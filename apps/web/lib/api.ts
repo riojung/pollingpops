@@ -37,3 +37,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 export function humanError(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong. Try again.";
 }
+
+/** Only reads may automatically retry; writes must preserve their idempotent intent. */
+export function isRetryableReadError(error: unknown): boolean {
+  return error instanceof ApiClientError
+    ? error.status === 429 || error.status >= 500
+    : error instanceof TypeError;
+}

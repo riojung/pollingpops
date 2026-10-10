@@ -1,5 +1,6 @@
 import {
   AudienceScopeSnapshotSchema,
+  PresentationAudienceAvailabilitySchema,
   audienceRolePermissions,
   type AudienceScopeSnapshot,
   type ScopedQnaCommand,
@@ -39,6 +40,27 @@ export class AudienceScopeService {
       scopedQna: ScopedQnaRepository;
     },
   ) {}
+
+  async presentationAvailability(sessionId: string, token: string) {
+    const actor = await new PresentationAudienceAccess(
+      this.dependencies.presentations,
+    ).authenticate(sessionId, token);
+    const scope = await this.dependencies.scopes.get(actor.session.workspaceId, sessionId);
+    const activated = !!scope && scope.expiresAt > new Date();
+    const creationEnabled =
+      actor.session.status === "active" &&
+      coreParityCreationEnabled(
+        this.dependencies.config,
+        actor.session.workspaceId,
+        "audienceScopes",
+      );
+    return PresentationAudienceAvailabilitySchema.parse({
+      schemaVersion: 1,
+      available: activated || creationEnabled,
+      activated,
+      canActivate: creationEnabled && !activated && actor.role === "host",
+    });
+  }
 
   async activatePresentation(sessionId: string, token: string, idempotencyKey: string) {
     const actor = await new PresentationAudienceAccess(

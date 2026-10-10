@@ -62,6 +62,25 @@ export const AudienceScopeSnapshotSchema = z
   });
 export type AudienceScopeSnapshot = z.infer<typeof AudienceScopeSnapshotSchema>;
 
+/** Native Presentation credentials can discover rollout state without creating a scope. */
+export const PresentationAudienceAvailabilitySchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    available: z.boolean(),
+    activated: z.boolean(),
+    canActivate: z.boolean(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      (!value.activated || value.available) &&
+      (!value.canActivate || (value.available && !value.activated)),
+    "Audience availability must match the activation state",
+  );
+export type PresentationAudienceAvailability = z.infer<
+  typeof PresentationAudienceAvailabilitySchema
+>;
+
 /** This foundation only activates Presentations. Feedback room writers arrive separately. */
 export const ActivatePresentationAudienceScopeSchema = z
   .object({
@@ -141,6 +160,9 @@ export const ScopedQnaReceiptSchema = z
   })
   .strict();
 export type ScopedQnaReceipt = z.infer<typeof ScopedQnaReceiptSchema>;
+export const ScopedQnaAcknowledgementSchema = z
+  .object({ receipt: ScopedQnaReceiptSchema, duplicate: z.boolean() })
+  .strict();
 
 export const ScopedAudienceSubscribeSchema = z
   .object({

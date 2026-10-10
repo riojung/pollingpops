@@ -6,10 +6,9 @@ do not need accounts.
 
 For a local first run, complete the [quick start](quick-start.md) first.
 
-The Core-Parity foundation includes a gated Presentation Q&A backend preview, but does not yet
-add new user-facing workflows. Presentation
-Q&A/chat/Pulse, organizer-blind feedback rooms, Surveys, new opinion formats, and feedback
-export/sharing tools remain pending. Existing learning Q&A's Anonymous public display still lets
+The Core-Parity foundation includes gated Presentation Q&A on host, participant, and Companion
+screens. Presentation replies/chat/Pulse, organizer-blind feedback rooms, Surveys, new opinion
+formats, and feedback export/sharing tools remain pending. Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
 
@@ -206,6 +205,37 @@ the current phase. Participants receive complete slide content and question cont
 own devices. When live flex mode is also enabled, choose **Flex** during setup to remove question
 countdowns and deadlines for the whole room; the host closes responses. The live code expires
 after 24 hours independently of how long session history is retained.
+
+### Collect Presentation Q&A
+
+An operator must enable `FEATURE_AUDIENCE_SCOPES=true` and include the workspace UUID in
+`CORE_PARITY_WORKSPACE_ALLOWLIST`, in addition to the existing live Presentation gates.
+
+1. On the live host screen, select **Activate audience Q&A**. Activation does not start or advance
+   the Presentation. The panel opens with the segment's moderation and public-name defaults.
+2. Participants join using the same code, link, or QR, then expand **Questions and answers**.
+   Submit with **Ask question**; premoderated questions appear to their author and facilitator
+   while awaiting review. **I have this question** adds one vote to a published question.
+3. In the host panel, use **Publish**, **Dismiss**, **Remove**, or **Mark answered**. **Remove and
+   block** blocks the author from Presentation Q&A, not from checkpoint answering.
+   The host can pause Q&A or change public names and moderation in **Q&A controls**.
+4. Companion can expand the same panel to read public questions and votes. It cannot publish,
+   submit, vote, remove, block, or change Q&A settings; moderate in the host window.
+5. If an acknowledgement is lost, choose **Retry the same Q&A action**. It resends the original
+   intent, not a second question or vote. Collapsing and reopening the panel preserves that retry.
+   Refresh restores accepted questions; it does not preserve an unconfirmed local draft.
+
+Temporary discovery or Q&A read failures retry automatically, even if the realtime connection
+still says Connected. A failed Q&A read hides the old list while current state is recovered. You
+may use **Refresh** to request a new read; repeated clicks coalesce instead of discarding slow
+successful results. Expired/revoked credentials require reopening through the appropriate join or
+host flow rather than repeated retries.
+
+The facilitator can see each author's session alias, even under Anonymous public display.
+This is not organizer-blind feedback. Presentation replies remain unavailable; use **Mark
+answered** after addressing a question verbally. At Presentation end, retained Q&A is read-only
+until credential expiry/revocation or session retention/deletion. Disabling new activation does
+not remove previously activated Q&A.
 
 ### Arrange text on a Presentation slide
 

@@ -1004,6 +1004,8 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       "A participant can see that a published question has a facilitator answer without losing it in the chat stream.",
     notes: [
       "Q&A has its own moderation states and limits; enabling room chat does not replace Q&A. Both follow session retention and deletion.",
+      "For allowlisted live Presentations, the host first selects Activate audience Q&A. Participants expand Questions and answers to ask and vote; Companion can only read public Q&A. Presentation replies remain unavailable—use Mark answered after a verbal answer. Anonymous public names still reveal the session alias to the facilitator.",
+      "If a Presentation Q&A acknowledgement is lost, use Retry the same Q&A action. It preserves the original intent when you collapse and reopen the panel; refreshing restores accepted questions, not unconfirmed drafts. Q&A becomes read-only when the Presentation ends.",
     ],
     troubleshooting: [
       {

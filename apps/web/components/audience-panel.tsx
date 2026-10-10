@@ -16,6 +16,7 @@ import {
 } from "@openround/contracts";
 import { apiFetch, humanError } from "../lib/api";
 import { clientUuid } from "../lib/uuid";
+import { createInFlightRefreshCoalescer } from "../lib/refresh-queue";
 import { useLocale } from "./locale-provider";
 import { ParticipantIdentity } from "./participant-avatar";
 
@@ -70,67 +71,7 @@ const MAX_REALTIME_REPLAY_SIZE = 256;
 // summary that covers them arrives.
 const MAX_PRIVATE_PROJECTION_OVERLAYS = 512;
 
-export function createInFlightRefreshCoalescer<T>() {
-  type TrailingRefresh = {
-    promise: Promise<T>;
-    refresh: () => Promise<T>;
-    resolve: (value: T | PromiseLike<T>) => void;
-    reject: (reason?: unknown) => void;
-  };
-  type Entry = { active: Promise<T> | null; trailing: TrailingRefresh | null };
-  const entries = new Map<string, Entry>();
-
-  const launch = (key: string, entry: Entry, refresh: () => Promise<T>) => {
-    let promise: Promise<T>;
-    try {
-      promise = refresh();
-    } catch (error) {
-      promise = Promise.reject(error);
-    }
-    entry.active = promise;
-    const finish = () => {
-      if (entry.active !== promise) return;
-      entry.active = null;
-      const trailing = entry.trailing;
-      if (!trailing) {
-        entries.delete(key);
-        return;
-      }
-      entry.trailing = null;
-      const trailingPromise = launch(key, entry, trailing.refresh);
-      void trailingPromise.then(trailing.resolve, trailing.reject);
-    };
-    void promise.then(finish, finish);
-    return promise;
-  };
-
-  return {
-    run(key: string, refresh: () => Promise<T>, forceTrailing = false) {
-      let entry = entries.get(key);
-      if (!entry) {
-        entry = { active: null, trailing: null };
-        entries.set(key, entry);
-      }
-      if (!entry.active) return launch(key, entry, refresh);
-      if (!forceTrailing) return entry.active;
-      if (entry.trailing) {
-        entry.trailing.refresh = refresh;
-        return entry.trailing.promise;
-      }
-      let resolve!: TrailingRefresh["resolve"];
-      let reject!: TrailingRefresh["reject"];
-      const promise = new Promise<T>((onResolve, onReject) => {
-        resolve = onResolve;
-        reject = onReject;
-      });
-      entry.trailing = { promise, refresh, resolve, reject };
-      return promise;
-    },
-    isActive(key: string) {
-      return Boolean(entries.get(key)?.active);
-    },
-  };
-}
+export { createInFlightRefreshCoalescer } from "../lib/refresh-queue";
 
 export function enqueueAudienceRealtimeUpdate(
   current: AudienceRealtimeBatch | null,

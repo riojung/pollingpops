@@ -8,6 +8,57 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Core parity M1 — Presentation Q&A interfaces, October 10, 2026
+
+Implemented on `codex/core-parity-presentation-qna-ui` from merged PR #100 (`ad4214a`).
+This completes the gated Q&A UI slice, not M1 or a public-production release.
+
+- Host-only activation and Q&A settings/moderation, participant question submission/voting, and
+  read-only Companion Q&A use native room passes; no credential URLs or creator-cookie elevation.
+- Read-only availability discovery respects the independent scope flag/allowlist and preserves
+  previously activated Q&A during a creation pause.
+- Separate realtime audience subscriptions/cursors, current-state gap/reconnect recovery, fallback
+  polling, stale-response fences, safe pagination, and exact-command retries after uncertain delivery.
+- Alias-visibility disclosure, accessible collapsible panels, and closed-session read-only controls.
+  Legacy Round routes/replies stay compatible; Presentation replies remain explicitly disabled.
+- Quick-start, user-guide, Help, API, and architecture updates explain configuration and limitations.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds. The audience API suite has 29 passing tests; seven
+new client/subscription tests cover cookie omission, exact retries, schema rejection, duplicate/gap
+notices, stale-connection acknowledgements, timeout fallback and revoked access. Seven production-build
+Presentation/Companion browser journeys pass across desktop Chromium, mobile Chromium and mobile
+WebKit, including Q&A privacy, retries, moderation, voting, refresh, closed-room controls, keyboard
+activation, axe and viewport overflow checks. Three existing Chromium Round journeys also pass,
+including legacy Q&A publication and facilitator replies. Firefox failed before executing its
+journey: the local Playwright browser exits with `Could not find profile folder`; Firefox evidence
+remains open. No migrations changed, and PostgreSQL integration, physical devices, independent
+accessibility review, target-host mixed load or cross-process Redis disruption were not rerun.
+
+Review fixes: audience read budgets now use separate room/credential-hash discovery/state buckets,
+with both local and shared-cache enforcement. A real-route regression exercises thirty participants
+and 360 reads behind a 300/minute production IP limit; another shares a read budget across two API
+instances. Q&A/discovery refreshes serialize and coalesce trailing intents, retaining successful
+slow responses. Temporary failures retry with capped exponential backoff; scoped read failures
+hide stale content, and credential changes cancel timers/fence old work. The coalescer is shared
+with existing Round interactions without changing their behavior. Browser regressions exercise
+lost removal synchronization, automatic discovery retry and overlapping slow reads.
+Six new refresh/retry unit tests cover slow-read progress, latest-intent coalescing, credential
+isolation, retry classification, bounded backoff and timer cancellation; all 34 focused client,
+subscription, refresh and existing AudiencePanel tests pass.
+
+PR #101 follow-up retains an independent pre-authentication 10,000/minute IP ceiling across every
+audience-read route. Local and shared-cache guards reject rotating tokens/scope IDs before
+credential-bucket allocation or repository authentication, while the thirty-participant shared-IP
+polling regression still passes. Both new security regressions failed before the fix and pass
+afterward; all 29 audience API tests pass. No web code, migration or published capacity changed.
+The full repository check and four production-build Q&A browser journeys pass after this fix;
+Companion/legacy Round browser evidence above is from the preceding UI verification.
+
+Next: scoped replies/chat/Pulse and shared moderation/lifecycle work, then dedicated feedback-room
+anonymity/passcodes. New opinion formats, Surveys, advanced exports/sharing, cross-process mixed-load
+evidence and all thirteen external release gates remain pending. No participant caps or GA claims change.
+
 ### Core parity M1 — scoped Presentation Q&A backend, October 10, 2026
 
 Implemented on `codex/core-parity-scoped-qna` from merged PR #99 (`bfc92f0`). This is a

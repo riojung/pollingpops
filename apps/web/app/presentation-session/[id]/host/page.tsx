@@ -12,6 +12,7 @@ import { CreatorBrand } from "../../../../components/brand";
 import { useLocale } from "../../../../components/locale-provider";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationCompanionLauncher } from "../../../../components/presentation-live/companion-launcher";
+import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
 import {
   RecoveryPackCardPicker,
@@ -82,6 +83,7 @@ function PresentationHostContent() {
   const [legacyAdvanceBusy, setLegacyAdvanceBusy] = useState(false);
   const legacyAdvanceInFlight = useRef(false);
   const [hasControlPass, setHasControlPass] = useState(false);
+  const [audienceToken, setAudienceToken] = useState<string | null>(null);
   const [controlPassBusy, setControlPassBusy] = useState(false);
   const controlPassInFlight = useRef(false);
   const [controlPassAttempt, setControlPassAttempt] = useState(0);
@@ -130,6 +132,7 @@ function PresentationHostContent() {
   }, [id, router]);
 
   useEffect(() => {
+    setAudienceToken(null);
     let disposed = false;
     let controller: PresentationRealtimeController<PresentationHostSnapshot> | null = null;
     let timer: number | null = null;
@@ -154,6 +157,7 @@ function PresentationHostContent() {
       }
       if (disposed) return;
       setHasControlPass(!!controlToken);
+      setAudienceToken(controlToken);
       if (controlToken) setControlPassError("");
       controller = createPresentationRealtimeController<PresentationHostSnapshot>({
         sessionId: id,
@@ -175,6 +179,7 @@ function PresentationHostContent() {
         onCredentialRejected: (rejectedToken) => {
           if (disposed || !passManager.reject(rejectedToken)) return;
           setHasControlPass(false);
+          setAudienceToken(null);
           setControlPassError(
             "This host control pass is no longer valid. Reacquire it to use live card controls.",
           );
@@ -350,6 +355,7 @@ function PresentationHostContent() {
       passManagerRef.current?.replace(pass.controlToken);
       commandsRef.current?.rebindControlToken(pass.controlToken);
       setHasControlPass(true);
+      setAudienceToken(pass.controlToken);
       setControlPassAttempt((attempt) => attempt + 1);
     } catch (caught) {
       setControlPassError(humanError(caught));
@@ -640,6 +646,15 @@ function PresentationHostContent() {
           </div>
         )}
       </div>
+      {snapshot && audienceToken ? (
+        <PresentationQnaPanel
+          key={id}
+          sessionId={id}
+          token={audienceToken}
+          role="host"
+          closed={snapshot.phase === "finished"}
+        />
+      ) : null}
     </main>
   );
 }

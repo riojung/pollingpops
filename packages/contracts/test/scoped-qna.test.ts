@@ -10,8 +10,26 @@ import {
   ScopedQnaReceiptSchema,
   ScopedAudienceEventSchema,
   ScopedQnaPageSchema,
+  PresentationAudienceAvailabilitySchema,
 } from "../src/index.js";
 describe("shared Q&A policy and scoped protocol", () => {
+  it("validates rollout discovery without allowing contradictory or future states", () => {
+    expect(
+      PresentationAudienceAvailabilitySchema.safeParse({
+        schemaVersion: 1,
+        available: true,
+        activated: false,
+        canActivate: true,
+      }).success,
+    ).toBe(true);
+    for (const value of [
+      { schemaVersion: 2, available: true, activated: false, canActivate: true },
+      { schemaVersion: 1, available: false, activated: true, canActivate: false },
+      { schemaVersion: 1, available: true, activated: true, canActivate: true },
+      { schemaVersion: 1, available: false, activated: false, canActivate: true },
+    ])
+      expect(PresentationAudienceAvailabilitySchema.safeParse(value).success).toBe(false);
+  });
   it("preserves segment defaults and facilitator-visible learning aliases", () => {
     expect(qnaDefaults("education")).toEqual({
       enabled: true,

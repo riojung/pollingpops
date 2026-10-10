@@ -12,6 +12,7 @@ import type {
 import { Brand } from "../../../../components/brand";
 import { useLocale } from "../../../../components/locale-provider";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
+import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
@@ -32,6 +33,7 @@ export default function PresentationParticipantPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<PresentationParticipantSnapshot | null>(null);
+  const [audienceToken, setAudienceToken] = useState<string | null>(null);
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([]);
   const [numericValue, setNumericValue] = useState("");
   const [ratingValue, setRatingValue] = useState<number | null>(null);
@@ -81,6 +83,7 @@ export default function PresentationParticipantPage() {
     } catch (caught) {
       if ((caught as { status?: number }).status === 401) {
         sessionStorage.removeItem(`openround:presentation-participant:${id}`);
+        setAudienceToken(null);
         router.replace("/join");
       } else {
         setError(humanError(caught));
@@ -90,11 +93,13 @@ export default function PresentationParticipantPage() {
   }, [id, router]);
 
   useEffect(() => {
+    setAudienceToken(null);
     const participantToken = sessionStorage.getItem(`openround:presentation-participant:${id}`);
     if (!participantToken) {
       router.replace("/join");
       return;
     }
+    setAudienceToken(participantToken);
     const controller = createPresentationRealtimeController<PresentationParticipantSnapshot>({
       sessionId: id,
       credential: { projection: "participant", participantToken },
@@ -424,6 +429,15 @@ export default function PresentationParticipantPage() {
           </div>
         </section>
       </div>
+      {snapshot && audienceToken ? (
+        <PresentationQnaPanel
+          key={id}
+          sessionId={id}
+          token={audienceToken}
+          role="participant"
+          closed={snapshot.phase === "finished"}
+        />
+      ) : null}
     </main>
   );
 }

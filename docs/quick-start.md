@@ -237,6 +237,7 @@ roles and entitlements; flags do not complete production or institutional readin
 | Presentation authoring                            | Professional workspace configuration plus `FEATURE_PRESENTATIONS=true`                                                                     |
 | Live Presentation creation                        | Presentation configuration plus `FEATURE_PRESENTATION_REALTIME=true` and the workspace UUID in `EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST`     |
 | Presentation Companion foundation                 | Live Presentation configuration plus `FEATURE_PRESENTATION_COMPANION=true`; issuance remains owner/editor-only                             |
+| Presentation Q&A                                  | Live Presentation configuration plus `FEATURE_AUDIENCE_SCOPES=true` and the workspace UUID in `CORE_PARITY_WORKSPACE_ALLOWLIST`            |
 | Companion live Recovery Pack insertion            | Companion configuration plus `FEATURE_RECOVERY_PACKS=true` and `FEATURE_RECOVERY_PACK_LIVE_CARDS=true`; create a new eligible live session |
 | Whole-room live flex timing                       | `FEATURE_LIVE_FLEX_MODE=true` and the workspace UUID in `EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST`                                            |
 | Question Health in the professional Round builder | Professional builder configuration plus `FEATURE_QUESTION_HEALTH=true` and the workspace UUID in `EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST`   |
@@ -257,6 +258,12 @@ and retry fencing as the host. Join details include the canonical join link, QR,
 results show aggregate choice counts only after reveal. **Return to deck** closes the overlay
 back to the sidecar; it does not focus a desktop slide application. Existing valid passes continue
 working if new issuance is disabled.
+
+For Q&A, select **Activate audience Q&A** on the live host. Participants expand **Questions and
+answers** to ask and vote; the host publishes, dismisses, marks answered, removes, or blocks.
+Companion shows public Q&A read-only. Education starts premoderated with anonymous public names,
+but the facilitator still sees aliases. Replies, Presentation chat/Pulse, and organizer-blind
+feedback remain pending. See [Presentation Q&A](user-guide.md#collect-presentation-qna).
 
 For live Packs, enable Pack authoring/live cards before creating the session, then select
 **Add Recovery Pack** at a safe boundary. Choose a published text-only Pack and select

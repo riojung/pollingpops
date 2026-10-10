@@ -20,6 +20,7 @@ are `private, no-store`. The explicit `kind` selector prevents cross-engine ID a
 | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /v1/audience-scopes`                                         | Body `{kind:"presentation",sessionId,idempotencyKey}` (UUIDs). Native host pass only. Returns 201 on first activation, 200 on retry; scope/event commit atomically.              |
 | `GET /v1/audience-scopes/:scopeId?kind=round\|presentation`        | Authorized version-1 metadata, identity disclosure, audience sequence, permissions, and enabled interaction features.                                                            |
+| `GET /v1/audience-scopes/:scopeId/availability?kind=presentation`  | Native host/participant/Companion credential. Read-only `{schemaVersion:1,available,activated,canActivate}` discovery; creates no scope. Only a host can activate.               |
 | `POST /v1/audience-scopes/:scopeId/sync`                           | Body `{kind,limit?}`; limit 1–50, default 50. Round returns `{scope,round:{interactions,qna}}`; disabled Round Q&A is `null`. Presentation returns `{scope,presentation:{qna}}`. |
 | `GET /v1/audience-scopes/:scopeId/qna/questions?kind=presentation` | Authorized version-1 Q&A page; optional cursor and limit 1–50 (default 50).                                                                                                      |
 | `POST /v1/audience-scopes/:scopeId/qna/commands`                   | Body `{kind:"presentation",command}`; atomic Q&A mutation. Returns `{receipt,duplicate}` after commit.                                                                           |
@@ -30,9 +31,19 @@ in addition to the normal per-IP limiter. The native Presentation host pass is n
 with a creator cookie or Companion pass. Reads, sync, and accepted activation retries remain
 available during writer rollback, but expired/revoked credentials do not.
 
+Audience reads use individual room/credential-hash buckets rather than the generic 300/minute IP
+budget. Every read first consumes an independent 10,000/minute IP ceiling, shared across discovery,
+scope metadata, Q&A pages and sync, regardless of caller-supplied tokens or scope IDs. Both local
+and shared-cache guards run before credential-bucket allocation and repository authentication.
+Discovery allows 120 requests/minute; scope metadata, Q&A pages and sync share a separate
+720/minute state-read budget. Local and shared-cache limits enforce the same budgets across API
+processes. No raw pass or alias appears in a limiter key. Temporary 429/server/network read failures
+retry with bounded backoff; authorization and schema failures require a fresh credential or client.
+
 The Presentation scope shares its source session ID, freezes facilitator-visible alias policy and
 source retention. Activated scopes now advertise Q&A availability; chat and Pulse remain false.
-Presentation UI/replies remain pending. Existing Round aliases remain moderator-visible, including
+Presentation host/participant/Companion Q&A panels use native passes and omit creator cookies.
+Replies remain pending. Existing Round aliases remain moderator-visible, including
 when their public Q&A display is anonymous. Organizer-blind feedback is not implemented yet.
 
 Additive Socket.IO messages:
@@ -59,7 +70,7 @@ credential/rollout/lifecycle problem and a retry or rejoin action. Apply migrati
 compatible readers before activation. Surveys, feedback-room admission/settings, scoped chat/Pulse,
 Q&A replies and export/share routes are deliberately not registered by this increment.
 
-### Presentation Q&A commands (backend preview)
+### Presentation Q&A commands (gated preview)
 
 Every command requires a UUID `idempotencyKey`. Retry the same command/key after network loss.
 The receipt is `{schemaVersion:1,idempotencyKey,resourceId,audienceSeq}`. Reusing a key for different

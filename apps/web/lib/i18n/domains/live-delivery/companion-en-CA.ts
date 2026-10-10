@@ -1,5 +1,19 @@
 /** Foundation copy falls back to English until reviewed translations are available. */
 export const companionEnglishMessages = {
+  "live.presentationQna.activate": "Activate audience Q&A",
+  "live.presentationQna.activating": "Activating Q&A…",
+  "live.presentationQna.setup":
+    "Open a moderated question space alongside this Presentation. Companion access is read-only.",
+  "live.presentationQna.waiting": "Audience Q&A will appear when the facilitator activates it.",
+  "live.presentationQna.disclosure":
+    "The facilitator can see your session alias. Anonymous public display hides it from the room, not from the facilitator.",
+  "live.presentationQna.closed": "This Presentation has ended. Q&A is now read-only.",
+  "live.presentationQna.retry": "Retry the same Q&A action",
+  "live.presentationQna.markAnswered": "Mark answered",
+  "live.presentationQna.readOnly":
+    "Companion Q&A is read-only. Use the host window to moderate questions.",
+  "live.presentationQna.accessExpired":
+    "Q&A access has expired. Rejoin the Presentation or reacquire your host/Companion pass.",
   "live.companion.title": "Presentation Companion",
   "live.companion.launch": "Launch companion",
   "live.companion.revoke": "Revoke companion pass",

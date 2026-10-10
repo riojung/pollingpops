@@ -1,25 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { QnaPage, QnaQuestion, QnaSettings } from "@openround/contracts";
-import { apiFetch, humanError } from "../lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  QnaPage,
+  QnaQuestion,
+  QnaSettings,
+  ScopedQnaCommand,
+  ScopedQnaPage,
+} from "@openround/contracts";
+import { apiFetch, ApiClientError, humanError, isRetryableReadError } from "../lib/api";
+import { createPresentationQnaClient } from "../lib/presentation-qna";
+import { clientUuid } from "../lib/uuid";
+import { createInFlightRefreshCoalescer, createReadRetryScheduler } from "../lib/refresh-queue";
 import { useLocale } from "./locale-provider";
 
 type QnaPanelProps = {
-  role: "participant" | "moderator";
+  role: "participant" | "moderator" | "observer";
   sessionId: string;
   token: string;
   revision: number;
+  scopeKind?: "round" | "presentation";
 };
 
-export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
+type PanelPage = QnaPage & Partial<Pick<ScopedQnaPage, "audienceSeq" | "lifecycle">>;
+type PendingAction = { key: string; command: ScopedQnaCommand; success: string; done?: () => void };
+
+export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round" }: QnaPanelProps) {
   const { t } = useLocale();
-  const [page, setPage] = useState<QnaPage | null>(null);
+  const [page, setPage] = useState<PanelPage | null>(null);
   const [questionBody, setQuestionBody] = useState("");
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const loadRequest = useRef(0);
+  const refreshQueue = useRef(createInFlightRefreshCoalescer<void>());
+  const readRetry = useRef(createReadRetryScheduler());
+  const pageSequence = useRef<number | undefined>(undefined);
+  const generation = useRef(0);
+  const pendingRef = useRef<PendingAction | null>(null);
+  const writeInFlight = useRef(false);
+  const scoped = useMemo(
+    () => (scopeKind === "presentation" ? createPresentationQnaClient(sessionId, token) : null),
+    [scopeKind, sessionId, token],
+  );
   const statusLabel = (status: QnaQuestion["status"]) => t(`live.qna.status.${status}`);
 
   const request = useCallback(
@@ -32,30 +57,141 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
   );
 
   const load = useCallback(
-    async (cursor?: string, append = false) => {
+    async (cursor?: string, append = false): Promise<void> => {
       if (!token) return;
-      try {
-        const query = new URLSearchParams({ limit: "30" });
-        if (cursor) query.set("cursor", cursor);
-        const loaded = await request<QnaPage>(
-          `/v1/sessions/${sessionId}/qna/questions?${query.toString()}`,
-        );
-        setPage((current) =>
-          append && current
-            ? { ...loaded, questions: [...current.questions, ...loaded.questions] }
-            : loaded,
-        );
-        setError("");
-      } catch (caught) {
-        setError(humanError(caught));
-      }
+      const currentGeneration = generation.current;
+      await refreshQueue.current.run(
+        `${scopeKind}:${sessionId}:${token}`,
+        async () => {
+          if (currentGeneration !== generation.current) return;
+          // Invalidate only when a read starts, not when another refresh is queued.
+          const requestId = ++loadRequest.current;
+          readRetry.current.clearPending();
+          try {
+            const query = new URLSearchParams({ limit: "30" });
+            if (cursor) query.set("cursor", cursor);
+            let loaded: PanelPage = scoped
+              ? await scoped.page(cursor)
+              : await request<QnaPage>(
+                  `/v1/sessions/${sessionId}/qna/questions?${query.toString()}`,
+                );
+            if (requestId !== loadRequest.current || currentGeneration !== generation.current)
+              return;
+            if (scoped && append && loaded.audienceSeq !== pageSequence.current) {
+              // A changed sequence invalidates older pages: they may contain removed content.
+              loaded = await scoped.page();
+              append = false;
+              if (requestId !== loadRequest.current || currentGeneration !== generation.current)
+                return;
+            }
+            if (
+              loaded.audienceSeq !== undefined &&
+              pageSequence.current !== undefined &&
+              loaded.audienceSeq < pageSequence.current
+            )
+              return;
+            pageSequence.current = loaded.audienceSeq;
+            setPage((current) =>
+              loaded &&
+              loaded.audienceSeq !== undefined &&
+              current?.audienceSeq &&
+              loaded.audienceSeq < current.audienceSeq
+                ? current
+                : append && current
+                  ? {
+                      ...loaded,
+                      questions: [
+                        ...new Map(
+                          [...current.questions, ...loaded.questions].map((question) => [
+                            question.id,
+                            question,
+                          ]),
+                        ).values(),
+                      ],
+                    }
+                  : loaded,
+            );
+            setError("");
+            readRetry.current.reset();
+          } catch (caught) {
+            if (requestId !== loadRequest.current || currentGeneration !== generation.current)
+              return;
+            if (
+              scoped ||
+              (caught instanceof ApiClientError && [401, 403, 404].includes(caught.status))
+            )
+              setPage(null);
+            setError(humanError(caught));
+            if (isRetryableReadError(caught)) {
+              readRetry.current.schedule(() => {
+                if (currentGeneration === generation.current) void load();
+              });
+            } else readRetry.current.reset();
+          }
+        },
+        true,
+      );
     },
-    [request, sessionId, token],
+    [request, scoped, scopeKind, sessionId, token],
   );
+
+  useEffect(() => {
+    generation.current += 1;
+    pageSequence.current = undefined;
+    readRetry.current.reset();
+    setPage(null);
+    pendingRef.current = null;
+    writeInFlight.current = false;
+    setPending(null);
+    setQuestionBody("");
+    setReplyBodies({});
+    setBusyKey("");
+    setError("");
+    setNotice("");
+    return () => {
+      generation.current += 1;
+      loadRequest.current += 1;
+      readRetry.current.reset();
+    };
+  }, [sessionId, token, scopeKind]);
 
   useEffect(() => {
     void load();
   }, [load, revision]);
+
+  async function runScoped(action: PendingAction) {
+    if (!scoped || writeInFlight.current) return;
+    writeInFlight.current = true;
+    const currentGeneration = generation.current;
+    pendingRef.current = action;
+    setPending(action);
+    setBusyKey(action.key);
+    setError("");
+    setNotice("");
+    try {
+      await scoped.command(action.command);
+      if (currentGeneration !== generation.current) return;
+      pendingRef.current = null;
+      setPending(null);
+      action.done?.();
+      setNotice(action.success);
+      await load();
+    } catch (caught) {
+      if (currentGeneration !== generation.current) return;
+      // Keep the exact command/key on uncertain delivery; never synthesize a second intent.
+      if (caught instanceof ApiClientError && caught.status < 500) {
+        pendingRef.current = null;
+        setPending(null);
+        await load();
+      }
+      setError(humanError(caught));
+    } finally {
+      if (currentGeneration === generation.current) {
+        writeInFlight.current = false;
+        setBusyKey("");
+      }
+    }
+  }
 
   async function perform(key: string, action: () => Promise<unknown>, success = "") {
     setBusyKey(key);
@@ -76,6 +212,19 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
     event.preventDefault();
     const body = questionBody.trim();
     if (!body) return;
+    if (scoped) {
+      if (pendingRef.current) return;
+      await runScoped({
+        key: "new-question",
+        command: { type: "question.create", body, idempotencyKey: clientUuid() },
+        success:
+          page?.settings.moderationMode === "pre"
+            ? t("live.qna.questionSentForReview")
+            : t("live.qna.questionShared"),
+        done: () => setQuestionBody(""),
+      });
+      return;
+    }
     await perform(
       "new-question",
       async () => {
@@ -108,6 +257,20 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
   }
 
   async function setVote(question: QnaQuestion) {
+    if (scoped) {
+      if (pendingRef.current) return;
+      await runScoped({
+        key: `vote:${question.id}`,
+        command: {
+          type: "vote.set",
+          questionId: question.id,
+          voted: !question.votedByMe,
+          idempotencyKey: clientUuid(),
+        },
+        success: "",
+      });
+      return;
+    }
     await perform(`vote:${question.id}`, () =>
       request(`/v1/sessions/${sessionId}/qna/questions/${question.id}/vote`, {
         method: question.votedByMe ? "DELETE" : "POST",
@@ -120,6 +283,23 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
     status: QnaQuestion["status"],
     banParticipant = false,
   ) {
+    if (scoped) {
+      if (pendingRef.current || !page?.audienceSeq) return;
+      await runScoped({
+        key: `moderate:${question.id}`,
+        command: {
+          type: "question.moderate",
+          questionId: question.id,
+          status,
+          label: question.label,
+          banAuthor: banParticipant,
+          expectedAudienceSeq: page.audienceSeq,
+          idempotencyKey: clientUuid(),
+        },
+        success: "",
+      });
+      return;
+    }
     await perform(`moderate:${question.id}`, () =>
       request(`/v1/sessions/${sessionId}/qna/questions/${question.id}`, {
         method: "PATCH",
@@ -138,6 +318,20 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
   }
 
   async function updateSettings(update: Partial<QnaSettings>) {
+    if (scoped) {
+      if (pendingRef.current || !page?.audienceSeq) return;
+      await runScoped({
+        key: "settings",
+        command: {
+          type: "settings.update",
+          settings: { ...page.settings, ...update, participantReplies: false },
+          expectedAudienceSeq: page.audienceSeq,
+          idempotencyKey: clientUuid(),
+        },
+        success: "",
+      });
+      return;
+    }
     await perform("settings", async () => {
       const settings = await request<QnaSettings>(`/v1/sessions/${sessionId}/qna/settings`, {
         method: "PATCH",
@@ -149,6 +343,8 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
 
   const settings = page?.settings;
   const visibleQuestions = page?.questions ?? [];
+  const closed = page?.lifecycle === "closed";
+  const mutationDisabled = closed || !!busyKey || !!pending;
 
   return (
     <section className="panel qna-panel" aria-labelledby={`qna-heading-${role}`}>
@@ -172,9 +368,32 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
           {notice}
         </p>
       ) : null}
+      {scoped ? (
+        <p className="notice" lang="en-CA">
+          {t("live.presentationQna.disclosure")}
+        </p>
+      ) : null}
+      {closed ? (
+        <p className="notice" lang="en-CA">
+          {t("live.presentationQna.closed")}
+        </p>
+      ) : null}
+      {pending && !busyKey ? (
+        <button
+          className="button"
+          lang="en-CA"
+          onClick={() => void runScoped(pending)}
+          type="button"
+        >
+          {t("live.presentationQna.retry")}
+        </button>
+      ) : null}
 
       {role === "moderator" && settings ? (
-        <fieldset className="qna-settings" disabled={busyKey === "settings"}>
+        <fieldset
+          className="qna-settings"
+          disabled={scoped ? mutationDisabled : busyKey === "settings"}
+        >
           <legend>{t("live.qna.controls")}</legend>
           <label className="checkbox-field">
             <input
@@ -214,20 +433,22 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
               <option value="post">{t("live.qna.publishImmediately")}</option>
             </select>
           </label>
-          <label className="checkbox-field">
-            <input
-              checked={settings.participantReplies}
-              onChange={(event) =>
-                void updateSettings({ participantReplies: event.target.checked })
-              }
-              type="checkbox"
-            />
-            {t("live.qna.allowParticipantReplies")}
-          </label>
+          {!scoped ? (
+            <label className="checkbox-field">
+              <input
+                checked={settings.participantReplies}
+                onChange={(event) =>
+                  void updateSettings({ participantReplies: event.target.checked })
+                }
+                type="checkbox"
+              />
+              {t("live.qna.allowParticipantReplies")}
+            </label>
+          ) : null}
         </fieldset>
       ) : null}
 
-      {role === "participant" && settings?.enabled ? (
+      {role === "participant" && settings?.enabled && !closed ? (
         <form className="qna-compose" onSubmit={(event) => void submitQuestion(event)}>
           <label className="field" htmlFor="qna-question-body">
             <span className="field-label">{t("live.qna.askFacilitator")}</span>
@@ -243,7 +464,9 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
           <div className="button-row">
             <button
               className="button"
-              disabled={busyKey === "new-question" || !questionBody.trim()}
+              disabled={
+                (scoped ? mutationDisabled : busyKey === "new-question") || !questionBody.trim()
+              }
               type="submit"
             >
               {busyKey === "new-question" ? t("live.qna.sending") : t("live.qna.askQuestion")}
@@ -255,7 +478,7 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
             </small>
           </div>
         </form>
-      ) : role === "participant" && settings ? (
+      ) : role === "participant" && settings && !closed ? (
         <p className="notice">{t("live.qna.paused")}</p>
       ) : null}
 
@@ -282,11 +505,13 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
               </span>
             ) : null}
 
-            {role === "participant" && ["published", "answered"].includes(question.status) ? (
+            {role === "participant" &&
+            ["published", "answered"].includes(question.status) &&
+            !closed ? (
               <button
                 aria-pressed={question.votedByMe}
                 className="button-quiet small-button"
-                disabled={busyKey === `vote:${question.id}`}
+                disabled={scoped ? mutationDisabled : busyKey === `vote:${question.id}`}
                 onClick={() => void setVote(question)}
                 type="button"
               >
@@ -295,7 +520,21 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
             ) : null}
 
             {role === "moderator" ? (
-              <div className="button-row qna-moderation-actions">
+              <fieldset
+                className="button-row qna-moderation-actions"
+                disabled={scoped ? mutationDisabled : false}
+              >
+                <legend className="sr-only">{t("live.qna.controls")}</legend>
+                {scoped && question.status === "published" ? (
+                  <button
+                    className="button-quiet small-button"
+                    lang="en-CA"
+                    onClick={() => void moderate(question, "answered")}
+                    type="button"
+                  >
+                    {t("live.presentationQna.markAnswered")}
+                  </button>
+                ) : null}
                 {question.status === "pending" ? (
                   <button
                     className="button small-button"
@@ -326,7 +565,7 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
                     {t("live.qna.remove")}
                   </button>
                 ) : null}
-                {question.moderationParticipantId && question.status !== "removed" ? (
+                {(question.moderationParticipantId || scoped) && question.status !== "removed" ? (
                   <button
                     className="button-danger small-button"
                     disabled={busyKey === `moderate:${question.id}`}
@@ -339,7 +578,7 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
                     {t("live.qna.removeAndBlock")}
                   </button>
                 ) : null}
-              </div>
+              </fieldset>
             ) : null}
 
             {question.replies.length > 0 ? (
@@ -375,7 +614,8 @@ export function QnaPanel({ role, sessionId, token, revision }: QnaPanelProps) {
               </ul>
             ) : null}
 
-            {(role === "moderator" ||
+            {!scoped &&
+            (role === "moderator" ||
               (settings?.participantReplies &&
                 ["published", "answered"].includes(question.status))) &&
             question.status !== "removed" ? (

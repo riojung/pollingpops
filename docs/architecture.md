@@ -52,7 +52,29 @@ original body-free receipt after finish/ban, but never bypass credential revocat
 is terminal and ordinary views/account exports redact its body. PostgreSQL-backed budgets prevent
 a Redis outage from bypassing accepted-action limits.
 
-This is partial M1. Presentation interaction UI/replies, chat/Pulse adapters, feedback-room
+Presentation Q&A reuses the Round panel through a native-pass transport. Read-only discovery
+advertises allowlisted activation without creating a scope; retained activated scopes stay
+available during a writer pause. Host, participant, and Companion requests omit creator cookies
+and never put passes in URLs. Companion renders only the public, read-only projection. Metadata
+notices use a separate socket/cursor and trigger authorized current-state fetches; disconnected
+subscriptions fall back to bounded polling. Sequence changes invalidate appended pages so removed
+content cannot survive pagination. Exact pending commands survive panel collapse and uncertain
+delivery; credential changes clear local state and discard stale asynchronous results. Ending a
+Presentation reloads Q&A as read-only. Legacy Round routes, reply controls, and game state stay intact.
+
+Q&A and availability reads share a pure in-flight coalescer with Round interaction synchronization:
+one active request plus one latest trailing refresh per credential context. New notices do not
+invalidate a slow successful read. Temporary network/429/5xx failures schedule cancellable
+exponential retries capped at 30 seconds even when the socket remains subscribed; successful reads
+reset backoff. Failed scoped Q&A reads clear the displayed page rather than retaining possibly
+removed bodies. Credential changes/unmount cancel retry timers and fence old active/queued results.
+Discovery retains automatic recovery after transient errors. Individual reader budgets are
+hashed-credential and scope-specific, independently enforced locally and by the shared cache.
+An additional 10,000/minute shared-network IP ceiling covers every audience-read route before
+credential-bucket allocation or repository authentication. Its key contains neither scope IDs nor
+caller-supplied credentials, so rotating either cannot bypass local or cross-process protection.
+
+This is partial M1. Presentation replies, chat/Pulse adapters, feedback-room
 sources, organizer-blind projections and passcodes remain next work. Apply compatible
 migrations/readers before writer flags; disabling creation
 preserves retained resources and authenticated recovery paths.

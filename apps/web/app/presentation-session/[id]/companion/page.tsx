@@ -13,6 +13,7 @@ import {
 } from "@openround/contracts";
 import { useLocale } from "../../../../components/locale-provider";
 import { CompanionOverlay } from "../../../../components/presentation-live/companion-overlay";
+import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { CompanionQuickCheckForm } from "../../../../components/presentation-live/companion-quick-check";
 import { CompanionPublishedQuestionPicker } from "../../../../components/presentation-live/companion-published-questions";
 import {
@@ -766,6 +767,15 @@ export default function PresentationCompanionPage() {
             </p>
           ) : null}
         </CompanionOverlay>
+      ) : null}
+      {snapshot && pass ? (
+        <PresentationQnaPanel
+          key={id}
+          sessionId={id}
+          token={pass}
+          role="companion"
+          closed={snapshot.phase === "finished"}
+        />
       ) : null}
     </main>
   );

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import Fastify from "fastify";
+import rateLimit from "@fastify/rate-limit";
+import { registerAudienceScopeRoutes } from "../src/audience-scope-routes.js";
 import type { Server } from "socket.io";
 import {
   AudienceScopeSnapshotSchema,
@@ -15,7 +18,11 @@ import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
 import { coreParityCreationEnabled } from "../src/core-parity-rollout.js";
 import { hashToken } from "../src/security.js";
-import { RoundAudienceAccess, PresentationAudienceAccess } from "../src/audience-access.js";
+import {
+  AudienceAccessError,
+  RoundAudienceAccess,
+  PresentationAudienceAccess,
+} from "../src/audience-access.js";
 import { attachRealtime } from "../src/realtime.js";
 import { ScopedAudienceOutboxWorker } from "../src/scoped-audience-outbox-worker.js";
 import { registerScopedAudienceRealtime } from "../src/scoped-audience-realtime.js";
@@ -203,6 +210,263 @@ async function roundFixture(built: Awaited<ReturnType<typeof buildApp>>) {
 }
 
 describe("core-parity foundation", () => {
+  it("isolates discovery budgets for thirty participants behind a shared production IP", async () => {
+    const f = await fixture();
+    const keys = new Set<string>();
+    const app = Fastify();
+    apps.push(app);
+    await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute" });
+    await registerAudienceScopeRoutes(app, f.audienceScopeService, async (key, maximum, window) => {
+      keys.add(key);
+      return f.cache.consumeRateLimit(key, maximum, window);
+    });
+    const tokens = Array.from({ length: 30 }, () => randomUUID());
+    for (const token of tokens) {
+      const now = new Date();
+      await f.presentationSessions.addParticipant({
+        id: randomUUID(),
+        workspaceId: f.workspaceId,
+        sessionId: f.session.id,
+        nickname: "Shared network guest",
+        tokenHash: hashToken(token),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+    }
+    // Twelve five-second polls per guest: 360 reads from the same IP, not 360 per credential.
+    for (let poll = 0; poll < 12; poll++) {
+      for (const token of tokens) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/v1/audience-scopes/${f.session.id}/availability?kind=presentation`,
+          remoteAddress: "192.0.2.10",
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.statusCode).toBe(200);
+      }
+    }
+    expect([...keys].filter((key) => key.startsWith("audience-read:discovery:")).length).toBe(30);
+    expect(keys.has("audience-read-ip:192.0.2.10")).toBe(true);
+    expect([...keys].every((key) => tokens.every((token) => !key.includes(token)))).toBe(true);
+  });
+
+  it("enforces one distributed read budget across API processes without affecting other credentials", async () => {
+    const f = await fixture();
+    const readers = await Promise.all(
+      [0, 1].map(async () => {
+        const app = Fastify();
+        apps.push(app);
+        await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute" });
+        await registerAudienceScopeRoutes(
+          app,
+          f.audienceScopeService,
+          f.cache.consumeRateLimit.bind(f.cache),
+        );
+        return app;
+      }),
+    );
+    const url = `/v1/audience-scopes/${f.session.id}/availability?kind=presentation`;
+    for (let request = 0; request < 120; request++) {
+      expect(
+        (
+          await readers[request % 2]!.inject({
+            method: "GET",
+            url,
+            headers: { authorization: `Bearer ${f.tokens.participant}` },
+          })
+        ).statusCode,
+      ).toBe(200);
+    }
+    const limited = await readers[0]!.inject({
+      method: "GET",
+      url,
+      headers: { authorization: `Bearer ${f.tokens.participant}` },
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error.code).toBe("RATE_LIMITED");
+    expect(
+      (
+        await readers[0]!.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${f.tokens.host}` },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await f.audienceScopes.get(f.workspaceId, f.session.id)).toBeNull();
+  });
+
+  it("bounds rotating bearer tokens and scope IDs before authentication across API processes", async () => {
+    const f = await fixture();
+    const ip = "192.0.2.20";
+    const ipKey = `audience-read-ip:${ip}`;
+    // Exhaust all but two slots in the real shared cache, without issuing 9,998 repository reads.
+    for (let request = 0; request < 9_998; request++)
+      expect(await f.cache.consumeRateLimit(ipKey, 10_000, 60_000)).toBe(true);
+    const keys: string[] = [];
+    const readers = await Promise.all(
+      [0, 1].map(async () => {
+        const app = Fastify();
+        apps.push(app);
+        await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute" });
+        await registerAudienceScopeRoutes(
+          app,
+          f.audienceScopeService,
+          async (key, maximum, window) => {
+            keys.push(key);
+            return f.cache.consumeRateLimit(key, maximum, window);
+          },
+        );
+        return app;
+      }),
+    );
+    const authenticate = vi.spyOn(f.presentationSessions, "getSessionById");
+    const participantLookup = vi.spyOn(f.presentationSessions, "findParticipant");
+    for (const [index, path] of ["/availability", ""].entries()) {
+      const response = await readers[index]!.inject({
+        method: "GET",
+        url: `/v1/audience-scopes/${index ? randomUUID() : f.session.id}${path}?kind=presentation`,
+        remoteAddress: ip,
+        headers: { authorization: `Bearer ${randomUUID()}` },
+      });
+      expect(response.statusCode).toBe(401);
+    }
+    expect(authenticate).toHaveBeenCalledTimes(2);
+    expect(participantLookup).toHaveBeenCalledTimes(1);
+    keys.length = 0;
+    for (const [index, path] of ["/availability", "", "/qna/questions", "/sync"].entries()) {
+      const response = await readers[index % 2]!.inject({
+        method: path === "/sync" ? "POST" : "GET",
+        url: `/v1/audience-scopes/${randomUUID()}${path}${path === "/sync" ? "" : "?kind=presentation"}`,
+        remoteAddress: ip,
+        headers: { authorization: `Bearer ${randomUUID()}` },
+        ...(path === "/sync" ? { payload: { kind: "presentation" } } : {}),
+      });
+      expect(response.statusCode).toBe(429);
+      expect(response.json().error.code).toBe("RATE_LIMITED");
+      expect(response.headers["retry-after"]).toBe("60");
+    }
+    expect(authenticate).toHaveBeenCalledTimes(2);
+    expect(participantLookup).toHaveBeenCalledTimes(1);
+    // Denied requests never allocate a caller-controlled credential/scope bucket.
+    expect(keys).toEqual(Array(4).fill(ipKey));
+    const unaffected = await readers[0]!.inject({
+      method: "GET",
+      url: `/v1/audience-scopes/${f.session.id}/availability?kind=presentation`,
+      remoteAddress: "192.0.2.21",
+      headers: { authorization: `Bearer ${f.tokens.participant}` },
+    });
+    expect(unaffected.statusCode).toBe(200);
+  });
+
+  it("keeps a local pre-authentication IP ceiling even when the shared cache accepts every read", async () => {
+    const f = await fixture();
+    const app = Fastify();
+    apps.push(app);
+    await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute" });
+    const consumeAdmission = vi.fn(async () => true);
+    await registerAudienceScopeRoutes(app, f.audienceScopeService, consumeAdmission);
+    const read = vi
+      .spyOn(f.audienceScopeService, "presentationAvailability")
+      .mockRejectedValue(new AudienceAccessError("UNAUTHORIZED", "Invalid room credential"));
+    const ip = "192.0.2.30";
+    for (let request = 0; request < 10_000; request++) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/audience-scopes/${randomUUID()}/availability?kind=presentation`,
+        remoteAddress: ip,
+        headers: { authorization: `Bearer ${randomUUID()}` },
+      });
+      expect(response.statusCode).toBe(401);
+    }
+    expect(read).toHaveBeenCalledTimes(10_000);
+    const admissionCalls = consumeAdmission.mock.calls.length;
+    const denied = await app.inject({
+      method: "GET",
+      url: `/v1/audience-scopes/${randomUUID()}/availability?kind=presentation`,
+      remoteAddress: ip,
+      headers: { authorization: `Bearer ${randomUUID()}` },
+    });
+    expect(denied.statusCode).toBe(429);
+    expect(denied.json().error.code).toBe("RATE_LIMITED");
+    expect(read).toHaveBeenCalledTimes(10_000);
+    expect(consumeAdmission.mock.calls.length).toBe(admissionCalls);
+  }, 30_000);
+
+  it("discovers gated Presentation Q&A without activating it or broadening guest permissions", async () => {
+    const f = await fixture();
+    for (const role of ["host", "participant", "companion"] as const) {
+      const response = await f.app.inject({
+        method: "GET",
+        url: `/v1/audience-scopes/${f.session.id}/availability?kind=presentation`,
+        headers: { authorization: `Bearer ${f.tokens[role]}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        schemaVersion: 1,
+        available: true,
+        activated: false,
+        canActivate: role === "host",
+      });
+    }
+    const absent = await f.app.inject({
+      method: "GET",
+      url: `/v1/audience-scopes/${f.session.id}?kind=presentation`,
+      headers: { authorization: `Bearer ${f.tokens.host}` },
+    });
+    expect(absent.statusCode).toBe(404);
+  });
+
+  it("hides disabled creation but preserves activated Q&A discovery after rollout pause", async () => {
+    const f = await fixture(false);
+    const url = `/v1/audience-scopes/${f.session.id}/availability?kind=presentation`;
+    const headers = { authorization: `Bearer ${f.tokens.host}` };
+    expect((await f.app.inject({ method: "GET", url, headers })).json()).toEqual({
+      schemaVersion: 1,
+      available: false,
+      activated: false,
+      canActivate: false,
+    });
+    f.settings.FEATURE_AUDIENCE_SCOPES = true;
+    f.settings.CORE_PARITY_WORKSPACE_ALLOWLIST = [f.workspaceId];
+    expect((await f.activate()).statusCode).toBe(201);
+    f.settings.FEATURE_AUDIENCE_SCOPES = false;
+    expect((await f.app.inject({ method: "GET", url, headers })).json()).toEqual({
+      schemaVersion: 1,
+      available: true,
+      activated: true,
+      canActivate: false,
+    });
+  });
+
+  it("rejects foreign and revoked credentials during audience discovery", async () => {
+    const f = await fixture();
+    const url = `/v1/audience-scopes/${f.session.id}/availability?kind=presentation`;
+    expect(
+      (
+        await f.app.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${randomUUID()}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    await f.presentationSessions.revokeCredential(
+      f.workspaceId,
+      f.session.id,
+      f.credentialIds.companion!,
+    );
+    expect(
+      (
+        await f.app.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${f.tokens.companion}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+
   it.each(["-".repeat(36), "0".repeat(36), "12345678-1234-1234-1234-12345678901-"])(
     "returns an actionable cursor conflict for malformed UUID %s",
     async (invalidId) => {

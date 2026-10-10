@@ -8,6 +8,7 @@ import {
   type QuizDraft,
   type StarterId,
   type StarterSummary,
+  type RoundCategory,
 } from "@openround/contracts";
 
 const ids = {
@@ -63,7 +64,7 @@ function choiceQuestion(
   };
 }
 
-const starterDrafts: Record<StarterId, QuizDraft> = {
+const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
   "exit-ticket": {
     title: "Exit ticket",
     description:
@@ -298,7 +299,7 @@ const starterDrafts: Record<StarterId, QuizDraft> = {
   },
 };
 
-const metadata: Record<StarterId, Pick<StarterSummary, "description" | "segment">> = {
+const metadata: Partial<Record<StarterId, Pick<StarterSummary, "description" | "segment">>> = {
   "exit-ticket": {
     description: "Close with a key-idea check and linked transfer question.",
     segment: "education",
@@ -325,27 +326,427 @@ const metadata: Record<StarterId, Pick<StarterSummary, "description" | "segment"
   },
 };
 
+const presetForCategory = {
+  general: "focus",
+  education: "campus",
+  business: "studio",
+  technical: "blueprint",
+  safety_compliance: "signal",
+  icebreaker: "spark",
+} as const;
+
+function addQuiz(
+  id: StarterId,
+  title: string,
+  category: RoundCategory,
+  prompt: string,
+  labels: string[],
+  correct: number,
+  explanation: string,
+  recheck: { prompt: string; labels: string[]; correct: number; explanation: string },
+) {
+  starterDrafts[id] = {
+    title,
+    description:
+      "An original, ready-to-edit diagnostic and linked transfer check. Review examples for your audience before hosting.",
+    category,
+    experiencePreset: { id: presetForCategory[category], version: 1 },
+    questions: [
+      choiceQuestion(ids.q1, prompt, labels, correct, {
+        explanation,
+        conceptKeys: [id],
+        confidence: "required",
+        linkedRecheckQuestionId: ids.q2,
+      }),
+      choiceQuestion(ids.q2, recheck.prompt, recheck.labels, recheck.correct, {
+        explanation: recheck.explanation,
+        conceptKeys: [id],
+        delivery: "recheck",
+        purpose: "practice",
+        confidence: "required",
+      }),
+    ],
+  };
+  metadata[id] = {
+    segment:
+      category === "education"
+        ? "education"
+        : category === "business" || category === "safety_compliance"
+          ? "workplace"
+          : "all",
+    description: explanation,
+  };
+}
+
+addQuiz(
+  "retrieval-practice",
+  "Learning that lasts",
+  "education",
+  "Which activity gives the clearest evidence that you can recall an idea?",
+  [
+    "Rereading a highlighted passage",
+    "Explaining it without looking at notes",
+    "Recognizing the textbook cover",
+  ],
+  1,
+  "Retrieving an idea without notes reveals what you can recall, not just recognize.",
+  {
+    prompt: "After reading a chapter, which next step checks your recall?",
+    labels: [
+      "Close it and summarize the key idea",
+      "Highlight the same paragraph again",
+      "Count the pages",
+    ],
+    correct: 0,
+    explanation: "A summary from memory is a retrieval check; revisit gaps afterward.",
+  },
+);
+addQuiz(
+  "scientific-reasoning",
+  "Correlation or cause?",
+  "education",
+  "Ice cream sales and swimming both increase in summer. What does this establish?",
+  [
+    "Ice cream causes swimming",
+    "They are associated; a shared cause may explain it",
+    "Swimming causes ice cream sales",
+  ],
+  1,
+  "Association alone does not establish causation; temperature could influence both.",
+  {
+    prompt:
+      "People carrying umbrellas are more likely to encounter rain. What should you conclude?",
+    labels: [
+      "Umbrellas cause rain",
+      "Rain may explain both umbrella use and getting wet",
+      "Umbrellas prevent all rain",
+    ],
+    correct: 1,
+    explanation: "Consider common causes and alternative explanations before inferring causation.",
+  },
+);
+addQuiz(
+  "data-literacy",
+  "Reading averages",
+  "education",
+  "For values 2, 3, 4, 5, and 100, which summary is less affected by the extreme value?",
+  ["Mean", "Median", "Maximum"],
+  1,
+  "The median describes the middle observation and is less sensitive to outliers.",
+  {
+    prompt:
+      "One very expensive house enters a small neighborhood dataset. Which summary best represents a typical sale?",
+    labels: ["Maximum price", "Total price", "Median price"],
+    correct: 2,
+    explanation:
+      "The median is often useful for describing a typical observation in a skewed distribution.",
+  },
+);
+addQuiz(
+  "percentage-check",
+  "Percentages in practice",
+  "technical",
+  "A price of $80 is reduced by 25%. What is the new price?",
+  ["$55", "$60", "$75"],
+  1,
+  "25% of $80 is $20; subtracting it leaves $60.",
+  {
+    prompt: "A $120 price is reduced by 10%. What is the new price?",
+    labels: ["$108", "$110", "$12"],
+    correct: 0,
+    explanation: "10% of $120 is $12; the remaining price is $108.",
+  },
+);
+addQuiz(
+  "cybersecurity-basics",
+  "Spot the phishing trap",
+  "safety_compliance",
+  "An unexpected message asks you to sign in urgently using its link. What is the safest first step?",
+  [
+    "Use the link immediately",
+    "Verify through a known, independent channel",
+    "Forward your password to support",
+  ],
+  1,
+  "Verify unexpected requests independently and follow your organization's reporting procedure.",
+  {
+    prompt: "A caller claims to be IT and asks for your verification code. What should you do?",
+    labels: [
+      "Share the code",
+      "Verify the request through your known IT channel without sharing it",
+      "Post the code in team chat",
+    ],
+    correct: 1,
+    explanation:
+      "Do not share authentication codes; independently verify and report suspicious requests.",
+  },
+);
+addQuiz(
+  "api-design",
+  "Safe API retries",
+  "technical",
+  "A client times out after submitting a payment. What best prevents duplicate processing on retry?",
+  [
+    "A new request identifier every time",
+    "An idempotency key reused for the same operation",
+    "Disabling all error handling",
+  ],
+  1,
+  "An idempotency key lets the server recognize retries of the same logical operation.",
+  {
+    prompt:
+      "A create-order request is retried after network loss. Which identifier should remain stable?",
+    labels: [
+      "The logical operation's idempotency key",
+      "The new socket ID",
+      "The current timestamp",
+    ],
+    correct: 0,
+    explanation:
+      "Stable operation identity makes retries safe; each distinct new order needs its own key.",
+  },
+);
+addQuiz(
+  "incident-response",
+  "Incident first steps",
+  "technical",
+  "An alert suggests a production issue. What should you do first?",
+  [
+    "Delete logs to reduce noise",
+    "Validate impact and follow the incident procedure",
+    "Change several systems at once",
+  ],
+  1,
+  "Validate the impact, preserve evidence, and use an agreed incident process.",
+  {
+    prompt: "A possible data exposure is reported. Which action best supports response?",
+    labels: [
+      "Preserve evidence and use the approved escalation path",
+      "Publish affected records in chat",
+      "Ignore it until confirmed by social media",
+    ],
+    correct: 0,
+    explanation:
+      "Protect evidence and sensitive information while escalating through the appropriate process.",
+  },
+);
+addQuiz(
+  "accessibility-awareness",
+  "Accessible by design",
+  "business",
+  "A chart distinguishes categories only by color. What improves accessibility?",
+  ["Add labels or distinct patterns", "Make colors more similar", "Remove the legend"],
+  0,
+  "Do not rely on color alone; provide another way to distinguish information.",
+  {
+    prompt: "A form flags errors using red borders only. What should you add?",
+    labels: [
+      "A flashing background",
+      "Clear error text associated with each field",
+      "Smaller labels",
+    ],
+    correct: 1,
+    explanation:
+      "Associated text describes the problem to people who cannot perceive the color cue.",
+  },
+);
+
+function addPoll(
+  id: StarterId,
+  title: string,
+  category: RoundCategory,
+  prompt: string,
+  labels: string[],
+  ratingPrompt: string,
+  low: string,
+  high: string,
+) {
+  starterDrafts[id] = {
+    title,
+    description:
+      "Two unscored, original prompts for a live conversation. There are no correct answers or learner scores.",
+    category,
+    experiencePreset: { id: presetForCategory[category], version: 1 },
+    questions: [
+      choiceQuestion(ids.q1, prompt, labels, null, {
+        type: "poll",
+        explanation: "Use the distribution as a starting point for discussion.",
+      }),
+      {
+        id: ids.q2,
+        type: "rating",
+        prompt: ratingPrompt,
+        purpose: "opinion",
+        confidence: "off",
+        delivery: "main",
+        conceptKeys: [],
+        linkedRecheckQuestionId: null,
+        min: 1,
+        max: 5,
+        minLabel: low,
+        maxLabel: high,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation: "Invite context without treating a rating as a judgment of a participant.",
+        mediaId: null,
+        mediaAlt: null,
+      },
+    ],
+  };
+  metadata[id] = {
+    description: `${prompt} Follow with a labeled reflection scale.`,
+    segment: category === "education" ? "education" : category === "business" ? "workplace" : "all",
+  };
+}
+addPoll(
+  "project-kickoff",
+  "Project kickoff",
+  "business",
+  "What needs the most clarity before this project starts?",
+  ["Success criteria", "Roles", "Timeline", "Dependencies"],
+  "How clear is our shared goal?",
+  "Not clear",
+  "Very clear",
+);
+addPoll(
+  "team-retrospective",
+  "Team retrospective",
+  "business",
+  "What would most improve our next iteration?",
+  ["Smaller scope", "Earlier feedback", "Clearer ownership", "Fewer interruptions"],
+  "How sustainable was our pace?",
+  "Not sustainable",
+  "Very sustainable",
+);
+addPoll(
+  "meeting-priorities",
+  "Meeting priorities",
+  "business",
+  "Where should we focus today's discussion?",
+  ["Decisions", "Blockers", "Planning", "Questions"],
+  "How ready are you to make a decision?",
+  "Need more context",
+  "Ready",
+);
+addPoll(
+  "training-feedback",
+  "Training feedback",
+  "general",
+  "What would make the next training more useful?",
+  ["More examples", "More practice", "More discussion", "A different pace"],
+  "How useful was this session for your work?",
+  "Not yet useful",
+  "Very useful",
+);
+addPoll(
+  "course-pulse",
+  "Course pulse",
+  "education",
+  "What would help you most in the next class?",
+  ["A worked example", "Practice problems", "Concept review", "Peer discussion"],
+  "How manageable is the current pace?",
+  "Too demanding",
+  "Very manageable",
+);
+addPoll(
+  "workshop-expectations",
+  "Workshop expectations",
+  "general",
+  "What do you most want from this workshop?",
+  ["Practical tools", "New perspectives", "Hands-on practice", "Discussion"],
+  "How familiar are you with the topic?",
+  "New to it",
+  "Very familiar",
+);
+addPoll(
+  "change-readiness",
+  "Change readiness",
+  "business",
+  "What support would help you adopt this change?",
+  ["A clear rationale", "A practical demonstration", "Practice time", "A help contact"],
+  "How ready do you feel for the next step?",
+  "Need support",
+  "Ready",
+);
+addPoll(
+  "customer-discovery",
+  "Product discovery",
+  "business",
+  "Which improvement would be most valuable?",
+  ["Easier setup", "Faster workflows", "Better reporting", "More guidance"],
+  "How well does the current workflow meet your needs?",
+  "Not well",
+  "Very well",
+);
+addPoll(
+  "this-or-that",
+  "This or that",
+  "icebreaker",
+  "Which way would you prefer to start?",
+  ["A quick challenge", "A short story", "A group discussion", "A demonstration"],
+  "How much interaction would you like today?",
+  "Mostly listen",
+  "Lots of interaction",
+);
+addPoll(
+  "weekend-warmup",
+  "Low-pressure warmup",
+  "icebreaker",
+  "Choose a relaxing way to spend an hour.",
+  ["A walk", "A book", "Music", "A creative project"],
+  "How ready are you to start?",
+  "Warming up",
+  "Ready to go",
+);
+starterDrafts["retrieval-practice"]!.questions.push(
+  choiceQuestion(
+    ids.q3,
+    "Which practice strategy would you like to try next?",
+    [
+      "Recall without notes",
+      "Explain to a peer",
+      "Space practice across days",
+      "Combine strategies",
+    ],
+    null,
+    {
+      type: "poll",
+      explanation: "This reflection is unscored and separate from the diagnostic evidence.",
+    },
+  ),
+);
+starterDrafts["accessibility-awareness"]!.questions.push({
+  ...starterDrafts["course-pulse"]!.questions[1]!,
+  id: ids.q3,
+  prompt: "How confident do you feel applying accessible design in your own work?",
+});
+
 for (const [id, draft] of Object.entries(starterDrafts)) {
   starterDrafts[id as StarterId] = QuizContentSchema.parse(draft);
 }
 
 export const starterSummaries = (Object.keys(starterDrafts) as StarterId[]).map((id) => {
-  const draft = starterDrafts[id];
+  const draft = starterDrafts[id]!;
   return StarterSummarySchema.parse({
     id,
     title: draft.title,
-    description: metadata[id].description,
-    segment: metadata[id].segment,
+    description: metadata[id]!.description,
+    segment: metadata[id]!.segment,
     category: draft.category,
     experiencePreset: draft.experiencePreset,
     questionCount: draft.questions.length,
     responseTypes: [...new Set(draft.questions.map((question) => question.type))],
     version: 1,
+    roundType: draft.questions.every((q) => q.type === "poll" || q.type === "rating")
+      ? "poll"
+      : draft.questions.every((q) => q.type !== "poll" && q.type !== "rating")
+        ? "quiz"
+        : "custom",
   });
 });
 
 export function instantiateStarter(id: StarterId): QuizDraft {
-  const source = starterDrafts[id];
+  const source = starterDrafts[id]!;
   const questionIds = new Map(source.questions.map((question) => [question.id, randomUUID()]));
   return QuizDraftSchema.parse({
     ...structuredClone(source),

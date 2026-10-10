@@ -6,11 +6,54 @@ do not need accounts.
 
 For a local first run, complete the [quick start](quick-start.md) first.
 
-The Core-Parity foundation includes gated Presentation Q&A on host, participant, and Companion
-screens. Presentation replies/chat/Pulse, organizer-blind feedback rooms, Surveys, new opinion
-formats, and feedback export/sharing tools remain pending. Existing learning Q&A's Anonymous public display still lets
+The Core-Parity foundation includes gated Presentation Q&A and a gated self-paced Survey beta
+using polls and ratings. Presentation replies/chat/Pulse, Q&A-only feedback rooms, new opinion
+formats and advanced feedback exports remain pending. Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
+
+## Choose an activity and a template
+
+Select **Create → Round**. Choose **Live quiz** for knowledge checks/recovery, **Live poll** for
+unscored host-paced opinions, **Survey** for independent responses over time, or **Custom Round** for
+mixed live questions. Older starting links still work as custom workflows. Formats can be changed
+later in the Round editor. A live poll is not a self-paced Survey.
+
+Search the 24 original templates and filter by category/type. **Preview questions** shows prompts
+and options without creating content. **Use starter** makes an independent draft with fresh IDs.
+Review every answer, explanation and recheck for your audience before publishing. Original template
+content is English; chooser/filter controls are localized.
+
+## Standalone Surveys (beta)
+
+Your operator must enable the flags/allowlist in the quick start. Owners/editors create, edit,
+publish and share; viewers can read content/results.
+
+1. Choose **Survey**, then a feedback template or **Create blank Survey**.
+2. Edit details, add poll/rating questions, label scale endpoints, select required/optional, and
+   reorder/remove items. Other opinion formats are not included yet.
+3. **Save draft**, preview, then **Publish Survey**. Saves are explicit; save before leaving.
+   Revision conflicts require reloading, not silently overwriting another editor's work.
+4. Choose a window (seven days by default, up to 30 within retention) and **Create sharing link**.
+   Share the code, link or downloadable QR. New sharing links are separate runs; later edits never
+   alter an already shared version.
+5. Participants use the normal Join page without an account, nickname or avatar. They answer at
+   their own pace, **Save progress** before leaving, then **Submit Survey**. Required items must be
+   answered. Refresh resumes saved answers on the same browser. One completion per credential is
+   enforced, not verified one-person identity; another browser/device is a new credential.
+6. Return through **Library → Browse Surveys** (`/surveys`) to content, sharing links and results.
+   Refresh results to count finalized submissions. **Close admissions and submissions**, or wait for
+   the deadline, to release final distributions. Each question needs at least five finalized answers;
+   optional unanswered items do not count toward that minimum. Open runs never show changing
+   distributions, which could reveal individual answers through consecutive result comparisons.
+7. Owners/editors may close a run; only the workspace owner may permanently **Delete survey run**.
+   **Duplicate** an archived Survey to create a new editable draft without altering the original.
+
+Organizers cannot inspect linked respondent answers. A room-only bearer credential is stored locally
+for resume and only its hash server-side. Clearing site data loses resume access. Closing blocks new
+admissions/submissions; saved receipts remain readable until retention. Deleting a run removes its
+attempts/receipts, including its sharing-link creation receipt. Survey opinions are separate from
+learning accuracy and Recovery evidence.
 
 For video guidance, open **Help** (`/help`). The quick start follows sign-in, authoring,
 preview, publishing, hosting, QR/link joining, answering, and results. The longer user guide

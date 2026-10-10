@@ -1,4 +1,7 @@
+import { creationMessages } from "../creation-messages";
+
 export const englishMessages = {
+  ...creationMessages("en-CA"),
   "common.create": "Create",
   "common.round": "Round",
   "common.presentation": "Presentation",

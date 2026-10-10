@@ -9,9 +9,33 @@ The guides are currently in English and label optional capabilities that are not
 This guide starts the complete community stack and walks through one live checkpoint round. The
 normal path takes about ten minutes after container images are available.
 
-Core-parity work is currently a backend foundation only. This walkthrough and the existing UI
-remain unchanged; Surveys, organizer-blind feedback rooms, word clouds/ranking/open-text polls,
-and feedback exports are not available yet. See the [staged implementation status](implementation-status.md).
+Core-parity includes Presentation Q&A and a gated self-paced Survey beta. Word clouds, ranking,
+open text, standalone Q&A feedback rooms and advanced feedback exports remain pending.
+
+## Try the new creation workflows
+
+After signing in, **Create → Round** offers Live quiz, Live poll, Survey and Custom Round. Search
+24 templates and preview questions before making a copy. Polls are host-paced; Surveys are self-paced.
+
+To opt into the Survey beta, migrate the current database release first, then configure these existing
+environment keys for your current deployment/runtime, preserving other allowlisted workspace IDs:
+
+```dotenv
+FEATURE_AUDIENCE_SCOPES=true
+FEATURE_FEEDBACK_ROOMS=true
+FEATURE_SURVEYS=true
+CORE_PARITY_WORKSPACE_ALLOWLIST=YOUR_WORKSPACE_UUID
+```
+
+Find your own `creator.workspaceId` through authenticated `GET /v1/auth/me`. Restart the API with
+your working service profile/runtime; do not switch runtimes or delete volumes to enable a feature.
+The service launcher passes these keys. The flags enable an opt-in beta, not production approval.
+
+Choose **Survey → Training feedback**, save changes, publish, and create a sharing link. Participants
+scan/open the QR/link or enter its code, save progress, and submit without a nickname or account.
+Return via **Library → Browse Surveys**. Poll/rating questions are supported; aggregate distributions
+appear only after closing the run or reaching its deadline, with five finalized responses per question.
+See the [user guide](user-guide.md) for limits and privacy behavior.
 
 ## What you need
 

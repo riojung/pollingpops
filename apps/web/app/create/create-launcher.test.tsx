@@ -46,17 +46,34 @@ describe("Round creation launcher", () => {
     fixtures.push.mockClear();
   });
 
-  it("offers four distinct, deep-linkable starting methods", () => {
+  it("asks for an activity type before offering starting methods", () => {
     const markup = renderToStaticMarkup(<CreatePage />);
 
-    expect(markup).toContain("How do you want to start?");
-    expect(markup).toContain('href="/create?start=starters"');
-    expect(markup).toContain('href="/create?start=source"');
-    expect(markup).toContain('href="/create?start=import"');
-    expect(markup).toContain('href="/create?start=blank"');
-    expect(markup).toContain("Built for review, not instant publishing.");
+    expect(markup).toContain("What would you like to create?");
+    expect(markup).toContain('href="/create?type=quiz"');
+    expect(markup).toContain('href="/create?type=poll"');
+    expect(markup).toContain('href="/surveys/new"');
+    expect(markup).toContain('href="/create?type=custom"');
+    expect(markup).toContain("at their own pace");
     expect(markup).not.toContain("Source authoring workflow");
     expect(markup).not.toContain("Structured import workflow");
+  });
+
+  it("offers only unscored responses for a live poll", () => {
+    fixtures.query = "type=poll&start=blank";
+    const markup = renderToStaticMarkup(<CreatePage />);
+    expect(markup).toContain('value="poll"');
+    expect(markup).toContain('value="rating"');
+    expect(markup).not.toContain('value="single_select"');
+    expect(markup).not.toContain('value="numeric"');
+  });
+  it("offers scored responses for a quiz and every format for custom", () => {
+    fixtures.query = "type=quiz&start=blank";
+    const quiz = renderToStaticMarkup(<CreatePage />);
+    expect(quiz).toContain('value="numeric"');
+    expect(quiz).not.toContain('value="rating"');
+    fixtures.query = "type=custom&start=blank";
+    expect(renderToStaticMarkup(<CreatePage />)).toContain('value="rating"');
   });
 
   it("renders only the selected creation workflow", () => {

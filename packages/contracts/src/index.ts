@@ -150,6 +150,7 @@ export const WorkspaceProductFeaturesSchema = z.object({
   liveFlexMode: z.boolean().default(false),
   questionHealth: z.boolean().default(false),
   recoveryPacks: z.boolean().default(false),
+  surveys: z.boolean().default(false),
   groups: z.boolean(),
   discover: z.boolean(),
 });
@@ -1815,7 +1816,7 @@ export type JoinPreflightRequest = z.infer<typeof JoinPreflightRequestSchema>;
 export const JoinPreflightResponseSchema = z
   .object({
     nicknamePolicy: z.enum(["custom", "friendly_only"]),
-    artifactType: z.enum(["round", "presentation"]).default("round"),
+    artifactType: z.enum(["round", "presentation", "feedback_room"]).default("round"),
     destination: z.string().startsWith("/").default("/join"),
   })
   .strict();
@@ -2591,6 +2592,24 @@ export const StarterIdSchema = z.enum([
   "compliance-scenario",
   "new-hire-knowledge-check",
   "icebreaker-poll",
+  "retrieval-practice",
+  "scientific-reasoning",
+  "data-literacy",
+  "percentage-check",
+  "cybersecurity-basics",
+  "api-design",
+  "incident-response",
+  "accessibility-awareness",
+  "project-kickoff",
+  "team-retrospective",
+  "meeting-priorities",
+  "training-feedback",
+  "course-pulse",
+  "workshop-expectations",
+  "change-readiness",
+  "customer-discovery",
+  "this-or-that",
+  "weekend-warmup",
 ]);
 export type StarterId = z.infer<typeof StarterIdSchema>;
 
@@ -2604,6 +2623,7 @@ export const StarterSummarySchema = z.object({
   questionCount: z.number().int().positive(),
   responseTypes: z.array(QuestionTypeSchema).min(1),
   version: z.literal(1),
+  roundType: z.enum(["quiz", "poll", "custom"]).default("custom"),
 });
 export type StarterSummary = z.infer<typeof StarterSummarySchema>;
 

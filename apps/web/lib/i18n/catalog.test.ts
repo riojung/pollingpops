@@ -66,6 +66,8 @@ describe("localized message catalogs", () => {
 
   it("loads only the domains required by the active route", async () => {
     expect(localeDomainsForPath("/account")).toEqual(["account"]);
+    expect(localeDomainsForPath("/surveys/rooms/example")).toEqual(["live-delivery"]);
+    expect(localeDomainsForPath("/surveys/example")).toEqual([]);
     expect(localeDomainsForPath("/home")).toEqual(["workspace-pages"]);
     expect(localeDomainsForPath("/quiz/example")).toEqual([
       "delivery-authoring",

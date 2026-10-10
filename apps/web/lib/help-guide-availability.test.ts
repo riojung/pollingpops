@@ -20,6 +20,7 @@ const enabledFeatures: WorkspaceProductFeatures = {
   liveFlexMode: true,
   questionHealth: false,
   recoveryPacks: false,
+  surveys: false,
   groups: true,
   discover: true,
 };

@@ -15,6 +15,7 @@ export * from "./published-question-live-metadata.js";
 export * from "./audience-scope-types.js";
 export * from "./audience-scopes.js";
 export * from "./scoped-qna.js";
+export * from "./surveys.js";
 export * from "./recovery-pack-types.js";
 export { recoveryPackTextOnlyLiveEligible } from "./recovery-pack-live-metadata.js";
 export * from "./recovery-packs.js";

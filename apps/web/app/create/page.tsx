@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import type { QuestionType } from "@openround/contracts";
+import { questionTypeDefinition, type QuestionType } from "@openround/contracts";
 import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { CheckpointSetImport } from "../../components/checkpoint-set-import";
 import { useLocale } from "../../components/locale-provider";
@@ -91,7 +91,30 @@ function CreateContent() {
   const [questionType, setQuestionType] = useState<QuestionType>("single_select");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const selectedMethod = startMethod(searchParams.get("start")) ?? legacyHashMethod;
+  const requestedMethod = startMethod(searchParams.get("start")) ?? legacyHashMethod;
+  const requestedKind = searchParams.get("type");
+  const kind =
+    requestedKind === "quiz" || requestedKind === "poll" || requestedKind === "custom"
+      ? requestedKind
+      : requestedMethod
+        ? "custom"
+        : null;
+  const selectedMethod =
+    kind === "poll" && (requestedMethod === "source" || requestedMethod === "import")
+      ? null
+      : requestedMethod;
+  const availableTypes = questionTypeOptions.filter((option) =>
+    kind === "quiz"
+      ? questionTypeDefinition(option.type).scored
+      : kind === "poll"
+        ? !questionTypeDefinition(option.type).scored
+        : true,
+  );
+  const effectiveType = availableTypes.some((option) => option.type === questionType)
+    ? questionType
+    : kind === "poll"
+      ? "poll"
+      : "single_select";
 
   useEffect(() => {
     if (startMethod(searchParams.get("start"))) return;
@@ -112,7 +135,7 @@ function CreateContent() {
         }),
       });
       recordCreationEvent("creation_completed", "blank", "round");
-      router.push(`/quiz/${response.quiz.id}?insert=${questionType}`);
+      router.push(`/quiz/${response.quiz.id}?insert=${effectiveType}`);
     } catch (caught) {
       setError(humanError(caught));
       setBusy(false);
@@ -133,33 +156,64 @@ function CreateContent() {
 
   return (
     <>
-      {!selectedMethod ? (
+      {!kind ? (
+        <nav className={styles.startGrid} aria-label={t("create.kind.title")}>
+          {(["quiz", "poll", "survey", "custom"] as const).map((type, index) => (
+            <Link
+              className={styles.startCard}
+              href={type === "survey" ? "/surveys/new" : `/create?type=${type}`}
+              key={type}
+            >
+              <span className={styles.startNumber} aria-hidden="true">
+                {index + 1}
+              </span>
+              <h2>{t(`create.kind.${type}`)}</h2>
+              <p>{t(`create.kind.${type}.description`)}</p>
+              <span className={styles.startLink}>{t("create.kind.start")}</span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+      {kind && !selectedMethod ? (
         <>
+          <div className={styles.methodToolbar}>
+            <Link href="/create" className="button-quiet small-button">
+              {t("create.kind.title")}
+            </Link>
+            <h2>{t(`create.kind.${kind}`)}</h2>
+          </div>
           <nav className={styles.startGrid} aria-label={t("create.round.waysLabel")}>
-            {starts.map((start, index) => (
-              <Link className={styles.startCard} href={`/create?start=${start.id}`} key={start.id}>
-                <span className={styles.startNumber} aria-hidden="true">
-                  {index + 1}
-                </span>
-                <span className={styles.startBadge}>{t(start.badgeKey)}</span>
-                <h2>{t(start.titleKey)}</h2>
-                <p>{t(start.descriptionKey)}</p>
-                <span className={styles.startLink}>{t("create.round.choosePath")}</span>
-              </Link>
-            ))}
+            {starts
+              .filter((start) => kind !== "poll" || start.id === "starters" || start.id === "blank")
+              .map((start, index) => (
+                <Link
+                  className={styles.startCard}
+                  href={`/create?type=${kind}&start=${start.id}`}
+                  key={start.id}
+                >
+                  <span className={styles.startNumber} aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <span className={styles.startBadge}>{t(start.badgeKey)}</span>
+                  <h2>{t(start.titleKey)}</h2>
+                  <p>{t(start.descriptionKey)}</p>
+                  <span className={styles.startLink}>{t("create.round.choosePath")}</span>
+                </Link>
+              ))}
           </nav>
           <aside aria-label={t("create.round.review.label")} className={styles.launcherNote}>
             <strong>{t("create.round.review.title")}</strong>
             <span>{t("create.round.review.description")}</span>
           </aside>
         </>
-      ) : (
+      ) : selectedMethod ? (
         <div className={styles.focusedCreate}>
           <div className={styles.methodToolbar}>
             <Link className="button-quiet small-button" href="/create">
               {t("create.common.allStartingPoints")}
             </Link>
             <span>
+              {t(`create.kind.${kind ?? "custom"}`)} ·{" "}
               {t(starts.find((start) => start.id === selectedMethod)?.badgeKey ?? "common.create")}
             </span>
           </div>
@@ -174,7 +228,7 @@ function CreateContent() {
                 </div>
                 <Link href="/templates">{t("create.round.starter.allTemplates")}</Link>
               </div>
-              <StarterGallery compact />
+              <StarterGallery compact roundType={kind === "custom" ? "all" : (kind ?? "all")} />
             </section>
           ) : null}
 
@@ -223,10 +277,10 @@ function CreateContent() {
                 <fieldset>
                   <legend>{t("create.round.blank.firstResponse")}</legend>
                   <div className={styles.typeGrid}>
-                    {questionTypeOptions.map((option) => (
+                    {availableTypes.map((option) => (
                       <label className={styles.typeChoice} key={option.type}>
                         <input
-                          checked={questionType === option.type}
+                          checked={effectiveType === option.type}
                           name="question-type"
                           onChange={() => setQuestionType(option.type)}
                           type="radio"
@@ -264,7 +318,7 @@ function CreateContent() {
             </section>
           ) : null}
         </div>
-      )}
+      ) : null}
     </>
   );
 }
@@ -282,7 +336,7 @@ export default function CreatePage() {
         description={t("create.round.description")}
         eyebrow={t("create.round.eyebrow")}
         requiredFeature="builderV2"
-        title={t("create.round.title")}
+        title={t("create.kind.title")}
         translationLevel="full"
       >
         <CreateContent />

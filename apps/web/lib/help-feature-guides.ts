@@ -40,7 +40,9 @@ type ActionTarget =
   | "packs"
   | "account"
   | "join"
+  | "surveys"
   | "status";
+// Survey guidance is separate from graded practice and live polls.
 
 export interface HelpFeatureGuide {
   id: string;
@@ -203,7 +205,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
     steps: [
       {
         title: "Browse starting patterns",
-        body: "Use the available starter/template gallery, or Discover when enabled. Choose a pattern by purpose: diagnose a concept, build from source material, or engage a presentation.",
+        body: "Create → Round first offers Live quiz, Live poll, Survey and Custom Round. Search the 24 original templates, filter by category/type, and preview questions before making a copy. Live polls are host-paced; Surveys are self-paced.",
       },
       {
         title: "Create your own draft",
@@ -229,6 +231,64 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
     ],
     action: { target: "library", label: "Open Library" },
+  },
+  {
+    id: "self-paced-surveys",
+    title: "Create a self-paced Survey",
+    topic: "create",
+    icon: "choices",
+    summary:
+      "Share independent opinion feedback without participant accounts or linked respondent reports.",
+    audience: "Owners/editors create; workspace viewers can read results",
+    requiredFeatures: ["surveys"],
+    before: [
+      "An operator must enable the Survey beta and allowlist your workspace.",
+      "Use opinion polls or rating scales, not graded diagnostics.",
+    ],
+    steps: [
+      {
+        title: "Choose Survey",
+        body: "Select Create → Round → Survey, then start blank or use a feedback template. Survey creates a separate self-paced artifact, not a live Round or graded assignment.",
+      },
+      {
+        title: "Build and review",
+        body: "Edit details, add poll/rating questions, label scale endpoints, mark required/optional items, reorder, and preview. Select Save draft before leaving; this beta uses explicit saves.",
+      },
+      {
+        title: "Publish and share",
+        body: "Publish the saved draft, choose a window (seven days by default), and create a sharing link. Copy the link, show its code or download its QR. A new link is a separate frozen run.",
+      },
+      {
+        title: "Answer independently",
+        body: "Participants join without a nickname or account, answer at their own pace, save progress, and submit once. Refresh resumes saved responses on the same browser. Missing required items are explained before submission.",
+      },
+      {
+        title: "Return to results",
+        body: "Use Library → Browse Surveys to find your content and runs. Refresh results to count finalized submissions. Close admissions and submissions, or wait for the deadline, to release final distributions; each question needs five responses. Owners/editors can close a run, but only owners can permanently delete it. Duplicate an archived Survey to reuse its content.",
+      },
+    ],
+    check:
+      "A participant can resume saved progress and receive a submission receipt; the facilitator sees question-level totals, not linked respondent rows.",
+    notes: [
+      "One completion per room credential is enforced, not verified one-person participation. Another browser/device is a new credential.",
+      "No alias, learning identity, score or timer is collected. Clearing browser site data loses resume access.",
+      "Open text, word clouds, ranking, advanced exports, passcodes and individual credential revocation remain pending. Free shares five published items across Rounds and Surveys.",
+    ],
+    troubleshooting: [
+      {
+        symptom: "Survey creation is unavailable",
+        fix: "Ask your operator to enable FEATURE_AUDIENCE_SCOPES, FEATURE_FEEDBACK_ROOMS and FEATURE_SURVEYS and include your workspace in CORE_PARITY_WORKSPACE_ALLOWLIST. Existing Surveys remain readable during a creation pause.",
+      },
+      {
+        symptom: "Results are hidden",
+        fix: "Wait for five finalized respondents; saved drafts do not count. Optional skipped questions may have fewer answers.",
+      },
+      {
+        symptom: "A save fails",
+        fix: "For uncertain network failures, retry the same operation. For a stale revision, reload before editing; never silently overwrite another editor or browser tab.",
+      },
+    ],
+    action: { target: "surveys", label: "Open Surveys" },
   },
   {
     id: "linked-rechecks",
@@ -1584,6 +1644,7 @@ export function helpGuideAction(
     packs: features?.recoveryPacks ? "/recovery-packs" : null,
     account: "/account",
     join: "/join",
+    surveys: "/surveys",
     status: "/status",
   };
   const href = paths[target];

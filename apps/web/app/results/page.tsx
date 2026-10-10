@@ -724,6 +724,9 @@ export default function ResultsPage() {
         title={t("page.results.title")}
         translationLevel="full"
       >
+        <p>
+          <Link href="/surveys">{t("create.kind.browseSurveys")}</Link>
+        </p>
         <ResultsContent />
       </WorkspaceShell>
     </WorkspaceProvider>

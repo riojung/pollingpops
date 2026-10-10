@@ -10,7 +10,7 @@ const authoringPort = Number(process.env.BETA_E2E_AUTHORING_PORT ?? betaE2eApiPo
 const authoringEnvironment = authoringFixture
   ? `ALLOW_INSECURE_LOCAL_HTTP=true AUTHORING_AI_MODE=openai_compatible AUTHORING_AI_ENDPOINT=http://127.0.0.1:${authoringPort}/chat/completions AUTHORING_AI_PROVIDER_NAME=beta-fixture AUTHORING_AI_MODEL=synthetic-source-fixture`
   : "";
-const audienceEnvironment = `FEATURE_AUDIENCE_SCOPES=true CORE_PARITY_WORKSPACE_ALLOWLIST=${betaWorkspaceId}`;
+const audienceEnvironment = `FEATURE_AUDIENCE_SCOPES=true FEATURE_FEEDBACK_ROOMS=true FEATURE_SURVEYS=true CORE_PARITY_WORKSPACE_ALLOWLIST=${betaWorkspaceId}`;
 const nextCommand = productionWeb
   ? `NEXT_PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} pnpm --filter @openround/web build && cp -r apps/web/public apps/web/.next/standalone/apps/web/public && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && PORT=${betaE2eWebPort} HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js`
   : `NEXT_PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} pnpm --filter @openround/web exec next dev -p ${betaE2eWebPort}`;

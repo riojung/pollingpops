@@ -25,7 +25,7 @@ function TemplatesWorkspace() {
       <div className={styles.panel}>
         <div className={styles.sectionHeader}>
           <div>
-            <h2>Proven starting points</h2>
+            <h2>24 original starting points</h2>
             <p>
               Templates are versioned and read-only. Using one creates a fresh draft with new IDs
               inside your workspace.
@@ -33,6 +33,9 @@ function TemplatesWorkspace() {
           </div>
         </div>
         <StarterGallery />
+        <p>
+          <Link href="/surveys/new">Create a self-paced Survey from a feedback template</Link>
+        </p>
       </div>
     </WorkspaceShell>
   );

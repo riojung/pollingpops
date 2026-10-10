@@ -224,6 +224,7 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  publishedSurveyCount?(workspaceId: string): number;
   deletePresentationSessionMetadata?(workspaceId: string, sessionId: string): void;
   exportAccount(
     context: MemoryRepositoryLifecycleContext,
@@ -378,6 +379,25 @@ export class MemoryRepository implements Repository {
   constructor(options: { initialWorkspaceId?: string; initialPlan?: Plan } = {}) {
     this.nextInitialWorkspaceId = options.initialWorkspaceId;
     this.nextInitialPlan = options.initialPlan;
+  }
+
+  private readonly publicationLocks = new Map<string, Promise<unknown>>();
+  async withPublicationLock<T>(workspaceId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.publicationLocks.get(workspaceId) ?? Promise.resolve();
+    const task = previous.catch(() => undefined).then(work);
+    this.publicationLocks.set(workspaceId, task);
+    try {
+      return await task;
+    } finally {
+      if (this.publicationLocks.get(workspaceId) === task)
+        this.publicationLocks.delete(workspaceId);
+    }
+  }
+  private publishedSurveyCount(workspaceId: string) {
+    return [...this.lifecycleExtensions.values()].reduce(
+      (count, { lifecycle }) => count + (lifecycle.publishedSurveyCount?.(workspaceId) ?? 0),
+      0,
+    );
   }
 
   getOrCreateLifecycleExtension<T extends MemoryRepositoryLifecycleExtension>(
@@ -1379,6 +1399,16 @@ export class MemoryRepository implements Repository {
     archived: boolean,
     maxPublishedQuizzes: number | null = null,
   ) {
+    return this.withPublicationLock(workspaceId, () =>
+      this.archiveQuizUnlocked(workspaceId, quizId, archived, maxPublishedQuizzes),
+    );
+  }
+  private async archiveQuizUnlocked(
+    workspaceId: string,
+    quizId: string,
+    archived: boolean,
+    maxPublishedQuizzes: number | null,
+  ) {
     const quiz = this.quizzes.get(quizId);
     if (!quiz || quiz.workspaceId !== workspaceId) return null;
     const restoresPublishedQuiz = !archived && quiz.status === "archived" && quiz.currentVersionId;
@@ -1388,7 +1418,7 @@ export class MemoryRepository implements Repository {
     if (
       restoresPublishedQuiz &&
       maxPublishedQuizzes !== null &&
-      publishedQuizCount >= maxPublishedQuizzes
+      publishedQuizCount + this.publishedSurveyCount(workspaceId) >= maxPublishedQuizzes
     ) {
       throw new PublishedQuizLimitError(maxPublishedQuizzes);
     }
@@ -1464,6 +1494,15 @@ export class MemoryRepository implements Repository {
     maxPublishedQuizzes: number | null = null,
     expectedDraftRevision?: number,
   ) {
+    return this.withPublicationLock(input.workspaceId, () =>
+      this.publishQuizUnlocked(input, maxPublishedQuizzes, expectedDraftRevision),
+    );
+  }
+  private async publishQuizUnlocked(
+    input: QuizVersionRecord,
+    maxPublishedQuizzes: number | null,
+    expectedDraftRevision?: number,
+  ) {
     const quiz = this.quizzes.get(input.quizId);
     if (!quiz || quiz.workspaceId !== input.workspaceId) throw new Error("Quiz not found");
     const currentDraftRevision = quiz.draftRevision ?? 0;
@@ -1483,7 +1522,7 @@ export class MemoryRepository implements Repository {
     if (
       quiz.status !== "published" &&
       maxPublishedQuizzes !== null &&
-      publishedQuizCount >= maxPublishedQuizzes
+      publishedQuizCount + this.publishedSurveyCount(input.workspaceId) >= maxPublishedQuizzes
     ) {
       throw new PublishedQuizLimitError(maxPublishedQuizzes);
     }

@@ -20,6 +20,9 @@ This is a bounded Survey vertical slice, not completion of core-parity M2–M4 o
 - Version-1 Survey drafts: poll/rating questions, required/optional items, explicit revision-fenced
   saves, reordering, preview, duplication, archive and immutable publication. Shared runs freeze the
   published version, category/preset metadata, organizer-blind policy, window and retention deadline.
+  New runs retain results for their plan period after scheduled closure (Free 30 days, Pro 365,
+  Community operator-configured), so a maximum 30-day collection window still has a reporting period.
+  Sharing screens display expiry; early closure and deployment upgrades never extend frozen deadlines.
 - Code/link/downloadable QR use the existing universal registry. Independent participants save/resume
   and finalize once per hashed room credential, without aliases, accounts, scores or learning identity.
   This is not verified one-person participation. Organizers see finalized question-level aggregates,

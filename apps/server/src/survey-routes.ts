@@ -269,12 +269,11 @@ export async function registerSurveyRoutes(
       const features = await deps.repository.getOperationalFeatures();
       if (!features.sessionCreation)
         throw new SurveyError("ROOM_CLOSED", "New room creation is temporarily paused");
-      if (input.windowDays > limits.reportRetentionDays)
-        throw new SurveyError(
-          "VALIDATION_ERROR",
-          "The survey window cannot exceed your retention period",
-        );
       const now = Date.now();
+      const closesAt = new Date(now + input.windowDays * 86400000);
+      // Retain final results after collection closes, including the maximum Free window.
+      // Both deadlines are frozen with the run; manual early closure does not extend them.
+      const expiresAt = new Date(closesAt.getTime() + limits.reportRetentionDays * 86400000);
       for (let attempt = 0; attempt < 10; attempt++) {
         try {
           const room = await deps.surveys.createRoom(
@@ -284,8 +283,8 @@ export async function registerSurveyRoutes(
             input.idempotencyKey,
             {
               code: String(randomInt(1000000, 10000000)),
-              closesAt: new Date(now + input.windowDays * 86400000).toISOString(),
-              expiresAt: new Date(now + limits.reportRetentionDays * 86400000).toISOString(),
+              closesAt: closesAt.toISOString(),
+              expiresAt: expiresAt.toISOString(),
               participantLimit: limits.maxParticipants,
               windowDays: input.windowDays,
             },

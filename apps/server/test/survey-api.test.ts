@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { MemoryRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
@@ -10,14 +10,22 @@ let app: FastifyInstance | undefined;
 afterEach(async () => {
   await app?.close();
   app = undefined;
+  vi.useRealTimers();
 });
-async function fixture(enabled = true) {
+async function fixture(
+  enabled = true,
+  options: { plan?: "free" | "pro"; communityRetentionDays?: number } = {},
+) {
   const workspaceId = randomUUID();
-  const repository = new MemoryRepository({ initialWorkspaceId: workspaceId });
+  const repository = new MemoryRepository({
+    initialWorkspaceId: workspaceId,
+    initialPlan: options.plan,
+  });
   const config = ConfigSchema.parse({
     NODE_ENV: "test",
     ALLOW_IN_MEMORY: "true",
-    COMMUNITY_MODE: "false",
+    COMMUNITY_MODE: String(options.communityRetentionDays !== undefined),
+    COMMUNITY_REPORT_RETENTION_DAYS: options.communityRetentionDays,
     WEB_ORIGIN: "http://localhost:3000",
     PUBLIC_API_URL: "http://localhost:4000",
     LOG_LEVEL: "silent",
@@ -28,6 +36,9 @@ async function fixture(enabled = true) {
   });
   const built = await buildApp(config, { repository, cache: new MemorySessionCache() });
   app = built.app;
+  return { app, config, repository, headers: await signIn(app) };
+}
+async function signIn(app: FastifyInstance) {
   const magic = await app.inject({
     method: "POST",
     url: "/v1/auth/magic-link",
@@ -36,9 +47,148 @@ async function fixture(enabled = true) {
   const token = new URL(magic.json().debugUrl).searchParams.get("token");
   const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
   const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
-  return { app, config, repository, headers: { cookie } };
+  return { cookie };
 }
 describe("Survey creator and participant APIs", () => {
+  it.each([
+    { edition: "Free", plan: "free" as const, retentionDays: 30 },
+    { edition: "Pro", plan: "pro" as const, retentionDays: 365 },
+    { edition: "Community", plan: "free" as const, retentionDays: 1, communityRetentionDays: 1 },
+  ])(
+    "keeps a 30-day $edition run readable after natural closure until post-close retention expires",
+    async (options) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const { app, headers, repository } = await fixture(true, options);
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/surveys",
+        headers,
+        payload: { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const id = created.json().survey.id;
+      await app.inject({
+        method: "POST",
+        url: `/v1/surveys/${id}/publish`,
+        headers,
+        payload: { idempotencyKey: randomUUID(), expectedRevision: 0 },
+      });
+      const roomBody = { idempotencyKey: randomUUID(), expectedRevision: 0, windowDays: 30 };
+      const shared = await app.inject({
+        method: "POST",
+        url: `/v1/surveys/${id}/rooms`,
+        headers,
+        payload: roomBody,
+      });
+      expect(shared.statusCode, shared.body).toBe(201);
+      const room = shared.json().room;
+      expect(Date.parse(room.closesAt) - Date.now()).toBe(30 * 86400000);
+      expect(Date.parse(room.expiresAt) - Date.parse(room.closesAt)).toBe(
+        options.retentionDays * 86400000,
+      );
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/v1/surveys/${id}/rooms`,
+            headers,
+            payload: roomBody,
+          })
+        ).json().room,
+      ).toEqual(room);
+      for (let i = 0; i < 5; i++) {
+        const guestHeaders = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+        const joined = await app.inject({
+          method: "POST",
+          url: "/v1/survey-rooms/join",
+          headers: guestHeaders,
+          payload: { code: room.code },
+        });
+        const responses = Object.fromEntries(
+          joined
+            .json()
+            .attempt.content.items.map(
+              ({
+                question,
+              }: {
+                question: { id: string; type: string; choices?: { id: string }[] };
+              }) => [
+                question.id,
+                question.type === "poll"
+                  ? { kind: "poll", choiceIds: [question.choices![0]!.id] }
+                  : { kind: "rating", value: 4 },
+              ],
+            ),
+        );
+        expect(
+          (
+            await app.inject({
+              method: "POST",
+              url: `/v1/survey-rooms/${room.id}/submit`,
+              headers: guestHeaders,
+              payload: { idempotencyKey: randomUUID(), expectedRevision: 0, responses },
+            })
+          ).statusCode,
+        ).toBe(200);
+      }
+      const collecting = (
+        await app.inject({ method: "GET", url: `/v1/survey-rooms/${room.id}/results`, headers })
+      ).json().results;
+      expect(collecting).toMatchObject({
+        suppressed: true,
+        resultsStatus: "collecting",
+        submittedCount: 5,
+      });
+      vi.setSystemTime(new Date(room.closesAt));
+      // A 30-day creator session also expires here, so sign back in as an actual returning owner.
+      const returningOwner = await signIn(app);
+      await repository.purgeExpired(new Date());
+      const results = await app.inject({
+        method: "GET",
+        url: `/v1/survey-rooms/${room.id}/results`,
+        headers: returningOwner,
+      });
+      expect(results.statusCode, results.body).toBe(200);
+      expect(results.json().results).toMatchObject({
+        suppressed: false,
+        resultsStatus: "available",
+        submittedCount: 5,
+      });
+      expect(results.json().results.questions[0].distribution[0].count).toBe(5);
+      vi.setSystemTime(new Date(Date.parse(room.expiresAt) - 1));
+      const retainedOwner = await signIn(app);
+      await repository.purgeExpired(new Date());
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/v1/survey-rooms/${room.id}/results`,
+            headers: retainedOwner,
+          })
+        ).statusCode,
+      ).toBe(200);
+      vi.setSystemTime(new Date(room.expiresAt));
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/v1/survey-rooms/${room.id}/results`,
+            headers: retainedOwner,
+          })
+        ).statusCode,
+      ).toBe(404);
+      await repository.purgeExpired(new Date());
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/v1/survey-rooms/${room.id}`,
+            headers: retainedOwner,
+          })
+        ).statusCode,
+      ).toBe(404);
+    },
+  );
   it("releases distributions only after closure and keeps accepted submission retries stable", async () => {
     const { app, headers } = await fixture();
     const created = await app.inject({

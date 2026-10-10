@@ -325,6 +325,13 @@ export class SurveyRepository {
               "Save and publish your latest changes before sharing this survey",
             );
           const version = requireRecord(await tx.get("survey_versions", survey.versionId));
+          const closesAt = Date.parse(settings.closesAt);
+          const expiresAt = Date.parse(settings.expiresAt);
+          if (!Number.isFinite(closesAt) || !Number.isFinite(expiresAt) || expiresAt <= closesAt)
+            throw new SurveyError(
+              "VALIDATION_ERROR",
+              "The survey must retain results after its submission deadline",
+            );
           const room: SurveyRoom = {
             schemaVersion: 1,
             id: roomId,

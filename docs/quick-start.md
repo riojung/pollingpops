@@ -35,6 +35,8 @@ Choose **Survey → Training feedback**, save changes, publish, and create a sha
 scan/open the QR/link or enter its code, save progress, and submit without a nickname or account.
 Return via **Library → Browse Surveys**. Poll/rating questions are supported; aggregate distributions
 appear only after closing the run or reaching its deadline, with five finalized responses per question.
+New runs retain results for 30 days on Free, 365 on Pro, or the Community operator setting after
+the scheduled close. The sharing screen shows the frozen expiry date; closing early does not extend it.
 See the [user guide](user-guide.md) for limits and privacy behavior.
 
 ## What you need

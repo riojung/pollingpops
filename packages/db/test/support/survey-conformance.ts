@@ -83,6 +83,14 @@ export async function expectSurveyConformance(repository: Repository, workspaceI
     windowDays: 1,
   };
   const roomKey = randomUUID();
+  for (const expiresAt of [settings.closesAt, new Date(now.getTime()).toISOString(), "invalid"]) {
+    await expect(
+      surveys.createRoom(workspaceId, id, saved.revision, randomUUID(), {
+        ...settings,
+        expiresAt,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  }
   const room = await surveys.createRoom(workspaceId, id, saved.revision, roomKey, settings);
   expect(
     await surveys.createRoom(workspaceId, id, saved.revision, roomKey, {

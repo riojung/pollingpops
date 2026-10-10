@@ -50,6 +50,7 @@ for (const surface of ["", "@mobile "]) {
     await page.getByRole("button", { name: "Create sharing link", exact: true }).click();
     const room = (await (await shared).json()).room;
     await expect(page).toHaveURL(new RegExp(`/surveys/rooms/${room.id}$`));
+    await expect(page.getByText("Results and responses expire", { exact: false })).toBeVisible();
     await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
     const qrDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download QR SVG", exact: true }).click();

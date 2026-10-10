@@ -34,9 +34,13 @@ publish and share; viewers can read content/results.
    reorder/remove items. Other opinion formats are not included yet.
 3. **Save draft**, preview, then **Publish Survey**. Saves are explicit; save before leaving.
    Revision conflicts require reloading, not silently overwriting another editor's work.
-4. Choose a window (seven days by default, up to 30 within retention) and **Create sharing link**.
+4. Choose a window (seven days by default, up to 30) and **Create sharing link**.
    Share the code, link or downloadable QR. New sharing links are separate runs; later edits never
    alter an already shared version.
+   New runs retain results after their scheduled close for 30 days on Free, 365 on Pro, or the
+   Community operator setting. The sharing screen shows the expiry date. Closing early does not
+   extend the frozen deadline. Existing runs keep their original deadline; close an older run early
+   if its displayed expiry coincides with its scheduled close.
 5. Participants use the normal Join page without an account, nickname or avatar. They answer at
    their own pace, **Save progress** before leaving, then **Submit Survey**. Required items must be
    answered. Refresh resumes saved answers on the same browser. One completion per credential is

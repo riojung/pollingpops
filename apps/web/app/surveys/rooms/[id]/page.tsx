@@ -21,6 +21,7 @@ function Room() {
     title: string;
     code: string;
     closesAt: string;
+    expiresAt: string;
     closed: boolean;
   } | null>(null);
   const [results, setResults] = useState<ReturnType<typeof surveyAggregate> | null>(null);
@@ -67,6 +68,10 @@ function Room() {
           </h2>
           <p>
             Code: <strong>{room.code}</strong>. Closes {new Date(room.closesAt).toLocaleString()}.
+          </p>
+          <p>
+            Results and responses expire {new Date(room.expiresAt).toLocaleString()}. Closing early
+            does not change this deadline.
           </p>
           <JoinAccess code={room.code} editable={canEdit} activityName="Survey" />
           <p>

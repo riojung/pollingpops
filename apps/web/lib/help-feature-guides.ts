@@ -256,7 +256,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
       {
         title: "Publish and share",
-        body: "Publish the saved draft, choose a window (seven days by default), and create a sharing link. Copy the link, show its code or download its QR. A new link is a separate frozen run.",
+        body: "Publish the saved draft, choose a window (seven days by default, up to 30), and create a sharing link. Copy the link, show its code or download its QR. A new link is a separate frozen run. New runs retain results after scheduled closure for 30 days on Free, 365 on Pro, or the Community operator setting; the sharing screen shows expiry. Closing early does not extend it.",
       },
       {
         title: "Answer independently",

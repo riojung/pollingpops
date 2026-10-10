@@ -18,6 +18,10 @@ PostgreSQL transaction mechanics. Migration 061 adds `surveys`, immutable `surve
 `survey_feedback_rooms`, hashed room-only `survey_guests` and `survey_mutation_receipts`, all with
 forced RLS and workspace-scoped cascades. Workspace locks serialize shared Round/Survey publication
 quotas; room locks serialize admission, revision-fenced progress and atomic finalization.
+New rooms freeze a submission deadline from the 1–30-day collection window and a later expiry
+from the scheduled close plus plan retention. Repository creation rejects invalid or non-positive
+post-close retention intervals. Manual early closure does not move expiry; legacy deadlines remain
+unchanged. This leaves a post-close reporting interval even for the maximum Free collection window.
 
 Participants send a cryptographically random room credential in Authorization with creator cookies
 omitted. Internal IDs, hashes and draft/final responses support resume/uniqueness only. Organizer

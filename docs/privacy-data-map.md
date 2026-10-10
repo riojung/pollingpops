@@ -18,6 +18,10 @@ rows, precise respondent timestamps or personal
 activity. Creator account exports contain Survey content and room metadata, not respondent records or
 credentials. Owner-only room deletion, retention and owner-workspace deletion cascade through
 attempts/receipts, including room-creation receipts. Editors may close runs but not delete them.
+New runs freeze expiry at scheduled close plus the plan retention period: 30 days on Free, 365 on
+Pro, or operator configuration in Community. The collection window is separately limited to 30 days,
+so a 30-day Free run can retain responses for up to 60 days from creation. Closing early never
+extends expiry, and existing frozen deadlines are not rewritten.
 Logs/metrics must not record responses/credentials; guest requests omit creator cookies. Only polls and
 ratings are accepted initially, so respondent-authored text/attachments are absent. One completion per
 credential is enforced, not verified one-person participation. Cross-device resume, passcodes,

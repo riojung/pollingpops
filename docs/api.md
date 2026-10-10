@@ -18,7 +18,10 @@ Creator-cookie routes: `GET/POST /v1/surveys`, `GET/PUT /v1/surveys/:id`, `POST 
 `/rooms` under that Survey, and `GET /v1/surveys/templates`. Create takes
 `{idempotencyKey,title?,templateId?,sourceId?}` (one source maximum). PUT takes
 `{idempotencyKey,expectedRevision,draft}`; publish/archive require key and revision. Room creation
-adds `windowDays?` and freezes the published version. Workspace routes `GET /v1/survey-rooms`,
+adds `windowDays?` (1–30, default seven) and freezes the published version. For new runs,
+`closesAt = creation time + windowDays` and `expiresAt = closesAt + reportRetentionDays`
+(Free: 30 days; Pro: 365; Community: operator configuration). Early manual closure does not change
+either stored deadline. Existing frozen runs keep their original deadlines. Workspace routes `GET /v1/survey-rooms`,
 `GET /v1/survey-rooms/:id`, `/results`, `POST /close` (key), and `DELETE` provide sharing, aggregate
 evidence and lifecycle controls. Lists use UUID cursors and a maximum page size of 50. Viewer writes
 are denied; permanent room deletion requires the workspace owner, while editors may close a run.

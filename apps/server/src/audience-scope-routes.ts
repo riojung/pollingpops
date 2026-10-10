@@ -12,6 +12,22 @@ import { hashToken } from "./security.js";
 const ScopeParams = z.object({ scopeId: z.string().uuid() }).strict();
 const ScopeQuery = z.object({ kind: z.enum(["round", "presentation"]) }).strict();
 const SyncBody = ScopeQuery.extend({ limit: z.number().int().min(1).max(50).default(50) });
+// Shared-network headroom, not an authentication bypass: all read routes consume this ceiling.
+const AUDIENCE_READ_IP_LIMIT = 10_000;
+const READ_WINDOW_MS = 60_000;
+
+function readRateLimited(request: FastifyRequest, reply: FastifyReply) {
+  return reply
+    .header("retry-after", "60")
+    .code(429)
+    .send({
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many audience reads. Wait a minute and retry",
+        requestId: request.id,
+      },
+    });
+}
 
 function credential(request: FastifyRequest) {
   const authorization = request.headers.authorization;
@@ -44,20 +60,35 @@ export async function registerAudienceScopeRoutes(
 ) {
   // Encapsulation keeps scope-specific error translation out of the legacy route handler.
   await app.register(async (scoped) => {
+    // This manual limiter has its own local store and does not skip the credential limiter.
+    const preAuthenticationReads = scoped.createRateLimit({
+      max: AUDIENCE_READ_IP_LIMIT,
+      timeWindow: READ_WINDOW_MS,
+      keyGenerator: (request: FastifyRequest) => `audience-read-ip:${request.ip}`,
+    });
     const readOptions = (maximum: number) => ({
+      onRequest: async (request: FastifyRequest, reply: FastifyReply) => {
+        const local = await preAuthenticationReads(request);
+        // Fastify appends the route's credential limiter after this hook. Reject before
+        // allocating caller-controlled buckets or performing any repository authentication.
+        if (
+          (!local.isAllowed && local.isExceeded) ||
+          !(await consumeAdmission(
+            `audience-read-ip:${request.ip}`,
+            AUDIENCE_READ_IP_LIMIT,
+            READ_WINDOW_MS,
+          ))
+        ) {
+          return readRateLimited(request, reply);
+        }
+      },
       config: {
-        // Replace the shared-IP budget for room reads, as on participant snapshot routes.
+        // Keep individual budgets in addition to the independent pre-authentication IP ceiling.
         rateLimit: { max: maximum, timeWindow: "1 minute", keyGenerator: audienceReadRateLimitKey },
       },
       preHandler: async (request: FastifyRequest, reply: FastifyReply) => {
-        if (!(await consumeAdmission(audienceReadRateLimitKey(request), maximum, 60_000))) {
-          return reply.code(429).send({
-            error: {
-              code: "RATE_LIMITED",
-              message: "Too many audience reads. Wait a minute and retry",
-              requestId: request.id,
-            },
-          });
+        if (!(await consumeAdmission(audienceReadRateLimitKey(request), maximum, READ_WINDOW_MS))) {
+          return readRateLimited(request, reply);
         }
       },
     });

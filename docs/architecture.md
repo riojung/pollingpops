@@ -68,8 +68,11 @@ invalidate a slow successful read. Temporary network/429/5xx failures schedule c
 exponential retries capped at 30 seconds even when the socket remains subscribed; successful reads
 reset backoff. Failed scoped Q&A reads clear the displayed page rather than retaining possibly
 removed bodies. Credential changes/unmount cancel retry timers and fence old active/queued results.
-Discovery retains automatic recovery after transient errors. Reader budgets are hashed-credential
-and scope-specific, independently enforced locally and by the shared cache, not pooled by campus IP.
+Discovery retains automatic recovery after transient errors. Individual reader budgets are
+hashed-credential and scope-specific, independently enforced locally and by the shared cache.
+An additional 10,000/minute shared-network IP ceiling covers every audience-read route before
+credential-bucket allocation or repository authentication. Its key contains neither scope IDs nor
+caller-supplied credentials, so rotating either cannot bypass local or cross-process protection.
 
 This is partial M1. Presentation replies, chat/Pulse adapters, feedback-room
 sources, organizer-blind projections and passcodes remain next work. Apply compatible

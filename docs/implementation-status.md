@@ -24,7 +24,7 @@ This completes the gated Q&A UI slice, not M1 or a public-production release.
 - Quick-start, user-guide, Help, API, and architecture updates explain configuration and limitations.
 
 Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
-package/support tests and production builds. The audience API suite has 27 passing tests; seven
+package/support tests and production builds. The audience API suite has 29 passing tests; seven
 new client/subscription tests cover cookie omission, exact retries, schema rejection, duplicate/gap
 notices, stale-connection acknowledgements, timeout fallback and revoked access. Seven production-build
 Presentation/Companion browser journeys pass across desktop Chromium, mobile Chromium and mobile
@@ -46,6 +46,14 @@ lost removal synchronization, automatic discovery retry and overlapping slow rea
 Six new refresh/retry unit tests cover slow-read progress, latest-intent coalescing, credential
 isolation, retry classification, bounded backoff and timer cancellation; all 34 focused client,
 subscription, refresh and existing AudiencePanel tests pass.
+
+PR #101 follow-up retains an independent pre-authentication 10,000/minute IP ceiling across every
+audience-read route. Local and shared-cache guards reject rotating tokens/scope IDs before
+credential-bucket allocation or repository authentication, while the thirty-participant shared-IP
+polling regression still passes. Both new security regressions failed before the fix and pass
+afterward; all 29 audience API tests pass. No web code, migration or published capacity changed.
+The full repository check and four production-build Q&A browser journeys pass after this fix;
+Companion/legacy Round browser evidence above is from the preceding UI verification.
 
 Next: scoped replies/chat/Pulse and shared moderation/lifecycle work, then dedicated feedback-room
 anonymity/passcodes. New opinion formats, Surveys, advanced exports/sharing, cross-process mixed-load

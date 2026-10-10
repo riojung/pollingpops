@@ -31,7 +31,10 @@ in addition to the normal per-IP limiter. The native Presentation host pass is n
 with a creator cookie or Companion pass. Reads, sync, and accepted activation retries remain
 available during writer rollback, but expired/revoked credentials do not.
 
-Audience reads use room/credential-hash buckets instead of pooling participants behind one IP.
+Audience reads use individual room/credential-hash buckets rather than the generic 300/minute IP
+budget. Every read first consumes an independent 10,000/minute IP ceiling, shared across discovery,
+scope metadata, Q&A pages and sync, regardless of caller-supplied tokens or scope IDs. Both local
+and shared-cache guards run before credential-bucket allocation and repository authentication.
 Discovery allows 120 requests/minute; scope metadata, Q&A pages and sync share a separate
 720/minute state-read budget. Local and shared-cache limits enforce the same budgets across API
 processes. No raw pass or alias appears in a limiter key. Temporary 429/server/network read failures

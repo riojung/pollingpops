@@ -41,6 +41,16 @@ Migration 063 expands document checks to versions 1 and 2 without rewriting immu
 accepted responses or receipts. Stored document/content versions must match. V2 guest responses
 retain unique, sorted choice IDs; retries normalize the set before hashing. Aggregate reports use
 schema version 2 and count each selected option per respondent, not as exclusive categories.
+
+Creator autosave is a transport-independent `SurveyAutosave` controller with one active write, a
+coalesced latest draft and a retained serialized retry intent. Successful acknowledgements advance
+the revision without replacing newer keystrokes. Trimming/default normalization prevents endless
+saves, and loading a v1 draft does not write merely to upgrade it. Transient errors receive bounded
+exact retries; conflicts pause saving and preserve local work for explicit recovery. Publish,
+duplicate and archive drain saves before mutating; sharing requires the latest published revision.
+Editor identity and disposal fence late reads, acknowledgements and retries on navigation. Viewers
+and archived drafts do not autosave. Unacknowledged edits remain in memory, not browser storage;
+the optional local JSON download is a user-triggered recovery copy without guest or workspace data.
 Deploy compatible readers and the additive migration before writers; rollback must retain readers
 for accepted v2 data. Round/Presentation contracts, live clients, game states and learning reports
 are unchanged; live multi-selection opinion polls require a later capability-negotiated release.

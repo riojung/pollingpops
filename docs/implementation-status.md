@@ -8,6 +8,38 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Survey draft autosave October 11 2026
+
+Implemented on `codex/survey-draft-autosave` from merged PR #104 (`14d397e`).
+This completes creator draft autosave, not the remaining core-parity milestones or public GA.
+
+- Edits debounce for 700 ms, with waiting/saving/saved status and an immediate Save draft action.
+  One active write coalesces newer keystrokes and uses acknowledged revisions without replacing them.
+- Transient failures automatically retry the identical body/key up to three times. Exhaustion
+  pauses saving until explicit Retry save; newer edits wait behind the original acknowledgement.
+- Revision conflicts preserve local work and stop writes. Local JSON recovery downloads and
+  confirmed reload are available; unsaved edits are not automatically persisted in browser storage.
+- Publish, duplicate and archive drain pending saves. Sharing requires the latest revision to be
+  published, and autosave never publishes or changes existing frozen runs.
+- Legacy reads do not trigger upgrade writes. Viewers/archived content remain read-only, editor
+  disposal fences delayed responses/retries, and API/schema versions and migrations are unchanged.
+- Help and existing quick start, user guide, API and architecture explain saving and recovery.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds. All 667 web unit tests pass, including 16
+autosave-controller cases. All 21
+production-build Survey browser journeys pass on desktop Chromium, mobile Chromium and mobile
+WebKit, including nine autosave/publish-barrier, lost-acknowledgement and two-editor-conflict
+journeys, JSON recovery downloads and automated axe checks. Local core services were rebuilt using
+the existing Colima context and Compose project; database and coordination readiness pass, and
+existing volumes are preserved. No database/API change or new PostgreSQL test run was required
+for this client-only increment. Physical-device, manual assistive-tech, Firefox and external
+production acceptance remain separate gates.
+
+Next: capability-negotiated live multi-selection opinion polls; open text, word clouds and ranking;
+remaining scoped Presentation interaction and feedback-room/passcode work; feedback reports,
+export jobs and aggregate sharing. Existing external production gates remain open.
+
 ### Survey enablement and multiple-selection opinions — October 10, 2026
 
 Implemented on `codex/core-parity-multiselect-surveys` from merged baseline `6a7b98c`.
@@ -27,7 +59,7 @@ This is a Survey-only M2 increment, not completion of M1–M4 or public GA.
   Rollback must keep v2-compatible readers, not remove accepted content or responses.
 - In-product Help, quick start, user guide, API and architecture explain selection limits and rollout.
 
-Next: Survey draft autosave; capability-negotiated live multi-selection opinion polls; open text,
+Next at that checkpoint: Survey draft autosave; capability-negotiated live multi-selection opinion polls; open text,
 word clouds and ranking with safe public-text moderation; remaining scoped Presentation interaction
 and feedback-room/passcode work; durable feedback report/export jobs and aggregate sharing. Existing
 external load, physical-device, privacy/security/accessibility and production release gates remain open.

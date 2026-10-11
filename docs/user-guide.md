@@ -37,8 +37,16 @@ publish and share; viewers can read content/results.
    may deselect choices, but cannot select more than the limit. Removing an option reduces the
    limit if necessary. These opinion polls have no correct answers, confidence or scores.
    Open text, word clouds and ranking are not included yet.
-3. **Save draft**, preview, then **Publish Survey**. Saves are explicit; save before leaving.
-   Revision conflicts require reloading, not silently overwriting another editor's work.
+3. Draft edits autosave after a short pause. Watch **Waiting to save…**, **Saving…**, then **Saved.**
+   You can keep typing during a save, or use **Save draft** to save immediately. Preview, then
+   **Publish Survey**; publishing first waits for all current edits to be saved. Autosave does not
+   publish changes. After editing a published Survey, publish again before creating a new sharing link.
+   If saving fails, use **Retry save** before leaving. Retry preserves the original request even
+   if you have made newer edits. On a revision conflict, saving pauses and your edits stay in this
+   editor. **Download local draft** keeps a JSON copy on your device; it is a recovery copy, not a
+   supported Survey import. **Reload latest version** asks for confirmation before discarding local
+   edits and loading the other editor's version. Edits are not backed up automatically to browser
+   storage; wait for **Saved.** before closing or refreshing the page.
 4. Choose a window (seven days by default, up to 30) and **Create sharing link**.
    Share the code, link or downloadable QR. New sharing links are separate runs; later edits never
    alter an already shared version.

@@ -31,10 +31,14 @@ Find your own `creator.workspaceId` through authenticated `GET /v1/auth/me`. Res
 your working service profile/runtime; do not switch runtimes or delete volumes to enable a feature.
 The service launcher passes these keys. The flags enable an opt-in beta, not production approval.
 
-Choose **Survey → Training feedback**, save changes, publish, and create a sharing link. Participants
+Choose **Survey → Training feedback**, edit and wait for **Saved.**, publish, and create a sharing link. Participants
 scan/open the QR/link or enter its code, save progress, and submit without a nickname or account.
 In a Survey poll, **Maximum selections** controls single-choice radios or multi-choice checkboxes,
 up to the number of available options. Live Round polls remain single-choice in this increment.
+Creator draft changes autosave; **Save draft** saves immediately. Publishing waits for the latest
+save and remains an explicit action. If a save fails, select **Retry save**. A revision conflict
+pauses saving: download your local draft before confirming **Reload latest version**. Keep the
+editor open until saving succeeds; participant progress still uses **Save progress** explicitly.
 Return via **Library → Browse Surveys**. Opinion polls and rating questions are supported; aggregate distributions
 appear only after closing the run or reaching its deadline, with five finalized responses per question.
 New runs retain results for 30 days on Free, 365 on Pro, or the Community operator setting after

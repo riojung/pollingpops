@@ -2543,7 +2543,7 @@ export class PostgresRepository implements Repository {
           !archived && quiz.status === "archived" && quiz.current_version_id !== null;
         if (restoresPublishedQuiz && maxPublishedQuizzes !== null) {
           const count = await client.query(
-            "SELECT count(*)::integer AS count FROM quizzes WHERE workspace_id = $1 AND status = 'published'",
+            "SELECT ((SELECT count(*) FROM quizzes WHERE workspace_id = $1 AND status = 'published') + (SELECT count(*) FROM surveys WHERE workspace_id = $1 AND data->>'status' = 'published'))::integer AS count",
             [workspaceId],
           );
           if (Number(count.rows[0]?.count ?? 0) >= maxPublishedQuizzes) {
@@ -2634,7 +2634,7 @@ export class PostgresRepository implements Repository {
         const content = upcastRoundContent(input.content, contentSchemaVersion);
         if (current.rows[0].status !== "published" && maxPublishedQuizzes !== null) {
           const count = await client.query(
-            "SELECT count(*)::integer AS count FROM quizzes WHERE workspace_id = $1 AND status = 'published'",
+            "SELECT ((SELECT count(*) FROM quizzes WHERE workspace_id = $1 AND status = 'published') + (SELECT count(*) FROM surveys WHERE workspace_id = $1 AND data->>'status' = 'published'))::integer AS count",
             [input.workspaceId],
           );
           if (Number(count.rows[0]?.count ?? 0) >= maxPublishedQuizzes) {
@@ -7151,6 +7151,15 @@ export class PostgresRepository implements Repository {
                   current_version_id, folder_id, tags, created_at, updated_at
            FROM quizzes WHERE workspace_id = ANY($1::uuid[]) ORDER BY created_at, id`,
         );
+        const surveys = await queryWorkspaceData(
+          "SELECT data FROM surveys WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
+        );
+        const surveyVersions = await queryWorkspaceData(
+          "SELECT data FROM survey_versions WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
+        );
+        const surveyRooms = await queryWorkspaceData(
+          "SELECT data FROM survey_feedback_rooms WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
+        );
         const quizDraftHistory = await queryWorkspaceData(
           `SELECT id, workspace_id, quiz_id, revision, draft, draft_schema_version,
                   saved_by, mutation_id, created_at
@@ -7494,6 +7503,9 @@ export class PostgresRepository implements Repository {
           workspaceMemberships: membershipResult.rows,
           workspaces: workspaceResult.rows,
           folders: folders.rows,
+          surveys: surveys.rows.map((row) => row.data),
+          surveyVersions: surveyVersions.rows.map((row) => row.data),
+          surveyRooms: surveyRooms.rows.map((row) => row.data),
           quizzes: quizzes.rows.map((row) => ({
             ...row,
             draft: upcastRoundDraft(
@@ -7704,6 +7716,10 @@ export class PostgresRepository implements Repository {
           "DELETE FROM presentation_live_sessions WHERE retention_expires_at <= $1 RETURNING id",
           [now],
         );
+        const surveyResult = await client.query(
+          "DELETE FROM survey_feedback_rooms WHERE retention_expires_at <= $1 RETURNING id",
+          [now],
+        );
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM creator_sessions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM authoring_jobs WHERE expires_at <= $1", [now]);
@@ -7722,7 +7738,9 @@ export class PostgresRepository implements Repository {
           "DELETE FROM recovery_pack_source_approvals WHERE created_at < $1::timestamptz - interval '30 days'",
           [now],
         );
-        return [...result.rows, ...presentationResult.rows].map((row) => String(row.id));
+        return [...result.rows, ...presentationResult.rows, ...surveyResult.rows].map((row) =>
+          String(row.id),
+        );
       },
       { system: true },
     );

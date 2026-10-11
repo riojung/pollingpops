@@ -147,7 +147,7 @@ describe("P0 beta creator APIs", () => {
       headers: { cookie: signedIn.cookie },
     });
     expect(listed.statusCode).toBe(200);
-    expect(listed.json<{ starters: unknown[] }>().starters).toHaveLength(6);
+    expect(listed.json<{ starters: unknown[] }>().starters).toHaveLength(24);
 
     const create = () =>
       app!.inject({

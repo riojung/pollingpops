@@ -12,6 +12,42 @@ embed, and follow-up routes use their own scoped credentials as documented by th
 
 ## Audience-scope foundation (partial M1)
 
+### Self-paced Survey beta
+
+Creator-cookie routes: `GET/POST /v1/surveys`, `GET/PUT /v1/surveys/:id`, `POST /publish`, `/archive`,
+`/rooms` under that Survey, and `GET /v1/surveys/templates`. Create takes
+`{idempotencyKey,title?,templateId?,sourceId?}` (one source maximum). PUT takes
+`{idempotencyKey,expectedRevision,draft}`; publish/archive require key and revision. Room creation
+adds `windowDays?` (1–30, default seven) and freezes the published version. For new runs,
+`closesAt = creation time + windowDays` and `expiresAt = closesAt + reportRetentionDays`
+(Free: 30 days; Pro: 365; Community: operator configuration). Early manual closure does not change
+either stored deadline. Existing frozen runs keep their original deadlines. Workspace routes `GET /v1/survey-rooms`,
+`GET /v1/survey-rooms/:id`, `/results`, `POST /close` (key), and `DELETE` provide sharing, aggregate
+evidence and lifecycle controls. Lists use UUID cursors and a maximum page size of 50. Viewer writes
+are denied; permanent room deletion requires the workspace owner, while editors may close a run.
+New writers require all Survey flags and the core-parity allowlist.
+
+Results include `resultsStatus: collecting | insufficient_sample | available`. While a run is open,
+all distributions are empty and question `answeredCount` values are null, even above five submissions.
+Manual closure or the server deadline releases final distributions only. Each question also has a
+`suppressed` flag: fewer than five answers (including optional questions) keeps its counts hidden.
+Room deletion/retention removes creation receipts as well as attempts, so retries cannot return a
+deleted room. Archived Surveys remain valid duplication sources, not editable originals.
+
+Guest endpoints use a room-only 32-byte hex bearer in Authorization, never URLs or creator cookies:
+`POST /v1/survey-rooms/join` takes `{code}`; `GET /v1/survey-rooms/:id/attempt` resumes progress;
+`POST /draft` and `/submit` take `{idempotencyKey,expectedRevision,responses}`. Responses map question
+UUIDs to `{kind:"poll",choiceIds:[one choice UUID]}` or `{kind:"rating",value:integer}`. Finalization
+validates required items atomically. Same-key retries return the original receipt; differing payloads
+return `IDEMPOTENCY_CONFLICT`. Server deadlines override client clocks. Organizer endpoints do not
+return respondent-linked rows, and creator cookies cannot authorize guest attempt reads.
+
+Universal preflight adds `artifactType:"feedback_room"` and a resource-only `/survey/:id` destination;
+code/link/QR still use the same registry. `WorkspaceProductFeatures.surveys` controls creation, not
+accepted read/resume/submission paths. Stable errors include `ROOM_CLOSED`, `STALE_DRAFT`,
+`VALIDATION_ERROR`, `PARTICIPANT_LIMIT`, `IDEMPOTENCY_CONFLICT`, `RATE_LIMITED`, `NOT_FOUND`,
+`UNAUTHORIZED` and `ENTITLEMENT_LIMIT`.
+
 These additive interfaces do not replace legacy `/v1/sessions/:id/...` routes or game events.
 Use `Authorization: Bearer <room credential>`; credentials are never accepted in URLs. Responses
 are `private, no-store`. The explicit `kind` selector prevents cross-engine ID ambiguity.
@@ -235,7 +271,8 @@ learner launches, NRPS, and AGS are deliberately rejected in this release.
 
 Legacy `/v1/quizzes` naming is intentionally stable through v1 even though the UI says **Round**.
 
-- `GET /v1/starters` — six immutable, versioned first-party starter summaries.
+- `GET /v1/starters` — 24 original, versioned starter summaries, with category and activity type.
+- `GET /v1/starters/:id` — authenticated question preview; does not create content.
 - `POST /v1/starters/{id}/use` — owner/editor creation of a normal draft with fresh Round,
   question, and choice IDs while preserving linked-recheck relationships.
 - `GET|POST /v1/quizzes`; `GET` accepts `archived=true|false` and `summary=true|false`. Normal

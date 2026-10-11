@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { JoinPreflightRequestSchema, JoinPreflightResponseSchema } from "@openround/contracts";
-import type { PresentationSessionRepository, Repository } from "@openround/db";
+import type { PresentationSessionRepository, Repository, SurveyRepository } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import { entitlementsFor } from "./entitlements.js";
 import { SessionError, type SessionService } from "./session-service.js";
@@ -28,6 +28,7 @@ export async function registerLiveRoomRoutes(
   app: FastifyInstance,
   dependencies: {
     repository: Repository;
+    surveys?: SurveyRepository;
     sessions: SessionService;
     presentationSessions: PresentationSessionRepository;
     config: Pick<
@@ -76,6 +77,22 @@ export async function registerLiveRoomRoutes(
         }
       }
 
+      if (room.artifactType === "feedback_room") {
+        const survey = await dependencies.surveys?.getRoom(room.artifactId);
+        if (
+          !survey ||
+          survey.closed ||
+          survey.code !== input.code ||
+          new Date(survey.closesAt) <= now ||
+          new Date(survey.expiresAt) <= now
+        )
+          throw unavailableRoom();
+        return JoinPreflightResponseSchema.parse({
+          nicknamePolicy: "friendly_only",
+          artifactType: "feedback_room",
+          destination: `/survey/${survey.id}`,
+        });
+      }
       const presentation = await dependencies.presentationSessions.getSessionById(room.artifactId);
       if (
         !presentation ||

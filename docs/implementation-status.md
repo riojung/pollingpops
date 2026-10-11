@@ -8,6 +8,51 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Activity chooser, 24 templates, and self-paced Survey beta — October 10, 2026
+
+Implemented on `codex/round-types-and-template-library` from the merged Presentation Q&A baseline.
+This is a bounded Survey vertical slice, not completion of core-parity M2–M4 or GA.
+
+- Create Round first offers Live quiz (scored), Live poll (unscored), Survey (self-paced), and
+  Custom Round (mixed). Older starting-method URLs/hash links remain compatible.
+- 24 original templates across six categories, with search, category/type filters, previews and
+  fresh-ID copies. Opinion templates can create genuine Surveys; mixed-format templates are included.
+- Version-1 Survey drafts: poll/rating questions, required/optional items, explicit revision-fenced
+  saves, reordering, preview, duplication, archive and immutable publication. Shared runs freeze the
+  published version, category/preset metadata, organizer-blind policy, window and retention deadline.
+  New runs retain results for their plan period after scheduled closure (Free 30 days, Pro 365,
+  Community operator-configured), so a maximum 30-day collection window still has a reporting period.
+  Sharing screens display expiry; early closure and deployment upgrades never extend frozen deadlines.
+- Code/link/downloadable QR use the existing universal registry. Independent participants save/resume
+  and finalize once per hashed room credential, without aliases, accounts, scores or learning identity.
+  This is not verified one-person participation. Organizers see finalized question-level aggregates,
+  with distributions hidden until closure/deadline and below five responses per question; no linked
+  answer rows or credential exports. Optional questions retain the same small-sample protection.
+- Migration 061 adds forced-RLS storage, composite cascades, durable retry receipts and immutable
+  snapshots. Owner-only run deletion and retention remove attempts and room-creation receipts;
+  editors may close runs, and archived Surveys remain duplicable. Free publication quota is shared
+  transactionally across Rounds and Surveys, including concurrent publication and Round unarchive.
+- Migration 062 forward-repairs earlier room-creation receipt links and removes orphaned receipts
+  without rewriting applied migrations or changing accepted acknowledgement bodies.
+- Creation/publication/sharing require the audience-scopes, feedback-room and survey flags plus the
+  core-parity workspace allowlist. Writer pauses preserve accepted read/resume/submission paths.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds. Nine production-build browser journeys pass across desktop Chromium, mobile Chromium
+and mobile WebKit, including template filtering/previews, QR download, required-response validation,
+saved refresh/resume, finalization receipts, closure-only aggregates, owner-only deletion controls,
+archived Survey duplication and automated axe checks.
+Three existing desktop Round journeys pass for blank creation, viewer restrictions and private
+rehearsal. All 77 PostgreSQL integration tests pass against an isolated local database, including
+the Survey conformance journey and forward receipt repair with a restricted runtime role. Physical-device, Firefox, independent
+accessibility/privacy/security and target-region mixed-load evidence remain open.
+
+Remaining: autosave (current saves are explicit), new opinion formats, standalone Q&A/live feedback
+rooms, passcodes/individual credential revocation, background feedback export/report jobs, aggregate
+sharing, Survey theme presentation/branding, full Survey localization, mixed-load evidence and
+independent privacy/security/accessibility acceptance. The chooser/template controls cover ten locales;
+Survey editor/player copy is explicitly English. Existing external release gates remain mandatory.
+
 ### Core parity M1 — Presentation Q&A interfaces, October 10, 2026
 
 Implemented on `codex/core-parity-presentation-qna-ui` from merged PR #100 (`ad4214a`).

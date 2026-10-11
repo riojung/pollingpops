@@ -26,6 +26,7 @@ const enabled: WorkspaceProductFeatures = {
   liveFlexMode: true,
   questionHealth: true,
   recoveryPacks: true,
+  surveys: true,
   groups: true,
   discover: true,
 };

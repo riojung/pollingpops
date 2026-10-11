@@ -113,6 +113,8 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   const path = pathname.split("?", 1)[0] || "/";
 
   if (path === "/account" || path.startsWith("/account/")) return ["account"];
+  // Survey sharing reuses the QR/address controls from live delivery.
+  if (/^\/surveys\/rooms\/[^/]+\/?$/.test(path)) return ["live-delivery"];
   if (
     [
       "/home",

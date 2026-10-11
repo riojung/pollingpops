@@ -350,7 +350,7 @@ export interface StoredSession {
   updatedAt: Date;
 }
 
-export type LiveRoomArtifactType = "round" | "presentation";
+export type LiveRoomArtifactType = "round" | "presentation" | "feedback_room";
 
 /** Authoritative claim in the shared seven-digit live-room namespace. */
 export interface LiveRoomCodeRecord {
@@ -601,7 +601,7 @@ export class RecoveryPackPracticeAssignmentConflictError extends Error {
 
 export class PublishedQuizLimitError extends Error {
   constructor(public readonly limit: number) {
-    super(`This plan supports ${limit} published quizzes`);
+    super(`This plan supports ${limit} published Rounds and Surveys combined`);
     this.name = "PublishedQuizLimitError";
   }
 }

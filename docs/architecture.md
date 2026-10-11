@@ -10,6 +10,36 @@ Read the [implementation status](implementation-status.md) for verified and outs
 
 ## Additive audience-scope foundation
 
+### Dedicated self-paced Survey vertical slice
+
+Surveys are separate version-1 artifacts, not graded follow-ups or game-engine checkpoints. Shared
+opinion controls render bounded polls/ratings. `SurveyRepository` has one rule layer over memory and
+PostgreSQL transaction mechanics. Migration 061 adds `surveys`, immutable `survey_versions`, frozen
+`survey_feedback_rooms`, hashed room-only `survey_guests` and `survey_mutation_receipts`, all with
+forced RLS and workspace-scoped cascades. Workspace locks serialize shared Round/Survey publication
+quotas; room locks serialize admission, revision-fenced progress and atomic finalization.
+New rooms freeze a submission deadline from the 1–30-day collection window and a later expiry
+from the scheduled close plus plan retention. Repository creation rejects invalid or non-positive
+post-close retention intervals. Manual early closure does not move expiry; legacy deadlines remain
+unchanged. This leaves a post-close reporting interval even for the maximum Free collection window.
+
+Participants send a cryptographically random room credential in Authorization with creator cookies
+omitted. Internal IDs, hashes and draft/final responses support resume/uniqueness only. Organizer
+projections contain submission totals while collecting, never changing answer distributions or
+linked rows. Manual closure or the server deadline releases final question distributions only,
+with a five-answer minimum per question. Editors may close runs; deletion requires the owner.
+Survey data does not enter game snapshots, Recovery evidence or audience realtime. Exact retries
+return durable receipts, including after closing. Eligibility uses server time after the room lock.
+Sharing claims `feedback_room` codes transactionally in the existing universal registry. Retention
+and deletion cascade through attempts/receipts (including room-linked creation receipts); account
+export excludes respondents/credentials. Archived content can be duplicated into a new editable draft.
+Migration 062 forward-repairs older room-creation receipt links and discards orphaned acknowledgements
+without changing migration 061 or the original receipt bodies.
+
+Initial aggregate views are computed on demand at current supported caps. Background feedback
+report/export jobs, Q&A feedback scopes, theme presentation and mixed-load evidence remain future
+milestones. The opt-in writer flags do not imply completion of the shared-audience parity plan.
+
 M0/M1 introduces a versioned audience context without rewriting Round foreign keys or merging
 audience traffic into the game state. Round Q&A and Pulse/chat share `RoundAudienceAccess` and
 keep legacy repositories/projections. Native Presentation host, Companion, and participant

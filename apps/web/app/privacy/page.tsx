@@ -21,7 +21,17 @@ export default function PrivacyPage() {
           create participant accounts, build cross-session profiles, sell participant data, or use
           it for advertising.
         </p>
-        <h2>Data used</h2>
+        <h2>Self-paced Survey beta</h2>
+        <p>
+          Surveys do not request participant accounts or aliases. A room-only credential is stored
+          in your browser for saved progress and a hash is stored server-side with draft/final
+          responses. Organizers receive question-level results, not linked respondent answers.
+          Distributions are hidden below five submitted respondents. One completion per credential
+          is enforced, not verified one-person participation. Clearing site data loses resume
+          access. Survey responses and retry receipts are removed with the run's deletion or
+          retention deadline.
+        </p>
+        <h2>Other data used</h2>
         <p>
           We process creator email, checkpoint-set content, session settings, participant nicknames,
           submitted responses, optional confidence, interventions, Q&A, follow-up attempts, scores,

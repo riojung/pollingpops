@@ -29,6 +29,7 @@ import {
   PostgresLibraryMetadataRepository,
   PostgresPresentationRepository,
   PostgresPresentationSessionRepository,
+  createSurveyRepository,
   createRecoveryPackRepository,
   createAudienceScopeRepository,
   createScopedQnaRepository,
@@ -45,6 +46,7 @@ import {
   WorkspaceDeletionInProgressError,
 } from "../src/types.js";
 import { discoverMigrations, runMigrations } from "../src/migrations.js";
+import { expectSurveyConformance, surveyFixture } from "./support/survey-conformance.js";
 import { createLibraryDeletionFixture } from "./support/library-deletion-fixtures.js";
 import {
   expectPresentationSessionRepositoryConformance,
@@ -1072,6 +1074,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 58, name: "recovery_pack_source_authoring" },
       { version: 59, name: "audience_scope_foundation" },
       { version: 60, name: "scoped_qna" },
+      { version: 61, name: "surveys" },
+      { version: 62, name: "survey_room_receipt_cleanup" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1125,6 +1129,71 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(result).not.toBeNull();
     return result!;
   }
+
+  it("supports self-paced Surveys through the restricted PostgreSQL runtime", async () => {
+    const actor = await creator("survey-conformance");
+    await expectSurveyConformance(repository, actor.workspaceId);
+    expect((await runtimePool.query("SELECT * FROM survey_guests")).rows).toHaveLength(0);
+  });
+
+  it("forward-repairs old room creation receipts and preserves unrelated Survey retries", async () => {
+    const actor = await creator("survey-receipt-repair");
+    const surveys = createSurveyRepository(repository);
+    const id = randomUUID();
+    const createKey = randomUUID();
+    const roomKey = randomUUID();
+    const orphanKey = randomUUID();
+    await surveys.create(actor.workspaceId, id, surveyFixture(), createKey);
+    await surveys.publish(actor.workspaceId, id, 0, randomUUID(), 5);
+    const settings = {
+      code: String(randomInt(1000000, 10000000)),
+      closesAt: new Date(Date.now() + 86400000).toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+      participantLimit: 20,
+      windowDays: 1,
+    };
+    const room = await surveys.createRoom(actor.workspaceId, id, 0, roomKey, settings);
+    const repair = await readFile(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../migrations/062_survey_room_receipt_cleanup.sql",
+      ),
+      "utf8",
+    );
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [actor.workspaceId]);
+      await client.query(
+        "UPDATE survey_mutation_receipts SET room_id = NULL WHERE owner_id = $1 AND idempotency_key = $2",
+        [id, roomKey],
+      );
+      await client.query(
+        "INSERT INTO survey_mutation_receipts (workspace_id, survey_id, owner_id, idempotency_key, request_hash, receipt) SELECT workspace_id, survey_id, owner_id, $3, request_hash, jsonb_set(receipt, '{id}', to_jsonb($4::text)) FROM survey_mutation_receipts WHERE owner_id = $1 AND idempotency_key = $2",
+        [id, roomKey, orphanKey, randomUUID()],
+      );
+      await client.query(repair);
+      await client.query(repair);
+      const receipts = await client.query(
+        "SELECT idempotency_key, room_id FROM survey_mutation_receipts WHERE workspace_id = $1 AND owner_id = $2",
+        [actor.workspaceId, id],
+      );
+      expect(receipts.rows).toContainEqual({ idempotency_key: roomKey, room_id: room.id });
+      expect(receipts.rows).toContainEqual({ idempotency_key: createKey, room_id: null });
+      expect(receipts.rows.some((r) => r.idempotency_key === orphanKey)).toBe(false);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    expect(await surveys.createRoom(actor.workspaceId, id, 0, roomKey, settings)).toEqual(room);
+    await surveys.deleteRoom(actor.workspaceId, room.id);
+    expect((await surveys.createRoom(actor.workspaceId, id, 0, roomKey, settings)).id).not.toBe(
+      room.id,
+    );
+  });
 
   async function packPracticeScoped<T>(
     workspaceId: string,

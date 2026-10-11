@@ -2,6 +2,31 @@
 
 This engineering inventory is not a legal opinion. Confirm purposes, legal basis, processor location, notices, and contracts before production.
 
+## Self-paced Survey beta
+
+Survey versions/rooms retain organizer-authored opinions, category/preset references, deadlines and
+an immutable organizer-blind policy. No participant alias, email, account or learning identity is
+requested. Browser-local room credentials support resume; PostgreSQL stores hashes and internal
+room IDs, bounded draft responses, revision/finalization state and random receipts. This is operational
+pseudonymous data, not a claim that infrastructure operators cannot process network information.
+
+Organizer results expose finalized submission totals while collecting, but question-level
+counts/distributions only after manual closure or the server deadline. Each question is suppressed
+below five finalized responses, including optional questions. Results cannot be refreshed to subtract
+one respondent's answers from changing live distributions. APIs never expose guest IDs/hashes, linked
+rows, precise respondent timestamps or personal
+activity. Creator account exports contain Survey content and room metadata, not respondent records or
+credentials. Owner-only room deletion, retention and owner-workspace deletion cascade through
+attempts/receipts, including room-creation receipts. Editors may close runs but not delete them.
+New runs freeze expiry at scheduled close plus the plan retention period: 30 days on Free, 365 on
+Pro, or operator configuration in Community. The collection window is separately limited to 30 days,
+so a 30-day Free run can retain responses for up to 60 days from creation. Closing early never
+extends expiry, and existing frozen deadlines are not rewritten.
+Logs/metrics must not record responses/credentials; guest requests omit creator cookies. Only polls and
+ratings are accepted initially, so respondent-authored text/attachments are absent. One completion per
+credential is enforced, not verified one-person participation. Cross-device resume, passcodes,
+individual revocation and independent privacy/security acceptance remain pending.
+
 The Core-Parity audience foundation stores opted-in Presentation scope metadata (workspace/source
 ID, immutable facilitator-visible alias policy, creation receipt, audience sequence, and source
 retention deadline) and metadata-only activation/Q&A outbox events. Scoped Presentation Q&A now
@@ -17,9 +42,9 @@ not retained in distributed socket data, Redis adapter fetches, account exports,
 No scope event exposes credentials, aliases, individual activity, or answers.
 
 Learning Round/Presentation scope responses explicitly disclose that moderators can see the session
-alias even when the public room display says Anonymous. Presentation audience interaction UI and
-organizer-blind feedback-room/survey modes are not yet shipped; do not market the new scope
-foundation as organizer-blind anonymous feedback. Those future modes require separate projections
+alias even when the public room display says Anonymous. Organizer-blind Q&A/live feedback-room
+modes remain pending. The separate self-paced Survey beta is described above; do not market
+learning Q&A as organizer-blind anonymous feedback. Future feedback-room modes require separate projections
 and privacy/security acceptance across every API, event, moderation, report, export, and account path.
 
 Source-assisted Recovery Pack conversion reuses an existing validated authoring output; it makes

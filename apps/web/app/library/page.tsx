@@ -469,6 +469,9 @@ function LibraryContent() {
       title={t("page.library.title")}
       translationLevel="full"
     >
+      <p>
+        <Link href="/surveys">{t("create.kind.browseSurveys")}</Link>
+      </p>
       <div className={styles.toolbar}>
         <div className={styles.tabs} role="tablist" aria-label={t("pages.library.typeLabel")}>
           <button

@@ -526,6 +526,9 @@ export default function SessionsPage() {
         title={t("page.sessions.title")}
         translationLevel="full"
       >
+        <p>
+          <Link href="/surveys">{t("create.kind.browseSurveys")}</Link>
+        </p>
         <SessionsContent />
       </WorkspaceShell>
     </WorkspaceProvider>

@@ -8,6 +8,7 @@ import { Brand } from "../../components/brand";
 import { AvatarPicker } from "../../components/participant-avatar";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
+import { surveyAccessToken, type SurveyAttempt } from "../../lib/survey-client";
 import {
   beginJoinPreflight,
   completeJoinPreflight,
@@ -111,6 +112,22 @@ function JoinForm() {
       }
 
       const resolvedArtifactType = joinArtifactFor(resolvedPreflight, submittedCode);
+      if (resolvedArtifactType === "feedback_room") {
+        const roomId = resolvedPreflight.destination?.match(/^\/survey\/([a-f0-9-]{36})$/)?.[1];
+        if (!roomId) throw new Error("Could not confirm this Survey. Check the code and retry.");
+        const storageKey = `pollingpops:survey:${roomId}`;
+        const token = localStorage.getItem(storageKey) ?? surveyAccessToken();
+        // Persist before admission so an interrupted acknowledgement retries the same guest.
+        localStorage.setItem(storageKey, token);
+        const joined = await apiFetch<{ attempt: SurveyAttempt }>("/v1/survey-rooms/join", {
+          method: "POST",
+          credentials: "omit",
+          headers: { authorization: `Bearer ${token}` },
+          body: JSON.stringify({ code: submittedCode }),
+        });
+        router.push(`/survey/${joined.attempt.roomId}`);
+        return;
+      }
       if (resolvedArtifactType === "presentation") {
         const joined = await apiFetch<{
           participantToken: string;
@@ -155,14 +172,18 @@ function JoinForm() {
     <section className="join-card auth-card" aria-labelledby="join-heading">
       <p className="eyebrow">{t("delivery.join.eyebrow")}</p>
       <h1 id="join-heading" style={{ fontSize: "clamp(2.5rem, 9vw, 4.4rem)" }}>
-        {artifactType === "presentation"
-          ? t("delivery.join.presentationTitle")
-          : t("delivery.join.title")}
+        {artifactType === "feedback_room"
+          ? t("create.kind.survey")
+          : artifactType === "presentation"
+            ? t("delivery.join.presentationTitle")
+            : t("delivery.join.title")}
       </h1>
       <p className="muted">
-        {artifactType === "presentation"
-          ? t("delivery.join.presentationDescription")
-          : t("delivery.join.description")}
+        {artifactType === "feedback_room"
+          ? t("create.kind.survey.description")
+          : artifactType === "presentation"
+            ? t("delivery.join.presentationDescription")
+            : t("delivery.join.description")}
       </p>
       <form onSubmit={submit}>
         <div className="field">
@@ -197,7 +218,9 @@ function JoinForm() {
           </div>
         ) : (
           <p className="notice" data-testid="friendly-alias-notice" role="status">
-            A privacy-friendly nickname will be assigned when you join.
+            {artifactType === "feedback_room"
+              ? "No nickname or learning identity is collected. Organizers see question-level totals, not linked respondent answers."
+              : "A privacy-friendly nickname will be assigned when you join."}
           </p>
         )}
         {artifactType === "round" ? (
@@ -224,22 +247,24 @@ function JoinForm() {
             busy ||
             code.length !== 7 ||
             preflight.status === "checking" ||
-            (artifactType !== "round" && !nickname.trim())
+            (artifactType !== "round" && artifactType !== "feedback_room" && !nickname.trim())
           }
           type="submit"
         >
           {busy
             ? t("delivery.join.joining")
-            : artifactType === "presentation"
-              ? t("delivery.join.presentationTitle")
-              : t("delivery.join.submit")}
+            : artifactType === "feedback_room"
+              ? t("create.kind.survey")
+              : artifactType === "presentation"
+                ? t("delivery.join.presentationTitle")
+                : t("delivery.join.submit")}
         </button>
       </form>
       <p className="muted" style={{ fontSize: "0.84rem", marginTop: 18, marginBottom: 0 }}>
         By joining, you agree to the session rules and <Link href="/privacy">privacy notice</Link>.
       </p>
       <p className="muted" style={{ fontSize: "0.84rem", marginBottom: 0 }}>
-        Round and Presentation codes both work here.
+        Round, Presentation, and Survey codes all work here.
       </p>
     </section>
   );

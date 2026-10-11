@@ -5,7 +5,7 @@ export interface JoinPreflightState {
   code: string;
   status: "idle" | "checking" | "ready" | "failed";
   nicknamePolicy: JoinPreflightResponse["nicknamePolicy"] | null;
-  artifactType: "round" | "presentation" | null;
+  artifactType: "round" | "presentation" | "feedback_room" | null;
   destination: string | null;
   message: string;
 }
@@ -82,6 +82,7 @@ export async function resolveJoinPreflightForSubmission(
 }
 
 export function shouldCollectJoinNickname(state: JoinPreflightState, code: string) {
+  if (joinArtifactFor(state, code) === "feedback_room") return false;
   if (joinArtifactFor(state, code) === "presentation") return true;
   return !(
     state.code === code &&

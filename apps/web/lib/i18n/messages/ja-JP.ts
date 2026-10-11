@@ -1,6 +1,8 @@
 import type { MessageCatalog } from "./en-CA";
+import { creationMessages } from "../creation-messages";
 
 const messages = {
+  ...creationMessages("ja-JP"),
   "common.create": "作成",
   "common.round": "ラウンド",
   "common.presentation": "プレゼンテーション",

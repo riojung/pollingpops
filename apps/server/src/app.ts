@@ -11,6 +11,7 @@ import {
   createCollaborationGroupRepository,
   createAudienceScopeRepository,
   createScopedQnaRepository,
+  createSurveyRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
   createRecoveryPackRepository,
@@ -56,6 +57,7 @@ import { registerGroupRoutes } from "./group-routes.js";
 import { registerHomeRoutes } from "./home-routes.js";
 import { registerLibraryRoutes } from "./library-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
+import { registerSurveyRoutes } from "./survey-routes.js";
 import { registerQuestionHealthRoutes } from "./question-health-routes.js";
 import { registerRecoveryPackRoutes } from "./recovery-pack-routes.js";
 import { registerRecoveryPackPortabilityRoutes } from "./recovery-pack-portability-routes.js";
@@ -426,6 +428,14 @@ export async function buildApp(
     sessions,
     presentationSessions,
     config,
+    surveys: createSurveyRepository(repository),
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
+  await registerSurveyRoutes(app, {
+    repository,
+    auth,
+    config,
+    surveys: createSurveyRepository(repository),
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
   // Presentation read and recovery routes remain registered when a rollout is paused. Route-level

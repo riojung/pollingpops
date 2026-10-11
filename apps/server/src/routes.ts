@@ -91,6 +91,7 @@ import {
 } from "@openround/db";
 import { experiencePresets } from "@openround/experience";
 import type { AppConfig } from "./config.js";
+import { coreParityCreationEnabled } from "./core-parity-rollout.js";
 import type { AuthService } from "./auth.js";
 import { cleanPlainText, hashToken } from "./security.js";
 import type { SessionService } from "./session-service.js";
@@ -498,6 +499,7 @@ export async function registerRoutes(
         evidenceWorkspaceFeatureEnabled(config, workspaceId, "presentationCompanion"),
       liveFlexMode: evidenceWorkspaceFeatureEnabled(config, workspaceId, "liveFlexMode"),
       questionHealth: evidenceWorkspaceFeatureEnabled(config, workspaceId, "questionHealth"),
+      surveys: coreParityCreationEnabled(config, workspaceId, "surveys"),
       recoveryPacks: evidenceWorkspaceFeatureEnabled(config, workspaceId, "recoveryPacks"),
       groups: professionalWorkspaceFeatureEnabled(config, workspaceId, "groups"),
       discover: professionalWorkspaceFeatureEnabled(config, workspaceId, "discover"),
@@ -1512,6 +1514,12 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     return StartersResponseSchema.parse({ starters: starterSummaries });
+  });
+  app.get("/v1/starters/:id", async (request, reply) => {
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    const { id } = StarterParamsSchema.parse(request.params);
+    return { draft: instantiateStarter(id) };
   });
 
   app.post("/v1/starters/:id/use", async (request, reply) => {

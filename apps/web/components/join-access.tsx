@@ -18,10 +18,12 @@ export function JoinAccess({
   code,
   editable = false,
   size = 190,
+  activityName,
 }: {
   code: string;
   editable?: boolean;
   size?: number;
+  activityName?: string;
 }) {
   const { t } = useLocale();
   const [base, setBase] = useState("");
@@ -159,13 +161,24 @@ export function JoinAccess({
   }
 
   return (
-    <section className="join-access" aria-label={t("live.joinAccess.sectionAria")}>
+    <section
+      className="join-access"
+      aria-label={
+        activityName
+          ? `Join this ${activityName} using a QR code or direct link`
+          : t("live.joinAccess.sectionAria")
+      }
+    >
       <p className="eyebrow">{t("live.joinAccess.scanToJoin")}</p>
       {joinUrl ? (
         <>
           <div className="join-qr-frame" ref={qrFrame}>
             <QRCodeSVG
-              aria-label={t("live.joinAccess.qrAria", { code: code.split("").join(" ") })}
+              aria-label={
+                activityName
+                  ? `${activityName} QR code: ${code.split("").join(" ")}`
+                  : t("live.joinAccess.qrAria", { code: code.split("").join(" ") })
+              }
               bgColor="#ffffff"
               fgColor="#0b2239"
               size={size}

@@ -99,9 +99,11 @@
 .startLink {
   margin-top: auto;
   padding-top: 1rem;
-  color: var(--ui-accent);
+  color: var(--ui-accent-ink);
   font-size: 0.88rem;
   font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
 }
 
 .launcherNote {
@@ -484,7 +486,7 @@
   align-items: center;
   border: 0;
   background: transparent;
-  color: var(--ui-accent);
+  color: var(--ui-accent-ink);
   display: inline-flex;
   font-weight: 800;
   justify-content: center;

@@ -72,6 +72,14 @@ describe.each([
       ).toBeGreaterThanOrEqual(3);
     }
   });
+
+  it("keeps mint text links readable on every working surface", () => {
+    for (const surface of surfaces) {
+      expect(colorContrastRatio(theme["--ui-accent-ink"]!, theme[surface]!)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
 });
 
 it("retains experience-scoped tokens instead of recoloring frozen live themes", () => {

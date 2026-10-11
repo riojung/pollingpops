@@ -3,6 +3,30 @@ import { expect, test } from "@playwright/test";
 import { signInBeta } from "./sign-in";
 
 for (const surface of ["desktop", "phone @mobile"]) {
+  test(`neutral brand theme keeps text actions mint and underlined on ${surface}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page);
+
+    for (const mode of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: mode });
+      const ink = mode === "light" ? "rgb(20, 101, 82)" : "rgb(185, 234, 206)";
+      for (const [path, action] of [
+        ["/create", "Choose a starting point"],
+        ["/discover", "Explore starters →"],
+      ] as const) {
+        await page.goto(path);
+        await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
+        const textAction = page.getByRole("main").getByText(action, { exact: true }).first();
+        await expect(textAction).toBeVisible();
+        await expect(textAction).toHaveCSS("color", ink);
+        await expect(textAction).toHaveCSS("text-decoration-line", "underline");
+        expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      }
+    }
+  });
+
   test(`neutral brand theme keeps templates usable in light and dark on ${surface}`, async ({
     page,
   }, testInfo) => {

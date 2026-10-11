@@ -7,11 +7,13 @@ gates have passed.
 ## Product intent
 
 The public identity is **Polling Pops**, with the tagline **Make every voice pop.**
-The original lollipop mark joins candy ribbons with rising poll bars. Berry actions,
-cream canvases, mint and butter-yellow decorations, and plum typography now connect
-the landing page, creator workspace, builders, and live delivery. The interface remains
-calm during questions and evidence review. See the [brand guide](brand.md) for assets,
-accessible color use, dark mode, and compatibility rules.
+The original lollipop mark joins candy ribbons with rising poll bars. Neutral white and
+graphite surfaces, readable charcoal typography, and restrained mint selections keep
+the workspace focused; pink and butter-yellow primarily belong to the logo and brand
+artwork. Dark mode uses neutral charcoal rather than plum surfaces. Primary actions use
+graphite/near-white and secondary controls stay neutral, with clear focus outlines and
+subtle shadows. Published live experiences retain their versioned palette. See the
+[brand guide](brand.md) for assets, accessible color use, and compatibility rules.
 
 Polling Pops is a privacy-preserving comprehension recovery system for higher education and workplace
 learning. Its promise is that a facilitator can see what did not land, take an appropriate action,

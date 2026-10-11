@@ -140,7 +140,7 @@ test("beta workspace and creation surfaces pass automated accessibility checks",
   await expectNoAxeViolations(page);
 
   await page.goto("/create");
-  await expect(page.getByRole("heading", { name: "How do you want to start?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would you like to create?" })).toBeVisible();
   await expectNoAxeViolations(page);
 
   await page.goto("/templates");
@@ -282,11 +282,11 @@ test("workspace appearance follows, overrides, and persists the system color mod
     if (path === "/account") {
       await expect(page.locator(".settings-grid > .panel").first()).toHaveCSS(
         "background-color",
-        "rgba(43, 35, 48, 0.96)",
+        "rgba(32, 36, 43, 0.96)",
       );
       await expect(page.locator("#active-workspace")).toHaveCSS(
         "background-color",
-        "rgb(53, 42, 58)",
+        "rgb(41, 46, 54)",
       );
     }
     await expectNoAxeViolations(page);
@@ -314,7 +314,7 @@ test("Presentation Builder dialogs and drawers pass automated accessibility chec
   const questionPrompt = page.getByLabel("Question prompt");
   await questionPrompt.focus();
   await expect(questionPrompt).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");
-  await expect(questionPrompt).toHaveCSS("color", "rgb(57, 36, 60)");
+  await expect(questionPrompt).toHaveCSS("color", "rgb(48, 54, 64)");
   await expect(page.getByRole("status")).toHaveText("Saved");
 
   await page.evaluate(() => window.localStorage.setItem("openround:color-mode", "dark"));
@@ -349,7 +349,7 @@ test("Round Builder follows system appearance changes", async ({ page }) => {
   // must inspect the final dark surface, not a light/dark interpolation.
   await expect(page.getByRole("button", { name: "Preview", exact: true })).toHaveCSS(
     "background-color",
-    "rgb(51, 38, 51)",
+    "rgb(38, 43, 51)",
   );
   await expectNoAxeViolations(page);
 });
@@ -424,7 +424,7 @@ test("mobile beta creation surface passes automated accessibility checks @mobile
 }) => {
   await signIn(page);
   await page.goto("/create");
-  await expect(page.getByRole("heading", { name: "How do you want to start?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would you like to create?" })).toBeVisible();
   await expectNoAxeViolations(page);
   await page.getByLabel("Appearance: System").click();
   await page.getByRole("radio", { name: "Dark" }).click();

@@ -211,6 +211,10 @@
   margin-top: auto;
 }
 
+.starterCard button ~ button {
+  margin-top: 0.5rem;
+}
+
 .cardTopline,
 .metaLine,
 .rowTopline {

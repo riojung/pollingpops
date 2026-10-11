@@ -80,6 +80,31 @@ describe.each([
       );
     }
   });
+
+  it("keeps text readable at the strongest point of the subtle pink brand glow", () => {
+    const glow = theme["--ui-brand-glow"]!.match(/^rgba\(249, 104, 138, (0\.\d+)\)$/);
+    expect(glow).not.toBeNull();
+    const alpha = Number(glow![1]);
+    expect(alpha).toBeGreaterThan(0);
+    expect(alpha).toBeLessThanOrEqual(0.2);
+    // Only brand-bearing sidebar/header surfaces carry the halo. Opaque cards,
+    // input fills and hover surfaces do not inherit it.
+    const background = theme["--ui-surface"]!;
+    const blended = [249, 104, 138].map((channel, index) => {
+      const base = Number.parseInt(background.slice(1 + index * 2, 3 + index * 2), 16);
+      return Math.round(channel * alpha + base * (1 - alpha))
+        .toString(16)
+        .padStart(2, "0");
+    });
+    for (const text of [
+      "--ui-text-strong",
+      "--ui-text-subtle",
+      "--ui-text-muted",
+      "--ui-accent-ink",
+    ]) {
+      expect(colorContrastRatio(theme[text]!, `#${blended.join("")}`)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
 
 it("retains experience-scoped tokens instead of recoloring frozen live themes", () => {

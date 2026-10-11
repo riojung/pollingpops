@@ -5,6 +5,7 @@
   --pop-yellow: #ffc857;
   --pop-plum: #39243c;
   /* Keep candy colors in the identity; working surfaces stay neutral. */
+  --ui-brand-glow: rgba(249, 104, 138, 0.18);
   --ui-canvas: #f6f7f9;
   --ui-canvas-glow: rgba(20, 101, 82, 0.12);
   --ui-surface: #ffffff;
@@ -79,6 +80,7 @@
 }
 
 html[data-color-mode="dark"] {
+  --ui-brand-glow: rgba(249, 104, 138, 0.12);
   --ink: var(--ui-text);
   --ink-soft: var(--ui-text-subtle);
   --line: var(--ui-border);

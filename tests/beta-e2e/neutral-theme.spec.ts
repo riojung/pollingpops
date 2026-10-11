@@ -57,6 +57,12 @@ for (const surface of ["desktop", "phone @mobile"]) {
         mode === "light" ? "rgb(48, 54, 64)" : "rgb(232, 235, 240)",
       );
       await expect(page.locator("body")).toHaveCSS("background-image", "none");
+      const brandSurface = page.getByRole(surface === "desktop" ? "complementary" : "banner");
+      await expect(brandSurface).toHaveCSS("background-image", /radial-gradient/);
+      await expect(brandSurface).toHaveCSS(
+        "background-image",
+        mode === "light" ? /rgba\(249, 104, 138, 0\.18\)/ : /rgba\(249, 104, 138, 0\.12\)/,
+      );
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -64,6 +70,13 @@ for (const surface of ["desktop", "phone @mobile"]) {
       await page.getByRole("heading", { name: "Templates", exact: true }).click();
       await page.mouse.move(0, 0);
       await page.screenshot({ path: testInfo.outputPath(`templates-${mode}.png`), scale: "css" });
+      if (surface === "desktop") {
+        await page.screenshot({
+          path: testInfo.outputPath(`logo-glow-${mode}.png`),
+          clip: { x: 0, y: 0, width: 244, height: 240 },
+          scale: "css",
+        });
+      }
 
       const search = page.getByLabel("Search templates");
       await search.focus();

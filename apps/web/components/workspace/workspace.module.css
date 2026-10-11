@@ -39,7 +39,10 @@
   width: 244px;
   flex-direction: column;
   border-right: 1px solid var(--ui-border);
-  background: var(--ui-surface-translucent);
+  /* The logo halo fades to neutral instead of tinting the full-height sidebar. */
+  background:
+    radial-gradient(ellipse 240px 190px at 36px 32px, var(--ui-brand-glow), transparent),
+    var(--ui-surface-translucent);
   padding: 1.3rem 0.9rem;
   backdrop-filter: blur(14px);
 }
@@ -510,6 +513,9 @@
   .topHeader {
     grid-template-columns: auto minmax(200px, 1fr) auto;
     padding-inline: 1rem;
+    background:
+      radial-gradient(ellipse 180px 100px at 32px 22px, var(--ui-brand-glow), transparent),
+      var(--ui-surface-translucent);
   }
 
   .mobileBrand {

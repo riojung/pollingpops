@@ -252,7 +252,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
       {
         title: "Build and review",
-        body: "Edit details, add poll/rating questions, label scale endpoints, mark required/optional items, reorder, and preview. Select Save draft before leaving; this beta uses explicit saves.",
+        body: "Edit details, add poll/rating questions, label scale endpoints, mark required/optional items, reorder, and preview. Set Maximum selections on a poll: one uses radios, more than one uses checkboxes, up to the number of options. Removing options clamps the limit. These polls are unscored opinions. Select Save draft before leaving; this beta uses explicit saves.",
       },
       {
         title: "Publish and share",
@@ -264,7 +264,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
       {
         title: "Return to results",
-        body: "Use Library → Browse Surveys to find your content and runs. Refresh results to count finalized submissions. Close admissions and submissions, or wait for the deadline, to release final distributions; each question needs five responses. Owners/editors can close a run, but only owners can permanently delete it. Duplicate an archived Survey to reuse its content.",
+        body: "Use Library → Browse Surveys to find your content and runs. Refresh results to count finalized submissions. Close admissions and submissions, or wait for the deadline, to release final distributions; each question needs five responses. Multi-selection counts show respondents selecting each option, so their sum can exceed the response count. Owners/editors can close a run, but only owners can permanently delete it. Duplicate an archived Survey to reuse its content.",
       },
     ],
     check:

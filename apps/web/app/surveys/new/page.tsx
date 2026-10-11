@@ -36,8 +36,8 @@ function CreateSurvey() {
           <section className={styles.panel}>
             <h2>Start blank</h2>
             <p>
-              Build with unscored choice polls and labeled rating scales. Open text, ranking, and
-              word clouds are not included yet.
+              Build with single- or multiple-selection opinion polls and labeled rating scales. Open
+              text, ranking, and word clouds are not included yet.
             </p>
             {error ? (
               <p role="alert" className="error">

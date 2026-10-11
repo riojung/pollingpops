@@ -46,7 +46,11 @@ import {
   WorkspaceDeletionInProgressError,
 } from "../src/types.js";
 import { discoverMigrations, runMigrations } from "../src/migrations.js";
-import { expectSurveyConformance, surveyFixture } from "./support/survey-conformance.js";
+import {
+  expectSurveyConformance,
+  expectSurveyCreationUpgradeConformance,
+  surveyFixture,
+} from "./support/survey-conformance.js";
 import { createLibraryDeletionFixture } from "./support/library-deletion-fixtures.js";
 import {
   expectPresentationSessionRepositoryConformance,
@@ -1076,6 +1080,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 60, name: "scoped_qna" },
       { version: 61, name: "surveys" },
       { version: 62, name: "survey_room_receipt_cleanup" },
+      { version: 63, name: "survey_multiselection" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1130,10 +1135,97 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     return result!;
   }
 
+  it("expands v1 Survey storage without changing accepted responses or immutable room/version bytes", async () => {
+    const actor = await creator("survey-v2-upgrade");
+    const surveys = createSurveyRepository(repository);
+    const id = randomUUID();
+    const now = new Date();
+    const draft = surveyFixture();
+    await surveys.create(actor.workspaceId, id, draft, randomUUID());
+    await surveys.publish(actor.workspaceId, id, 0, randomUUID(), 5);
+    const room = await surveys.createRoom(actor.workspaceId, id, 0, randomUUID(), {
+      code: String(randomInt(1000000, 10000000)),
+      closesAt: new Date(now.getTime() + 86400000).toISOString(),
+      expiresAt: new Date(now.getTime() + 30 * 86400000).toISOString(),
+      participantLimit: 20,
+      windowDays: 1,
+    });
+    const question = draft.items[0]!.question;
+    if (question.type !== "poll") throw new Error("Expected poll");
+    const tokenHash = createHash("sha256").update(randomUUID()).digest("hex");
+    await surveys.admit(room.id, tokenHash, now);
+    const key = randomUUID();
+    const responses = {
+      [question.id]: { kind: "poll" as const, choiceIds: [question.choices[0]!.id] },
+    };
+    const receipt = await surveys.respond(room.id, tokenHash, responses, 0, key, true, now);
+    const pool = new Pool({ connectionString: adminUrl });
+    const client = await pool.connect();
+    const tables = ["surveys", "survey_versions", "survey_feedback_rooms", "survey_guests"];
+    try {
+      await client.query("BEGIN");
+      const before = [];
+      for (const table of tables) {
+        // This fixture precedes v2 writes and restores the previous release's checks only.
+        await client.query(`ALTER TABLE ${table} DROP CONSTRAINT ${table}_data_check`);
+        await client.query(
+          `ALTER TABLE ${table} ADD CONSTRAINT ${table}_data_check CHECK ((data->>'schemaVersion')::integer = 1)`,
+        );
+        before.push(
+          (
+            await client.query(
+              `SELECT id, data FROM ${table} WHERE workspace_id = $1 ORDER BY id`,
+              [actor.workspaceId],
+            )
+          ).rows,
+        );
+      }
+      const migrations = await discoverMigrations(
+        join(dirname(fileURLToPath(import.meta.url)), "../migrations"),
+      );
+      await client.query(migrations.find(({ version }) => version === 63)!.sql);
+      for (const [index, table] of tables.entries()) {
+        expect(
+          (
+            await client.query(
+              `SELECT id, data FROM ${table} WHERE workspace_id = $1 ORDER BY id`,
+              [actor.workspaceId],
+            )
+          ).rows,
+        ).toEqual(before[index]);
+      }
+      await client.query("SAVEPOINT future_version");
+      await expect(
+        client.query("INSERT INTO surveys (id, workspace_id, data) VALUES ($1, $2, $3::jsonb)", [
+          randomUUID(),
+          actor.workspaceId,
+          JSON.stringify({ schemaVersion: 3 }),
+        ]),
+      ).rejects.toMatchObject({ code: "23514" });
+      await client.query("ROLLBACK TO SAVEPOINT future_version");
+      await client.query("COMMIT");
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+      await pool.end();
+    }
+    expect(await surveys.respond(room.id, tokenHash, responses, 0, key, true, now)).toEqual(
+      receipt,
+    );
+    expect((await surveys.attempt(room.id, tokenHash, now)).responses).toEqual(responses);
+    await surveys.deleteRoom(actor.workspaceId, room.id);
+  });
+
   it("supports self-paced Surveys through the restricted PostgreSQL runtime", async () => {
     const actor = await creator("survey-conformance");
     await expectSurveyConformance(repository, actor.workspaceId);
+    await expectSurveyConformance(repository, actor.workspaceId, 2);
     expect((await runtimePool.query("SELECT * FROM survey_guests")).rows).toHaveLength(0);
+  });
+
+  it("replays legacy Survey creation receipts through the restricted PostgreSQL runtime", async () => {
+    const actor = await creator("survey-creation-upgrade");
+    await expectSurveyCreationUpgradeConformance(repository, actor.workspaceId);
   });
 
   it("forward-repairs old room creation receipts and preserves unrelated Survey retries", async () => {

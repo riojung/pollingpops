@@ -8,6 +8,41 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Survey enablement and multiple-selection opinions — October 10, 2026
+
+Implemented on `codex/core-parity-multiselect-surveys` from merged baseline `6a7b98c`.
+This is a Survey-only M2 increment, not completion of M1–M4 or public GA.
+
+- Survey creation is verified in the signed-in local Workplace workspace after opt-in flags and
+  its workspace allowlist are applied. Deployment defaults remain off; local `.env` is not committed.
+- New Surveys use schema version 2. Polls accept one to six unique choices, bounded by an authored
+  maximum and available options. Legacy version-1 polls still allow exactly one choice. Ratings and
+  opinion-only restrictions are unchanged; responses never enter accuracy/recovery denominators.
+- Editor, preview and player use the same selection limit. Removing options clamps it. Selected
+  choices remain deselectable when the limit is reached; saved sets survive refresh and finalize once.
+- Aggregate report v2 counts respondents selecting each option; sums may exceed response count.
+  Closure/deadline and the five-respondent minimum per question still protect anonymous distributions.
+- Migration 063 expands v1/v2 document checks without changing old snapshots/accepted data. Reader
+  upgrades reject future versions, stored versions match content, and retry hashing normalizes sets.
+  Rollback must keep v2-compatible readers, not remove accepted content or responses.
+- In-product Help, quick start, user guide, API and architecture explain selection limits and rollout.
+
+Next: Survey draft autosave; capability-negotiated live multi-selection opinion polls; open text,
+word clouds and ranking with safe public-text moderation; remaining scoped Presentation interaction
+and feedback-room/passcode work; durable feedback report/export jobs and aggregate sharing. Existing
+external load, physical-device, privacy/security/accessibility and production release gates remain open.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds. All 78 PostgreSQL integration tests pass on a fresh,
+disposable PostgreSQL 17 cluster, including accepted-v1-data preservation, repeat/checksum migration
+checks, forced RLS and memory/PostgreSQL v1/v2 conformance. All 12 production-build Survey browser
+journeys pass on desktop Chromium, mobile Chromium and mobile WebKit, including option-removal
+clamping, preview, saved checkbox-set restoration, server-side limit enforcement, finalization,
+closure-only respondent counts and automated axe checks. The local core service was rebuilt and
+restarted in the existing Colima context; migration 063 and readiness checks passed, and the
+updated creation page is verified in the signed-in Workplace workspace. Physical-device, manual screen-reader, Firefox, target-region mixed
+load and external release gates are not claimed by this increment.
+
 ### Activity chooser, 24 templates, and self-paced Survey beta — October 10, 2026
 
 Implemented on `codex/round-types-and-template-library` from the merged Presentation Q&A baseline.

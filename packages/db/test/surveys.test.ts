@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MemoryRepository, createSurveyRepository } from "../src/index.js";
-import { expectSurveyConformance, surveyFixture } from "./support/survey-conformance.js";
+import {
+  expectSurveyConformance,
+  expectSurveyCreationUpgradeConformance,
+  surveyFixture,
+} from "./support/survey-conformance.js";
 
 async function fixture() {
   const repository = new MemoryRepository();
@@ -19,9 +23,14 @@ async function fixture() {
   return { repository, creator, surveys: createSurveyRepository(repository) };
 }
 describe("self-paced Survey storage", () => {
+  it("replays v1 creation receipts after a version-only writer upgrade without relaxing conflicts", async () => {
+    const { repository, creator } = await fixture();
+    await expectSurveyCreationUpgradeConformance(repository, creator.workspaceId);
+  });
   it("conforms for revisions, frozen sharing, resume, finalization, privacy and retention", async () => {
     const { repository, creator } = await fixture();
     await expectSurveyConformance(repository, creator.workspaceId);
+    await expectSurveyConformance(repository, creator.workspaceId, 2);
   });
   it("serializes concurrent publications and applies the shared Round/Survey quota", async () => {
     const { repository, creator, surveys } = await fixture();

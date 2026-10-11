@@ -52,11 +52,73 @@ export function surveyFixture() {
     ],
   });
 }
-export async function expectSurveyConformance(repository: Repository, workspaceId: string) {
+export async function expectSurveyCreationUpgradeConformance(
+  repository: Repository,
+  workspaceId: string,
+) {
+  const surveys = createSurveyRepository(repository);
+  const id = randomUUID();
+  const key = randomUUID();
+  const legacyDraft = surveyFixture();
+  const original = await surveys.create(workspaceId, id, legacyDraft, key);
+  const upgradedDraft = { ...legacyDraft, schemaVersion: 2 as const };
+  expect(await surveys.create(workspaceId, id, upgradedDraft, key)).toEqual(original);
+
+  const changedDrafts = [
+    { ...upgradedDraft, title: "Changed title" },
+    { ...upgradedDraft, description: "Changed description" },
+    {
+      ...upgradedDraft,
+      items: upgradedDraft.items.map((item) => ({ ...item, required: !item.required })),
+    },
+    {
+      ...upgradedDraft,
+      items: upgradedDraft.items.map((item) =>
+        item.question.type === "poll"
+          ? { ...item, question: { ...item.question, maxSelections: 2 } }
+          : item,
+      ),
+    },
+  ];
+  for (const changed of changedDrafts)
+    await expect(surveys.create(workspaceId, id, changed, key)).rejects.toMatchObject({
+      code: "IDEMPOTENCY_CONFLICT",
+    });
+  await expect(surveys.save(workspaceId, id, upgradedDraft, 0, key)).rejects.toMatchObject({
+    code: "IDEMPOTENCY_CONFLICT",
+  });
+
+  const saved = await surveys.save(workspaceId, id, upgradedDraft, 0, randomUUID());
+  expect(saved.schemaVersion).toBe(2);
+  const retries = await Promise.all([
+    surveys.create(workspaceId, id, upgradedDraft, key),
+    surveys.create(workspaceId, id, legacyDraft, key),
+  ]);
+  expect(retries).toEqual([original, original]);
+  expect(await surveys.get(workspaceId, id)).toEqual(saved);
+  expect(await surveys.get(randomUUID(), id)).toBeNull();
+
+  const newId = randomUUID();
+  const newKey = randomUUID();
+  const current = await surveys.create(workspaceId, newId, upgradedDraft, newKey);
+  expect(current.schemaVersion).toBe(2);
+  expect(await surveys.create(workspaceId, newId, upgradedDraft, newKey)).toEqual(current);
+  await expect(surveys.create(workspaceId, newId, legacyDraft, newKey)).rejects.toMatchObject({
+    code: "IDEMPOTENCY_CONFLICT",
+  });
+}
+export async function expectSurveyConformance(
+  repository: Repository,
+  workspaceId: string,
+  schemaVersion: 1 | 2 = 1,
+) {
   const surveys = createSurveyRepository(repository);
   const id = randomUUID();
   const now = new Date();
   const draft = surveyFixture();
+  draft.schemaVersion = schemaVersion;
+  if (schemaVersion === 2 && draft.items[0]!.question.type === "poll")
+    draft.items[0]!.question.maxSelections = 2;
   const key = randomUUID();
   const original = await surveys.create(workspaceId, id, draft, key);
   expect(await surveys.create(workspaceId, id, draft, key)).toEqual(original);
@@ -92,6 +154,8 @@ export async function expectSurveyConformance(repository: Repository, workspaceI
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   }
   const room = await surveys.createRoom(workspaceId, id, saved.revision, roomKey, settings);
+  expect(room.schemaVersion).toBe(schemaVersion);
+  expect(room.content.schemaVersion).toBe(schemaVersion);
   expect(
     await surveys.createRoom(workspaceId, id, saved.revision, roomKey, {
       ...settings,
@@ -113,16 +177,36 @@ export async function expectSurveyConformance(repository: Repository, workspaceI
   const updated = await surveys.save(
     workspaceId,
     id,
-    { ...draft, title: "Feedback v2" },
+    {
+      ...draft,
+      schemaVersion: 2,
+      title: "Feedback v2",
+      items: draft.items.map((item) =>
+        item.question.type === "poll"
+          ? { ...item, question: { ...item.question, maxSelections: 2 } }
+          : item,
+      ),
+    },
     saved.revision,
     randomUUID(),
   );
   await surveys.publish(workspaceId, id, updated.revision, randomUUID(), 5);
+  expect(updated.schemaVersion).toBe(2);
+  expect((await surveys.getRoom(room.id))?.schemaVersion).toBe(schemaVersion);
+  expect((await surveys.getRoom(room.id))?.content.items[0]!.question.maxSelections).toBe(
+    schemaVersion === 2 ? 2 : undefined,
+  );
   expect((await surveys.getRoom(room.id))?.content.title).toBe("Feedback v1");
   const question = draft.items[0]!.question;
   if (question.type !== "poll") throw new Error("Expected poll");
   const responses = {
-    [question.id]: { kind: "poll" as const, choiceIds: [question.choices[0]!.id] },
+    [question.id]: {
+      kind: "poll" as const,
+      choiceIds:
+        schemaVersion === 2
+          ? question.choices.map((choice) => choice.id).sort()
+          : [question.choices[0]!.id],
+    },
   };
   const tokenHash = createHash("sha256").update(randomUUID()).digest("hex");
   const admitted = await Promise.all([
@@ -144,6 +228,25 @@ export async function expectSurveyConformance(repository: Repository, workspaceI
   ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   const submitKey = randomUUID();
   const completed = await surveys.respond(room.id, tokenHash, responses, 1, submitKey, true, now);
+  expect(completed.responseSchemaVersion).toBe(schemaVersion);
+  if (schemaVersion === 2) {
+    expect(
+      await surveys.respond(
+        room.id,
+        tokenHash,
+        {
+          [question.id]: {
+            kind: "poll",
+            choiceIds: [...responses[question.id]!.choiceIds].reverse(),
+          },
+        },
+        1,
+        submitKey,
+        true,
+        now,
+      ),
+    ).toEqual(completed);
+  }
   expect(completed.finalized).toBe(true);
   expect(completed.receipt).toBeTruthy();
   expect(
@@ -207,7 +310,7 @@ export async function expectSurveyConformance(repository: Repository, workspaceI
     submittedCount: 6,
   });
   expect(results.questions[0]!.distribution[0]!.count).toBe(5);
-  expect(results.questions[0]!.distribution[1]!.count).toBe(1);
+  expect(results.questions[0]!.distribution[1]!.count).toBe(schemaVersion === 2 ? 6 : 1);
   expect(results.questions[1]).toMatchObject({
     suppressed: true,
     answeredCount: null,

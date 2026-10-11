@@ -159,7 +159,7 @@ export async function registerSurveyRoutes(
       const actor = await creator(request, reply, true, true);
       if (!actor) return;
       const input = Create.parse(request.body);
-      let draft = SurveyDraftSchema.parse({ schemaVersion: 1, title: input.title, items: [] });
+      let draft = SurveyDraftSchema.parse({ schemaVersion: 2, title: input.title, items: [] });
       if (input.templateId) {
         const template = instantiateStarter(input.templateId);
         if (!template.questions.every((q) => q.type === "poll" || q.type === "rating"))
@@ -168,7 +168,7 @@ export async function registerSurveyRoutes(
             "Choose a poll or feedback template for a Survey",
           );
         draft = SurveyDraftSchema.parse({
-          schemaVersion: 1,
+          schemaVersion: 2,
           title: template.title,
           description: "Answer independently at your own pace. This Survey is unscored.",
           category: template.category,
@@ -180,6 +180,7 @@ export async function registerSurveyRoutes(
         const source = await deps.surveys.get(actor.workspaceId, input.sourceId);
         if (!source) throw new SurveyError("NOT_FOUND", "Survey not found");
         draft = structuredClone(source.draft);
+        draft.schemaVersion = 2;
         draft.title = `${draft.title.slice(0, 150)} (copy)`;
       }
       // Stable IDs make a lost creation response retryable without exposing credentials.

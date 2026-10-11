@@ -14,20 +14,46 @@ The artwork is original repository SVG geometry. It uses no competitor logo, let
 flower badge, wrapper, illustration, or trademark. Project-created artwork is Apache-2.0.
 See the [asset register](asset-register.md) for distribution details.
 
-| Color         | Value     | Use                                                          |
-| ------------- | --------- | ------------------------------------------------------------ |
-| Berry         | `#AC2855` | Primary actions and selected navigation; supports white text |
-| Pink          | `#F9688A` | Candy artwork and decorative accents                         |
-| Cream         | `#FFF8EF` | Light canvas                                                 |
-| Mint          | `#D8EEE3` | Decorative backgrounds                                       |
-| Mint ink      | `#146552` | Readable mint controls and focus outlines                    |
-| Butter yellow | `#FFC857` | Decorations; never white-text buttons                        |
-| Plum          | `#39243C` | Logo outline, light-mode text, and presentation backgrounds  |
+| Color         | Value     | Use                                                    |
+| ------------- | --------- | ------------------------------------------------------ |
+| Berry         | `#AC2855` | Limited brand accents; not an application surface wash |
+| Pink          | `#F9688A` | Candy artwork and decorative accents                   |
+| Cream         | `#FFF8EF` | Candy artwork and versioned Candy Pop experience       |
+| Mint          | `#D8EEE3` | Decorative backgrounds                                 |
+| Mint ink      | `#146552` | Readable mint controls and focus outlines              |
+| Butter yellow | `#FFC857` | Decorations; never white-text buttons                  |
+| Plum          | `#39243C` | Logo outline and original experience artwork           |
 
-Use the shared `--ui-*` tokens for application surfaces and text. Dark mode uses plum
-surfaces, light cream text, and pale berry controls with dark text. Status colors retain
-their meaning. Rounded display type is reserved for the wordmark and landing headline;
-editing controls and data use the existing readable system font stack.
+### Neutral interface palette
+
+The application uses a neutral-first palette: the logo carries the candy colors, while
+working surfaces, forms, secondary controls, and borders stay quiet. Mint connects
+selected navigation, recommendations, links, and focus states to the logo's idea rays.
+Primary actions are graphite in light mode and near-white in dark mode, not pink.
+
+| Semantic use       | Light mode | Dark mode |
+| ------------------ | ---------- | --------- |
+| Canvas             | `#F6F7F9`  | `#16191E` |
+| Surface            | `#FFFFFF`  | `#20242B` |
+| Soft surface       | `#F1F3F5`  | `#262B33` |
+| Strong text        | `#242931`  | `#F6F7F9` |
+| Primary action     | `#262B33`  | `#EDF0F4` |
+| Selection fill     | `#E6F2EC`  | `#253B34` |
+| Selection/link ink | `#146552`  | `#B9EACE` |
+| Focus outline      | `#146552`  | `#9CDEBC` |
+
+Use shared `--ui-*` tokens rather than literal colors in components. Global and workspace
+canvases have no decorative gradient; hero/brand artwork may use restrained pink, mint,
+or yellow details. Controls use modest rounded corners and soft shadows rather than
+raised candy-button edges. Status colors retain their meaning. Rounded display type is
+reserved for the wordmark and landing headline; editing controls and data retain the
+readable system font stack. Automated checks cover text, actions, selections, statuses,
+focus outlines, and input boundaries in both modes, with browser axe and keyboard checks
+on desktop and phone templates.
+
+This interface update does not rewrite versioned experience presets or frozen live
+session themes. Explicit Candy Pop and other preset selections keep their authored
+colors; participant high-contrast and reduced-motion preferences still take precedence.
 
 ## Assets
 

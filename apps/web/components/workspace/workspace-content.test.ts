@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const styles = readFileSync(new URL("./workspace-content.module.css", import.meta.url), "utf8");
+const hubStyles = readFileSync(new URL("./workspace-hub.module.css", import.meta.url), "utf8");
 const themeStyles = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
 function declaration(css: string, selector: string, property: string) {
@@ -41,4 +42,22 @@ describe("workspace list-card eyebrow contrast", () => {
       expect(contrast).toBeGreaterThanOrEqual(4.5);
     },
   );
+});
+
+describe("workspace text actions", () => {
+  it.each([
+    ["start-card actions", styles, ".startLink"],
+    ["inline and folder actions", styles, ".inlineButton,\n.folderActions button"],
+    ["hub-card actions", hubStyles, ".cardLink"],
+    ["hub-card labels", hubStyles, ".featureCard small,\n.methodCard small"],
+  ])("keeps %s on the mint ink token rather than the primary fill", (_label, css, selector) => {
+    expect(declaration(css!, selector!, "color")).toBe("var(--ui-accent-ink)");
+  });
+
+  it.each([
+    ["start-card actions", styles, ".startLink"],
+    ["hub-card actions", hubStyles, ".cardLink"],
+  ])("gives %s an underline as well as color", (_label, css, selector) => {
+    expect(declaration(css!, selector!, "text-decoration")).toBe("underline");
+  });
 });

@@ -205,11 +205,13 @@
 }
 
 .cardLink {
-  color: var(--ui-accent);
+  color: var(--ui-accent-ink);
   font-size: 0.84rem;
   font-weight: 820;
   margin-top: auto;
   padding-top: 1rem;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
 }
 
 .featureCard {
@@ -218,7 +220,7 @@
 
 .featureCard small,
 .methodCard small {
-  color: var(--ui-accent);
+  color: var(--ui-accent-ink);
   font-size: 0.68rem;
   font-weight: 850;
   letter-spacing: 0.08em;

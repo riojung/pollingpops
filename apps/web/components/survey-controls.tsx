@@ -1,10 +1,9 @@
 "use client";
 
-import type { QuestionDraft } from "@openround/contracts";
-import type { SurveyResponse } from "@openround/contracts/surveys";
+import type { SurveyQuestionDraft, SurveyResponse } from "@openround/contracts/surveys";
 import { surveyMutationKey } from "../lib/survey-client";
 
-export function newSurveyQuestion(type: "poll" | "rating"): QuestionDraft {
+export function newSurveyQuestion(type: "poll" | "rating"): SurveyQuestionDraft {
   const common = {
     id: surveyMutationKey(),
     prompt: "",
@@ -38,19 +37,22 @@ export function SurveyResponseControl({
   disabled = false,
   required = false,
 }: {
-  question: QuestionDraft;
+  question: SurveyQuestionDraft;
   response?: SurveyResponse;
   onChange?: (value?: SurveyResponse) => void;
   disabled?: boolean;
   required?: boolean;
 }) {
   if (question.type !== "poll" && question.type !== "rating") return null;
+  const maxSelections = question.type === "poll" ? (question.maxSelections ?? 1) : 1;
+  const multiple = maxSelections > 1;
+  const selectedIds = response?.kind === "poll" ? response.choiceIds : [];
   const options =
     question.type === "poll"
       ? question.choices.map((choice) => ({
           value: choice.id,
           label: choice.label,
-          selected: response?.kind === "poll" && response.choiceIds[0] === choice.id,
+          selected: selectedIds.includes(choice.id),
         }))
       : question.type === "rating"
         ? Array.from({ length: question.max - question.min + 1 }, (_, offset) => ({
@@ -64,6 +66,11 @@ export function SurveyResponseControl({
       <legend>
         {question.prompt || "Untitled question"} {required ? "(required)" : "(optional)"}
       </legend>
+      {multiple ? (
+        <p>
+          Select up to {maxSelections} options. {selectedIds.length} selected.
+        </p>
+      ) : null}
       {options.map((option) => (
         <label
           className="field"
@@ -71,17 +78,23 @@ export function SurveyResponseControl({
           style={{ padding: "0.5rem 0", display: "flex", gap: 12 }}
         >
           <input
-            type="radio"
+            type={multiple ? "checkbox" : "radio"}
             name={question.id}
             value={option.value}
             checked={option.selected}
-            onChange={() =>
-              onChange?.(
-                question.type === "poll"
-                  ? { kind: "poll", choiceIds: [option.value] }
-                  : { kind: "rating", value: Number(option.value) },
-              )
-            }
+            disabled={multiple && !option.selected && selectedIds.length >= maxSelections}
+            onChange={() => {
+              if (question.type === "rating") {
+                onChange?.({ kind: "rating", value: Number(option.value) });
+                return;
+              }
+              const choiceIds = multiple
+                ? option.selected
+                  ? selectedIds.filter((id) => id !== option.value)
+                  : [...selectedIds, option.value].sort()
+                : [option.value];
+              onChange?.(choiceIds.length ? { kind: "poll", choiceIds } : undefined);
+            }}
           />
           {option.label}
         </label>
@@ -100,8 +113,8 @@ export function SurveyQuestionEditor({
   onChange,
   disabled,
 }: {
-  question: QuestionDraft;
-  onChange: (question: QuestionDraft) => void;
+  question: SurveyQuestionDraft;
+  onChange: (question: SurveyQuestionDraft) => void;
   disabled: boolean;
 }) {
   return (
@@ -118,6 +131,23 @@ export function SurveyQuestionEditor({
       </label>
       {question.type === "poll" ? (
         <>
+          <label className="field">
+            Maximum selections
+            <select
+              className="input"
+              value={question.maxSelections ?? 1}
+              onChange={(event) =>
+                onChange({ ...question, maxSelections: Number(event.target.value) })
+              }
+            >
+              {question.choices.map((_, index) => (
+                <option key={index + 1} value={index + 1}>
+                  {index === 0 ? "1 — single choice" : `${index + 1} — multiple choices`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p>Participants may select up to this limit. Polls have no correct answer or score.</p>
           {question.choices.map((choice, index) => (
             <div key={choice.id}>
               <label className="field">
@@ -144,6 +174,10 @@ export function SurveyQuestionEditor({
                   onChange({
                     ...question,
                     choices: question.choices.filter((c) => c.id !== choice.id),
+                    maxSelections: Math.min(
+                      question.maxSelections ?? 1,
+                      question.choices.length - 1,
+                    ),
                   })
                 }
               >

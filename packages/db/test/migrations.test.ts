@@ -27,6 +27,17 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("expands Survey v2 document checks without rewriting accepted data or immutable snapshots", async () => {
+    const migrations = await discoverMigrations(
+      join(dirname(fileURLToPath(import.meta.url)), "../migrations"),
+    );
+    const migration = migrations.find(({ version }) => version === 63)!;
+    expect(migration.name).toBe("survey_multiselection");
+    for (const table of ["surveys", "survey_versions", "survey_feedback_rooms", "survey_guests"])
+      expect(migration.sql).toContain(`ALTER TABLE ${table} ADD CONSTRAINT ${table}_data_check`);
+    expect(migration.sql.match(/IN \(1, 2\)/g)).toHaveLength(4);
+    expect(migration.sql).not.toMatch(/UPDATE |DELETE |TRUNCATE |DISABLE ROW LEVEL SECURITY/i);
+  });
   it("adds scoped Q&A with composite cascades, durable rate limits and forced isolation", async () => {
     const migrations = await discoverMigrations(
       join(dirname(fileURLToPath(import.meta.url)), "../migrations"),

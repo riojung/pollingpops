@@ -12,8 +12,10 @@ Read the [implementation status](implementation-status.md) for verified and outs
 
 ### Dedicated self-paced Survey vertical slice
 
-Surveys are separate version-1 artifacts, not graded follow-ups or game-engine checkpoints. Shared
-opinion controls render bounded polls/ratings. `SurveyRepository` has one rule layer over memory and
+Surveys are separate versioned artifacts, not graded follow-ups or game-engine checkpoints. Version 2
+adds Survey-only `maxSelections` for opinion polls; version-1 polls retain a one-choice default.
+The explicit draft upgrader rejects future versions. Shared opinion controls render bounded
+single/multiple-selection polls and ratings. `SurveyRepository` has one rule layer over memory and
 PostgreSQL transaction mechanics. Migration 061 adds `surveys`, immutable `survey_versions`, frozen
 `survey_feedback_rooms`, hashed room-only `survey_guests` and `survey_mutation_receipts`, all with
 forced RLS and workspace-scoped cascades. Workspace locks serialize shared Round/Survey publication
@@ -35,6 +37,13 @@ and deletion cascade through attempts/receipts (including room-linked creation r
 export excludes respondents/credentials. Archived content can be duplicated into a new editable draft.
 Migration 062 forward-repairs older room-creation receipt links and discards orphaned acknowledgements
 without changing migration 061 or the original receipt bodies.
+Migration 063 expands document checks to versions 1 and 2 without rewriting immutable snapshots,
+accepted responses or receipts. Stored document/content versions must match. V2 guest responses
+retain unique, sorted choice IDs; retries normalize the set before hashing. Aggregate reports use
+schema version 2 and count each selected option per respondent, not as exclusive categories.
+Deploy compatible readers and the additive migration before writers; rollback must retain readers
+for accepted v2 data. Round/Presentation contracts, live clients, game states and learning reports
+are unchanged; live multi-selection opinion polls require a later capability-negotiated release.
 
 Initial aggregate views are computed on demand at current supported caps. Background feedback
 report/export jobs, Q&A feedback scopes, theme presentation and mixed-load evidence remain future

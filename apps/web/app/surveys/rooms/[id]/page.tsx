@@ -159,6 +159,12 @@ function Room() {
                   ) : (
                     <>
                       <p>{question.answeredCount} responses</p>
+                      {(question.maxSelections ?? 1) > 1 ? (
+                        <p>
+                          Multiple selections allowed. Counts show respondents selecting each
+                          option; totals can exceed the number of responses.
+                        </p>
+                      ) : null}
                       <table>
                         <caption>Response counts</caption>
                         <thead>

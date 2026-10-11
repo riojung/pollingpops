@@ -5,6 +5,143 @@ import { signInBeta } from "./sign-in";
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
 for (const surface of ["", "@mobile "]) {
+  test(`${surface}multiple-selection Survey controls preserve limits, saved sets and respondent counts`, async ({
+    page,
+    browser,
+  }) => {
+    await signInBeta(page);
+    await page.goto("/surveys/new");
+    await page.getByRole("button", { name: "Create blank Survey", exact: true }).click();
+    await page.getByLabel("Title", { exact: true }).fill("Synthetic multi-selection Survey");
+    await page.getByRole("button", { name: "Add poll", exact: true }).click();
+    await page
+      .getByLabel("Question", { exact: true })
+      .fill("Which support would help? Choose two.");
+    await page.getByLabel("Option 1", { exact: true }).fill("Examples");
+    await page.getByLabel("Option 2", { exact: true }).fill("Practice");
+    await page.getByRole("button", { name: "Add option", exact: true }).click();
+    await page.getByLabel("Option 3", { exact: true }).fill("Discussion");
+    await page.getByLabel("Maximum selections").selectOption("3");
+    await page.getByRole("button", { name: "Remove option 3", exact: true }).click();
+    await expect(page.getByLabel("Maximum selections")).toHaveValue("2");
+    await page.getByRole("button", { name: "Add option", exact: true }).click();
+    await page.getByLabel("Option 3", { exact: true }).fill("Discussion");
+    await page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel("Maximum selections")).toHaveValue("2");
+    await page.getByRole("button", { name: "Preview Survey", exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "Examples", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Edit questions", exact: true }).click();
+    await page.getByRole("button", { name: "Publish Survey", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Create sharing link", exact: true }),
+    ).toBeEnabled();
+    const shared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        /\/v1\/surveys\/.+\/rooms$/.test(new URL(response.url()).pathname),
+    );
+    await page.getByRole("button", { name: "Create sharing link", exact: true }).click();
+    const room = (await (await shared).json()).room;
+    await expect(page).toHaveURL(new RegExp(`/surveys/rooms/${room.id}$`));
+    const context = await browser.newContext({ baseURL: page.url().split("/surveys")[0] });
+    try {
+      const participant = await context.newPage();
+      await participant.goto(`/join?code=${room.code}`);
+      const admission = participant.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname === "/v1/survey-rooms/join",
+      );
+      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      const admitted = (await (await admission).json()).attempt;
+      expect(admitted.schemaVersion).toBe(2);
+      expect(admitted.content.items[0].question.maxSelections).toBe(2);
+      await participant.getByRole("checkbox", { name: "Examples", exact: true }).check();
+      await participant.getByRole("checkbox", { name: "Practice", exact: true }).check();
+      await expect(
+        participant.getByRole("checkbox", { name: "Discussion", exact: true }),
+      ).toBeDisabled();
+      await participant.getByRole("checkbox", { name: "Examples", exact: true }).uncheck();
+      await expect(
+        participant.getByRole("checkbox", { name: "Discussion", exact: true }),
+      ).toBeEnabled();
+      await participant.getByRole("checkbox", { name: "Examples", exact: true }).check();
+      await participant.getByRole("button", { name: "Save progress", exact: true }).click();
+      await expect(participant.getByRole("status")).toContainText("Progress saved");
+      await participant.reload();
+      await expect(
+        participant.getByRole("checkbox", { name: "Examples", exact: true }),
+      ).toBeChecked();
+      await expect(
+        participant.getByRole("checkbox", { name: "Practice", exact: true }),
+      ).toBeChecked();
+      expect((await new AxeBuilder({ page: participant }).analyze()).violations).toEqual([]);
+      await participant.screenshot({
+        path: `test-results-beta/survey-multiselection-${test.info().project.name}.png`,
+        fullPage: true,
+      });
+      await participant.getByRole("button", { name: "Submit Survey", exact: true }).click();
+      await expect(participant.getByRole("heading", { name: "Thank you" })).toBeVisible();
+      const question = admitted.content.items[0].question;
+      for (let i = 0; i < 4; i++) {
+        const headers = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+        expect(
+          (
+            await context.request.post(`${api}/v1/survey-rooms/join`, {
+              headers,
+              data: { code: room.code },
+            })
+          ).ok(),
+        ).toBeTruthy();
+        const oversized = await context.request.post(`${api}/v1/survey-rooms/${room.id}/submit`, {
+          headers,
+          data: {
+            idempotencyKey: randomUUID(),
+            expectedRevision: 0,
+            responses: {
+              [question.id]: {
+                kind: "poll",
+                choiceIds: question.choices.map((c: { id: string }) => c.id),
+              },
+            },
+          },
+        });
+        expect(oversized.status()).toBe(422);
+        expect((await oversized.json()).error.code).toBe("VALIDATION_ERROR");
+        expect(
+          (
+            await context.request.post(`${api}/v1/survey-rooms/${room.id}/submit`, {
+              headers,
+              data: {
+                idempotencyKey: randomUUID(),
+                expectedRevision: 0,
+                responses: {
+                  [question.id]: {
+                    kind: "poll",
+                    choiceIds: question.choices.slice(0, 2).map((c: { id: string }) => c.id),
+                  },
+                },
+              },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      }
+      await page.getByRole("button", { name: "Refresh results", exact: true }).click();
+      await expect(page.getByRole("table")).toHaveCount(0);
+      await page
+        .getByRole("button", { name: "Close admissions and submissions", exact: true })
+        .click();
+      await expect(page.getByRole("table")).toHaveCount(1);
+      await expect(page.getByRole("row", { name: "Examples 5" })).toBeVisible();
+      await expect(page.getByRole("row", { name: "Practice 5" })).toBeVisible();
+      await expect(page.getByText("Multiple selections allowed.", { exact: false })).toBeVisible();
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
   test(`${surface}creation choices and template filtering distinguish live polls from Surveys`, async ({
     page,
   }) => {

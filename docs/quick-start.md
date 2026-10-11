@@ -33,11 +33,18 @@ The service launcher passes these keys. The flags enable an opt-in beta, not pro
 
 Choose **Survey → Training feedback**, save changes, publish, and create a sharing link. Participants
 scan/open the QR/link or enter its code, save progress, and submit without a nickname or account.
-Return via **Library → Browse Surveys**. Poll/rating questions are supported; aggregate distributions
+In a Survey poll, **Maximum selections** controls single-choice radios or multi-choice checkboxes,
+up to the number of available options. Live Round polls remain single-choice in this increment.
+Return via **Library → Browse Surveys**. Opinion polls and rating questions are supported; aggregate distributions
 appear only after closing the run or reaching its deadline, with five finalized responses per question.
 New runs retain results for 30 days on Free, 365 on Pro, or the Community operator setting after
 the scheduled close. The sharing screen shows the frozen expiry date; closing early does not extend it.
 See the [user guide](user-guide.md) for limits and privacy behavior.
+
+Apply migration 063 and deploy the matching web/API release before creating multiple-selection
+Surveys. Version-1 Surveys and their frozen runs remain readable. New content uses version 2;
+do not roll back to an older binary that cannot read it. Keep these beta flags allowlisted rather
+than enabling Surveys globally before the release gates pass.
 
 ## What you need
 

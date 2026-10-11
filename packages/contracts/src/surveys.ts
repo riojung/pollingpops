@@ -7,18 +7,43 @@ import {
 } from "./index";
 
 /** Surveys are separate, unscored artifacts. They never enter the learning engine. */
+export const CURRENT_SURVEY_SCHEMA_VERSION = 2;
+// Selection limits are Survey-specific until live client capability negotiation ships.
+export const SurveyQuestionDraftSchema = QuestionDraftSchema.and(
+  z.object({ maxSelections: z.number().int().min(1).max(6).optional() }),
+).superRefine((question, ctx) => {
+  if (question.maxSelections === undefined) return;
+  if (question.type !== "poll" || question.maxSelections > question.choices.length) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["maxSelections"],
+      message: "Only polls may set a selection limit, between one and the number of options",
+    });
+  }
+});
+export type SurveyQuestionDraft = z.infer<typeof SurveyQuestionDraftSchema>;
+
 export const SurveyDraftSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.union([z.literal(1), z.literal(2)]),
     title: z.string().trim().max(160),
     description: z.string().trim().max(1000).default(""),
     category: RoundCategorySchema.default("general"),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    items: z.array(z.object({ required: z.boolean(), question: QuestionDraftSchema })).max(100),
+    items: z
+      .array(z.object({ required: z.boolean(), question: SurveyQuestionDraftSchema }))
+      .max(100),
   })
   .strict()
   .superRefine((draft, ctx) => {
     for (const [index, { question }] of draft.items.entries()) {
+      if (draft.schemaVersion === 1 && (question.maxSelections ?? 1) > 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["schemaVersion"],
+          message: "Multiple-selection Survey polls require schema version 2",
+        });
+      }
       if (
         !["poll", "rating"].includes(question.type) ||
         question.purpose !== "opinion" ||
@@ -50,6 +75,10 @@ export const SurveyDraftSchema = z
     }
   });
 export type SurveyDraft = z.infer<typeof SurveyDraftSchema>;
+/** Explicit reader upgrade: unknown future versions fail instead of losing fields. */
+export function upgradeSurveyDraft(value: unknown): SurveyDraft {
+  return { ...SurveyDraftSchema.parse(value), schemaVersion: CURRENT_SURVEY_SCHEMA_VERSION };
+}
 export const SurveyContentSchema = SurveyDraftSchema.superRefine((draft, ctx) => {
   const content = QuizContentSchema.safeParse({
     ...draft,
@@ -69,7 +98,17 @@ export const SurveyContentSchema = SurveyDraftSchema.superRefine((draft, ctx) =>
     }
 });
 export const SurveyResponseSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("poll"), choiceIds: z.array(z.string().uuid()).length(1) }).strict(),
+  z
+    .object({
+      kind: z.literal("poll"),
+      choiceIds: z
+        .array(z.string().uuid())
+        .min(1)
+        .max(6)
+        .refine((ids) => new Set(ids).size === ids.length, "Select each option at most once")
+        .transform((ids) => [...ids].sort()),
+    })
+    .strict(),
   z.object({ kind: z.literal("rating"), value: z.number().int().min(1).max(10) }).strict(),
 ]);
 export type SurveyResponse = z.infer<typeof SurveyResponseSchema>;
@@ -116,8 +155,8 @@ export function validateSurveyResponses(
     const valid =
       question.type === "poll"
         ? response.kind === "poll" &&
-          response.choiceIds.length === 1 &&
-          question.choices.some((c) => c.id === response.choiceIds[0])
+          response.choiceIds.length <= (question.maxSelections ?? 1) &&
+          response.choiceIds.every((id) => question.choices.some((c) => c.id === id))
         : question.type === "rating" &&
           response.kind === "rating" &&
           response.value >= question.min &&
@@ -137,7 +176,7 @@ export function surveyAggregate(
   // Release one final distribution only after admission and submission have both closed.
   const suppressed = !closed || responses.length < 5;
   return {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     title: content.title,
     submittedCount: responses.length,
     suppressed,
@@ -154,6 +193,8 @@ export function surveyAggregate(
         id: question.id,
         prompt: question.prompt,
         type: question.type,
+        maxSelections: question.type === "poll" ? (question.maxSelections ?? 1) : undefined,
+        percentBasis: "respondents" as const,
         suppressed: questionSuppressed,
         answeredCount: questionSuppressed ? null : answeredCount,
         distribution: questionSuppressed
@@ -163,7 +204,7 @@ export function surveyAggregate(
                 label: choice.label,
                 count: responses.filter((row) => {
                   const r = row[question.id];
-                  return r?.kind === "poll" && r.choiceIds[0] === choice.id;
+                  return r?.kind === "poll" && r.choiceIds.includes(choice.id);
                 }).length,
               }))
             : question.type === "rating"

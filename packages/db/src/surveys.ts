@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import {
   SurveyContentSchema,
   SurveyDraftSchema,
+  SurveyResponsesSchema,
   surveyAggregate,
   validateSurveyResponses,
   type SurveyDraft,
@@ -34,7 +35,7 @@ export class SurveyError extends Error {
   }
 }
 export interface SurveyRecord {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   workspaceId: string;
   draft: SurveyDraft;
@@ -44,7 +45,7 @@ export interface SurveyRecord {
   publishedRevision: number | null;
 }
 export interface SurveyVersion {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   workspaceId: string;
   surveyId: string;
@@ -52,7 +53,7 @@ export interface SurveyVersion {
   revision: number;
 }
 export interface SurveyRoom {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   workspaceId: string;
   surveyId: string;
@@ -66,7 +67,7 @@ export interface SurveyRoom {
   identityPolicy: "organizer_blind";
 }
 interface Guest {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   workspaceId: string;
   roomId: string;
@@ -85,10 +86,23 @@ type Documents = {
 type Table = keyof Documents;
 function compatibleDocument<T extends Table>(table: T, value: unknown): Documents[T] {
   const row = value as Documents[T];
-  if (!row || row.schemaVersion !== 1)
+  if (!row || (row.schemaVersion !== 1 && row.schemaVersion !== 2))
     throw new Error(`Unsupported stored ${table} schema; keep compatible readers deployed`);
   if ("draft" in row) SurveyDraftSchema.parse(row.draft);
   if ("content" in row) SurveyContentSchema.parse(row.content);
+  if ("responses" in row) {
+    SurveyResponsesSchema.parse(row.responses);
+    if (
+      row.schemaVersion === 1 &&
+      Object.values(row.responses).some(
+        (response) => response.kind === "poll" && response.choiceIds.length > 1,
+      )
+    )
+      throw new Error("Multiple-selection responses require stored Survey schema version 2");
+  }
+  const content = "draft" in row ? row.draft : "content" in row ? row.content : null;
+  if (content && content.schemaVersion !== row.schemaVersion)
+    throw new Error(`Stored ${table} and content schema versions must match`);
   return row;
 }
 type Receipt = {
@@ -152,11 +166,15 @@ export class SurveyRepository {
     key: string,
     input: unknown,
     work: () => Promise<T>,
+    compatibleRetryInput?: unknown,
   ): Promise<T> {
     const requestHash = hash(input);
     const previous = await tx.receipt(owner.ownerId, key);
     if (previous) {
-      if (previous.requestHash !== requestHash)
+      if (
+        previous.requestHash !== requestHash &&
+        (compatibleRetryInput === undefined || previous.requestHash !== hash(compatibleRetryInput))
+      )
         throw new SurveyError(
           "IDEMPOTENCY_CONFLICT",
           "This retry key was already used for a different operation",
@@ -168,6 +186,13 @@ export class SurveyRepository {
     return receipt;
   }
   create(workspaceId: string, id: string, draft: SurveyDraft, key: string) {
+    const legacyDraft = { ...draft, schemaVersion: 1 as const };
+    // Creation requests generate their draft on the server. A version-only writer upgrade
+    // must still replay an accepted v1 receipt, without rewriting it or relaxing content checks.
+    const compatibleRetryInput =
+      draft.schemaVersion === 2 && SurveyDraftSchema.safeParse(legacyDraft).success
+        ? { action: "create", draft: legacyDraft }
+        : undefined;
     return this.run(workspaceId, async (tx) =>
       this.mutate(
         tx,
@@ -176,7 +201,7 @@ export class SurveyRepository {
         { action: "create", draft },
         async () => {
           const record: SurveyRecord = {
-            schemaVersion: 1,
+            schemaVersion: draft.schemaVersion,
             id,
             workspaceId,
             draft: SurveyDraftSchema.parse(draft),
@@ -188,6 +213,7 @@ export class SurveyRepository {
           await tx.put("surveys", record, true);
           return record;
         },
+        compatibleRetryInput,
       ),
     );
   }
@@ -213,6 +239,7 @@ export class SurveyRepository {
               "Duplicate an archived survey before editing it",
             );
           record.draft = SurveyDraftSchema.parse(draft);
+          record.schemaVersion = record.draft.schemaVersion;
           record.revision++;
           await tx.put("surveys", record);
           return record;
@@ -246,7 +273,7 @@ export class SurveyRepository {
               throw new PublishedQuizLimitError(limit);
             if (record.publishedRevision !== record.revision || !record.versionId) {
               const version: SurveyVersion = {
-                schemaVersion: 1,
+                schemaVersion: content.schemaVersion,
                 id: randomUUID(),
                 workspaceId,
                 surveyId: id,
@@ -333,7 +360,7 @@ export class SurveyRepository {
               "The survey must retain results after its submission deadline",
             );
           const room: SurveyRoom = {
-            schemaVersion: 1,
+            schemaVersion: version.content.schemaVersion,
             id: roomId,
             workspaceId,
             surveyId: id,
@@ -372,7 +399,7 @@ export class SurveyRepository {
           "This survey has reached its participation limit",
         );
       const guest: Guest = {
-        schemaVersion: 1,
+        schemaVersion: room.schemaVersion,
         id: randomUUID(),
         workspaceId: room.workspaceId,
         roomId: id,
@@ -388,6 +415,8 @@ export class SurveyRepository {
   }
   private attemptView(room: SurveyRoom, guest: Guest) {
     return {
+      schemaVersion: room.schemaVersion,
+      responseSchemaVersion: guest.schemaVersion,
       roomId: room.id,
       content: room.content,
       closesAt: room.closesAt,
@@ -420,6 +449,7 @@ export class SurveyRepository {
     clock: Date | (() => Date),
   ) {
     return this.run(null, async (tx) => {
+      const normalizedResponses = SurveyResponsesSchema.parse(responses);
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
       const now = typeof clock === "function" ? clock() : clock;
       if (new Date(room.expiresAt) <= now)
@@ -432,15 +462,15 @@ export class SurveyRepository {
         tx,
         { workspaceId: room.workspaceId, surveyId: room.surveyId, roomId: id, ownerId: guest.id },
         key,
-        { action: final ? "submit" : "save", responses, expected },
+        { action: final ? "submit" : "save", responses: normalizedResponses, expected },
         async () => {
           open(room, typeof clock === "function" ? clock() : clock);
           revision(guest.revision, expected);
           if (guest.finalized)
             throw new SurveyError("VALIDATION_ERROR", "This survey has already been submitted");
-          const issues = validateSurveyResponses(room.content, responses, final);
+          const issues = validateSurveyResponses(room.content, normalizedResponses, final);
           if (issues.length) throw new SurveyError("VALIDATION_ERROR", issues.join(". "));
-          guest.responses = responses;
+          guest.responses = normalizedResponses;
           guest.revision++;
           guest.finalized = final;
           if (final) guest.receipt = randomUUID();

@@ -27,17 +27,30 @@ evidence and lifecycle controls. Lists use UUID cursors and a maximum page size 
 are denied; permanent room deletion requires the workspace owner, while editors may close a run.
 New writers require all Survey flags and the core-parity allowlist.
 
-Results include `resultsStatus: collecting | insufficient_sample | available`. While a run is open,
+New Survey documents/drafts use `schemaVersion:2`; readers also accept version 1 and reject future
+versions. A v2 `poll` question may set `maxSelections` from 1 to the number of options (maximum six).
+Omission means one. Limits above one are invalid in v1; ratings cannot set this field. This setting
+is Survey-only; live Round opinion polls remain single-choice. Polls remain unscored opinions.
+Migration 063 expands storage checks without rewriting old rows.
+Compatible web/API readers must remain deployed after any v2 writes.
+
+Results use `schemaVersion:2` and include `resultsStatus: collecting | insufficient_sample | available`. While a run is open,
 all distributions are empty and question `answeredCount` values are null, even above five submissions.
 Manual closure or the server deadline releases final distributions only. Each question also has a
 `suppressed` flag: fewer than five answers (including optional questions) keeps its counts hidden.
 Room deletion/retention removes creation receipts as well as attempts, so retries cannot return a
 deleted room. Archived Surveys remain valid duplication sources, not editable originals.
+Poll question aggregates include `maxSelections` and `percentBasis:"respondents"`. Each option's
+count is the number of finalized respondents who selected it; counts may sum above the answered
+count. Only question-level aggregates are returned, never a respondent's selection set.
 
 Guest endpoints use a room-only 32-byte hex bearer in Authorization, never URLs or creator cookies:
 `POST /v1/survey-rooms/join` takes `{code}`; `GET /v1/survey-rooms/:id/attempt` resumes progress;
 `POST /draft` and `/submit` take `{idempotencyKey,expectedRevision,responses}`. Responses map question
-UUIDs to `{kind:"poll",choiceIds:[one choice UUID]}` or `{kind:"rating",value:integer}`. Finalization
+UUIDs to `{kind:"poll",choiceIds:[one or more unique choice UUIDs]}` or `{kind:"rating",value:integer}`.
+Poll IDs must exist in the frozen question and respect its selection limit. Sets are sorted before
+storage/idempotency hashing; reversed order is the same response. Attempt views include the room
+`schemaVersion` and guest `responseSchemaVersion` (1 or 2). Finalization
 validates required items atomically. Same-key retries return the original receipt; differing payloads
 return `IDEMPOTENCY_CONFLICT`. Server deadlines override client clocks. Organizer endpoints do not
 return respondent-linked rows, and creator cookies cannot authorize guest attempt reads.

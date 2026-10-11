@@ -7,8 +7,9 @@ do not need accounts.
 For a local first run, complete the [quick start](quick-start.md) first.
 
 The Core-Parity foundation includes gated Presentation Q&A and a gated self-paced Survey beta
-using polls and ratings. Presentation replies/chat/Pulse, Q&A-only feedback rooms, new opinion
-formats and advanced feedback exports remain pending. Existing learning Q&A's Anonymous public display still lets
+using single- or multiple-selection opinion polls and ratings. Presentation replies/chat/Pulse,
+Q&A-only feedback rooms, open text, word clouds, ranking and advanced feedback exports remain pending.
+Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
 
@@ -31,7 +32,11 @@ publish and share; viewers can read content/results.
 
 1. Choose **Survey**, then a feedback template or **Create blank Survey**.
 2. Edit details, add poll/rating questions, label scale endpoints, select required/optional, and
-   reorder/remove items. Other opinion formats are not included yet.
+   reorder/remove items. For a poll, choose **Maximum selections**: one uses radio buttons; two or
+   more uses checkboxes. The limit cannot exceed the number of options (two to six). Participants
+   may deselect choices, but cannot select more than the limit. Removing an option reduces the
+   limit if necessary. These opinion polls have no correct answers, confidence or scores.
+   Open text, word clouds and ranking are not included yet.
 3. **Save draft**, preview, then **Publish Survey**. Saves are explicit; save before leaving.
    Revision conflicts require reloading, not silently overwriting another editor's work.
 4. Choose a window (seven days by default, up to 30) and **Create sharing link**.
@@ -50,6 +55,8 @@ publish and share; viewers can read content/results.
    the deadline, to release final distributions. Each question needs at least five finalized answers;
    optional unanswered items do not count toward that minimum. Open runs never show changing
    distributions, which could reveal individual answers through consecutive result comparisons.
+   Multi-selection counts show respondents who selected each option; their sum can exceed the
+   number of responses. A respondent is counted only once for each selected option.
 7. Owners/editors may close a run; only the workspace owner may permanently **Delete survey run**.
    **Duplicate** an archived Survey to create a new editable draft without altering the original.
 

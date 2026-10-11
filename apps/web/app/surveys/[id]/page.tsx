@@ -2,7 +2,11 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { SurveyContentSchema, type SurveyDraft } from "@openround/contracts/surveys";
+import {
+  SurveyContentSchema,
+  upgradeSurveyDraft,
+  type SurveyDraft,
+} from "@openround/contracts/surveys";
 import {
   newSurveyQuestion,
   SurveyQuestionEditor,
@@ -34,7 +38,7 @@ function Editor() {
     try {
       const response = await apiFetch<{ survey: SurveyRecord }>(`/v1/surveys/${id}`);
       setRecord(response.survey);
-      setDraft(response.survey.draft);
+      setDraft(upgradeSurveyDraft(response.survey.draft));
     } catch (caught) {
       setError(humanError(caught));
     }
@@ -42,7 +46,9 @@ function Editor() {
   useEffect(() => {
     void load();
   }, [id]);
-  const dirty = Boolean(record && draft && JSON.stringify(record.draft) !== JSON.stringify(draft));
+  const dirty = Boolean(
+    record && draft && JSON.stringify(upgradeSurveyDraft(record.draft)) !== JSON.stringify(draft),
+  );
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -72,7 +78,7 @@ function Editor() {
       }
       if (result.survey) {
         setRecord(result.survey);
-        setDraft(result.survey.draft);
+        setDraft(upgradeSurveyDraft(result.survey.draft));
       }
       if (result.room) router.push(`/surveys/rooms/${result.room.id}`);
       setNotice("Saved.");

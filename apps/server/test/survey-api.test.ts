@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MemoryRepository } from "@openround/db";
+import { MemoryRepository, SurveyRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -50,6 +50,59 @@ async function signIn(app: FastifyInstance) {
   return { cookie };
 }
 describe("Survey creator and participant APIs", () => {
+  it.each(["blank", "template", "duplicate"] as const)(
+    "replays a lost legacy %s creation response after deploying v2 writers",
+    async (mode) => {
+      const { app, headers } = await fixture();
+      const create = SurveyRepository.prototype.create;
+      // Model the previous release accepting a request and storing its v1 hash/receipt.
+      const legacyWriter = vi
+        .spyOn(SurveyRepository.prototype, "create")
+        .mockImplementation(function (this: SurveyRepository, workspaceId, id, draft, key) {
+          return create.call(this, workspaceId, id, { ...draft, schemaVersion: 1 }, key);
+        });
+      const idempotencyKey = randomUUID();
+      let sourceId: string | undefined;
+      try {
+        if (mode === "duplicate") {
+          const source = await app.inject({
+            method: "POST",
+            url: "/v1/surveys",
+            headers,
+            payload: { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+          });
+          expect(source.statusCode, source.body).toBe(201);
+          sourceId = source.json().survey.id;
+        }
+        const payload = {
+          idempotencyKey,
+          ...(mode === "blank" ? { title: "Legacy blank Survey" } : {}),
+          ...(mode === "template" ? { templateId: "training-feedback" } : {}),
+          ...(sourceId ? { sourceId } : {}),
+        };
+        const original = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
+        expect(original.statusCode, original.body).toBe(201);
+        expect(original.json().survey.schemaVersion).toBe(1);
+        legacyWriter.mockRestore();
+
+        const retry = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
+        expect(retry.statusCode, retry.body).toBe(201);
+        expect(retry.json()).toEqual(original.json());
+        const conflict = await app.inject({
+          method: "POST",
+          url: "/v1/surveys",
+          headers,
+          payload: { idempotencyKey, title: "A different Survey" },
+        });
+        expect(conflict.statusCode, conflict.body).toBe(409);
+        expect(conflict.json().error.code).toBe("IDEMPOTENCY_CONFLICT");
+        const listed = await app.inject({ method: "GET", url: "/v1/surveys", headers });
+        expect(listed.json().surveys).toHaveLength(mode === "duplicate" ? 2 : 1);
+      } finally {
+        legacyWriter.mockRestore();
+      }
+    },
+  );
   it.each([
     { edition: "Free", plan: "free" as const, retentionDays: 30 },
     { edition: "Pro", plan: "pro" as const, retentionDays: 365 },

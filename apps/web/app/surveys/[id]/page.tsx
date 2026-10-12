@@ -1,7 +1,6 @@
 "use client";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SurveyContentSchema, type SurveyDraft } from "@openround/contracts/surveys";
 import {
   newSurveyQuestion,
@@ -10,6 +9,11 @@ import {
 } from "../../../components/survey-controls";
 import { WorkspaceProvider, useWorkspace } from "../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
+import {
+  GuardedLink as Link,
+  NavigationGuardProvider,
+  useNavigationBlocker,
+} from "../../../components/navigation-guard";
 import { apiFetch, humanError, ApiClientError } from "../../../lib/api";
 import {
   surveyMutationKey,
@@ -35,6 +39,11 @@ function Editor({ id }: { id: string }) {
   const working = useRef(false);
   const pending = useRef<{ path: string; body: string; method: string; action: Action } | null>(
     null,
+  );
+  // Read the controller at navigation time, including edits in the debounce window
+  // and action intents whose state has not reached the next React render yet.
+  useNavigationBlocker(
+    useCallback(() => Boolean(autosave.current?.snapshot().unsettled || pending.current), []),
   );
   const record = model?.record;
   const draft = model?.draft;
@@ -106,15 +115,6 @@ function Editor({ id }: { id: string }) {
     link.click();
     URL.revokeObjectURL(url);
   }
-  const unsettled = Boolean(model?.unsettled || pending.current);
-  useEffect(() => {
-    if (!unsettled) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [unsettled]);
   async function saveNow() {
     setNotice("");
     await autosave.current?.retry().catch(() => undefined);
@@ -200,17 +200,7 @@ function Editor({ id }: { id: string }) {
       description="Self-paced, unscored feedback. Draft changes autosave; preview, publish, then create a sharing link."
       eyebrow="Survey"
       actions={
-        <Link
-          className="button-quiet"
-          href="/surveys"
-          onClick={(event) => {
-            if (
-              unsettled &&
-              !window.confirm("Changes are not fully saved. Leave this editor anyway?")
-            )
-              event.preventDefault();
-          }}
-        >
+        <Link className="button-quiet" href="/surveys">
           All Surveys
         </Link>
       }
@@ -479,8 +469,10 @@ function Editor({ id }: { id: string }) {
 export default function SurveyEditorPage() {
   const id = useParams<{ id: string }>().id;
   return (
-    <WorkspaceProvider>
-      <Editor key={id} id={id} />
-    </WorkspaceProvider>
+    <NavigationGuardProvider>
+      <WorkspaceProvider>
+        <Editor key={id} id={id} />
+      </WorkspaceProvider>
+    </NavigationGuardProvider>
   );
 }

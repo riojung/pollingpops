@@ -43,7 +43,10 @@ publish and share; viewers can read content/results.
    publish changes. After editing a published Survey, publish again before creating a new sharing link.
    If saving fails, use **Retry save** before leaving. Retry preserves the original request even
    if you have made newer edits. On a revision conflict, saving pauses and your edits stay in this
-   editor. **Download local draft** keeps a JSON copy on your device; it is a recovery copy, not a
+   editor. Workspace links, search, and sign-out ask for confirmation while saves or operations
+   remain unsettled, including during the debounce window. Cancel keeps you in the editor;
+   confirm only when discarding that local work is intentional. Reload/close also warn.
+   **Download local draft** keeps a JSON copy on your device; it is a recovery copy, not a
    supported Survey import. **Reload latest version** asks for confirmation before discarding local
    edits and loading the other editor's version. Edits are not backed up automatically to browser
    storage; wait for **Saved.** before closing or refreshing the page.

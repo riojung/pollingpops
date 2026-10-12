@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { GuardedLink as Link } from "./navigation-guard";
 import { PRODUCT_BRAND, type WorkspaceProductFeatures } from "@openround/contracts";
 import { LollipopMark } from "./lollipop-mark";
 

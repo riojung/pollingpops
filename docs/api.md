@@ -93,6 +93,14 @@ evidence and lifecycle controls. Lists use UUID cursors and a maximum page size 
 are denied; permanent room deletion requires the workspace owner, while editors may close a run.
 New writers require all Survey flags and the core-parity allowlist.
 
+The Survey editor debounces draft PUTs, serializes them, and coalesces newer edits while a request
+is in flight. Transient failures retry the identical serialized body, including its key and
+expected revision, up to three automatic attempts. Exhausted retries retain that intent for
+explicit retry; they never substitute a newer draft under an old key. `STALE_DRAFT` stops autosave
+without adopting or overwriting another editor's content. Publication/duplication/archive use the
+acknowledged revision after draining pending saves. Sharing also requires that revision to be
+published. This uses the existing API and schemas; no new migration is required.
+
 New Survey documents/drafts use `schemaVersion:2`; readers also accept version 1 and reject future
 versions. A v2 `poll` question may set `maxSelections` from 1 to the number of options (maximum six).
 Omission means one. Limits above one are invalid in v1; ratings cannot set this field. This setting

@@ -8,6 +8,56 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Survey draft autosave October 11 2026
+
+Implemented on `codex/survey-draft-autosave` from merged PR #104 (`14d397e`).
+This completes creator draft autosave, not the remaining core-parity milestones or public GA.
+
+- Edits debounce for 700 ms, with waiting/saving/saved status and an immediate Save draft action.
+  One active write coalesces newer keystrokes and uses acknowledged revisions without replacing them.
+- Transient failures automatically retry the identical body/key up to three times. Exhaustion
+  pauses saving until explicit Retry save; newer edits wait behind the original acknowledgement.
+- Revision conflicts preserve local work and stop writes. Local JSON recovery downloads and
+  confirmed reload are available; unsaved edits are not automatically persisted in browser storage.
+- An editor-scoped navigation guard checks the live autosave state for workspace/sidebar/mobile
+  links, the brand, Create menu, account/help/activity links, global search and sign-out. Cancel
+  preserves local edits during debounce, failures and conflicts; saved editors navigate normally.
+  Reload/close retains the browser warning, and downloads/new-tab links are not blocked.
+- Publish, duplicate and archive drain pending saves. Sharing requires the latest revision to be
+  published, and autosave never publishes or changes existing frozen runs.
+- Legacy reads do not trigger upgrade writes. Viewers/archived content remain read-only, editor
+  disposal fences delayed responses/retries, and API/schema versions and migrations are unchanged.
+- Help and existing quick start, user guide, API and architecture explain saving and recovery.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds. All 667 web unit tests pass, including 16
+autosave-controller cases. All 21
+production-build Survey browser journeys pass on desktop Chromium, mobile Chromium and mobile
+WebKit, including nine autosave/publish-barrier, lost-acknowledgement and two-editor-conflict
+journeys, JSON recovery downloads and automated axe checks. Local core services were rebuilt using
+the existing Colima context and Compose project; database and coordination readiness pass, and
+existing volumes are preserved. No database/API change or new PostgreSQL test run was required
+for this client-only increment. Physical-device, manual assistive-tech, Firefox and external
+production acceptance remain separate gates.
+
+PR #105 navigation-review follow-up (October 12): `CI=true pnpm check` passes, including 668 web
+unit tests. All 33 Survey production-build journeys pass on desktop Chromium, mobile Chromium,
+and mobile WebKit, including nine navigation-guard journeys covering debounce, save errors,
+conflicts, canceled exits and settled navigation. Firefox failed to launch locally with
+`Could not find profile folder`, before application assertions; it is not claimed as passing.
+
+PR #105 base integration (October 12): conflicts with `main` at `a61fcea` are resolved without
+discarding the unified Survey Library, Feedback or protocol foundation. Editor search retains
+both unsettled-navigation protection and the selected Surveys tab/query. `CI=true pnpm check`
+passes with 672 web unit tests; 36 Survey/Library/Feedback browser journeys and three separately
+enabled protocol-writer journeys pass across desktop Chromium, mobile Chromium and mobile WebKit.
+Six navigation journeys additionally verify successful editor search after save/conflict recovery.
+Applied migrations are unchanged; the local Firefox launch limitation remains.
+
+Next: capability-negotiated live multi-selection opinion polls; open text, word clouds and ranking;
+remaining scoped Presentation interaction and feedback-room/passcode work; feedback reports,
+export jobs and aggregate sharing. Existing external production gates remain open.
+
 ### Unified Survey Library and product feedback October 11 2026
 
 PR #106 review follow-up: feedback admission now charges each workspace-scoped intent once through
@@ -49,8 +99,8 @@ load and independent beta-release gates remain open. No deployment or public-bet
 
 Implemented on `codex/live-poll-protocol-foundation` from merged baseline `14d397e`.
 This reader-first M2 increment prepares safe live-format evolution; it does not enable live
-multiple-selection opinion polls or complete core parity. Survey draft autosave remains separate
-work in PR 105 and is not included in this baseline.
+multiple-selection opinion polls or complete core parity. At that baseline, Survey draft autosave
+was separate work in PR 105 and was not part of the protocol increment.
 
 - Strict, bounded client profiles and server-owned session requirements cover HTTP and realtime
   admission, resume, snapshots, commands, answer retries and game fanout. Existing requests may
@@ -99,7 +149,7 @@ This is a Survey-only M2 increment, not completion of M1–M4 or public GA.
   Rollback must keep v2-compatible readers, not remove accepted content or responses.
 - In-product Help, quick start, user guide, API and architecture explain selection limits and rollout.
 
-Next: Survey draft autosave; capability-negotiated live multi-selection opinion polls; open text,
+Next at that checkpoint: Survey draft autosave; capability-negotiated live multi-selection opinion polls; open text,
 word clouds and ranking with safe public-text moderation; remaining scoped Presentation interaction
 and feedback-room/passcode work; durable feedback report/export jobs and aggregate sharing. Existing
 external load, physical-device, privacy/security/accessibility and production release gates remain open.

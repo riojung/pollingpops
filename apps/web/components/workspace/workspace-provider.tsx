@@ -17,6 +17,7 @@ import type {
 } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
+import { useConfirmNavigation } from "../navigation-guard";
 
 export interface WorkspaceCreator {
   userId: string;
@@ -53,6 +54,7 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: Readonly<{ children: React.ReactNode }>) {
   const router = useRouter();
+  const confirmNavigation = useConfirmNavigation();
   const { locale, loadError: localeLoadError, setLocale } = useLocale();
   const localeRef = useRef(locale);
   const localeLoadErrorRef = useRef(localeLoadError);
@@ -119,6 +121,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       canEdit: creator?.role === "owner" || creator?.role === "editor",
       refreshAccount,
       signOut: async () => {
+        if (!confirmNavigation()) return;
         await apiFetch("/v1/auth/logout", { method: "POST", body: "{}" });
         router.replace("/");
       },
@@ -130,7 +133,16 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
         window.location.assign(result.url);
       },
     }),
-    [creator, entitlements, error, loading, productFeatures, refreshAccount, router],
+    [
+      confirmNavigation,
+      creator,
+      entitlements,
+      error,
+      loading,
+      productFeatures,
+      refreshAccount,
+      router,
+    ],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

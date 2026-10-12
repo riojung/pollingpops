@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { GuardedLink as Link, useConfirmNavigation } from "../navigation-guard";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CreatorBrand } from "../brand";
@@ -324,6 +324,7 @@ export function WorkspaceShell({
   translationLevel = "none",
 }: WorkspaceShellProps) {
   const router = useRouter();
+  const confirmNavigation = useConfirmNavigation();
   const { locale, t } = useLocale();
   const { creator, productFeatures, loading, error, canEdit, signOut, startUpgrade } =
     useWorkspace();
@@ -356,6 +357,7 @@ export function WorkspaceShell({
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!confirmNavigation()) return;
     router.push(librarySearchHref(globalSearch, window.location.pathname, window.location.search));
   }
 

@@ -26,7 +26,6 @@ for (const surface of ["", "@mobile "]) {
     await expect(page.getByLabel("Maximum selections")).toHaveValue("2");
     await page.getByRole("button", { name: "Add option", exact: true }).click();
     await page.getByLabel("Option 3", { exact: true }).fill("Discussion");
-    await page.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("Maximum selections")).toHaveValue("2");
@@ -176,7 +175,6 @@ for (const surface of ["", "@mobile "]) {
     await page.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
     await page.getByLabel("Title", { exact: true }).fill("Synthetic Survey browser fixture");
-    await page.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Publish Survey", exact: true }).click();
     const shared = page.waitForResponse(

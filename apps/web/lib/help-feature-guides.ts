@@ -252,11 +252,11 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
       {
         title: "Build and review",
-        body: "Edit details, add poll/rating questions, label scale endpoints, mark required/optional items, reorder, and preview. Set Maximum selections on a poll: one uses radios, more than one uses checkboxes, up to the number of options. Removing options clamps the limit. These polls are unscored opinions. Select Save draft before leaving; this beta uses explicit saves.",
+        body: "Edit details, add poll/rating questions, label scale endpoints, mark required/optional items, reorder, and preview. Set Maximum selections on a poll: one uses radios, more than one uses checkboxes, up to the number of options. Removing options clamps the limit. Draft changes autosave after a short pause; wait for Saved. before leaving, or select Save draft to save immediately.",
       },
       {
         title: "Publish and share",
-        body: "Publish the saved draft, choose a window (seven days by default, up to 30), and create a sharing link. Copy the link, show its code or download its QR. A new link is a separate frozen run. New runs retain results after scheduled closure for 30 days on Free, 365 on Pro, or the Community operator setting; the sharing screen shows expiry. Closing early does not extend it.",
+        body: "Publish Survey waits for current edits to be saved. Autosave never publishes automatically: publish again after editing before creating a new sharing link. Choose a window (seven days by default, up to 30), copy the link, show its code or download its QR. A new link is a separate frozen run. New runs retain results after scheduled closure for 30 days on Free, 365 on Pro, or the Community operator setting; the sharing screen shows expiry. Closing early does not extend it.",
       },
       {
         title: "Answer independently",
@@ -285,7 +285,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
       {
         symptom: "A save fails",
-        fix: "For uncertain network failures, retry the same operation. For a stale revision, reload before editing; never silently overwrite another editor or browser tab.",
+        fix: "Select Retry save to resend the exact pending request; newer edits remain in the editor. On a revision conflict, autosave pauses. Download local draft to keep a recovery JSON copy, then confirm Reload latest version to discard local edits. Unsaved edits are kept only in this open editor, not automatically in browser storage.",
       },
     ],
     action: { target: "surveys", label: "Open Surveys" },

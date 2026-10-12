@@ -1,7 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { FeedbackSubmissionSchema, feedbackPage } from "../src/index.js";
+import { FeedbackSubmissionSchema, FeedbackPageCursorSchema, feedbackPage } from "../src/index.js";
 describe("privacy-safe product feedback", () => {
+  it("strictly versions feedback pagination markers", () => {
+    const cursor = { schemaVersion: 1, id: randomUUID(), createdAt: new Date().toISOString() };
+    expect(FeedbackPageCursorSchema.parse(cursor)).toEqual(cursor);
+    for (const invalid of [
+      { ...cursor, schemaVersion: 2 },
+      { ...cursor, createdAt: "yesterday" },
+      { ...cursor, secret: "unsupported" },
+    ])
+      expect(FeedbackPageCursorSchema.safeParse(invalid).success).toBe(false);
+  });
   it("removes credentials, queries, fragments, and object identifiers from page context", () => {
     expect(feedbackPage("/surveys/rooms/secret-room?token=private#alias")).toBe(
       "/surveys/rooms/:id",

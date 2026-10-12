@@ -85,6 +85,12 @@ queue exposes email only with consent, never publishes an issue or notification 
 and hides expired records. Account export contains only that author's feedback. Retention purges
 at 90 days; explicit soft-account cleanup and workspace cascades remove associated records.
 
+Feedback admission uses a separate fixed-window Redis hash (or synchronous memory equivalent)
+to atomically admit each workspace-scoped intent once. Concurrent retries share the same budget
+charge and remain admitted after the five-intent limit is reached. The operator queue uses the
+existing `(created_at DESC, id DESC)` index and validated versioned keyset cursors; a deleted cursor
+anchor does not interrupt subsequent pages. Legacy UUID anchors remain a supported input.
+
 Initial aggregate views are computed on demand at current supported caps. Background feedback
 report/export jobs, Q&A feedback scopes, theme presentation and mixed-load evidence remain future
 milestones. The opt-in writer flags do not imply completion of the shared-audience parity plan.

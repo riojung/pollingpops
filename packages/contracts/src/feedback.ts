@@ -70,3 +70,11 @@ export const FeedbackSubmissionSchema = z
   })
   .strict();
 export type FeedbackSubmission = z.infer<typeof FeedbackSubmissionSchema>;
+
+export const FeedbackPageCursorSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    id: z.string().uuid(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();

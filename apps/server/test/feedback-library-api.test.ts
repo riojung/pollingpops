@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MemoryRepository } from "@openround/db";
+import {
+  MemoryRepository,
+  createFeedbackRepository,
+  feedbackCursor,
+  parseFeedbackCursor,
+} from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
 import { MemorySessionCache } from "../src/cache.js";
@@ -49,6 +54,131 @@ async function fixture() {
   return { app, headers, adminToken, repository: built.repository, workspaceId };
 }
 describe("feedback and Survey Library APIs", () => {
+  it("does not charge concurrent new-key retries more than once", async () => {
+    const { app, repository, headers, adminToken } = await fixture();
+    const feedback = createFeedbackRepository(repository);
+    const originalFind = feedback.find.bind(feedback);
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let arrived = 0;
+    const find = vi.spyOn(feedback, "find").mockImplementation(async (...args) => {
+      const prior = await originalFind(...args);
+      if (++arrived === 10) release();
+      await barrier;
+      return prior;
+    });
+    const input = {
+      idempotencyKey: randomUUID(),
+      category: "bug",
+      message: "Synthetic concurrent feedback retry",
+      page: "/library",
+    };
+    const retries = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        app.inject({ method: "POST", url: "/v1/feedback", headers, payload: input }),
+      ),
+    );
+    find.mockRestore();
+    expect(retries.every((row) => row.statusCode === 201 || row.statusCode === 200)).toBe(true);
+    expect(new Set(retries.map((row) => row.json().feedbackId)).size).toBe(1);
+    for (let index = 0; index < 4; index++) {
+      const result = await app.inject({
+        method: "POST",
+        url: "/v1/feedback",
+        headers,
+        payload: { ...input, idempotencyKey: randomUUID() },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+    }
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v1/feedback",
+          headers,
+          payload: { ...input, idempotencyKey: randomUUID() },
+        })
+      ).statusCode,
+    ).toBe(429);
+    expect(
+      (await app.inject({ method: "POST", url: "/v1/feedback", headers, payload: input }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          url: "/v1/admin/feedback",
+          headers: { authorization: `Bearer ${adminToken}` },
+        })
+      ).json().feedback,
+    ).toHaveLength(5);
+  });
+  it("returns newest reports with opaque chronological cursors and rejects malformed cursors", async () => {
+    const { app, repository, headers, workspaceId, adminToken } = await fixture();
+    const account = await app.inject({ url: "/v1/auth/me", headers });
+    expect(account.statusCode).toBe(200);
+    const userId = account.json().creator.userId;
+    const feedback = createFeedbackRepository(repository);
+    const now = new Date();
+    const rows = [];
+    for (let index = 0; index < 4; index++)
+      rows.push(
+        await feedback.submit(
+          workspaceId,
+          userId,
+          {
+            idempotencyKey: randomUUID(),
+            category: "idea",
+            message: "Synthetic chronological feedback",
+            page: "/library",
+            allowContact: false,
+          },
+          new Date(now.getTime() - (3 - index) * 1000),
+        ),
+      );
+    const admin = { authorization: `Bearer ${adminToken}` };
+    const first = await app.inject({ url: "/v1/admin/feedback?limit=2", headers: admin });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().feedback.map((row: { id: string }) => row.id)).toEqual([
+      rows[3]!.id,
+      rows[2]!.id,
+    ]);
+    expect(parseFeedbackCursor(first.json().nextCursor)).toEqual({
+      id: rows[2]!.id,
+      createdAt: rows[2]!.createdAt,
+    });
+    const second = await app.inject({
+      url: `/v1/admin/feedback?limit=2&cursor=${first.json().nextCursor}`,
+      headers: admin,
+    });
+    expect(second.json().feedback.map((row: { id: string }) => row.id)).toEqual([
+      rows[1]!.id,
+      rows[0]!.id,
+    ]);
+    expect(second.json().nextCursor).toBeNull();
+    const legacy = await app.inject({
+      url: `/v1/admin/feedback?cursor=${rows[2]!.id}`,
+      headers: admin,
+    });
+    expect(legacy.json().feedback.map((row: { id: string }) => row.id)).toEqual([
+      rows[1]!.id,
+      rows[0]!.id,
+    ]);
+    for (const cursor of [
+      "not-a-cursor",
+      randomUUID(),
+      Buffer.from(
+        JSON.stringify({ schemaVersion: 2, id: rows[2]!.id, createdAt: now.toISOString() }),
+      ).toString("base64url"),
+    ])
+      expect(
+        (await app.inject({ url: `/v1/admin/feedback?cursor=${cursor}`, headers: admin })).json()
+          .error.code,
+      ).toBe("INVALID_CURSOR");
+    expect(feedbackCursor(rows[2]!)).toBe(first.json().nextCursor);
+  });
   it("saves private feedback, preserves exact retries after limits, and restricts triage to administrators", async () => {
     const { app, headers, adminToken } = await fixture();
     const input = {

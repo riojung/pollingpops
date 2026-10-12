@@ -52,6 +52,7 @@ import { discoverMigrations, runMigrations } from "../src/migrations.js";
 import {
   expectSurveyLibraryConformance,
   expectFeedbackConformance,
+  expectFeedbackPaginationConformance,
 } from "./support/feedback-library-conformance.js";
 import {
   expectSurveyConformance,
@@ -1146,6 +1147,13 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     const actor = await creator("survey-library-feedback");
     await expectSurveyLibraryConformance(repository, actor);
     await expectFeedbackConformance(repository, actor);
+  });
+
+  it("paginates feedback by creation time and ID without losing records when cursor anchors are deleted", async () => {
+    await expectFeedbackPaginationConformance(
+      repository,
+      await creator("feedback-chronological-queue"),
+    );
   });
 
   it("isolates feedback from workspace peers and removes a deleted collaborator's feedback in retained workspaces", async () => {

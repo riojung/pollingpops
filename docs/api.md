@@ -63,11 +63,17 @@ Message length is 10–4,000 characters; contact permission defaults false. The 
 queries, fragments and unknown path identifiers. Response is `{feedbackId, receivedAt}` after
 durable commit. Exact retries return that receipt, changed payloads with the same key return
 `IDEMPOTENCY_CONFLICT`. A distributed per-user budget allows five new submissions per ten minutes;
-exact retries remain available after the budget is exhausted. Invalid payloads return 422
+atomic intent markers charge each workspace-scoped retry key at most once, including simultaneous
+new-key retries on different API processes. Previously admitted and durable exact retries remain
+available after the budget is exhausted. Invalid payloads return 422
 `VALIDATION_ERROR`; `RATE_LIMITED` returns 429. No public listing or external issue creation occurs.
 
-`GET /v1/admin/feedback?limit=50&cursor=UUID` requires the configured administrator Bearer token.
-It returns a bounded private queue and a continuation cursor. Contact email appears only when the
+`GET /v1/admin/feedback?limit=50&cursor=OPAQUE` requires the configured administrator Bearer token.
+It returns a bounded private queue ordered by `createdAt DESC, id DESC`. Use the returned opaque
+`nextCursor` unchanged. Versioned cursors carry both ordering fields and remain valid when the
+anchor report is deleted. Legacy UUID cursors remain accepted while their anchor exists; invalid,
+future-version or missing legacy anchors return 422 `INVALID_CURSOR` with a refresh instruction.
+Contact email appears only when the
 submitter opted in; user IDs and retry keys are omitted. Feedback follows a 90-day retention window,
 is included only in the submitting creator's account export and is deleted with that account or
 workspace. Keep administrator credentials out of URLs, browser storage, and issue attachments.

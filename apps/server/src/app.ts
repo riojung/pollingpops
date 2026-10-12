@@ -443,7 +443,7 @@ export async function buildApp(
     repository,
     auth,
     config,
-    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    consumeAdmission: cache.consumeIdempotentRateLimit.bind(cache),
   });
   // Presentation read and recovery routes remain registered when a rollout is paused. Route-level
   // workspace gates still prevent creation and other new authoring mutations.

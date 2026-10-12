@@ -10,6 +10,17 @@ trademark review.
 
 ### Unified Survey Library and product feedback October 11 2026
 
+PR #106 review follow-up: feedback admission now charges each workspace-scoped intent once through
+an atomic shared-cache operation, including concurrent first-time retries. Operator triage is
+newest-first with creation-time/ID keyset cursors; issued versioned cursors survive anchor deletion
+and legacy UUID cursors remain readable. Regression coverage includes a ten-request HTTP race,
+two independent Redis clients, tied timestamps, more than fifty rows and deleted anchors. Existing
+migrations are unchanged.
+
+Follow-up verification: the full local check and production builds pass, all 83 PostgreSQL tests
+pass, both two-client Redis/distributed-writer tests pass, and all three focused production-build
+Survey Library/Feedback browser journeys pass on desktop Chromium, mobile Chromium and mobile WebKit.
+
 - Fixed the reviewed mixed-client answer batch defect: an incompatible client is rejected alone,
   while compatible answers in the same batch remain durable and retries have no duplicate score effect.
 - Surveys now share the Library tabs, search, Status/Folder/Favorites/Ownership filters, counts,

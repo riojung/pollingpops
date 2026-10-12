@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient, QueryResultRow } from "pg";
-import type { FeedbackSubmission } from "@openround/contracts";
+import { FeedbackPageCursorSchema, type FeedbackSubmission } from "@openround/contracts";
 import { MemoryRepository, type MemoryRepositoryLifecycleContext } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
 import type { Repository } from "./types.js";
@@ -13,6 +13,31 @@ export interface FeedbackRecord extends FeedbackSubmission {
   expiresAt: Date;
 }
 export class FeedbackConflictError extends Error {}
+export class FeedbackCursorError extends Error {
+  constructor() {
+    super("Invalid or expired feedback cursor. Refresh the queue and try again.");
+  }
+}
+export type FeedbackCursor = { id: string; createdAt?: Date };
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function feedbackCursor(row: Pick<FeedbackRecord, "id" | "createdAt">) {
+  return Buffer.from(
+    JSON.stringify({ schemaVersion: 1, id: row.id, createdAt: row.createdAt.toISOString() }),
+  ).toString("base64url");
+}
+export function parseFeedbackCursor(value: string): FeedbackCursor {
+  // Keep accepting the previous UUID cursor; newly issued cursors survive anchor deletion.
+  if (uuid.test(value)) return { id: value.toLowerCase() };
+  try {
+    if (value.length > 256 || !/^[a-zA-Z0-9_-]+$/.test(value)) throw new FeedbackCursorError();
+    const bytes = Buffer.from(value, "base64url");
+    if (bytes.toString("base64url") !== value) throw new FeedbackCursorError();
+    const parsed = FeedbackPageCursorSchema.parse(JSON.parse(bytes.toString("utf8")));
+    return { id: parsed.id, createdAt: new Date(parsed.createdAt) };
+  } catch {
+    throw new FeedbackCursorError();
+  }
+}
 function matches(record: FeedbackRecord, input: FeedbackSubmission) {
   if (
     record.category !== input.category ||
@@ -32,7 +57,7 @@ interface FeedbackRepository {
     now: Date,
   ): Promise<FeedbackRecord>;
   list(
-    beforeId?: string,
+    cursor?: FeedbackCursor,
     limit?: number,
   ): Promise<Array<FeedbackRecord & { contactEmail: string | null }>>;
   purge(now: Date): Promise<number>;
@@ -68,12 +93,21 @@ class MemoryFeedbackRepository implements FeedbackRepository {
     this.records.set(record.id, structuredClone(record));
     return structuredClone(record);
   }
-  async list(beforeId?: string, limit = 50) {
+  async list(cursor?: FeedbackCursor, limit = 50) {
     const now = new Date();
+    const before = cursor
+      ? { id: cursor.id, createdAt: cursor.createdAt ?? this.records.get(cursor.id)?.createdAt }
+      : undefined;
+    if (before && !before.createdAt) throw new FeedbackCursorError();
     return [...this.records.values()]
       .filter((row) => row.expiresAt > now)
-      .filter((row) => !beforeId || row.id < beforeId)
-      .sort((a, b) => b.id.localeCompare(a.id))
+      .filter(
+        (row) =>
+          !before ||
+          row.createdAt < before.createdAt! ||
+          (row.createdAt.getTime() === before.createdAt!.getTime() && row.id < before.id),
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
       .slice(0, limit)
       .map((row) => ({
         ...structuredClone(row),
@@ -181,18 +215,26 @@ class PostgresFeedbackRepository implements FeedbackRepository {
       return matches(map(row), input);
     });
   }
-  async list(beforeId?: string, limit = 50) {
-    return this.transaction(null, null, async (client) =>
-      (
+  async list(cursor?: FeedbackCursor, limit = 50) {
+    return this.transaction(null, null, async (client) => {
+      let before = cursor;
+      if (before && !before.createdAt) {
+        const anchor = await client.query("SELECT created_at FROM beta_feedback WHERE id = $1", [
+          before.id,
+        ]);
+        if (!anchor.rows[0]) throw new FeedbackCursorError();
+        before = { id: before.id, createdAt: anchor.rows[0].created_at };
+      }
+      return (
         await client.query(
           `SELECT f.*, CASE WHEN f.allow_contact THEN u.email ELSE NULL END AS contact_email
        FROM beta_feedback f JOIN users u ON u.id = f.user_id
-       WHERE ($1::uuid IS NULL OR f.id < $1) AND f.expires_at > $3
-       ORDER BY f.id DESC LIMIT $2`,
-          [beforeId ?? null, limit, new Date()],
+       WHERE ($1::timestamptz IS NULL OR (f.created_at, f.id) < ($1::timestamptz, $2::uuid)) AND f.expires_at > $4
+       ORDER BY f.created_at DESC, f.id DESC LIMIT $3`,
+          [before?.createdAt ?? null, before?.id ?? null, limit, new Date()],
         )
-      ).rows.map((row) => ({ ...map(row), contactEmail: row.contact_email })),
-    );
+      ).rows.map((row) => ({ ...map(row), contactEmail: row.contact_email }));
+    });
   }
   async purge(now: Date) {
     return this.transaction(

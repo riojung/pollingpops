@@ -34,7 +34,10 @@ email, create a GitHub issue, page a responder, or guarantee that a human has re
 - Assign a named support owner to review `GET /v1/admin/feedback` regularly during beta. Authenticate
   using the existing `ADMIN_TOKEN` bearer credential from the private secret manager, never a URL,
   screenshot, checked-in script, or browser bookmark. Pages accept `limit` up to 50 and `cursor`;
-  follow `nextCursor` until null. The queue is ordered by opaque ID, not severity or receipt time.
+  follow the returned opaque `nextCursor` unchanged until null. The queue is ordered newest-first
+  by creation time, with ID as the tie-breaker; ordering is not severity-based. New cursors survive
+  anchor deletion. Legacy UUID cursors remain readable while their anchor exists; refresh the queue
+  on `INVALID_CURSOR`.
 - Treat message text as untrusted and potentially sensitive. Record the receipt reference, severity,
   status, owner, and redacted reproduction steps in the private support system. Do not copy raw
   reports to public issues or telemetry. Escalate incidents through the normal severity procedure.

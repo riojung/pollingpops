@@ -4,6 +4,7 @@ import { MemoryRepository, createSurveyRepository } from "../src/index.js";
 import {
   expectSurveyLibraryConformance,
   expectFeedbackConformance,
+  expectFeedbackPaginationConformance,
 } from "./support/feedback-library-conformance.js";
 import {
   expectSurveyConformance,
@@ -27,6 +28,10 @@ async function fixture() {
   return { repository, creator, surveys: createSurveyRepository(repository) };
 }
 describe("self-paced Survey storage", () => {
+  it("orders private feedback newest-first with stable tied-time pagination and deleted anchors", async () => {
+    const { repository, creator } = await fixture();
+    await expectFeedbackPaginationConformance(repository, creator);
+  });
   it("shares Library organization and private favorites without changing published evidence", async () => {
     const { repository, creator } = await fixture();
     await expectSurveyLibraryConformance(repository, creator);

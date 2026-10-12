@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterLibraryItems, libraryBulkActionIds, roundBulkActionIds } from "./library-controls";
+import {
+  filterLibraryItems,
+  libraryBulkActionIds,
+  roundBulkActionIds,
+  librarySearchHref,
+} from "./library-controls";
 
 const items = [
   {
@@ -31,6 +36,18 @@ const items = [
 ];
 
 describe("Library controls", () => {
+  it("keeps header searches on Surveys or the selected Library type without copying private queries", () => {
+    expect(librarySearchHref("  feedback  ", "/library", "?type=surveys&token=secret")).toBe(
+      "/library?type=surveys&q=feedback",
+    );
+    expect(librarySearchHref("", "/surveys/survey-id", "?token=secret")).toBe(
+      "/library?type=surveys",
+    );
+    expect(librarySearchHref("x & y", "/library", "?type=presentations")).toBe(
+      "/library?type=presentations&q=x+%26+y",
+    );
+    expect(librarySearchHref("", "/home", "?type=unknown")).toBe("/library");
+  });
   it("searches titles, descriptions, and supplied metadata without showing archives by default", () => {
     expect(
       filterLibraryItems(items, {

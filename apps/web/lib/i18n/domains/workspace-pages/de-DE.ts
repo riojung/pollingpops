@@ -1,6 +1,17 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "Umfragen",
+  "pages.library.searchSurveys": "Umfragen suchen",
+  "pages.library.createSurvey": "Umfrage erstellen",
+  "pages.library.firstSurvey": "Erste Umfrage erstellen",
+  "pages.library.firstSurveyDescription":
+    "Sammeln Sie unabhängiges Feedback im eigenen Tempo. Beginnen Sie mit einer Vorlage oder eigenen Fragen.",
+  "pages.library.surveyQuestions": "{count} Fragen · Eigenes Tempo",
+  "pages.library.shareSurvey": "Teilen",
+  "pages.library.surveyRuns": "Umfragedurchläufe und Ergebnisse",
+  "pages.library.surveyPaused":
+    "Neue Umfragen sind für diesen Arbeitsbereich pausiert. Bestehende Umfragen, Durchläufe und Ergebnisse bleiben verfügbar.",
   "pages.help.card.readGuide": "Anleitung lesen",
   "pages.activity.accuracyValue": "{value}% Genauigkeit",
   "pages.activity.assignment": "{status} Zuweisung",

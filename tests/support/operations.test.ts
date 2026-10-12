@@ -2001,7 +2001,12 @@ describe("deployment configuration and manifest validation", () => {
         buildId,
       ),
     ).toThrow("feature flags contains an unexpected field set");
-    for (const flag of ["liveFlexMode", "recoveryPackLiveCards", "presentationCompanion"]) {
+    for (const flag of [
+      "liveFlexMode",
+      "recoveryPackLiveCards",
+      "presentationCompanion",
+      "roundClientProtocol",
+    ]) {
       for (const value of [false, true]) {
         const summary = {
           ...oldSummary,
@@ -2044,12 +2049,14 @@ describe("deployment configuration and manifest validation", () => {
       FEATURE_LIVE_FLEX_MODE: "true",
       FEATURE_RECOVERY_PACK_LIVE_CARDS: "true",
       FEATURE_PRESENTATION_COMPANION: "true",
+      FEATURE_ROUND_CLIENT_PROTOCOL: "true",
     });
     const summary = createConfigCheckSummary({ ...serverConfig, NODE_ENV: "production" });
 
     expect(summary.featureFlags.liveFlexMode).toBe(true);
     expect(summary.featureFlags.recoveryPackLiveCards).toBe(true);
     expect(summary.featureFlags.presentationCompanion).toBe(true);
+    expect(summary.featureFlags.roundClientProtocol).toBe(true);
     expect(validateReceiptConfigCheckSummary(summary, config, buildId)).toBe(summary);
   });
 
@@ -2059,11 +2066,12 @@ describe("deployment configuration and manifest validation", () => {
     const legacyBytes = JSON.stringify(legacy);
     expect(() =>
       validateEnvFileKeys(
-        `${singleVmRuntimeEnvironment()}\nFEATURE_AUDIENCE_SCOPES=false\nFEATURE_FEEDBACK_ROOMS=false\nFEATURE_SURVEYS=false\nFEATURE_FEEDBACK_EXPORTS=false\nCORE_PARITY_WORKSPACE_ALLOWLIST=\n`,
+        `${singleVmRuntimeEnvironment()}\nFEATURE_AUDIENCE_SCOPES=false\nFEATURE_ROUND_CLIENT_PROTOCOL=false\nFEATURE_FEEDBACK_ROOMS=false\nFEATURE_SURVEYS=false\nFEATURE_FEEDBACK_EXPORTS=false\nCORE_PARITY_WORKSPACE_ALLOWLIST=\n`,
         "single-vm-runtime",
       ),
     ).not.toThrow();
     const flags = {
+      roundClientProtocol: false,
       audienceScopes: false,
       feedbackRooms: false,
       surveys: false,

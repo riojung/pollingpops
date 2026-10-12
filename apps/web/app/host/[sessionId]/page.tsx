@@ -11,6 +11,7 @@ import type {
   SessionStaffCredential,
   SessionSnapshot,
 } from "@openround/contracts";
+import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
 import { Brand, creatorLandingHref } from "../../../components/brand";
 import {
   AudiencePanel,
@@ -248,6 +249,7 @@ export default function HostPage() {
           {
             sessionId,
             role: "host",
+            clientCapabilities: currentRoundClientCapabilities(),
             hostToken: attemptedToken,
             lastSeq: snapshotRef.current?.seq ?? 0,
           },
@@ -327,6 +329,7 @@ export default function HostPage() {
       ])
         socket.on(event, audienceUpdate);
       syncHostRef.current = sync;
+      socket.on("client.update.required", () => setError(ROUND_CLIENT_UPDATE_MESSAGE));
       socket.connect();
     };
 
@@ -459,6 +462,7 @@ export default function HostPage() {
         hostToken,
         commandId,
         expectedVersion: snapshot.version,
+        clientCapabilities: currentRoundClientCapabilities(),
         action,
         ...options,
       },
@@ -472,7 +476,13 @@ export default function HostPage() {
           setError(response.error.message);
           socket.emit(
             "sync.request",
-            { sessionId, role: "host", hostToken, lastSeq: snapshotRef.current?.seq ?? 0 },
+            {
+              sessionId,
+              role: "host",
+              hostToken,
+              lastSeq: snapshotRef.current?.seq ?? 0,
+              clientCapabilities: currentRoundClientCapabilities(),
+            },
             (sync: Ack<{ snapshot: SessionSnapshot }>) => {
               if (sync.data) setSnapshot(sync.data.snapshot);
             },

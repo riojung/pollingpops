@@ -1,4 +1,8 @@
-import { MEDIA_DELETION_TOMBSTONE_HOLD_MS, type Repository } from "@openround/db";
+import {
+  createFeedbackRepository,
+  MEDIA_DELETION_TOMBSTONE_HOLD_MS,
+  type Repository,
+} from "@openround/db";
 import type { StorageService } from "./storage.js";
 import type { MetricsService } from "./metrics.js";
 
@@ -47,6 +51,7 @@ export class RetentionService {
     const auditCutoff = new Date(now.getTime() - this.auditRetentionDays * 24 * 60 * 60 * 1_000);
     const purgedAuditEvents = await this.repository.purgeAuditEvents(auditCutoff);
     const purgedProductEvents = await this.repository.purgeProductEvents(now);
+    await createFeedbackRepository(this.repository).purge(now);
     const cutoff = new Date(now.getTime() - this.quarantineRetentionHours * 60 * 60 * 1_000);
     const unattachedCutoff = new Date(
       now.getTime() - this.unattachedMediaGraceDays * 24 * 60 * 60 * 1_000,

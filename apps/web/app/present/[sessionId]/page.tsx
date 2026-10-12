@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventEnvelope, SessionSnapshot } from "@openround/contracts";
+import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
 import { Brand } from "../../../components/brand";
 import {
   AudiencePanel,
@@ -77,6 +78,7 @@ export default function PresenterPage() {
         {
           sessionId,
           role: "presenter",
+          clientCapabilities: currentRoundClientCapabilities(),
           hostToken: presenterToken,
           lastSeq: snapshotRef.current?.seq ?? 0,
         },
@@ -106,6 +108,10 @@ export default function PresenterPage() {
         enqueueAudienceRealtimeUpdate(current, { gap, envelope }),
       ),
     );
+    socket.on("client.update.required", () => {
+      setError(ROUND_CLIENT_UPDATE_MESSAGE);
+      setErrorIsEnglish(true);
+    });
     socket.on("connect", () => {
       setAudienceSyncRevision((current) => current + 1);
       sync();

@@ -1,8 +1,10 @@
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
+import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
   ...creationMessages("zh-TW"),
+  ...feedbackMessages("zh-TW"),
   "common.create": "建立",
   "common.round": "互動測驗",
   "common.presentation": "簡報",

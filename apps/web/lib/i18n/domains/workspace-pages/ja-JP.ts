@@ -1,6 +1,17 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "アンケート",
+  "pages.library.searchSurveys": "アンケートを検索",
+  "pages.library.createSurvey": "アンケートを作成",
+  "pages.library.firstSurvey": "最初のアンケートを作成",
+  "pages.library.firstSurveyDescription":
+    "参加者が自分のペースで回答できるアンケートです。テンプレートを使うか、独自の質問を作成してください。",
+  "pages.library.surveyQuestions": "{count}問 · 自分のペース",
+  "pages.library.shareSurvey": "共有",
+  "pages.library.surveyRuns": "アンケートの実施と結果",
+  "pages.library.surveyPaused":
+    "このワークスペースでは新規アンケートの作成を停止しています。既存のアンケート、実施履歴、結果は引き続き利用できます。",
   "pages.help.card.readGuide": "ガイドを読む",
   "pages.activity.accuracyValue": "{value}% の精度",
   "pages.activity.assignment": "{status} 割り当て",

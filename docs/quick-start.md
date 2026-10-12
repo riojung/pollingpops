@@ -489,6 +489,11 @@ the `observability` profile, then run `pnpm smoke:observability`. Prometheus bin
 
 ## Troubleshooting startup
 
+For **This browser cannot use this round's response formats**, refresh the existing tab and rejoin.
+Accepted answers are retained. Keep session storage intact so the participant or host credential
+can resume the original session. Operators should deploy matching compatible web/API releases;
+turning off a creation flag does not make an older server safe for newly accepted state versions.
+
 | Symptom                                          | Check                                                                                                                             |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | Product does not open                            | Run `docker compose ps` and wait for health checks; then inspect `docker compose logs server web caddy`.                          |

@@ -76,7 +76,7 @@ for (const surface of ["", "@mobile "]) {
       await cancelExit(page, () => link.click(), editorUrl);
     }
     await page.locator('summary[aria-label="Create"]').click();
-    for (const href of ["/create", "/create/presentation"])
+    for (const href of ["/create", "/create/presentation", "/surveys/new"])
       await cancelExit(page, () => page.locator(`a[href="${href}"]`).click(), editorUrl);
     await page.locator('summary[aria-label="Create"]').click();
     expect((await storedSurvey(page, id)).draft.title).not.toBe("Synthetic local work");
@@ -89,7 +89,7 @@ for (const surface of ["", "@mobile "]) {
       await dialog.accept();
     });
     await page.getByRole("link", { name: "All Surveys", exact: true }).click();
-    await expect(page).toHaveURL(/\/surveys$/);
+    await expect(page).toHaveURL(/\/library\?type=surveys$/);
     expect(prompts).toBe(1);
   });
 
@@ -154,8 +154,15 @@ for (const surface of ["", "@mobile "]) {
         prompts++;
         await dialog.dismiss();
       });
-      await page.getByRole("link", { name: "All Surveys", exact: true }).click();
-      await expect(page).toHaveURL(/\/surveys$/);
+      await search.press("Enter");
+      await expect(page).toHaveURL(/\/library\?type=surveys&q=Synthetic\+search$/);
+      await expect(page.getByRole("tab", { name: /^Surveys/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await expect(
+        page.getByRole("searchbox", { name: "Search surveys", exact: true }),
+      ).toHaveValue("Synthetic search");
       expect(prompts).toBe(0);
     });
   }

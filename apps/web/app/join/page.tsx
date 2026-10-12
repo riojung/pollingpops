@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import type { AvatarId, JoinPreflightResponse, JoinResponse } from "@openround/contracts";
+import { currentRoundClientCapabilities } from "@openround/contracts";
 import { Brand } from "../../components/brand";
 import { AvatarPicker } from "../../components/participant-avatar";
 import { useLocale } from "../../components/locale-provider";
@@ -153,6 +154,7 @@ function JoinForm() {
         body: JSON.stringify({
           code: submittedCode,
           avatarId,
+          clientCapabilities: currentRoundClientCapabilities(),
           ...(requestedNickname ? { nickname: requestedNickname } : {}),
         }),
       });

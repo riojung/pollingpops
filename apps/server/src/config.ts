@@ -235,6 +235,7 @@ export const ConfigSchema = z
     FEATURE_EXTENDED_QUESTION_TYPES: booleanString,
     FEATURE_VERIFIED_INSTITUTION: booleanString,
     FEATURE_AUDIENCE_SCOPES: booleanString,
+    FEATURE_ROUND_CLIENT_PROTOCOL: booleanString,
     FEATURE_FEEDBACK_ROOMS: booleanString,
     FEATURE_SURVEYS: booleanString,
     FEATURE_FEEDBACK_EXPORTS: booleanString,

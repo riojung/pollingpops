@@ -6,9 +6,11 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { CreatorBrand } from "../brand";
 import { useLocale } from "../locale-provider";
 import { humanError } from "../../lib/api";
+import { librarySearchHref } from "../../lib/library-controls";
 import type { MessageKey } from "../../lib/i18n/catalog";
 import { ColorModeMenu } from "./color-mode-menu";
 import { LanguageMenu } from "./language-menu";
+import { FeedbackButton } from "./feedback-button";
 import {
   useWorkspace,
   WorkspaceProvider,
@@ -48,7 +50,10 @@ const destinations: Array<{
     href: "/library",
     icon: "library",
     label: "workspace.nav.library",
-    match: (path) => path === "/library" || path === "/dashboard",
+    match: (path) =>
+      path === "/library" ||
+      path === "/dashboard" ||
+      (path.startsWith("/surveys") && !path.startsWith("/surveys/rooms")),
   },
   {
     href: "/sessions",
@@ -290,6 +295,17 @@ function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeat
             </span>
           </Link>
         ) : null}
+        {productFeatures.surveys ? (
+          <Link className={styles.createMenuItem} href="/surveys/new">
+            <span className={styles.createMenuIcon}>
+              <ShellIcon name="assignments" />
+            </span>
+            <span>
+              <strong>{t("create.kind.survey")}</strong>
+              <small>{t("create.kind.survey.description")}</small>
+            </span>
+          </Link>
+        ) : null}
       </div>
     </details>
   );
@@ -342,8 +358,7 @@ export function WorkspaceShell({
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!confirmNavigation()) return;
-    const query = globalSearch.trim();
-    router.push(query ? `/library?q=${encodeURIComponent(query)}` : "/library");
+    router.push(librarySearchHref(globalSearch, window.location.pathname, window.location.search));
   }
 
   const workspaceLabel = creator
@@ -445,6 +460,7 @@ export function WorkspaceShell({
               <ShellIcon name="help" />
               <span className={styles.utilityLabel}>{t("workspace.help")}</span>
             </Link>
+            <FeedbackButton />
             <Link
               aria-label={t("workspace.accountSettings")}
               className={styles.accountButton}

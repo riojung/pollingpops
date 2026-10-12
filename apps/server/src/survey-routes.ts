@@ -261,6 +261,28 @@ export async function registerSurveyRoutes(
         ),
       };
     });
+    scoped.patch("/v1/surveys/:id/organization", async (request, reply) => {
+      const actor = await creator(request, reply, true);
+      if (!actor) return;
+      const input = Key.extend({ folderId: z.string().uuid().nullable() }).parse(request.body);
+      const id = Id.parse(request.params).id;
+      const survey = await deps.surveys.organize(
+        actor.workspaceId,
+        id,
+        input.folderId,
+        input.expectedRevision,
+        input.idempotencyKey,
+      );
+      await deps.repository.recordAudit({
+        workspaceId: actor.workspaceId,
+        actorId: actor.userId,
+        action: "survey.organize",
+        targetType: "survey",
+        targetId: id,
+        requestId: request.id,
+      });
+      return { survey };
+    });
     scoped.post("/v1/surveys/:id/rooms", async (request, reply) => {
       const actor = await creator(request, reply, true, true);
       if (!actor) return;

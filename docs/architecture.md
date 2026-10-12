@@ -8,6 +8,29 @@ the accountless Recovery Loop: ask, diagnose, intervene, recheck, and prove.
 
 Read the [implementation status](implementation-status.md) for verified and outstanding release work. Architecture intent is not a substitute for production readiness evidence.
 
+## Round protocol evolution
+
+Round state schema 5 is the legacy baseline; schema 6 adds frozen Recovery Pack live-card support.
+Schema 7 adds validated `roundProtocol` requirements alongside the existing state. The explicit
+reader preserves each of these versions, rejects future state versions, and rejects protocol
+metadata incorrectly attached to older states. Legacy sessions are not silently rewritten to 7.
+No SQL migration is needed: the existing positive `state_schema_version` column and JSON storage
+already support the new version.
+
+Only new sessions in `CORE_PARITY_WORKSPACE_ALLOWLIST` with `FEATURE_ROUND_CLIENT_PROTOCOL=true`
+write schema 7. The server freezes requirements at creation; subsequent state transitions retain
+them. The requirements currently match legacy formats: minimum client version 2, no additional
+capabilities. The current web client declares exactly that support. Future version-3 profiles
+reserve `poll.multiselect`; neither that declaration nor the writer flag enables the format today.
+
+Shared contracts validate profiles across HTTP and Socket.IO. Session-service checks fence join,
+resume, role-filtered reads, commands and answers before their state effects. Socket registration
+retains the validated profile for fanout checks. Incompatible sockets receive a refresh/rejoin
+notice, not question data. Authorization still uses the existing scoped credentials; claiming a
+capability grants no role or data access. Disabling the writer flag preserves compatible reads,
+accepted-answer retries and restoration of existing schema-7 sessions. Rollback binaries must
+continue to understand every persisted version they may encounter.
+
 ## Additive audience-scope foundation
 
 ### Dedicated self-paced Survey vertical slice
@@ -54,6 +77,29 @@ the optional local JSON download is a user-triggered recovery copy without guest
 Deploy compatible readers and the additive migration before writers; rollback must retain readers
 for accepted v2 data. Round/Presentation contracts, live clients, game states and learning reports
 are unchanged; live multi-selection opinion polls require a later capability-negotiated release.
+
+Migration 064 adds mutable `folder_id`/`updated_at` Library metadata separately from immutable
+Survey versions. Workspace-validated folder references are cleared on folder deletion. Metadata
+moves use the existing revision fence and receipts, preserving publish eligibility when content
+is unchanged. Member-private polymorphic favorites now validate Survey parents as well. The web
+Library shares filters and grid/list preferences across Rounds, Presentations and Surveys;
+`/surveys` redirects to its tab while `/surveys/runs` retains delivery history. Reading existing
+content remains available when the Survey creation rollout is disabled.
+
+Product feedback is separate from audience/Survey submissions. Strict contracts accept bounded
+plain text, an explicit contact preference and redacted page type. Creator authentication and
+distributed admission limits protect submission; forced RLS scopes records to the author and
+workspace, with system access only for operator triage and lifecycle jobs. The acknowledgement is
+returned after commit and exact retries recover the original receipt. The administrator-only
+queue exposes email only with consent, never publishes an issue or notification automatically,
+and hides expired records. Account export contains only that author's feedback. Retention purges
+at 90 days; explicit soft-account cleanup and workspace cascades remove associated records.
+
+Feedback admission uses a separate fixed-window Redis hash (or synchronous memory equivalent)
+to atomically admit each workspace-scoped intent once. Concurrent retries share the same budget
+charge and remain admitted after the five-intent limit is reached. The operator queue uses the
+existing `(created_at DESC, id DESC)` index and validated versioned keyset cursors; a deleted cursor
+anchor does not interrupt subsequent pages. Legacy UUID anchors remain a supported input.
 
 Initial aggregate views are computed on demand at current supported caps. Background feedback
 report/export jobs, Q&A feedback scopes, theme presentation and mixed-load evidence remain future
@@ -497,7 +543,7 @@ revocable, role-scoped records; the presenter never reuses the host token.
 new public identity preset; all six legacy preset definitions remain immutable. Drafts and immutable
 exports carry category plus preset reference. Session creation resolves published preset, optional
 host override, eligible workspace branding, and sound preference into a validated theme snapshot
-stored in current game state v5 together with the frozen trust mode. Legacy upcasting resolves a
+stored in game state together with the frozen trust mode. Legacy upcasting resolves a
 missing theme from frozen content and supplies Learning trust mode when omitted; future state
 versions fail closed. Reconnect and process recovery therefore cannot pick up later draft or
 branding changes.

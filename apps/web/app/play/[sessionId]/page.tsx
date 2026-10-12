@@ -10,6 +10,7 @@ import type {
   ResponsePayload,
   SessionSnapshot,
 } from "@openround/contracts";
+import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
 import { Brand } from "../../../components/brand";
 import {
   AudiencePanel,
@@ -178,6 +179,7 @@ export default function PlayerPage() {
         {
           sessionId,
           role: "participant",
+          clientCapabilities: currentRoundClientCapabilities(),
           participantToken: token,
           lastSeq: snapshotRef.current?.seq ?? 0,
         },
@@ -258,6 +260,10 @@ export default function PlayerPage() {
       "audience.event",
     ])
       socket.on(event, audienceUpdate);
+    socket.on("client.update.required", () => {
+      setError(ROUND_CLIENT_UPDATE_MESSAGE);
+      setErrorIsEnglish(true);
+    });
     socket.connect();
     return () => {
       submissionRecoveryRef.current?.dispose();
@@ -291,6 +297,7 @@ export default function PlayerPage() {
         confidence: submission.confidence ?? undefined,
         participantToken,
         idempotencyKey: submission.idempotencyKey,
+        clientCapabilities: currentRoundClientCapabilities(),
       },
       (response: Ack<AnswerAck>) => {
         if (!clearPendingSubmission(attemptId)) return;

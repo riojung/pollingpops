@@ -1,6 +1,16 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "调查",
+  "pages.library.searchSurveys": "搜索调查",
+  "pages.library.createSurvey": "创建调查",
+  "pages.library.firstSurvey": "创建您的第一个调查",
+  "pages.library.firstSurveyDescription":
+    "收集参与者按自己的节奏独立提供的反馈。使用模板或编写自己的问题。",
+  "pages.library.surveyQuestions": "{count} 个问题 · 自定进度",
+  "pages.library.shareSurvey": "分享",
+  "pages.library.surveyRuns": "调查批次和结果",
+  "pages.library.surveyPaused": "此工作区已暂停创建新调查。现有调查、批次和结果仍可使用。",
   "pages.help.card.readGuide": "阅读指南",
   "pages.activity.accuracyValue": "{value}% 准确度",
   "pages.activity.assignment": "{status} 赋值",

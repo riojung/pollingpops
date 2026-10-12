@@ -27,8 +27,37 @@ content is English; chooser/filter controls are localized.
 
 ## Standalone Surveys (beta)
 
+Surveys are a first-class **Library → Surveys** tab alongside Rounds and Presentations. Search
+titles/descriptions and folder names; combine Status, Folder, Favorites and Ownership filters.
+Grid/List uses the same workspace preference as the other tabs. Star a Survey to save a private
+favorite; select one or more Surveys to move them into a workspace folder, duplicate them, or
+archive them. Owners/editors may organize existing Surveys even when new creation is paused.
+Archiving preserves published versions and existing run evidence. Survey restore/permanent artifact
+deletion are not offered yet; duplicate an archived Survey when creation is enabled.
+
+**Survey runs and results** opens the separate delivery history. Old `/surveys` bookmarks now
+open the Library Surveys tab; survey editor and room links remain unchanged.
+
 Your operator must enable the flags/allowlist in the quick start. Owners/editors create, edit,
 publish and share; viewers can read content/results.
+
+## Send product feedback
+
+Choose **Feedback** in the workspace header from any creator workspace page. Pick a problem,
+usability issue, suggestion or other feedback and describe what you tried, what happened and what
+you expected (10–4,000 characters). Follow-up by account email is optional and unchecked by default.
+Submit and keep the receipt reference. If delivery fails, your message stays in the dialog; retrying
+the same message reuses its receipt rather than creating a duplicate. Escape/Cancel closes the
+dialog and returns focus to Feedback. Do not close a draft you want to keep: unsent feedback is not
+saved outside the open dialog.
+
+Only the product team's administrator interface can review submitted feedback. The stored page
+type excludes queries, fragments and object identifiers. Screenshots, participant responses and
+logs are not collected automatically. Do not include passwords, tokens or participant details.
+Feedback is retained for 90 days and removed by scheduled retention or account/workspace deletion.
+Submitting feedback does not mean public beta or production launch has been approved.
+
+## Create and run a Survey
 
 1. Choose **Survey**, then a feedback template or **Create blank Survey**.
 2. Edit details, add poll/rating questions, label scale endpoints, select required/optional, and
@@ -61,7 +90,8 @@ publish and share; viewers can read content/results.
    their own pace, **Save progress** before leaving, then **Submit Survey**. Required items must be
    answered. Refresh resumes saved answers on the same browser. One completion per credential is
    enforced, not verified one-person identity; another browser/device is a new credential.
-6. Return through **Library → Browse Surveys** (`/surveys`) to content, sharing links and results.
+6. Return through **Library → Surveys** (`/library?type=surveys`) for content; choose
+   **Survey runs and results** for sharing links and results.
    Refresh results to count finalized submissions. **Close admissions and submissions**, or wait for
    the deadline, to release final distributions. Each question needs at least five finalized answers;
    optional unanswered items do not count toward that minimum. Open runs never show changing
@@ -625,6 +655,11 @@ text and set the corresponding policy version.
 - Use anonymous participation when names are unnecessary, especially in education.
 
 ## Troubleshooting
+
+If you see **This browser cannot use this round's response formats**, refresh Polling Pops in the
+same tab, then rejoin. Your accepted answers remain saved. Do not clear browser session storage:
+it holds the credential needed to resume your session alias. If refreshing does not help, ask the
+operator to check that the web and server releases support the same Round protocol.
 
 | Message or symptom                                      | Meaning and response                                                                        |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------- |

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ExperiencePresetIdSchema,
+  currentRoundClientCapabilities,
   SessionSettingsSchema,
   type Entitlements,
   type ExperiencePresetId,
@@ -270,6 +271,7 @@ export default function HostSetupPage() {
         body: JSON.stringify({
           quizId: quiz.id,
           settings,
+          clientCapabilities: currentRoundClientCapabilities(),
           ...(roundExperiencesAvailable &&
           experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
             ? { experiencePresetOverride: experiencePreset }

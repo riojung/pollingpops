@@ -24,6 +24,13 @@ export interface SessionCache {
   releaseMutationLease(sessionId: string, owner: string): Promise<void>;
   /** Atomic fixed-window admission counter shared by HTTP and Socket.IO paths. */
   consumeRateLimit(key: string, maximum: number, windowMs: number): Promise<boolean>;
+  /** Charge each scoped intent once, including concurrent retries on different processes. */
+  consumeIdempotentRateLimit(
+    key: string,
+    intent: string,
+    maximum: number,
+    windowMs: number,
+  ): Promise<boolean>;
   delete(sessionId: string): Promise<void>;
   close(): Promise<void>;
 }
@@ -34,6 +41,10 @@ export class MemorySessionCache implements SessionCache {
   private readonly codeReservations = new Map<string, { owner: string; expiresAt: number }>();
   private readonly leases = new Map<string, { owner: string; expiresAt: number }>();
   private readonly rateLimits = new Map<string, { count: number; expiresAt: number }>();
+  private readonly idempotentLimits = new Map<
+    string,
+    { intents: Set<string>; expiresAt: number }
+  >();
 
   async get(sessionId: string) {
     const state = this.states.get(sessionId);
@@ -121,10 +132,28 @@ export class MemorySessionCache implements SessionCache {
     this.events.delete(sessionId);
   }
 
+  async consumeIdempotentRateLimit(key: string, intent: string, maximum: number, windowMs: number) {
+    const now = Date.now();
+    if (this.idempotentLimits.size > 10_000) {
+      for (const [candidate, bucket] of this.idempotentLimits)
+        if (bucket.expiresAt <= now) this.idempotentLimits.delete(candidate);
+    }
+    let bucket = this.idempotentLimits.get(key);
+    if (!bucket || bucket.expiresAt <= now) {
+      bucket = { intents: new Set(), expiresAt: now + windowMs };
+      this.idempotentLimits.set(key, bucket);
+    }
+    if (bucket.intents.has(intent)) return true;
+    if (bucket.intents.size >= maximum) return false;
+    bucket.intents.add(intent);
+    return true;
+  }
+
   async close() {
     this.codeReservations.clear();
     this.leases.clear();
     this.rateLimits.clear();
+    this.idempotentLimits.clear();
   }
 }
 
@@ -288,6 +317,24 @@ export class RedisSessionCache implements SessionCache {
 
   async delete(sessionId: string) {
     await this.redis.del(`openround:session:${sessionId}`, `openround:events:${sessionId}`);
+  }
+
+  async consumeIdempotentRateLimit(key: string, intent: string, maximum: number, windowMs: number) {
+    const result = await this.redis.eval(
+      `if redis.call('hexists', KEYS[1], ARGV[1]) == 1 then return 1 end
+       local count = tonumber(redis.call('hget', KEYS[1], '__count') or '0')
+       if count >= tonumber(ARGV[2]) then return 0 end
+       redis.call('hset', KEYS[1], ARGV[1], '1')
+       redis.call('hincrby', KEYS[1], '__count', 1)
+       if count == 0 then redis.call('pexpire', KEYS[1], ARGV[3]) end
+       return 1`,
+      1,
+      `openround:idempotent-rate-limit:${key}`,
+      `intent:${intent}`,
+      String(maximum),
+      String(windowMs),
+    );
+    return Number(result) === 1;
   }
 
   async close() {

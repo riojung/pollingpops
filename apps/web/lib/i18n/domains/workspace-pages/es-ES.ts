@@ -1,6 +1,17 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "Encuestas",
+  "pages.library.searchSurveys": "Buscar encuestas",
+  "pages.library.createSurvey": "Crear encuesta",
+  "pages.library.firstSurvey": "Crea tu primera encuesta",
+  "pages.library.firstSurveyDescription":
+    "Recoge opiniones independientes al ritmo de cada persona. Usa una plantilla o crea tus preguntas.",
+  "pages.library.surveyQuestions": "{count} preguntas · A tu ritmo",
+  "pages.library.shareSurvey": "Compartir",
+  "pages.library.surveyRuns": "Sesiones de encuesta y resultados",
+  "pages.library.surveyPaused":
+    "La creación de encuestas está pausada en este espacio. Las encuestas, sesiones y resultados existentes siguen disponibles.",
   "pages.help.card.readGuide": "Leer la guía",
   "pages.activity.accuracyValue": "{value}% de precisión",
   "pages.activity.assignment": "{status} tarea",

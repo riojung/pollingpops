@@ -46,9 +46,89 @@ and mobile WebKit, including nine navigation-guard journeys covering debounce, s
 conflicts, canceled exits and settled navigation. Firefox failed to launch locally with
 `Could not find profile folder`, before application assertions; it is not claimed as passing.
 
+PR #105 base integration (October 12): conflicts with `main` at `a61fcea` are resolved without
+discarding the unified Survey Library, Feedback or protocol foundation. Editor search retains
+both unsettled-navigation protection and the selected Surveys tab/query. `CI=true pnpm check`
+passes with 672 web unit tests; 36 Survey/Library/Feedback browser journeys and three separately
+enabled protocol-writer journeys pass across desktop Chromium, mobile Chromium and mobile WebKit.
+Six navigation journeys additionally verify successful editor search after save/conflict recovery.
+Applied migrations are unchanged; the local Firefox launch limitation remains.
+
 Next: capability-negotiated live multi-selection opinion polls; open text, word clouds and ranking;
 remaining scoped Presentation interaction and feedback-room/passcode work; feedback reports,
 export jobs and aggregate sharing. Existing external production gates remain open.
+
+### Unified Survey Library and product feedback October 11 2026
+
+PR #106 review follow-up: feedback admission now charges each workspace-scoped intent once through
+an atomic shared-cache operation, including concurrent first-time retries. Operator triage is
+newest-first with creation-time/ID keyset cursors; issued versioned cursors survive anchor deletion
+and legacy UUID cursors remain readable. Regression coverage includes a ten-request HTTP race,
+two independent Redis clients, tied timestamps, more than fifty rows and deleted anchors. Existing
+migrations are unchanged.
+
+Follow-up verification: the full local check and production builds pass, all 83 PostgreSQL tests
+pass, both two-client Redis/distributed-writer tests pass, and all three focused production-build
+Survey Library/Feedback browser journeys pass on desktop Chromium, mobile Chromium and mobile WebKit.
+
+- Fixed the reviewed mixed-client answer batch defect: an incompatible client is rejected alone,
+  while compatible answers in the same batch remain durable and retries have no duplicate score effect.
+- Surveys now share the Library tabs, search, Status/Folder/Favorites/Ownership filters, counts,
+  grid/list preferences and selection controls. Folder assignment is workspace-validated and
+  revision-fenced; favorites are member-private. Old `/surveys` links open the unified tab;
+  delivery history remains at `/surveys/runs`. Creation remains rollout-gated.
+- The workspace header provides Feedback with a labelled, keyboard-accessible modal, bounded
+  text, optional contact consent, recoverable errors and durable idempotent receipts. An
+  administrator-only paginated API provides triage; no external message or issue is posted.
+- Additive migration 064 introduces Survey Library metadata and forced-RLS feedback storage.
+  Feedback account export, account/workspace deletion and 90-day retention are implemented.
+- Public beta is not enabled by these changes. Existing independent stability, privacy, security,
+  accessibility, support and launch gates remain required.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds. All 82 PostgreSQL tests pass on a fresh isolated cluster,
+including upgrade/replay/checksum checks, author-scoped feedback RLS, collaborator soft-account
+deletion and Survey Library/favorites conformance. Eight production-build browser journeys pass on
+desktop Chromium, mobile Chromium and mobile WebKit: shared Survey filters/favorites/list layout,
+header search, legacy redirect/run-history navigation, 320px/390px layouts, light/dark feedback,
+keyboard focus/Escape, contact defaults, lost-receipt retries and existing Round recovery/answer
+flows. Automated axe checks pass. Physical-device, manual screen-reader/zoom, Firefox, target-region
+load and independent beta-release gates remain open. No deployment or public-beta promotion is made.
+
+### Round client protocol foundation October 11 2026
+
+Implemented on `codex/live-poll-protocol-foundation` from merged baseline `14d397e`.
+This reader-first M2 increment prepares safe live-format evolution; it does not enable live
+multiple-selection opinion polls or complete core parity. At that baseline, Survey draft autosave
+was separate work in PR 105 and was not part of the protocol increment.
+
+- Strict, bounded client profiles and server-owned session requirements cover HTTP and realtime
+  admission, resume, snapshots, commands, answer retries and game fanout. Existing requests may
+  omit profiles; current browsers declare legacy version 2 with no extra capabilities.
+- Schema-7 state is written only with the new off-by-default `FEATURE_ROUND_CLIENT_PROTOCOL` flag
+  and the core-parity workspace allowlist. Schema-5/6 sessions retain their versions. Existing
+  schema-7 sessions remain readable after the writer flag is disabled; future versions fail closed.
+- Incompatible clients receive `CLIENT_UPDATE_REQUIRED` with refresh/rejoin instructions. Accepted
+  responses and host progress are retained. Credentials and role filtering remain unchanged.
+- Live poll responses remain single-choice; the reserved `poll.multiselect` capability is not
+  advertised by the browser. Artifact, answer, report, scoring and audience schemas stay unchanged.
+
+Verification: the local `CI=true pnpm check` covers formatting, lint, strict types, package/support
+tests and production builds. All 80 PostgreSQL tests pass against a fresh isolated database using
+the restricted runtime, including schema-7 progress/answer restoration and tenant isolation.
+A 100-participant memory-service burst retains exactly 100 answers and one score effect each after
+restart and exact retries; this is correctness coverage, not network capacity or SLO evidence.
+Eight production-build browser journeys pass on desktop Chromium, mobile Chromium and mobile WebKit,
+covering create/join profiles, presenter view, explicit submission, refresh, hidden explanations,
+Recovery Pack interventions/rechecks, all existing response types, reports and automated axe checks.
+CI opts into the protocol writer for the beta browser suite while keeping the feature-off suite.
+Local Firefox cannot launch
+its test browser; Firefox, physical-device, target-region load and external release gates remain open.
+
+Next: deliver a complete gated live multiple-selection poll journey, including authoring, preview,
+host/player/presenter controls, durable canonical responses, respondent-based aggregates, imports
+and compatible reporting. Then add open text, word clouds and ranking. Presentation and practice
+paths must explicitly support or reject each new format, not inherit it accidentally.
 
 ### Survey enablement and multiple-selection opinions — October 10, 2026
 

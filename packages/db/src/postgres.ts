@@ -7152,7 +7152,7 @@ export class PostgresRepository implements Repository {
            FROM quizzes WHERE workspace_id = ANY($1::uuid[]) ORDER BY created_at, id`,
         );
         const surveys = await queryWorkspaceData(
-          "SELECT data FROM surveys WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
+          "SELECT data || jsonb_build_object('folderId', folder_id, 'updatedAt', updated_at) AS data FROM surveys WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
         );
         const surveyVersions = await queryWorkspaceData(
           "SELECT data FROM survey_versions WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
@@ -7221,6 +7221,10 @@ export class PostgresRepository implements Repository {
           `SELECT workspace_id, user_id, artifact_type, artifact_id, created_at
            FROM library_favorites WHERE user_id = $1
            ORDER BY created_at, artifact_type, artifact_id`,
+          [userId],
+        );
+        const productFeedback = await client.query(
+          "SELECT * FROM beta_feedback WHERE user_id = $1 ORDER BY created_at, id",
           [userId],
         );
         const presentationVersions = await queryWorkspaceData(
@@ -7581,6 +7585,7 @@ export class PostgresRepository implements Repository {
           recoveryPackSources: recoveryPackSources.rows,
           recoveryPackSourceApprovals: recoveryPackSourceApprovals.rows,
           libraryFavorites: libraryFavorites.rows,
+          productFeedback: productFeedback.rows,
           mediaAssets: mediaAssets.rows,
           mediaReferences: mediaReferences.rows,
           sessions: sessions.rows,
@@ -7675,6 +7680,7 @@ export class PostgresRepository implements Repository {
         }
         await client.query("DELETE FROM collaboration_group_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM library_favorites WHERE user_id = $1", [userId]);
+        await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM workspace_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id = $1", [userId]);

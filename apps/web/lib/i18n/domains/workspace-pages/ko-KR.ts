@@ -1,6 +1,17 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "설문조사",
+  "pages.library.searchSurveys": "설문조사 검색",
+  "pages.library.createSurvey": "설문조사 만들기",
+  "pages.library.firstSurvey": "첫 설문조사 만들기",
+  "pages.library.firstSurveyDescription":
+    "참여자가 각자의 속도로 의견을 공유합니다. 템플릿을 사용하거나 직접 질문을 만드세요.",
+  "pages.library.surveyQuestions": "질문 {count}개 · 자기 주도",
+  "pages.library.shareSurvey": "공유",
+  "pages.library.surveyRuns": "설문조사 진행 및 결과",
+  "pages.library.surveyPaused":
+    "이 워크스페이스에서는 새 설문조사 만들기가 일시 중지되었습니다. 기존 설문조사, 진행 기록 및 결과는 계속 이용할 수 있습니다.",
   "pages.help.card.readGuide": "가이드 읽기",
   "pages.activity.accuracyValue": "{value}% 정확도",
   "pages.activity.assignment": "{status} 할당",

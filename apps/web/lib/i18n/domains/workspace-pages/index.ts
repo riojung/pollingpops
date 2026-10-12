@@ -1,6 +1,17 @@
 import type { SupportedLocale } from "@openround/contracts";
 
 export const workspacePageEnglishMessages = {
+  "pages.common.surveys": "Surveys",
+  "pages.library.searchSurveys": "Search surveys",
+  "pages.library.createSurvey": "Create Survey",
+  "pages.library.firstSurvey": "Create your first Survey",
+  "pages.library.firstSurveyDescription":
+    "Collect independent, self-paced feedback. Start with a template or build your own questions.",
+  "pages.library.surveyQuestions": "{count} questions · Self-paced",
+  "pages.library.shareSurvey": "Share",
+  "pages.library.surveyRuns": "Survey runs and results",
+  "pages.library.surveyPaused":
+    "New Survey creation is paused for this workspace. Existing Surveys, runs, and results remain available.",
   "pages.activity.accuracyValue": "{value}% accuracy",
   "pages.activity.assignment": "{status} assignment",
   "pages.activity.emptyDescription":

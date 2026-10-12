@@ -25,6 +25,30 @@
 Never copy tokens, cookies, participant nicknames, chat bodies, participant-linked Pulse signals,
 answer content, email addresses, or full billing events into chat or incident documents.
 
+## Product feedback intake
+
+Signed-in workspace members can use **Feedback** in the header to report a problem, usability issue,
+or suggestion. A receipt means the report was committed to private storage; it does not send an
+email, create a GitHub issue, page a responder, or guarantee that a human has reviewed it.
+
+- Assign a named support owner to review `GET /v1/admin/feedback` regularly during beta. Authenticate
+  using the existing `ADMIN_TOKEN` bearer credential from the private secret manager, never a URL,
+  screenshot, checked-in script, or browser bookmark. Pages accept `limit` up to 50 and `cursor`;
+  follow `nextCursor` until null. The queue is ordered by opaque ID, not severity or receipt time.
+- Treat message text as untrusted and potentially sensitive. Record the receipt reference, severity,
+  status, owner, and redacted reproduction steps in the private support system. Do not copy raw
+  reports to public issues or telemetry. Escalate incidents through the normal severity procedure.
+- The queue exposes a follow-up email only when the author explicitly opted in. Do not infer contact
+  permission from workspace membership or resolve a contact address from the workspace reference.
+- Feedback is not an urgent incident channel. Keep the approved support/status route visible in Help.
+  Reports expire after 90 days, are purged by the retention job, appear in the author's account export,
+  and are removed on author/account or owned-workspace deletion. No participant content, screenshots,
+  logs, page identifiers, or URL queries are collected automatically.
+
+Verify durable submission, lost-receipt retry, administrator-only access, contact consent, account
+deletion, and retention in staging before enabling public-beta intake. The Feedback button does not
+replace the external support rehearsal or any release gate.
+
 ## Phase 0 support rehearsal
 
 Run this exercise only during an approved window against the exact build used for the staging,

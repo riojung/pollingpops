@@ -34,6 +34,9 @@ export {
   type PresentationRecoveryPackUpdateComparison,
 } from "./presentation-recovery-pack-updates";
 
+import { RoundClientCapabilitiesSchema, RoundProtocolSchema } from "./round-protocol";
+export * from "./round-protocol";
+
 function isHttpOrHttpsUrl(value: string) {
   try {
     return ["http:", "https:"].includes(new URL(value).protocol);
@@ -98,6 +101,7 @@ export const errorCodes = [
   "LTI_REGISTRATION_NOT_FOUND",
   "LTI_LAUNCH_INVALID",
   "INTERNAL_ERROR",
+  "CLIENT_UPDATE_REQUIRED",
 ] as const;
 
 export const ErrorCodeSchema = z.enum(errorCodes);
@@ -1740,6 +1744,7 @@ export const ResponseDistributionSchema = z.discriminatedUnion("kind", [
 export type ResponseDistribution = z.infer<typeof ResponseDistributionSchema>;
 
 export const SessionSnapshotSchema = z.object({
+  roundProtocol: RoundProtocolSchema.optional(),
   mode: z.literal("live").default("live"),
   uxBeta: z.boolean().optional(),
   stateSchemaVersion: z.number().int().positive().default(1),
@@ -1824,6 +1829,7 @@ export type JoinPreflightResponse = z.input<typeof JoinPreflightResponseSchema>;
 export type ResolvedJoinPreflightResponse = z.output<typeof JoinPreflightResponseSchema>;
 
 export const JoinRequestSchema = z.object({
+  clientCapabilities: RoundClientCapabilitiesSchema.optional(),
   code: z
     .string()
     .trim()
@@ -2376,6 +2382,7 @@ export const AudienceSyncRequestSchema = z
 
 export const AnswerSubmitSchema = z
   .object({
+    clientCapabilities: RoundClientCapabilitiesSchema.optional(),
     sessionId: z.string().uuid(),
     roundId: z.string().uuid(),
     choiceId: z.string().uuid().optional(),
@@ -2429,6 +2436,7 @@ export type HostAction = z.infer<typeof HostActionSchema>;
 
 export const HostCommandSchema = z
   .object({
+    clientCapabilities: RoundClientCapabilitiesSchema.optional(),
     sessionId: z.string().uuid(),
     hostToken: z.string().min(20),
     commandId: z.string().min(8).max(160),
@@ -2478,6 +2486,7 @@ export type HostCommand = z.infer<typeof HostCommandSchema>;
 
 export const SyncRequestSchema = z
   .object({
+    clientCapabilities: RoundClientCapabilitiesSchema.optional(),
     sessionId: z.string().uuid(),
     role: z.enum(["host", "presenter", "participant"]),
     hostToken: z.string().min(20).max(1_000).optional(),
@@ -2911,6 +2920,7 @@ export const ProductEventBatchSchema = z
 export type ProductEventBatch = z.infer<typeof ProductEventBatchSchema>;
 
 export const CreateSessionSchema = z.object({
+  clientCapabilities: RoundClientCapabilitiesSchema.optional(),
   quizId: z.string().uuid(),
   settings: SessionSettingsSchema,
   experiencePresetOverride: ExperiencePresetIdSchema.optional(),
@@ -5609,3 +5619,4 @@ export type PresentationReportWithSessionContextEnvelope = z.infer<
 >;
 
 export * from "./recovery-pack-exports";
+export * from "./feedback";

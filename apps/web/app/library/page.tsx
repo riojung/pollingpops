@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "../../components/locale-provider";
 import type { QuizDraft } from "@openround/contracts";
+import type { SurveyDraft } from "@openround/contracts/surveys";
+import { SurveyLibraryCards } from "../../components/workspace/survey-library-cards";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../lib/api";
@@ -51,8 +53,20 @@ interface PresentationRecord {
   updatedAt: string;
 }
 
-type LibraryType = "rounds" | "presentations";
-type ArtifactType = "round" | "presentation";
+interface SurveyRecord {
+  id: string;
+  workspaceId: string;
+  title: string;
+  description: string;
+  draft: SurveyDraft;
+  status: LibraryItemStatus;
+  revision: number;
+  versionId: string | null;
+  folderId: string | null;
+  updatedAt?: string;
+}
+type LibraryType = "rounds" | "presentations" | "surveys";
+type ArtifactType = "round" | "presentation" | "survey";
 type BulkAction = "duplicate" | "archive" | "restore" | "delete";
 
 interface FolderRecord {
@@ -96,10 +110,15 @@ function LibraryContent() {
   const presentationsEnabled = productFeatures?.presentations === true;
   const requestedType = searchParams.get("type");
   const [type, setType] = useState<LibraryType>(
-    requestedType === "presentations" && presentationsEnabled ? "presentations" : "rounds",
+    requestedType === "surveys"
+      ? "surveys"
+      : requestedType === "presentations" && presentationsEnabled
+        ? "presentations"
+        : "rounds",
   );
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
   const [presentations, setPresentations] = useState<PresentationRecord[]>([]);
+  const [surveys, setSurveys] = useState<SurveyRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
@@ -123,17 +142,42 @@ function LibraryContent() {
     setLoading(true);
     setError("");
     try {
-      const [roundResponse, presentationResponse, folderResponse, favoriteResponse] =
-        await Promise.all([
-          apiFetch<{ quizzes: RoundRecord[] }>("/v1/quizzes?archived=true"),
-          presentationsEnabled
-            ? apiFetch<{ presentations: PresentationRecord[] }>("/v1/presentations?archived=true")
-            : Promise.resolve({ presentations: [] }),
-          apiFetch<{ folders: FolderRecord[] }>("/v1/folders"),
-          apiFetch<{ favorites: FavoriteRecord[] }>("/v1/library/favorites"),
-        ]);
+      const [
+        roundResponse,
+        presentationResponse,
+        surveyResponse,
+        folderResponse,
+        favoriteResponse,
+      ] = await Promise.all([
+        apiFetch<{ quizzes: RoundRecord[] }>("/v1/quizzes?archived=true"),
+        presentationsEnabled
+          ? apiFetch<{ presentations: PresentationRecord[] }>("/v1/presentations?archived=true")
+          : Promise.resolve({ presentations: [] }),
+        (async () => {
+          const rows: SurveyRecord[] = [];
+          let cursor: string | null = null;
+          do {
+            const page: { surveys: SurveyRecord[]; nextCursor: string | null } = await apiFetch(
+              `/v1/surveys?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+            );
+            rows.push(
+              ...page.surveys.map((survey) => ({
+                ...survey,
+                title: survey.draft.title,
+                description: survey.draft.description ?? "",
+                folderId: survey.folderId ?? null,
+              })),
+            );
+            cursor = page.nextCursor;
+          } while (cursor);
+          return rows;
+        })(),
+        apiFetch<{ folders: FolderRecord[] }>("/v1/folders"),
+        apiFetch<{ favorites: FavoriteRecord[] }>("/v1/library/favorites"),
+      ]);
       setRounds(roundResponse.quizzes);
       setPresentations(presentationResponse.presentations);
+      setSurveys(surveyResponse);
       setFolders(folderResponse.folders);
       setFavoriteIds(
         new Set(
@@ -155,7 +199,13 @@ function LibraryContent() {
   }, [refresh]);
 
   useEffect(() => {
-    setType(requestedType === "presentations" && presentationsEnabled ? "presentations" : "rounds");
+    setType(
+      requestedType === "surveys"
+        ? "surveys"
+        : requestedType === "presentations" && presentationsEnabled
+          ? "presentations"
+          : "rounds",
+    );
     setSearch(searchParams.get("q") ?? "");
     setStatus(statusFromQuery(searchParams.get("status")));
     setOwnership(searchParams.get("owner") === "workspace" ? "workspace" : "all");
@@ -170,13 +220,15 @@ function LibraryContent() {
 
   useEffect(() => {
     const available = new Set(
-      (type === "rounds" ? rounds : presentations).map((artifact) => artifact.id),
+      (type === "rounds" ? rounds : type === "surveys" ? surveys : presentations).map(
+        (artifact) => artifact.id,
+      ),
     );
     setSelectedIds((current) => {
       const next = new Set([...current].filter((id) => available.has(id)));
       return next.size === current.size ? current : next;
     });
-  }, [presentations, rounds, type]);
+  }, [presentations, rounds, surveys, type]);
 
   const filters = useMemo(
     () => ({
@@ -221,12 +273,43 @@ function LibraryContent() {
     () =>
       type === "rounds"
         ? libraryBulkActionIds(rounds, selectedIds)
-        : libraryBulkActionIds(presentations, selectedIds),
-    [presentations, rounds, selectedIds, type],
+        : type === "surveys"
+          ? libraryBulkActionIds(surveys, selectedIds)
+          : libraryBulkActionIds(presentations, selectedIds),
+    [presentations, rounds, surveys, selectedIds, type],
+  );
+  const visibleSurveys = useMemo(
+    () =>
+      filterLibraryItems(
+        surveys.map((survey) => ({
+          ...survey,
+          favorite: favoriteIds.has(favoriteKey("survey", survey.id)),
+          searchTerms: [folders.find((folder) => folder.id === survey.folderId)?.name ?? ""],
+        })),
+        filters,
+      ),
+    [surveys, favoriteIds, folders, filters],
+  );
+  const typeLabel =
+    type === "surveys"
+      ? t("pages.common.surveys")
+      : t(type === "rounds" ? "pages.common.rounds" : "pages.common.presentations");
+  const searchLabel = t(
+    type === "surveys"
+      ? "pages.library.searchSurveys"
+      : type === "rounds"
+        ? "pages.library.searchRounds"
+        : "pages.library.searchPresentations",
   );
   const visibleIds = useMemo(
-    () => (type === "rounds" ? visibleRounds : visiblePresentations).map((artifact) => artifact.id),
-    [type, visiblePresentations, visibleRounds],
+    () =>
+      (type === "rounds"
+        ? visibleRounds
+        : type === "surveys"
+          ? visibleSurveys
+          : visiblePresentations
+      ).map((artifact) => artifact.id),
+    [type, visiblePresentations, visibleRounds, visibleSurveys],
   );
   useEffect(() => {
     const visible = new Set(visibleIds);
@@ -242,14 +325,20 @@ function LibraryContent() {
     ownership !== "all" ||
     folderId !== "all" ||
     favoritesOnly;
-  const visibleCount = type === "rounds" ? visibleRounds.length : visiblePresentations.length;
-  const totalCount = type === "rounds" ? rounds.length : presentations.length;
+  const visibleCount =
+    type === "rounds"
+      ? visibleRounds.length
+      : type === "surveys"
+        ? visibleSurveys.length
+        : visiblePresentations.length;
+  const totalCount =
+    type === "rounds" ? rounds.length : type === "surveys" ? surveys.length : presentations.length;
 
   function chooseType(next: LibraryType) {
     setType(next);
     setSelectedIds(new Set());
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "presentations") params.set("type", "presentations");
+    if (next !== "rounds") params.set("type", next);
     else params.delete("type");
     if (search.trim()) params.set("q", search.trim());
     else params.delete("q");
@@ -278,7 +367,7 @@ function LibraryContent() {
     setFolderId("all");
     setFavoritesOnly(false);
     const params = new URLSearchParams();
-    if (type === "presentations") params.set("type", "presentations");
+    if (type !== "rounds") params.set("type", type);
     router.replace(`/library${params.size ? `?${params}` : ""}`);
   }
 
@@ -303,6 +392,7 @@ function LibraryContent() {
   async function runArtifactAction(action: BulkAction, ids: string[]) {
     if (!ids.length || busyAction) return;
     const actionType = type;
+    if (actionType === "surveys" && (action === "delete" || action === "restore")) return;
     if (action === "delete") {
       if (!canDelete) return;
       const items = actionType === "rounds" ? rounds : presentations;
@@ -319,21 +409,33 @@ function LibraryContent() {
     setError("");
     const results = await Promise.allSettled(
       ids.map((id) =>
-        action === "delete"
-          ? apiFetch(actionType === "rounds" ? `/v1/quizzes/${id}` : `/v1/presentations/${id}`, {
-              method: "DELETE",
-            })
-          : action === "duplicate"
-            ? apiFetch(`/v1/quizzes/${id}/duplicate`, { method: "POST", body: "{}" })
-            : apiFetch(
-                actionType === "rounds"
-                  ? `/v1/quizzes/${id}/archive`
-                  : `/v1/presentations/${id}/archive`,
-                {
-                  method: "POST",
-                  body: JSON.stringify({ archived: action === "archive" }),
-                },
+        actionType === "surveys"
+          ? apiFetch(action === "duplicate" ? "/v1/surveys" : `/v1/surveys/${id}/archive`, {
+              method: "POST",
+              body: JSON.stringify(
+                action === "duplicate"
+                  ? { idempotencyKey: crypto.randomUUID(), sourceId: id }
+                  : {
+                      idempotencyKey: crypto.randomUUID(),
+                      expectedRevision: surveys.find((survey) => survey.id === id)!.revision,
+                    },
               ),
+            })
+          : action === "delete"
+            ? apiFetch(actionType === "rounds" ? `/v1/quizzes/${id}` : `/v1/presentations/${id}`, {
+                method: "DELETE",
+              })
+            : action === "duplicate"
+              ? apiFetch(`/v1/quizzes/${id}/duplicate`, { method: "POST", body: "{}" })
+              : apiFetch(
+                  actionType === "rounds"
+                    ? `/v1/quizzes/${id}/archive`
+                    : `/v1/presentations/${id}/archive`,
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ archived: action === "archive" }),
+                  },
+                ),
       ),
     );
     const succeeded = ids.filter((_, index) => results[index]?.status === "fulfilled");
@@ -367,7 +469,10 @@ function LibraryContent() {
       setAnnouncement(
         t("pages.library.actionComplete", {
           count: succeeded.length,
-          type: t(actionType === "rounds" ? "pages.common.rounds" : "pages.common.presentations"),
+          type:
+            actionType === "surveys"
+              ? t("pages.common.surveys")
+              : t(actionType === "rounds" ? "pages.common.rounds" : "pages.common.presentations"),
           action: t(`pages.library.action.${action}`),
         }),
       );
@@ -391,10 +496,19 @@ function LibraryContent() {
                 tags: rounds.find((round) => round.id === id)?.tags ?? [],
               }),
             })
-          : apiFetch(`/v1/presentations/${id}/organization`, {
-              method: "PATCH",
-              body: JSON.stringify({ folderId: nextFolderId }),
-            }),
+          : type === "surveys"
+            ? apiFetch(`/v1/surveys/${id}/organization`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  folderId: nextFolderId,
+                  expectedRevision: surveys.find((survey) => survey.id === id)!.revision,
+                  idempotencyKey: crypto.randomUUID(),
+                }),
+              })
+            : apiFetch(`/v1/presentations/${id}/organization`, {
+                method: "PATCH",
+                body: JSON.stringify({ folderId: nextFolderId }),
+              }),
       ),
     );
     const succeeded = ids.filter((_, index) => results[index]?.status === "fulfilled");
@@ -447,19 +561,25 @@ function LibraryContent() {
   return (
     <WorkspaceShell
       actions={
-        canEdit ? (
+        canEdit && (type !== "surveys" || productFeatures?.surveys) ? (
           <Link
             className="button"
             href={
-              type === "presentations"
-                ? "/create/presentation"
-                : productFeatures?.builderV2
-                  ? "/create"
-                  : "/dashboard"
+              type === "surveys"
+                ? "/surveys/new"
+                : type === "presentations"
+                  ? "/create/presentation"
+                  : productFeatures?.builderV2
+                    ? "/create"
+                    : "/dashboard"
             }
           >
             {t(
-              type === "rounds" ? "pages.library.createRound" : "pages.library.createPresentation",
+              type === "surveys"
+                ? "pages.library.createSurvey"
+                : type === "rounds"
+                  ? "pages.library.createRound"
+                  : "pages.library.createPresentation",
             )}
           </Link>
         ) : null
@@ -469,9 +589,6 @@ function LibraryContent() {
       title={t("page.library.title")}
       translationLevel="full"
     >
-      <p>
-        <Link href="/surveys">{t("create.kind.browseSurveys")}</Link>
-      </p>
       <div className={styles.toolbar}>
         <div className={styles.tabs} role="tablist" aria-label={t("pages.library.typeLabel")}>
           <button
@@ -498,22 +615,23 @@ function LibraryContent() {
               {t("pages.common.presentations")} <span>{presentations.length}</span>
             </button>
           ) : null}
+          <button
+            aria-controls="surveys-panel"
+            aria-selected={type === "surveys"}
+            className={type === "surveys" ? styles.tabActive : styles.tab}
+            id="surveys-tab"
+            onClick={() => chooseType("surveys")}
+            role="tab"
+            type="button"
+          >
+            {t("pages.common.surveys")} <span>{surveys.length}</span>
+          </button>
         </div>
         <label className={styles.searchField}>
-          <span className="sr-only">
-            {t(
-              type === "rounds"
-                ? "pages.library.searchRounds"
-                : "pages.library.searchPresentations",
-            )}
-          </span>
+          <span className="sr-only">{searchLabel}</span>
           <input
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={t(
-              type === "rounds"
-                ? "pages.library.searchRounds"
-                : "pages.library.searchPresentations",
-            )}
+            placeholder={searchLabel}
             type="search"
             value={search}
           />
@@ -582,7 +700,7 @@ function LibraryContent() {
             : t("pages.library.resultCount", {
                 visible: visibleCount,
                 total: totalCount,
-                type: t(type === "rounds" ? "pages.common.rounds" : "pages.common.presentations"),
+                type: typeLabel,
               })}
         </p>
         <div aria-label={t("pages.library.layoutLabel")} className={styles.viewToggle} role="group">
@@ -633,7 +751,7 @@ function LibraryContent() {
                 <span className="sr-only"> {type}</span>
               </strong>
               <div className={styles.bulkActions}>
-                {type === "rounds" ? (
+                {type === "rounds" || (type === "surveys" && productFeatures?.surveys) ? (
                   <button
                     disabled={Boolean(busyAction)}
                     onClick={() => void runArtifactAction("duplicate", bulkTargets.duplicate)}
@@ -651,7 +769,7 @@ function LibraryContent() {
                     {t("pages.library.archiveCount", { count: bulkTargets.archive.length })}
                   </button>
                 ) : null}
-                {bulkTargets.restore.length ? (
+                {type !== "surveys" && bulkTargets.restore.length ? (
                   <button
                     disabled={Boolean(busyAction)}
                     onClick={() => void runArtifactAction("restore", bulkTargets.restore)}
@@ -660,7 +778,7 @@ function LibraryContent() {
                     {t("pages.library.restoreCount", { count: bulkTargets.restore.length })}
                   </button>
                 ) : null}
-                {canDelete && bulkTargets.restore.length ? (
+                {type !== "surveys" && canDelete && bulkTargets.restore.length ? (
                   <button
                     className={styles.dangerAction}
                     disabled={Boolean(busyAction)}
@@ -1026,6 +1144,46 @@ function LibraryContent() {
           ) : null}
         </div>
       ) : null}
+      <div
+        aria-labelledby="surveys-tab"
+        hidden={type !== "surveys"}
+        id="surveys-panel"
+        role="tabpanel"
+      >
+        {type === "surveys" ? (
+          <>
+            <p>
+              <Link href="/surveys/runs">{t("pages.library.surveyRuns")}</Link>
+            </p>
+            {!productFeatures?.surveys ? (
+              <p className="notice">{t("pages.library.surveyPaused")}</p>
+            ) : null}
+            {!loading ? (
+              visibleSurveys.length ? (
+                <SurveyLibraryCards
+                  surveys={visibleSurveys}
+                  folders={folders}
+                  view={view}
+                  canEdit={canEdit}
+                  canCreate={productFeatures?.surveys === true}
+                  selectedIds={selectedIds}
+                  busy={Boolean(busyAction)}
+                  onSelect={toggleSelection}
+                  onFavorite={(id) => void toggleFavorite("survey", id)}
+                  onAction={(action, id) => void runArtifactAction(action, [id])}
+                />
+              ) : (
+                <EmptyLibrary
+                  type="surveys"
+                  canEdit={canEdit && productFeatures?.surveys === true}
+                  filtered={filtered}
+                  onClear={clearFilters}
+                />
+              )
+            ) : null}
+          </>
+        ) : null}
+      </div>
     </WorkspaceShell>
   );
 }
@@ -1044,28 +1202,57 @@ function EmptyLibrary({
   const { t } = useLocale();
   return (
     <section className={styles.empty}>
-      <span aria-hidden="true">{type === "rounds" ? "R" : "P"}</span>
+      <span aria-hidden="true">{type === "rounds" ? "R" : type === "surveys" ? "S" : "P"}</span>
       <h2>
         {filtered
           ? t("pages.library.noMatch", {
-              type: t(type === "rounds" ? "pages.common.rounds" : "pages.common.presentations"),
+              type: t(
+                type === "surveys"
+                  ? "pages.common.surveys"
+                  : type === "rounds"
+                    ? "pages.common.rounds"
+                    : "pages.common.presentations",
+              ),
             })
-          : t(type === "rounds" ? "pages.library.firstRound" : "pages.library.firstPresentation")}
+          : t(
+              type === "surveys"
+                ? "pages.library.firstSurvey"
+                : type === "rounds"
+                  ? "pages.library.firstRound"
+                  : "pages.library.firstPresentation",
+            )}
       </h2>
       <p>
         {filtered
           ? t("pages.library.noMatchDescription")
-          : type === "rounds"
-            ? t("pages.library.firstRoundDescription")
-            : t("pages.library.firstPresentationDescription")}
+          : type === "surveys"
+            ? t("pages.library.firstSurveyDescription")
+            : type === "rounds"
+              ? t("pages.library.firstRoundDescription")
+              : t("pages.library.firstPresentationDescription")}
       </p>
       {filtered ? (
         <button className="button-quiet" onClick={onClear} type="button">
           {t("pages.results.clearFilters")}
         </button>
       ) : canEdit ? (
-        <Link className="button" href={type === "rounds" ? "/create" : "/create/presentation"}>
-          {t(type === "rounds" ? "pages.library.createRound" : "pages.library.createPresentation")}
+        <Link
+          className="button"
+          href={
+            type === "surveys"
+              ? "/surveys/new"
+              : type === "rounds"
+                ? "/create"
+                : "/create/presentation"
+          }
+        >
+          {t(
+            type === "surveys"
+              ? "pages.library.createSurvey"
+              : type === "rounds"
+                ? "pages.library.createRound"
+                : "pages.library.createPresentation",
+          )}
         </Link>
       ) : null}
     </section>

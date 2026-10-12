@@ -24,6 +24,7 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
       builderV2: true,
       presentations: true,
       presentationRealtime: true,
+      surveys: true,
     },
   }),
 }));
@@ -92,6 +93,18 @@ describe("Library workspace", () => {
     expect(markup).toContain("Create Presentation");
     expect(markup).toContain('href="/dashboard"');
     expect(markup).toContain("Manage folders");
+  });
+  it("includes Surveys as a first-class Library tab with the same filters and layouts", () => {
+    fixtures.query = "type=surveys&q=training&status=published&favorites=true";
+    const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>Surveys/);
+    expect(markup).toContain('placeholder="Search surveys"');
+    expect(markup).toContain('value="training"');
+    expect(markup).toContain('href="/surveys/new"');
+    expect(markup).toContain('href="/surveys/runs"');
+    expect(markup).toContain('aria-label="Filter by folder"');
+    expect(markup).toContain('aria-label="Grid view"');
+    expect(markup).not.toContain("Browse Surveys");
   });
 
   it("hydrates deep-linked status and ownership filters", () => {

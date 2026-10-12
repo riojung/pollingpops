@@ -4,6 +4,26 @@ This engineering inventory is not a legal opinion. Confirm purposes, legal basis
 
 ## Self-paced Survey beta
 
+Survey Library metadata consists of workspace folder assignment, update time and member-private
+favorites. It never links respondents to creators or other survey attempts. Metadata changes do
+not rewrite published Survey content or a run's frozen privacy policy. Creator exports include
+workspace Survey metadata and their own favorites.
+
+## Product feedback
+
+Creator-submitted feedback stores a bounded plain-text message, category, user/workspace reference,
+redacted page type, idempotency key, optional follow-up consent, creation/expiry timestamps, and a
+receipt ID. It is not organizer-blind participant feedback. There are no automatic screenshots,
+query strings, fragments, object IDs, diagnostics or participant-content attachments. The dialog
+warns against including secrets and participant information. Only administrators can read the
+feedback queue; account email is projected there only after explicit consent. Other workspace
+members cannot list a submitter's feedback. Authors receive their own feedback in account export.
+Scheduled retention removes it after 90 days; account deletion explicitly removes feedback even
+when the user row is soft-deleted, and workspace deletion cascades. Do not log message bodies.
+Deployment operators must assign an owner and monitored triage process before public beta.
+
+## Self-paced Survey participation
+
 Survey versions/rooms retain organizer-authored opinions, category/preset references, deadlines and
 an immutable organizer-blind policy. No participant alias, email, account or learning identity is
 requested. Browser-local room credentials support resume; PostgreSQL stores hashes and internal

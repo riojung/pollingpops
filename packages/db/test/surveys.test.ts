@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MemoryRepository, createSurveyRepository } from "../src/index.js";
 import {
+  expectSurveyLibraryConformance,
+  expectFeedbackConformance,
+} from "./support/feedback-library-conformance.js";
+import {
   expectSurveyConformance,
   expectSurveyCreationUpgradeConformance,
   surveyFixture,
@@ -23,6 +27,14 @@ async function fixture() {
   return { repository, creator, surveys: createSurveyRepository(repository) };
 }
 describe("self-paced Survey storage", () => {
+  it("shares Library organization and private favorites without changing published evidence", async () => {
+    const { repository, creator } = await fixture();
+    await expectSurveyLibraryConformance(repository, creator);
+  });
+  it("persists private feedback with exact retries, contact permission, export, retention and deletion", async () => {
+    const { repository, creator } = await fixture();
+    await expectFeedbackConformance(repository, creator);
+  });
   it("replays v1 creation receipts after a version-only writer upgrade without relaxing conflicts", async () => {
     const { repository, creator } = await fixture();
     await expectSurveyCreationUpgradeConformance(repository, creator.workspaceId);

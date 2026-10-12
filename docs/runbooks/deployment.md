@@ -374,6 +374,22 @@ JSON, manifests, command arguments, logs, receipts, or release artifacts.
 
 ### Core-parity audience canary
 
+The Round client protocol canary is independent of audience activation. Set
+`FEATURE_ROUND_CLIENT_PROTOCOL=true` and include the intended workspace UUID in
+`CORE_PARITY_WORKSPACE_ALLOWLIST` to create new schema-7 Rounds. Both Compose deployment profiles
+forward this flag; it defaults to false. It does not enable any new poll response format or alter
+existing sessions. The redacted config-check summary exposes the `roundClientProtocol` boolean;
+deployment receipts accept it without changing older receipt hashes. Deploy compatible readers
+before enabling this writer, then verify host and presenter views, participant join/refresh,
+exact answer retry, and process restoration in staging.
+
+To pause new schema-7 creation, disable the flag. Existing schema-7 sessions must remain readable
+and writable by compatible clients. Do not roll back to older binaries that reject schema 7;
+retain a compatible release or forward-repair it. No migration or data deletion is required for
+this canary. Local verification can opt in with `BETA_E2E_ROUND_PROTOCOL=true` when running the
+beta Playwright Round protocol tests. Target-region load and physical-device checks remain launch
+gates; local automated tests are not substitutes.
+
 Apply ordered migration 059 before deploying the audience-scope API and outbox relay. Do not alter
 older applied migrations or add another join-code directory. New activation defaults off; a local
 or reviewed canary may set `FEATURE_AUDIENCE_SCOPES=true` and explicitly include its workspace in

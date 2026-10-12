@@ -37,6 +37,15 @@ export default function PrivacyPage() {
           submitted responses, optional confidence, interventions, Q&A, follow-up attempts, scores,
           limited security logs, consent records, and billing status where applicable.
         </p>
+        <h2>Product feedback</h2>
+        <p>
+          When you use Feedback in the creator workspace, we store your message, feedback type,
+          account/workspace reference and redacted page type for 90 days. Only the product team's
+          administrator interface can review it. Follow-up by your account email is optional.
+          Screenshots, page queries, participant content and logs are not collected automatically.
+          Do not include passwords, tokens or personal participant information. Your own feedback is
+          included in account export and removed when your account or workspace is deleted.
+        </p>
         <h2>Optional authoring assistant</h2>
         <p>
           When a deployment enables source-grounded authoring, a creator may submit pasted text or a

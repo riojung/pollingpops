@@ -3,6 +3,10 @@ import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { SpanStatusCode, trace, type Attributes } from "@opentelemetry/api";
 import {
   canonicalizeResponse,
+  canUseRoundProtocol,
+  legacyRoundProtocol,
+  ROUND_CLIENT_UPDATE_MESSAGE,
+  type RoundClientCapabilities,
   responseForAnswer,
   type AnswerAck,
   type AnswerSubmit,
@@ -152,10 +156,20 @@ export class SessionError extends Error {
       | "INSTITUTION_AUTH_REQUIRED"
       | "UNAUTHORIZED"
       | "NOT_FOUND"
+      | "CLIENT_UPDATE_REQUIRED"
       | "CONFLICT",
     message: string,
   ) {
     super(message);
+  }
+}
+
+function requireRoundClient(
+  state: Pick<GameState, "roundProtocol">,
+  client?: RoundClientCapabilities,
+) {
+  if (!canUseRoundProtocol(state.roundProtocol, client)) {
+    throw new SessionError("CLIENT_UPDATE_REQUIRED", ROUND_CLIENT_UPDATE_MESSAGE);
   }
 }
 
@@ -773,6 +787,7 @@ export class SessionService {
     experience: {
       experiencePresetOverride?: ExperiencePresetId;
       presenterSoundEnabled?: boolean;
+      clientCapabilities?: RoundClientCapabilities;
     } = {},
   ): Promise<{ sessionId: string; code: string; hostToken: string; snapshot: SessionSnapshot }> {
     if (creator.role === "viewer") {
@@ -805,6 +820,7 @@ export class SessionService {
       quiz.currentVersionId,
     );
     if (!version) throw new SessionError("NOT_FOUND", "Published quiz version not found");
+    requireRoundClient({ roundProtocol: legacyRoundProtocol() }, experience.clientCapabilities);
     const plan = this.config.COMMUNITY_MODE
       ? "team"
       : await this.repository.getPlan(creator.workspaceId);
@@ -865,6 +881,10 @@ export class SessionService {
             settings,
             brandTheme,
             experienceTheme,
+            ...(this.config.FEATURE_ROUND_CLIENT_PROTOCOL &&
+            this.config.CORE_PARITY_WORKSPACE_ALLOWLIST.includes(creator.workspaceId)
+              ? { roundProtocol: legacyRoundProtocol() }
+              : {}),
             uxBeta: this.uxBetaEnabled(creator.workspaceId),
             // Freeze live Pack use with the room. Disabling rollout must not strand an
             // already-created room or require mutable source Pack access during playback.
@@ -976,7 +996,7 @@ export class SessionService {
       return {
         participantId: participant.id,
         participantToken: input.resumeToken,
-        snapshot: await this.reconnectParticipant(participant),
+        snapshot: await this.reconnectParticipant(participant, input.clientCapabilities),
       };
     }
 
@@ -1059,6 +1079,7 @@ export class SessionService {
 
       for (const item of items) {
         try {
+          requireRoundClient(priorState, item.input.clientCapabilities);
           if (participantCount >= priorState.settings.audienceLimit) {
             throw new SessionError(
               "SESSION_FULL",
@@ -1426,6 +1447,7 @@ export class SessionService {
 
       for (const item of items) {
         try {
+          requireRoundClient(priorState, item.input.clientCapabilities);
           const existingForKey = existingByIdempotencyKey.get(item.input.idempotencyKey);
           const existingForRound = existingByParticipantRound.get(
             `${item.participant.id}:${item.input.roundId}`,
@@ -1495,7 +1517,11 @@ export class SessionService {
             },
           });
         } catch (error) {
-          if (error instanceof EngineError && error.code === "ANSWER_LATE") {
+          if (error instanceof SessionError && error.code === "CLIENT_UPDATE_REQUIRED") {
+            // Compatibility is specific to this client, not the shared commit.
+            // One outdated submission must not reject other participants' answers.
+            item.reject(error);
+          } else if (error instanceof EngineError && error.code === "ANSWER_LATE") {
             outcomes.push({
               item,
               acknowledgement: { accepted: false, duplicate: false, code: "ANSWER_LATE" },
@@ -1626,6 +1652,7 @@ export class SessionService {
               sessionId: input.sessionId,
               hostToken: input.hostToken,
               role: "host",
+              clientCapabilities: input.clientCapabilities,
             });
             // Authentication is the command's ordering point. Do not let an
             // unauthenticated request stall participant receipts.
@@ -1637,6 +1664,7 @@ export class SessionService {
             const session = await this.loadSessionForMutation(input.sessionId);
             if (!session) throw new SessionError("NOT_FOUND", "Session not found");
             const staffActor = await this.authorizeStaff(session, input.hostToken, ["cohost"]);
+            requireRoundClient(session.state, input.clientCapabilities);
             try {
               const commandTime = new Date(commandTimeMs ?? Date.now());
               const priorState = session.state;
@@ -1761,6 +1789,7 @@ export class SessionService {
     participantToken?: string;
     hostToken?: string;
     role?: "participant" | "host" | "presenter";
+    clientCapabilities?: RoundClientCapabilities;
   }) {
     const session = await this.loadSession(input.sessionId);
     if (!session) throw new SessionError("NOT_FOUND", "Session not found");
@@ -1770,6 +1799,7 @@ export class SessionService {
         input.hostToken,
         input.role === "presenter" ? ["cohost", "presenter"] : ["cohost"],
       );
+      requireRoundClient(session.state, input.clientCapabilities);
       return snapshotForRole(session.state, {
         role: input.role === "presenter" ? "presenter" : "host",
       });
@@ -1779,6 +1809,7 @@ export class SessionService {
       if (!participant || participant.sessionId !== session.id) {
         throw new SessionError("UNAUTHORIZED", "Participant token is invalid");
       }
+      requireRoundClient(session.state, input.clientCapabilities);
       return snapshotForRole(session.state, { role: "participant", participantId: participant.id });
     }
     throw new SessionError("UNAUTHORIZED", "A session credential is required");
@@ -1791,7 +1822,7 @@ export class SessionService {
       if (!participant || participant.sessionId !== input.sessionId) {
         throw new SessionError("UNAUTHORIZED", "Participant token is invalid");
       }
-      snapshot = await this.reconnectParticipant(participant);
+      snapshot = await this.reconnectParticipant(participant, input.clientCapabilities);
     } else {
       snapshot = await this.snapshot(input);
     }
@@ -1824,7 +1855,10 @@ export class SessionService {
     return { snapshot, replay, replayComplete };
   }
 
-  private async reconnectParticipant(participant: ParticipantRecord): Promise<SessionSnapshot> {
+  private async reconnectParticipant(
+    participant: ParticipantRecord,
+    client?: RoundClientCapabilities,
+  ): Promise<SessionSnapshot> {
     return this.mutate(participant.sessionId, "resume", async () => {
       const session = await this.loadSessionForMutation(participant.sessionId);
       if (!session) throw new SessionError("INVALID_CODE", "Session is no longer available");
@@ -1832,6 +1866,7 @@ export class SessionService {
       if (!current || current.kicked || participant.status === "kicked") {
         throw new SessionError("UNAUTHORIZED", "Participant access has been revoked");
       }
+      requireRoundClient(session.state, client);
       if (!current.connected) {
         const expectedVersion = session.state.version;
         const result = setParticipantConnection(session.state, participant.id, true);

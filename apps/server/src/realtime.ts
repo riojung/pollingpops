@@ -10,6 +10,8 @@ import {
   HostCommandSchema,
   JoinRequestSchema,
   SyncRequestSchema,
+  canUseRoundProtocol,
+  ROUND_CLIENT_UPDATE_MESSAGE,
   type SessionSnapshot,
 } from "@openround/contracts";
 import { snapshotForRole, type GameState } from "@openround/game-engine";
@@ -315,6 +317,13 @@ export async function attachRealtime(
         for (const socket of sockets) {
           const role = socket.data.role as RealtimeRole | undefined;
           if (!role) continue;
+          if (!canUseRoundProtocol(state.roundProtocol, socket.data.roundClientCapabilities)) {
+            socket.emit("client.update.required", {
+              error: { code: "CLIENT_UPDATE_REQUIRED", message: ROUND_CLIENT_UPDATE_MESSAGE },
+            });
+            socket.disconnect(true);
+            continue;
+          }
           if (role !== "participant") {
             const staffExpiresAtMs: unknown = socket.data.staffExpiresAtMs;
             if (isExpiredRealtimeStaffCredential(staffExpiresAtMs)) {
@@ -447,6 +456,7 @@ export async function attachRealtime(
         socket.data.role = "participant";
         socket.data.participantId = joined.participantId;
         socket.data.participantToken = joined.participantToken;
+        socket.data.roundClientCapabilities = input.clientCapabilities;
         await socket.join(`session:${joined.snapshot.sessionId}`);
         acknowledge({ data: joined });
       } catch (error) {
@@ -484,6 +494,7 @@ export async function attachRealtime(
           "host",
         );
         socket.data.role = "host";
+        socket.data.roundClientCapabilities = input.clientCapabilities;
         socket.data.participantId = undefined;
         socket.data.participantToken = undefined;
         socket.data.staffCredentialId = staff.credentialId ?? undefined;
@@ -511,6 +522,7 @@ export async function attachRealtime(
             ? await sessions.realtimeStaffIdentity(input.sessionId, input.hostToken, input.role)
             : null;
         socket.data.role = input.role;
+        socket.data.roundClientCapabilities = input.clientCapabilities;
         socket.data.participantToken = input.participantToken;
         socket.data.participantId = synchronized.snapshot.myParticipantId ?? undefined;
         socket.data.staffCredentialId = staff?.credentialId ?? undefined;

@@ -10,7 +10,67 @@ environment, persisted-version, and webhook boundaries. Errors use:
 Creator routes use the secure HttpOnly creator cookie. Session, staff, presenter, participant,
 embed, and follow-up routes use their own scoped credentials as documented by the returned flow.
 
+## Round client compatibility
+
+Round create, join, answer, command, and sync requests accept optional `clientCapabilities`:
+
+```json
+{ "protocolVersion": 2, "capabilities": [] }
+```
+
+This is the current browser profile. Omitted profiles retain implicit legacy version-2 support.
+Profile version 3 and `poll.multiselect` are reserved for the next format release; declaring them
+does not enable multiple-selection live poll responses. Unknown versions/capabilities, duplicate
+capabilities, and capabilities attached to version 2 are rejected at request validation.
+
+For `GET /v1/sessions/:id/snapshot`, pass the same profile as URL-encoded JSON in the
+`clientCapabilities` query parameter (maximum 256 characters before URL encoding). Credentials
+remain in Authorization, never the query string. Legacy requests may omit the parameter.
+
+Allowlisted sessions created with `FEATURE_ROUND_CLIENT_PROTOCOL=true` use state schema 7 and
+expose `snapshot.roundProtocol`:
+
+```json
+{ "schemaVersion": 1, "minimumClientVersion": 2, "requiredCapabilities": [] }
+```
+
+Requirements come from the server and remain fixed for the session. Compatibility checks apply
+to admission, resume, authenticated snapshots/sync, host commands and accepted-answer retries.
+Insufficient support returns HTTP 409 with `CLIENT_UPDATE_REQUIRED` and instructions to refresh
+and rejoin; existing accepted answers remain durable. Invalid credentials return authorization
+errors before compatibility details. Realtime fanout additionally emits `client.update.required`
+and disconnects an incompatible socket without sending a game snapshot. Compatible game and
+audience event envelopes keep their existing versions and independent sequences.
+
+Flag-off new sessions retain state schema 5 or 6 without protocol metadata. Readers preserve
+existing schema-7 sessions even after the writer flag is disabled. No legacy scoring, deadlines,
+response shapes, artifact schemas, or report schemas change in this foundation release.
+
 ## Audience-scope foundation (partial M1)
+
+### Survey Library metadata and product feedback
+
+`PATCH /v1/surveys/:id/organization` accepts
+`{folderId: UUID | null, expectedRevision, idempotencyKey}`. Owners/editors may move existing items;
+foreign/missing folders return `NOT_FOUND` and stale revisions return `STALE_DRAFT`. Metadata-only
+moves do not invalidate an already-published content revision. Survey readers expose `folderId`
+and `updatedAt`; published content and frozen runs are unchanged. Survey favorites use the existing
+`PUT /v1/library/favorites/survey/:artifactId` route and remain private to the signed-in creator.
+
+`POST /v1/feedback` requires a creator cookie, including for viewers. The strict request contains
+`{idempotencyKey, category: bug | idea | usability | other, message, page, allowContact?}`.
+Message length is 10–4,000 characters; contact permission defaults false. The server strips page
+queries, fragments and unknown path identifiers. Response is `{feedbackId, receivedAt}` after
+durable commit. Exact retries return that receipt, changed payloads with the same key return
+`IDEMPOTENCY_CONFLICT`. A distributed per-user budget allows five new submissions per ten minutes;
+exact retries remain available after the budget is exhausted. Invalid payloads return 422
+`VALIDATION_ERROR`; `RATE_LIMITED` returns 429. No public listing or external issue creation occurs.
+
+`GET /v1/admin/feedback?limit=50&cursor=UUID` requires the configured administrator Bearer token.
+It returns a bounded private queue and a continuation cursor. Contact email appears only when the
+submitter opted in; user IDs and retry keys are omitted. Feedback follows a 90-day retention window,
+is included only in the submitting creator's account export and is deleted with that account or
+workspace. Keep administrator credentials out of URLs, browser storage, and issue attachments.
 
 ### Self-paced Survey beta
 

@@ -26,6 +26,20 @@ afterEach(() => {
 });
 
 describe("browser CI scheduling and serving", () => {
+  it("keeps protocol writers off locally and explicitly enables their beta CI coverage", async () => {
+    vi.stubEnv("BETA_E2E_ROUND_PROTOCOL", "");
+    const [, legacy] = await browserConfigs(false, false);
+    expect(servers(legacy)[0]!.command).toContain("FEATURE_ROUND_CLIENT_PROTOCOL=false");
+    vi.stubEnv("BETA_E2E_ROUND_PROTOCOL", "true");
+    const [, enabled] = await browserConfigs(true, false);
+    expect(servers(enabled)[0]!.command).toContain("FEATURE_ROUND_CLIENT_PROTOCOL=true");
+    expect(servers(enabled)[0]!.command).toContain("CORE_PARITY_WORKSPACE_ALLOWLIST=");
+    const workflow = await readFile(
+      new URL("../../.github/workflows/ci.yml", import.meta.url),
+      "utf8",
+    );
+    expect(workflow).toContain('BETA_E2E_ROUND_PROTOCOL: "true"');
+  });
   it("runs every beta profile in one invocation without concurrent shared-account mutations", async () => {
     const manifest = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),

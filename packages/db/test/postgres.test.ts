@@ -14,6 +14,8 @@ import {
   RecoveryPackContentSchema,
   QuestionSchema,
   recoveryPackContentHash,
+  legacyRoundProtocol,
+  type RoundProtocol,
 } from "@openround/contracts";
 import {
   acceptAnswer,
@@ -30,6 +32,7 @@ import {
   PostgresPresentationRepository,
   PostgresPresentationSessionRepository,
   createSurveyRepository,
+  createFeedbackRepository,
   createRecoveryPackRepository,
   createAudienceScopeRepository,
   createScopedQnaRepository,
@@ -46,6 +49,10 @@ import {
   WorkspaceDeletionInProgressError,
 } from "../src/types.js";
 import { discoverMigrations, runMigrations } from "../src/migrations.js";
+import {
+  expectSurveyLibraryConformance,
+  expectFeedbackConformance,
+} from "./support/feedback-library-conformance.js";
 import {
   expectSurveyConformance,
   expectSurveyCreationUpgradeConformance,
@@ -1081,6 +1088,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 61, name: "surveys" },
       { version: 62, name: "survey_room_receipt_cleanup" },
       { version: 63, name: "survey_multiselection" },
+      { version: 64, name: "survey_library_and_beta_feedback" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1134,6 +1142,63 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(result).not.toBeNull();
     return result!;
   }
+  it("persists Survey Library metadata and feedback under restricted PostgreSQL permissions", async () => {
+    const actor = await creator("survey-library-feedback");
+    await expectSurveyLibraryConformance(repository, actor);
+    await expectFeedbackConformance(repository, actor);
+  });
+
+  it("isolates feedback from workspace peers and removes a deleted collaborator's feedback in retained workspaces", async () => {
+    const owner = await creator("feedback-workspace-owner");
+    const member = await creator("feedback-workspace-editor");
+    const outsider = await creator("feedback-workspace-outsider");
+    const client = await runtimePool.connect();
+    const feedback = createFeedbackRepository(repository);
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.system_access', 'on', true)");
+      await client.query(
+        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'editor')",
+        [owner.workspaceId, member.userId],
+      );
+      await client.query("COMMIT");
+      const receipt = await feedback.submit(
+        owner.workspaceId,
+        member.userId,
+        {
+          idempotencyKey: randomUUID(),
+          category: "usability",
+          message: "Synthetic collaborator feedback privacy test",
+          page: "/library",
+          allowContact: true,
+        },
+        new Date(),
+      );
+      for (const [workspaceId, userId, visible] of [
+        [owner.workspaceId, member.userId, true],
+        [owner.workspaceId, owner.userId, false],
+        [outsider.workspaceId, member.userId, false],
+      ] as const) {
+        await client.query("BEGIN");
+        await client.query(
+          "SELECT set_config('app.workspace_id', $1, true), set_config('app.user_id', $2, true)",
+          [workspaceId, userId],
+        );
+        expect(
+          (await client.query("SELECT id FROM beta_feedback WHERE id = $1", [receipt.id])).rowCount,
+        ).toBe(visible ? 1 : 0);
+        await client.query("ROLLBACK");
+      }
+      await repository.deleteAccount(member.userId);
+      expect((await feedback.list()).some((row) => row.id === receipt.id)).toBe(false);
+      expect(
+        (await repository.getCreatorByUserId(owner.userId, owner.workspaceId))?.workspaceId,
+      ).toBe(owner.workspaceId);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
 
   it("expands v1 Survey storage without changing accepted responses or immutable room/version bytes", async () => {
     const actor = await creator("survey-v2-upgrade");
@@ -2376,6 +2441,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     trustMode: "learning" | "verified" = "learning",
     decisionReplayEnabled = false,
     recoveryPackCardsEnabled = false,
+    roundProtocol?: RoundProtocol,
   ) {
     const now = new Date();
     const id = randomUUID();
@@ -2384,6 +2450,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       code,
       quiz: fixture.content,
       recoveryPackCardsEnabled,
+      roundProtocol,
       settings: {
         audienceLimit: 20,
         scoringMode: "accuracy",
@@ -2409,6 +2476,104 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     });
     return { id, state };
   }
+
+  it("restores protocol-v7 rooms and durable responses through the restricted runtime", async () => {
+    const owner = await creator("round-protocol-owner");
+    const other = await creator("round-protocol-outsider");
+    const fixture = await createPublishedRoundFixture(owner, "Protocol restoration");
+    const created = await createRoundSessionFixture(
+      owner,
+      fixture,
+      String(randomInt(1_000_000, 10_000_000)),
+      "learning",
+      false,
+      false,
+      legacyRoundProtocol(),
+    );
+    const stored = (await repository.getSessionById(created.id))!;
+    const now = new Date();
+    const participantId = randomUUID();
+    const joined = addParticipant(stored.state, {
+      id: participantId,
+      nickname: "Synthetic learner",
+      score: 0,
+      correctCount: 0,
+      acceptedResponseMs: 0,
+      connected: true,
+      kicked: false,
+    }).state;
+    await repository.commitParticipants(
+      { ...stored, state: joined },
+      [
+        {
+          id: participantId,
+          sessionId: created.id,
+          nickname: "Synthetic learner",
+          tokenHash: randomUUID(),
+          status: "active",
+          joinedAt: now,
+        },
+      ],
+      stored.state.version,
+    );
+    const opened = applyHostCommand(joined, {
+      action: "start",
+      commandId: randomUUID(),
+      expectedVersion: joined.version,
+      nowMs: now.getTime(),
+      newRoundId: randomUUID,
+    }).state;
+    await repository.saveSession({ ...stored, state: opened }, joined.version);
+    const accepted = acceptAnswer(opened, {
+      answerId: randomUUID(),
+      participantId,
+      roundId: opened.roundId!,
+      response: { kind: "numeric", value: "2" },
+      idempotencyKey: randomUUID(),
+      nowMs: now.getTime() + 100,
+    });
+    await repository.commitAnswer(
+      { ...stored, state: accepted.state },
+      accepted.answer,
+      opened.version,
+    );
+    const restarted = new PostgresRepository(runtimeUrl!);
+    try {
+      expect((await restarted.getSessionById(created.id))!.state).toEqual(accepted.state);
+      expect((await restarted.getSessionEvidence(owner.workspaceId, created.id)).answers).toEqual([
+        accepted.answer,
+      ]);
+      expect((await restarted.getSessionEvidence(other.workspaceId, created.id)).answers).toEqual(
+        [],
+      );
+      expect(
+        await restarted.findAnswers(owner.workspaceId, created.id, [
+          {
+            participantId,
+            roundId: opened.roundId!,
+            idempotencyKey: accepted.answer.idempotencyKey,
+          },
+        ]),
+      ).toEqual([accepted.answer]);
+      const client = await runtimePool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.workspace_id', $1, true)", [owner.workspaceId]);
+        expect(
+          (
+            await client.query("SELECT state_schema_version FROM game_sessions WHERE id = $1", [
+              created.id,
+            ])
+          ).rows,
+        ).toEqual([{ state_schema_version: 7 }]);
+        await client.query("ROLLBACK");
+      } finally {
+        client.release();
+      }
+    } finally {
+      await restarted.close();
+    }
+  });
 
   async function createPublishedPresentationFixture(
     owner: Awaited<ReturnType<typeof creator>>,

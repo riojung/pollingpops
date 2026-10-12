@@ -472,6 +472,11 @@ export async function assertDockerReady({
         platform === "darwin"
           ? "Start your chosen runtime: open -a Docker for Docker Desktop, or colima start --profile YOUR_EXISTING_PROFILE for Colima."
           : "Start your Docker Engine service and check that your user has permission to access its socket.",
+        ...(platform === "darwin"
+          ? [
+              "For post-reboot Colima startup, use pnpm local:start with your existing profile/context (see pnpm local:start --help).",
+            ]
+          : []),
         `Verify ${infoCommand} succeeds, then retry. Select an existing context with --docker-context NAME or DOCKER_CONTEXT=NAME.`,
         "No services, volumes, or Docker contexts were changed. Do not delete volumes or switch to a new runtime to repair a missing socket.",
       ].join("\n"),

@@ -58,6 +58,7 @@ import { registerHomeRoutes } from "./home-routes.js";
 import { registerLibraryRoutes } from "./library-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
+import { registerFeedbackRoutes } from "./feedback-routes.js";
 import { registerQuestionHealthRoutes } from "./question-health-routes.js";
 import { registerRecoveryPackRoutes } from "./recovery-pack-routes.js";
 import { registerRecoveryPackPortabilityRoutes } from "./recovery-pack-portability-routes.js";
@@ -438,6 +439,12 @@ export async function buildApp(
     surveys: createSurveyRepository(repository),
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
+  await registerFeedbackRoutes(app, {
+    repository,
+    auth,
+    config,
+    consumeAdmission: cache.consumeIdempotentRateLimit.bind(cache),
+  });
   // Presentation read and recovery routes remain registered when a rollout is paused. Route-level
   // workspace gates still prevent creation and other new authoring mutations.
   await registerPresentationRoutes(app, {
@@ -484,6 +491,7 @@ export async function buildApp(
     repository,
     presentations,
     libraryMetadata,
+    surveys: createSurveyRepository(repository),
     auth,
     workspaceEnabled: workspaceShellEnabled,
     presentationsEnabled,

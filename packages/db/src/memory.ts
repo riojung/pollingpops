@@ -224,6 +224,7 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  deleteFolderMetadata?(workspaceId: string, folderId: string): void;
   publishedSurveyCount?(workspaceId: string): number;
   deletePresentationSessionMetadata?(workspaceId: string, sessionId: string): void;
   exportAccount(
@@ -233,7 +234,7 @@ export interface MemoryRepositoryLifecycleExtension {
   purgeExpired?(now: Date): Promise<string[]> | string[];
   hasLibraryArtifact?(
     workspaceId: string,
-    artifactType: "round" | "presentation",
+    artifactType: "round" | "presentation" | "survey",
     artifactId: string,
   ): boolean;
   isLibraryArtifactReferenced?(
@@ -413,7 +414,7 @@ export class MemoryRepository implements Repository {
 
   hasLibraryArtifact(
     workspaceId: string,
-    artifactType: "round" | "presentation",
+    artifactType: "round" | "presentation" | "survey",
     artifactId: string,
   ) {
     if (artifactType === "round") return this.quizzes.get(artifactId)?.workspaceId === workspaceId;
@@ -927,6 +928,8 @@ export class MemoryRepository implements Repository {
     const folder = this.folders.get(folderId);
     if (!folder || folder.workspaceId !== workspaceId) return false;
     this.folders.delete(folderId);
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.deleteFolderMetadata?.(workspaceId, folderId);
     for (const quiz of this.quizzes.values()) {
       if (quiz.workspaceId === workspaceId && quiz.folderId === folderId) {
         quiz.folderId = null;

@@ -1,6 +1,17 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "Sondages",
+  "pages.library.searchSurveys": "Rechercher des sondages",
+  "pages.library.createSurvey": "Créer un sondage",
+  "pages.library.firstSurvey": "Créez votre premier sondage",
+  "pages.library.firstSurveyDescription":
+    "Recueillez des avis indépendants au rythme de chacun. Partez d’un modèle ou créez vos questions.",
+  "pages.library.surveyQuestions": "{count} questions · À son rythme",
+  "pages.library.shareSurvey": "Partager",
+  "pages.library.surveyRuns": "Sessions de sondage et résultats",
+  "pages.library.surveyPaused":
+    "La création de sondages est suspendue pour cet espace. Les sondages, sessions et résultats existants restent accessibles.",
   "pages.help.card.readGuide": "Lire le guide",
   "pages.activity.accuracyValue": "Précision de {value} %",
   "pages.activity.assignment": "Mission {status}",

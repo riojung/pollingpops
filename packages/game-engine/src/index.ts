@@ -6,6 +6,8 @@ import {
   questionConfidence,
   questionDelivery,
   questionPurpose,
+  RoundProtocolSchema,
+  type RoundProtocol,
   RecoveryPackCardSelectionSchema,
   RecoveryPackLiveCardSchema,
   type BrandTheme,
@@ -33,10 +35,10 @@ import {
 import { resolveExperienceTheme } from "@openround/experience";
 import { deriveCheckpointInsight } from "@openround/insights";
 
-// Ordinary rooms retain v5 readability during flag-off canaries. Enabled live Pack rooms use
-// v6 to fence old writers that cannot retain card projections and decision/report attribution.
+// Flag-off rooms retain v5/v6 readability. Protocol-aware rooms use v7 to fence old writers.
 export const BASE_GAME_STATE_SCHEMA_VERSION = 5;
-export const CURRENT_GAME_STATE_SCHEMA_VERSION = 6;
+export const RECOVERY_PACK_GAME_STATE_SCHEMA_VERSION = 6;
+export const CURRENT_GAME_STATE_SCHEMA_VERSION = 7;
 
 /** Browser-safe stable fallback used for legacy and avatar-less participants. */
 export function avatarIdForSeed(seed: string): AvatarId {
@@ -123,6 +125,7 @@ export interface EngineIntervention {
 
 export interface GameState {
   stateSchemaVersion: number;
+  roundProtocol?: RoundProtocol;
   uxBeta?: boolean;
   recoveryPackCardsEnabled?: boolean;
   sessionId: string;
@@ -237,6 +240,12 @@ export function upgradeGameState(input: GameState): GameState {
       `Game state schema ${legacy.stateSchemaVersion} is newer than supported schema ${CURRENT_GAME_STATE_SCHEMA_VERSION}`,
     );
   }
+  if (
+    (legacy.stateSchemaVersion ?? 1) < CURRENT_GAME_STATE_SCHEMA_VERSION &&
+    legacy.roundProtocol !== undefined
+  ) {
+    throw new Error("Round protocol metadata requires game state schema 7");
+  }
   const participants = participantsWithAvatars(legacy.participants);
   const settings = resolvedSettings(legacy.settings);
   if (legacy.stateSchemaVersion === CURRENT_GAME_STATE_SCHEMA_VERSION) {
@@ -245,15 +254,21 @@ export function upgradeGameState(input: GameState): GameState {
       participants,
       settings,
       recoveryPackCardsEnabled: legacy.recoveryPackCardsEnabled ?? false,
+      roundProtocol: RoundProtocolSchema.parse(legacy.roundProtocol),
     };
   }
-  if (legacy.stateSchemaVersion === BASE_GAME_STATE_SCHEMA_VERSION) {
+  if (
+    legacy.stateSchemaVersion === BASE_GAME_STATE_SCHEMA_VERSION ||
+    legacy.stateSchemaVersion === RECOVERY_PACK_GAME_STATE_SCHEMA_VERSION
+  ) {
     return {
       ...legacy,
       participants,
       settings,
-      stateSchemaVersion: BASE_GAME_STATE_SCHEMA_VERSION,
-      recoveryPackCardsEnabled: false,
+      stateSchemaVersion: legacy.stateSchemaVersion,
+      recoveryPackCardsEnabled:
+        legacy.stateSchemaVersion === RECOVERY_PACK_GAME_STATE_SCHEMA_VERSION &&
+        (legacy.recoveryPackCardsEnabled ?? false),
     };
   }
   const category = legacy.quiz.category ?? "general";
@@ -309,12 +324,18 @@ export function createGameState(input: {
   experienceTheme?: ExperienceThemeSnapshot;
   uxBeta?: boolean;
   recoveryPackCardsEnabled?: boolean;
+  roundProtocol?: RoundProtocol;
 }): GameState {
   const brandTheme = input.brandTheme ?? null;
   return {
-    stateSchemaVersion: input.recoveryPackCardsEnabled
+    stateSchemaVersion: input.roundProtocol
       ? CURRENT_GAME_STATE_SCHEMA_VERSION
-      : BASE_GAME_STATE_SCHEMA_VERSION,
+      : input.recoveryPackCardsEnabled
+        ? RECOVERY_PACK_GAME_STATE_SCHEMA_VERSION
+        : BASE_GAME_STATE_SCHEMA_VERSION,
+    ...(input.roundProtocol
+      ? { roundProtocol: RoundProtocolSchema.parse(input.roundProtocol) }
+      : {}),
     uxBeta: input.uxBeta,
     recoveryPackCardsEnabled: input.recoveryPackCardsEnabled ?? false,
     sessionId: input.sessionId,
@@ -1263,6 +1284,7 @@ export function snapshotForRole(
     mode: "live",
     uxBeta: state.uxBeta ?? false,
     stateSchemaVersion: state.stateSchemaVersion,
+    ...(state.roundProtocol ? { roundProtocol: state.roundProtocol } : {}),
     sessionId: state.sessionId,
     code: state.code,
     version: state.version,

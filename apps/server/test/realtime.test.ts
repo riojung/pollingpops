@@ -1,6 +1,7 @@
 import { createServer, type Server as HttpServer } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { io as createClient, type Socket } from "socket.io-client";
+import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
 import {
   acceptAnswer,
   addParticipant,
@@ -35,6 +36,126 @@ describe("realtime authorization", () => {
       await new Promise<void>((resolve, reject) => {
         httpServer!.close((error) => (error ? reject(error) : resolve()));
       });
+    }
+  });
+
+  it.each([
+    undefined,
+    currentRoundClientCapabilities(),
+    { protocolVersion: 3 as const, capabilities: ["poll.multiselect" as const] },
+  ])("fences unsupported realtime projections for profile %j", async (clientCapabilities) => {
+    const state = createGameState({
+      sessionId: crypto.randomUUID(),
+      code: "1234567",
+      quiz: {
+        title: "Protocol fanout",
+        description: "",
+        questions: [
+          {
+            id: crypto.randomUUID(),
+            type: "numeric",
+            prompt: "Two plus two?",
+            correctValue: "4",
+            tolerance: "0",
+            unit: null,
+            timeLimitSeconds: 30,
+            basePoints: 100,
+            explanation: "Private explanation",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        ],
+      },
+      settings: {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+      roundProtocol: {
+        schemaVersion: 1,
+        minimumClientVersion: 3,
+        requiredCapabilities: ["poll.multiselect"],
+      },
+    });
+    let listener: Parameters<SessionService["subscribe"]>[0] | undefined;
+    const sessions = {
+      subscribe: vi.fn((callback) => {
+        listener = callback;
+        return vi.fn();
+      }),
+      subscribeAuxiliary: vi.fn(() => vi.fn()),
+      join: vi.fn().mockResolvedValue({
+        participantId: crypto.randomUUID(),
+        participantToken: "participant-token-long-enough",
+        snapshot: snapshotForRole(state, { role: "participant" }),
+      }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      envelope: vi.fn((_state, event, payload) => ({ type: event.type, payload })),
+    } as unknown as SessionService;
+    httpServer = createServer();
+    await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
+    const address = httpServer.address();
+    if (!address || typeof address === "string") throw new Error("Test server did not bind a port");
+    const origin = `http://127.0.0.1:${address.port}`;
+    realtime = await attachRealtime(
+      httpServer,
+      sessions,
+      ConfigSchema.parse({
+        NODE_ENV: "test",
+        ALLOW_IN_MEMORY: "true",
+        WEB_ORIGIN: origin,
+        PUBLIC_API_URL: origin,
+        LOG_LEVEL: "silent",
+      }),
+      new MetricsService(),
+    );
+    client = createClient(origin, {
+      transports: ["websocket"],
+      reconnection: false,
+      extraHeaders: { origin },
+    });
+    await new Promise<void>((resolve, reject) => {
+      client!.once("connect", resolve);
+      client!.once("connect_error", reject);
+    });
+    const invalid = await client.timeout(2_000).emitWithAck("session.join", {
+      code: state.code,
+      clientCapabilities: { protocolVersion: 99, capabilities: [] },
+    });
+    expect(invalid).toHaveProperty("error");
+    expect(sessions.join).not.toHaveBeenCalled();
+    const joined = await client
+      .timeout(2_000)
+      .emitWithAck("session.join", { code: state.code, clientCapabilities });
+    expect(joined).toHaveProperty("data");
+    expect(sessions.join).toHaveBeenCalledWith(
+      expect.objectContaining(clientCapabilities ? { clientCapabilities } : { code: state.code }),
+    );
+    const received = vi.fn();
+    client.on("lobby.updated", received);
+    const supported = clientCapabilities?.protocolVersion === 3;
+    const nextEvent = new Promise<unknown>((resolve) =>
+      client!.once(supported ? "lobby.updated" : "client.update.required", resolve),
+    );
+    const disconnected = supported
+      ? null
+      : new Promise<void>((resolve) => client!.once("disconnect", () => resolve()));
+    await listener!({ state, events: [{ type: "lobby.updated", seq: state.seq }] });
+    if (supported) {
+      expect(await nextEvent).toHaveProperty(
+        "payload.snapshot.roundProtocol.minimumClientVersion",
+        3,
+      );
+      expect(client.connected).toBe(true);
+    } else {
+      expect(await nextEvent).toEqual({
+        error: { code: "CLIENT_UPDATE_REQUIRED", message: ROUND_CLIENT_UPDATE_MESSAGE },
+      });
+      await disconnected;
+      expect(received).not.toHaveBeenCalled();
+      expect(sessions.envelope).not.toHaveBeenCalled();
     }
   });
 

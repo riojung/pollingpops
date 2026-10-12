@@ -1,6 +1,16 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "問卷",
+  "pages.library.searchSurveys": "搜尋問卷",
+  "pages.library.createSurvey": "建立問卷",
+  "pages.library.firstSurvey": "建立您的第一份問卷",
+  "pages.library.firstSurveyDescription":
+    "收集參與者按自己的步調獨立提供的回饋。使用範本或編寫自己的問題。",
+  "pages.library.surveyQuestions": "{count} 個問題 · 自訂進度",
+  "pages.library.shareSurvey": "分享",
+  "pages.library.surveyRuns": "問卷批次與結果",
+  "pages.library.surveyPaused": "此工作區已暫停建立新問卷。現有問卷、批次與結果仍可使用。",
   "pages.help.card.readGuide": "閱讀指南",
   "pages.activity.accuracyValue": "{value}% 準確度",
   "pages.activity.assignment": "{status} 賦值",

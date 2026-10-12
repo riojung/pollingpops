@@ -7,7 +7,7 @@ import {
 import { PostgresRepository } from "./postgres.js";
 import type { Repository } from "./types.js";
 
-export type LibraryArtifactType = "round" | "presentation";
+export type LibraryArtifactType = "round" | "presentation" | "survey";
 
 export interface LibraryFavoriteRecord {
   workspaceId: string;
@@ -179,7 +179,9 @@ export class PostgresLibraryMetadataRepository implements LibraryMetadataReposit
       const artifact = await client.query(
         input.artifactType === "round"
           ? "SELECT id FROM quizzes WHERE workspace_id = $1 AND id = $2 FOR KEY SHARE"
-          : "SELECT id FROM presentations WHERE workspace_id = $1 AND id = $2 FOR KEY SHARE",
+          : input.artifactType === "survey"
+            ? "SELECT id FROM surveys WHERE workspace_id = $1 AND id = $2 FOR KEY SHARE"
+            : "SELECT id FROM presentations WHERE workspace_id = $1 AND id = $2 FOR KEY SHARE",
         [input.workspaceId, input.artifactId],
       );
       if (!artifact.rows[0]) return null;

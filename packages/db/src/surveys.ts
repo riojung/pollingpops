@@ -43,6 +43,8 @@ export interface SurveyRecord {
   status: "draft" | "published" | "archived";
   versionId: string | null;
   publishedRevision: number | null;
+  folderId?: string | null;
+  updatedAt?: string;
 }
 export interface SurveyVersion {
   schemaVersion: 1 | 2;
@@ -115,6 +117,7 @@ type Receipt = {
   receipt: unknown;
 };
 interface Transaction {
+  folderExists(id: string): Promise<boolean>;
   get<T extends Table>(table: T, id: string): Promise<Documents[T] | null>;
   list<T extends Table>(table: T, roomId?: string): Promise<Documents[T][]>;
   put<T extends Table>(table: T, row: Documents[T], insert?: boolean): Promise<void>;
@@ -209,6 +212,7 @@ export class SurveyRepository {
             status: "draft",
             versionId: null,
             publishedRevision: null,
+            folderId: null,
           };
           await tx.put("surveys", record, true);
           return record;
@@ -222,6 +226,33 @@ export class SurveyRepository {
   }
   get(workspaceId: string, id: string) {
     return this.run(workspaceId, (tx) => tx.get("surveys", id));
+  }
+  organize(
+    workspaceId: string,
+    id: string,
+    folderId: string | null,
+    expected: number,
+    key: string,
+  ) {
+    return this.run(workspaceId, async (tx) => {
+      const record = requireRecord(await tx.get("surveys", id));
+      return this.mutate(
+        tx,
+        { workspaceId, surveyId: id, ownerId: id },
+        key,
+        { action: "organize", folderId, expected },
+        async () => {
+          revision(record.revision, expected);
+          if (folderId && !(await tx.folderExists(folderId)))
+            throw new SurveyError("NOT_FOUND", "Selected folder not found in this workspace");
+          record.folderId = folderId;
+          if (record.publishedRevision === record.revision) record.publishedRevision++;
+          record.revision++;
+          await tx.put("surveys", record);
+          return record;
+        },
+      );
+    });
   }
   save(workspaceId: string, id: string, draft: SurveyDraft, expected: number, key: string) {
     return this.run(workspaceId, async (tx) => {
@@ -530,6 +561,7 @@ class MemorySurveyStore {
         previous?: LiveRoomCodeRecord;
       }> = [];
       const tx: Transaction = {
+        folderExists: async (id) => this.parent.folders.get(id)?.workspaceId === workspaceId,
         get: async (table, id) => {
           const row = this[table].get(id);
           return row && (!workspaceId || row.workspaceId === workspaceId)
@@ -545,6 +577,7 @@ class MemorySurveyStore {
             )
             .map((r) => compatibleDocument(table, structuredClone(r))) as never,
         put: async (table, row, insert) => {
+          if (table === "surveys") (row as SurveyRecord).updatedAt = new Date().toISOString();
           if (table === "survey_feedback_rooms" && insert) {
             const room = row as SurveyRoom;
             await this.parent.assertWorkspaceLiveSessionCreationAllowed(room.workspaceId);
@@ -616,6 +649,14 @@ class MemorySurveyStore {
       (s) => s.workspaceId === workspaceId && s.status === "published",
     ).length;
   }
+  hasLibraryArtifact(workspaceId: string, artifactType: string, artifactId: string) {
+    return artifactType === "survey" && this.surveys.get(artifactId)?.workspaceId === workspaceId;
+  }
+  deleteFolderMetadata(workspaceId: string, folderId: string) {
+    for (const survey of this.surveys.values())
+      if (survey.workspaceId === workspaceId && survey.folderId === folderId)
+        survey.folderId = null;
+  }
   private deleteRoomData(id: string) {
     for (const guest of this.survey_guests.values())
       if (guest.roomId === id) this.survey_guests.delete(guest.id);
@@ -672,30 +713,78 @@ function postgresRun(repository: PostgresRepository): Run {
       if (workspaceId)
         await client.query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);
       const tx: Transaction = {
+        folderExists: async (id) =>
+          Boolean(
+            (
+              await client.query(
+                "SELECT id FROM folders WHERE workspace_id = $1 AND id = $2 FOR KEY SHARE",
+                [workspaceId, id],
+              )
+            ).rowCount,
+          ),
         get: async (table, id) => {
-          const result = await client.query(`SELECT data FROM ${table} WHERE id = $1 FOR UPDATE`, [
+          const result = await client.query(`SELECT * FROM ${table} WHERE id = $1 FOR UPDATE`, [
             id,
           ]);
-          return result.rows[0] ? compatibleDocument(table, result.rows[0].data) : null;
+          const row = result.rows[0];
+          return row
+            ? compatibleDocument(
+                table,
+                table === "surveys"
+                  ? {
+                      ...row.data,
+                      folderId: row.folder_id,
+                      updatedAt: row.updated_at.toISOString(),
+                    }
+                  : row.data,
+              )
+            : null;
         },
         list: async (table, roomId) =>
           (
             await client.query(
-              `SELECT data FROM ${table}${roomId ? " WHERE room_id = $1" : ""} ORDER BY id`,
+              `SELECT * FROM ${table}${roomId ? " WHERE room_id = $1" : ""} ORDER BY id`,
               roomId ? [roomId] : [],
             )
-          ).rows.map((r) => compatibleDocument(table, r.data)),
+          ).rows.map((r) =>
+            compatibleDocument(
+              table,
+              table === "surveys"
+                ? {
+                    ...r.data,
+                    folderId: r.folder_id,
+                    updatedAt: r.updated_at.toISOString(),
+                  }
+                : r.data,
+            ),
+          ),
         put: async (table, row, insert) => {
+          if (table === "surveys") (row as SurveyRecord).updatedAt = new Date().toISOString();
           if (!insert) {
-            await client.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [row.id, row]);
+            if (table === "surveys")
+              await client.query(
+                "UPDATE surveys SET data = $2, folder_id = $3, updated_at = $4 WHERE id = $1",
+                [
+                  row.id,
+                  row,
+                  (row as SurveyRecord).folderId ?? null,
+                  (row as SurveyRecord).updatedAt,
+                ],
+              );
+            else await client.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [row.id, row]);
             return;
           }
           if (table === "surveys")
-            await client.query("INSERT INTO surveys (id, workspace_id, data) VALUES ($1,$2,$3)", [
-              row.id,
-              row.workspaceId,
-              row,
-            ]);
+            await client.query(
+              "INSERT INTO surveys (id, workspace_id, data, folder_id, updated_at) VALUES ($1,$2,$3,$4,$5)",
+              [
+                row.id,
+                row.workspaceId,
+                row,
+                (row as SurveyRecord).folderId ?? null,
+                (row as SurveyRecord).updatedAt,
+              ],
+            );
           else if (table === "survey_versions") {
             const version = row as SurveyVersion;
             await client.query(

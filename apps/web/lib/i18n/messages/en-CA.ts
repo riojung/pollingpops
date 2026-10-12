@@ -1,6 +1,29 @@
 import { creationMessages } from "../creation-messages";
 
 export const englishMessages = {
+  "feedback.button": "Feedback",
+  "feedback.title": "Share feedback",
+  "feedback.description": "Found a problem or have an idea? Help us improve Polling Pops.",
+  "feedback.close": "Close feedback",
+  "feedback.category": "Feedback type",
+  "feedback.bug": "Report a problem",
+  "feedback.usability": "Something is hard to use",
+  "feedback.idea": "Suggest an improvement",
+  "feedback.other": "Other feedback",
+  "feedback.message": "What would you like to share?",
+  "feedback.messageHint":
+    "10–4,000 characters. For a problem, include what you tried, what happened, and what you expected.",
+  "feedback.privacy":
+    "Only the product team can review this feedback. We save your message, account/workspace reference, and page type for up to 90 days. No page queries, participant data, screenshots, or logs are sent automatically. Please do not include passwords, tokens, or personal participant information.",
+  "feedback.contact": "The product team may use my account email to follow up about this feedback.",
+  "feedback.cancel": "Cancel",
+  "feedback.send": "Send feedback",
+  "feedback.sending": "Sending…",
+  "feedback.failed": "Feedback could not be sent. Your message is still here; please retry.",
+  "feedback.thanks": "Thanks for helping us improve!",
+  "feedback.received": "Your feedback has been saved for the product team to review.",
+  "feedback.receipt": "Reference:",
+  "feedback.done": "Done",
   ...creationMessages("en-CA"),
   "common.create": "Create",
   "common.round": "Round",

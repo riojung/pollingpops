@@ -460,6 +460,8 @@
 
 .cardMain {
   flex: 1;
+  min-width: 0;
+  width: 100%;
 }
 
 .card h2 {
@@ -596,6 +598,7 @@
 
 .collection[data-view="list"] .cardMeta {
   grid-column: 1 / -1;
+  padding-right: 40px;
 }
 
 .collection[data-view="list"] .cardMain {
@@ -724,6 +727,17 @@
     padding: 14px;
   }
 
+  .collection[data-view="list"] .cardMeta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .collection[data-view="list"] .cardMeta > span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .collection[data-view="list"] .cardActions {
     gap: 6px;
   }
@@ -735,4 +749,14 @@
     transition: none;
     animation: none;
   }
+}
+.surveyArtwork {
+  background: linear-gradient(135deg, var(--ui-accent-soft), var(--ui-surface-raised));
+  color: var(--ui-accent-ink);
+}
+
+.surveyArtwork span {
+  border-color: var(--ui-border-strong);
+  color: var(--ui-accent-ink);
+  background: var(--ui-surface-translucent);
 }

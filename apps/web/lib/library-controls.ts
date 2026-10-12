@@ -2,6 +2,21 @@ export type LibraryItemStatus = "draft" | "published" | "archived";
 export type LibraryStatusFilter = "active" | LibraryItemStatus | "all";
 export type LibraryOwnershipFilter = "all" | "workspace";
 
+/** Keep header searches on the selected content type without forwarding private URL context. */
+export function librarySearchHref(query: string, pathname: string, search: string) {
+  const requested = new URLSearchParams(search).get("type");
+  const type =
+    pathname === "/surveys" || pathname.startsWith("/surveys/")
+      ? "surveys"
+      : pathname === "/library" && (requested === "surveys" || requested === "presentations")
+        ? requested
+        : null;
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  if (query.trim()) params.set("q", query.trim());
+  return `/library${params.size ? `?${params}` : ""}`;
+}
+
 export interface LibraryFilterableItem {
   id: string;
   workspaceId: string;

@@ -1,8 +1,10 @@
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
+import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
   ...creationMessages("de-DE"),
+  ...feedbackMessages("de-DE"),
   "common.create": "Erstellen",
   "common.round": "Runde",
   "common.presentation": "Präsentation",

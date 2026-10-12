@@ -6,12 +6,13 @@ import type {
   LibraryArtifactDeletionResult,
   PresentationRepository,
   Repository,
+  SurveyRepository,
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import { professionalFeatureUnavailable } from "./workspace-rollout.js";
 
 const FavoriteParamsSchema = z.object({
-  artifactType: z.enum(["round", "presentation"]),
+  artifactType: z.enum(["round", "presentation", "survey"]),
   artifactId: z.string().uuid(),
 });
 const FavoriteMutationSchema = z.object({ favorite: z.boolean() });
@@ -84,6 +85,7 @@ export async function registerLibraryRoutes(
     repository: Repository;
     presentations: PresentationRepository;
     libraryMetadata: LibraryMetadataRepository;
+    surveys: SurveyRepository;
     auth: AuthService;
     workspaceEnabled: (workspaceId: string) => boolean;
     presentationsEnabled: (workspaceId: string) => boolean;
@@ -135,7 +137,9 @@ export async function registerLibraryRoutes(
       const artifact =
         artifactType === "round"
           ? await repository.getQuiz(creator.workspaceId, artifactId)
-          : await presentations.getPresentation(creator.workspaceId, artifactId);
+          : artifactType === "survey"
+            ? await dependencies.surveys.get(creator.workspaceId, artifactId)
+            : await presentations.getPresentation(creator.workspaceId, artifactId);
       if (!artifact) {
         return apiError(reply, 404, "NOT_FOUND", "Library item not found", request.id);
       }
@@ -155,7 +159,7 @@ export async function registerLibraryRoutes(
       workspaceId: creator.workspaceId,
       actorId: creator.userId,
       action: favorite ? "library.favorite.add" : "library.favorite.remove",
-      targetType: artifactType === "round" ? "quiz" : "presentation",
+      targetType: artifactType === "round" ? "quiz" : artifactType,
       targetId: artifactId,
       requestId: request.id,
     });

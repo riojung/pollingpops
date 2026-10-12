@@ -4,6 +4,7 @@ import { z, ZodError } from "zod";
 import Stripe from "stripe";
 import {
   AnswerSubmitSchema,
+  RoundClientCapabilitiesQuerySchema,
   AcceptWorkspaceInvitationSchema,
   ApplyAuthoringJobSchema,
   BrandThemeSchema,
@@ -326,6 +327,7 @@ function roundPublishValidationError(
 function sessionStatus(code: SessionError["code"]) {
   if (code === "UNAUTHORIZED") return 401;
   if (code === "INSTITUTION_AUTH_REQUIRED") return 403;
+  if (code === "CLIENT_UPDATE_REQUIRED") return 409;
   if (code === "NOT_FOUND" || code === "INVALID_CODE") return 404;
   if (code === "ENTITLEMENT_LIMIT") return 402;
   if (
@@ -2108,6 +2110,7 @@ export async function registerRoutes(
     const session = await sessions.createSession(creator, input.quizId, input.settings, {
       experiencePresetOverride: experiencesAvailable ? input.experiencePresetOverride : "focus",
       presenterSoundEnabled: experiencesAvailable && input.presenterSoundEnabled,
+      clientCapabilities: input.clientCapabilities,
     });
     return reply.code(201).send(session);
   });
@@ -2235,14 +2238,18 @@ export async function registerRoutes(
 
   app.get("/v1/sessions/:id/snapshot", async (request) => {
     const { id } = IdParamsSchema.parse(request.params);
-    const { role } = z
-      .object({ role: z.enum(["host", "participant", "presenter"]).default("participant") })
+    const { role, clientCapabilities } = z
+      .object({
+        role: z.enum(["host", "participant", "presenter"]).default("participant"),
+        clientCapabilities: RoundClientCapabilitiesQuerySchema,
+      })
       .parse(request.query);
     const bearer = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     return {
       snapshot: await sessions.snapshot({
         sessionId: id,
         role,
+        clientCapabilities,
         ...(role === "participant" ? { participantToken: bearer } : { hostToken: bearer }),
       }),
     };

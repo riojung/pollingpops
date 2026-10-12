@@ -1,6 +1,17 @@
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  "pages.common.surveys": "Inquéritos",
+  "pages.library.searchSurveys": "Pesquisar inquéritos",
+  "pages.library.createSurvey": "Criar inquérito",
+  "pages.library.firstSurvey": "Crie o seu primeiro inquérito",
+  "pages.library.firstSurveyDescription":
+    "Recolha opiniões independentes ao ritmo de cada pessoa. Use um modelo ou crie as suas perguntas.",
+  "pages.library.surveyQuestions": "{count} perguntas · Ritmo próprio",
+  "pages.library.shareSurvey": "Partilhar",
+  "pages.library.surveyRuns": "Sessões de inquérito e resultados",
+  "pages.library.surveyPaused":
+    "A criação de inquéritos está suspensa neste espaço. Os inquéritos, sessões e resultados existentes continuam disponíveis.",
   "pages.help.card.readGuide": "Ler o guia",
   "pages.activity.accuracyValue": "{value}% de precisão",
   "pages.activity.assignment": "{status} atribuição",

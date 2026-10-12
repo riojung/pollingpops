@@ -48,7 +48,11 @@ async function joinParticipant(browser: Browser, code: string) {
       request.method() === "POST" && new URL(request.url()).pathname === "/v1/sessions/join",
   );
   await page.getByRole("button", { name: "Join round" }).click();
-  expect((await joinRequest).postDataJSON()).toEqual({ code, avatarId: "owl" });
+  expect((await joinRequest).postDataJSON()).toEqual({
+    code,
+    avatarId: "owl",
+    clientCapabilities: { protocolVersion: 2, capabilities: [] },
+  });
   await expect(page).toHaveURL(/\/play\//);
   await expect(page.getByRole("img", { name: "Owl avatar" })).toBeVisible();
   return { context, page };

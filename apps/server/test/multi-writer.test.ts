@@ -77,6 +77,26 @@ describe.skipIf(!enabled)("distributed session mutation ownership", () => {
     await secondRepository.close();
   });
 
+  it("atomically charges each feedback intent once across independent Redis clients", async () => {
+    const key = `feedback:${randomUUID()}`;
+    const intent = `${randomUUID()}:${randomUUID()}`;
+    const attempts = await Promise.all(
+      Array.from({ length: 32 }, (_, index) =>
+        (index % 2 ? firstCache : secondCache).consumeIdempotentRateLimit(key, intent, 5, 60_000),
+      ),
+    );
+    expect(attempts.every(Boolean)).toBe(true);
+    for (let index = 0; index < 4; index++)
+      expect(await secondCache.consumeIdempotentRateLimit(key, randomUUID(), 5, 60_000)).toBe(true);
+    expect(await firstCache.consumeIdempotentRateLimit(key, randomUUID(), 5, 60_000)).toBe(false);
+    expect(await secondCache.consumeIdempotentRateLimit(key, intent, 5, 60_000)).toBe(true);
+    const expiringKey = `feedback:${randomUUID()}`;
+    expect(await firstCache.consumeIdempotentRateLimit(expiringKey, "first", 1, 100)).toBe(true);
+    expect(await secondCache.consumeIdempotentRateLimit(expiringKey, "second", 1, 100)).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(await secondCache.consumeIdempotentRateLimit(expiringKey, "second", 1, 100)).toBe(true);
+  });
+
   it("serializes two writers and continues after one writer exits", async () => {
     const abandonedLeaseSession = randomUUID();
     const abandonedOwner = randomUUID();

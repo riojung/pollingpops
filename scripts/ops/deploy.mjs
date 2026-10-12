@@ -182,6 +182,7 @@ const configCheckFeatureKeys = Object.freeze([
 ]);
 // Older deployed summaries and their receipt hashes remain valid without additive rollout flags.
 const optionalConfigCheckFeatureKeys = Object.freeze([
+  "roundClientProtocol",
   "liveFlexMode",
   "recoveryPackLiveCards",
   "presentationCompanion",
@@ -1062,6 +1063,7 @@ export function assertConfigCheckSummary(summary, config, buildId) {
   // Keep pre-flag rollback summaries valid; selecting a schema-compatible image is still required.
   // A current image must confirm the exact Fly template keeps live-card playback disabled.
   for (const key of [
+    "roundClientProtocol",
     "recoveryPackLiveCards",
     "presentationCompanion",
     ...coreParityConfigCheckFeatureKeys,

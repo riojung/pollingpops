@@ -53,6 +53,7 @@ export function createConfigCheckSummary(config: AppConfig) {
       extendedQuestionTypes: config.FEATURE_EXTENDED_QUESTION_TYPES,
       verifiedInstitution: config.FEATURE_VERIFIED_INSTITUTION,
       audienceScopes: config.FEATURE_AUDIENCE_SCOPES,
+      roundClientProtocol: config.FEATURE_ROUND_CLIENT_PROTOCOL,
       feedbackRooms: config.FEATURE_FEEDBACK_ROOMS,
       surveys: config.FEATURE_SURVEYS,
       feedbackExports: config.FEATURE_FEEDBACK_EXPORTS,

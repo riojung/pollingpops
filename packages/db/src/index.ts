@@ -19,3 +19,4 @@ export * from "./surveys.js";
 export * from "./recovery-pack-types.js";
 export { recoveryPackTextOnlyLiveEligible } from "./recovery-pack-live-metadata.js";
 export * from "./recovery-packs.js";
+export * from "./feedback.js";

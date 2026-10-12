@@ -85,6 +85,12 @@ Use any valid development email address to request a sign-in link, then open the
 in Mailpit. The core profile uses development credentials and disables untrusted image uploads
 because no malware scanner is attached.
 
+For an existing Colima installation on macOS, use `pnpm local:start` after rebooting. With Node.js
+22+ and dependencies installed (`pnpm install --frozen-lockfile`), it starts the existing `default`
+VM, waits for Docker, and starts the core stack without switching global contexts or deleting data.
+Use `pnpm local:start --no-build` when the application images are already built and unchanged.
+See [Colima startup and explicit recovery](docs/quick-start.md#one-command-startup-after-a-reboot-colima).
+
 Stop the stack while preserving its PostgreSQL, Valkey, and MinIO named volumes. Captured Mailpit
 messages and unused development sign-in links are ephemeral and will be discarded:
 

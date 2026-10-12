@@ -163,8 +163,9 @@ DOCKER_CONTEXT=colima-YOUR_EXISTING_PROFILE pnpm service development start --pro
 ```
 
 `--docker-context` is development-only. Hosted service control still uses the pinned SSH target
-and current release in the checked-in configuration. No automatic context switching, runtime
-startup, VM deletion, or volume renaming is performed.
+and current release in the checked-in configuration. Ordinary service/build commands do not
+start runtimes, switch global contexts, delete VMs, or rename volumes. The dedicated local
+startup helper below may start the explicitly selected existing Colima VM.
 
 All local profiles now build `polling-pops-server:development` and
 `polling-pops-web:development`; the multiwriter secondary uses the same server image. Rebuild
@@ -173,6 +174,40 @@ references remain unchanged. The Compose project stays `openround`, preserving i
 containers and PostgreSQL, Valkey, and MinIO volume namespace. The profile names `core`, `media`,
 and `observability` describe service bundles and are intentionally unchanged. A Colima profile
 is a separate VM/runtime choice, not the `--profile` service bundle.
+
+#### Colima startup after a reboot
+
+With Node.js 22+, pnpm, and repository dependencies installed, run:
+
+```bash
+pnpm local:start
+pnpm local:start --dry-run
+```
+
+`scripts/ops/local-start.mjs` validates the saved profile and local context endpoint before
+performing any runtime mutation. Defaults are the existing `default` VM, `colima` context, and
+`core` service bundle. It starts stopped VMs with global context activation, saved-config writes,
+and SSH-config writes disabled; it then waits for Docker and delegates to normal service control.
+The readiness budget is 180 seconds, adjustable with `--wait-seconds` (1–900). A running but
+unresponsive daemon is waited for, not implicitly stopped. Failures prevent product startup.
+
+Use `--no-build` only for already-built, unchanged application images, `--restart` to recreate
+product containers, and `--colima-profile NAME --docker-context NAME` for a different verified
+existing profile. There is no automatic selection of another running VM or profile creation.
+The `openround` Compose namespace and named data volumes remain unchanged.
+
+For a stuck `Running` profile whose Docker daemon returns `EOF`, explicitly opt into recovery:
+
+```bash
+pnpm local:start --restart-runtime
+```
+
+This permits one stop/start of the same unhealthy VM, **interrupting every container in it**.
+It never deletes profiles or volumes and does not restart an already healthy VM. Review other
+workloads in that profile first. The helper clears Docker host/context, TLS, and API-version
+environment overrides only in child processes, leaving the parent shell untouched. It does not
+install a login agent or change saved Colima settings; run it manually after a reboot.
+See the [quick start](../quick-start.md#one-command-startup-after-a-reboot-colima) for examples.
 
 #### Reclaim local Docker disk space and rebuild
 

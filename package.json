@@ -37,6 +37,7 @@
     "load:presentation:compose": "tsx tests/load/compose-presentation-load.ts",
     "load:socket": "tsx tests/load/socket-load.ts",
     "network:urls": "node scripts/show-network-urls.mjs",
+    "local:start": "node scripts/ops/local-start.mjs",
     "product:build": "bash scripts/product-build.sh",
     "service": "bash scripts/service.sh",
     "deploy": "bash scripts/deploy.sh",

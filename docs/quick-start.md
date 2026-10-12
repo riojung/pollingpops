@@ -88,6 +88,52 @@ Do not delete Docker/Colima volumes or create a new runtime to repair a missing 
 Colima profiles have separate Docker data. Switching profiles will not migrate your existing
 checkpoint sets, accounts, or uploaded images.
 
+### One-command startup after a reboot (Colima)
+
+If you already use Colima on macOS, run this from the repository root after each reboot:
+
+```bash
+pnpm local:start
+```
+
+This requires Node.js 22+, pnpm, installed repository dependencies
+(`pnpm install --frozen-lockfile`), Colima, the Docker CLI, and Docker Compose v2. It verifies your
+existing **`default` Colima VM / `colima` Docker context**, starts that VM if stopped, waits up to
+180 seconds for Docker readiness, and starts the **core** services. A healthy VM is reused.
+It preserves the `openround` Compose namespace and existing volumes. It does not create a VM,
+change your global Docker context, or install automatic login/startup tasks.
+
+For faster startup when the current application images are already built, or to recreate just
+the product's containers:
+
+```bash
+pnpm local:start --no-build
+pnpm local:start --restart --no-build
+```
+
+For another **existing** Colima profile, supply its name and the exact context from
+`docker context ls`. Do not select a different profile to repair a broken one; its data is separate.
+
+```bash
+pnpm local:start --colima-profile YOUR_EXISTING_PROFILE --docker-context YOUR_EXISTING_CONTEXT
+pnpm local:start --dry-run
+pnpm local:start --help
+```
+
+If Colima reports `Running` but Docker keeps returning `EOF`, ordinary startup only waits and
+then fails without starting product services. To explicitly allow one stop/start of the **same**
+VM, retaining its volumes:
+
+```bash
+pnpm local:start --restart-runtime
+```
+
+**This interrupts every container inside the selected Colima VM**, including unrelated products.
+Use it only when that interruption is acceptable. It does not delete the VM or volumes.
+`--wait-seconds 300` increases the runtime startup/readiness budget on slower machines.
+Stale Docker endpoint, TLS, and API-version overrides are cleared for child commands only;
+your shell environment and saved Colima configuration are unchanged.
+
 ## 1. Start the core stack
 
 The core profile includes the product, API/realtime server, PostgreSQL, Valkey, private MinIO storage, Mailpit, and Caddy. Untrusted image uploads are disabled because this profile has no malware scanner.

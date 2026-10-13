@@ -11,6 +11,9 @@ import {
 } from "@openround/contracts/surveys";
 import { MemoryRepository, type MemoryRepositoryLifecycleContext } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
+import { assertAudienceAdmissionInMemory, getMemoryPlatformRepository } from "./platform-memory.js";
+import { assertAudienceAdmissionForTransaction } from "./platform-postgres.js";
+import { PlatformError } from "./platform-types.js";
 import {
   PublishedQuizLimitError,
   SessionCodeConflictError,
@@ -28,6 +31,7 @@ export class SurveyError extends Error {
       | "ROOM_CLOSED"
       | "VALIDATION_ERROR"
       | "PARTICIPANT_LIMIT"
+      | "ADMISSION_RESTRICTED"
       | "RATE_LIMITED",
     message: string,
   ) {
@@ -117,6 +121,7 @@ type Receipt = {
   receipt: unknown;
 };
 interface Transaction {
+  assertAudienceAdmission(workspaceId: string): Promise<void>;
   folderExists(id: string): Promise<boolean>;
   get<T extends Table>(table: T, id: string): Promise<Documents[T] | null>;
   list<T extends Table>(table: T, roomId?: string): Promise<Documents[T][]>;
@@ -130,6 +135,7 @@ type Run = <T>(
   workspaceId: string | null,
   work: (tx: Transaction) => Promise<T>,
   publication?: boolean,
+  admissionRoomId?: string,
 ) => Promise<T>;
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function requireRecord<T>(row: T | null): T {
@@ -417,32 +423,44 @@ export class SurveyRepository {
     return this.run(workspaceId, (tx) => tx.list("survey_feedback_rooms"));
   }
   admit(id: string, tokenHash: string, clock: Date | (() => Date)) {
-    return this.run(null, async (tx) => {
-      const room = requireRecord(await tx.get("survey_feedback_rooms", id));
-      const now = typeof clock === "function" ? clock() : clock;
-      open(room, now);
-      const guests = await tx.list("survey_guests", id);
-      const existing = guests.find((g) => g.tokenHash === tokenHash);
-      if (existing) return this.attemptView(room, existing);
-      if (guests.length >= room.participantLimit)
-        throw new SurveyError(
-          "PARTICIPANT_LIMIT",
-          "This survey has reached its participation limit",
-        );
-      const guest: Guest = {
-        schemaVersion: room.schemaVersion,
-        id: randomUUID(),
-        workspaceId: room.workspaceId,
-        roomId: id,
-        tokenHash,
-        revision: 0,
-        responses: {},
-        finalized: false,
-        receipt: null,
-      };
-      await tx.put("survey_guests", guest, true);
-      return this.attemptView(room, guest);
-    });
+    return this.run(
+      null,
+      async (tx) => {
+        const room = requireRecord(await tx.get("survey_feedback_rooms", id));
+        const now = typeof clock === "function" ? clock() : clock;
+        open(room, now);
+        const guests = await tx.list("survey_guests", id);
+        const existing = guests.find((g) => g.tokenHash === tokenHash);
+        if (existing) return this.attemptView(room, existing);
+        try {
+          await tx.assertAudienceAdmission(room.workspaceId);
+        } catch (error) {
+          if (error instanceof PlatformError && error.code === "ADMISSION_RESTRICTED")
+            throw new SurveyError(error.code, error.message);
+          throw error;
+        }
+        if (guests.length >= room.participantLimit)
+          throw new SurveyError(
+            "PARTICIPANT_LIMIT",
+            "This survey has reached its participation limit",
+          );
+        const guest: Guest = {
+          schemaVersion: room.schemaVersion,
+          id: randomUUID(),
+          workspaceId: room.workspaceId,
+          roomId: id,
+          tokenHash,
+          revision: 0,
+          responses: {},
+          finalized: false,
+          receipt: null,
+        };
+        await tx.put("survey_guests", guest, true);
+        return this.attemptView(room, guest);
+      },
+      false,
+      id,
+    );
   }
   private attemptView(room: SurveyRoom, guest: Guest) {
     return {
@@ -546,7 +564,7 @@ class MemorySurveyStore {
   private receipts = new Map<string, Receipt>();
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private readonly parent: MemoryRepository) {}
-  run: Run = (workspaceId, work, _publication = false) => {
+  run: Run = (workspaceId, work, _publication = false, admissionRoomId) => {
     const execute = async () => {
       const maps = structuredClone({
         surveys: this.surveys,
@@ -561,6 +579,8 @@ class MemorySurveyStore {
         previous?: LiveRoomCodeRecord;
       }> = [];
       const tx: Transaction = {
+        assertAudienceAdmission: async (workspace) =>
+          assertAudienceAdmissionInMemory(this.parent, workspace),
         folderExists: async (id) => this.parent.folders.get(id)?.workspaceId === workspaceId,
         get: async (table, id) => {
           const row = this[table].get(id);
@@ -639,9 +659,10 @@ class MemorySurveyStore {
         throw error;
       }
     };
-    const task = this.queue.then(() =>
-      workspaceId ? this.parent.withPublicationLock(workspaceId, execute) : execute(),
-    );
+    const task = this.queue.then(() => {
+      if (admissionRoomId) return getMemoryPlatformRepository(this.parent).withTransaction(execute);
+      return workspaceId ? this.parent.withPublicationLock(workspaceId, execute) : execute();
+    });
     this.queue = task.catch(() => undefined);
     return task;
   };
@@ -703,7 +724,7 @@ class MemorySurveyStore {
 }
 
 function postgresRun(repository: PostgresRepository): Run {
-  return async (workspaceId, work, _publication) => {
+  return async (workspaceId, work, _publication, admissionRoomId) => {
     const client: PoolClient = await repository.pool.connect();
     try {
       await client.query("BEGIN");
@@ -713,7 +734,21 @@ function postgresRun(repository: PostgresRepository): Run {
       ]);
       if (workspaceId)
         await client.query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE", [workspaceId]);
+      if (admissionRoomId) {
+        const room = await client.query<{ workspace_id: string }>(
+          "SELECT workspace_id FROM survey_feedback_rooms WHERE id = $1",
+          [admissionRoomId],
+        );
+        if (room.rows[0])
+          // Match other audience admissions and workspace-scoped Survey mutations:
+          // lock the workspace before the room, then re-read both room and restriction.
+          await client.query("SELECT id FROM workspaces WHERE id = $1 FOR SHARE", [
+            room.rows[0].workspace_id,
+          ]);
+      }
       const tx: Transaction = {
+        assertAudienceAdmission: (workspace) =>
+          assertAudienceAdmissionForTransaction(client, workspace),
         folderExists: async (id) =>
           Boolean(
             (

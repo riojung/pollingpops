@@ -85,11 +85,13 @@ export async function registerSurveyRoutes(
               ? 404
               : code === "UNAUTHORIZED"
                 ? 401
-                : code === "RATE_LIMITED"
-                  ? 429
-                  : code === "VALIDATION_ERROR"
-                    ? 422
-                    : 409,
+                : code === "ADMISSION_RESTRICTED"
+                  ? 403
+                  : code === "RATE_LIMITED"
+                    ? 429
+                    : code === "VALIDATION_ERROR"
+                      ? 422
+                      : 409,
           )
           .send({
             error: {

@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MemoryRepository, SurveyRepository } from "@openround/db";
+import { MemoryRepository, SurveyRepository, createPlatformRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -14,7 +14,11 @@ afterEach(async () => {
 });
 async function fixture(
   enabled = true,
-  options: { plan?: "free" | "pro"; communityRetentionDays?: number } = {},
+  options: {
+    plan?: "free" | "pro";
+    communityRetentionDays?: number;
+    businessEnabled?: boolean;
+  } = {},
 ) {
   const workspaceId = randomUUID();
   const repository = new MemoryRepository({
@@ -32,11 +36,12 @@ async function fixture(
     FEATURE_AUDIENCE_SCOPES: "true",
     FEATURE_FEEDBACK_ROOMS: "true",
     FEATURE_SURVEYS: String(enabled),
+    BUSINESS_PLATFORM_ENABLED: String(options.businessEnabled ?? false),
     CORE_PARITY_WORKSPACE_ALLOWLIST: workspaceId,
   });
   const built = await buildApp(config, { repository, cache: new MemorySessionCache() });
   app = built.app;
-  return { app, config, repository, headers: await signIn(app) };
+  return { app, config, repository, workspaceId, headers: await signIn(app) };
 }
 async function signIn(app: FastifyInstance) {
   const magic = await app.inject({
@@ -50,6 +55,78 @@ async function signIn(app: FastifyInstance) {
   return { cookie };
 }
 describe("Survey creator and participant APIs", () => {
+  it.each([true, false])(
+    "blocks new Survey admissions and preserves existing guests when business writers are enabled=%s",
+    async (businessEnabled) => {
+      const { app, headers, repository, workspaceId } = await fixture(true, { businessEnabled });
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/surveys",
+        headers,
+        payload: { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const id = created.json().survey.id;
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/surveys/${id}/publish`,
+        headers,
+        payload: { idempotencyKey: randomUUID(), expectedRevision: 0 },
+      });
+      expect(published.statusCode, published.body).toBe(200);
+      const shared = await app.inject({
+        method: "POST",
+        url: `/v1/surveys/${id}/rooms`,
+        headers,
+        payload: { idempotencyKey: randomUUID(), expectedRevision: 0 },
+      });
+      expect(shared.statusCode, shared.body).toBe(201);
+      const room = shared.json().room;
+      const admittedHeaders = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+      const joined = await app.inject({
+        method: "POST",
+        url: "/v1/survey-rooms/join",
+        headers: admittedHeaders,
+        payload: { code: room.code },
+      });
+      expect(joined.statusCode, joined.body).toBe(200);
+      const platform = createPlatformRepository(repository);
+      await platform.setWorkspaceAdmissionRestriction(workspaceId, true);
+      const newGuestHeaders = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+      const blocked = await app.inject({
+        method: "POST",
+        url: "/v1/survey-rooms/join",
+        headers: newGuestHeaders,
+        payload: { code: room.code },
+      });
+      expect(blocked.statusCode, blocked.body).toBe(403);
+      expect(blocked.json().error.code).toBe("ADMISSION_RESTRICTED");
+      const resumed = await app.inject({
+        method: "POST",
+        url: "/v1/survey-rooms/join",
+        headers: admittedHeaders,
+        payload: { code: room.code },
+      });
+      expect(resumed.statusCode, resumed.body).toBe(200);
+      expect(resumed.json()).toEqual(joined.json());
+      const draft = await app.inject({
+        method: "POST",
+        url: `/v1/survey-rooms/${room.id}/draft`,
+        headers: admittedHeaders,
+        payload: { idempotencyKey: randomUUID(), expectedRevision: 0, responses: {} },
+      });
+      expect(draft.statusCode, draft.body).toBe(200);
+      expect(draft.json().attempt.revision).toBe(1);
+      await platform.setWorkspaceAdmissionRestriction(workspaceId, false);
+      const unblocked = await app.inject({
+        method: "POST",
+        url: "/v1/survey-rooms/join",
+        headers: newGuestHeaders,
+        payload: { code: room.code },
+      });
+      expect(unblocked.statusCode, unblocked.body).toBe(200);
+    },
+  );
   it.each(["blank", "template", "duplicate"] as const)(
     "replays a lost legacy %s creation response after deploying v2 writers",
     async (mode) => {

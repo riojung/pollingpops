@@ -1,3 +1,4 @@
+import { expectFolderConformance } from "./support/folder-conformance.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -135,6 +136,140 @@ function publishableRound(title: string): QuizDraft {
 }
 
 describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
+  it("splits legacy shared folders by content type while retaining Round IDs and frozen versions", async () => {
+    const schema = `openround_folder_upgrade_${randomUUID().replaceAll("-", "")}`;
+    const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
+    const legacyDirectory = await mkdtemp(join(tmpdir(), "openround-pre-scoped-folders-"));
+    const adminPool = new Pool({ connectionString: adminUrl });
+    let pool: Pool | undefined;
+    try {
+      for (const migration of (await discoverMigrations(directory)).filter(
+        ({ version }) => version <= 65,
+      ))
+        await writeFile(join(legacyDirectory, migration.fileName), migration.sql);
+      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      const url = new URL(adminUrl!);
+      url.searchParams.set("options", `-csearch_path=${schema},public`);
+      pool = new Pool({ connectionString: url.toString(), max: 1 });
+      await runMigrations(pool, legacyDirectory);
+      await pool.query("SELECT set_config('app.system_access', 'on', false)");
+      const userId = randomUUID();
+      const workspaceId = randomUUID();
+      const folderId = randomUUID();
+      const unusedId = randomUUID();
+      const quizId = randomUUID();
+      const presentationId = randomUUID();
+      const surveyId = randomUUID();
+      const content = publishableRound("Retained Round");
+      const presentationContent = presentationSessionConformanceContent();
+      const surveyDraft = surveyFixture();
+      const surveyData = {
+        schemaVersion: 1,
+        id: surveyId,
+        workspaceId,
+        draft: surveyDraft,
+        revision: 0,
+        status: "draft",
+        versionId: null,
+        publishedRevision: null,
+        folderId,
+      };
+      await pool.query("INSERT INTO users (id, email) VALUES ($1,$2)", [
+        userId,
+        `${userId}@example.com`,
+      ]);
+      await pool.query(
+        "INSERT INTO workspaces (id,name,segment,owner_id) VALUES ($1,'Folder upgrade','education',$2)",
+        [workspaceId, userId],
+      );
+      await pool.query(
+        "INSERT INTO folders (id,workspace_id,name) VALUES ($1,$2,'Shared'),($3,$2,'Unused')",
+        [folderId, workspaceId, unusedId],
+      );
+      await pool.query(
+        "INSERT INTO quizzes (id,workspace_id,title,draft,folder_id) VALUES ($1,$2,$3,$4::jsonb,$5)",
+        [quizId, workspaceId, content.title, JSON.stringify(content), folderId],
+      );
+      await pool.query(
+        "INSERT INTO quiz_versions (id,workspace_id,quiz_id,version,content,content_hash) VALUES ($1,$2,$3,1,$4::jsonb,'frozen-round')",
+        [randomUUID(), workspaceId, quizId, JSON.stringify(content)],
+      );
+      await pool.query(
+        "INSERT INTO presentations (id,workspace_id,title,draft,draft_schema_version,folder_id) VALUES ($1,$2,$3,$4::jsonb,2,$5)",
+        [
+          presentationId,
+          workspaceId,
+          presentationContent.title,
+          JSON.stringify(presentationContent),
+          folderId,
+        ],
+      );
+      await pool.query(
+        "INSERT INTO presentation_versions (id,workspace_id,presentation_id,version,content,content_schema_version,content_hash,source_draft_revision) VALUES ($1,$2,$3,1,$4::jsonb,2,'frozen-presentation',0)",
+        [randomUUID(), workspaceId, presentationId, JSON.stringify(presentationContent)],
+      );
+      await pool.query(
+        "INSERT INTO surveys (id,workspace_id,data,folder_id) VALUES ($1,$2,$3::jsonb,$4)",
+        [surveyId, workspaceId, JSON.stringify(surveyData), folderId],
+      );
+      await pool.query(
+        "INSERT INTO survey_versions (id,workspace_id,survey_id,data) VALUES ($1,$2,$3,$4::jsonb)",
+        [
+          randomUUID(),
+          workspaceId,
+          surveyId,
+          JSON.stringify({ schemaVersion: 1, content: surveyDraft }),
+        ],
+      );
+      const frozenBefore = await pool.query(
+        "SELECT content AS frozen FROM quiz_versions UNION ALL SELECT content FROM presentation_versions UNION ALL SELECT data FROM survey_versions",
+      );
+      await runMigrations(pool, directory);
+      await runMigrations(pool, directory);
+      const folders = await pool.query(
+        "SELECT id,artifact_type,parent_id,position FROM folders WHERE workspace_id=$1 ORDER BY artifact_type,position",
+        [workspaceId],
+      );
+      expect(folders.rows).toHaveLength(4);
+      expect(
+        folders.rows.filter((row) => row.artifact_type === "round").map((row) => row.id),
+      ).toEqual([folderId, unusedId]);
+      const assignments = await pool.query(
+        "SELECT folder_id AS id,'round' AS type FROM quizzes UNION ALL SELECT folder_id,'presentation' FROM presentations UNION ALL SELECT folder_id,'survey' FROM surveys",
+      );
+      for (const assignment of assignments.rows)
+        expect(folders.rows.find((folder) => folder.id === assignment.id)?.artifact_type).toBe(
+          assignment.type,
+        );
+      const survey = (
+        await pool.query("SELECT folder_id,data FROM surveys WHERE id=$1", [surveyId])
+      ).rows[0]!;
+      expect(survey.data.folderId).toBe(survey.folder_id);
+      expect(survey.data.draft).toEqual(surveyDraft);
+      expect(survey.data.revision).toBe(0);
+      expect(
+        (
+          await pool.query(
+            "SELECT content AS frozen FROM quiz_versions UNION ALL SELECT content FROM presentation_versions UNION ALL SELECT data FROM survey_versions",
+          )
+        ).rows,
+      ).toEqual(frozenBefore.rows);
+      // Direct writes receive the same parent/type protections as repository calls.
+      await expect(
+        pool.query("UPDATE folders SET parent_id=id WHERE id=$1", [folderId]),
+      ).rejects.toMatchObject({ code: "23514" });
+      const presentationFolder = folders.rows.find((row) => row.artifact_type === "presentation")!;
+      await expect(
+        pool.query("UPDATE quizzes SET folder_id=$2 WHERE id=$1", [quizId, presentationFolder.id]),
+      ).rejects.toMatchObject({ code: "23514" });
+    } finally {
+      await pool?.end();
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.end();
+      await rm(legacyDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("upgrades pre-055 rooms and command receipts without retroactively enabling live cards", async () => {
     const schema = `openround_live_cards_upgrade_${randomUUID().replaceAll("-", "")}`;
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
@@ -1091,6 +1226,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 63, name: "survey_multiselection" },
       { version: 64, name: "survey_library_and_beta_feedback" },
       { version: 65, name: "business_platform" },
+      { version: 66, name: "scoped_nested_folders" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1288,6 +1424,14 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
     expect((await surveys.attempt(room.id, tokenHash, now)).responses).toEqual(responses);
     await surveys.deleteRoom(actor.workspaceId, room.id);
+  });
+
+  it("conforms for scoped nested folder isolation, ordering, promotion and concurrent cycle prevention", async () => {
+    await expectFolderConformance(
+      repository,
+      await creator("folder-conformance"),
+      await creator("folder-outsider"),
+    );
   });
 
   it("supports self-paced Surveys through the restricted PostgreSQL runtime", async () => {
@@ -4726,6 +4870,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       id: randomUUID(),
       workspaceId: owner.workspaceId,
       name: `Briefings ${randomUUID()}`,
+      artifactType: "presentation",
       createdAt: now,
       updatedAt: now,
     });

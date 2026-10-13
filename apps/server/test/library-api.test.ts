@@ -170,7 +170,7 @@ describe("Library metadata API", () => {
       method: "POST",
       url: "/v1/folders",
       headers: { cookie },
-      payload: { name: "Leadership sessions" },
+      payload: { name: "Leadership sessions", artifactType: "presentation" },
     });
     const folderId = folder.json<{ folder: { id: string } }>().folder.id;
     const organized = await app.inject({

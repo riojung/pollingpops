@@ -1,0 +1,378 @@
+.tabs {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface-raised);
+}
+
+.tab,
+.tabActive {
+  display: inline-flex;
+  min-height: 42px;
+  padding: 8px 14px;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--ui-text-muted);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.tabActive {
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.backLink {
+  color: var(--ui-accent-ink);
+  font-weight: 750;
+}
+
+.createForm,
+.command,
+.panel {
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface-raised);
+}
+
+.createForm {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.createForm label,
+.command label,
+.bulkControls label:not(.selectAll) {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--ui-text-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.createForm input,
+.createForm select,
+.command input,
+.command select,
+.bulkControls select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  color: var(--ui-text-strong);
+  font: inherit;
+  background: var(--ui-surface);
+}
+
+.createForm button,
+.command button,
+.bulkControls button,
+.error button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  color: var(--ui-text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--ui-surface);
+  cursor: pointer;
+}
+
+.createForm .primaryButton,
+.command .primaryButton,
+.bulkControls .primaryButton {
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
+}
+
+.command .dangerButton {
+  border-color: var(--ui-danger-border);
+  color: var(--ui-danger-text);
+  background: var(--ui-danger-bg);
+}
+
+.tabs a:focus-visible,
+.layout button:focus-visible,
+.createForm :is(input, select, button):focus-visible,
+.command :is(input, select, button):focus-visible,
+.bulkControls :is(input, select, button):focus-visible,
+.contentList :is(input, a):focus-visible,
+.error button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel {
+  min-width: 0;
+}
+
+.panel h2,
+.command h2 {
+  margin: 0 0 15px;
+  overflow-wrap: anywhere;
+  color: var(--ui-text-strong);
+  font-size: 18px;
+}
+
+.folderList,
+.children,
+.contentList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.children {
+  margin-left: 15px;
+  padding-left: 10px;
+  border-left: 1px solid var(--ui-border);
+}
+
+.folderRow {
+  margin-top: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.folderSelect,
+.unfiled {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  color: var(--ui-text-strong);
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  background: var(--ui-surface);
+  cursor: pointer;
+}
+
+.unfiled {
+  margin-bottom: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+}
+
+.folderSelect[aria-pressed="true"],
+.unfiled[aria-pressed="true"] {
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.folderName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.folderIcon {
+  flex-shrink: 0;
+  font-size: 22px;
+}
+
+.count {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--ui-surface-hover);
+}
+
+.folderActions {
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--ui-border);
+  background: var(--ui-surface-soft);
+}
+
+.folderActions button {
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 0;
+  color: var(--ui-text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  background: transparent;
+  cursor: pointer;
+}
+
+.folderActions button:hover:not(:disabled) {
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.layout button:disabled,
+.createForm :disabled,
+.command :disabled,
+.error :disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.contentHeading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 15px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.contentHeading > span,
+.empty,
+.notice,
+.command p {
+  color: var(--ui-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.bulkControls {
+  display: flex;
+  margin: 0 0 16px;
+  padding: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: end;
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+}
+
+.bulkControls > span {
+  color: var(--ui-text-muted);
+  font-size: 12px;
+}
+
+.bulkControls label:not(.selectAll) {
+  flex: 1 1 180px;
+}
+
+.selectAll {
+  display: flex;
+  min-height: 42px;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.contentList li {
+  display: flex;
+  min-height: 54px;
+  padding: 12px 0;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--ui-border);
+}
+
+.contentList a {
+  min-width: 0;
+  color: var(--ui-accent-ink);
+  font-size: 14px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.contentList input,
+.selectAll input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ui-accent);
+}
+
+.status {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+}
+
+.command {
+  margin-bottom: 20px;
+  border-color: var(--ui-border-strong);
+}
+
+.commandActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.announcement:not(:empty),
+.error {
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  color: var(--ui-text-strong);
+  background: var(--ui-accent-soft);
+}
+
+.announcement:empty {
+  margin: 0;
+}
+
+.error {
+  background: var(--ui-danger-bg);
+}
+
+.error p {
+  margin: 0 0 10px;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .createForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .createForm,
+  .command,
+  .panel {
+    padding: 14px;
+  }
+
+  .children {
+    margin-left: 8px;
+    padding-left: 6px;
+  }
+
+  .status {
+    max-width: 90px;
+    overflow-wrap: anywhere;
+  }
+}

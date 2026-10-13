@@ -7,6 +7,7 @@ import type {
   ConfidenceValue,
   FollowupPurpose,
   FollowupTimeMode,
+  FolderArtifactType,
   IdentityRequirement,
   InstitutionCapabilities,
   InstitutionContractStatus,
@@ -250,8 +251,25 @@ export interface FolderRecord {
   id: string;
   workspaceId: string;
   name: string;
+  artifactType: FolderArtifactType;
+  parentId: string | null;
+  position: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export type FolderCreateInput = Omit<FolderRecord, "artifactType" | "parentId" | "position"> &
+  Partial<Pick<FolderRecord, "artifactType" | "parentId" | "position">>;
+export type FolderUpdateInput = Partial<Pick<FolderRecord, "name" | "parentId" | "position">>;
+
+export class FolderError extends Error {
+  constructor(
+    public readonly code: "NOT_FOUND" | "CONFLICT",
+    message: string,
+  ) {
+    super(message);
+    this.name = "FolderError";
+  }
 }
 
 export interface QuizVersionRecord {
@@ -1110,15 +1128,20 @@ export interface Repository {
     search?: string,
     limit?: number,
   ): Promise<PresentationCompanionPublishedQuestionCatalog>;
-  listFolders(workspaceId: string): Promise<FolderRecord[]>;
-  createFolder(input: FolderRecord): Promise<FolderRecord>;
+  listFolders(workspaceId: string, artifactType?: FolderArtifactType): Promise<FolderRecord[]>;
+  createFolder(input: FolderCreateInput): Promise<FolderRecord>;
+  updateFolder(
+    workspaceId: string,
+    folderId: string,
+    input: FolderUpdateInput,
+  ): Promise<FolderRecord | null>;
   renameFolder(workspaceId: string, folderId: string, name: string): Promise<FolderRecord | null>;
   deleteFolder(workspaceId: string, folderId: string): Promise<boolean>;
   organizeQuiz(
     workspaceId: string,
     quizId: string,
     folderId: string | null,
-    tags: string[],
+    tags?: string[],
   ): Promise<QuizRecord | null>;
   createQuiz(input: QuizRecord): Promise<QuizRecord>;
   getQuiz(workspaceId: string, quizId: string): Promise<QuizRecord | null>;

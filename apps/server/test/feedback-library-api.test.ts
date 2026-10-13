@@ -326,7 +326,7 @@ describe("feedback and Survey Library APIs", () => {
       method: "POST",
       url: "/v1/folders",
       headers,
-      payload: { name: "Survey folder" },
+      payload: { name: "Survey folder", artifactType: "survey" },
     });
     expect(folder.statusCode, folder.body).toBe(201);
     const input = {

@@ -93,6 +93,7 @@ describe("Library metadata", () => {
       id: folderId,
       workspaceId,
       name: "Executive briefings",
+      artifactType: "presentation",
       createdAt: now,
       updatedAt: now,
     });
@@ -100,6 +101,7 @@ describe("Library metadata", () => {
       id: foreignFolderId,
       workspaceId: otherWorkspaceId,
       name: "Foreign folder",
+      artifactType: "presentation",
       createdAt: now,
       updatedAt: now,
     });

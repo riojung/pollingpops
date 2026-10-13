@@ -27,6 +27,20 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds nested content-scoped folders with serialized ancestry checks and preserved artifact assignments", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 66)!;
+    expect(migration.name).toBe("scoped_nested_folders");
+    expect(migration.sql).toContain("pg_advisory_xact_lock");
+    expect(migration.sql).toContain("WITH RECURSIVE ancestors");
+    expect(migration.sql).toContain("folders_sibling_name_uq");
+    expect(migration.sql).toContain("jsonb_set(artifact.data, '{folderId}'");
+    expect(migration.sql).not.toMatch(
+      /UPDATE (quiz_versions|presentation_versions|survey_versions)|DELETE FROM (quizzes|presentations|surveys)|DISABLE ROW LEVEL SECURITY/i,
+    );
+  });
+
   it("expands Survey v2 document checks without rewriting accepted data or immutable snapshots", async () => {
     const migrations = await discoverMigrations(
       join(dirname(fileURLToPath(import.meta.url)), "../migrations"),

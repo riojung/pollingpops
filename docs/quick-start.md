@@ -39,11 +39,19 @@ Creator draft changes autosave; **Save draft** saves immediately. Publishing wai
 save and remains an explicit action. If a save fails, select **Retry save**. A revision conflict
 pauses saving: download your local draft before confirming **Reload latest version**. Keep the
 editor open until saving succeeds; participant progress still uses **Save progress** explicitly.
-Return via **Library → Browse Surveys**. Opinion polls and rating questions are supported; aggregate distributions
+Return via **Library → Surveys**. Opinion polls and rating questions are supported; aggregate distributions
 appear only after closing the run or reaching its deadline, with five finalized responses per question.
 New runs retain results for 30 days on Free, 365 on Pro, or the Community operator setting after
 the scheduled close. The sharing screen shows the frozen expiry date; closing early does not extend it.
 See the [user guide](user-guide.md) for limits and privacy behavior.
+
+To organize content, select **Rounds**, **Presentations**, or **Surveys** in Library, then choose
+**Manage folders**. Each type has its own folder tree. Create a folder at the top level or inside
+another folder; use **Rename**, **Move**, and **Move up/down** to arrange it. Open a folder or
+**Unfiled**, select content, choose a destination, and select **Move selected**. Workspace owners
+and editors can make changes; viewers can browse folders. Deleting a folder keeps its content,
+moves its direct content to Unfiled, and promotes its child folders to the top level. A conflicting
+top-level name must be resolved before deletion.
 
 Apply migration 063 and deploy the matching web/API release before creating multiple-selection
 Surveys. Version-1 Surveys and their frozen runs remain readable. New content uses version 2;

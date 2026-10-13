@@ -12,6 +12,7 @@ import {
   BrandThemeSchema,
   CheckpointSetImportRequestSchema,
   CreateFolderSchema,
+  FolderListQuerySchema,
   CreateAuthoringJobSchema,
   CreateChatMessageSchema,
   CreateFollowupSchema,
@@ -87,6 +88,7 @@ import {
 } from "@openround/contracts";
 import {
   PublishedQuizLimitError,
+  FolderError,
   QuizDraftMutationConflictError,
   QuizDraftRevisionConflictError,
   type BillingEventInput,
@@ -626,6 +628,15 @@ export async function registerRoutes(
               : status === 400
                 ? "VALIDATION_ERROR"
                 : "CONFLICT",
+        error.message,
+        request.id,
+      );
+    }
+    if (error instanceof FolderError) {
+      return apiError(
+        reply,
+        error.code === "NOT_FOUND" ? 404 : 409,
+        error.code,
         error.message,
         request.id,
       );
@@ -1500,7 +1511,8 @@ export async function registerRoutes(
   app.get("/v1/folders", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    return { folders: await repository.listFolders(creator.workspaceId) };
+    const query = FolderListQuerySchema.parse(request.query);
+    return { folders: await repository.listFolders(creator.workspaceId, query.artifactType) };
   });
 
   app.post("/v1/folders", async (request, reply) => {
@@ -1516,6 +1528,8 @@ export async function registerRoutes(
       id: randomUUID(),
       workspaceId: creator.workspaceId,
       name,
+      artifactType: input.artifactType,
+      parentId: input.parentId,
       createdAt: now,
       updatedAt: now,
     });
@@ -1536,15 +1550,21 @@ export async function registerRoutes(
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id } = IdParamsSchema.parse(request.params);
     const input = UpdateFolderSchema.parse(request.body);
-    const name = cleanPlainText(input.name, 80);
-    if (!name)
+    const name = input.name === undefined ? undefined : cleanPlainText(input.name, 80);
+    if (name === "")
       return apiError(reply, 400, "VALIDATION_ERROR", "Folder name is required", request.id);
-    const folder = await repository.renameFolder(creator.workspaceId, id, name);
+    const folder = await repository.updateFolder(creator.workspaceId, id, {
+      ...input,
+      ...(name === undefined ? {} : { name }),
+    });
     if (!folder) return apiError(reply, 404, "NOT_FOUND", "Folder not found", request.id);
     await repository.recordAudit({
       workspaceId: creator.workspaceId,
       actorId: creator.userId,
-      action: "folder.rename",
+      action:
+        input.parentId !== undefined || input.position !== undefined
+          ? "folder.move"
+          : "folder.rename",
       targetType: "folder",
       targetId: folder.id,
       requestId: request.id,
@@ -1961,8 +1981,8 @@ export async function registerRoutes(
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id } = IdParamsSchema.parse(request.params);
     const input = OrganizeQuizSchema.parse(request.body);
-    const tags = input.tags.map((tag) => cleanPlainText(tag, 40));
-    if (tags.some((tag) => !tag)) {
+    const tags = input.tags?.map((tag) => cleanPlainText(tag, 40));
+    if (tags?.some((tag) => !tag)) {
       return apiError(reply, 400, "VALIDATION_ERROR", "Tags cannot be empty", request.id);
     }
     const quiz = await repository.organizeQuiz(creator.workspaceId, id, input.folderId, tags);

@@ -1,3 +1,4 @@
+import { createFolderState, updateFolderState, deleteFolderState } from "./folders.js";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +27,7 @@ import {
   questionDelivery,
   QuestionSchema,
   type BrandTheme,
+  type FolderArtifactType,
   type QuizDraft,
   type Report,
   type SupportedLocale,
@@ -87,6 +89,8 @@ import type {
   ChatReactionSummaryRecord,
   CreatorContext,
   FolderRecord,
+  FolderCreateInput,
+  FolderUpdateInput,
   FollowupAccessRecord,
   FollowupAnswerRecord,
   FollowupAttemptRecord,
@@ -362,6 +366,9 @@ function mapFolder(row: QueryResultRow): FolderRecord {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     name: String(row.name),
+    artifactType: row.artifact_type,
+    parentId: row.parent_id ?? null,
+    position: Number(row.position),
     createdAt: date(row.created_at),
     updatedAt: date(row.updated_at),
   };
@@ -1878,54 +1885,113 @@ export class PostgresRepository implements Repository {
     };
   }
 
-  async listFolders(workspaceId: string) {
+  async listFolders(workspaceId: string, artifactType?: FolderArtifactType) {
     const result = await this.workspaceQuery(
       workspaceId,
-      "SELECT * FROM folders WHERE workspace_id = $1 ORDER BY lower(name), id",
-      [workspaceId],
+      "SELECT * FROM folders WHERE workspace_id = $1 AND ($2::text IS NULL OR artifact_type = $2) ORDER BY position, lower(name), id",
+      [workspaceId, artifactType ?? null],
     );
     return result.rows.map(mapFolder);
   }
 
-  async createFolder(input: FolderRecord) {
-    const result = await this.workspaceQuery(
-      input.workspaceId,
-      `INSERT INTO folders (id, workspace_id, name, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [input.id, input.workspaceId, input.name, input.createdAt, input.updatedAt],
+  private async folderTransaction<T>(
+    workspaceId: string,
+    work: (client: PoolClient, folders: FolderRecord[]) => Promise<T>,
+  ) {
+    return this.transaction(
+      async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 660066))", [
+          workspaceId,
+        ]);
+        const result = await client.query(
+          "SELECT * FROM folders WHERE workspace_id = $1 ORDER BY position, lower(name), id",
+          [workspaceId],
+        );
+        return work(client, result.rows.map(mapFolder));
+      },
+      { workspaceId },
     );
-    return mapFolder(result.rows[0]!);
+  }
+
+  private async storeFolderState(client: PoolClient, folders: FolderRecord[]) {
+    for (const folder of folders)
+      await client.query(
+        "UPDATE folders SET name = $3, parent_id = $4, position = $5, updated_at = $6 WHERE workspace_id = $1 AND id = $2",
+        [
+          folder.workspaceId,
+          folder.id,
+          folder.name,
+          folder.parentId,
+          folder.position,
+          folder.updatedAt,
+        ],
+      );
+  }
+
+  async createFolder(input: FolderCreateInput) {
+    return this.folderTransaction(input.workspaceId, async (client, existing) => {
+      const state = createFolderState(existing, input);
+      const folder = state.folder;
+      await client.query(
+        `INSERT INTO folders (id, workspace_id, name, artifact_type, parent_id, position, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          folder.id,
+          folder.workspaceId,
+          folder.name,
+          folder.artifactType,
+          folder.parentId,
+          folder.position,
+          folder.createdAt,
+          folder.updatedAt,
+        ],
+      );
+      await this.storeFolderState(client, state.folders);
+      return folder;
+    });
+  }
+
+  async updateFolder(workspaceId: string, folderId: string, input: FolderUpdateInput) {
+    return this.folderTransaction(workspaceId, async (client, existing) => {
+      const state = updateFolderState(existing, folderId, input);
+      if (!state) return null;
+      await this.storeFolderState(client, state.folders);
+      return state.folder;
+    });
   }
 
   async renameFolder(workspaceId: string, folderId: string, name: string) {
-    const result = await this.workspaceQuery(
-      workspaceId,
-      `UPDATE folders SET name = $3, updated_at = now()
-       WHERE workspace_id = $1 AND id = $2 RETURNING *`,
-      [workspaceId, folderId, name],
-    );
-    return result.rows[0] ? mapFolder(result.rows[0]) : null;
+    return this.updateFolder(workspaceId, folderId, { name });
   }
 
   async deleteFolder(workspaceId: string, folderId: string) {
-    const result = await this.workspaceQuery(
-      workspaceId,
-      "DELETE FROM folders WHERE workspace_id = $1 AND id = $2",
-      [workspaceId, folderId],
-    );
-    return (result.rowCount ?? 0) > 0;
+    return this.folderTransaction(workspaceId, async (client, existing) => {
+      const state = deleteFolderState(existing, folderId);
+      if (!state) return false;
+      await client.query("DELETE FROM folders WHERE workspace_id = $1 AND id = $2", [
+        workspaceId,
+        folderId,
+      ]);
+      await this.storeFolderState(client, state);
+      return true;
+    });
   }
 
-  async organizeQuiz(workspaceId: string, quizId: string, folderId: string | null, tags: string[]) {
+  async organizeQuiz(
+    workspaceId: string,
+    quizId: string,
+    folderId: string | null,
+    tags?: string[],
+  ) {
     const result = await this.workspaceQuery(
       workspaceId,
-      `UPDATE quizzes SET folder_id = $3, tags = $4::text[], updated_at = now()
+      `UPDATE quizzes SET folder_id = $3, tags = COALESCE($4::text[], tags), updated_at = now()
        WHERE workspace_id = $1 AND id = $2
          AND ($3::uuid IS NULL OR EXISTS (
-           SELECT 1 FROM folders WHERE workspace_id = $1 AND id = $3
+           SELECT 1 FROM folders WHERE workspace_id = $1 AND id = $3 AND artifact_type = 'round'
          ))
        RETURNING *`,
-      [workspaceId, quizId, folderId, tags],
+      [workspaceId, quizId, folderId, tags ?? null],
     );
     return result.rows[0] ? mapQuiz(result.rows[0]) : null;
   }
@@ -7277,7 +7343,7 @@ export class PostgresRepository implements Repository {
            ORDER BY workspace_id, quiz_id, created_at, application_id`,
         );
         const folders = await queryWorkspaceData(
-          `SELECT id, workspace_id, name, created_at, updated_at
+          `SELECT id, workspace_id, name, artifact_type, parent_id, position, created_at, updated_at
            FROM folders WHERE workspace_id = ANY($1::uuid[]) ORDER BY workspace_id, lower(name), id`,
         );
         const quizVersions = await queryWorkspaceData(

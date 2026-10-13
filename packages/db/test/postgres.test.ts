@@ -1,4 +1,5 @@
 import { expectFolderConformance } from "./support/folder-conformance.js";
+import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1284,6 +1285,14 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     const actor = await creator("survey-library-feedback");
     await expectSurveyLibraryConformance(repository, actor);
     await expectFeedbackConformance(repository, actor);
+  });
+
+  it("counts retained session kinds and searches frozen Round history under restricted PostgreSQL permissions", async () => {
+    await expectSessionHistoryConformance(
+      repository,
+      await creator("session-history-owner"),
+      await creator("session-history-outsider"),
+    );
   });
 
   it("paginates feedback by creation time and ID without losing records when cursor anchors are deleted", async () => {

@@ -154,8 +154,12 @@ for (const surface of ["", "@mobile "]) {
     await expect(trigger).toBeFocused();
     await page.unroute(`${api}/v1/feedback`);
     await page.getByRole("link", { name: "Survey runs and results", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Survey runs", exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "Back to Survey library", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /^Surveys/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await page.getByRole("link", { name: "Back to Survey library", exact: true }).first().click();
     await expect(page.getByRole("tab", { name: /^Surveys/ })).toHaveAttribute(
       "aria-selected",
       "true",

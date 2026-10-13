@@ -383,6 +383,23 @@ types and omitted media are reported.
 Export a checkpoint set as Polling Pops JSON, formula-safe UTF-8 CSV, or QTI ZIP. Hosted portability
 exports require Pro; community deployments do not impose an application paywall.
 
+### Find sessions and Survey runs
+
+Open **Sessions** and choose **Rounds**, **Presentations**, or **Surveys**. Each tab shows
+the workspace's retained delivery history; its badge counts all retained sessions of that type.
+Search by the title recorded when the room was created or its room code. Use **Status**, the
+source-content selector, and date filters to narrow the list. Round and Presentation dates refer
+to when the session started; Survey dates refer to its collection deadline.
+
+Choose **Grid** or **List** to save a layout for this workspace. Sessions keeps its own layout
+preference. The selected tab, search, and filters can be bookmarked or shared with another
+workspace member through the page URL. **Back to … library** opens the matching Library tab.
+
+Active Rounds and Presentations offer host access to owners and editors. Survey runs offer
+**Manage sharing** while open and **View results** while their results remain retained. Survey
+history stays available when new Survey creation is paused. Survey cards do not expose
+respondent identities or individual answers. Existing `/surveys/runs` links open the Surveys tab.
+
 ### Delete archived content and session history
 
 Workspace owners can permanently delete archived Rounds and Presentations in **Library**.
@@ -401,7 +418,9 @@ In **Sessions**, owners can choose **Delete session** for a finished or expired 
 Presentation session. Confirmation permanently removes that session's responses, report, and
 linked follow-ups. The source Round or Presentation remains in the Library. Active rooms must
 finish or expire before the session list offers deletion. Editors and viewers cannot permanently
-delete content or sessions.
+delete content or sessions. Owners can also choose **Delete Survey run** for a closed or expired
+Survey run; this permanently removes the run and its retained responses while keeping its source
+Survey in the Library.
 
 Live access expiry does not immediately remove retained session history. An **Expired** session
 can remain listed for its retention period, but cannot be resumed. Deleting its history also

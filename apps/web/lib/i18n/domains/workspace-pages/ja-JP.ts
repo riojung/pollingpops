@@ -532,6 +532,47 @@ const messages = {
   "pages.home.sessions.blockProgress": "ブロック {current}/{total}",
   "pages.home.sessions.lobby": "ロビー",
   "pages.home.sessions.questionProgress": "質問 {current}/{total}",
+  "pages.common.survey": "アンケート",
+  "pages.sessions.typeLabel": "セッションの種類",
+  "pages.sessions.searchRounds": "ラウンドのセッションを検索",
+  "pages.sessions.searchPresentations": "プレゼンテーションのセッションを検索",
+  "pages.sessions.searchSurveys": "アンケートのセッションを検索",
+  "pages.sessions.filtersLabel": "セッションの絞り込み",
+  "pages.sessions.allPresentations": "すべてのプレゼンテーション",
+  "pages.sessions.allSurveys": "すべてのアンケート",
+  "pages.sessions.startedFrom": "開始日の下限",
+  "pages.sessions.startedTo": "開始日の上限",
+  "pages.sessions.closesFrom": "終了日の下限",
+  "pages.sessions.closesTo": "終了日の上限",
+  "pages.sessions.backToLibrary": "{type}ライブラリに戻る",
+  "pages.sessions.countLoading": "セッション数を読み込み中",
+  "pages.sessions.countUnavailable": "セッション数を取得できません",
+  "pages.sessions.resultCount": "{count}件のセッションを表示",
+  "pages.sessions.noMatches": "条件に一致するセッションはありません。",
+  "pages.sessions.surveyListLabel": "アンケートのセッション",
+  "pages.sessions.surveyClosesInRoom": "{date}に終了 · ルーム {code}",
+  "pages.sessions.surveySharing": "共有を管理",
+  "pages.sessions.surveyEmptyDescription":
+    "ライブラリで公開済みのアンケートを開き、共有リンクを作成してください。",
+  "pages.sessions.presentationEmptyDescription":
+    "ライブラリからプレゼンテーションを開始すると、セッション履歴が表示されます。",
+  "pages.sessions.roundEmptyDescription":
+    "ライブラリからラウンドを開始すると、セッション履歴が表示されます。",
+  "pages.sessions.emptyRounds": "ラウンドのセッションはまだありません",
+  "pages.sessions.emptyPresentations": "プレゼンテーションのセッションはまだありません",
+  "pages.sessions.emptySurveys": "アンケートのセッションはまだありません",
+  "pages.sessions.layoutLabel": "セッションのレイアウト",
+  "pages.sessions.loadingError": "セッションを読み込めませんでした。もう一度お試しください。",
+  "pages.sessions.surveyDescription":
+    "共有リンクごとに、各自のペースで回答できる固定版のアンケートが作成されます。結果は質問ごとに表示され、回答者の別名や個人の回答を結び付ける行は含まれません。",
+  "pages.sessions.surveyRun": "アンケートの実施記録を見る",
+  "pages.sessions.deleteSurvey": "アンケートの実施記録を削除",
+  "pages.sessions.deleteSurveyConfirm":
+    "アンケートの実施記録「{title}」と、その提出内容および結果を完全に削除しますか？この操作は取り消せません。",
+  "pages.sessions.description":
+    "ラウンドやプレゼンテーションのライブセッションと、各自のペースで回答するアンケートの実施記録を確認できます。",
+  "pages.sessions.eyebrow": "実施履歴",
+  "pages.sessions.workspaceSearch": "ワークスペースのセッションを検索",
 } satisfies WorkspacePageMessages;
 
 export default messages;

@@ -224,6 +224,14 @@ export class MemoryPresentationSessionRepository
     });
   }
 
+  retainedSessionCounts(workspaceId: string) {
+    let presentations = 0;
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === workspaceId) presentations += 1;
+    }
+    return { presentations };
+  }
+
   async listSessions(workspaceId: string, now = new Date(), includeExpired = false) {
     return [...this.sessions.values()]
       .filter(

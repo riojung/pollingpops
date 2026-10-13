@@ -326,6 +326,7 @@ export function WorkspaceShell({
   translationLevel = "none",
 }: WorkspaceShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const confirmNavigation = useConfirmNavigation();
   const { locale, t } = useLocale();
   const { creator, productFeatures, loading, error, canEdit, signOut, startUpgrade, management } =
@@ -437,14 +438,22 @@ export function WorkspaceShell({
           </Link>
           <form className={styles.globalSearch} onSubmit={submitSearch} role="search">
             <label className={styles.srOnly} htmlFor="workspace-search">
-              {t("workspace.search.label")}
+              {t(
+                pathname === "/sessions"
+                  ? "pages.sessions.workspaceSearch"
+                  : "workspace.search.label",
+              )}
             </label>
             <ShellIcon name="search" />
             <input
               autoComplete="off"
               id="workspace-search"
               onChange={(event) => setGlobalSearch(event.target.value)}
-              placeholder={t("workspace.search.placeholder")}
+              placeholder={t(
+                pathname === "/sessions"
+                  ? "pages.sessions.workspaceSearch"
+                  : "workspace.search.placeholder",
+              )}
               type="search"
               value={globalSearch}
             />

@@ -130,6 +130,7 @@ import {
   type BrandTheme,
   type QuizDraft,
   type Report,
+  type SessionCounts,
 } from "@openround/contracts";
 
 interface UserRecord extends CreatorContext {
@@ -232,6 +233,9 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  retainedSessionCounts?(
+    workspaceId: string,
+  ): Partial<Pick<SessionCounts, "presentations" | "surveys">>;
   deleteFolderMetadata?(workspaceId: string, folderId: string): void;
   publishedSurveyCount?(workspaceId: string): number;
   deletePresentationSessionMetadata?(workspaceId: string, sessionId: string): void;
@@ -2050,20 +2054,42 @@ export class MemoryRepository implements Repository {
     return this.workspaceMediaDeletionClaims.has(workspaceId);
   }
 
+  async getSessionCounts(workspaceId: string, options: { includePresentations?: boolean } = {}) {
+    const counts: SessionCounts = { rounds: 0, presentations: 0, surveys: 0 };
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === workspaceId) counts.rounds += 1;
+    }
+    for (const { lifecycle } of this.lifecycleExtensions.values()) {
+      const extensionCounts = lifecycle.retainedSessionCounts?.(workspaceId);
+      counts.presentations +=
+        options.includePresentations === false ? 0 : (extensionCounts?.presentations ?? 0);
+      counts.surveys += extensionCounts?.surveys ?? 0;
+    }
+    return counts;
+  }
+
   async listSessionHistory(
     workspaceId: string,
     options: {
       cursor?: HistoryCursor;
       limit: number;
       status?: SessionHistoryRecord["status"];
+      search?: string;
       quizId?: string;
       from?: Date;
       to?: Date;
       now: Date;
     },
   ) {
+    const search = options.search?.trim().toLowerCase();
     const records = [...this.sessions.values()]
       .filter((session) => session.workspaceId === workspaceId)
+      .filter(
+        (session) =>
+          !search ||
+          session.state.quiz.title.toLowerCase().includes(search) ||
+          session.state.code.includes(search),
+      )
       .flatMap((session): SessionHistoryRecord[] => {
         const version = this.versions.get(session.quizVersionId);
         if (!version) return [];

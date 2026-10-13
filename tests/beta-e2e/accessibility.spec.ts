@@ -272,12 +272,15 @@ test("workspace appearance follows, overrides, and persists the system color mod
     await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", "dark");
     if (path === "/sessions") {
+      await page.getByRole("tab", { name: /^Presentations/ }).click();
       const presentationCard = page.getByRole("article").filter({
         has: page.getByRole("heading", { name: presentationTitle, exact: true }),
       });
       await expect(presentationCard).toBeVisible();
-      await expect(presentationCard.locator(".eyebrow")).toHaveText("Presentation");
-      await expect(presentationCard.locator(".eyebrow")).toBeVisible();
+      await expect(page.getByRole("tab", { name: /^Presentations/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
     }
     if (path === "/account") {
       await expect(page.locator(".settings-grid > .panel").first()).toHaveCSS(

@@ -533,6 +533,47 @@ const messages = {
   "pages.home.sessions.blockProgress": "Bloque {current} de {total}",
   "pages.home.sessions.lobby": "Sala de espera",
   "pages.home.sessions.questionProgress": "Pregunta {current} de {total}",
+  "pages.common.survey": "Encuesta",
+  "pages.sessions.typeLabel": "Tipo de sesión",
+  "pages.sessions.searchRounds": "Buscar sesiones de Round",
+  "pages.sessions.searchPresentations": "Buscar sesiones de presentación",
+  "pages.sessions.searchSurveys": "Buscar sesiones de encuesta",
+  "pages.sessions.filtersLabel": "Filtros de sesiones",
+  "pages.sessions.allPresentations": "Todas las presentaciones",
+  "pages.sessions.allSurveys": "Todas las encuestas",
+  "pages.sessions.startedFrom": "Inicio desde",
+  "pages.sessions.startedTo": "Inicio hasta",
+  "pages.sessions.closesFrom": "Cierre desde",
+  "pages.sessions.closesTo": "Cierre hasta",
+  "pages.sessions.backToLibrary": "Volver a la biblioteca: {type}",
+  "pages.sessions.countLoading": "Cargando el número de sesiones",
+  "pages.sessions.countUnavailable": "Número de sesiones no disponible",
+  "pages.sessions.resultCount": "{count} sesiones mostradas",
+  "pages.sessions.noMatches": "Ninguna sesión coincide con estos filtros.",
+  "pages.sessions.surveyListLabel": "Sesiones de encuesta",
+  "pages.sessions.surveyClosesInRoom": "Cierra el {date} · sala {code}",
+  "pages.sessions.surveySharing": "Gestionar el uso compartido",
+  "pages.sessions.surveyEmptyDescription":
+    "Abre una encuesta publicada en la biblioteca para crear un enlace para compartir.",
+  "pages.sessions.presentationEmptyDescription":
+    "Inicia una presentación desde la biblioteca para ver su historial de sesiones.",
+  "pages.sessions.roundEmptyDescription":
+    "Inicia un Round desde la biblioteca para ver su historial de sesiones.",
+  "pages.sessions.emptyRounds": "Aún no hay sesiones de Round",
+  "pages.sessions.emptyPresentations": "Aún no hay sesiones de presentación",
+  "pages.sessions.emptySurveys": "Aún no hay sesiones de encuesta",
+  "pages.sessions.layoutLabel": "Diseño de las sesiones",
+  "pages.sessions.loadingError": "No se pudieron cargar las sesiones. Inténtalo de nuevo.",
+  "pages.sessions.surveyDescription":
+    "Cada enlace para compartir crea una versión fija de la encuesta que se responde al ritmo de cada persona. Los resultados se muestran por pregunta, sin alias de participantes ni filas que vinculen sus respuestas.",
+  "pages.sessions.surveyRun": "Ver sesión de encuesta",
+  "pages.sessions.deleteSurvey": "Eliminar sesión de encuesta",
+  "pages.sessions.deleteSurveyConfirm":
+    "¿Eliminar permanentemente la sesión de encuesta «{title}», sus envíos y resultados? Esta acción no se puede deshacer.",
+  "pages.sessions.description":
+    "Explora sesiones en directo de Rounds y presentaciones, y sesiones de encuesta al ritmo de cada persona.",
+  "pages.sessions.eyebrow": "Historial de actividades",
+  "pages.sessions.workspaceSearch": "Buscar sesiones de tu espacio de trabajo",
 } satisfies WorkspacePageMessages;
 
 export default messages;

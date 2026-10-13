@@ -693,6 +693,13 @@ class MemorySurveyStore {
       (s) => s.workspaceId === workspaceId && s.status === "published",
     ).length;
   }
+  retainedSessionCounts(workspaceId: string) {
+    let surveys = 0;
+    for (const room of this.survey_feedback_rooms.values()) {
+      if (room.workspaceId === workspaceId) surveys += 1;
+    }
+    return { surveys };
+  }
   hasLibraryArtifact(workspaceId: string, artifactType: string, artifactId: string) {
     return artifactType === "survey" && this.surveys.get(artifactId)?.workspaceId === workspaceId;
   }

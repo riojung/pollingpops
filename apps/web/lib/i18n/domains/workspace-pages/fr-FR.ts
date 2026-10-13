@@ -536,6 +536,47 @@ const messages = {
   "pages.home.sessions.blockProgress": "Bloc {current} sur {total}",
   "pages.home.sessions.lobby": "Salle d’attente",
   "pages.home.sessions.questionProgress": "Question {current} sur {total}",
+  "pages.common.survey": "Sondage",
+  "pages.sessions.typeLabel": "Type de session",
+  "pages.sessions.searchRounds": "Rechercher des sessions de Round",
+  "pages.sessions.searchPresentations": "Rechercher des sessions de présentation",
+  "pages.sessions.searchSurveys": "Rechercher des sessions de sondage",
+  "pages.sessions.filtersLabel": "Filtres des sessions",
+  "pages.sessions.allPresentations": "Toutes les présentations",
+  "pages.sessions.allSurveys": "Tous les sondages",
+  "pages.sessions.startedFrom": "Début à partir du",
+  "pages.sessions.startedTo": "Début jusqu’au",
+  "pages.sessions.closesFrom": "Clôture à partir du",
+  "pages.sessions.closesTo": "Clôture jusqu’au",
+  "pages.sessions.backToLibrary": "Retour à la bibliothèque : {type}",
+  "pages.sessions.countLoading": "Chargement du nombre de sessions",
+  "pages.sessions.countUnavailable": "Nombre de sessions indisponible",
+  "pages.sessions.resultCount": "{count} sessions affichées",
+  "pages.sessions.noMatches": "Aucune session ne correspond à ces filtres.",
+  "pages.sessions.surveyListLabel": "Sessions de sondage",
+  "pages.sessions.surveyClosesInRoom": "Clôture le {date} · salle {code}",
+  "pages.sessions.surveySharing": "Gérer le partage",
+  "pages.sessions.surveyEmptyDescription":
+    "Ouvrez un sondage publié dans la bibliothèque pour créer un lien de partage.",
+  "pages.sessions.presentationEmptyDescription":
+    "Lancez une présentation depuis la bibliothèque pour voir son historique de sessions.",
+  "pages.sessions.roundEmptyDescription":
+    "Lancez un Round depuis la bibliothèque pour voir son historique de sessions.",
+  "pages.sessions.emptyRounds": "Aucune session de Round pour le moment",
+  "pages.sessions.emptyPresentations": "Aucune session de présentation pour le moment",
+  "pages.sessions.emptySurveys": "Aucune session de sondage pour le moment",
+  "pages.sessions.layoutLabel": "Disposition des sessions",
+  "pages.sessions.loadingError": "Les sessions n’ont pas pu être chargées. Réessayez.",
+  "pages.sessions.surveyDescription":
+    "Chaque lien de partage crée une version figée du sondage pour des réponses au rythme de chacun. Les résultats sont présentés par question, sans pseudonymes ni lignes reliant les réponses d’une même personne.",
+  "pages.sessions.surveyRun": "Voir la session de sondage",
+  "pages.sessions.deleteSurvey": "Supprimer la session de sondage",
+  "pages.sessions.deleteSurveyConfirm":
+    "Supprimer définitivement la session de sondage « {title} », ses réponses et ses résultats ? Cette action est irréversible.",
+  "pages.sessions.description":
+    "Consultez les sessions en direct de Rounds et de présentations ainsi que les sessions de sondage à rythme libre.",
+  "pages.sessions.eyebrow": "Historique des activités",
+  "pages.sessions.workspaceSearch": "Rechercher dans les sessions de votre espace de travail",
 } satisfies WorkspacePageMessages;
 
 export default messages;

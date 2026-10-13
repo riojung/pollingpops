@@ -36,6 +36,8 @@ import {
   SessionSettingsSchema,
   SessionSnapshotSchema,
   SessionDecisionEventSchema,
+  SessionCountsResponseSchema,
+  SessionHistorySearchSchema,
   ReportV3Schema,
   SyncRequestSchema,
   UpdateQuizRequestSchema,
@@ -43,6 +45,20 @@ import {
 } from "../src/index.js";
 
 describe("public contracts", () => {
+  it("validates exact nonnegative session counts and a trimmed bounded history search", () => {
+    expect(
+      SessionCountsResponseSchema.parse({ counts: { rounds: 28, presentations: 0, surveys: 2 } }),
+    ).toEqual({ counts: { rounds: 28, presentations: 0, surveys: 2 } });
+    for (const rounds of [-1, 1.5, "28"]) {
+      expect(
+        SessionCountsResponseSchema.safeParse({ counts: { rounds, presentations: 0, surveys: 2 } })
+          .success,
+      ).toBe(false);
+    }
+    expect(SessionHistorySearchSchema.parse("  Frozen room  ")).toBe("Frozen room");
+    expect(SessionHistorySearchSchema.parse("   ")).toBe("");
+    expect(SessionHistorySearchSchema.safeParse("x".repeat(161)).success).toBe(false);
+  });
   it("validates bounded, versioned Question Health findings", () => {
     const result = QuestionHealthResultSchema.parse({
       quizId: randomUUID(),

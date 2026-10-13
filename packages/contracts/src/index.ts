@@ -2673,6 +2673,15 @@ export type RoundFilterOptionsResponse = z.infer<typeof RoundFilterOptionsRespon
 
 export const SessionHistoryStatusSchema = z.enum(["active", "finished", "expired"]);
 export type SessionHistoryStatus = z.infer<typeof SessionHistoryStatusSchema>;
+export const SessionHistorySearchSchema = z.string().trim().max(160);
+export const SessionCountsSchema = z.object({
+  rounds: z.number().int().nonnegative(),
+  presentations: z.number().int().nonnegative(),
+  surveys: z.number().int().nonnegative(),
+});
+export type SessionCounts = z.infer<typeof SessionCountsSchema>;
+export const SessionCountsResponseSchema = z.object({ counts: SessionCountsSchema });
+export type SessionCountsResponse = z.infer<typeof SessionCountsResponseSchema>;
 export const SessionSummarySchema = z.object({
   id: z.string().uuid(),
   quizId: z.string().uuid(),

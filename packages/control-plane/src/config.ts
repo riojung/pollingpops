@@ -9,7 +9,27 @@ const configuredList = z
       .map((entry) => entry.trim())
       .filter(Boolean),
   );
-const optionalValue = z.string().trim().min(1).optional();
+const optionalValue = z.preprocess(
+  (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+  z.string().trim().min(1).optional(),
+);
+function isLoopbackHttpOrigin(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      url.pathname === "/"
+    );
+  } catch {
+    return false;
+  }
+}
 const bootstrapSchema = z
   .array(
     z
@@ -30,11 +50,17 @@ const configSchema = z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
-    CONTROL_PUBLIC_ORIGIN: optionalValue,
-    CONTROL_PRODUCT_ORIGIN: z.preprocess(
+    CONTROL_AUTH_MODE: z.enum(["oidc", "local"]).default("oidc"),
+    CONTROL_LOCAL_DEVELOPMENT: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    OPENROUND_DEPLOYMENT_ENVIRONMENT: z.preprocess(
       (value) => (typeof value === "string" && !value.trim() ? undefined : value),
-      optionalValue,
+      z.enum(["development", "staging", "production"]).optional(),
     ),
+    CONTROL_PUBLIC_ORIGIN: optionalValue,
+    CONTROL_PRODUCT_ORIGIN: optionalValue,
     CONTROL_DATABASE_URL: optionalValue,
     CONTROL_ALLOW_LOCAL_HTTP: z
       .enum(["true", "false"])
@@ -66,6 +92,39 @@ const configSchema = z
     INTEGRATION_SECRET_KEY: optionalValue,
   })
   .superRefine((config, context) => {
+    if (config.CONTROL_AUTH_MODE === "local") {
+      if (!config.CONTROL_LOCAL_DEVELOPMENT)
+        context.addIssue({
+          code: "custom",
+          path: ["CONTROL_LOCAL_DEVELOPMENT"],
+          message: "Local operator authentication requires explicit local-development opt-in",
+        });
+      if (
+        config.OPENROUND_DEPLOYMENT_ENVIRONMENT &&
+        config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development"
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["OPENROUND_DEPLOYMENT_ENVIRONMENT"],
+          message: "Local operator authentication is unavailable in hosted deployments",
+        });
+      for (const field of ["CONTROL_PUBLIC_ORIGIN", "CONTROL_PRODUCT_ORIGIN"] as const) {
+        if (field === "CONTROL_PRODUCT_ORIGIN" && !config[field]) continue;
+        if (!isLoopbackHttpOrigin(config[field]))
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: "Local operator authentication requires an exact loopback HTTP origin",
+          });
+      }
+      if (config.CONTROL_ENABLED && !config.CONTROL_DATABASE_URL)
+        context.addIssue({
+          code: "custom",
+          path: ["CONTROL_DATABASE_URL"],
+          message: "Required when operator control is enabled",
+        });
+      return;
+    }
     if (!config.CONTROL_ENABLED) return;
     if (config.CONTROL_PRODUCT_ORIGIN) {
       try {
@@ -155,6 +214,17 @@ const configSchema = z
   });
 
 export type ControlConfig = z.infer<typeof configSchema>;
+export function isLocalControlDevelopment(config: ControlConfig): boolean {
+  return (
+    config.CONTROL_ENABLED &&
+    config.CONTROL_AUTH_MODE === "local" &&
+    config.CONTROL_LOCAL_DEVELOPMENT &&
+    (!config.OPENROUND_DEPLOYMENT_ENVIRONMENT ||
+      config.OPENROUND_DEPLOYMENT_ENVIRONMENT === "development") &&
+    isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) &&
+    (!config.CONTROL_PRODUCT_ORIGIN || isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN))
+  );
+}
 export function loadControlConfig(
   environment: Record<string, string | undefined> = process.env,
 ): ControlConfig {

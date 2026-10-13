@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { controlRuntime } from "../../../lib/runtime";
-import { operatorCookieNames, safeError } from "../../../lib/http";
-import { OperatorError } from "@openround/control-plane";
+import { operatorCookieNames, safeError, setOperatorSessionCookies } from "../../../lib/http";
+import { loadControlConfig, OperatorError } from "@openround/control-plane";
 export const runtime = "nodejs";
 export async function GET(request: NextRequest) {
   try {
+    if (loadControlConfig().CONTROL_AUTH_MODE !== "oidc")
+      throw new OperatorError(403, "OIDC_DISABLED", "Managed operator sign-in is disabled");
     const control = await controlRuntime();
     const names = operatorCookieNames(control.config);
     const state = request.nextUrl.searchParams.get("state");
@@ -19,16 +21,7 @@ export async function GET(request: NextRequest) {
       new URL("/", control.config.CONTROL_PUBLIC_ORIGIN!),
       303,
     );
-    const options = {
-      path: "/",
-      httpOnly: true,
-      secure: names.secure,
-      sameSite: "lax" as const,
-      maxAge: 8 * 60 * 60,
-    };
-    response.cookies.set(names.session, result.token, options);
-    response.cookies.set(names.csrf, result.csrfToken, options);
-    response.cookies.set(names.binding, "", { ...options, maxAge: 0 });
+    setOperatorSessionCookies(response, control.config, result);
     response.headers.set("cache-control", "private, no-store");
     return response;
   } catch (error) {

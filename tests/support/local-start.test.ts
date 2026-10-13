@@ -113,6 +113,9 @@ describe("post-reboot local startup", () => {
       expect(env).not.toHaveProperty("DOCKER_API_VERSION");
     }
     expect(f.environment.DOCKER_CONTEXT).toBe("other-runtime");
+    expect(f.dependencies.log.mock.calls.flat().join("\n")).toContain(
+      "management console: http://localhost:3002",
+    );
   });
   it("does not restart a healthy VM, even when recovery is permitted", async () => {
     const f = fixture({ status: "Running", readyAt: 1 });
@@ -177,6 +180,7 @@ describe("post-reboot local startup", () => {
     const output = f.dependencies.log.mock.calls.flat().join("\n");
     expect(output).toContain("colima start --profile default --activate=false");
     expect(output).toContain("--project-name openround");
+    expect(output).toContain("--file compose.business.yaml --file compose.local-control.yaml");
     expect(output).toContain("--force-recreate --no-build --wait");
     expect(output).not.toContain("other-runtime");
   });

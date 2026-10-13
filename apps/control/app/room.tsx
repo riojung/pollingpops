@@ -68,7 +68,13 @@ function Table({ items, columns }: { items: Row[]; columns: string[] }) {
     </div>
   );
 }
-export default function ControlRoom({ enabled }: { enabled: boolean }) {
+export default function ControlRoom({
+  enabled,
+  localAdmin = false,
+}: {
+  enabled: boolean;
+  localAdmin?: boolean;
+}) {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [csrf, setCsrf] = useState("");
   const [view, setView] = useState<View>("organizations");
@@ -79,6 +85,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
   const [pending, setPending] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [contacts, setContacts] = useState<Row[]>([]);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
   const loadSequence = useRef(0);
@@ -212,6 +219,20 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function signInLocally() {
+    rememberLoginView();
+    setSigningIn(true);
+    setMessage("");
+    try {
+      const response = await fetch("/auth/local", { method: "POST" });
+      const body = record(await response.json());
+      if (!response.ok) throw new Error(text(record(body.error).message));
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Local admin sign-in failed");
+      setSigningIn(false);
     }
   }
   async function signOut() {
@@ -350,7 +371,14 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         </div>
         <h1>Business operations</h1>
         <p>Manage organizations, billing, credits, support, and operational controls.</p>
-        {enabled ? (
+        {enabled && localAdmin ? (
+          <>
+            <button disabled={signingIn || loading} onClick={() => void signInLocally()}>
+              {signingIn ? "Signing in…" : "Sign in as local admin"}
+            </button>
+            <p className="note">Local development access for business administration.</p>
+          </>
+        ) : enabled ? (
           <>
             <a className="button" href="/auth/start" onClick={rememberLoginView}>
               Sign in with operator identity
@@ -396,7 +424,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         </nav>
         <div className="identity">
           <strong>{identity.name}</strong>
-          <small>{label(identity.role)}</small>
+          <small>{identity.role === "founder" ? "Super admin" : label(identity.role)}</small>
           <button disabled={signingOut} onClick={() => void signOut()}>
             Sign out
           </button>
@@ -415,11 +443,16 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         {message && (
           <p role="status" className="notice">
             {message}{" "}
-            {message.includes("Sign in again") && (
-              <a href="/auth/start" onClick={rememberLoginView}>
-                Verify identity again
-              </a>
-            )}
+            {message.includes("Sign in again") &&
+              (localAdmin ? (
+                <button disabled={signingIn} onClick={() => void signInLocally()}>
+                  Sign in as local admin
+                </button>
+              ) : (
+                <a href="/auth/start" onClick={rememberLoginView}>
+                  Verify identity again
+                </a>
+              ))}
           </p>
         )}
         {loading ? (

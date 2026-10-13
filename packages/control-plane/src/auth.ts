@@ -1,10 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import * as oidc from "openid-client";
 import type { PlatformOperator, PlatformOperatorSession, PlatformRepository } from "@openround/db";
-import type { ControlConfig } from "./config.js";
+import { isLocalControlDevelopment, type ControlConfig } from "./config.js";
 
 export const OPERATOR_SESSION_COOKIE = "__Host-pollingpops-operator";
 export const OPERATOR_BINDING_COOKIE = "__Host-pollingpops-operator-login";
+export const LOCAL_OPERATOR_ISSUER = "urn:pollingpops:local-development";
+export const LOCAL_OPERATOR_SUBJECT = "local-admin";
+export const LOCAL_OPERATOR_NAME = "Local admin";
 export const operatorSessionLifetimeMs = 8 * 60 * 60_000;
 export const operatorIdleLifetimeMs = 30 * 60_000;
 export function tokenHash(value: string): string {
@@ -149,6 +152,7 @@ export class OperatorAuthService {
     private readonly provider: OperatorOidcProvider,
   ) {}
   async provisionConfiguredOperators() {
+    if (this.config.CONTROL_AUTH_MODE !== "oidc") return;
     for (const identity of this.config.OPERATOR_BOOTSTRAP_IDENTITIES) {
       // Configuration inserts initial operators; a restart cannot reactivate a revoked identity.
       await this.platform.withOperatorTransaction(async (repository) => {
@@ -164,9 +168,58 @@ export class OperatorAuthService {
       });
     }
   }
+  async localLogin(requestId: string, now = new Date()) {
+    if (!isLocalControlDevelopment(this.config))
+      throw new OperatorError(404, "LOCAL_AUTH_DISABLED", "Local operator sign-in is unavailable");
+    return this.platform.withOperatorTransaction(async (repository) => {
+      const operator =
+        (await repository.getOperatorByIdentity(LOCAL_OPERATOR_ISSUER, LOCAL_OPERATOR_SUBJECT)) ??
+        (await repository.provisionOperator({
+          issuer: LOCAL_OPERATOR_ISSUER,
+          subject: LOCAL_OPERATOR_SUBJECT,
+          name: LOCAL_OPERATOR_NAME,
+          role: "founder",
+          capabilities: [],
+          active: true,
+        }));
+      if (!operator.active)
+        throw new OperatorError(
+          403,
+          "OPERATOR_NOT_PROVISIONED",
+          "The local administrator has no active operator access",
+        );
+      const token = randomBytes(32).toString("base64url");
+      const csrfToken = randomBytes(32).toString("base64url");
+      const session: PlatformOperatorSession = {
+        id: randomUUID(),
+        operatorId: operator.id,
+        tokenHash: tokenHash(token),
+        csrfHash: tokenHash(csrfToken),
+        authenticatedAt: now,
+        lastSeenAt: now,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + operatorSessionLifetimeMs),
+        revokedAt: null,
+      };
+      await repository.createOperatorSession(session);
+      await repository.appendAuditEvent({
+        actorId: operator.id,
+        organizationId: null,
+        action: "operator.login",
+        targetId: session.id,
+        reason: "Explicit local development administrator sign-in",
+        requestId,
+        before: null,
+        after: { role: operator.role, authMode: "local" },
+      });
+      return { token, csrfToken, operator };
+    });
+  }
   async start(now = new Date()) {
     if (!this.config.CONTROL_ENABLED)
       throw new OperatorError(404, "CONTROL_DISABLED", "Operator control is disabled");
+    if (this.config.CONTROL_AUTH_MODE !== "oidc")
+      throw new OperatorError(404, "OIDC_DISABLED", "Managed operator sign-in is unavailable");
     const state = oidc.randomState();
     const binding = randomBytes(32).toString("base64url");
     const nonce = oidc.randomNonce();
@@ -190,6 +243,8 @@ export class OperatorAuthService {
     requestId: string,
     now = new Date(),
   ) {
+    if (!this.config.CONTROL_ENABLED || this.config.CONTROL_AUTH_MODE !== "oidc")
+      throw new OperatorError(404, "OIDC_DISABLED", "Managed operator sign-in is unavailable");
     const transaction = await this.platform.consumeOperatorOidcTransaction(
       tokenHash(state),
       tokenHash(binding),
@@ -244,7 +299,13 @@ export class OperatorAuthService {
     return { token, csrfToken, operator };
   }
   async authenticate(token: string | undefined, now = new Date()): Promise<OperatorContext> {
-    if (!this.config.CONTROL_ENABLED || !token || token.length > 256)
+    const local = isLocalControlDevelopment(this.config);
+    if (
+      !this.config.CONTROL_ENABLED ||
+      !token ||
+      token.length > 256 ||
+      (this.config.CONTROL_AUTH_MODE === "local" && !local)
+    )
       throw new OperatorError(401, "UNAUTHORIZED", "Operator sign-in required");
     const hash = tokenHash(token);
     const context = await this.platform.touchOperatorSession(
@@ -257,7 +318,11 @@ export class OperatorAuthService {
       !context.operator.active ||
       context.session.revokedAt ||
       context.session.expiresAt <= now ||
-      !context.session.authenticatedAt
+      !context.session.authenticatedAt ||
+      (local
+        ? context.operator.issuer !== LOCAL_OPERATOR_ISSUER ||
+          context.operator.subject !== LOCAL_OPERATOR_SUBJECT
+        : context.operator.issuer === LOCAL_OPERATOR_ISSUER)
     )
       throw new OperatorError(401, "UNAUTHORIZED", "Operator sign-in required");
     return { ...context, tokenHash: hash };

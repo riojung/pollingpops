@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
+import console from "node:console";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { parse as parseYaml } from "yaml";
 import {
   composeArgv,
@@ -320,7 +321,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     );
   }
   log(
-    "Polling Pops services are started. Default URLs: http://localhost:8080 (captured sign-in email: http://localhost:8025).",
+    "Polling Pops services are started. Default URLs: http://localhost:8080 (management console: http://localhost:3002; captured sign-in email: http://localhost:8025).",
   );
 }
 

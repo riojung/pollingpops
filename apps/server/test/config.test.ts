@@ -14,6 +14,19 @@ const productionConfig = {
 } as const;
 
 describe("production configuration", () => {
+  it("accepts the explicit local development environment and loopback console origin", () => {
+    const config = ConfigSchema.parse({
+      NODE_ENV: "development",
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: "development",
+      COMMUNITY_MODE: "true",
+      CONTROL_PUBLIC_ORIGIN: "http://localhost:3002",
+      TRACING_ENABLED: "true",
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://localhost:4318/v1/traces",
+    });
+    expect(config.OPENROUND_DEPLOYMENT_ENVIRONMENT).toBe("development");
+    expect(config.CONTROL_PUBLIC_ORIGIN).toBe("http://localhost:3002");
+    expect(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBe("http://localhost:4318/v1/traces");
+  });
   it.each([
     "https://control.example.ca/path",
     "https://control.example.ca/?token=anything",

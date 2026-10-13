@@ -1,0 +1,33 @@
+# Development only. Normal local service profiles include this after compose.business.yaml.
+# Authentication is available only when the control and product origins pass the loopback guard.
+services:
+  server:
+    environment:
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: development
+      CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-http://localhost:3002}
+  jobs:
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: development
+  control:
+    environment:
+      CONTROL_ENABLED: "true"
+      CONTROL_AUTH_MODE: local
+      CONTROL_LOCAL_DEVELOPMENT: "true"
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: development
+      CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-http://localhost:3002}
+      # Keep LAN product settings independent; local operator cookies require a loopback product.
+      CONTROL_PRODUCT_ORIGIN: ${CONTROL_PRODUCT_ORIGIN:-http://localhost:8080}
+      CONTROL_DATABASE_URL: postgresql://openround_app:openround-app-local@postgres:5432/openround
+      # Local development never consults inherited operator identity-provider configuration.
+      OPERATOR_OIDC_ISSUER: ""
+      OPERATOR_OIDC_CLIENT_ID: ""
+      OPERATOR_OIDC_CLIENT_SECRET: ""
+      OPERATOR_OIDC_MFA_POLICY_ENFORCED: "false"
+      OPERATOR_OIDC_REQUIRED_AMR: ""
+      OPERATOR_OIDC_ALLOWED_ACR: ""
+      OPERATOR_BOOTSTRAP_IDENTITIES: "[]"
+    ports: !override
+      - "127.0.0.1:3002:3002"

@@ -156,7 +156,7 @@ function isUnusableHostedTracingHostname(value: string) {
 export const ConfigSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    OPENROUND_DEPLOYMENT_ENVIRONMENT: z.enum(["staging", "production"]).optional(),
+    OPENROUND_DEPLOYMENT_ENVIRONMENT: z.enum(["development", "staging", "production"]).optional(),
     HOST: z.string().default("0.0.0.0"),
     PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
     TRUSTED_PROXY_IP: optionalIpAddress,
@@ -612,6 +612,7 @@ export const ConfigSchema = z
     }
     if (
       config.TRACING_ENABLED &&
+      config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development" &&
       config.OPENROUND_DEPLOYMENT_ENVIRONMENT &&
       config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     ) {

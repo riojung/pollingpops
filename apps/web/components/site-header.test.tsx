@@ -65,10 +65,21 @@ describe("management discovery in the product header", () => {
     expect(markup).not.toContain("Organization settings");
   });
 
+  it("makes staff sign-in discoverable in both header layouts before operator authentication", () => {
+    fixtures.navigation.operatorConsoleOrigin = "https://control.example.com";
+    const markup = renderToStaticMarkup(<SiteHeader />);
+    expect(markup.match(/>Business admin sign in<\/a>/g)).toHaveLength(2);
+    expect(markup.match(/href="https:\/\/control\.example\.com\/auth\/start"/g)).toHaveLength(2);
+    expect(markup).toContain('href="/signin"');
+    expect(markup).not.toContain("Super admin");
+    expect(markup).not.toContain("Tenants");
+  });
+
   it("does not advertise unavailable management on a disabled product deployment", () => {
     const markup = renderToStaticMarkup(<SiteHeader />);
     expect(markup).toContain('href="/signin"');
     expect(markup).not.toContain('href="/organization"');
     expect(markup).not.toContain("Business");
+    expect(markup).not.toContain("Business admin sign in");
   });
 });

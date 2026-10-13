@@ -79,11 +79,17 @@ addresses remain in Stripe rather than the webhook inbox or PollingPops audit re
 ## Processes and operator access
 
 The product sign-in screen includes **Business admin sign in** when the API is configured with
-`CONTROL_PUBLIC_ORIGIN`. After managed operator sign-in, the product header and workspace menus
+`CONTROL_PUBLIC_ORIGIN`. After admin sign-in, the product header and workspace menus
 show the permitted business areas: tenant management, billing, credits and promotions, operations,
 support, integrations and audit. Founder operators are presented as **Super admin**; other operators
 see their permitted administrative areas. Selecting an area opens the restricted console at that
 area, including after an authentication refresh.
+
+Normal local development bundles include the console by default. Run `pnpm local:start`, open
+`http://localhost:8080`, choose **Business admin sign in**, then **Sign in as local admin**. The
+built-in Local admin uses founder permissions and the existing durable sessions, command checks,
+and audit trail. Its explicitly enabled loopback development profile requires no SSO or MFA.
+Customer Community behavior and disabled billing remain the local defaults.
 
 Customer organization navigation is also available from product headers, desktop/mobile workspace
 menus and account navigation. Members see their organization; owners/admins see workspace, membership
@@ -109,9 +115,10 @@ admin sign-in entry and full console navigation.
 - `node apps/server/dist/jobs.js` runs reports, authoring, retention, billing reconciliation and
   integrations without constructing gameplay or an HTTP application.
 - The API keeps its audience outbox relays. Set `BACKGROUND_JOBS_MODE=separate` when a dedicated
-  jobs process is running; the default `in_process` preserves the ordinary development stack.
+  jobs process is running; the normal local service bundles include that process. The default
+  `in_process` supports standalone product startup.
 
-Control uses its own database URL and managed OIDC application. Configure exact MFA assurance
+Hosted control uses its own database URL and managed OIDC application. Configure exact MFA assurance
 claims, enforced provider policy, and explicitly provisioned issuer/subject identities.
 Bootstrap creates missing accounts and does not reactivate disabled operators. Customer cookies,
 customer institution OIDC roles and the legacy administrator bearer token do not authorize the
@@ -159,8 +166,10 @@ idempotently, including delayed payments. Browser success redirects do not grant
 6. Prove independent paging and a clean off-host restore with the exact candidate. Configure
    tax/accounting mappings and distinct financial, operator, support and telemetry retention.
 
-For local development, `compose.business.yaml` is an opt-in overlay on `compose.yaml`. The
-operator container binds only to loopback and requires its reviewed HTTPS origin when enabled.
+For local development, the normal service bundles merge `compose.business.yaml` and
+`compose.local-control.yaml` after `compose.yaml`. The operator container binds only to loopback;
+the local override explicitly enables development-only HTTP admin sign-in and product discovery.
+Using `compose.business.yaml` alone retains its optional, production-policy console configuration.
 For hosted single-VM operation, merge `compose.single-vm.business.yaml` after the existing base;
 it requires an immutable control image, dedicated hostname and reviewed operator-network CIDRs.
 Its jobs container deliberately has no API ingress alias. Validate the merged configuration and

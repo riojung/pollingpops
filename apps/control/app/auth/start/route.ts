@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
+import { isLocalControlDevelopment, loadControlConfig } from "@openround/control-plane";
 import { controlRuntime } from "../../../lib/runtime";
 import { operatorCookieNames, safeError } from "../../../lib/http";
 export const runtime = "nodejs";
 export async function GET() {
   try {
+    const config = loadControlConfig();
+    if (isLocalControlDevelopment(config)) {
+      const response = NextResponse.redirect(new URL("/", config.CONTROL_PUBLIC_ORIGIN!), 303);
+      response.headers.set("cache-control", "private, no-store");
+      return response;
+    }
     const control = await controlRuntime();
     const result = await control.auth.start();
     const names = operatorCookieNames(control.config);

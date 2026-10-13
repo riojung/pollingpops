@@ -20,6 +20,23 @@ export function operatorCookieNames(config: ControlConfig) {
     csrf: secure ? "__Host-pollingpops-operator-csrf" : "pollingpops-operator-csrf-local",
   };
 }
+export function setOperatorSessionCookies(
+  response: NextResponse,
+  config: ControlConfig,
+  session: { token: string; csrfToken: string },
+) {
+  const names = operatorCookieNames(config);
+  const options = {
+    path: "/",
+    httpOnly: true,
+    secure: names.secure,
+    sameSite: "lax" as const,
+    maxAge: 8 * 60 * 60,
+  };
+  response.cookies.set(names.session, session.token, options);
+  response.cookies.set(names.csrf, session.csrfToken, options);
+  response.cookies.set(names.binding, "", { ...options, maxAge: 0 });
+}
 export function jsonResponse(value: unknown, status = 200) {
   return NextResponse.json(value, { status, headers: { "cache-control": "private, no-store" } });
 }

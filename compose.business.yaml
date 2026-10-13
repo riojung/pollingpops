@@ -1,4 +1,4 @@
-# Opt-in development/business overlay; customer hosting does not depend on the console.
+# Shared development/business services. Local commands add compose.local-control.yaml.
 services:
   server:
     environment:
@@ -47,12 +47,16 @@ services:
     build:
       context: .
       dockerfile: apps/control/Dockerfile
+      args:
+        OPENROUND_BUILD_ID: ${OPENROUND_BUILD_ID:-unversioned}
     depends_on:
       server:
         condition: service_healthy
     environment:
       NODE_ENV: production
       CONTROL_ENABLED: ${CONTROL_ENABLED:-false}
+      CONTROL_AUTH_MODE: oidc
+      CONTROL_LOCAL_DEVELOPMENT: "false"
       CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-}
       # Production control accepts only an explicitly trusted HTTPS product origin.
       # Leave unset for an HTTP local product; direct operator sign-in still works.

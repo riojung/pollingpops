@@ -66,13 +66,13 @@ for their deployment gates.
 ## Quick start
 
 You need Docker Desktop or Docker Engine with Docker Compose v2, at least 2 GB of available memory,
-and local ports `8080`, `8025`, and `9000`.
+and local ports `8080`, `3002`, `8025`, and `9000`.
 
 ```bash
 git clone https://github.com/riojung/pollingpops.git
 cd pollingpops
-docker compose up --build --detach --wait
-docker compose ps
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml up --build --detach --wait
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml ps
 curl -fsS http://localhost:8080/health/ready
 ```
 
@@ -80,6 +80,12 @@ Then open:
 
 - Polling Pops: <http://localhost:8080>
 - Development email inbox: <http://localhost:8025>
+
+Local development includes the management console. In the product header, select **Business admin
+sign in**, then **Sign in as local admin**. The built-in **Local admin** account has Super admin
+access and exposes tenant, billing, credits, operations, support, integrations, and audit menus.
+Local sign-in needs no SSO, MFA, or password. Use `http://localhost:8080` for the product so its
+menus can discover the admin session on `http://localhost:3002`.
 
 Use any valid development email address to request a sign-in link, then open the captured message
 in Mailpit. The core profile uses development credentials and disables untrusted image uploads
@@ -95,7 +101,7 @@ Stop the stack while preserving its PostgreSQL, Valkey, and MinIO named volumes.
 messages and unused development sign-in links are ephemeral and will be discarded:
 
 ```bash
-docker compose down
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml down
 ```
 
 For the first-Round walkthrough, cross-device setup, optional media profile, and troubleshooting,

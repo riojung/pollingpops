@@ -136,7 +136,9 @@ your shell environment and saved Colima configuration are unchanged.
 
 ## 1. Start the core stack
 
-The core profile includes the product, API/realtime server, PostgreSQL, Valkey, private MinIO storage, Mailpit, and Caddy. Untrusted image uploads are disabled because this profile has no malware scanner.
+The core profile includes the product, API/realtime server, management console, dedicated jobs,
+PostgreSQL, Valkey, private MinIO storage, Mailpit, and Caddy. Untrusted image uploads are disabled
+because this profile has no malware scanner.
 
 ```bash
 pnpm service development start --profile core
@@ -149,8 +151,8 @@ Wait until `server`, `web`, `postgres`, `valkey`, and `minio` are healthy. Confi
 curl -fsS http://localhost:8080/health/ready
 ```
 
-Local application images are `polling-pops-server:development` and
-`polling-pops-web:development`. Rebuild once after the rebrand before using `--no-build`.
+Local application images are `polling-pops-server:development`, `polling-pops-web:development`, and
+`polling-pops-control:development`. Rebuild after code or service-profile changes before using `--no-build`.
 The Compose project remains `openround` to reuse existing data volumes; `core`, `media`, and
 `observability` are service bundles, not product names or Colima profile names.
 
@@ -158,6 +160,17 @@ Open:
 
 - Product: <http://localhost:8080>
 - Captured development email: <http://localhost:8025>
+
+### Local admin access
+
+Select **Business admin sign in** in the product header, then **Sign in as local admin**. This
+creates a session for the built-in **Local admin**, which has Super admin access. Return to the
+product to use its Business menu, or use the console's tenant, billing, credits, operations, support,
+integrations, and audit areas. Local sign-in needs no SSO, MFA, or password.
+
+Use the product's `http://localhost:8080` origin for automatic admin menus. Participant links can
+continue using the configured LAN address. Customer sign-in and workspace access are separate from
+this local operator identity.
 
 ## 2. Sign in as a creator
 
@@ -446,33 +459,33 @@ The available profiles are `core`, `media`, and `observability`. The last is the
 stack and includes the other two. Docker-only users must keep the same Compose file and profile
 selection for every lifecycle command:
 
-| Profile         | Docker Compose command prefix                                                                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `core`          | `docker compose`                                                                                                         |
-| `media`         | `docker compose --file compose.yaml --file compose.media.yaml`                                                           |
-| `observability` | `docker compose --file compose.yaml --file compose.media.yaml --file compose.observability.yaml --profile observability` |
+| Profile         | Docker Compose command prefix                                                                                                                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core`          | `docker compose --file compose.yaml --file compose.business.yaml --file compose.local-control.yaml`                                                                                     |
+| `media`         | `docker compose --file compose.yaml --file compose.business.yaml --file compose.local-control.yaml --file compose.media.yaml`                                                           |
+| `observability` | `docker compose --file compose.yaml --file compose.business.yaml --file compose.local-control.yaml --file compose.media.yaml --file compose.observability.yaml --profile observability` |
 
 The examples below use `core`. For `media` or `observability`, replace the leading
-`docker compose` with that profile's complete prefix; omitting an overlay can leave its services
+core command prefix with that profile's complete prefix; omitting an overlay can leave its services
 running as orphans or exclude them from recreation.
 
 Follow service logs:
 
 ```bash
-docker compose logs -f server web caddy
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml logs -f server web control jobs caddy
 ```
 
 Stop the stack while preserving the PostgreSQL, Valkey, and MinIO named volumes. Mailpit messages
 and unused development sign-in links are ephemeral and will be discarded:
 
 ```bash
-docker compose down
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml down
 ```
 
 Start it again with the same data and existing images:
 
 ```bash
-docker compose up -d
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml up -d
 ```
 
 For Docker disk pressure or a clean rebuild of core, media, and observability services, follow the
@@ -484,7 +497,7 @@ MinIO backups, delete the core profile's local Polling Pops database, cache, and
 volumes:
 
 ```bash
-docker compose down --volumes
+docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml down --volumes
 ```
 
 This command is destructive and cannot be undone without a backup. Do not use `--volumes`,
@@ -516,6 +529,10 @@ Open <http://localhost:3000>. In development mode, the sign-in page displays **C
 `--env-mode=loose` is required here so Turborepo passes the explicitly listed shell variables to the web and server development tasks.
 
 The `.env.example` values target services by their Compose network names and are intended for the containerized profile. Do not copy that file unchanged for a host-native server process.
+
+Management workflows need a durable PostgreSQL database shared by the native API and console.
+For that setup, use the [native local-admin settings](../apps/control/README.md#local-development-authentication)
+with your PostgreSQL connection. The in-memory recipe above provides the customer product only.
 
 For an operational pause without restarting containers, use the `ADMIN_TOKEN`-protected
 `GET|PATCH /v1/admin/features` API described in the

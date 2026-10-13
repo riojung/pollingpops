@@ -123,7 +123,7 @@ export function SiteHeader() {
             </Link>
           </>
         )}
-        <ManagementNavigationLinks navigation={management} />
+        <ManagementNavigationLinks navigation={management} showAdminSignIn />
         <Link className="button small-button" href="/join">
           {t("delivery.site.joinRound")}
         </Link>
@@ -182,7 +182,7 @@ export function SiteHeader() {
             <Link href="/privacy">{t("delivery.site.privacy")}</Link>
           </>
         )}
-        <ManagementNavigationLinks navigation={management} variant="sections" />
+        <ManagementNavigationLinks navigation={management} variant="sections" showAdminSignIn />
         <Link href="/join">{t("delivery.site.joinRound")}</Link>
         {signOutError ? (
           <p className="site-nav-error" role="alert">

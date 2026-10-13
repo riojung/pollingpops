@@ -146,7 +146,7 @@ describe("Polling Pops development service", () => {
       { cwd: directory, capture: true },
     );
     expect(result.stdout).toContain(
-      "docker compose --project-name openround --file compose.yaml ps",
+      "docker compose --project-name openround --file compose.yaml --file compose.business.yaml --file compose.local-control.yaml ps",
     );
   });
 
@@ -194,7 +194,7 @@ describe("Polling Pops development service", () => {
         "--version",
         `--context ${context} compose version`,
         `--context ${context} info --format {{.ServerVersion}}`,
-        `--context ${context} compose --project-name openround --file compose.yaml up --detach --force-recreate --build --wait`,
+        `--context ${context} compose --project-name openround --file compose.yaml --file compose.business.yaml --file compose.local-control.yaml up --detach --force-recreate --build --wait`,
       ]);
     },
   );

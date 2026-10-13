@@ -63,6 +63,9 @@ function SessionsContent() {
   );
   const { type, query, status, sourceId, from, to } = filters;
   const queryKey = `${workspaceId}\u0000${sessionsHref(filters)}`;
+  const dataRequestKey =
+    type === "rounds" ? queryKey : `${workspaceId}\u0000/sessions?type=${type}`;
+  const roundRequestPath = type === "rounds" ? roundSessionsPath(filters) : "/v1/sessions?limit=25";
   const sourceKey = `${workspaceId}\u0000${type}`;
   const [data, setData] = useState<SessionData>(EMPTY_DATA);
   const [sources, setSources] = useState<{ key: string; items: SourceOption[] }>({
@@ -83,12 +86,17 @@ function SessionsContent() {
     Array<{ workspaceId: string; type: SessionType; id: string }>
   >([]);
   const [error, setError] = useState<{ key: string; message: string }>({ key: "", message: "" });
+  const [loadError, setLoadError] = useState<{ key: string; message: string }>({
+    key: "",
+    message: "",
+  });
   const [viewPreference, setViewPreference] = useState<{ workspaceId: string; view: SessionView }>({
     workspaceId: "",
     view: "grid",
   });
   const [now, setNow] = useState(() => Date.now());
   const activeQueryKey = useRef(queryKey);
+  const activeDataRequestKey = useRef(dataRequestKey);
   const activeWorkspace = useRef(workspaceId);
   const mounted = useRef(false);
   const loadMoreController = useRef<AbortController | null>(null);
@@ -96,9 +104,10 @@ function SessionsContent() {
   const deletionControllers = useRef(new Map<string, AbortController>());
   const deletedIds = useRef(new Set<string>());
   activeQueryKey.current = queryKey;
+  activeDataRequestKey.current = dataRequestKey;
   activeWorkspace.current = workspaceId;
-  const loading = fetching || data.key !== queryKey;
-  const current = data.key === queryKey ? data : EMPTY_DATA;
+  const loading = fetching || data.key !== dataRequestKey;
+  const current = data.key === dataRequestKey ? data : EMPTY_DATA;
   const view = viewPreference.workspaceId === workspaceId ? viewPreference.view : "grid";
   const displayLimit = displayPage.key === queryKey ? displayPage.limit : 25;
   const loadingErrorMessage = t("pages.sessions.loadingError");
@@ -164,21 +173,30 @@ function SessionsContent() {
 
   const fetchRounds = useCallback(
     (cursor?: string, signal?: AbortSignal) =>
-      apiFetch<CursorPage<SessionSummary>>(roundSessionsPath(filters, cursor), { signal }),
-    [filters],
+      apiFetch<CursorPage<SessionSummary>>(
+        `${roundRequestPath}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        { signal },
+      ),
+    [roundRequestPath],
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    const requestedKey = queryKey;
-    loadMoreController.current?.abort();
-    loadMoreController.current = null;
     actionController.current?.abort();
     actionController.current = null;
     setBusyId("");
+    setDisplayPage({ key: queryKey, limit: 25 });
+    setError({ key: queryKey, message: "" });
+    return () => actionController.current?.abort();
+  }, [queryKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const requestedKey = dataRequestKey;
+    loadMoreController.current?.abort();
+    loadMoreController.current = null;
     setLoadingMore(false);
     setFetching(true);
-    setError({ key: requestedKey, message: "" });
+    setLoadError({ key: requestedKey, message: "" });
     if (!workspaceId || !featuresLoaded) return () => controller.abort();
     const deletedKey = (id: string) => `${workspaceId}:${type}:${id}`;
     async function load(): Promise<SessionData> {
@@ -218,7 +236,8 @@ function SessionsContent() {
           `/v1/survey-rooms?${params}`,
           { signal: controller.signal },
         );
-        if (controller.signal.aborted || activeQueryKey.current !== requestedKey) return EMPTY_DATA;
+        if (controller.signal.aborted || activeDataRequestKey.current !== requestedKey)
+          return EMPTY_DATA;
         surveys.push(...page.rooms.filter((row) => !deletedIds.current.has(deletedKey(row.id))));
         cursor = page.nextCursor;
       } while (cursor);
@@ -226,7 +245,7 @@ function SessionsContent() {
     }
     void load()
       .then((response) => {
-        if (!controller.signal.aborted && activeQueryKey.current === requestedKey) {
+        if (!controller.signal.aborted && activeDataRequestKey.current === requestedKey) {
           setData({
             ...response,
             rounds: response.rounds.filter(
@@ -242,21 +261,20 @@ function SessionsContent() {
         }
       })
       .catch((caught) => {
-        if (!controller.signal.aborted && activeQueryKey.current === requestedKey) {
+        if (!controller.signal.aborted && activeDataRequestKey.current === requestedKey) {
           setData({ ...EMPTY_DATA, key: requestedKey });
-          setError({ key: requestedKey, message: humanError(caught) });
+          setLoadError({ key: requestedKey, message: humanError(caught) });
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted && activeQueryKey.current === requestedKey)
+        if (!controller.signal.aborted && activeDataRequestKey.current === requestedKey)
           setFetching(false);
       });
     return () => {
       controller.abort();
       loadMoreController.current?.abort();
-      actionController.current?.abort();
     };
-  }, [fetchRounds, featuresLoaded, loadingErrorMessage, queryKey, type, workspaceId]);
+  }, [dataRequestKey, fetchRounds, featuresLoaded, loadingErrorMessage, type, workspaceId]);
 
   const filteredPresentations = filterSessionRows(current.presentations, filters, (row) => ({
     sourceId: row.presentationId,
@@ -504,7 +522,9 @@ function SessionsContent() {
         : surveys.length;
   const filtered =
     Boolean(query.trim()) || status !== "all" || sourceId !== "all" || Boolean(from || to);
-  const errorMessage = error.key === queryKey ? error.message : "";
+  const errorMessage =
+    (error.key === queryKey ? error.message : "") ||
+    (loadError.key === dataRequestKey ? loadError.message : "");
   const availableTypes: SessionType[] = presentationsEnabled
     ? ["rounds", "presentations", "surveys"]
     : ["rounds", "surveys"];

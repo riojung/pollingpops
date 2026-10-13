@@ -1,3 +1,5 @@
+import { RoundFilterOptionSchema } from "@openround/contracts";
+
 export type SessionType = "rounds" | "presentations" | "surveys";
 export type SessionStatus = "active" | "finished" | "expired";
 export type SessionView = "grid" | "list";
@@ -47,6 +49,10 @@ function dateFromQuery(value: string | null): string {
     : "";
 }
 
+function sourceIdFromQuery(value: string | null): string {
+  return value && RoundFilterOptionSchema.shape.id.safeParse(value).success ? value : "all";
+}
+
 export function sessionFiltersFromQuery(
   params: Pick<URLSearchParams, "get">,
   presentationsEnabled: boolean,
@@ -64,7 +70,7 @@ export function sessionFiltersFromQuery(
     type,
     query: (params.get("q") ?? "").slice(0, 160),
     status: status === "active" || status === "finished" || status === "expired" ? status : "all",
-    sourceId: fallback ? "all" : (params.get("source") ?? params.get("quizId") ?? "all"),
+    sourceId: fallback ? "all" : sourceIdFromQuery(params.get("source") ?? params.get("quizId")),
     from: fallback ? "" : dateFromQuery(params.get("from")),
     to: fallback ? "" : dateFromQuery(params.get("to")),
   };

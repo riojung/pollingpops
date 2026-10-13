@@ -12,6 +12,7 @@ import {
   surveySessionStatus,
   writeSessionsView,
   type SessionFilters,
+  type SessionType,
   type SurveySessionSummary,
 } from "./session-controls";
 
@@ -24,9 +25,15 @@ const defaults: SessionFilters = {
   to: "",
 };
 const now = new Date("2026-10-13T12:00:00Z").getTime();
+const roundId = "10000000-0000-4000-8000-000000000001";
+const legacyRoundId = "10000000-0000-4000-8000-000000000002";
+const presentationId = "20000000-0000-4000-8000-000000000001";
+const surveyId = "30000000-0000-4000-8000-000000000001";
+const otherSurveyId = "30000000-0000-4000-8000-000000000002";
+const otherSurveyRoomId = "40000000-0000-4000-8000-000000000002";
 const survey: SurveySessionSummary = {
-  id: "room",
-  surveyId: "survey",
+  id: "40000000-0000-4000-8000-000000000001",
+  surveyId,
   title: "Feedback",
   code: "1234567",
   closesAt: "2026-10-14T12:00:00Z",
@@ -40,7 +47,7 @@ describe("Sessions controls", () => {
     expect(
       sessionFiltersFromQuery(
         new URLSearchParams(
-          "type=surveys&q=x&status=finished&source=survey&from=2026-10-01&to=2026-10-13",
+          `type=surveys&q=x&status=finished&source=${surveyId}&from=2026-10-01&to=2026-10-13`,
         ),
         true,
       ),
@@ -48,7 +55,7 @@ describe("Sessions controls", () => {
       type: "surveys",
       query: "x",
       status: "finished",
-      sourceId: "survey",
+      sourceId: surveyId,
       from: "2026-10-01",
       to: "2026-10-13",
     });
@@ -60,7 +67,7 @@ describe("Sessions controls", () => {
     ).toEqual(defaults);
     expect(
       sessionFiltersFromQuery(
-        new URLSearchParams("type=presentations&source=old&from=2026-10-01"),
+        new URLSearchParams(`type=presentations&source=${presentationId}&from=2026-10-01`),
         false,
       ),
     ).toEqual(defaults);
@@ -69,16 +76,83 @@ describe("Sessions controls", () => {
     ).toHaveLength(160);
   });
 
+  it.each(["", " ", "\t\n", "round", "not-a-uuid", "/v1/sessions", ` ${roundId} `])(
+    "normalizes invalid source %j without forwarding it to session URLs or requests",
+    (source) => {
+      const filters = sessionFiltersFromQuery(
+        new URLSearchParams({ type: "rounds", source }),
+        true,
+      );
+
+      expect(filters).toEqual(defaults);
+      expect(sessionsHref(filters)).toBe("/sessions?type=rounds");
+      expect(roundSessionsPath(filters)).toBe("/v1/sessions?limit=25");
+    },
+  );
+
+  it.each(["", " ", "\t\n", "quiz-one", "not-a-uuid", "/v1/quizzes"])(
+    "normalizes invalid legacy quizId %j without forwarding it to session URLs or requests",
+    (quizId) => {
+      const filters = sessionFiltersFromQuery(
+        new URLSearchParams({ type: "rounds", quizId }),
+        true,
+      );
+
+      expect(filters).toEqual(defaults);
+      expect(sessionsHref(filters)).toBe("/sessions?type=rounds");
+      expect(roundSessionsPath(filters)).toBe("/v1/sessions?limit=25");
+    },
+  );
+
+  it.each<[SessionType, string]>([
+    ["rounds", roundId],
+    ["presentations", presentationId],
+    ["surveys", surveyId],
+  ])("preserves valid UUID sources for %s", (type, source) => {
+    const filters = sessionFiltersFromQuery(new URLSearchParams({ type, source }), true);
+
+    expect(filters.sourceId).toBe(source);
+    expect(new URLSearchParams(sessionsHref(filters).split("?")[1]).get("source")).toBe(source);
+    expect(sessionFiltersFromQuery(new URLSearchParams({ type, source: "all" }), true)).toEqual({
+      ...defaults,
+      type,
+    });
+  });
+
+  it.each(["", " ", "not-a-uuid", "all"])(
+    "keeps explicit source %j ahead of a valid legacy quizId",
+    (source) => {
+      const filters = sessionFiltersFromQuery(
+        new URLSearchParams({ source, quizId: legacyRoundId }),
+        true,
+      );
+
+      expect(filters.sourceId).toBe("all");
+      expect(roundSessionsPath(filters)).toBe("/v1/sessions?limit=25");
+    },
+  );
+
+  it("uses a valid legacy UUID only when source is absent and preserves an explicit valid UUID", () => {
+    expect(
+      sessionFiltersFromQuery(new URLSearchParams({ quizId: legacyRoundId }), true).sourceId,
+    ).toBe(legacyRoundId);
+    expect(
+      sessionFiltersFromQuery(new URLSearchParams({ source: roundId, quizId: legacyRoundId }), true)
+        .sourceId,
+    ).toBe(roundId);
+    expect(sessionFiltersFromQuery(new URLSearchParams({ quizId: "all" }), true)).toEqual(defaults);
+  });
+
   it("serializes only session filters and resets source and date semantics when changing tabs", () => {
     const filters: SessionFilters = {
       ...defaults,
       query: "x & y",
-      sourceId: "round",
+      sourceId: roundId,
       from: "2026-10-01",
       status: "expired",
     };
     expect(sessionsHref(filters)).toBe(
-      "/sessions?type=rounds&q=x+%26+y&status=expired&source=round&from=2026-10-01",
+      `/sessions?type=rounds&q=x+%26+y&status=expired&source=${roundId}&from=2026-10-01`,
     );
     expect(sessionFiltersForType(filters, "surveys")).toEqual({
       ...defaults,
@@ -94,7 +168,7 @@ describe("Sessions controls", () => {
         ...defaults,
         query: "  later page  ",
         status: "finished",
-        sourceId: "round",
+        sourceId: roundId,
         from: "2026-10-01",
         to: "2026-10-13",
       },
@@ -104,7 +178,7 @@ describe("Sessions controls", () => {
     expect(params.get("search")).toBe("later page");
     expect(params.get("limit")).toBe("25");
     expect(params.get("status")).toBe("finished");
-    expect(params.get("quizId")).toBe("round");
+    expect(params.get("quizId")).toBe(roundId);
     expect(params.get("cursor")).toBe("cursor & value");
     expect(params.get("from")).toBe(new Date("2026-10-01T00:00:00").toISOString());
     expect(params.get("to")).toBe(new Date("2026-10-13T23:59:59.999").toISOString());
@@ -126,9 +200,9 @@ describe("Sessions controls", () => {
       survey,
       {
         ...survey,
-        id: "other",
+        id: otherSurveyRoomId,
         title: "Earlier",
-        surveyId: "other",
+        surveyId: otherSurveyId,
         closesAt: "2026-10-10T12:00:00Z",
       },
     ];
@@ -147,10 +221,16 @@ describe("Sessions controls", () => {
     expect(
       filterSessionRows(
         rows,
-        { ...defaults, type: "surveys", query: "1234", sourceId: "other", status: "finished" },
+        {
+          ...defaults,
+          type: "surveys",
+          query: "1234",
+          sourceId: otherSurveyId,
+          status: "finished",
+        },
         metadata,
       ).map((row) => row.id),
-    ).toEqual(["other"]);
+    ).toEqual([otherSurveyRoomId]);
     expect(
       filterSessionRows(rows, { ...defaults, type: "surveys", status: "expired" }, metadata),
     ).toEqual([]);
@@ -158,8 +238,8 @@ describe("Sessions controls", () => {
 
   it("uses the live expiry for Presentation statuses", () => {
     const presentation = {
-      id: "session",
-      presentationId: "source",
+      id: "50000000-0000-4000-8000-000000000001",
+      presentationId,
       title: "Slides",
       code: "1234567",
       status: "active" as const,

@@ -168,7 +168,7 @@ import SessionsPage from "./page";
 function round(id = "round-one") {
   return {
     id,
-    quizId: "quiz-one",
+    quizId: "11111111-1111-4111-8111-111111111111",
     title: id === "round-one" ? "First Round" : "Later Round",
     code: "1234567",
     status: "finished",
@@ -185,7 +185,7 @@ function round(id = "round-one") {
 }
 const presentation = {
   id: "presentation-one",
-  presentationId: "slides-one",
+  presentationId: "22222222-2222-4222-8222-222222222222",
   title: "First Presentation",
   code: "2345678",
   status: "active",
@@ -199,7 +199,7 @@ const presentation = {
 };
 const openSurvey = {
   id: "survey-open",
-  surveyId: "survey-source",
+  surveyId: "33333333-3333-4333-8333-333333333333",
   title: "Open Survey",
   code: "3456789",
   closesAt: "2099-10-01T00:00:00Z",
@@ -218,7 +218,7 @@ function response(path: string) {
   if (path === "/v1/sessions/counts")
     return { counts: { rounds: 77, presentations: 7, surveys: 55 } };
   if (path.startsWith("/v1/quizzes?"))
-    return { quizzes: [{ id: "quiz-one", title: "Source Round" }] };
+    return { quizzes: [{ id: "11111111-1111-4111-8111-111111111111", title: "Source Round" }] };
   if (path.startsWith("/v1/sessions?")) return { items: [round()], nextCursor: "next-round" };
   if (path === "/v1/presentation-sessions") return { sessions: [presentation] };
   if (path.startsWith("/v1/survey-rooms?")) {
@@ -293,7 +293,7 @@ describe("Sessions workspace", () => {
 
   it("honors typed URL filters and browser back/forward query changes", async () => {
     fixtures.query =
-      "type=presentations&q=234&status=active&source=slides-one&from=2026-10-01&to=2026-10-01";
+      "type=presentations&q=234&status=active&source=22222222-2222-4222-8222-222222222222&from=2026-10-01&to=2026-10-01";
     const harness = sessionsHarness();
     let markup = await harness.settle();
     expect(markup).toContain("First Presentation");
@@ -306,18 +306,21 @@ describe("Sessions workspace", () => {
     expect(markup).not.toContain('<h2 lang="">Open Survey</h2>');
     expect(markup).not.toContain('<h2 lang="">Expired Survey</h2>');
     expect(markup).toContain("Closes from");
-    fixtures.query = "type=rounds&q=next-page&status=expired&source=quiz-one";
+    fixtures.query =
+      "type=rounds&q=next-page&status=expired&source=11111111-1111-4111-8111-111111111111";
     await harness.settle();
     expect(
       fixtures.apiFetch.mock.calls.some(([path]) =>
-        String(path).includes("search=next-page&status=expired&quizId=quiz-one"),
+        String(path).includes(
+          "search=next-page&status=expired&quizId=11111111-1111-4111-8111-111111111111",
+        ),
       ),
     ).toBe(true);
   });
 
   it("clears source and date filters on a tab switch while retaining the search and status", async () => {
     fixtures.query =
-      "type=rounds&q=Room&status=finished&source=quiz-one&from=2026-10-01&to=2026-10-13";
+      "type=rounds&q=Room&status=finished&source=11111111-1111-4111-8111-111111111111&from=2026-10-01&to=2026-10-13";
     const harness = sessionsHarness();
     await harness.settle();
     clickTab("surveys");
@@ -338,7 +341,7 @@ describe("Sessions workspace", () => {
     const markup = await harness.settle();
     expect(markup).toContain("Open Survey");
     expect(markup).not.toContain('id="presentations-tab"');
-    fixtures.query = "type=presentations&source=slides-one";
+    fixtures.query = "type=presentations&source=22222222-2222-4222-8222-222222222222";
     const fallback = await harness.settle();
     expect(fallback).toContain('id="rounds-panel"');
     expect(fixtures.replace).toHaveBeenCalledWith("/sessions?type=rounds", { scroll: false });
@@ -420,6 +423,314 @@ describe("Sessions workspace", () => {
       markup = await harness.settle();
       expect(markup.match(/<article /g)).toHaveLength(1);
       expect(markup).toContain('<h2 lang="">Paged session 29</h2>');
+      expect(fixtures.apiFetch.mock.calls).toHaveLength(reads);
+      fixtures.query = `type=${type}`;
+      markup = harness.render();
+      expect(markup.match(/<article /g)).toHaveLength(25);
+      expect(markup).toContain("Load more sessions");
+    },
+  );
+
+  it.each(["presentations", "surveys"])(
+    "immediately reuses loaded %s history for every local filter",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      const secondSource = "44444444-4444-4444-8444-444444444444";
+      const rows =
+        type === "presentations"
+          ? [
+              presentation,
+              {
+                ...presentation,
+                id: "second-presentation",
+                presentationId: secondSource,
+                title: "Closed history",
+                code: "4567890",
+                status: "finished",
+                createdAt: "2026-10-02T12:00:00Z",
+              },
+            ]
+          : [
+              openSurvey,
+              {
+                ...closedSurvey,
+                surveyId: secondSource,
+                title: "Closed history",
+                code: "4567890",
+                closesAt: "2099-10-02T12:00:00Z",
+              },
+            ];
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (path === "/v1/presentation-sessions") return { sessions: rows };
+        if (path.startsWith("/v1/survey-rooms?"))
+          return path.includes("cursor=")
+            ? { rooms: [rows[1]], nextCursor: null }
+            : { rooms: [rows[0]], nextCursor: "next-survey" };
+        return response(path);
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      const reads = fixtures.apiFetch.mock.calls.length;
+      const dateYear = type === "presentations" ? "2026" : "2099";
+      const firstTitle = type === "presentations" ? "First Presentation" : "Open Survey";
+      const cases: Array<[Record<string, string>, string[]]> = [
+        [{ q: "absent" }, []],
+        [{ q: "7890" }, ["Closed history"]],
+        [{ status: "active" }, [firstTitle]],
+        [{ status: "finished" }, ["Closed history"]],
+        [{ source: secondSource }, ["Closed history"]],
+        [{ from: `${dateYear}-10-02`, to: `${dateYear}-10-02` }, ["Closed history"]],
+        [
+          {
+            q: "Closed",
+            status: "finished",
+            source: secondSource,
+            from: `${dateYear}-10-02`,
+            to: `${dateYear}-10-02`,
+          },
+          ["Closed history"],
+        ],
+      ];
+      for (const [filters, titles] of cases) {
+        fixtures.query = new URLSearchParams({ type, ...filters }).toString();
+        const immediate = harness.render();
+        expect(immediate.match(/<h2 lang="">[^<]+<\/h2>/g) ?? []).toEqual(
+          titles.map((title) => `<h2 lang="">${title}</h2>`),
+        );
+        expect(immediate).not.toContain("Loading sessions");
+        await harness.settle();
+        expect(fixtures.apiFetch.mock.calls).toHaveLength(reads);
+      }
+    },
+  );
+
+  it.each(["presentations", "surveys"])(
+    "does not restart an in-flight %s history load when local filters change",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      const pending = deferred<unknown>();
+      fixtures.apiFetch.mockImplementation((path: string) => {
+        if (path === "/v1/presentation-sessions" || path.includes("cursor=next-survey"))
+          return pending.promise;
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      const request = fixtures.apiFetch.mock.calls.find(
+        ([path]) =>
+          path === "/v1/presentation-sessions" || String(path).includes("cursor=next-survey"),
+      );
+      const reads = fixtures.apiFetch.mock.calls.length;
+      const source = type === "presentations" ? presentation.presentationId : openSurvey.surveyId;
+      for (const filter of [
+        "q=C",
+        "q=Closed",
+        "status=finished",
+        `source=${source}&status=finished`,
+        "q=Closed&status=finished&from=2026-01-01&to=2099-12-31",
+      ]) {
+        fixtures.query = `type=${type}&${filter}`;
+        await harness.settle();
+        expect(fixtures.apiFetch.mock.calls).toHaveLength(reads);
+        expect(request?.[1].signal.aborted).toBe(false);
+      }
+      pending.resolve(
+        type === "presentations"
+          ? { sessions: [{ ...presentation, title: "Closed history", status: "finished" }] }
+          : { rooms: [{ ...closedSurvey, title: "Closed history" }], nextCursor: null },
+      );
+      const markup = await harness.settle();
+      expect(markup).toContain('<h2 lang="">Closed history</h2>');
+      expect(markup).not.toContain("Loading sessions");
+      expect(fixtures.apiFetch.mock.calls).toHaveLength(reads);
+    },
+  );
+
+  it.each(["presentations", "surveys"])(
+    "keeps a pending %s load failure visible after local filter changes",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      const pending = deferred<unknown>();
+      fixtures.apiFetch.mockImplementation((path: string) =>
+        path === "/v1/presentation-sessions" || path.includes("cursor=next-survey")
+          ? pending.promise
+          : Promise.resolve(response(path)),
+      );
+      const harness = sessionsHarness();
+      await harness.settle();
+      fixtures.query = `type=${type}&q=changed&status=finished`;
+      await harness.settle();
+      pending.reject(new Error("History read failed"));
+      let markup = await harness.settle();
+      expect(markup).toContain('role="alert"');
+      expect(markup).toContain("History read failed");
+      expect(markup).not.toContain("No sessions match");
+      const reads = fixtures.apiFetch.mock.calls.length;
+      fixtures.query = `type=${type}&q=changed-again`;
+      markup = await harness.settle();
+      expect(markup).toContain("History read failed");
+      expect(fixtures.apiFetch.mock.calls).toHaveLength(reads);
+    },
+  );
+
+  it.each(["presentations", "surveys"])(
+    "aborts stale %s reads on a workspace or tab change and reloads the selected history",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      const stale = deferred<unknown>();
+      let historyReads = 0;
+      fixtures.apiFetch.mockImplementation((path: string) => {
+        if (
+          path === "/v1/presentation-sessions" ||
+          (path.startsWith("/v1/survey-rooms?") && !path.includes("cursor="))
+        ) {
+          historyReads++;
+          if (historyReads === 1) return stale.promise;
+        }
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      const request = fixtures.apiFetch.mock.calls.find(
+        ([path]) =>
+          path === "/v1/presentation-sessions" || String(path).startsWith("/v1/survey-rooms?"),
+      );
+      fixtures.workspaceId = "workspace-b";
+      let markup = await harness.settle();
+      expect(request?.[1].signal.aborted).toBe(true);
+      expect(historyReads).toBe(2);
+      expect(markup).toContain(
+        type === "presentations"
+          ? '<h2 lang="">First Presentation</h2>'
+          : '<h2 lang="">Closed Survey</h2>',
+      );
+      stale.resolve(
+        type === "presentations"
+          ? { sessions: [{ ...presentation, title: "Stale history" }] }
+          : { rooms: [{ ...openSurvey, title: "Stale history" }], nextCursor: null },
+      );
+      markup = await harness.settle();
+      expect(markup).not.toContain("Stale history");
+      clickTab("rounds");
+      await harness.settle();
+      clickTab(type);
+      markup = await harness.settle();
+      expect(historyReads).toBe(3);
+      expect(markup).not.toContain("Stale history");
+    },
+  );
+
+  it("continues to request filtered Round history from the server on each query change", async () => {
+    const harness = sessionsHarness();
+    await harness.settle();
+    for (const query of ["f", "first", "first round"]) {
+      fixtures.query = new URLSearchParams({ type: "rounds", q: query }).toString();
+      await harness.settle();
+    }
+    const historyReads = fixtures.apiFetch.mock.calls.filter(([path]) =>
+      String(path).startsWith("/v1/sessions?"),
+    );
+    expect(historyReads).toHaveLength(4);
+    expect(
+      historyReads.map(([path]) => new URLSearchParams(String(path).split("?")[1]).get("search")),
+    ).toEqual([null, "f", "first", "first round"]);
+  });
+
+  it.each(["presentations", "surveys"])(
+    "discards a pending %s history response after changing tabs",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      const stale = deferred<unknown>();
+      let heldReads = 0;
+      fixtures.apiFetch.mockImplementation((path: string) => {
+        if (path === "/v1/presentation-sessions" || path.includes("cursor=next-survey")) {
+          heldReads++;
+          if (heldReads === 1) return stale.promise;
+        }
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      const request = fixtures.apiFetch.mock.calls.find(
+        ([path]) =>
+          path === "/v1/presentation-sessions" || String(path).includes("cursor=next-survey"),
+      );
+      clickTab("rounds");
+      await harness.settle();
+      expect(request?.[1].signal.aborted).toBe(true);
+      stale.resolve(
+        type === "presentations"
+          ? { sessions: [{ ...presentation, title: "Stale history" }] }
+          : { rooms: [{ ...openSurvey, title: "Stale history" }], nextCursor: null },
+      );
+      let markup = await harness.settle();
+      expect(markup).toContain('<h2 lang="">First Round</h2>');
+      expect(markup).not.toContain("Stale history");
+      clickTab(type);
+      markup = await harness.settle();
+      expect(heldReads).toBe(2);
+      expect(markup).toContain(
+        type === "presentations"
+          ? '<h2 lang="">First Presentation</h2>'
+          : '<h2 lang="">Closed Survey</h2>',
+      );
+      expect(markup).not.toContain("Stale history");
+    },
+  );
+
+  it.each(["presentations", "surveys"])(
+    "reconciles a deleted %s snapshot after local filter changes without reloading it",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      const deletion = deferred<unknown>();
+      let committed = false;
+      fixtures.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+        if (init?.method === "DELETE") return deletion.promise;
+        if (path === "/v1/sessions/counts")
+          return Promise.resolve({
+            counts: {
+              rounds: 77,
+              presentations: type === "presentations" && committed ? 6 : 7,
+              surveys: type === "surveys" && committed ? 54 : 55,
+            },
+          });
+        if (path === "/v1/presentation-sessions")
+          return Promise.resolve({
+            sessions: [{ ...presentation, title: "Deletable history", status: "finished" }],
+          });
+        if (path.startsWith("/v1/survey-rooms?"))
+          return Promise.resolve({
+            rooms: [{ ...closedSurvey, title: "Deletable history" }],
+            nextCursor: null,
+          });
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      const historyReads = () =>
+        fixtures.apiFetch.mock.calls.filter(
+          ([path]) =>
+            path === "/v1/presentation-sessions" || String(path).startsWith("/v1/survey-rooms?"),
+        ).length;
+      expect(historyReads()).toBe(1);
+      clickButton(type === "presentations" ? "Delete session" : "Delete Survey run");
+      fixtures.query = `type=${type}&q=Deletable&status=finished`;
+      await harness.settle();
+      expect(historyReads()).toBe(1);
+      committed = true;
+      deletion.resolve(undefined);
+      let markup = await harness.settle();
+      expect(markup).not.toContain('<h2 lang="">Deletable history</h2>');
+      expect(markup).toContain(
+        type === "presentations" ? "Presentations <span>6</span>" : "Surveys <span>54</span>",
+      );
+      expect(historyReads()).toBe(1);
+      clickTab("rounds");
+      await harness.settle();
+      clickTab(type);
+      markup = await harness.settle();
+      expect(historyReads()).toBe(2);
+      expect(markup).not.toContain('<h2 lang="">Deletable history</h2>');
     },
   );
 
@@ -684,8 +995,10 @@ function clickButton(name: string) {
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }

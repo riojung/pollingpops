@@ -160,10 +160,17 @@ for (const mobile of [false, true]) {
     });
     await signInBeta(page);
     const fixture = await createSessions(page);
+    const historyReads = { presentations: 0, surveys: 0 };
+    page.on("request", (request) => {
+      if (request.method() !== "GET") return;
+      const path = new URL(request.url()).pathname;
+      if (path === "/v1/presentation-sessions") historyReads.presentations += 1;
+      if (path === "/v1/survey-rooms") historyReads.surveys += 1;
+    });
     const countsResponse = await page.request.get(`${api}/v1/sessions/counts`);
     expect(countsResponse.status()).toBe(200);
     const { counts } = await countsResponse.json();
-    await page.goto(`/sessions?type=rounds&q=${encodeURIComponent(fixture.title)}`);
+    await page.goto(`/sessions?type=rounds&q=${encodeURIComponent(fixture.title)}&source=`);
     await expect(page.getByRole("heading", { name: "Sessions", level: 1 })).toBeVisible();
     const tabs = page.getByRole("tablist", { name: "Session type" });
     for (const [label, kind] of [
@@ -179,6 +186,7 @@ for (const mobile of [false, true]) {
       .getByRole("article")
       .filter({ has: page.getByRole("heading", { name: `${fixture.title} Round`, exact: true }) });
     await expect(roundCard).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Round", exact: true })).toHaveValue("all");
     await expect(
       roundCard.getByRole("button", { name: "Resume Session", exact: true }),
     ).toBeVisible();
@@ -217,6 +225,31 @@ for (const mobile of [false, true]) {
       `/presentation-session/${fixture.presentationRoom.snapshot.sessionId}/host`,
     );
     await expect(page.getByRole("article")).toHaveCount(1);
+    const presentationReads = historyReads.presentations;
+    await page
+      .getByRole("searchbox", { name: "Search Presentation sessions", exact: true })
+      .fill(fixture.presentationRoom.snapshot.code);
+    await expect(page).toHaveURL(new RegExp(`q=${fixture.presentationRoom.snapshot.code}`));
+    await expect(presentationCard).toBeVisible();
+    await page
+      .getByRole("combobox", { name: "Presentation", exact: true })
+      .selectOption(fixture.presentationId);
+    await expect(page).toHaveURL(new RegExp(`source=${fixture.presentationId}`));
+    await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("finished");
+    await expect(
+      page.getByRole("heading", { name: "No sessions match these filters.", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
+    await expect(presentationCard).toBeVisible();
+    await page.getByLabel("Started from", { exact: true }).fill("2020-01-01");
+    await expect(page).toHaveURL(/from=2020-01-01/);
+    await expect(presentationCard).toBeVisible();
+    await page
+      .getByRole("searchbox", { name: "Search Presentation sessions", exact: true })
+      .fill(fixture.title);
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(fixture.title);
+    await expect(presentationCard).toBeVisible();
+    expect(historyReads.presentations).toBe(presentationReads);
     await tabs.getByRole("tab", { name: /^Surveys/ }).click();
     const surveyCard = page
       .getByRole("article")
@@ -230,6 +263,20 @@ for (const mobile of [false, true]) {
       surveyCard.getByRole("button", { name: "Delete Survey run", exact: true }),
     ).toHaveCount(0);
     await expect(page.getByLabel("Closes from", { exact: true })).toBeVisible();
+    const surveyReads = historyReads.surveys;
+    await page
+      .getByRole("combobox", { name: "Survey", exact: true })
+      .selectOption(fixture.surveyId);
+    await expect(page).toHaveURL(new RegExp(`source=${fixture.surveyId}`));
+    await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("finished");
+    await expect(
+      page.getByRole("heading", { name: "No sessions match these filters.", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
+    await expect(surveyCard).toBeVisible();
+    await page.getByLabel("Closes from", { exact: true }).fill("2020-01-01");
+    await expect(page).toHaveURL(/from=2020-01-01/);
+    await expect(surveyCard).toBeVisible();
     await page
       .getByRole("searchbox", { name: "Search your workspace sessions", exact: true })
       .fill(fixture.surveyRoom.code);
@@ -237,6 +284,16 @@ for (const mobile of [false, true]) {
       .getByRole("searchbox", { name: "Search your workspace sessions", exact: true })
       .press("Enter");
     await expect(page).toHaveURL(/\/sessions\?type=surveys&q=/);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("q"))
+      .toBe(fixture.surveyRoom.code);
+    await expect(
+      page.getByRole("searchbox", { name: "Search Survey sessions", exact: true }),
+    ).toHaveValue(fixture.surveyRoom.code);
+    await expect(surveyCard).toBeVisible();
+    expect(historyReads.surveys).toBe(surveyReads);
+    await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("all");
+    await expect.poll(() => new URL(page.url()).searchParams.get("status")).toBeNull();
     await expect(surveyCard).toBeVisible();
     if (mobile) await page.setViewportSize({ width: 320, height: 844 });
     expect(

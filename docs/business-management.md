@@ -93,11 +93,14 @@ access. Direct visits to `/organization` ask signed-out users to sign in, and sh
 state when hosted management is disabled, including Community deployments.
 
 Set `CONTROL_PRODUCT_ORIGIN` on the operator app to the exact product origin to allow credentialed,
-read-only navigation discovery. The business overlays supply the corresponding product origin by
-default. Discovery returns only the current operator's name, role and permitted links; credentials,
-CSRF tokens and customer records remain private to the console. The product reads this endpoint
-independently with a bounded timeout, so a console outage does not block customer navigation or
-gameplay. Browser detection uses the existing SameSite operator cookie and works when product and
+read-only navigation discovery. The hosted business overlay defaults to its HTTPS product domain.
+The local business overlay leaves discovery unset unless an exact trusted HTTPS product origin is
+configured, because its console also enforces production HTTPS policy. An HTTP local product keeps
+the explicit admin sign-in entry and full console navigation. Discovery returns only the current
+operator's name, role and permitted links; credentials, CSRF tokens and customer records remain
+private to the console. The product reads this endpoint independently with a bounded timeout, so a
+console outage does not block customer navigation or gameplay. Browser detection uses the existing
+SameSite operator cookie and works when product and
 console are on the same site (for example separate subdomains); independent sites retain the explicit
 admin sign-in entry and full console navigation.
 

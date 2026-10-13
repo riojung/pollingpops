@@ -54,7 +54,9 @@ services:
       NODE_ENV: production
       CONTROL_ENABLED: ${CONTROL_ENABLED:-false}
       CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-}
-      CONTROL_PRODUCT_ORIGIN: ${CONTROL_PRODUCT_ORIGIN:-${OPENROUND_PUBLIC_URL:-http://localhost:8080}}
+      # Production control accepts only an explicitly trusted HTTPS product origin.
+      # Leave unset for an HTTP local product; direct operator sign-in still works.
+      CONTROL_PRODUCT_ORIGIN: ${CONTROL_PRODUCT_ORIGIN:-}
       CONTROL_DATABASE_URL: ${CONTROL_DATABASE_URL:-}
       OPERATOR_OIDC_ISSUER: ${OPERATOR_OIDC_ISSUER:-}
       OPERATOR_OIDC_CLIENT_ID: ${OPERATOR_OIDC_CLIENT_ID:-}

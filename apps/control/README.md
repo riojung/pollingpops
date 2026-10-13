@@ -57,6 +57,13 @@ The product remains usable when discovery is unavailable; its explicit admin sig
 console directly. Console links accept permitted `?view=` areas and preserve the selected area
 through sign-in.
 
+The local `compose.business.yaml` overlay runs the console with production HTTPS policy and leaves
+`CONTROL_PRODUCT_ORIGIN` unset unless explicitly configured. With the default HTTP product, use the
+direct admin sign-in entry; configure discovery only after serving the product at its exact trusted
+HTTPS origin. The hosted `compose.single-vm.business.yaml` overlay defaults discovery to
+`https://<OPENROUND_APP_DOMAIN>`, matching its product ingress. Neither overlay relaxes production
+origin validation.
+
 Organization/workspace pause, billing projections, credits/promotions, worker heartbeats and pause,
 support cases and the fifty newest private product-feedback records, integration attempts, and
 operator audits have separate server-side capability checks. Commands commit their mutation,

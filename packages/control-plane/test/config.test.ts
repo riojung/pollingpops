@@ -23,6 +23,30 @@ describe("trusted product navigation origin", () => {
         .CONTROL_PRODUCT_ORIGIN,
     ).toBe("https://pollingpops.example");
   });
+  it("allows enabled production control without optional discovery for an HTTP local product", () => {
+    const environment = {
+      ...enabled,
+      NODE_ENV: "production",
+      OPENROUND_PUBLIC_URL: "http://localhost:8080",
+      CONTROL_PRODUCT_ORIGIN: "",
+    };
+    const config = loadControlConfig(environment);
+    expect(config.CONTROL_ENABLED).toBe(true);
+    expect(config.CONTROL_PUBLIC_ORIGIN).toBe(enabled.CONTROL_PUBLIC_ORIGIN);
+    expect(config.CONTROL_PRODUCT_ORIGIN).toBeUndefined();
+    expect(() =>
+      loadControlConfig({
+        ...environment,
+        CONTROL_PRODUCT_ORIGIN: environment.OPENROUND_PUBLIC_URL,
+      }),
+    ).toThrow();
+    expect(
+      loadControlConfig({
+        ...environment,
+        CONTROL_PRODUCT_ORIGIN: "https://product.example.test",
+      }).CONTROL_PRODUCT_ORIGIN,
+    ).toBe("https://product.example.test");
+  });
   it.each([
     "https://pollingpops.example/account",
     "https://user:secret@pollingpops.example",

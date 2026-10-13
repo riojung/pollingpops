@@ -537,6 +537,47 @@ const messages = {
   "pages.home.sessions.blockProgress": "Block {current} von {total}",
   "pages.home.sessions.lobby": "Warteraum",
   "pages.home.sessions.questionProgress": "Frage {current} von {total}",
+  "pages.common.survey": "Umfrage",
+  "pages.sessions.typeLabel": "Sitzungstyp",
+  "pages.sessions.searchRounds": "Round-Sitzungen suchen",
+  "pages.sessions.searchPresentations": "Präsentationssitzungen suchen",
+  "pages.sessions.searchSurveys": "Umfragesitzungen suchen",
+  "pages.sessions.filtersLabel": "Sitzungsfilter",
+  "pages.sessions.allPresentations": "Alle Präsentationen",
+  "pages.sessions.allSurveys": "Alle Umfragen",
+  "pages.sessions.startedFrom": "Gestartet ab",
+  "pages.sessions.startedTo": "Gestartet bis",
+  "pages.sessions.closesFrom": "Endet ab",
+  "pages.sessions.closesTo": "Endet bis",
+  "pages.sessions.backToLibrary": "Zurück zur Bibliothek: {type}",
+  "pages.sessions.countLoading": "Sitzungsanzahl wird geladen",
+  "pages.sessions.countUnavailable": "Sitzungsanzahl nicht verfügbar",
+  "pages.sessions.resultCount": "{count} Sitzungen angezeigt",
+  "pages.sessions.noMatches": "Keine Sitzungen entsprechen diesen Filtern.",
+  "pages.sessions.surveyListLabel": "Umfragesitzungen",
+  "pages.sessions.surveyClosesInRoom": "Endet am {date} · Raum {code}",
+  "pages.sessions.surveySharing": "Freigabe verwalten",
+  "pages.sessions.surveyEmptyDescription":
+    "Öffnen Sie eine veröffentlichte Umfrage in der Bibliothek, um einen Freigabelink zu erstellen.",
+  "pages.sessions.presentationEmptyDescription":
+    "Starten Sie eine Präsentation aus der Bibliothek, um ihren Sitzungsverlauf zu sehen.",
+  "pages.sessions.roundEmptyDescription":
+    "Starten Sie einen Round aus der Bibliothek, um seinen Sitzungsverlauf zu sehen.",
+  "pages.sessions.emptyRounds": "Noch keine Round-Sitzungen",
+  "pages.sessions.emptyPresentations": "Noch keine Präsentationssitzungen",
+  "pages.sessions.emptySurveys": "Noch keine Umfragesitzungen",
+  "pages.sessions.layoutLabel": "Sitzungsansicht",
+  "pages.sessions.loadingError": "Sitzungen konnten nicht geladen werden. Versuchen Sie es erneut.",
+  "pages.sessions.surveyDescription":
+    "Jeder Freigabelink erstellt einen unveränderlichen Umfragedurchlauf, der im eigenen Tempo beantwortet wird. Die Ergebnisse werden je Frage angezeigt, ohne Pseudonyme oder verknüpfte Antwortzeilen einzelner Personen.",
+  "pages.sessions.surveyRun": "Umfragedurchlauf anzeigen",
+  "pages.sessions.deleteSurvey": "Umfragedurchlauf löschen",
+  "pages.sessions.deleteSurveyConfirm":
+    "Den Umfragedurchlauf „{title}“, seine Einreichungen und Ergebnisse dauerhaft löschen? Dies kann nicht rückgängig gemacht werden.",
+  "pages.sessions.description":
+    "Durchsuchen Sie Live-Sitzungen von Rounds und Präsentationen sowie Umfragedurchläufe im eigenen Tempo.",
+  "pages.sessions.eyebrow": "Durchführungsverlauf",
+  "pages.sessions.workspaceSearch": "Sitzungen in Ihrem Arbeitsbereich suchen",
 } satisfies WorkspacePageMessages;
 
 export default messages;

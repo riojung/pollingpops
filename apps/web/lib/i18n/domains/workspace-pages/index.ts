@@ -526,6 +526,47 @@ export const workspacePageEnglishMessages = {
   "pages.sessions.viewReport": "View Report",
   "pages.sessions.viewResult": "View Result",
   "pages.sessions.viewRound": "View Round",
+  "pages.common.survey": "Survey",
+  "pages.sessions.typeLabel": "Session type",
+  "pages.sessions.searchRounds": "Search Round sessions",
+  "pages.sessions.searchPresentations": "Search Presentation sessions",
+  "pages.sessions.searchSurveys": "Search Survey sessions",
+  "pages.sessions.filtersLabel": "Session filters",
+  "pages.sessions.allPresentations": "All Presentations",
+  "pages.sessions.allSurveys": "All Surveys",
+  "pages.sessions.startedFrom": "Started from",
+  "pages.sessions.startedTo": "Started to",
+  "pages.sessions.closesFrom": "Closes from",
+  "pages.sessions.closesTo": "Closes to",
+  "pages.sessions.backToLibrary": "Back to {type} library",
+  "pages.sessions.countLoading": "Loading session count",
+  "pages.sessions.countUnavailable": "Session count unavailable",
+  "pages.sessions.resultCount": "{count} sessions shown",
+  "pages.sessions.noMatches": "No sessions match these filters.",
+  "pages.sessions.surveyListLabel": "Survey sessions",
+  "pages.sessions.surveyClosesInRoom": "Closes {date} · room {code}",
+  "pages.sessions.surveySharing": "Manage sharing",
+  "pages.sessions.surveyEmptyDescription":
+    "Open a published Survey from the Library to create a sharing link.",
+  "pages.sessions.presentationEmptyDescription":
+    "Start a Presentation from the Library to see its session history.",
+  "pages.sessions.roundEmptyDescription":
+    "Start a Round from the Library to see its session history.",
+  "pages.sessions.emptyRounds": "No Round sessions yet",
+  "pages.sessions.emptyPresentations": "No Presentation sessions yet",
+  "pages.sessions.emptySurveys": "No Survey sessions yet",
+  "pages.sessions.layoutLabel": "Session layout",
+  "pages.sessions.loadingError": "Sessions could not be loaded. Try again.",
+  "pages.sessions.surveyDescription":
+    "Each sharing link creates a frozen Survey run for self-paced feedback. Results are shown by question, without respondent aliases or linked answer rows.",
+  "pages.sessions.surveyRun": "View Survey run",
+  "pages.sessions.deleteSurvey": "Delete Survey run",
+  "pages.sessions.deleteSurveyConfirm":
+    "Permanently delete the Survey run “{title}”, its submissions, and results? This cannot be undone.",
+  "pages.sessions.description":
+    "Browse live Round and Presentation sessions and self-paced Survey runs.",
+  "pages.sessions.eyebrow": "Delivery history",
+  "pages.sessions.workspaceSearch": "Search your workspace sessions",
 } as const;
 
 export type WorkspacePageMessageKey = keyof typeof workspacePageEnglishMessages;

@@ -223,7 +223,8 @@ describe("Library workspace", () => {
     expect(markup).toContain('placeholder="Search surveys"');
     expect(markup).toContain('value="training"');
     expect(markup).toContain('href="/surveys/new"');
-    expect(markup).toContain('href="/surveys/runs"');
+    expect(markup).toContain('href="/sessions?type=surveys"');
+    expect(markup).toContain("Survey runs and results");
     expect(markup).toContain('href="/library/folders?type=surveys"');
     expect(markup).toContain('aria-label="Filter by folder"');
     expect(markup).toContain('aria-label="Grid view"');

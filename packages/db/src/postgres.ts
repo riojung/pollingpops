@@ -3465,12 +3465,33 @@ export class PostgresRepository implements Repository {
     return !result.rows[0] || result.rows[0].deletion_started_at !== null;
   }
 
+  async getSessionCounts(workspaceId: string, options: { includePresentations?: boolean } = {}) {
+    const result = await this.workspaceQuery(
+      workspaceId,
+      `SELECT
+         (SELECT count(*) FROM game_sessions
+          WHERE workspace_id = $1 AND deleted_at IS NULL) AS rounds,
+         CASE WHEN $2::boolean THEN
+           (SELECT count(*) FROM presentation_live_sessions WHERE workspace_id = $1)
+           ELSE 0 END AS presentations,
+         (SELECT count(*) FROM survey_feedback_rooms WHERE workspace_id = $1) AS surveys`,
+      [workspaceId, options.includePresentations !== false],
+    );
+    const row = result.rows[0]!;
+    return {
+      rounds: Number(row.rounds),
+      presentations: Number(row.presentations),
+      surveys: Number(row.surveys),
+    };
+  }
+
   async listSessionHistory(
     workspaceId: string,
     options: {
       cursor?: HistoryCursor;
       limit: number;
       status?: SessionHistoryRecord["status"];
+      search?: string;
       quizId?: string;
       from?: Date;
       to?: Date;
@@ -3502,6 +3523,9 @@ export class PostgresRepository implements Repository {
            OR ($7 = 'active' AND game_sessions.state <> 'finished' AND game_sessions.expires_at > $8)
            OR ($7 = 'expired' AND game_sessions.state <> 'finished' AND game_sessions.expires_at <= $8)
          )
+         AND ($10::text IS NULL
+           OR strpos(lower(game_sessions.state_snapshot #>> '{quiz,title}'), lower($10)) > 0
+           OR strpos(game_sessions.code, $10) > 0)
        ORDER BY game_sessions.created_at DESC, game_sessions.id DESC
        LIMIT $9`,
       [
@@ -3514,6 +3538,7 @@ export class PostgresRepository implements Repository {
         options.status ?? null,
         options.now,
         options.limit + 1,
+        options.search?.trim() || null,
       ],
     );
     const hasMore = result.rows.length > options.limit;

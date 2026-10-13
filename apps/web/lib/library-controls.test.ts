@@ -48,6 +48,16 @@ describe("Library controls", () => {
     );
     expect(librarySearchHref("", "/home", "?type=unknown")).toBe("/library");
   });
+  it("searches the selected Sessions type without forwarding control credentials or stale filters", () => {
+    expect(
+      librarySearchHref("  workshop  ", "/sessions", "?type=surveys&source=old&token=secret"),
+    ).toBe("/sessions?type=surveys&q=workshop");
+    expect(librarySearchHref("room 123", "/sessions", "?type=presentations&status=active")).toBe(
+      "/sessions?type=presentations&q=room+123",
+    );
+    expect(librarySearchHref("", "/sessions", "?type=rounds")).toBe("/sessions");
+    expect(librarySearchHref("ready", "/sessions", "?type=unknown")).toBe("/sessions?q=ready");
+  });
   it("searches titles, descriptions, and supplied metadata without showing archives by default", () => {
     expect(
       filterLibraryItems(items, {

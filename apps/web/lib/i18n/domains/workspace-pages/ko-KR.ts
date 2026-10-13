@@ -518,6 +518,47 @@ const messages = {
   "pages.home.sessions.blockProgress": "블록 {current}/{total}",
   "pages.home.sessions.lobby": "로비",
   "pages.home.sessions.questionProgress": "질문 {current}/{total}",
+  "pages.common.survey": "설문조사",
+  "pages.sessions.typeLabel": "세션 유형",
+  "pages.sessions.searchRounds": "라운드 세션 검색",
+  "pages.sessions.searchPresentations": "프레젠테이션 세션 검색",
+  "pages.sessions.searchSurveys": "설문조사 세션 검색",
+  "pages.sessions.filtersLabel": "세션 필터",
+  "pages.sessions.allPresentations": "모든 프레젠테이션",
+  "pages.sessions.allSurveys": "모든 설문조사",
+  "pages.sessions.startedFrom": "시작일 범위 시작",
+  "pages.sessions.startedTo": "시작일 범위 끝",
+  "pages.sessions.closesFrom": "마감일 범위 시작",
+  "pages.sessions.closesTo": "마감일 범위 끝",
+  "pages.sessions.backToLibrary": "{type} 라이브러리로 돌아가기",
+  "pages.sessions.countLoading": "세션 수 불러오는 중",
+  "pages.sessions.countUnavailable": "세션 수를 확인할 수 없음",
+  "pages.sessions.resultCount": "세션 {count}개 표시",
+  "pages.sessions.noMatches": "이 필터와 일치하는 세션이 없습니다.",
+  "pages.sessions.surveyListLabel": "설문조사 세션",
+  "pages.sessions.surveyClosesInRoom": "{date} 마감 · 방 {code}",
+  "pages.sessions.surveySharing": "공유 관리",
+  "pages.sessions.surveyEmptyDescription":
+    "라이브러리에서 게시된 설문조사를 열어 공유 링크를 만드세요.",
+  "pages.sessions.presentationEmptyDescription":
+    "라이브러리에서 프레젠테이션을 시작하면 세션 기록을 볼 수 있습니다.",
+  "pages.sessions.roundEmptyDescription":
+    "라이브러리에서 라운드를 시작하면 세션 기록을 볼 수 있습니다.",
+  "pages.sessions.emptyRounds": "아직 라운드 세션이 없습니다",
+  "pages.sessions.emptyPresentations": "아직 프레젠테이션 세션이 없습니다",
+  "pages.sessions.emptySurveys": "아직 설문조사 세션이 없습니다",
+  "pages.sessions.layoutLabel": "세션 레이아웃",
+  "pages.sessions.loadingError": "세션을 불러올 수 없습니다. 다시 시도하세요.",
+  "pages.sessions.surveyDescription":
+    "각 공유 링크는 각자 원하는 속도로 응답할 수 있는 고정된 설문조사 실행본을 만듭니다. 결과는 질문별로 표시되며, 응답자 별칭이나 개인의 답변을 연결하는 행은 포함되지 않습니다.",
+  "pages.sessions.surveyRun": "설문조사 실행 기록 보기",
+  "pages.sessions.deleteSurvey": "설문조사 실행 기록 삭제",
+  "pages.sessions.deleteSurveyConfirm":
+    "설문조사 실행 기록 “{title}”과 제출 내용 및 결과를 영구적으로 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+  "pages.sessions.description":
+    "라운드와 프레젠테이션의 실시간 세션 및 각자의 속도로 응답하는 설문조사 실행 기록을 살펴보세요.",
+  "pages.sessions.eyebrow": "실행 기록",
+  "pages.sessions.workspaceSearch": "워크스페이스 세션 검색",
 } satisfies WorkspacePageMessages;
 
 export default messages;

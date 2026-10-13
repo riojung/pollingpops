@@ -539,7 +539,14 @@ permanent untracked object.
 
 ## Live session, staff, presenter, and embed APIs
 
-- `GET /v1/sessions` — tenant-scoped summary history with status, Round, and date filters.
+- `GET /v1/sessions` — tenant-scoped Round summary history with `status`, `quizId`, `from`,
+  `to`, `cursor`, and `limit` filters. Optional `search` is a trimmed, case-insensitive literal
+  substring of the frozen room title or room code (maximum 160 characters), applied before
+  cursor pagination.
+- `GET /v1/sessions/counts` — authenticated, private/no-store unfiltered counts of retained
+  rooms: `{counts: {rounds, presentations, surveys}}`. Deleted rooms are excluded; expired rooms
+  remain counted until retention cleanup. Presentation counts are zero when that workspace's
+  Presentation feature is disabled. Paused Survey creation does not hide Survey history.
 - `POST /v1/sessions`
 - `GET /v1/sessions/join/preflight?code=...` — rate-limited, non-mutating nickname-policy lookup
   for the join form.

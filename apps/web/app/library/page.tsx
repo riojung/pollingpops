@@ -1257,7 +1257,7 @@ function LibraryContent() {
         {type === "surveys" ? (
           <>
             <p>
-              <Link href="/surveys/runs">{t("pages.library.surveyRuns")}</Link>
+              <Link href="/sessions?type=surveys">{t("pages.library.surveyRuns")}</Link>
             </p>
             {!productFeatures?.surveys ? (
               <p className="notice">{t("pages.library.surveyPaused")}</p>

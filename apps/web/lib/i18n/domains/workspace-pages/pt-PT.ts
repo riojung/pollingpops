@@ -532,6 +532,47 @@ const messages = {
   "pages.home.sessions.blockProgress": "Bloco {current} de {total}",
   "pages.home.sessions.lobby": "Sala de espera",
   "pages.home.sessions.questionProgress": "Pergunta {current} de {total}",
+  "pages.common.survey": "Inquérito",
+  "pages.sessions.typeLabel": "Tipo de sessão",
+  "pages.sessions.searchRounds": "Pesquisar sessões de Round",
+  "pages.sessions.searchPresentations": "Pesquisar sessões de apresentação",
+  "pages.sessions.searchSurveys": "Pesquisar sessões de inquérito",
+  "pages.sessions.filtersLabel": "Filtros das sessões",
+  "pages.sessions.allPresentations": "Todas as apresentações",
+  "pages.sessions.allSurveys": "Todos os inquéritos",
+  "pages.sessions.startedFrom": "Início a partir de",
+  "pages.sessions.startedTo": "Início até",
+  "pages.sessions.closesFrom": "Encerramento a partir de",
+  "pages.sessions.closesTo": "Encerramento até",
+  "pages.sessions.backToLibrary": "Voltar à biblioteca: {type}",
+  "pages.sessions.countLoading": "A carregar o número de sessões",
+  "pages.sessions.countUnavailable": "Número de sessões indisponível",
+  "pages.sessions.resultCount": "{count} sessões apresentadas",
+  "pages.sessions.noMatches": "Nenhuma sessão corresponde a estes filtros.",
+  "pages.sessions.surveyListLabel": "Sessões de inquérito",
+  "pages.sessions.surveyClosesInRoom": "Encerra em {date} · sala {code}",
+  "pages.sessions.surveySharing": "Gerir partilha",
+  "pages.sessions.surveyEmptyDescription":
+    "Abra um inquérito publicado na biblioteca para criar uma ligação de partilha.",
+  "pages.sessions.presentationEmptyDescription":
+    "Inicie uma apresentação a partir da biblioteca para ver o histórico de sessões.",
+  "pages.sessions.roundEmptyDescription":
+    "Inicie um Round a partir da biblioteca para ver o histórico de sessões.",
+  "pages.sessions.emptyRounds": "Ainda não há sessões de Round",
+  "pages.sessions.emptyPresentations": "Ainda não há sessões de apresentação",
+  "pages.sessions.emptySurveys": "Ainda não há sessões de inquérito",
+  "pages.sessions.layoutLabel": "Disposição das sessões",
+  "pages.sessions.loadingError": "Não foi possível carregar as sessões. Tente novamente.",
+  "pages.sessions.surveyDescription":
+    "Cada ligação de partilha cria uma versão fixa do inquérito para respostas ao ritmo de cada pessoa. Os resultados são apresentados por pergunta, sem pseudónimos dos participantes nem linhas que associem as suas respostas.",
+  "pages.sessions.surveyRun": "Ver sessão de inquérito",
+  "pages.sessions.deleteSurvey": "Eliminar sessão de inquérito",
+  "pages.sessions.deleteSurveyConfirm":
+    "Eliminar permanentemente a sessão de inquérito «{title}», as suas submissões e os seus resultados? Esta ação não pode ser anulada.",
+  "pages.sessions.description":
+    "Consulte sessões em direto de Rounds e apresentações e sessões de inquérito ao ritmo de cada pessoa.",
+  "pages.sessions.eyebrow": "Histórico de atividades",
+  "pages.sessions.workspaceSearch": "Pesquisar sessões do seu espaço de trabalho",
 } satisfies WorkspacePageMessages;
 
 export default messages;

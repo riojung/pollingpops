@@ -62,6 +62,8 @@ import {
   ReportSummaryPageSchema,
   RoundFilterOptionsResponseSchema,
   SessionSummaryPageSchema,
+  SessionCountsResponseSchema,
+  SessionHistorySearchSchema,
   FollowupSummaryPageSchema,
   StarterIdSchema,
   StartersResponseSchema,
@@ -215,6 +217,7 @@ const HistoryQueryBase = {
 };
 const SessionHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
+  search: SessionHistorySearchSchema.optional(),
   status: z.enum(["active", "finished", "expired"]).optional(),
   quizId: z.string().uuid().optional(),
 });
@@ -2147,6 +2150,21 @@ export async function registerRoutes(
     return quiz ? { quiz } : apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
   });
 
+  app.get("/v1/sessions/counts", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    return SessionCountsResponseSchema.parse({
+      counts: await repository.getSessionCounts(creator.workspaceId, {
+        includePresentations: professionalWorkspaceFeatureEnabled(
+          config,
+          creator.workspaceId,
+          "presentations",
+        ),
+      }),
+    });
+  });
+
   app.get("/v1/sessions", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
@@ -2163,6 +2181,7 @@ export async function registerRoutes(
           }
         : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.search ? { search: query.search } : {}),
       ...(query.quizId ? { quizId: query.quizId } : {}),
       ...(query.from ? { from: new Date(query.from) } : {}),
       ...(query.to ? { to: new Date(query.to) } : {}),

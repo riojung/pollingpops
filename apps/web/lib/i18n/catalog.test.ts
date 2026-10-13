@@ -69,6 +69,7 @@ describe("localized message catalogs", () => {
     expect(localeDomainsForPath("/surveys/rooms/example")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/surveys/example")).toEqual([]);
     expect(localeDomainsForPath("/home")).toEqual(["workspace-pages"]);
+    expect(localeDomainsForPath("/sessions?type=surveys")).toEqual(["workspace-pages"]);
     expect(localeDomainsForPath("/quiz/example")).toEqual([
       "delivery-authoring",
       "report-round",

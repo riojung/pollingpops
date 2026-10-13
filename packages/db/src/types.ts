@@ -22,6 +22,7 @@ import type {
   Report,
   ResponsePayload,
   SessionDecisionEvent,
+  SessionCounts,
   SupportedLocale,
   TimeMultiplier,
   TrustMode,
@@ -1271,12 +1272,18 @@ export interface Repository {
   listSessionIds(workspaceId: string): Promise<string[]>;
   listSessionInvalidationTargets(workspaceId: string): Promise<SessionInvalidationTarget[]>;
   workspaceDeletionStarted(workspaceId: string): Promise<boolean>;
+  /** Exact unfiltered counts of retained rooms, without content or audience projections. */
+  getSessionCounts(
+    workspaceId: string,
+    options?: { includePresentations?: boolean },
+  ): Promise<SessionCounts>;
   listSessionHistory(
     workspaceId: string,
     options: {
       cursor?: HistoryCursor;
       limit: number;
       status?: SessionHistoryRecord["status"];
+      search?: string;
       quizId?: string;
       from?: Date;
       to?: Date;

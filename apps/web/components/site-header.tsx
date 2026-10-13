@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { Brand, creatorLandingHref } from "./brand";
 import { apiFetch, humanError } from "../lib/api";
 import { useLocale } from "./locale-provider";
+import { ManagementNavigationLinks, useManagementNavigation } from "./management-navigation";
 
 interface CreatorSummary {
   email: string;
@@ -21,6 +22,7 @@ type SessionState =
 
 export function SiteHeader() {
   const { t } = useLocale();
+  const management = useManagementNavigation();
   const [session, setSession] = useState<SessionState>({ status: "checking", creator: null });
   const [menuOpen, setMenuOpen] = useState(false);
   const [signOutError, setSignOutError] = useState("");
@@ -69,8 +71,14 @@ export function SiteHeader() {
     }
   }
 
-  const signedIn = session.status === "signed-in";
-  const brandHref = signedIn ? creatorLandingHref(session.productFeatures) : "/";
+  const workspaceSignedIn = session.status === "signed-in";
+  const signedIn = workspaceSignedIn || management.user !== null;
+  const email = workspaceSignedIn ? session.creator.email : management.user?.email;
+  const brandHref = workspaceSignedIn
+    ? creatorLandingHref(session.productFeatures)
+    : signedIn && management.organizationManagementEnabled
+      ? "/organization"
+      : "/";
 
   return (
     <header className="shell topbar site-header">
@@ -79,16 +87,18 @@ export function SiteHeader() {
       </a>
       <Brand href={brandHref} />
       <nav
-        aria-busy={session.status === "checking"}
+        aria-busy={session.status === "checking" && management.loading}
         aria-label={t("delivery.site.primaryNavigation")}
         className="nav-links site-desktop-nav"
       >
         {signedIn ? (
           <>
-            <span className="creator-identity" title={session.creator.email}>
-              {session.creator.email}
+            <span className="creator-identity" title={email}>
+              {email}
             </span>
-            <Link href="/dashboard">{t("delivery.site.myRounds")}</Link>
+            {workspaceSignedIn ? (
+              <Link href="/dashboard">{t("delivery.site.myRounds")}</Link>
+            ) : null}
             <Link href="/account">{t("delivery.site.account")}</Link>
             <button
               className="nav-text-button"
@@ -108,16 +118,28 @@ export function SiteHeader() {
           <>
             <Link href="/pricing">{t("delivery.site.pricing")}</Link>
             <Link href="/privacy">{t("delivery.site.privacy")}</Link>
-            <Link href="/signin">{t("delivery.site.signIn")}</Link>
+            <Link href="/signin">
+              {management.operator ? t("delivery.site.signInToCreate") : t("delivery.site.signIn")}
+            </Link>
           </>
         )}
+        <ManagementNavigationLinks navigation={management} />
         <Link className="button small-button" href="/join">
           {t("delivery.site.joinRound")}
         </Link>
       </nav>
       <div className="site-mobile-actions">
-        <Link className="button small-button" href={signedIn ? "/dashboard" : "/signin"}>
-          {signedIn ? t("delivery.site.myLibrary") : t("delivery.site.signIn")}
+        <Link
+          className="button small-button"
+          href={workspaceSignedIn ? "/dashboard" : signedIn ? "/account" : "/signin"}
+        >
+          {workspaceSignedIn
+            ? t("delivery.site.myLibrary")
+            : signedIn
+              ? t("delivery.site.account")
+              : management.operator
+                ? t("delivery.site.signInToCreate")
+                : t("delivery.site.signIn")}
         </Link>
         <button
           aria-controls={mobileMenuId}
@@ -130,7 +152,7 @@ export function SiteHeader() {
         </button>
       </div>
       <nav
-        aria-busy={session.status === "checking"}
+        aria-busy={session.status === "checking" && management.loading}
         aria-label={t("delivery.site.mobileNavigation")}
         className="site-mobile-nav"
         hidden={!menuOpen}
@@ -140,9 +162,11 @@ export function SiteHeader() {
           <>
             <div className="site-mobile-session">
               <span>{t("delivery.site.signedInAs")}</span>
-              <strong>{session.creator.email}</strong>
+              <strong>{email}</strong>
             </div>
-            <Link href="/dashboard">{t("delivery.site.myRounds")}</Link>
+            {workspaceSignedIn ? (
+              <Link href="/dashboard">{t("delivery.site.myRounds")}</Link>
+            ) : null}
             <Link href="/account">{t("delivery.site.account")}</Link>
             <Link href="/pricing">{t("delivery.site.plans")}</Link>
             <button disabled={signingOut} onClick={() => void signOut()} type="button">
@@ -158,6 +182,7 @@ export function SiteHeader() {
             <Link href="/privacy">{t("delivery.site.privacy")}</Link>
           </>
         )}
+        <ManagementNavigationLinks navigation={management} variant="sections" />
         <Link href="/join">{t("delivery.site.joinRound")}</Link>
         {signOutError ? (
           <p className="site-nav-error" role="alert">

@@ -1,10 +1,74 @@
-import type { BillingView, OrganizationRole } from "./organization-model";
-import { licenseOverflow, organizationPermissions } from "./organization-model";
+import Link from "next/link";
+import type { BillingView, OrganizationAccessState, OrganizationRole } from "./organization-model";
+import {
+  licenseOverflow,
+  organizationPermissions,
+  organizationSections,
+} from "./organization-model";
+import styles from "./organization.module.css";
+
+export function OrganizationSections({ role }: { role: OrganizationRole }) {
+  return (
+    <nav className={styles.sectionMenu} aria-label="Organization management sections">
+      {organizationSections(role).map((section) => (
+        <a key={section.href} href={section.href}>
+          {section.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+export function OrganizationEntryState({
+  state,
+  error,
+  onRetry,
+}: {
+  state: Exclude<OrganizationAccessState, "ready">;
+  error?: string;
+  onRetry: () => void;
+}) {
+  if (state === "loading") return <p role="status">Loading organization management…</p>;
+  return (
+    <section className="panel">
+      {state === "signed-out" ? (
+        <>
+          <h2>Sign in to manage your organization</h2>
+          <p>
+            Access your organization’s workspaces, memberships, billing, and shared event credits.
+          </p>
+          <Link className="button" href="/signin?returnTo=%2Forganization">
+            Sign in
+          </Link>
+        </>
+      ) : state === "unavailable" ? (
+        <>
+          <h2>Organization management is unavailable</h2>
+          <p>
+            This installation has not enabled organization management. Contact its administrator for
+            access.
+          </p>
+          <Link className="button button-quiet" href="/home">
+            Return to PollingPops
+          </Link>
+        </>
+      ) : (
+        <>
+          <h2>Organization management could not load</h2>
+          <p role="alert">{error || "We could not load your organization. Try again."}</p>
+          <button className="button" type="button" onClick={onRetry}>
+            Try again
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
 
 export function FundingGuide({ billing }: { billing: BillingView }) {
   const overflow = licenseOverflow(billing);
   return (
-    <section className="panel" aria-labelledby="funding-heading">
+    <section className="panel" id="billing" aria-labelledby="funding-heading">
       <h2 id="funding-heading">Licenses and event credits</h2>
       <p>
         Workspace subscriptions cover the workspaces you license. Event credits are shared across
@@ -64,7 +128,7 @@ export function FundingGuide({ billing }: { billing: BillingView }) {
 export function OrganizationAccessGuide({ role }: { role: OrganizationRole }) {
   const permissions = organizationPermissions(role);
   return (
-    <section className="panel">
+    <section className="panel" id="overview">
       <h2>Organization access</h2>
       <p>Your organization role: {role === "billing" ? "billing administrator" : role}.</p>
       <p>

@@ -1411,6 +1411,7 @@ describe("operations environment contract", () => {
       "BUSINESS_BILLING_RECONCILE_INTERVAL_MS",
       "CONTROL_ENABLED",
       "CONTROL_PUBLIC_ORIGIN",
+      "CONTROL_PRODUCT_ORIGIN",
       "CONTROL_DATABASE_URL",
       "CONTROL_DOMAIN",
       "CONTROL_ALLOWED_CIDRS",

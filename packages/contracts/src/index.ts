@@ -36,6 +36,7 @@ export {
 
 import { RoundClientCapabilitiesSchema, RoundProtocolSchema } from "./round-protocol";
 export * from "./round-protocol";
+export * from "./management-navigation";
 
 function isHttpOrHttpsUrl(value: string) {
   try {

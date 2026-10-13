@@ -22,8 +22,10 @@ test("organization owner invites billing-only administrator and funds a premium 
   const ownerIdentity = (await (await owner.request.get(`${api}/v1/auth/me`)).json()).creator as {
     userId: string;
   };
-  await owner.goto("/account");
-  await owner.getByRole("link", { name: "Organization and billing", exact: true }).click();
+  const accountNavigation = owner.getByRole("navigation", { name: "Account navigation" });
+  await accountNavigation.locator("summary").filter({ hasText: "Organization" }).click();
+  await expect(accountNavigation.getByRole("link", { name: "Members", exact: true })).toBeVisible();
+  await accountNavigation.getByRole("link", { name: "Organization", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
   await owner.getByLabel("Organization name", { exact: true }).fill("Browser business launch");
   await owner.getByRole("button", { name: "Create organization", exact: true }).click();
@@ -108,7 +110,7 @@ test("organization owner invites billing-only administrator and funds a premium 
   await expect(
     finance.getByRole("heading", { name: "Personal account", exact: true }),
   ).toBeVisible();
-  await expect(finance.getByText(financeEmail, { exact: true })).toBeVisible();
+  await expect(finance.getByRole("main").getByText(financeEmail, { exact: true })).toBeVisible();
   await expect(
     finance.getByRole("button", { name: "Delete personal account", exact: true }),
   ).toBeDisabled();
@@ -153,4 +155,36 @@ test("organization owner invites billing-only administrator and funds a premium 
   expect(authoring.entitlements.authoringJobsPerMonth).toBe(3);
   await audienceContext.close();
   await financeContext.close();
+});
+
+test("organization entry explains sign-in and disabled deployments without creation controls", async ({
+  page,
+}) => {
+  await page.goto("/organization");
+  await expect(
+    page.getByRole("heading", { name: "Sign in to manage your organization" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create organization", exact: true })).toHaveCount(
+    0,
+  );
+  await page.route(`${api}/v1/auth/navigation`, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: {
+        user: null,
+        organizationManagementEnabled: false,
+        organizations: [],
+        operatorConsoleOrigin: null,
+      },
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Organization management is unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create organization", exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Request failed (404)", { exact: true })).toHaveCount(0);
 });

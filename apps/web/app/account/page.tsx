@@ -15,6 +15,11 @@ import type {
   WorkspaceSummary,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../components/brand";
+import { SiteHeader } from "../../components/site-header";
+import {
+  ManagementNavigationLinks,
+  useManagementNavigation,
+} from "../../components/management-navigation";
 import { useLocale } from "../../components/locale-provider";
 import { WorkspaceProvider } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
@@ -34,6 +39,7 @@ interface Creator {
 
 export default function AccountPage() {
   const { locale, t } = useLocale();
+  const management = useManagementNavigation();
   const tRef = useRef(t);
   const router = useRouter();
   const [creator, setCreator] = useState<Creator | null>(null);
@@ -451,60 +457,63 @@ export default function AccountPage() {
 
   if (billingOnly && userIdentity)
     return (
-      <main className="shell" lang="en-CA">
-        <section className="panel">
-          <h1>Personal account</h1>
-          <p>{userIdentity.email}</p>
-          <Link className="button button-quiet" href="/organization">
-            Organizations and billing
-          </Link>
-          <p className="muted">
-            Your sign-in is active. Workspace membership is required to open polls and reports.
-            Organization permissions determine billing access.
-          </p>
-          <button
-            className="button-quiet"
-            disabled={busy !== ""}
-            onClick={() =>
-              void apiFetch("/v1/auth/logout", { method: "POST" })
-                .then(() => router.replace("/"))
-                .catch((caught) => setError(humanError(caught)))
-            }
-          >
-            Sign out
-          </button>
-        </section>
-        <section className="panel danger-panel">
-          <h2>Delete personal account</h2>
-          <p>
-            Organization content and financial records are retained. Transfer ownership or close any
-            organization you own before deleting your sign-in.
-          </p>
-          {error ? (
-            <p className="error" role="alert">
-              {error}
+      <>
+        <SiteHeader />
+        <main className="shell" lang="en-CA">
+          <section className="panel">
+            <h1>Personal account</h1>
+            <p>{userIdentity.email}</p>
+            <Link className="button button-quiet" href="/organization">
+              Organizations and billing
+            </Link>
+            <p className="muted">
+              Your sign-in is active. Workspace membership is required to open polls and reports.
+              Organization permissions determine billing access.
             </p>
-          ) : null}
-          <form onSubmit={deleteAccount}>
-            <label className="field">
-              Type DELETE to confirm
-              <input
-                className="input"
-                autoComplete="off"
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-              />
-            </label>
             <button
-              className="button-danger"
-              disabled={confirmation !== "DELETE" || busy !== ""}
-              type="submit"
+              className="button-quiet"
+              disabled={busy !== ""}
+              onClick={() =>
+                void apiFetch("/v1/auth/logout", { method: "POST" })
+                  .then(() => router.replace("/"))
+                  .catch((caught) => setError(humanError(caught)))
+              }
             >
-              {busy === "delete" ? "Deleting…" : "Delete personal account"}
+              Sign out
             </button>
-          </form>
-        </section>
-      </main>
+          </section>
+          <section className="panel danger-panel">
+            <h2>Delete personal account</h2>
+            <p>
+              Organization content and financial records are retained. Transfer ownership or close
+              any organization you own before deleting your sign-in.
+            </p>
+            {error ? (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <form onSubmit={deleteAccount}>
+              <label className="field">
+                Type DELETE to confirm
+                <input
+                  className="input"
+                  autoComplete="off"
+                  value={confirmation}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                />
+              </label>
+              <button
+                className="button-danger"
+                disabled={confirmation !== "DELETE" || busy !== ""}
+                type="submit"
+              >
+                {busy === "delete" ? "Deleting…" : "Delete personal account"}
+              </button>
+            </form>
+          </section>
+        </main>
+      </>
     );
 
   const content = (
@@ -1039,9 +1048,12 @@ export default function AccountPage() {
     <>
       <header className="shell topbar">
         <CreatorBrand productFeatures={productFeatures} />
-        <Link className="button-quiet small-button" href="/dashboard">
-          {t("account.legacy.dashboard")}
-        </Link>
+        <nav className="button-row" aria-label="Account navigation">
+          <Link className="button-quiet small-button" href="/dashboard">
+            {t("account.legacy.dashboard")}
+          </Link>
+          <ManagementNavigationLinks navigation={management} />
+        </nav>
       </header>
       <main className="shell page-main" id="main">
         <div className="page-heading">

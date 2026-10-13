@@ -13,6 +13,7 @@ import {
 } from "../../packages/control-plane/src/index.js";
 
 const origin = "http://127.0.0.1:3302";
+const productOrigin = "http://127.0.0.1:3300";
 const issuer = "http://127.0.0.1:3303";
 const names = {
   session: "pollingpops-operator-local",
@@ -181,6 +182,7 @@ async function harness(context: BrowserContext) {
     NODE_ENV: "test",
     CONTROL_ENABLED: "true",
     CONTROL_PUBLIC_ORIGIN: origin,
+    CONTROL_PRODUCT_ORIGIN: productOrigin,
     CONTROL_ALLOW_LOCAL_HTTP: "true",
     CONTROL_DATABASE_URL: "unused",
     OPERATOR_OIDC_ISSUER: issuer,
@@ -241,6 +243,15 @@ async function harness(context: BrowserContext) {
   // Only the HTTP boundary is replaced. All identity assurance, DB sessions,
   // capability checks, command transactions, and audit/ledger effects are real services.
   await context.route(`${origin}/api/**`, async (route) => {
+    const navigationRequest = new URL(route.request().url()).pathname === "/api/navigation";
+    const corsHeaders: Record<string, string> =
+      navigationRequest && route.request().headers().origin === productOrigin
+        ? {
+            "access-control-allow-origin": productOrigin,
+            "access-control-allow-credentials": "true",
+            vary: "Origin",
+          }
+        : {};
     try {
       const request = route.request();
       const url = new URL(request.url());
@@ -263,7 +274,25 @@ async function harness(context: BrowserContext) {
           },
           csrfToken: await cookie(names.csrf),
         };
-      else if (url.pathname.startsWith("/api/views/"))
+      else if (navigationRequest) {
+        if (request.headers().origin && request.headers().origin !== productOrigin)
+          throw new OperatorError(403, "FORBIDDEN_ORIGIN", "Navigation origin denied");
+        const labels = {
+          organizations: "Tenant management",
+          billing: "Billing",
+          credits: "Credits and promotions",
+          operations: "Operations",
+          support: "Support",
+          integrations: "Integrations",
+          audit: "Audit",
+        };
+        result = {
+          operator: { name: identity.operator.name, role: identity.operator.role },
+          links: Object.entries(labels)
+            .filter(([view]) => operatorCapabilities(identity.operator).includes(`${view}.read`))
+            .map(([id, label]) => ({ id, label, href: `${origin}/?view=${id}` })),
+        };
+      } else if (url.pathname.startsWith("/api/views/"))
         result = await service.view(
           identity,
           url.pathname.split("/").at(-1) as Parameters<OperatorService["view"]>[1],
@@ -282,9 +311,14 @@ async function harness(context: BrowserContext) {
         await auth.logout(identity, randomUUID());
         result = { ok: true };
       } else throw new OperatorError(404, "NOT_FOUND", "Synthetic API not found");
-      await route.fulfill({ status: 200, json: result, headers: { "cache-control": "no-store" } });
+      await route.fulfill({
+        status: 200,
+        json: result,
+        headers: { "cache-control": "no-store", ...corsHeaders },
+      });
     } catch (error) {
       await route.fulfill({
+        headers: corsHeaders,
         status:
           error instanceof OperatorError
             ? error.status
@@ -308,11 +342,11 @@ test("enabled founder signs in through OIDC, retries one audited credit grant, r
 }, testInfo) => {
   loginSubject = "founder";
   const fixture = await harness(context);
-  await page.goto("/");
+  await page.goto("/?view=credits");
   await page.getByRole("link", { name: "Sign in with operator identity" }).click();
-  await expect(page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Credits", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\?view=credits$/);
   expect(tokenExchanges).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "Credits", exact: true }).click();
   const grant = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Grant event credits", exact: true }) });
@@ -378,8 +412,43 @@ test("enabled founder signs in through OIDC, retries one audited credit grant, r
   });
   const operator = await fixture.platform.getOperatorByIdentity(issuer, "founder");
   await fixture.platform.revokeOperatorSessions(operator!.id);
-  await page.reload();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByRole("link", { name: "Sign in with operator identity" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toHaveCount(0);
+});
+
+test("product admin sign-in exposes business menus and opens permitted console areas", async ({
+  page,
+  context,
+}, testInfo) => {
+  loginSubject = "founder";
+  const fixture = await harness(context);
+  await page.goto(`${productOrigin}/signin`);
+  await page.getByRole("link", { name: "Business admin sign in", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  await page.goto(productOrigin);
+  await page.locator("summary").filter({ hasText: "Business · Super admin" }).click();
+  for (const name of [
+    "Tenant management",
+    "Billing",
+    "Credits and promotions",
+    "Operations",
+    "Support",
+    "Integrations",
+    "Audit",
+  ])
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("product-super-admin-navigation.png") });
+  await page.getByRole("link", { name: "Billing", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/?view=billing`);
+  await expect(page.getByRole("heading", { name: "Billing", exact: true })).toBeVisible();
+  const operator = await fixture.platform.getOperatorByIdentity(issuer, "founder");
+  await fixture.platform.revokeOperatorSessions(operator!.id);
+  await page.goto(productOrigin);
+  await expect(page.locator("summary").filter({ hasText: "Business · Super admin" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("link", { name: "Tenant management", exact: true })).toHaveCount(0);
 });
 
 test("readonly operator sees permitted views and server rejects a forged credit command", async ({
@@ -388,12 +457,14 @@ test("readonly operator sees permitted views and server rejects a forged credit 
 }) => {
   loginSubject = "reader";
   const fixture = await harness(context);
-  await page.goto("/");
+  await page.goto("/?view=billing");
   await page.getByRole("link", { name: "Sign in with operator identity" }).click();
   await expect(page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\?view=organizations$/);
   await expect(page.getByRole("button", { name: "Credits", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Pause new work", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Operations", exact: true }).click();
+  await expect(page).toHaveURL(/\?view=operations$/);
   await expect(page.getByRole("heading", { name: "Product queues", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Retry failed Authoring/ })).toHaveCount(0);
   const status = await page.evaluate(
@@ -419,4 +490,8 @@ test("readonly operator sees permitted views and server rejects a forged credit 
   expect(await fixture.platform.getCreditBalance(fixture.organization.id)).toMatchObject({
     balance: 0,
   });
+  await page.getByRole("button", { name: "Organizations", exact: true }).click();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Operations", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\?view=operations$/);
 });

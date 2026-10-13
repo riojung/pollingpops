@@ -9,6 +9,7 @@ import {
   OperatorError,
   OperatorService,
   operatorCapabilities,
+  tokenHash,
   verifyMutationRequest,
 } from "../../packages/control-plane/src/index.js";
 
@@ -309,7 +310,9 @@ async function harness(context: BrowserContext) {
         }
       } else if (url.pathname === "/api/logout") {
         await auth.logout(identity, randomUUID());
-        result = { ok: true };
+        await context.clearCookies({ name: names.session });
+        await context.clearCookies({ name: names.csrf });
+        result = { signedOut: true };
       } else throw new OperatorError(404, "NOT_FOUND", "Synthetic API not found");
       await route.fulfill({
         status: 200,
@@ -415,6 +418,50 @@ test("enabled founder signs in through OIDC, retries one audited credit grant, r
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByRole("link", { name: "Sign in with operator identity" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Operator areas" })).toHaveCount(0);
+});
+
+test("stale CSRF after another tab signs in preserves rejected logout access until confirmed sign-out", async ({
+  page,
+  context,
+}) => {
+  loginSubject = "founder";
+  const fixture = await harness(context);
+  await page.goto("/");
+  await page.getByRole("link", { name: "Sign in with operator identity" }).click();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  const firstCsrf = await fixture.cookie(names.csrf);
+  const secondTab = await context.newPage();
+  await secondTab.goto(`${origin}/auth/start`);
+  await expect(secondTab.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  expect(await fixture.cookie(names.csrf)).not.toBe(firstCsrf);
+  await secondTab.close();
+
+  const rejected = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/logout",
+  );
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  expect((await rejected).status()).toBe(403);
+  await expect(page.getByRole("status")).toContainText("Sign-out could not be confirmed");
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in with operator identity" })).toHaveCount(0);
+  expect(await page.evaluate(async () => (await fetch("/api/me")).status)).toBe(200);
+  const currentToken = await fixture.cookie(names.session);
+
+  await page.reload();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Sign in with operator identity" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toHaveCount(0);
+  expect(await fixture.cookie(names.session)).toBeUndefined();
+  expect(await fixture.cookie(names.csrf)).toBeUndefined();
+  expect(await page.evaluate(async () => (await fetch("/api/me")).status)).toBe(401);
+  const operator = await fixture.platform.getOperatorByIdentity(issuer, "founder");
+  const audit = await fixture.platform.listAuditEvents(undefined, 100);
+  expect(
+    audit.filter((event) => event.actorId === operator!.id && event.action === "operator.logout"),
+  ).toHaveLength(1);
+  expect(currentToken).toBeTruthy();
+  expect(await fixture.platform.getOperatorSession(tokenHash(currentToken!))).toBeNull();
 });
 
 test("product admin sign-in exposes business menus and opens permitted console areas", async ({

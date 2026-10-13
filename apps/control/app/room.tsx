@@ -78,6 +78,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [contacts, setContacts] = useState<Row[]>([]);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
   const loadSequence = useRef(0);
@@ -211,6 +212,27 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function signOut() {
+    setSigningOut(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/logout", {
+        method: "POST",
+        headers: { "x-operator-csrf": csrf },
+      });
+      if (response.ok || response.status === 401) clearAccess();
+      else
+        setMessage(
+          "Sign-out could not be confirmed. Your session may still be active. Reload this page before trying again.",
+        );
+    } catch {
+      setMessage(
+        "Sign-out could not be confirmed. Your session may still be active. Check your connection and try again.",
+      );
+    } finally {
+      setSigningOut(false);
     }
   }
   function submitForm(event: FormEvent<HTMLFormElement>, action: string) {
@@ -375,18 +397,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         <div className="identity">
           <strong>{identity.name}</strong>
           <small>{label(identity.role)}</small>
-          <button
-            onClick={() => {
-              void fetch("/api/logout", {
-                method: "POST",
-                headers: { "x-operator-csrf": csrf },
-              }).then((response) => {
-                if (response.ok || response.status === 401 || response.status === 403) {
-                  clearAccess();
-                } else setMessage("Sign-out could not be confirmed");
-              });
-            }}
-          >
+          <button disabled={signingOut} onClick={() => void signOut()}>
             Sign out
           </button>
         </div>

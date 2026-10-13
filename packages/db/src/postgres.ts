@@ -7735,11 +7735,50 @@ export class PostgresRepository implements Repository {
     );
   }
 
+  private async deleteCollaborationGroupMemberships(client: PoolClient, userId: string) {
+    const groupOwnerships = await client.query<{ group_id: string }>(
+      `SELECT groups.id AS group_id
+       FROM collaboration_groups groups
+       JOIN collaboration_group_members members ON members.group_id = groups.id
+       WHERE members.user_id = $1 AND members.role = 'owner'
+       ORDER BY groups.id
+       FOR UPDATE OF groups`,
+      [userId],
+    );
+    for (const { group_id: groupId } of groupOwnerships.rows) {
+      const otherOwner = await client.query(
+        `SELECT 1 FROM collaboration_group_members
+         WHERE group_id = $1 AND user_id <> $2 AND role = 'owner'
+         LIMIT 1`,
+        [groupId, userId],
+      );
+      if (otherOwner.rows[0]) continue;
+      const successor = await client.query<{ user_id: string }>(
+        `SELECT user_id FROM collaboration_group_members
+         WHERE group_id = $1 AND user_id <> $2
+         ORDER BY joined_at, user_id
+         LIMIT 1`,
+        [groupId, userId],
+      );
+      if (successor.rows[0]) {
+        await client.query(
+          `UPDATE collaboration_group_members SET role = 'owner'
+           WHERE group_id = $1 AND user_id = $2`,
+          [groupId, successor.rows[0].user_id],
+        );
+      } else {
+        await client.query("DELETE FROM collaboration_groups WHERE id = $1", [groupId]);
+      }
+    }
+    await client.query("DELETE FROM collaboration_group_members WHERE user_id = $1", [userId]);
+  }
+
   async deleteUserIdentity(userId: string) {
     await this.transaction(
       async (client) => {
         const platform = new PlatformService(new PostgresPlatformStore(null, client));
         await platform.deleteIdentityMemberships(userId);
+        await this.deleteCollaborationGroupMemberships(client, userId);
         await client.query("DELETE FROM external_identities WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM library_favorites WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id=$1", [userId]);
@@ -7784,37 +7823,7 @@ export class PostgresRepository implements Repository {
         for (const row of workspaceResult.rows) {
           await client.query("DELETE FROM workspaces WHERE id = $1", [row.workspace_id]);
         }
-        const groupOwnerships = await client.query<{ group_id: string }>(
-          `SELECT group_id FROM collaboration_group_members
-           WHERE user_id = $1 AND role = 'owner'`,
-          [userId],
-        );
-        for (const { group_id: groupId } of groupOwnerships.rows) {
-          const otherOwner = await client.query(
-            `SELECT 1 FROM collaboration_group_members
-             WHERE group_id = $1 AND user_id <> $2 AND role = 'owner'
-             LIMIT 1`,
-            [groupId, userId],
-          );
-          if (otherOwner.rows[0]) continue;
-          const successor = await client.query<{ user_id: string }>(
-            `SELECT user_id FROM collaboration_group_members
-             WHERE group_id = $1 AND user_id <> $2
-             ORDER BY joined_at, user_id
-             LIMIT 1`,
-            [groupId, userId],
-          );
-          if (successor.rows[0]) {
-            await client.query(
-              `UPDATE collaboration_group_members SET role = 'owner'
-               WHERE group_id = $1 AND user_id = $2`,
-              [groupId, successor.rows[0].user_id],
-            );
-          } else {
-            await client.query("DELETE FROM collaboration_groups WHERE id = $1", [groupId]);
-          }
-        }
-        await client.query("DELETE FROM collaboration_group_members WHERE user_id = $1", [userId]);
+        await this.deleteCollaborationGroupMemberships(client, userId);
         await client.query("DELETE FROM library_favorites WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);

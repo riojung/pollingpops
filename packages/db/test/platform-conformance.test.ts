@@ -10,6 +10,7 @@ import {
   reserveRoomCoverageInMemory,
   consumeRoomCoverageInMemory,
   createPresentationSessionRepository,
+  createCollaborationGroupRepository,
   type CreatorContext,
   type PlatformOffer,
   type PlatformRepository,
@@ -1343,6 +1344,182 @@ for (const backend of ["memory", "postgres"] as const) {
         expect(await platform.getCreditBalance(org)).toMatchObject({ balance: 2 });
         expect(await platform.listCreditLedgerForOperator(org)).toHaveLength(1);
       });
+      it.each(["sole owner", "replacement owner", "multiple owners"] as const)(
+        "cleans up Group memberships for a deleted identity with %s while preserving team content",
+        async (scenario) => {
+          const teamOwner = await creator(repository);
+          const earliestMember = await creator(repository);
+          const now = new Date();
+          if (repository instanceof MemoryRepository) {
+            for (const userId of [owner.userId, earliestMember.userId]) {
+              repository.workspaceMembers.set(`${teamOwner.workspaceId}:${userId}`, {
+                workspaceId: teamOwner.workspaceId,
+                userId,
+                role: "editor",
+                joinedAt: now,
+              });
+            }
+          } else {
+            const client = await (repository as PostgresRepository).pool.connect();
+            try {
+              await client.query("BEGIN");
+              await client.query("SELECT set_config('app.system_access', 'on', true)");
+              await client.query(
+                "INSERT INTO workspace_members(workspace_id,user_id,role) VALUES($1,$2,'editor'),($1,$3,'editor')",
+                [teamOwner.workspaceId, owner.userId, earliestMember.userId],
+              );
+              await client.query("COMMIT");
+            } catch (error) {
+              await client.query("ROLLBACK");
+              throw error;
+            } finally {
+              client.release();
+            }
+          }
+          const fixture = await createLibraryDeletionFixture(repository, teamOwner, owner.userId);
+          const groups = createCollaborationGroupRepository(repository);
+          // Non-owner memberships must be removed as well as ownerships.
+          await groups.addMember({
+            workspaceId: teamOwner.workspaceId,
+            groupId: fixture.group.id,
+            userId: owner.userId,
+            role: "member",
+            joinedAt: now,
+          });
+          const groupId = randomUUID();
+          await groups.createGroup(
+            {
+              id: groupId,
+              workspaceId: teamOwner.workspaceId,
+              name: `Identity deletion with ${scenario}`,
+              description: "Team content belongs to the workspace",
+              createdBy: owner.userId,
+              createdAt: now,
+              updatedAt: now,
+            },
+            {
+              workspaceId: teamOwner.workspaceId,
+              groupId,
+              userId: owner.userId,
+              role: "owner",
+              joinedAt: now,
+            },
+          );
+          if (scenario !== "sole owner") {
+            await groups.addMember({
+              workspaceId: teamOwner.workspaceId,
+              groupId,
+              userId: teamOwner.userId,
+              role: scenario === "multiple owners" ? "owner" : "member",
+              joinedAt: new Date(now.getTime() + 2),
+            });
+            await groups.addMember({
+              workspaceId: teamOwner.workspaceId,
+              groupId,
+              userId: earliestMember.userId,
+              role: "member",
+              joinedAt: new Date(now.getTime() + 1),
+            });
+          }
+          for (const [artifactType, artifactId] of [
+            ["round", fixture.round.id],
+            ["presentation", fixture.presentation.id],
+          ] as const) {
+            await groups.addArtifact({
+              id: randomUUID(),
+              workspaceId: teamOwner.workspaceId,
+              groupId,
+              artifactType,
+              artifactId,
+              addedBy: owner.userId,
+              createdAt: now,
+            });
+          }
+          const message = await groups.addMessage({
+            id: randomUUID(),
+            workspaceId: teamOwner.workspaceId,
+            groupId,
+            authorId: owner.userId,
+            body: "Keep this team facilitation note",
+            createdAt: now,
+          });
+          const schedule = await groups.addSchedule({
+            id: randomUUID(),
+            workspaceId: teamOwner.workspaceId,
+            groupId,
+            artifactType: "round",
+            artifactId: fixture.round.id,
+            kind: "live_session",
+            scheduledFor: now,
+            note: "Keep this team schedule",
+            createdBy: owner.userId,
+            createdAt: now,
+          });
+          await platform.grantCredits({
+            organizationId: org,
+            quantity: 2,
+            sourceKey: randomUUID(),
+            reason: "Retained commercial balance",
+            actorId: null,
+          });
+          await expect(repository.deleteUserIdentity(owner.userId)).rejects.toMatchObject({
+            code: "OWNERSHIP_TRANSFER_REQUIRED",
+          });
+          expect(await groups.listMembers(groupId)).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ userId: owner.userId, role: "owner" }),
+            ]),
+          );
+          await platform.updateOrganizationStatus(org, "closed");
+          await repository.deleteUserIdentity(owner.userId);
+
+          expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
+          expect(
+            await repository.getCreatorByUserId(owner.userId, teamOwner.workspaceId),
+          ).toBeNull();
+          expect(await groups.listGroups(teamOwner.workspaceId, owner.userId)).toHaveLength(0);
+          expect(await groups.listMembers(fixture.group.id)).toEqual([
+            expect.objectContaining({ userId: teamOwner.userId, role: "owner" }),
+          ]);
+          if (scenario === "sole owner") {
+            expect(await groups.getGroup(teamOwner.workspaceId, groupId)).toBeNull();
+            expect(await groups.listMembers(groupId)).toHaveLength(0);
+            expect(await groups.listArtifacts(groupId)).toHaveLength(0);
+            expect(await groups.listMessages(groupId)).toHaveLength(0);
+            expect(await groups.listSchedule(groupId)).toHaveLength(0);
+          } else {
+            expect(await groups.getGroup(teamOwner.workspaceId, groupId)).not.toBeNull();
+            expect(await groups.listMembers(groupId)).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  userId: earliestMember.userId,
+                  role: scenario === "replacement owner" ? "owner" : "member",
+                }),
+                expect.objectContaining({
+                  userId: teamOwner.userId,
+                  role: scenario === "multiple owners" ? "owner" : "member",
+                }),
+              ]),
+            );
+            expect(await groups.listMembers(groupId)).toHaveLength(2);
+            expect(await groups.listArtifacts(groupId)).toHaveLength(2);
+            expect(await groups.listMessages(groupId)).toEqual([message]);
+            expect(await groups.listSchedule(groupId)).toEqual([schedule]);
+          }
+          expect(
+            await repository.getQuizVersion(teamOwner.workspaceId, fixture.roundVersion.id),
+          ).toMatchObject({ content: fixture.content });
+          expect(
+            await fixture.presentations.getPresentation(
+              teamOwner.workspaceId,
+              fixture.presentation.id,
+            ),
+          ).toMatchObject({ currentVersionId: fixture.presentationVersion.id });
+          expect(await groups.listArtifacts(fixture.group.id)).toHaveLength(2);
+          expect(await platform.getCreditBalance(org)).toMatchObject({ balance: 2 });
+          expect(await platform.listCreditLedgerForOperator(org)).toHaveLength(1);
+        },
+      );
       it("blocks new premium rooms after a refund hold without changing existing reserved coverage", async () => {
         await platform.grantCredits({
           organizationId: org,

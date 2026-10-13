@@ -4,9 +4,55 @@ This is a separate Next.js application for provisioned operators. It shares plat
 with Polling Pops and does not construct the API/realtime application. Customer sessions and the
 legacy `ADMIN_TOKEN` cannot authorize console requests.
 
-The console starts disabled. `pnpm --filter @openround/control dev` serves it on port 3002. The
+The normal local service bundles start this console on port 3002 with a built-in **Local admin**
+account. Run `pnpm local:start` or `pnpm service development start --profile core`, open the product
+at `http://localhost:8080`, and sign in through the normal product form using
+`admin@pollingpops.local`. Open the captured magic-link email in Mailpit. The product then shows
+**Business · Super admin** and all permitted management areas. Public headers and sign-in pages do
+not advertise the console. Local sign-in does not use SSO, MFA, or a shared password; verified
+product sign-in creates the usual durable, revocable operator session.
+
+The default configuration outside that local profile remains disabled.
+`pnpm --filter @openround/control dev` serves it on port 3002. The
 production build uses the supported Webpack option because shared Node packages use `.js` ESM
 specifiers for TypeScript source. The deployment container uses Next's standalone output.
+
+## Local development authentication
+
+`compose.local-control.yaml` enables `CONTROL_AUTH_MODE=local` and
+`CONTROL_LOCAL_DEVELOPMENT=true`, with the deployment environment set to development. The console
+and trusted product origins must be loopback HTTP origins. The profile works with the production
+Node build used by local Docker, while staging/production deployment markers reject local auth.
+The hosted overlay fixes managed OIDC mode and disables the local-development flag.
+
+`LOCAL_ADMIN_EMAIL` selects the exact verified development identity; normal local bundles default
+to `admin@pollingpops.local`. The API and console use the same loopback hostname so their host-only
+cookies can be shared across ports. Admin magic links and success redirects use that loopback host
+even when participant URLs use a LAN address. Other emails keep their ordinary customer access.
+
+The local account is provisioned once with founder permissions. Login never reactivates a disabled
+account. Product logout and signing in with an ordinary account revoke local operator access.
+Mutations retain capability checks, CSRF verification, and attributable audits. Local sessions
+cannot authorize managed-mode requests. Database runtime principal checks remain enabled for
+production-built containers.
+
+For host-native development, configure the product and console to use the same PostgreSQL database
+and export the local settings before `pnpm dev`:
+
+```bash
+export CONTROL_ENABLED=true CONTROL_AUTH_MODE=local CONTROL_LOCAL_DEVELOPMENT=true
+export OPENROUND_DEPLOYMENT_ENVIRONMENT=development
+export CONTROL_PUBLIC_ORIGIN=http://localhost:3002 CONTROL_PRODUCT_ORIGIN=http://localhost:3000
+export LOCAL_ADMIN_EMAIL=admin@pollingpops.local
+export CONTROL_DATABASE_URL="$DATABASE_URL"
+pnpm exec turbo run dev --parallel --env-mode=loose
+```
+
+The product's in-memory native recipe cannot supply durable tenant data to the separate console;
+use a PostgreSQL-backed native environment for management workflows.
+
+Native `dev` and `start` bind to `127.0.0.1:3002`. The Docker standalone server listens inside its
+container, with local access restricted by the loopback-only published port.
 
 ## Identity and deployment configuration
 
@@ -53,16 +99,15 @@ the product API. Set optional `CONTROL_PRODUCT_ORIGIN` to the exact trusted prod
 the read-only `/api/navigation` probe. It authenticates and rechecks the operator session, returning
 only name, role and permitted area links. All other APIs retain their existing origin and credential
 boundaries. Use product/console origins on the same site for the existing SameSite session cookie.
-The product remains usable when discovery is unavailable; its explicit admin sign-in entry opens the
-console directly. Console links accept permitted `?view=` areas and preserve the selected area
-through sign-in.
+The product remains usable when discovery is unavailable. Staff can use the private console directly;
+public product pages do not advertise its sign-in address. Console links accept permitted `?view=`
+areas and preserve the selected area through sign-in.
 
-The local `compose.business.yaml` overlay runs the console with production HTTPS policy and leaves
-`CONTROL_PRODUCT_ORIGIN` unset unless explicitly configured. With the default HTTP product, use the
-direct admin sign-in entry; configure discovery only after serving the product at its exact trusted
-HTTPS origin. The hosted `compose.single-vm.business.yaml` overlay defaults discovery to
-`https://<OPENROUND_APP_DOMAIN>`, matching its product ingress. Neither overlay relaxes production
-origin validation.
+The normal local bundles add `compose.local-control.yaml` to enable loopback discovery and the
+verified development email binding. Using `compose.business.yaml` alone retains managed HTTPS
+policy. The hosted `compose.single-vm.business.yaml` overlay defaults discovery to
+`https://<OPENROUND_APP_DOMAIN>`, matching its product ingress, and retains production origin
+validation.
 
 Organization/workspace pause, billing projections, credits/promotions, worker heartbeats and pause,
 support cases and the fifty newest private product-feedback records, integration attempts, and

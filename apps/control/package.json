@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack --port 3002",
+    "dev": "next dev --webpack --hostname 127.0.0.1 --port 3002",
     "build": "next build --webpack",
-    "start": "next start --port 3002",
+    "start": "next start --hostname 127.0.0.1 --port 3002",
     "lint": "eslint app lib test next.config.ts proxy.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"

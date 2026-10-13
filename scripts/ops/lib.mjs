@@ -12,10 +12,17 @@ export const HOSTED_ENVIRONMENTS = Object.freeze(["staging", "production"]);
 // Stable data namespace: renaming this disconnects existing named volumes after the rebrand.
 export const DEV_COMPOSE_PROJECT = "openround";
 export const DEV_COMPOSE_PROFILES = Object.freeze({
-  core: Object.freeze(["compose.yaml"]),
-  media: Object.freeze(["compose.yaml", "compose.media.yaml"]),
+  core: Object.freeze(["compose.yaml", "compose.business.yaml", "compose.local-control.yaml"]),
+  media: Object.freeze([
+    "compose.yaml",
+    "compose.business.yaml",
+    "compose.local-control.yaml",
+    "compose.media.yaml",
+  ]),
   observability: Object.freeze([
     "compose.yaml",
+    "compose.business.yaml",
+    "compose.local-control.yaml",
     "compose.media.yaml",
     "compose.observability.yaml",
   ]),
@@ -521,7 +528,7 @@ export function composeBuildArgv(profile = "core") {
   const args = ["compose", "--project-name", DEV_COMPOSE_PROJECT];
   for (const file of files) args.push("--file", file);
   if (profile === "observability") args.push("--profile", "observability");
-  return [...args, "build", "server", "web"];
+  return [...args, "build", "server", "web", "control"];
 }
 
 function assertExactKeys(object, allowed, label) {
@@ -682,6 +689,9 @@ export function validateDeployConfig(input, expectedEnvironment) {
         throw new Error("single-vm deployment config must not define fly settings");
       }
       validateSingleVmConfig(input.singleVm);
+      if (input.singleVm.composeFiles.includes("compose.local-control.yaml")) {
+        throw new Error("hosted deployment must not use the local development control overlay");
+      }
       input.publicMediaUrl = assertHttpsOrigin(input.publicMediaUrl, "publicMediaUrl");
       if (input.publicWebUrl !== input.publicApiUrl) {
         throw new Error("single-vm deployment must use one public web and API origin");

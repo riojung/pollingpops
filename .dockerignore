@@ -13,6 +13,8 @@
 artifacts
 .next
 **/.next
+.next-*
+**/.next-*
 .turbo
 **/.turbo
 coverage
@@ -22,8 +24,10 @@ node_modules
 **/node_modules
 playwright-report
 playwright-report-beta
+playwright-report-*
 test-results
 test-results-beta
+test-results-*
 **/dist
 *.tsbuildinfo
 *.log

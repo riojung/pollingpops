@@ -65,6 +65,7 @@
     "test:e2e:beta": "playwright test --config=playwright.beta.config.ts",
     "test:e2e:business": "playwright test --config=playwright.business.config.ts",
     "test:e2e:control": "playwright test --config=playwright.control.config.ts",
+    "test:e2e:local-admin": "playwright test --config=playwright.local-admin.config.ts",
     "test:e2e:compose": "playwright test --config=playwright.compose.config.ts",
     "test:coverage": "turbo run test:coverage",
     "typecheck": "turbo run typecheck",

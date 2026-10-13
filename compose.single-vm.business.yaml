@@ -2,6 +2,9 @@
 services:
   server:
     environment:
+      CONTROL_AUTH_MODE: oidc
+      CONTROL_LOCAL_DEVELOPMENT: "false"
+      LOCAL_ADMIN_EMAIL: ""
       CONTROL_PUBLIC_ORIGIN: https://${CONTROL_DOMAIN:?Set the operator hostname}
       BACKGROUND_JOBS_MODE: separate
       BUSINESS_PLATFORM_ENABLED: ${BUSINESS_PLATFORM_ENABLED:-false}
@@ -47,6 +50,9 @@ services:
     environment:
       NODE_ENV: production
       CONTROL_ENABLED: "true"
+      CONTROL_AUTH_MODE: oidc
+      CONTROL_LOCAL_DEVELOPMENT: "false"
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: ${OPENROUND_DEPLOYMENT_ENVIRONMENT:?Set OPENROUND_DEPLOYMENT_ENVIRONMENT}
       CONTROL_PUBLIC_ORIGIN: https://${CONTROL_DOMAIN:?Set the operator hostname}
       CONTROL_PRODUCT_ORIGIN: ${CONTROL_PRODUCT_ORIGIN:-https://${OPENROUND_APP_DOMAIN:?Set the product hostname}}
       CONTROL_DATABASE_URL: ${CONTROL_DATABASE_URL:?Set the restricted operator database URL}

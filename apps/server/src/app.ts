@@ -34,7 +34,7 @@ import {
 import { AuthoringService } from "./authoring-service.js";
 import { AuthoringWorker } from "./authoring-worker.js";
 import { MemorySessionCache, RedisSessionCache, type SessionCache } from "./cache.js";
-import type { AppConfig } from "./config.js";
+import { isLocalProductAdminDevelopment, type AppConfig } from "./config.js";
 import { ConsoleMailer, SmtpMailer } from "./mailer.js";
 import { FollowupService } from "./followup-service.js";
 import { ClamAvScanner, type MalwareScanner } from "./malware-scanner.js";
@@ -199,7 +199,9 @@ export async function buildApp(
   } else cache = new MemorySessionCache();
 
   await app.register(cors, {
-    origin: config.WEB_ORIGIN,
+    origin: isLocalProductAdminDevelopment(config)
+      ? [config.WEB_ORIGIN, new URL(config.CONTROL_PRODUCT_ORIGIN!).origin]
+      : config.WEB_ORIGIN,
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
@@ -210,7 +212,11 @@ export async function buildApp(
       "traceparent",
       "tracestate",
     ],
-    exposedHeaders: ["x-request-id", "x-trace-id"],
+    exposedHeaders: [
+      "x-request-id",
+      "x-trace-id",
+      ...(isLocalProductAdminDevelopment(config) ? ["x-local-operator-revocation"] : []),
+    ],
   });
   await app.register(cookie);
   await app.register(formbody);
@@ -237,13 +243,16 @@ export async function buildApp(
         (requestPath === "/v1/lti/login" || requestPath === "/v1/lti/launch"))
     )
       return;
-    const allowed = originAllowed({
-      origin: request.headers.origin,
-      host: request.headers.host,
-      forwardedProto: request.headers["x-forwarded-proto"],
-      encrypted: Boolean((request.raw.socket as { encrypted?: boolean }).encrypted),
-      configuredOrigin: config.WEB_ORIGIN,
-    });
+    const allowed =
+      (isLocalProductAdminDevelopment(config) &&
+        request.headers.origin === new URL(config.CONTROL_PRODUCT_ORIGIN!).origin) ||
+      originAllowed({
+        origin: request.headers.origin,
+        host: request.headers.host,
+        forwardedProto: request.headers["x-forwarded-proto"],
+        encrypted: Boolean((request.raw.socket as { encrypted?: boolean }).encrypted),
+        configuredOrigin: config.WEB_ORIGIN,
+      });
     if (!allowed) {
       return reply.code(403).send({
         error: {

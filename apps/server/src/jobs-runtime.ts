@@ -125,7 +125,6 @@ export async function createJobsRuntime(
     ],
     onError,
     async (name) => {
-      if (!config.BUSINESS_PLATFORM_ENABLED) return true;
       const controlId =
         name === "integrations"
           ? "business-integrations"

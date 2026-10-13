@@ -68,7 +68,13 @@ function Table({ items, columns }: { items: Row[]; columns: string[] }) {
     </div>
   );
 }
-export default function ControlRoom({ enabled }: { enabled: boolean }) {
+export default function ControlRoom({
+  enabled,
+  localAdmin = false,
+}: {
+  enabled: boolean;
+  localAdmin?: boolean;
+}) {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [csrf, setCsrf] = useState("");
   const [view, setView] = useState<View>("organizations");
@@ -350,7 +356,14 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         </div>
         <h1>Business operations</h1>
         <p>Manage organizations, billing, credits, support, and operational controls.</p>
-        {enabled ? (
+        {enabled && localAdmin ? (
+          <>
+            <a className="button" href="/auth/start" onClick={rememberLoginView}>
+              Sign in to Polling Pops
+            </a>
+            <p className="note">Use your configured development admin account.</p>
+          </>
+        ) : enabled ? (
           <>
             <a className="button" href="/auth/start" onClick={rememberLoginView}>
               Sign in with operator identity
@@ -396,7 +409,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         </nav>
         <div className="identity">
           <strong>{identity.name}</strong>
-          <small>{label(identity.role)}</small>
+          <small>{identity.role === "founder" ? "Super admin" : label(identity.role)}</small>
           <button disabled={signingOut} onClick={() => void signOut()}>
             Sign out
           </button>
@@ -417,7 +430,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
             {message}{" "}
             {message.includes("Sign in again") && (
               <a href="/auth/start" onClick={rememberLoginView}>
-                Verify identity again
+                {localAdmin ? "Sign in to Polling Pops again" : "Verify identity again"}
               </a>
             )}
           </p>

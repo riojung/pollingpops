@@ -464,14 +464,21 @@ test("stale CSRF after another tab signs in preserves rejected logout access unt
   expect(await fixture.platform.getOperatorSession(tokenHash(currentToken!))).toBeNull();
 });
 
-test("product admin sign-in exposes business menus and opens permitted console areas", async ({
+test("managed operators sign in privately and see permitted product business menus", async ({
   page,
   context,
 }, testInfo) => {
   loginSubject = "founder";
   const fixture = await harness(context);
   await page.goto(`${productOrigin}/signin`);
-  await page.getByRole("link", { name: "Business admin sign in", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Business admin sign in", exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Business administration", exact: true }),
+  ).toHaveCount(0);
+  await page.goto(origin);
+  await page.getByRole("link", { name: "Sign in with operator identity" }).click();
   await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
   await page.goto(productOrigin);
   await page.locator("summary").filter({ hasText: "Business · Super admin" }).click();

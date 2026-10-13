@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ManagementNavigationLinks, type ManagementNavigationState } from "./management-navigation";
+import {
+  LogoutWarningNotice,
+  ManagementNavigationLinks,
+  type ManagementNavigationState,
+} from "./management-navigation";
 import { emptyCustomerManagementNavigation } from "../lib/management-navigation";
+import { LOGOUT_REVOCATION_WARNING } from "../lib/api";
 
 const origin = "https://control.example.com";
 const empty: ManagementNavigationState = {
@@ -15,6 +20,27 @@ const empty: ManagementNavigationState = {
 };
 
 describe("role-aware management menus", () => {
+  it("only shows the bounded retained logout warning and provides dismissal without operator privileges", () => {
+    expect(renderToStaticMarkup(<LogoutWarningNotice navigation={empty} />)).toBe("");
+    expect(
+      renderToStaticMarkup(
+        <LogoutWarningNotice navigation={{ ...empty, logoutWarning: "Untrusted warning" }} />,
+      ),
+    ).toBe("");
+    const markup = renderToStaticMarkup(
+      <LogoutWarningNotice
+        navigation={{
+          ...empty,
+          logoutWarning: LOGOUT_REVOCATION_WARNING,
+          dismissLogoutWarning: () => undefined,
+        }}
+      />,
+    );
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain(LOGOUT_REVOCATION_WARNING);
+    expect(markup).toContain(">Dismiss</button>");
+    expect(markup).not.toContain(origin);
+  });
   it("does not turn customer organization ownership into global administration", () => {
     const markup = renderToStaticMarkup(
       <ManagementNavigationLinks
@@ -32,6 +58,7 @@ describe("role-aware management menus", () => {
     expect(markup).not.toContain("Super admin");
     expect(markup).not.toContain("Tenants");
     expect(markup).not.toContain(origin);
+    expect(markup).not.toContain("Business");
   });
 
   it("shows the trusted founder navigation as Super admin on desktop and mobile", () => {
@@ -53,20 +80,26 @@ describe("role-aware management menus", () => {
       expect(markup).toContain("Tenants");
       expect(markup).toContain("Operations");
       expect(markup).not.toContain("Billing</a>");
+      expect(markup).not.toContain("Business admin sign in");
     }
   });
 
-  it("makes admin sign-in discoverable only when explicitly requested and configured", () => {
-    expect(
-      renderToStaticMarkup(<ManagementNavigationLinks navigation={empty} showAdminSignIn />),
-    ).toBe("");
+  it("hides staff entry and controls without an authenticated operator even when configured", () => {
+    expect(renderToStaticMarkup(<ManagementNavigationLinks navigation={empty} />)).toBe("");
     const configured = { ...empty, operatorConsoleOrigin: origin };
     expect(renderToStaticMarkup(<ManagementNavigationLinks navigation={configured} />)).toBe("");
-    const markup = renderToStaticMarkup(
-      <ManagementNavigationLinks navigation={configured} showAdminSignIn />,
-    );
-    expect(markup).toContain("Business admin sign in");
-    expect(markup).toContain(`href="${origin}/auth/start"`);
+    expect(
+      renderToStaticMarkup(
+        <ManagementNavigationLinks
+          navigation={{
+            ...configured,
+            operatorLinks: [
+              { id: "organizations", label: "Tenants", href: `${origin}/?view=organizations` },
+            ],
+          }}
+        />,
+      ),
+    ).toBe("");
   });
 
   it("keeps billing-only organization navigation available without workspace claims", () => {

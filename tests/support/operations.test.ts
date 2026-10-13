@@ -1443,6 +1443,8 @@ describe("operations environment contract", () => {
       "OPERATOR_OIDC_JWKS_URI",
       "QUICKBOOKS_API_URL",
       "CONTROL_ALLOW_LOCAL_HTTP",
+      "CONTROL_AUTH_MODE",
+      "CONTROL_LOCAL_DEVELOPMENT",
     ]) {
       expect(
         () =>
@@ -2888,7 +2890,17 @@ describe("deployment configuration and manifest validation", () => {
 
 describe("local service command construction", () => {
   it("uses bounded, non-destructive Compose commands for the lifecycle actions", () => {
-    const prefix = ["compose", "--project-name", "openround", "--file", "compose.yaml"];
+    const prefix = [
+      "compose",
+      "--project-name",
+      "openround",
+      "--file",
+      "compose.yaml",
+      "--file",
+      "compose.business.yaml",
+      "--file",
+      "compose.local-control.yaml",
+    ];
     expect(composeArgv("start")).toEqual([...prefix, "up", "--detach", "--build", "--wait"]);
     expect(composeArgv("stop")).toEqual([...prefix, "stop"]);
     expect(composeArgv("restart", { noBuild: true })).toEqual([
@@ -2924,6 +2936,10 @@ describe("local service command construction", () => {
       "openround",
       "--file",
       "compose.yaml",
+      "--file",
+      "compose.business.yaml",
+      "--file",
+      "compose.local-control.yaml",
       "--file",
       "compose.media.yaml",
       "--file",
@@ -2968,6 +2984,7 @@ describe("operations CLI dry runs", () => {
     expect(buildOutput).toContain("pnpm check:docker-context");
     expect(buildOutput).toContain("pnpm build");
     expect(buildOutput).toContain("docker compose");
+    expect(buildOutput).toContain("compose.local-control.yaml build server web control");
     expect(buildOutput).toContain("Dry run complete for development");
 
     const serviceOutput = await captureStdout(() =>

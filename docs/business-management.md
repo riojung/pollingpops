@@ -78,12 +78,20 @@ addresses remain in Stripe rather than the webhook inbox or PollingPops audit re
 
 ## Processes and operator access
 
-The product sign-in screen includes **Business admin sign in** when the API is configured with
-`CONTROL_PUBLIC_ORIGIN`. After managed operator sign-in, the product header and workspace menus
+Public product pages and ordinary customer accounts do not advertise business administration.
+After authenticated admin sign-in, the product header and workspace menus
 show the permitted business areas: tenant management, billing, credits and promotions, operations,
 support, integrations and audit. Founder operators are presented as **Super admin**; other operators
 see their permitted administrative areas. Selecting an area opens the restricted console at that
 area, including after an authentication refresh.
+
+Normal local development bundles include the console by default. Run `pnpm local:start`, open
+`http://localhost:8080`, and use the normal sign-in form with `admin@pollingpops.local`. Open the
+captured magic-link email in Mailpit. Only this configured, verified `LOCAL_ADMIN_EMAIL` binds to
+the built-in Local admin, which uses founder permissions and the existing durable sessions,
+command checks, and audit trail. Its explicitly enabled loopback development profile requires no
+SSO or MFA. Product logout and signing in with an ordinary account revoke local operator access.
+Customer Community behavior and disabled billing remain the local defaults.
 
 Customer organization navigation is also available from product headers, desktop/mobile workspace
 menus and account navigation. Members see their organization; owners/admins see workspace, membership
@@ -94,24 +102,25 @@ state when hosted management is disabled, including Community deployments.
 
 Set `CONTROL_PRODUCT_ORIGIN` on the operator app to the exact product origin to allow credentialed,
 read-only navigation discovery. The hosted business overlay defaults to its HTTPS product domain.
-The local business overlay leaves discovery unset unless an exact trusted HTTPS product origin is
-configured, because its console also enforces production HTTPS policy. An HTTP local product keeps
-the explicit admin sign-in entry and full console navigation. Discovery returns only the current
+The normal local profile configures matching loopback HTTP product and console hostnames. The
+API and console validate explicit local development before enabling the email binding; hosted
+deployments retain managed operator authentication. Discovery returns only the current
 operator's name, role and permitted links; credentials, CSRF tokens and customer records remain
 private to the console. The product reads this endpoint independently with a bounded timeout, so a
 console outage does not block customer navigation or gameplay. Browser detection uses the existing
 SameSite operator cookie and works when product and
-console are on the same site (for example separate subdomains); independent sites retain the explicit
-admin sign-in entry and full console navigation.
+console are on the same site (for example separate subdomains). For independent sites, staff use
+the private console directly; public product pages do not offer a staff sign-in link.
 
 - `apps/web` and the Fastify/realtime server continue serving customers.
 - `apps/control` serves the separate operator UI and same-origin API.
 - `node apps/server/dist/jobs.js` runs reports, authoring, retention, billing reconciliation and
   integrations without constructing gameplay or an HTTP application.
 - The API keeps its audience outbox relays. Set `BACKGROUND_JOBS_MODE=separate` when a dedicated
-  jobs process is running; the default `in_process` preserves the ordinary development stack.
+  jobs process is running; the normal local service bundles include that process. The default
+  `in_process` supports standalone product startup.
 
-Control uses its own database URL and managed OIDC application. Configure exact MFA assurance
+Hosted control uses its own database URL and managed OIDC application. Configure exact MFA assurance
 claims, enforced provider policy, and explicitly provisioned issuer/subject identities.
 Bootstrap creates missing accounts and does not reactivate disabled operators. Customer cookies,
 customer institution OIDC roles and the legacy administrator bearer token do not authorize the
@@ -159,8 +168,10 @@ idempotently, including delayed payments. Browser success redirects do not grant
 6. Prove independent paging and a clean off-host restore with the exact candidate. Configure
    tax/accounting mappings and distinct financial, operator, support and telemetry retention.
 
-For local development, `compose.business.yaml` is an opt-in overlay on `compose.yaml`. The
-operator container binds only to loopback and requires its reviewed HTTPS origin when enabled.
+For local development, the normal service bundles merge `compose.business.yaml` and
+`compose.local-control.yaml` after `compose.yaml`. The operator container binds only to loopback;
+the local override explicitly enables development-only HTTP admin sign-in and product discovery.
+Using `compose.business.yaml` alone retains its optional, production-policy console configuration.
 For hosted single-VM operation, merge `compose.single-vm.business.yaml` after the existing base;
 it requires an immutable control image, dedicated hostname and reviewed operator-network CIDRs.
 Its jobs container deliberately has no API ingress alias. Validate the merged configuration and

@@ -2,16 +2,22 @@ import { randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LocalReturnPathSchema } from "@openround/contracts";
 import type { CreatorContext, Repository, Segment, UserPrincipal } from "@openround/db";
-import type { AppConfig } from "./config.js";
+import { isLocalProductAdminDevelopment, type AppConfig } from "./config.js";
 import type { Mailer } from "./mailer.js";
 import { hashToken, opaqueToken } from "./security.js";
+import { LocalProductOperatorAuth } from "./local-operator-auth.js";
 
 export class AuthService {
+  private readonly localOperator;
   constructor(
     private readonly repository: Repository,
     private readonly mailer: Mailer,
     private readonly config: AppConfig,
-  ) {}
+  ) {
+    this.localOperator = isLocalProductAdminDevelopment(config)
+      ? new LocalProductOperatorAuth(repository, config)
+      : null;
+  }
 
   private async effectiveCreator(creator: CreatorContext): Promise<CreatorContext> {
     if (this.config.COMMUNITY_MODE) return { ...creator, plan: "team" };
@@ -31,7 +37,12 @@ export class AuthService {
       expiresAt: new Date(Date.now() + 15 * 60_000),
       consumedAt: null,
     });
-    const verifyUrl = new URL("/v1/auth/verify", this.config.PUBLIC_API_URL);
+    const verifyUrl = new URL(
+      "/v1/auth/verify",
+      this.localOperator?.isAdminEmail(email)
+        ? this.localOperator.verificationApiOrigin()
+        : this.config.PUBLIC_API_URL,
+    );
     verifyUrl.searchParams.set("token", token);
     if (returnTo) verifyUrl.searchParams.set("returnTo", returnTo);
     await this.mailer.sendMagicLink(email, verifyUrl.href);
@@ -124,8 +135,36 @@ export class AuthService {
     reply.setCookie(this.config.COOKIE_NAME, token, this.sessionCookieOptions());
   }
 
+  async setAuthenticatedSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    token: string,
+    verifiedMagicLinkEmail?: string,
+  ) {
+    this.setSessionCookie(reply, token);
+    return (
+      (await this.localOperator?.completeLogin(request, reply, verifiedMagicLinkEmail)) ?? true
+    );
+  }
+
+  localAdminSignInOrigin(request: FastifyRequest, email: string) {
+    return this.localOperator?.signInOrigin(request, email);
+  }
+
+  async operatorConsoleOrigin(request: FastifyRequest, user: UserPrincipal | null) {
+    if (this.config.CONTROL_AUTH_MODE === "local")
+      return this.localOperator?.consoleOrigin(request, user) ?? null;
+    return this.config.CONTROL_PUBLIC_ORIGIN
+      ? new URL(this.config.CONTROL_PUBLIC_ORIGIN).origin
+      : null;
+  }
+
   localeAwareWebRedirect(creator: UserPrincipal, returnTo: string) {
-    const webOrigin = new URL(this.config.WEB_ORIGIN);
+    const webOrigin = new URL(
+      this.localOperator?.isAdminEmail(creator.email)
+        ? this.config.CONTROL_PRODUCT_ORIGIN!
+        : this.config.WEB_ORIGIN,
+    );
     const localReturnTo = LocalReturnPathSchema.safeParse(returnTo);
     let destination: URL;
     try {
@@ -205,5 +244,6 @@ export class AuthService {
     const token = request.cookies[this.config.COOKIE_NAME];
     if (token) await this.repository.revokeCreatorSession(hashToken(token));
     this.clearSessionCookie(reply);
+    return (await this.localOperator?.endSession(request, reply, true)) ?? true;
   }
 }

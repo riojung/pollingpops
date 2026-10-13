@@ -13,7 +13,7 @@ const optionalValue = z.preprocess(
   (value) => (typeof value === "string" && !value.trim() ? undefined : value),
   z.string().trim().min(1).optional(),
 );
-function isLoopbackHttpOrigin(value: string | undefined): boolean {
+export function isLoopbackHttpOrigin(value: string | undefined): boolean {
   if (!value) return false;
   try {
     const url = new URL(value);
@@ -99,10 +99,7 @@ const configSchema = z
           path: ["CONTROL_LOCAL_DEVELOPMENT"],
           message: "Local operator authentication requires explicit local-development opt-in",
         });
-      if (
-        config.OPENROUND_DEPLOYMENT_ENVIRONMENT &&
-        config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development"
-      )
+      if (config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development")
         context.addIssue({
           code: "custom",
           path: ["OPENROUND_DEPLOYMENT_ENVIRONMENT"],
@@ -219,8 +216,7 @@ export function isLocalControlDevelopment(config: ControlConfig): boolean {
     config.CONTROL_ENABLED &&
     config.CONTROL_AUTH_MODE === "local" &&
     config.CONTROL_LOCAL_DEVELOPMENT &&
-    (!config.OPENROUND_DEPLOYMENT_ENVIRONMENT ||
-      config.OPENROUND_DEPLOYMENT_ENVIRONMENT === "development") &&
+    config.OPENROUND_DEPLOYMENT_ENVIRONMENT === "development" &&
     isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) &&
     (!config.CONTROL_PRODUCT_ORIGIN || isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN))
   );

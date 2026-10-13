@@ -4,35 +4,21 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import {
   OperatorError,
-  OPERATOR_BINDING_COOKIE,
-  OPERATOR_SESSION_COOKIE,
+  operatorCookieNames,
+  operatorSessionCookieOptions,
   verifyMutationRequest,
   type ControlConfig,
 } from "@openround/control-plane";
 import { controlRuntime } from "./runtime";
 
-export function operatorCookieNames(config: ControlConfig) {
-  const secure = new URL(config.CONTROL_PUBLIC_ORIGIN!).protocol === "https:";
-  return {
-    secure,
-    session: secure ? OPERATOR_SESSION_COOKIE : "pollingpops-operator-local",
-    binding: secure ? OPERATOR_BINDING_COOKIE : "pollingpops-operator-login-local",
-    csrf: secure ? "__Host-pollingpops-operator-csrf" : "pollingpops-operator-csrf-local",
-  };
-}
+export { operatorCookieNames } from "@openround/control-plane";
 export function setOperatorSessionCookies(
   response: NextResponse,
   config: ControlConfig,
   session: { token: string; csrfToken: string },
 ) {
   const names = operatorCookieNames(config);
-  const options = {
-    path: "/",
-    httpOnly: true,
-    secure: names.secure,
-    sameSite: "lax" as const,
-    maxAge: 8 * 60 * 60,
-  };
+  const options = operatorSessionCookieOptions(config);
   response.cookies.set(names.session, session.token, options);
   response.cookies.set(names.csrf, session.csrfToken, options);
   response.cookies.set(names.binding, "", { ...options, maxAge: 0 });

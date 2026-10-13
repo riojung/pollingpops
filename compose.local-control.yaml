@@ -4,7 +4,12 @@ services:
   server:
     environment:
       OPENROUND_DEPLOYMENT_ENVIRONMENT: development
+      CONTROL_ENABLED: "true"
+      CONTROL_AUTH_MODE: local
+      CONTROL_LOCAL_DEVELOPMENT: "true"
       CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-http://localhost:3002}
+      CONTROL_PRODUCT_ORIGIN: ${CONTROL_PRODUCT_ORIGIN:-http://localhost:8080}
+      LOCAL_ADMIN_EMAIL: ${LOCAL_ADMIN_EMAIL:-admin@pollingpops.local}
   jobs:
     depends_on:
       server:

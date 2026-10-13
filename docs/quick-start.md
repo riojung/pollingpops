@@ -163,14 +163,16 @@ Open:
 
 ### Local admin access
 
-Select **Business admin sign in** in the product header, then **Sign in as local admin**. This
-creates a session for the built-in **Local admin**, which has Super admin access. Return to the
-product to use its Business menu, or use the console's tenant, billing, credits, operations, support,
-integrations, and audit areas. Local sign-in needs no SSO, MFA, or password.
+Use the normal **Sign in** form with `admin@pollingpops.local`, then open its captured sign-in
+email in Mailpit. Verified sign-in creates a session for the built-in **Local admin**, which has
+Super admin access. The Business menu then exposes tenant, billing, credits, operations, support,
+integrations, and audit areas. Public pages and ordinary accounts have no business-admin links.
+Set `LOCAL_ADMIN_EMAIL` to change the development admin email. Local sign-in needs no SSO, MFA,
+or password.
 
 Use the product's `http://localhost:8080` origin for automatic admin menus. Participant links can
-continue using the configured LAN address. Customer sign-in and workspace access are separate from
-this local operator identity.
+continue using the configured LAN address. The configured admin email is an explicit development
+binding to the operator identity; customer workspace roles never grant global administration.
 
 ## 2. Sign in as a creator
 

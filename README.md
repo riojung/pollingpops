@@ -81,11 +81,13 @@ Then open:
 - Polling Pops: <http://localhost:8080>
 - Development email inbox: <http://localhost:8025>
 
-Local development includes the management console. In the product header, select **Business admin
-sign in**, then **Sign in as local admin**. The built-in **Local admin** account has Super admin
-access and exposes tenant, billing, credits, operations, support, integrations, and audit menus.
-Local sign-in needs no SSO, MFA, or password. Use `http://localhost:8080` for the product so its
-menus can discover the admin session on `http://localhost:3002`.
+Local development includes the management console. Use the normal product sign-in form with
+`admin@pollingpops.local` and open its captured sign-in email in Mailpit. This verified local
+identity establishes the **Local admin** session with Super admin access, revealing the Business
+menu for tenants, billing, credits, operations, support, integrations, and audit. Public pages and
+ordinary customer accounts have no business-admin entry. Local admin sign-in needs no SSO, MFA,
+or password. Use `http://localhost:8080` for the product; `LOCAL_ADMIN_EMAIL` configures the local
+admin email.
 
 Use any valid development email address to request a sign-in link, then open the captured message
 in Mailpit. The core profile uses development credentials and disables untrusted image uploads

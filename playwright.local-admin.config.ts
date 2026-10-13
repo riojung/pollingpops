@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "NODE_ENV=test PORT=4300 WEB_ORIGIN=http://127.0.0.1:3300 PUBLIC_API_URL=http://127.0.0.1:4300 CONTROL_PUBLIC_ORIGIN=http://127.0.0.1:3302 pnpm exec tsx apps/server/test/fixtures/business-browser-server.ts",
+        "NODE_ENV=test PORT=4300 WEB_ORIGIN=http://127.0.0.1:3300 PUBLIC_API_URL=http://127.0.0.1:4300 CONTROL_ENABLED=true CONTROL_AUTH_MODE=local CONTROL_LOCAL_DEVELOPMENT=true OPENROUND_DEPLOYMENT_ENVIRONMENT=development CONTROL_PRODUCT_ORIGIN=http://127.0.0.1:3300 CONTROL_PUBLIC_ORIGIN=http://127.0.0.1:3302 LOCAL_ADMIN_EMAIL=admin@pollingpops.local pnpm exec tsx apps/server/test/fixtures/business-browser-server.ts",
       port: 4300,
       reuseExistingServer: false,
       timeout: 120_000,

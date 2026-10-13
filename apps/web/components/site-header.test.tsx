@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ManagementNavigationModule from "./management-navigation";
+import { LOGOUT_REVOCATION_WARNING } from "../lib/api";
 
 const fixtures = vi.hoisted(() => ({
   navigation: {
@@ -14,6 +15,8 @@ const fixtures = vi.hoisted(() => ({
     operatorLinks: [] as Array<{ id: string; label: string; href: string }>,
     operatorLoading: false,
     refresh: async () => undefined,
+    logoutWarning: null as string | null,
+    dismissLogoutWarning: () => undefined,
   },
 }));
 
@@ -32,6 +35,7 @@ describe("management discovery in the product header", () => {
     fixtures.navigation.operator = null;
     fixtures.navigation.operatorConsoleOrigin = null;
     fixtures.navigation.operatorLinks = [];
+    fixtures.navigation.logoutWarning = null;
   });
 
   it("recognizes billing-only identity before workspace authentication succeeds", () => {
@@ -63,16 +67,29 @@ describe("management discovery in the product header", () => {
     expect(markup.match(/>Tenants<\/a>/g)).toHaveLength(2);
     expect(markup).toContain("Sign in to create");
     expect(markup).not.toContain("Organization settings");
+    expect(markup).not.toContain("Business admin sign in");
   });
 
-  it("makes staff sign-in discoverable in both header layouts before operator authentication", () => {
+  it("hides staff entry and administration from anonymous users even when the console is configured", () => {
     fixtures.navigation.operatorConsoleOrigin = "https://control.example.com";
     const markup = renderToStaticMarkup(<SiteHeader />);
-    expect(markup.match(/>Business admin sign in<\/a>/g)).toHaveLength(2);
-    expect(markup.match(/href="https:\/\/control\.example\.com\/auth\/start"/g)).toHaveLength(2);
+    expect(markup).not.toContain("Business");
+    expect(markup).not.toContain("https://control.example.com");
     expect(markup).toContain('href="/signin"');
     expect(markup).not.toContain("Super admin");
     expect(markup).not.toContain("Tenants");
+  });
+
+  it("keeps ordinary customer organization menus without advertising business administration", () => {
+    fixtures.navigation.user = { userId: "owner", email: "owner@example.com" };
+    fixtures.navigation.organizationManagementEnabled = true;
+    fixtures.navigation.organizations = [{ id: "owned", name: "Customer", role: "owner" }];
+    fixtures.navigation.operatorConsoleOrigin = "https://control.example.com";
+    const markup = renderToStaticMarkup(<SiteHeader />);
+    expect(markup).toContain("Organization settings");
+    expect(markup).toContain("Members");
+    expect(markup).not.toContain("Business");
+    expect(markup).not.toContain("https://control.example.com");
   });
 
   it("does not advertise unavailable management on a disabled product deployment", () => {
@@ -81,5 +98,15 @@ describe("management discovery in the product header", () => {
     expect(markup).not.toContain('href="/organization"');
     expect(markup).not.toContain("Business");
     expect(markup).not.toContain("Business admin sign in");
+    expect(markup).not.toContain(LOGOUT_REVOCATION_WARNING);
+  });
+
+  it("retains a dismissible revocation warning on the public homepage after customer sign-out", () => {
+    fixtures.navigation.logoutWarning = LOGOUT_REVOCATION_WARNING;
+    const markup = renderToStaticMarkup(<SiteHeader />);
+    expect(markup).toContain(LOGOUT_REVOCATION_WARNING);
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain(">Dismiss</button>");
+    expect(markup).not.toContain("Super admin");
   });
 });

@@ -780,7 +780,12 @@ export async function registerRoutes(
     }
     const input = MagicLinkRequestSchema.parse(request.body);
     const debugUrl = await auth.requestMagicLink(input.email, input.segment, input.returnTo);
-    return reply.code(202).send({ accepted: true, ...(debugUrl ? { debugUrl } : {}) });
+    const signInOrigin = auth.localAdminSignInOrigin(request, input.email);
+    return reply.code(202).send({
+      accepted: true,
+      ...(debugUrl ? { debugUrl } : {}),
+      ...(signInOrigin ? { signInOrigin } : {}),
+    });
   });
 
   app.get("/v1/auth/verify", async (request, reply) => {
@@ -799,7 +804,12 @@ export async function registerRoutes(
         "This sign-in link is invalid or expired",
         request.id,
       );
-    auth.setSessionCookie(reply, verified.sessionToken);
+    await auth.setAuthenticatedSession(
+      request,
+      reply,
+      verified.sessionToken,
+      verified.creator ? verified.creator.email : verified.user.email,
+    );
     if (!verified.creator)
       return reply.redirect(auth.localeAwareWebRedirect(verified.user, "/organization"));
     return reply.redirect(
@@ -820,9 +830,7 @@ export async function registerRoutes(
       user: user ? { userId: user.userId, email: user.email } : null,
       organizationManagementEnabled,
       organizations: organizations.map(({ id, name, role }) => ({ id, name, role })),
-      operatorConsoleOrigin: config.CONTROL_PUBLIC_ORIGIN
-        ? new URL(config.CONTROL_PUBLIC_ORIGIN).origin
-        : null,
+      operatorConsoleOrigin: await auth.operatorConsoleOrigin(request, user),
     });
   });
 
@@ -919,7 +927,7 @@ export async function registerRoutes(
       });
       if (result.mode === "login") {
         const session = await auth.issueCreatorSession(result.creator);
-        auth.setSessionCookie(reply, session.sessionToken);
+        await auth.setAuthenticatedSession(request, reply, session.sessionToken);
         return reply.redirect(
           auth.localeAwareWebRedirect(session.creator, "/dashboard?federated=1"),
         );
@@ -1012,7 +1020,7 @@ export async function registerRoutes(
         );
       }
       const session = await auth.issueCreatorSession(result.creator!);
-      auth.setSessionCookie(reply, session.sessionToken);
+      await auth.setAuthenticatedSession(request, reply, session.sessionToken);
       if (result.launch.messageType === "LtiDeepLinkingRequest") {
         return reply.redirect(
           auth.localeAwareWebRedirect(session.creator, `/lti/select?launchId=${result.launch.id}`),
@@ -1105,7 +1113,7 @@ export async function registerRoutes(
         request.id,
       );
     }
-    auth.setSessionCookie(reply, accepted.sessionToken);
+    await auth.setAuthenticatedSession(request, reply, accepted.sessionToken);
     return { creator: accepted.creator };
   });
 
@@ -1367,8 +1375,8 @@ export async function registerRoutes(
   });
 
   app.post("/v1/auth/logout", async (request, reply) => {
-    await auth.logout(request, reply);
-    return { ok: true };
+    const operatorSessionRevoked = await auth.logout(request, reply);
+    return { ok: true, ...(!operatorSessionRevoked ? { operatorSessionRevoked: false } : {}) };
   });
 
   app.get("/v1/account/embed-origins", async (request, reply) => {

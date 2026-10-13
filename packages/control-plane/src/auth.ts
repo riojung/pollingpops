@@ -10,6 +10,24 @@ export const LOCAL_OPERATOR_SUBJECT = "local-admin";
 export const LOCAL_OPERATOR_NAME = "Local admin";
 export const operatorSessionLifetimeMs = 8 * 60 * 60_000;
 export const operatorIdleLifetimeMs = 30 * 60_000;
+export function operatorCookieNames(config: Pick<ControlConfig, "CONTROL_PUBLIC_ORIGIN">) {
+  const secure = new URL(config.CONTROL_PUBLIC_ORIGIN!).protocol === "https:";
+  return {
+    secure,
+    session: secure ? OPERATOR_SESSION_COOKIE : "pollingpops-operator-local",
+    binding: secure ? OPERATOR_BINDING_COOKIE : "pollingpops-operator-login-local",
+    csrf: secure ? "__Host-pollingpops-operator-csrf" : "pollingpops-operator-csrf-local",
+  };
+}
+export function operatorSessionCookieOptions(config: Pick<ControlConfig, "CONTROL_PUBLIC_ORIGIN">) {
+  return {
+    path: "/",
+    httpOnly: true,
+    secure: operatorCookieNames(config).secure,
+    sameSite: "lax" as const,
+    maxAge: operatorSessionLifetimeMs / 1_000,
+  };
+}
 export function tokenHash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }

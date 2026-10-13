@@ -14,6 +14,12 @@ import {
   type OperatorManagementNavigation,
 } from "../lib/management-navigation";
 import styles from "./management-navigation.module.css";
+import {
+  AUTH_CHANGE_EVENT,
+  LOGOUT_REVOCATION_WARNING,
+  readLogoutWarning,
+  dismissLogoutWarning as dismissStoredLogoutWarning,
+} from "../lib/api";
 
 export interface ManagementNavigationState extends CustomerManagementNavigation {
   loading: boolean;
@@ -22,6 +28,8 @@ export interface ManagementNavigationState extends CustomerManagementNavigation 
   operatorLinks: ManagementNavigationLink[];
   operatorLoading: boolean;
   refresh: () => Promise<void>;
+  logoutWarning?: string | null;
+  dismissLogoutWarning?: () => void;
 }
 
 export function useManagementNavigation(): ManagementNavigationState {
@@ -30,6 +38,7 @@ export function useManagementNavigation(): ManagementNavigationState {
   const [loading, setLoading] = useState(true);
   const [operatorLoading, setOperatorLoading] = useState(false);
   const [error, setError] = useState("");
+  const [logoutWarning, setLogoutWarning] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -64,14 +73,26 @@ export function useManagementNavigation(): ManagementNavigationState {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    setLogoutWarning(readLogoutWarning());
     void refresh();
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
+    const onAuthChange = () => {
+      setLogoutWarning(readLogoutWarning());
+      void refresh();
+    };
+    window.addEventListener("focus", onAuthChange);
+    window.addEventListener(AUTH_CHANGE_EVENT, onAuthChange);
     return () => {
       request.current?.abort();
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", onAuthChange);
+      window.removeEventListener(AUTH_CHANGE_EVENT, onAuthChange);
     };
   }, [refresh]);
+
+  const dismissLogoutWarning = useCallback(() => {
+    setLogoutWarning(null);
+    dismissStoredLogoutWarning();
+  }, []);
 
   return {
     ...customer,
@@ -81,7 +102,27 @@ export function useManagementNavigation(): ManagementNavigationState {
     operatorLinks: operator.links,
     operatorLoading,
     refresh,
+    logoutWarning,
+    dismissLogoutWarning,
   };
+}
+
+export function LogoutWarningNotice({ navigation }: { navigation: ManagementNavigationState }) {
+  if (navigation.logoutWarning !== LOGOUT_REVOCATION_WARNING) return null;
+  return (
+    <div className="error" lang="en-CA" role="alert">
+      <p>{LOGOUT_REVOCATION_WARNING}</p>
+      {navigation.dismissLogoutWarning ? (
+        <button
+          className="button-quiet small-button"
+          onClick={navigation.dismissLogoutWarning}
+          type="button"
+        >
+          Dismiss
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function OperatorLink({ link }: { link: ManagementNavigationLink }) {
@@ -110,16 +151,13 @@ function OperatorLink({ link }: { link: ManagementNavigationLink }) {
 export function ManagementNavigationLinks({
   navigation,
   variant = "dropdown",
-  showAdminSignIn = false,
 }: {
   navigation: ManagementNavigationState;
   variant?: "dropdown" | "sections";
-  showAdminSignIn?: boolean;
 }) {
   const customerLinks = customerManagementLinks(navigation);
   const operatorLinks = navigation.operator ? navigation.operatorLinks : [];
-  const adminSignIn = showAdminSignIn && navigation.operatorConsoleOrigin && !navigation.operator;
-  if (!customerLinks.length && !operatorLinks.length && !adminSignIn) return null;
+  if (!customerLinks.length && !operatorLinks.length) return null;
 
   const organizationItems = customerLinks.map((link) => (
     <GuardedLink href={link.href} key={link.id}>
@@ -165,15 +203,6 @@ export function ManagementNavigationLinks({
             </div>
           </details>
         )
-      ) : null}
-      {adminSignIn ? (
-        <OperatorLink
-          link={{
-            id: "admin-signin",
-            label: "Business admin sign in",
-            href: `${navigation.operatorConsoleOrigin}/auth/start`,
-          }}
-        />
       ) : null}
     </div>
   );

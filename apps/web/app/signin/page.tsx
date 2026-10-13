@@ -9,6 +9,7 @@ import { LocalizedPolicyConsent } from "../../components/localized-policy-consen
 import { apiFetch, humanError } from "../../lib/api";
 import { resolveSignInEnvironment, type SignInEnvironment } from "../../lib/signin-environment";
 import {
+  LogoutWarningNotice,
   ManagementNavigationLinks,
   useManagementNavigation,
 } from "../../components/management-navigation";
@@ -64,18 +65,23 @@ export default function SignInPage() {
     setStatus("sending");
     setError("");
     try {
-      const result = await apiFetch<{ accepted: boolean; debugUrl?: string }>(
-        "/v1/auth/magic-link",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            email: submittedEmail,
-            segment,
-            acceptPolicies,
-            ...(returnTo ? { returnTo } : {}),
-          }),
-        },
-      );
+      const result = await apiFetch<{
+        accepted: boolean;
+        debugUrl?: string;
+        signInOrigin?: string;
+      }>("/v1/auth/magic-link", {
+        method: "POST",
+        body: JSON.stringify({
+          email: submittedEmail,
+          segment,
+          acceptPolicies,
+          ...(returnTo ? { returnTo } : {}),
+        }),
+      });
+      if (result.signInOrigin) {
+        const environment = resolveSignInEnvironment(result.signInOrigin, window.location.href);
+        if (environment) setSignInEnvironment(environment);
+      }
       setDebugUrl(result.debugUrl ?? "");
       setSentEmail(submittedEmail);
       setStatus("sent");
@@ -114,6 +120,7 @@ export default function SignInPage() {
             {t("delivery.auth.signInTitle")}
           </h1>
           <p className="muted">{t("delivery.auth.signInDescription")}</p>
+          <LogoutWarningNotice navigation={management} />
           {signInEnvironment?.originMismatch ? (
             <div className="notice" role="status">
               <strong>Use the configured address to sign in.</strong>
@@ -246,7 +253,7 @@ export default function SignInPage() {
               {status === "sending" ? t("delivery.auth.sending") : t("delivery.auth.sendLink")}
             </button>
           </form>
-          {management.operatorConsoleOrigin ? (
+          {management.operator ? (
             <section
               className="institution-signin"
               aria-label="Business administration"
@@ -256,7 +263,7 @@ export default function SignInPage() {
               <p className="muted">
                 Manage tenants, billing, and product operations with your staff account.
               </p>
-              <ManagementNavigationLinks navigation={management} showAdminSignIn />
+              <ManagementNavigationLinks navigation={management} />
             </section>
           ) : null}
         </section>

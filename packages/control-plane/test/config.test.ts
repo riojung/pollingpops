@@ -153,16 +153,19 @@ describe("explicit local operator development profile", () => {
     expect(() => loadControlConfig({ ...local, CONTROL_PUBLIC_ORIGIN: origin })).toThrow();
     expect(() => loadControlConfig({ ...local, CONTROL_PRODUCT_ORIGIN: origin })).toThrow();
   });
-  it("accepts exact IPv4/IPv6 loopback origins and allows an omitted deployment marker", () => {
+  it("accepts exact IPv4/IPv6 loopback origins only with an explicit development marker", () => {
     const config = loadControlConfig({
       ...local,
-      OPENROUND_DEPLOYMENT_ENVIRONMENT: "",
       CONTROL_PUBLIC_ORIGIN: "http://127.0.0.1:3002/",
       CONTROL_PRODUCT_ORIGIN: "http://[::1]:8080/",
     });
     expect(config.CONTROL_PUBLIC_ORIGIN).toBe("http://127.0.0.1:3002");
     expect(config.CONTROL_PRODUCT_ORIGIN).toBe("http://[::1]:8080");
     expect(isLocalControlDevelopment(config)).toBe(true);
+    expect(() => loadControlConfig({ ...local, OPENROUND_DEPLOYMENT_ENVIRONMENT: "" })).toThrow();
+    expect(() =>
+      loadControlConfig({ ...local, OPENROUND_DEPLOYMENT_ENVIRONMENT: undefined }),
+    ).toThrow();
   });
   it("never lets the local flag waive managed production MFA or HTTPS", () => {
     expect(() =>

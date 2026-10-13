@@ -85,7 +85,6 @@ export default function ControlRoom({
   const [pending, setPending] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [signingIn, setSigningIn] = useState(false);
   const [contacts, setContacts] = useState<Row[]>([]);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
   const loadSequence = useRef(0);
@@ -219,20 +218,6 @@ export default function ControlRoom({
       );
     } finally {
       setBusy(false);
-    }
-  }
-  async function signInLocally() {
-    rememberLoginView();
-    setSigningIn(true);
-    setMessage("");
-    try {
-      const response = await fetch("/auth/local", { method: "POST" });
-      const body = record(await response.json());
-      if (!response.ok) throw new Error(text(record(body.error).message));
-      window.location.reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Local admin sign-in failed");
-      setSigningIn(false);
     }
   }
   async function signOut() {
@@ -373,10 +358,10 @@ export default function ControlRoom({
         <p>Manage organizations, billing, credits, support, and operational controls.</p>
         {enabled && localAdmin ? (
           <>
-            <button disabled={signingIn || loading} onClick={() => void signInLocally()}>
-              {signingIn ? "Signing in…" : "Sign in as local admin"}
-            </button>
-            <p className="note">Local development access for business administration.</p>
+            <a className="button" href="/auth/start" onClick={rememberLoginView}>
+              Sign in to Polling Pops
+            </a>
+            <p className="note">Use your configured development admin account.</p>
           </>
         ) : enabled ? (
           <>
@@ -443,16 +428,11 @@ export default function ControlRoom({
         {message && (
           <p role="status" className="notice">
             {message}{" "}
-            {message.includes("Sign in again") &&
-              (localAdmin ? (
-                <button disabled={signingIn} onClick={() => void signInLocally()}>
-                  Sign in as local admin
-                </button>
-              ) : (
-                <a href="/auth/start" onClick={rememberLoginView}>
-                  Verify identity again
-                </a>
-              ))}
+            {message.includes("Sign in again") && (
+              <a href="/auth/start" onClick={rememberLoginView}>
+                {localAdmin ? "Sign in to Polling Pops again" : "Verify identity again"}
+              </a>
+            )}
           </p>
         )}
         {loading ? (

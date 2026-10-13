@@ -244,8 +244,13 @@ function LegacyDashboardPage() {
   }
 
   async function logout() {
-    await apiFetch("/v1/auth/logout", { method: "POST", body: "{}" });
-    router.replace("/");
+    setError("");
+    try {
+      await apiFetch("/v1/auth/logout", { method: "POST", body: "{}" });
+      router.replace("/");
+    } catch (caught) {
+      setError(humanError(caught));
+    }
   }
 
   async function upgrade() {

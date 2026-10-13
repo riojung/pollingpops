@@ -1,5 +1,39 @@
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 export const API_URL = configuredApiUrl ? configuredApiUrl.replace(/\/+$/, "") : "";
+export const AUTH_CHANGE_EVENT = "pollingpops:auth-change";
+export const LOGOUT_WARNING_STORAGE_KEY = "pollingpops:logout-revocation-warning";
+export const LOGOUT_REVOCATION_WARNING =
+  "Product sign-out completed, but admin session revocation could not be confirmed. Check the management service before leaving this device.";
+
+function persistLogoutWarning(warning: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (warning) window.sessionStorage.setItem(LOGOUT_WARNING_STORAGE_KEY, warning);
+    else window.sessionStorage.removeItem(LOGOUT_WARNING_STORAGE_KEY);
+  } catch {
+    // Restricted storage must not turn a completed product logout into another failure.
+  }
+}
+
+export function readLogoutWarning(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(LOGOUT_WARNING_STORAGE_KEY) === LOGOUT_REVOCATION_WARNING
+      ? LOGOUT_REVOCATION_WARNING
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function notifyAuthChange() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
+
+export function dismissLogoutWarning() {
+  persistLogoutWarning(null);
+  notifyAuthChange();
+}
 
 export class ApiClientError extends Error {
   constructor(
@@ -30,8 +64,39 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       response.status,
     );
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const loggedOut = path === "/v1/auth/logout" && init.method?.toUpperCase() === "POST";
+  if (response.status === 204) {
+    if (loggedOut) {
+      persistLogoutWarning(null);
+    }
+    return undefined as T;
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (error) {
+    if (loggedOut) notifyAuthChange();
+    throw error;
+  }
+  const uncertainRevocation =
+    loggedOut &&
+    typeof body === "object" &&
+    body !== null &&
+    "operatorSessionRevoked" in body &&
+    body.operatorSessionRevoked === false;
+  if (loggedOut) {
+    // Confirmed callers redirect; only uncertain logout needs a live navigation refresh.
+    persistLogoutWarning(uncertainRevocation ? LOGOUT_REVOCATION_WARNING : null);
+  }
+  if (uncertainRevocation) {
+    notifyAuthChange();
+    throw new ApiClientError(
+      LOGOUT_REVOCATION_WARNING,
+      "OPERATOR_SESSION_REVOCATION_UNCONFIRMED",
+      response.status,
+    );
+  }
+  return body as T;
 }
 
 export function humanError(error: unknown): string {

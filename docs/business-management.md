@@ -78,17 +78,19 @@ addresses remain in Stripe rather than the webhook inbox or PollingPops audit re
 
 ## Processes and operator access
 
-The product sign-in screen includes **Business admin sign in** when the API is configured with
-`CONTROL_PUBLIC_ORIGIN`. After admin sign-in, the product header and workspace menus
+Public product pages and ordinary customer accounts do not advertise business administration.
+After authenticated admin sign-in, the product header and workspace menus
 show the permitted business areas: tenant management, billing, credits and promotions, operations,
 support, integrations and audit. Founder operators are presented as **Super admin**; other operators
 see their permitted administrative areas. Selecting an area opens the restricted console at that
 area, including after an authentication refresh.
 
 Normal local development bundles include the console by default. Run `pnpm local:start`, open
-`http://localhost:8080`, choose **Business admin sign in**, then **Sign in as local admin**. The
-built-in Local admin uses founder permissions and the existing durable sessions, command checks,
-and audit trail. Its explicitly enabled loopback development profile requires no SSO or MFA.
+`http://localhost:8080`, and use the normal sign-in form with `admin@pollingpops.local`. Open the
+captured magic-link email in Mailpit. Only this configured, verified `LOCAL_ADMIN_EMAIL` binds to
+the built-in Local admin, which uses founder permissions and the existing durable sessions,
+command checks, and audit trail. Its explicitly enabled loopback development profile requires no
+SSO or MFA. Product logout and signing in with an ordinary account revoke local operator access.
 Customer Community behavior and disabled billing remain the local defaults.
 
 Customer organization navigation is also available from product headers, desktop/mobile workspace
@@ -100,15 +102,15 @@ state when hosted management is disabled, including Community deployments.
 
 Set `CONTROL_PRODUCT_ORIGIN` on the operator app to the exact product origin to allow credentialed,
 read-only navigation discovery. The hosted business overlay defaults to its HTTPS product domain.
-The local business overlay leaves discovery unset unless an exact trusted HTTPS product origin is
-configured, because its console also enforces production HTTPS policy. An HTTP local product keeps
-the explicit admin sign-in entry and full console navigation. Discovery returns only the current
+The normal local profile configures matching loopback HTTP product and console hostnames. The
+API and console validate explicit local development before enabling the email binding; hosted
+deployments retain managed operator authentication. Discovery returns only the current
 operator's name, role and permitted links; credentials, CSRF tokens and customer records remain
 private to the console. The product reads this endpoint independently with a bounded timeout, so a
 console outage does not block customer navigation or gameplay. Browser detection uses the existing
 SameSite operator cookie and works when product and
-console are on the same site (for example separate subdomains); independent sites retain the explicit
-admin sign-in entry and full console navigation.
+console are on the same site (for example separate subdomains). For independent sites, staff use
+the private console directly; public product pages do not offer a staff sign-in link.
 
 - `apps/web` and the Fastify/realtime server continue serving customers.
 - `apps/control` serves the separate operator UI and same-origin API.

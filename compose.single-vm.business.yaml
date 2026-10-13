@@ -2,6 +2,9 @@
 services:
   server:
     environment:
+      CONTROL_AUTH_MODE: oidc
+      CONTROL_LOCAL_DEVELOPMENT: "false"
+      LOCAL_ADMIN_EMAIL: ""
       CONTROL_PUBLIC_ORIGIN: https://${CONTROL_DOMAIN:?Set the operator hostname}
       BACKGROUND_JOBS_MODE: separate
       BUSINESS_PLATFORM_ENABLED: ${BUSINESS_PLATFORM_ENABLED:-false}

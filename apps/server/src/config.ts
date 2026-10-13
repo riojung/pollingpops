@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { z } from "zod";
 import { LOCALE_COOKIE_NAME, PRODUCT_BRAND } from "@openround/contracts";
-import { parseCatalog } from "@openround/control-plane";
+import { isLoopbackHttpOrigin, parseCatalog } from "@openround/control-plane";
 
 const booleanString = z
   .enum(["true", "false"])
@@ -261,7 +261,15 @@ export const ConfigSchema = z
     POLICY_VERSION: z.string().trim().min(1).max(80).default("2026-09-14-draft"),
     BILLING_MODE: z.enum(["disabled", "stripe"]).default("disabled"),
     BUSINESS_PLATFORM_ENABLED: booleanString,
+    CONTROL_ENABLED: booleanString,
+    CONTROL_AUTH_MODE: z.enum(["oidc", "local"]).default("oidc"),
+    CONTROL_LOCAL_DEVELOPMENT: booleanString,
     CONTROL_PUBLIC_ORIGIN: optionalHttpUrl,
+    CONTROL_PRODUCT_ORIGIN: optionalHttpUrl,
+    LOCAL_ADMIN_EMAIL: z.preprocess(
+      (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+      z.string().trim().toLowerCase().email().max(254).optional(),
+    ),
     BUSINESS_EVENT_CREDITS_ENABLED: booleanString,
     BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED: booleanString,
     BACKGROUND_JOBS_MODE: z.enum(["in_process", "separate"]).default("in_process"),
@@ -316,6 +324,58 @@ export const ConfigSchema = z
       .default("info"),
   })
   .superRefine((config, ctx) => {
+    if (config.CONTROL_AUTH_MODE === "local") {
+      if (!config.CONTROL_LOCAL_DEVELOPMENT)
+        ctx.addIssue({
+          code: "custom",
+          path: ["CONTROL_LOCAL_DEVELOPMENT"],
+          message: "Local administrator sign-in requires explicit local-development opt-in",
+        });
+      if (config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development")
+        ctx.addIssue({
+          code: "custom",
+          path: ["OPENROUND_DEPLOYMENT_ENVIRONMENT"],
+          message: "Local administrator sign-in requires the development deployment environment",
+        });
+      for (const field of ["CONTROL_PUBLIC_ORIGIN", "CONTROL_PRODUCT_ORIGIN"] as const)
+        if (!isLoopbackHttpOrigin(config[field]))
+          ctx.addIssue({
+            code: "custom",
+            path: [field],
+            message: "Local administrator sign-in requires an exact loopback HTTP origin",
+          });
+      if (
+        isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) &&
+        isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN)
+      ) {
+        const consoleUrl = new URL(config.CONTROL_PUBLIC_ORIGIN!);
+        const productUrl = new URL(config.CONTROL_PRODUCT_ORIGIN!);
+        if (consoleUrl.hostname !== productUrl.hostname || consoleUrl.origin === productUrl.origin)
+          ctx.addIssue({
+            code: "custom",
+            path: ["CONTROL_PRODUCT_ORIGIN"],
+            message: "Local product and console must share a loopback hostname on separate origins",
+          });
+      }
+      if (config.CONTROL_ENABLED && !config.LOCAL_ADMIN_EMAIL)
+        ctx.addIssue({
+          code: "custom",
+          path: ["LOCAL_ADMIN_EMAIL"],
+          message: "Configure the local administrator email before enabling local sign-in",
+        });
+      try {
+        const api = new URL(config.PUBLIC_API_URL);
+        if (api.protocol !== "http:" || api.username || api.password)
+          ctx.addIssue({
+            code: "custom",
+            path: ["PUBLIC_API_URL"],
+            message:
+              "Local administrator verification requires an HTTP API URL without credentials",
+          });
+      } catch {
+        // PUBLIC_API_URL has its own URL validation.
+      }
+    }
     if (config.CONTROL_PUBLIC_ORIGIN) {
       let origin: URL | undefined;
       try {
@@ -637,6 +697,22 @@ export const ConfigSchema = z
   });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;
+
+export function isLocalProductAdminDevelopment(config: AppConfig): boolean {
+  if (
+    !config.CONTROL_ENABLED ||
+    config.CONTROL_AUTH_MODE !== "local" ||
+    !config.CONTROL_LOCAL_DEVELOPMENT ||
+    config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development" ||
+    !config.LOCAL_ADMIN_EMAIL ||
+    !isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) ||
+    !isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN)
+  )
+    return false;
+  const consoleUrl = new URL(config.CONTROL_PUBLIC_ORIGIN!);
+  const productUrl = new URL(config.CONTROL_PRODUCT_ORIGIN!);
+  return consoleUrl.hostname === productUrl.hostname && consoleUrl.origin !== productUrl.origin;
+}
 
 function embeddedBuildId() {
   try {

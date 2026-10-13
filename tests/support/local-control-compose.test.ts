@@ -69,7 +69,14 @@ describe("default local management console", () => {
     }
     expect(local.services.control.ports).toEqual(["127.0.0.1:3002:3002"]);
     expect(local.services.server.environment.CONTROL_PUBLIC_ORIGIN).toBe(env.CONTROL_PUBLIC_ORIGIN);
-    expect(local.services.server.environment.OPENROUND_DEPLOYMENT_ENVIRONMENT).toBe("development");
+    expect(local.services.server.environment).toMatchObject({
+      CONTROL_ENABLED: "true",
+      CONTROL_AUTH_MODE: "local",
+      CONTROL_LOCAL_DEVELOPMENT: "true",
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: "development",
+      CONTROL_PRODUCT_ORIGIN: env.CONTROL_PRODUCT_ORIGIN,
+      LOCAL_ADMIN_EMAIL: "${LOCAL_ADMIN_EMAIL:-admin@pollingpops.local}",
+    });
     expect(env.CONTROL_PRODUCT_ORIGIN).not.toContain("OPENROUND_PUBLIC_URL");
   });
 
@@ -107,6 +114,11 @@ describe("default local management console", () => {
       OPERATOR_OIDC_MFA_POLICY_ENFORCED: "true",
     });
     expect(hosted.services.control).not.toHaveProperty("ports");
+    expect(hosted.services.server.environment).toMatchObject({
+      CONTROL_AUTH_MODE: "oidc",
+      CONTROL_LOCAL_DEVELOPMENT: "false",
+      LOCAL_ADMIN_EMAIL: "",
+    });
   });
 
   it.each(["staging", "production"])(

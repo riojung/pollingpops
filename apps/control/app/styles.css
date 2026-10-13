@@ -1,0 +1,398 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #18252d;
+  background: #f4f6f8;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+.button {
+  border: 1px solid #b8c5ca;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  color: #163d4b;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:hover,
+.button:hover {
+  background: #eaf3f5;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+a {
+  color: #15627a;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #f1a541;
+  outline-offset: 3px;
+}
+.brand {
+  font-size: 1.2rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+.brand span {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 0.22em;
+  color: #658391;
+  margin-top: 0.35rem;
+}
+.shell {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  min-height: 100vh;
+}
+aside {
+  background: #fff;
+  border-right: 1px solid #dce4e8;
+  padding: 2rem 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+nav {
+  display: grid;
+  gap: 0.3rem;
+}
+nav button {
+  text-align: left;
+  border-color: transparent;
+  font-weight: 500;
+}
+nav button.active {
+  background: #e6f1f5;
+  color: #07536b;
+  font-weight: 700;
+}
+.identity {
+  margin-top: auto;
+  display: grid;
+  gap: 0.5rem;
+}
+.identity small {
+  color: #64767d;
+}
+.identity button {
+  text-align: left;
+}
+main {
+  padding: 2.7rem;
+  max-width: 1500px;
+  min-width: 0;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.8rem;
+}
+h1 {
+  font-size: 2.1rem;
+  letter-spacing: -0.04em;
+  margin: 0.2rem 0;
+}
+h2 {
+  font-size: 1.15rem;
+  margin: 0 0 1rem;
+}
+h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #657982;
+  margin: 0;
+}
+.intro,
+.note {
+  color: #5d727c;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+section {
+  border: 1px solid #dce4e8;
+  border-radius: 12px;
+  background: white;
+  padding: 1.4rem;
+  margin: 1.2rem 0;
+  box-shadow: 0 2px 4px #17324005;
+}
+.section-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.section-heading h2 {
+  margin: 0;
+}
+.section-heading p {
+  font-size: 0.75rem;
+  color: #71858e;
+  margin: 0.3rem 0;
+}
+.section-heading button,
+.section-heading a {
+  margin-left: auto;
+}
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: #eef4f5;
+  font-size: 0.75rem;
+}
+.workspace {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 0;
+  border-top: 1px solid #e6ecef;
+}
+.workspace div {
+  margin-right: auto;
+}
+.workspace small {
+  display: block;
+  color: #6d838d;
+  font-size: 0.75rem;
+  margin: 0.2rem 0;
+}
+.workspace button {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+}
+.workspace select {
+  width: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.8rem;
+}
+th {
+  text-align: left;
+  color: #657b85;
+  font-weight: 500;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+th,
+td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid #e6ecef;
+  vertical-align: top;
+}
+td {
+  max-width: 330px;
+  word-break: break-word;
+}
+.table-scroll {
+  overflow: auto;
+}
+.stats {
+  display: flex;
+  gap: 3rem;
+  padding: 0.5rem 0 1.5rem;
+}
+.stats strong {
+  font-size: 1.8rem;
+  display: block;
+}
+.stats span {
+  color: #637e8a;
+  font-size: 0.8rem;
+}
+form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  max-width: 750px;
+}
+form button {
+  width: fit-content;
+}
+label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #496673;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid #bdccd2;
+  border-radius: 6px;
+  background: #fff;
+  color: #18252d;
+}
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+.check {
+  display: flex;
+  align-items: center;
+  font-weight: 400;
+}
+.check input {
+  width: auto;
+}
+.empty {
+  font-size: 0.9rem;
+  color: #6a7e87;
+  padding: 0.5rem 0;
+}
+.notice {
+  border: 1px solid #cedddf;
+  padding: 1rem;
+  border-radius: 8px;
+  background: #eaf2f3;
+  line-height: 1.5;
+}
+.signin {
+  max-width: 600px;
+  margin: 10vh auto;
+  padding: 2rem;
+}
+.signin h1 {
+  margin-top: 2.5rem;
+}
+.signin p {
+  line-height: 1.7;
+  color: #5b7480;
+}
+.signin .button {
+  display: inline-block;
+  background: #174f62;
+  color: white;
+  margin-top: 1rem;
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  background: #14313b80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 20;
+}
+.modal form {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 100%);
+  background: #fff;
+  padding: 1.8rem;
+  border-radius: 12px;
+  max-height: 90vh;
+  overflow: auto;
+}
+.modal pre {
+  font-size: 0.75rem;
+  background: #f3f6f7;
+  padding: 1rem;
+  overflow: auto;
+}
+.actions {
+  display: flex;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+.actions button:last-child {
+  background: #174f62;
+  color: white;
+}
+article {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e6ecef;
+}
+article p {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+}
+article small {
+  color: #6b828d;
+}
+.inline-action {
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  font-size: 0.75rem;
+}
+@media (max-width: 800px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  aside {
+    height: auto;
+    position: relative;
+    padding: 1rem;
+    border-bottom: 1px solid #dce4e8;
+  }
+  nav {
+    display: flex;
+    overflow: auto;
+  }
+  nav button {
+    white-space: nowrap;
+  }
+  .identity {
+    display: flex;
+    align-items: center;
+  }
+  .identity button {
+    margin-left: auto;
+  }
+  main {
+    padding: 1.4rem;
+  }
+  form {
+    grid-template-columns: 1fr;
+  }
+  .brand span {
+    display: inline;
+    margin-left: 0.75rem;
+  }
+  .stats {
+    gap: 1.5rem;
+  }
+}

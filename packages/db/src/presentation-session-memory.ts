@@ -1,4 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
+import { MemoryRepository } from "./memory.js";
+import {
+  reserveRoomCoverageInMemory,
+  consumeRoomCoverageInMemory,
+  releaseRoomCoverageInMemory,
+  getMemoryPlatformRepository,
+} from "./platform-memory.js";
 import type {
   MemoryRepositoryLifecycleContext,
   MemoryRepositoryLifecycleExtension,
@@ -59,6 +67,7 @@ export class MemoryPresentationSessionRepository
   constructor(
     private readonly liveRooms: Pick<Repository, "claimLiveRoomCode" | "releaseLiveRoomCode"> & {
       assertWorkspaceLiveSessionCreationAllowed?: (workspaceId: string) => void;
+      assertNewRoomLaunchAllowed?: (workspaceId: string) => void;
       deletePresentationSessionMetadata?: (workspaceId: string, sessionId: string) => void;
       assertPresentationPublishedQuestionSource?: (
         workspaceId: string,
@@ -129,7 +138,12 @@ export class MemoryPresentationSessionRepository
     };
   }
 
-  async deleteAccount({ ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
+  async deleteAccount({ ownedWorkspaceIds, userId }: MemoryRepositoryLifecycleContext) {
+    for (const credential of this.credentials.values()) {
+      if (this.sessions.get(credential.sessionId)?.createdBy === userId && !credential.revokedAt) {
+        credential.revokedAt = new Date();
+      }
+    }
     for (const [id, session] of this.sessions) {
       if (ownedWorkspaceIds.has(session.workspaceId)) await this.deleteSessionTree(id);
     }
@@ -147,6 +161,8 @@ export class MemoryPresentationSessionRepository
   }
 
   private async deleteSessionTree(sessionId: string) {
+    if (this.liveRooms instanceof MemoryRepository)
+      releaseRoomCoverageInMemory(this.liveRooms, "presentation", sessionId);
     // Remove every record synchronously before releasing the code so no suspended mutation or
     // report worker can republish retained room data while deletion is in progress.
     const session = this.sessions.get(sessionId);
@@ -234,6 +250,7 @@ export class MemoryPresentationSessionRepository
   async createSession(input: PresentationSessionCreateInput) {
     const normalized = normalizeSession(input);
     this.assertWorkspaceMutationAllowed(normalized.workspaceId);
+    this.liveRooms.assertNewRoomLaunchAllowed?.(normalized.workspaceId);
     await this.liveRooms.claimLiveRoomCode({
       code: normalized.code,
       workspaceId: normalized.workspaceId,
@@ -242,10 +259,18 @@ export class MemoryPresentationSessionRepository
       expiresAt: normalized.liveExpiresAt,
       createdAt: normalized.createdAt,
     });
+    let inserted = false;
     try {
       this.assertWorkspaceMutationAllowed(normalized.workspaceId);
+      this.liveRooms.assertNewRoomLaunchAllowed?.(normalized.workspaceId);
+      if (this.sessions.has(normalized.id))
+        throw Object.assign(new Error("Room already exists"), {
+          code: "23505",
+          constraint: "presentation_live_sessions_pkey",
+        });
       this.assertPresentationExists(normalized);
       this.sessions.set(input.id, clone(normalized));
+      inserted = true;
       this.enqueueReport(normalized);
       if (normalized.status !== "active" || normalized.liveExpiresAt <= new Date()) {
         await this.liveRooms.releaseLiveRoomCode(
@@ -256,9 +281,11 @@ export class MemoryPresentationSessionRepository
       }
       return clone(normalized);
     } catch (error) {
-      this.sessions.delete(normalized.id);
-      this.reports.delete(normalized.id);
-      this.reportJobs.delete(normalized.id);
+      if (inserted) {
+        this.sessions.delete(normalized.id);
+        this.reports.delete(normalized.id);
+        this.reportJobs.delete(normalized.id);
+      }
       await this.liveRooms.releaseLiveRoomCode("presentation", normalized.id);
       throw error;
     }
@@ -270,6 +297,7 @@ export class MemoryPresentationSessionRepository
   ) {
     const normalized = normalizeSession(input);
     this.assertWorkspaceMutationAllowed(normalized.workspaceId);
+    this.liveRooms.assertNewRoomLaunchAllowed?.(normalized.workspaceId);
     if (
       credential.workspaceId !== normalized.workspaceId ||
       credential.sessionId !== normalized.id
@@ -289,10 +317,23 @@ export class MemoryPresentationSessionRepository
       expiresAt: normalized.liveExpiresAt,
       createdAt: normalized.createdAt,
     });
+    let inserted = false;
     try {
       this.assertWorkspaceMutationAllowed(normalized.workspaceId);
+      this.liveRooms.assertNewRoomLaunchAllowed?.(normalized.workspaceId);
+      if (this.sessions.has(normalized.id))
+        throw Object.assign(new Error("Room already exists"), {
+          code: "23505",
+          constraint: "presentation_live_sessions_pkey",
+        });
       this.assertPresentationExists(normalized);
+      if (input.commercialCoverage) {
+        if (!(this.liveRooms instanceof MemoryRepository))
+          throw new Error("Commercial rooms require the durable repository");
+        reserveRoomCoverageInMemory(this.liveRooms, input.commercialCoverage);
+      }
       this.sessions.set(normalized.id, clone(normalized));
+      inserted = true;
       this.credentials.set(credential.id, clone(credential));
       this.enqueueReport(normalized);
       if (normalized.status !== "active" || normalized.liveExpiresAt <= new Date()) {
@@ -304,10 +345,12 @@ export class MemoryPresentationSessionRepository
       }
       return { session: clone(normalized), credential: clone(credential) };
     } catch (error) {
-      this.sessions.delete(normalized.id);
-      this.credentials.delete(credential.id);
-      this.reports.delete(normalized.id);
-      this.reportJobs.delete(normalized.id);
+      if (inserted) {
+        this.sessions.delete(normalized.id);
+        this.credentials.delete(credential.id);
+        this.reports.delete(normalized.id);
+        this.reportJobs.delete(normalized.id);
+      }
       await this.liveRooms.releaseLiveRoomCode("presentation", normalized.id);
       throw error;
     }
@@ -414,6 +457,8 @@ export class MemoryPresentationSessionRepository
     // before the final timeline record would diverge from PostgreSQL transaction semantics.
     if (becomingFinished) this.enqueueReport(updated);
     if (updated.status !== "active") {
+      if (this.liveRooms instanceof MemoryRepository)
+        releaseRoomCoverageInMemory(this.liveRooms, "presentation", updated.id);
       await this.liveRooms.releaseLiveRoomCode("presentation", updated.id, now);
     }
     return clone(updated);
@@ -463,13 +508,17 @@ export class MemoryPresentationSessionRepository
       return { status: "closed" };
     }
     this.assertWorkspaceMutationAllowed(input.workspaceId);
-    if (session.status !== "active" || input.joinedAt >= session.liveExpiresAt) {
+    if (session.status !== "active" || new Date() >= session.liveExpiresAt) {
       return { status: "closed" };
     }
     const participantCount = [...this.participants.values()].filter(
       (participant) => participant.sessionId === input.sessionId,
     ).length;
     if (participantCount >= participantLimit) return { status: "full" };
+    if (this.liveRooms instanceof MemoryRepository)
+      assertAudienceAdmissionInMemory(this.liveRooms, input.workspaceId);
+    if (this.liveRooms instanceof MemoryRepository)
+      consumeRoomCoverageInMemory(this.liveRooms, "presentation", input.sessionId);
     // Sequence fences cover every durable aggregate mutation, not only host transitions. This
     // keeps equal-revision join snapshots from racing one another in reconnecting clients.
     session.eventSeq += 1;
@@ -733,6 +782,8 @@ export class MemoryPresentationSessionRepository
   }
 
   async claimReportJob(now: Date, leaseUntil: Date) {
+    if (this.liveRooms instanceof MemoryRepository)
+      getMemoryPlatformRepository(this.liveRooms).memoryStore.assertMutationAllowed();
     const candidate = [...this.reportJobs.entries()]
       .filter(([id, job]) => this.reports.get(id)?.status === "pending" && job.availableAt <= now)
       .sort(
@@ -761,6 +812,8 @@ export class MemoryPresentationSessionRepository
     job: PresentationSessionReportJob,
     report: PresentationSessionReportCompletion,
   ) {
+    if (this.liveRooms instanceof MemoryRepository)
+      getMemoryPlatformRepository(this.liveRooms).memoryStore.assertMutationAllowed();
     if (job.reportId !== report.reportId || job.sessionId !== report.sessionId) {
       throw new Error("Completed Presentation report does not match the claimed job");
     }
@@ -796,6 +849,8 @@ export class MemoryPresentationSessionRepository
     availableAt: Date,
     failed: boolean,
   ) {
+    if (this.liveRooms instanceof MemoryRepository)
+      getMemoryPlatformRepository(this.liveRooms).memoryStore.assertMutationAllowed();
     const report = this.reports.get(job.reportId);
     const metadata = this.reportJobs.get(job.reportId);
     if (
@@ -814,8 +869,51 @@ export class MemoryPresentationSessionRepository
     report.updatedAt = new Date();
     if (failed) {
       report.status = "failed";
-      this.reportJobs.delete(job.reportId);
+      // Retain attempts/error evidence for a guarded operator retry.
     }
+  }
+
+  operatorReportQueueRows(now: Date) {
+    return [...this.reports.values()].map((report) => {
+      const metadata = this.reportJobs.get(report.id);
+      return {
+        id: report.id,
+        status: report.status,
+        createdAt: report.createdAt,
+        processing:
+          report.status === "pending" &&
+          Boolean(metadata?.leaseToken && metadata.availableAt > now),
+        retryable:
+          report.status === "failed" &&
+          report.expiresAt > now &&
+          this.sessions.has(report.sessionId),
+      };
+    });
+  }
+  retryFailedReportForOperator(id: string, now: Date): (() => void) | null {
+    const report = this.reports.get(id);
+    if (
+      !report ||
+      report.status !== "failed" ||
+      report.expiresAt <= now ||
+      !this.sessions.has(report.sessionId)
+    )
+      return null;
+    const before = clone(report);
+    const metadata = this.reportJobs.get(id);
+    const priorMetadata = metadata ? clone(metadata) : null;
+    this.reports.set(id, { ...report, status: "pending", updatedAt: now });
+    this.reportJobs.set(id, {
+      attempts: metadata?.attempts ?? 0,
+      availableAt: now,
+      leaseToken: null,
+      lastError: null,
+    });
+    return () => {
+      this.reports.set(id, before);
+      if (priorMetadata) this.reportJobs.set(id, priorMetadata);
+      else this.reportJobs.delete(id);
+    };
   }
 
   async createCredential(input: PresentationSessionCredentialRecord) {

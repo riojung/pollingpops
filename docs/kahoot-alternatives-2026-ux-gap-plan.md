@@ -579,8 +579,8 @@ Do not compete only on player count, but remove obvious acquisition friction:
 | Institution | Contract/pilot based                                 | SSO/LTI, policy, region, audit, optional identified workflows, grade services, support/SLA |
 
 Validate willingness to pay for **faster remediation and defensible evidence**, not merely a larger
-room. The current $15 monthly Pro price is explicitly a launch hypothesis, not a verified market
-price.
+room. Hosted paid pricing remains unannounced until catalog offers and payment operations have
+been reviewed.
 
 ## Outcome measures
 

@@ -594,6 +594,7 @@ class MemorySurveyStore {
               createdAt: new Date(),
               expiresAt: new Date(room.closesAt),
             });
+            this.parent.assertNewRoomLaunchAllowed(room.workspaceId);
           }
           if (insert && this[table].has(row.id))
             throw new SurveyError("IDEMPOTENCY_CONFLICT", "This identifier is already used");
@@ -892,4 +893,12 @@ export function createSurveyRepository(repository: Repository) {
     return new SurveyRepository(store.run);
   }
   throw new Error("Unsupported survey repository");
+}
+/** Aggregate-only internal operational projection; no guest identities or responses. */
+export function countSurveyParticipantsInMemory(repository: MemoryRepository, roomId: string) {
+  const store = repository.getOrCreateLifecycleExtension(
+    "surveys",
+    () => new MemorySurveyStore(repository),
+  );
+  return [...store.survey_guests.values()].filter((guest) => guest.roomId === roomId).length;
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LocalReturnPathSchema } from "@openround/contracts";
-import type { CreatorContext, Repository, Segment } from "@openround/db";
+import type { CreatorContext, Repository, Segment, UserPrincipal } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { Mailer } from "./mailer.js";
 import { hashToken, opaqueToken } from "./security.js";
@@ -13,8 +13,11 @@ export class AuthService {
     private readonly config: AppConfig,
   ) {}
 
-  private effectiveCreator(creator: CreatorContext): CreatorContext {
-    return this.config.COMMUNITY_MODE ? { ...creator, plan: "team" } : creator;
+  private async effectiveCreator(creator: CreatorContext): Promise<CreatorContext> {
+    if (this.config.COMMUNITY_MODE) return { ...creator, plan: "team" };
+    return this.config.BUSINESS_PLATFORM_ENABLED
+      ? { ...creator, plan: await this.repository.getPlan(creator.workspaceId) }
+      : creator;
   }
 
   async requestMagicLink(email: string, segment: Segment, returnTo?: string) {
@@ -38,21 +41,28 @@ export class AuthService {
   }
 
   async verifyMagicLink(token: string) {
-    const creator = await this.repository.consumeMagicToken(hashToken(token), new Date());
-    if (!creator) return null;
-    return this.issueCreatorSession(creator);
+    const identity = await this.repository.consumeMagicLinkIdentity(hashToken(token), new Date());
+    if (!identity) return null;
+    if (identity.creator) return this.issueCreatorSession(identity.creator);
+    const sessionToken = await this.issueIdentitySession(identity.user);
+    return { user: identity.user, creator: null, sessionToken };
   }
 
-  async issueCreatorSession(creator: CreatorContext) {
+  private async issueIdentitySession(user: UserPrincipal, activeWorkspaceId?: string) {
     const sessionToken = opaqueToken();
     await this.repository.createCreatorSession({
       id: randomUUID(),
-      userId: creator.userId,
+      userId: user.userId,
       tokenHash: hashToken(sessionToken),
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000),
-      activeWorkspaceId: creator.workspaceId,
+      ...(activeWorkspaceId ? { activeWorkspaceId } : {}),
     });
-    return { creator: this.effectiveCreator(creator), sessionToken };
+    return sessionToken;
+  }
+
+  async issueCreatorSession(creator: CreatorContext) {
+    const sessionToken = await this.issueIdentitySession(creator, creator.workspaceId);
+    return { creator: await this.effectiveCreator(creator), sessionToken };
   }
 
   async inviteWorkspace(creator: CreatorContext, email: string, role: "editor" | "viewer") {
@@ -85,6 +95,11 @@ export class AuthService {
     };
   }
 
+  async sendOrganizationInvitation(email: string, inviteUrl: string) {
+    const send = this.mailer.sendOrganizationInvitation ?? this.mailer.sendWorkspaceInvitation;
+    await send.call(this.mailer, email, inviteUrl);
+  }
+
   async acceptWorkspaceInvitation(token: string) {
     const creator = await this.repository.acceptWorkspaceInvitation(
       hashToken(token),
@@ -109,7 +124,7 @@ export class AuthService {
     reply.setCookie(this.config.COOKIE_NAME, token, this.sessionCookieOptions());
   }
 
-  localeAwareWebRedirect(creator: CreatorContext, returnTo: string) {
+  localeAwareWebRedirect(creator: UserPrincipal, returnTo: string) {
     const webOrigin = new URL(this.config.WEB_ORIGIN);
     const localReturnTo = LocalReturnPathSchema.safeParse(returnTo);
     let destination: URL;
@@ -167,6 +182,19 @@ export class AuthService {
       return null;
     }
     return creator;
+  }
+
+  async requireUser(request: FastifyRequest, reply: FastifyReply) {
+    const token = request.cookies[this.config.COOKIE_NAME];
+    const user = token
+      ? await this.repository.getUserPrincipalBySession(hashToken(token), new Date())
+      : null;
+    if (!user) {
+      await reply.code(401).send({
+        error: { code: "UNAUTHORIZED", message: "Sign in required", requestId: request.id },
+      });
+    }
+    return user;
   }
 
   async logout(request: FastifyRequest, reply: FastifyReply) {

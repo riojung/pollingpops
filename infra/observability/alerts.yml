@@ -254,3 +254,46 @@ groups:
         annotations:
           summary: Invalid billing webhook signatures are elevated
           runbook: docs/runbooks/observability.md
+
+  - name: pollingpops-business
+    rules:
+      - alert: PollingPopsBusinessProjectionUnavailable
+        expr: openround_business_projection_up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Durable business health cannot be read
+          runbook: docs/business-management.md
+      - alert: PollingPopsBusinessQueueDelayed
+        expr: openround_business_queue_oldest_seconds > 900
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Business delivery or billing processing is delayed
+          runbook: docs/business-management.md
+      - alert: PollingPopsBusinessDeliveryNeedsAttention
+        expr: sum by (queue) (openround_business_queue_jobs{state=~"failed|ambiguous"}) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Business jobs require retry or reconciliation
+          runbook: docs/business-management.md
+      - alert: PollingPopsJobsHeartbeatMissing
+        expr: openround_business_worker_heartbeat_age_seconds{worker="jobs"} > 90 or openround_business_worker_heartbeat_age_seconds{worker="jobs"} < 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: The jobs process is not reporting a heartbeat
+          runbook: docs/business-management.md
+      - alert: PollingPopsExpiredCreditReservations
+        expr: openround_event_credit_reservations{state="expired"} > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Empty expired rooms still reserve event credits
+          runbook: docs/business-management.md

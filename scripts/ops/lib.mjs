@@ -72,7 +72,7 @@ const MANIFEST_KEYS = new Set([
   "images",
 ]);
 const SOURCE_KEYS = new Set(["commit", "dirty"]);
-const IMAGES_KEYS = new Set(["server", "web"]);
+const IMAGES_KEYS = new Set(["server", "web", "control"]);
 const IMAGE_KEYS = new Set(["repository", "tag", "digest", "ref", "signed"]);
 const SSH_HOST_PATTERN =
   /^(?=.{1,253}$)(?!-)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
@@ -118,6 +118,29 @@ const SINGLE_VM_RUNTIME_ENV_KEYS = new Set([
   "RUN_MIGRATIONS",
   "ALLOW_IN_MEMORY",
   "COMMUNITY_MODE",
+  "BACKGROUND_JOBS_MODE",
+  "BUSINESS_PLATFORM_ENABLED",
+  "BUSINESS_EVENT_CREDITS_ENABLED",
+  "BUSINESS_CATALOG_JSON",
+  "BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED",
+  "BUSINESS_BILLING_WORKER_INTERVAL_MS",
+  "BUSINESS_BILLING_WORKER_LEASE_MS",
+  "BUSINESS_BILLING_RECONCILE_INTERVAL_MS",
+  "CONTROL_ENABLED",
+  "CONTROL_PUBLIC_ORIGIN",
+  "CONTROL_DATABASE_URL",
+  "CONTROL_DOMAIN",
+  "CONTROL_ALLOWED_CIDRS",
+  "OPERATOR_OIDC_ISSUER",
+  "OPERATOR_OIDC_CLIENT_ID",
+  "OPERATOR_OIDC_CLIENT_SECRET",
+  "OPERATOR_OIDC_MFA_POLICY_ENFORCED",
+  "OPERATOR_OIDC_REQUIRED_AMR",
+  "OPERATOR_OIDC_ALLOWED_ACR",
+  "OPERATOR_BOOTSTRAP_IDENTITIES",
+  "INTEGRATION_SECRET_KEY",
+  "QUICKBOOKS_ENVIRONMENT",
+  "QUICKBOOKS_PRODUCTION_READS_ENABLED",
   "MAX_SESSION_PARTICIPANTS",
   "MAX_PRACTICE_PERSONAL_LINKS",
   "RETENTION_INTERVAL_MINUTES",
@@ -254,6 +277,10 @@ const SINGLE_VM_RUNTIME_ENV_KEYS = new Set([
   "OPENROUND_SERVER_CPUS",
   "OPENROUND_SERVER_MEMORY_LIMIT",
   "OPENROUND_SERVER_PIDS_LIMIT",
+  "OPENROUND_JOBS_CPUS",
+  "OPENROUND_JOBS_MEMORY_LIMIT",
+  "OPENROUND_CONTROL_CPUS",
+  "OPENROUND_CONTROL_MEMORY_LIMIT",
   "OPENROUND_WEB_CPUS",
   "OPENROUND_WEB_MEMORY_LIMIT",
   "OPENROUND_WEB_PIDS_LIMIT",
@@ -925,7 +952,10 @@ export function validateBuildManifest(input, expected = {}) {
   if (input.source.dirty !== false)
     throw new Error("hosted build manifest must record a clean source");
   assertExactKeys(input.images, IMAGES_KEYS, "build manifest images");
-  for (const component of ["server", "web"]) {
+  if (expected.requireControl && !input.images.control) {
+    throw new Error("Business deployments require a signed control image in the build manifest");
+  }
+  for (const component of ["server", "web", ...(input.images.control ? ["control"] : [])]) {
     const image = input.images[component];
     assertExactKeys(image, IMAGE_KEYS, `build manifest images.${component}`);
     if (!IMAGE_REPOSITORY_PATTERN.test(String(image.repository ?? ""))) {
@@ -933,7 +963,7 @@ export function validateBuildManifest(input, expected = {}) {
     }
     if (
       image.repository !==
-      `${expected.imageRepository ?? image.repository.replace(/-(server|web)$/, "")}-${component}`
+      `${expected.imageRepository ?? image.repository.replace(/-(server|web|control)$/, "")}-${component}`
     ) {
       throw new Error(`images.${component}.repository does not match the target repository`);
     }

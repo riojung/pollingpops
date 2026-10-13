@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: [
     "src/index.ts",
+    "src/jobs.ts",
     "src/migrate.ts",
     "src/config-check.ts",
     "src/staging-capacity-provision.ts",
@@ -16,6 +17,7 @@ export default defineConfig({
   clean: true,
   noExternal: [
     "@openround/contracts",
+    "@openround/control-plane",
     "@openround/db",
     "@openround/experience",
     "@openround/game-engine",

@@ -339,10 +339,11 @@ export function validatePublishedReleaseRedeployReceipt(
   if (receipt.manifestSha256 !== manifestSha256) {
     throw new Error("Prior deployment receipt manifest does not match the accepted release");
   }
-  assertExactObjectKeys(receipt.images, ["server", "web"], "prior deployment images");
+  assertExactObjectKeys(receipt.images, Object.keys(manifest.images), "prior deployment images");
   if (
     receipt.images.server !== manifest.images.server.ref ||
-    receipt.images.web !== manifest.images.web.ref
+    receipt.images.web !== manifest.images.web.ref ||
+    (manifest.images.control && receipt.images.control !== manifest.images.control.ref)
   ) {
     throw new Error("Prior deployment receipt images do not match the accepted release");
   }
@@ -662,6 +663,15 @@ export async function assertProductionReleaseRevision({
   if (binding.imageDigests.server !== manifest.images.server.digest) {
     throw new Error("Signed release acceptance server digest does not match the build manifest");
   }
+  if (
+    Object.keys(binding.imageDigests).sort().join(",") !==
+    Object.keys(manifest.images).sort().join(",")
+  ) {
+    throw new Error("Signed release image set does not match the build manifest");
+  }
+  if (manifest.images.control && binding.imageDigests.control !== manifest.images.control.digest) {
+    throw new Error("Signed release acceptance control digest does not match the build manifest");
+  }
   if (binding.imageDigests.web !== manifest.images.web.digest) {
     throw new Error("Signed release acceptance web digest does not match the build manifest");
   }
@@ -902,6 +912,7 @@ async function writeReceipt({
     images: {
       server: config.manifest.images.server.ref,
       web: config.manifest.images.web.ref,
+      ...(config.manifest.images.control ? { control: config.manifest.images.control.ref } : {}),
     },
     ...(config.deploymentMode === "single-vm"
       ? {
@@ -1184,8 +1195,14 @@ export async function verifyForwardDeploymentAncestry(activeBuildId, targetBuild
 }
 
 export async function verifySignatures(config, manifest, dryRun, certificateIdentity) {
+  if (
+    config.singleVm?.composeFiles.includes("compose.single-vm.business.yaml") &&
+    !manifest.images.control
+  ) {
+    throw new Error("Business deployments require a signed control image in the build manifest");
+  }
   if (!config.requireSigning) return;
-  for (const component of ["server", "web"]) {
+  for (const component of Object.keys(manifest.images)) {
     const identityArguments = certificateIdentity
       ? ["--certificate-identity", certificateIdentity]
       : ["--certificate-identity-regexp", config.cosignIdentityRegexp];
@@ -1491,6 +1508,10 @@ export const REMOTE_DEPLOY_SCRIPT = [
   '[ "$server_build" = "$build" ] || { echo "Server image BUILD_ID does not match release" >&2; exit 67; }',
   'web_build=$(docker compose --env-file "$release/.env" run --rm --no-deps --entrypoint /bin/cat web /app/BUILD_ID)',
   '[ "$web_build" = "$build" ] || { echo "Web image BUILD_ID does not match release" >&2; exit 67; }',
+  'if docker compose --env-file "$release/.env" config --services | grep -qx control; then',
+  '  control_build=$(docker compose --env-file "$release/.env" run --rm --no-deps --entrypoint /bin/cat control /app/BUILD_ID)',
+  '  [ "$control_build" = "$build" ] || { echo "Control image BUILD_ID does not match release" >&2; exit 67; }',
+  "fi",
   "activation_started=1",
   'docker compose --env-file "$release/.env" up --detach --wait postgres valkey minio clamav',
   'if [ "$rollback" = "0" ]; then',
@@ -1784,14 +1805,19 @@ async function resolveSingleVmFiles(config, identityPath) {
 }
 
 function releaseEnvironment(content, manifest, keys) {
-  const reserved = ["OPENROUND_SERVER_IMAGE", "OPENROUND_WEB_IMAGE", "OPENROUND_BUILD_ID"];
+  const reserved = [
+    "OPENROUND_SERVER_IMAGE",
+    "OPENROUND_WEB_IMAGE",
+    "OPENROUND_CONTROL_IMAGE",
+    "OPENROUND_BUILD_ID",
+  ];
   assertNoEnvironmentKeyOverlap(
     keys,
     reserved,
     "runtime environment file",
     "release image environment",
   );
-  return `${content.endsWith("\n") ? content : `${content}\n`}OPENROUND_SERVER_IMAGE=${manifest.images.server.ref}\nOPENROUND_WEB_IMAGE=${manifest.images.web.ref}\nOPENROUND_BUILD_ID=${manifest.buildId}\n`;
+  return `${content.endsWith("\n") ? content : `${content}\n`}OPENROUND_SERVER_IMAGE=${manifest.images.server.ref}\nOPENROUND_WEB_IMAGE=${manifest.images.web.ref}\n${manifest.images.control ? `OPENROUND_CONTROL_IMAGE=${manifest.images.control.ref}\n` : ""}OPENROUND_BUILD_ID=${manifest.buildId}\n`;
 }
 
 function environmentFileValue(content, key) {

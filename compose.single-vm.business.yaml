@@ -1,0 +1,83 @@
+# Merge after compose.single-vm.yaml. Require reviewed immutable control image and ingress.
+services:
+  server:
+    environment:
+      BACKGROUND_JOBS_MODE: separate
+      BUSINESS_PLATFORM_ENABLED: ${BUSINESS_PLATFORM_ENABLED:-false}
+      BUSINESS_EVENT_CREDITS_ENABLED: ${BUSINESS_EVENT_CREDITS_ENABLED:-false}
+      BUSINESS_CATALOG_JSON: ${BUSINESS_CATALOG_JSON:-[]}
+      BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED: ${BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED:-false}
+      BUSINESS_BILLING_WORKER_INTERVAL_MS: ${BUSINESS_BILLING_WORKER_INTERVAL_MS:-3000}
+      BUSINESS_BILLING_WORKER_LEASE_MS: ${BUSINESS_BILLING_WORKER_LEASE_MS:-120000}
+      BUSINESS_BILLING_RECONCILE_INTERVAL_MS: ${BUSINESS_BILLING_RECONCILE_INTERVAL_MS:-900000}
+  jobs:
+    extends:
+      file: compose.single-vm.yaml
+      service: server
+    command: [node, dist/jobs.js]
+    healthcheck:
+      disable: true
+    environment:
+      BACKGROUND_JOBS_MODE: separate
+      BUSINESS_PLATFORM_ENABLED: ${BUSINESS_PLATFORM_ENABLED:-false}
+      BUSINESS_EVENT_CREDITS_ENABLED: ${BUSINESS_EVENT_CREDITS_ENABLED:-false}
+      BUSINESS_CATALOG_JSON: ${BUSINESS_CATALOG_JSON:-[]}
+      BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED: ${BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED:-false}
+      BUSINESS_BILLING_WORKER_INTERVAL_MS: ${BUSINESS_BILLING_WORKER_INTERVAL_MS:-3000}
+      BUSINESS_BILLING_WORKER_LEASE_MS: ${BUSINESS_BILLING_WORKER_LEASE_MS:-120000}
+      BUSINESS_BILLING_RECONCILE_INTERVAL_MS: ${BUSINESS_BILLING_RECONCILE_INTERVAL_MS:-900000}
+      INTEGRATION_SECRET_KEY: ${INTEGRATION_SECRET_KEY:-}
+      QUICKBOOKS_ENVIRONMENT: ${QUICKBOOKS_ENVIRONMENT:-sandbox}
+      QUICKBOOKS_PRODUCTION_READS_ENABLED: ${QUICKBOOKS_PRODUCTION_READS_ENABLED:-false}
+    # Never inherit the API's ingress alias; Caddy must only resolve realtime/API processes.
+    networks: !override
+      - edge
+      - data
+      - scan
+    cpus: ${OPENROUND_JOBS_CPUS:-1.0}
+    mem_limit: ${OPENROUND_JOBS_MEMORY_LIMIT:-1024m}
+  control:
+    image: ${OPENROUND_CONTROL_IMAGE:?Set a reviewed immutable control image}
+    init: true
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs: [/tmp:size=64m, mode=1777]
+    environment:
+      NODE_ENV: production
+      CONTROL_ENABLED: "true"
+      CONTROL_PUBLIC_ORIGIN: https://${CONTROL_DOMAIN:?Set the operator hostname}
+      CONTROL_DATABASE_URL: ${CONTROL_DATABASE_URL:?Set the restricted operator database URL}
+      OPERATOR_OIDC_ISSUER: ${OPERATOR_OIDC_ISSUER:?Set the dedicated operator issuer}
+      OPERATOR_OIDC_CLIENT_ID: ${OPERATOR_OIDC_CLIENT_ID:?Set the dedicated operator client}
+      OPERATOR_OIDC_CLIENT_SECRET: ${OPERATOR_OIDC_CLIENT_SECRET:?Set the operator client secret}
+      OPERATOR_OIDC_MFA_POLICY_ENFORCED: "true"
+      OPERATOR_OIDC_REQUIRED_AMR: ${OPERATOR_OIDC_REQUIRED_AMR:-}
+      OPERATOR_OIDC_ALLOWED_ACR: ${OPERATOR_OIDC_ALLOWED_ACR:-}
+      OPERATOR_BOOTSTRAP_IDENTITIES: ${OPERATOR_BOOTSTRAP_IDENTITIES:?Set explicit operator identities}
+      INTEGRATION_SECRET_KEY: ${INTEGRATION_SECRET_KEY:?Set the shared integration encryption key}
+    networks: [edge, data]
+    cpus: ${OPENROUND_CONTROL_CPUS:-0.5}
+    mem_limit: ${OPENROUND_CONTROL_MEMORY_LIMIT:-512m}
+    pids_limit: 128
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3002/api/health/ready', { signal: AbortSignal.timeout(5000) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 8s
+      start_period: 30s
+      retries: 5
+    stop_grace_period: 30s
+  caddy:
+    environment:
+      CONTROL_DOMAIN: ${CONTROL_DOMAIN:?Set the operator hostname}
+      CONTROL_ALLOWED_CIDRS: ${CONTROL_ALLOWED_CIDRS:?Set reviewed operator network CIDRs}
+    volumes:
+      - ./infra/single-vm/Caddyfile.business:/etc/caddy/Caddyfile:ro
+      - ./infra/single-vm/Caddyfile:/etc/caddy/Caddyfile.base:ro

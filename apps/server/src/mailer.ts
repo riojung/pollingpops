@@ -5,9 +5,13 @@ import type { AppConfig } from "./config.js";
 export interface Mailer {
   sendMagicLink(email: string, verifyUrl: string): Promise<void>;
   sendWorkspaceInvitation(email: string, acceptUrl: string): Promise<void>;
+  sendOrganizationInvitation?(email: string, acceptUrl: string): Promise<void>;
 }
 
 export class ConsoleMailer implements Mailer {
+  async sendOrganizationInvitation(email: string, acceptUrl: string) {
+    process.stdout.write(`Organization invitation for ${email}: ${acceptUrl}\n`);
+  }
   async sendMagicLink(email: string, verifyUrl: string) {
     process.stdout.write(`Magic link for ${email}: ${verifyUrl}\n`);
   }
@@ -41,6 +45,15 @@ export class SmtpMailer implements Mailer {
       subject: `Join a ${PRODUCT_BRAND.name} workspace`,
       text: `You have been invited to collaborate in ${PRODUCT_BRAND.name}. This link expires in seven days.\n\n${acceptUrl}\n\nIf you did not expect this invitation, ignore this email.`,
       html: `<p>You have been invited to collaborate in ${PRODUCT_BRAND.name}. This link expires in seven days.</p><p><a href="${acceptUrl}">Review invitation</a></p><p>If you did not expect this invitation, ignore this email.</p>`,
+    });
+  }
+
+  async sendOrganizationInvitation(email: string, acceptUrl: string) {
+    await this.transport.sendMail({
+      from: this.config.EMAIL_FROM,
+      to: email,
+      subject: `Join a ${PRODUCT_BRAND.name} organization`,
+      text: `You have been invited to join an organization in ${PRODUCT_BRAND.name}. Review the invitation to see your role. It expires in seven days.\n\n${acceptUrl}\n\nIf you did not expect this invitation, ignore this email.`,
     });
   }
 }

@@ -10,9 +10,9 @@ export default function PricingPage() {
       <SiteHeader />
       <main className="shell page-main" id="main" lang="en-CA">
         <div className="section-heading">
-          <p className="eyebrow">Simple launch pricing</p>
+          <p className="eyebrow">Plans and pricing</p>
           <h1 style={{ fontSize: "clamp(2.8rem, 7vw, 5.4rem)" }}>
-            Start free. Pay for room to grow.
+            Start free. Plan for growing audiences.
           </h1>
           <p className="lead">
             Self-hosting remains free under Apache 2.0. Hosted plans cover operations and support.
@@ -32,20 +32,20 @@ export default function PricingPage() {
           </article>
           <article className="card">
             <span className="status-pill">Pro</span>
-            <h2 style={{ marginTop: 28 }}>$15 USD monthly</h2>
+            <h2 style={{ marginTop: 28 }}>Pricing will be announced</h2>
             <p>
               Hosted Pro: 100 participants, unlimited checkpoint sets, cohosting, CSV/JSON/QTI,
               accountless follow-up, 100 authoring jobs, 365-day reports, and one contrast-checked
               workspace theme.
             </p>
-            <Link className="button" href="/signin">
-              Start with Free
+            <Link className="button" href="/organization">
+              Organization billing
             </Link>
           </article>
         </div>
         <p className="notice" style={{ marginTop: 28 }}>
-          Pricing is a launch hypothesis. Taxes, live payment replay, and provider operations must
-          be completed and validated before general availability.
+          Hosted pricing will be announced after review. Signed-in organization billing
+          administrators can review offers when they are published.
         </p>
       </main>
       <SiteFooter />

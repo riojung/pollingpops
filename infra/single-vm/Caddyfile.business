@@ -1,0 +1,25 @@
+import /etc/caddy/Caddyfile.base
+
+{$CONTROL_DOMAIN} {
+	@outside_operator_network not remote_ip {$CONTROL_ALLOWED_CIDRS}
+	respond @outside_operator_network 404
+	reverse_proxy control:3002
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri query {
+				delete code
+				delete state
+				delete token
+			}
+			request>headers>Referer delete
+		}
+	}
+}

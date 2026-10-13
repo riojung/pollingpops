@@ -12,6 +12,7 @@ import {
   PublishedQuizLimitError,
   SessionCodeConflictError,
   SurveyError,
+  createPlatformRepository,
   type Repository,
   type SurveyRepository,
 } from "@openround/db";
@@ -292,6 +293,18 @@ export async function registerSurveyRoutes(
       const features = await deps.repository.getOperationalFeatures();
       if (!features.sessionCreation)
         throw new SurveyError("ROOM_CLOSED", "New room creation is temporarily paused");
+      if (deps.config.BUSINESS_PLATFORM_ENABLED && !deps.config.COMMUNITY_MODE) {
+        const platform = createPlatformRepository(deps.repository);
+        const organization = await platform.getOrganizationForWorkspace(actor.workspaceId);
+        const workspace = organization
+          ? (await platform.listOrganizationWorkspacesForOperator(organization.id)).find(
+              (entry) => entry.id === actor.workspaceId,
+            )
+          : null;
+        if (!organization || organization.status !== "active" || workspace?.status !== "active") {
+          throw new SurveyError("ROOM_CLOSED", "New launches are paused for this workspace");
+        }
+      }
       const now = Date.now();
       const closesAt = new Date(now + input.windowDays * 86400000);
       // Retain final results after collection closes, including the maximum Free window.

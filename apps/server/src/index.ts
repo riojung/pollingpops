@@ -1,6 +1,9 @@
 import { loadConfig } from "./config.js";
 import { startTelemetry } from "./tracing.js";
 import { ScopedAudienceOutboxWorker } from "./scoped-audience-outbox-worker.js";
+import { JobRunner } from "./job-runner.js";
+import { createPlatformRepository } from "@openround/db";
+import { createIntegrationWorker } from "@openround/control-plane";
 
 const config = loadConfig();
 const telemetry = startTelemetry(config);
@@ -10,6 +13,8 @@ const [{ buildApp }, { attachRealtime }] = await Promise.all([
 ]);
 const {
   app,
+  repository,
+  platformBillingWorker,
   sessions,
   interactions,
   audienceOutboxWorker,
@@ -39,6 +44,7 @@ const scopedAudienceOutboxWorker = new ScopedAudienceOutboxWorker(audienceScopes
   realtime.scopedAudience!.publish(event),
 );
 let activeScopedAudienceRun: Promise<unknown> | null = null;
+let activeAudienceRun: Promise<unknown> | null = null;
 const audienceOutboxTimer = setInterval(() => {
   if (!activeScopedAudienceRun) {
     activeScopedAudienceRun = scopedAudienceOutboxWorker
@@ -51,84 +57,104 @@ const audienceOutboxTimer = setInterval(() => {
         activeScopedAudienceRun = null;
       });
   }
-  void audienceOutboxWorker
-    .runUntilIdle()
-    .then((results) => {
-      if (results.includes("retry")) app.log.warn("audience outbox delivery will retry");
-    })
-    .catch((error: unknown) => app.log.error({ err: error }, "audience outbox relay failed"));
+  if (!activeAudienceRun) {
+    activeAudienceRun = audienceOutboxWorker
+      .runUntilIdle()
+      .catch(() => app.log.error("audience outbox relay failed"))
+      .finally(() => {
+        activeAudienceRun = null;
+      });
+  }
 }, 250);
 audienceOutboxTimer.unref();
-const retentionTimer = setInterval(() => {
-  void retention
-    .run(new Date())
-    .then((result) => {
-      if (
-        result.expiredLiveSessions > 0 ||
-        result.purgedSessions > 0 ||
-        result.purgedPracticeAssignments > 0 ||
-        result.purgedAuditEvents > 0 ||
-        result.purgedProductEvents > 0 ||
-        result.purgedMedia > 0
+const platform = createPlatformRepository(repository);
+const integrationWorker = createIntegrationWorker(platform);
+const jobs =
+  config.BACKGROUND_JOBS_MODE === "in_process"
+    ? new JobRunner(
+        [
+          {
+            name: "reports",
+            intervalMs: config.REPORT_WORKER_INTERVAL_MS,
+            run: () =>
+              Promise.all([reportWorker.runUntilIdle(), presentationReportWorker.runUntilIdle()]),
+          },
+          {
+            name: "retention",
+            intervalMs: config.RETENTION_INTERVAL_MINUTES * 60_000,
+            run: () => retention.run(new Date()),
+          },
+          {
+            name: "authoring",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => authoringWorker.runUntilIdle(),
+          },
+          {
+            name: "billing",
+            intervalMs: config.BUSINESS_BILLING_WORKER_INTERVAL_MS,
+            run: () => platformBillingWorker.runUntilIdle(),
+          },
+          {
+            name: "billing-reconciliation",
+            intervalMs: config.BUSINESS_BILLING_RECONCILE_INTERVAL_MS,
+            run: () => platformBillingWorker.reconcileAll(),
+          },
+          {
+            name: "integrations",
+            intervalMs: 5_000,
+            run: () =>
+              config.BUSINESS_PLATFORM_ENABLED
+                ? integrationWorker.runUntilIdle()
+                : Promise.resolve(),
+          },
+          {
+            name: "heartbeat",
+            intervalMs: 15_000,
+            run: () =>
+              config.BUSINESS_PLATFORM_ENABLED
+                ? platform.heartbeat({
+                    id: "jobs",
+                    status: "healthy",
+                    details: { process: "in_process", pid: process.pid },
+                  })
+                : Promise.resolve(),
+          },
+          {
+            name: "credit-reservations",
+            intervalMs: 60_000,
+            run: async () => {
+              if (!config.BUSINESS_PLATFORM_ENABLED) return;
+              for (const room of await platform.listReservedRoomCoverages(new Date())) {
+                await platform.releaseExpiredRoomReservation(room.artifactType, room.roomId);
+              }
+            },
+          },
+        ],
+        (name, error) =>
+          app.log.error(
+            { job: name, errorType: error instanceof Error ? error.name : "unknown" },
+            "background job failed",
+          ),
+        async (name) => {
+          if (!config.BUSINESS_PLATFORM_ENABLED) return true;
+          const controlId =
+            name === "integrations"
+              ? "business-integrations"
+              : name === "billing"
+                ? "billing-reconciliation"
+                : name;
+          return !(await platform.getWorkerControl(controlId))?.paused;
+        },
       )
-        app.log.info(result, "retention purge completed");
-      if (result.failedMedia > 0)
-        app.log.warn(result, "retention media cleanup requires attention");
-    })
-    .catch((error: unknown) => app.log.error({ err: error }, "retention purge failed"));
-}, config.RETENTION_INTERVAL_MINUTES * 60_000);
-retentionTimer.unref();
-
-let activeReportRun: Promise<void> | null = null;
-const runReportWorkers = () => {
-  if (activeReportRun) return activeReportRun;
-  const run = Promise.all([reportWorker.runUntilIdle(), presentationReportWorker.runUntilIdle()])
-    .then(([roundResults, presentationResults]) => {
-      const roundCompleted = roundResults.filter((result) => result === "completed").length;
-      const presentationCompleted = presentationResults.filter(
-        (result) => result === "completed",
-      ).length;
-      if (roundCompleted + presentationCompleted > 0) {
-        app.log.info({ roundCompleted, presentationCompleted }, "report generation completed");
-      }
-      if (roundResults.includes("failed") || presentationResults.includes("failed")) {
-        app.log.error("report generation exhausted its retries");
-      }
-    })
-    .catch((error: unknown) => app.log.error({ err: error }, "report worker failed"));
-  const tracked = run.finally(() => {
-    activeReportRun = null;
-  });
-  activeReportRun = tracked;
-  return tracked;
-};
-
-const reportTimer = setInterval(() => {
-  void runReportWorkers();
-}, config.REPORT_WORKER_INTERVAL_MS);
-reportTimer.unref();
-
-const authoringTimer = setInterval(() => {
-  void authoringWorker
-    .runUntilIdle()
-    .then((results) => {
-      const completed = results.filter((result) => result === "completed").length;
-      if (completed > 0) app.log.info({ completed }, "authoring jobs completed");
-      if (results.includes("failed")) app.log.warn("an authoring job failed");
-    })
-    .catch((error: unknown) => app.log.error({ err: error }, "authoring worker failed"));
-}, config.AUTHORING_WORKER_INTERVAL_MS);
-authoringTimer.unref();
+    : null;
+jobs?.start();
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, "graceful shutdown started");
-  clearInterval(retentionTimer);
-  clearInterval(reportTimer);
-  clearInterval(authoringTimer);
   clearInterval(audienceOutboxTimer);
-  await activeScopedAudienceRun;
+  await Promise.allSettled([activeScopedAudienceRun, activeAudienceRun]);
+  await jobs?.stop();
   await realtime.close();
-  await activeReportRun;
   await app.close();
   await telemetry.shutdown();
   process.exit(0);

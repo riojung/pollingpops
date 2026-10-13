@@ -37,6 +37,9 @@ export default function AccountPage() {
   const tRef = useRef(t);
   const router = useRouter();
   const [creator, setCreator] = useState<Creator | null>(null);
+  const [userIdentity, setUserIdentity] = useState<{ userId: string; email: string } | null>(null);
+  const [billingOnly, setBillingOnly] = useState(false);
+  const [businessManagementEnabled, setBusinessManagementEnabled] = useState(false);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [theme, setTheme] = useState<BrandTheme>(() => ({
     organizationName: t("account.theme.defaultOrganizationName"),
@@ -76,6 +79,7 @@ export default function AccountPage() {
       apiFetch<{
         creator: Creator;
         entitlements: Entitlements;
+        businessManagementEnabled?: boolean;
         productFeatures?: { uxBeta?: boolean; workspaceShell?: boolean };
       }>("/v1/auth/me"),
       apiFetch<{ theme: BrandTheme | null; enabled: boolean }>("/v1/account/theme"),
@@ -86,6 +90,7 @@ export default function AccountPage() {
     ])
       .then(async ([account, branding, workspaceList, embedPolicy, policy, identities]) => {
         setCreator(account.creator);
+        setBusinessManagementEnabled(account.businessManagementEnabled === true);
         setEntitlements(account.entitlements);
         setUxBeta(Boolean(account.productFeatures?.uxBeta));
         setProductFeatures({ workspaceShell: account.productFeatures?.workspaceShell === true });
@@ -120,8 +125,22 @@ export default function AccountPage() {
         }
       })
       .catch((caught) => {
-        if ((caught as { status?: number }).status === 401) router.replace("/signin");
-        else setError(humanError(caught));
+        if ((caught as { status?: number }).status === 401) {
+          void apiFetch<{
+            user: { userId: string; email: string };
+            businessManagementEnabled: boolean;
+          }>("/v1/auth/user")
+            .then((identity) => {
+              if (!identity.businessManagementEnabled) {
+                router.replace("/signin");
+                return;
+              }
+              setUserIdentity(identity.user);
+              setBusinessManagementEnabled(true);
+              setBillingOnly(true);
+            })
+            .catch(() => router.replace("/signin"));
+        } else setError(humanError(caught));
       });
   }, [router]);
 
@@ -430,6 +449,64 @@ export default function AccountPage() {
         .map(([name]) => capabilityLabels[name as keyof typeof capabilityLabels])
     : [];
 
+  if (billingOnly && userIdentity)
+    return (
+      <main className="shell" lang="en-CA">
+        <section className="panel">
+          <h1>Personal account</h1>
+          <p>{userIdentity.email}</p>
+          <Link className="button button-quiet" href="/organization">
+            Organizations and billing
+          </Link>
+          <p className="muted">
+            Your sign-in is active. Workspace membership is required to open polls and reports.
+            Organization permissions determine billing access.
+          </p>
+          <button
+            className="button-quiet"
+            disabled={busy !== ""}
+            onClick={() =>
+              void apiFetch("/v1/auth/logout", { method: "POST" })
+                .then(() => router.replace("/"))
+                .catch((caught) => setError(humanError(caught)))
+            }
+          >
+            Sign out
+          </button>
+        </section>
+        <section className="panel danger-panel">
+          <h2>Delete personal account</h2>
+          <p>
+            Organization content and financial records are retained. Transfer ownership or close any
+            organization you own before deleting your sign-in.
+          </p>
+          {error ? (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <form onSubmit={deleteAccount}>
+            <label className="field">
+              Type DELETE to confirm
+              <input
+                className="input"
+                autoComplete="off"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+            </label>
+            <button
+              className="button-danger"
+              disabled={confirmation !== "DELETE" || busy !== ""}
+              type="submit"
+            >
+              {busy === "delete" ? "Deleting…" : "Delete personal account"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+
   const content = (
     <div className={uxBeta ? styles.account : undefined}>
       {error ? (
@@ -443,6 +520,22 @@ export default function AccountPage() {
         </p>
       ) : null}
       <div className="settings-grid">
+        {businessManagementEnabled ? (
+          <section className="panel" lang="en-CA">
+            <h2>Organization management</h2>
+            <p className="muted">
+              Manage organization roles, workspace licenses, billing, and shared event credits.
+            </p>
+            <div className="actions">
+              <Link className="button button-quiet" href="/organization">
+                Organization and billing
+              </Link>
+              <Link className="button button-quiet" href="/organization#event-credits">
+                Event credits
+              </Link>
+            </div>
+          </section>
+        ) : null}
         <section className="panel">
           <p className="eyebrow">{t("account.workspace.eyebrow")}</p>
           <h2 style={{ fontSize: "1.8rem" }}>{t("account.workspace.title")}</h2>
@@ -894,7 +987,14 @@ export default function AccountPage() {
         <section className="panel danger-panel">
           <p className="eyebrow">{t("account.delete.eyebrow")}</p>
           <h2 style={{ fontSize: "1.8rem" }}>{t("account.delete.title")}</h2>
-          <p className="muted">{t("account.delete.description")}</p>
+          {businessManagementEnabled ? (
+            <p className="muted" lang="en-CA">
+              Delete your personal sign-in. Organization content and financial records are retained.
+              Transfer ownership or close your organizations first.
+            </p>
+          ) : (
+            <p className="muted">{t("account.delete.description")}</p>
+          )}
           <form onSubmit={deleteAccount}>
             <label className="field" htmlFor="delete-confirmation">
               <span>{t("account.delete.confirm", { confirmation: "DELETE" })}</span>

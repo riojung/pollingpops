@@ -296,6 +296,7 @@ This file is not legal advice.
 | safer-buffer                          | 2.1.2               | [Project page](https://github.com/ChALkeR/safer-buffer#readme)                                      |
 | sanitize-html                         | 2.18.0              | [Project page](https://github.com/apostrophecms/apostrophe/tree/main/packages/sanitize-html#readme) |
 | scheduler                             | 0.28.0              | [Project page](https://react.dev/)                                                                  |
+| server-only                           | 0.0.1               | [Project page](https://reactjs.org/)                                                                |
 | set-cookie-parser                     | 2.7.2               | [Project page](https://github.com/nfriedly/set-cookie-parser)                                       |
 | socket.io                             | 4.8.4               | [Project page](https://github.com/socketio/socket.io/tree/main/packages/socket.io#readme)           |
 | socket.io-adapter                     | 2.5.8               | [Project page](https://github.com/socketio/socket.io/tree/main/packages/socket.io-adapter#readme)   |

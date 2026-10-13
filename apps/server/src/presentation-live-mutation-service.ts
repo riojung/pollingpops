@@ -11,6 +11,7 @@ import {
   type PresentationResponseAck,
   type PresentationResponseSubmit,
   type PresentationSessionResponse,
+  type Entitlements,
 } from "@openround/contracts";
 import {
   PresentationPublishedQuestionSourceUnavailableError,
@@ -113,6 +114,7 @@ type PresentationEntitlementConfig = Pick<
 >;
 
 interface PresentationLiveMutationDependencies {
+  resolveRoomEntitlements?: (sessionId: string, workspaceId: string) => Promise<Entitlements>;
   sessions: PresentationMutationSessionRepository;
   repository: PresentationMutationRepository;
   config: PresentationEntitlementConfig;
@@ -284,6 +286,7 @@ export class PresentationLiveMutationService {
       const transitionRetentionExpiresAt = await this.transitionRetentionExpiry(
         input.workspaceId,
         transition.status,
+        input.sessionId,
       );
       const updated = await this.dependencies.sessions.transitionSession({
         workspaceId: input.workspaceId,
@@ -410,6 +413,7 @@ export class PresentationLiveMutationService {
       const transitionRetentionExpiresAt = await this.transitionRetentionExpiry(
         session.workspaceId,
         transition.status,
+        session.id,
       );
       const accepted = await this.dependencies.sessions.transitionSessionCommand({
         workspaceId: session.workspaceId,
@@ -823,14 +827,20 @@ export class PresentationLiveMutationService {
     });
   }
 
-  private async transitionRetentionExpiry(workspaceId: string, status: "active" | "finished") {
+  private async transitionRetentionExpiry(
+    workspaceId: string,
+    status: "active" | "finished",
+    sessionId: string,
+  ) {
     if (status !== "finished") return undefined;
     return retentionExpiry(
       new Date(),
-      entitlementsFor(
-        await this.dependencies.repository.getPlan(workspaceId),
-        this.dependencies.config,
-      ),
+      this.dependencies.resolveRoomEntitlements
+        ? await this.dependencies.resolveRoomEntitlements(sessionId, workspaceId)
+        : entitlementsFor(
+            await this.dependencies.repository.getPlan(workspaceId),
+            this.dependencies.config,
+          ),
     );
   }
 

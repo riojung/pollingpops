@@ -20,3 +20,5 @@ export * from "./recovery-pack-types.js";
 export { recoveryPackTextOnlyLiveEligible } from "./recovery-pack-live-metadata.js";
 export * from "./recovery-packs.js";
 export * from "./feedback.js";
+export * from "./platform-types.js";
+export * from "./platform.js";

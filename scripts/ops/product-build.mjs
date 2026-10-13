@@ -178,7 +178,7 @@ async function writeManifest(
 
 export async function scanImagesForVulnerabilities(imageRecords, runCommand = run) {
   const failures = [];
-  for (const component of ["server", "web"]) {
+  for (const component of Object.keys(imageRecords)) {
     try {
       await runCommand(
         "trivy",
@@ -213,7 +213,7 @@ export async function finalizeImages(imageRecords, { config, shouldSign, runComm
   }
 
   if (shouldSign) {
-    for (const component of ["server", "web"]) {
+    for (const component of Object.keys(imageRecords)) {
       await runCommand("cosign", ["sign", "--yes", imageRecords[component].ref], {
         cwd: repositoryRoot,
       });
@@ -221,7 +221,7 @@ export async function finalizeImages(imageRecords, { config, shouldSign, runComm
   }
 
   if (config.requireSigning) {
-    for (const component of ["server", "web"]) {
+    for (const component of Object.keys(imageRecords)) {
       await runCommand(
         "cosign",
         [
@@ -237,7 +237,7 @@ export async function finalizeImages(imageRecords, { config, shouldSign, runComm
     }
   }
 
-  for (const component of ["server", "web"]) {
+  for (const component of Object.keys(imageRecords)) {
     imageRecords[component].signed = shouldSign;
   }
 }
@@ -298,8 +298,9 @@ export async function main(argv = process.argv.slice(2)) {
       imagePlatform: config.imagePlatform,
       publicApiUrl: config.publicApiUrl,
       requireSigning: false,
+      requireControl: config.singleVm?.composeFiles.includes("compose.single-vm.business.yaml"),
     });
-    for (const component of ["server", "web"]) {
+    for (const component of Object.keys(manifest.images)) {
       if (manifest.images[component].signed) {
         throw new Error(`images.${component} is already recorded as signed`);
       }
@@ -365,7 +366,13 @@ export async function main(argv = process.argv.slice(2)) {
   const workDirectory = await mkdtemp(join(tmpdir(), "openround-build-"));
   const imageRecords = {};
   try {
-    for (const component of ["server", "web"]) {
+    for (const component of [
+      "server",
+      "web",
+      ...(config.singleVm?.composeFiles.includes("compose.single-vm.business.yaml")
+        ? ["control"]
+        : []),
+    ]) {
       const repository = `${config.imageRepository}-${component}`;
       const tag = `${repository}:${tagSuffix}`;
       const metadataPath = join(workDirectory, `${component}.json`);

@@ -376,6 +376,33 @@ describe("production release target boundary", () => {
 });
 
 describe("release image vulnerability evidence", () => {
+  it("scans and signs the optional control image with the same immutable release", async () => {
+    const controlRef = `ghcr.io/example/openround-control@sha256:${"3".repeat(64)}`;
+    const images = {
+      server: { ref: serverRef, signed: false },
+      web: { ref: webRef, signed: false },
+      control: { ref: controlRef, signed: false },
+    };
+    const calls: Array<{ command: string; ref: string | undefined }> = [];
+    await finalizeImages(images, {
+      config: {
+        requireSigning: true,
+        cosignIdentityRegexp: "^https://github.com/example/.*$",
+        cosignOidcIssuer: "https://token.actions.githubusercontent.com",
+      },
+      shouldSign: true,
+      runCommand: async (command: string, args: string[]) => {
+        calls.push({ command, ref: args.at(-1) });
+        return { stdout: "", stderr: "" };
+      },
+    });
+    expect(calls.filter(({ ref }) => ref === controlRef).map(({ command }) => command)).toEqual([
+      "trivy",
+      "cosign",
+      "cosign",
+    ]);
+    expect(images.control.signed).toBe(true);
+  });
   it("scans both immutable references before reporting vulnerability failures", async () => {
     const runCommand = vi.fn(async (_command: string, args: string[]) => {
       throw new Error(`vulnerable: ${args.at(-1)}`);

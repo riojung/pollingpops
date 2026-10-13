@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { z } from "zod";
 import { LOCALE_COOKIE_NAME, PRODUCT_BRAND } from "@openround/contracts";
+import { parseCatalog } from "@openround/control-plane";
 
 const booleanString = z
   .enum(["true", "false"])
@@ -259,6 +260,41 @@ export const ConfigSchema = z
     AUTH_DEBUG_MAGIC_LINKS: booleanString,
     POLICY_VERSION: z.string().trim().min(1).max(80).default("2026-09-14-draft"),
     BILLING_MODE: z.enum(["disabled", "stripe"]).default("disabled"),
+    BUSINESS_PLATFORM_ENABLED: booleanString,
+    BUSINESS_EVENT_CREDITS_ENABLED: booleanString,
+    BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED: booleanString,
+    BACKGROUND_JOBS_MODE: z.enum(["in_process", "separate"]).default("in_process"),
+    BUSINESS_CATALOG_JSON: z
+      .string()
+      .default("[]")
+      .superRefine((value, context) => {
+        try {
+          parseCatalog(value);
+        } catch {
+          context.addIssue({
+            code: "custom",
+            message: "Invalid business catalog; validate offers, versions, and published prices",
+          });
+        }
+      }),
+    BUSINESS_BILLING_WORKER_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(60_000)
+      .default(3_000),
+    BUSINESS_BILLING_WORKER_LEASE_MS: z.coerce
+      .number()
+      .int()
+      .min(10_000)
+      .max(600_000)
+      .default(120_000),
+    BUSINESS_BILLING_RECONCILE_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(86_400_000)
+      .default(900_000),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     STRIPE_PRO_PRICE_ID: z.string().optional(),
@@ -509,13 +545,16 @@ export const ConfigSchema = z
       });
     }
     if (config.BILLING_MODE === "stripe") {
-      for (const key of [
-        "STRIPE_SECRET_KEY",
-        "STRIPE_WEBHOOK_SECRET",
-        "STRIPE_PRO_PRICE_ID",
-      ] as const) {
+      for (const key of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const) {
         if (!config[key])
           ctx.addIssue({ code: "custom", path: [key], message: "Required for Stripe billing" });
+      }
+      if (!config.BUSINESS_PLATFORM_ENABLED && !config.STRIPE_PRO_PRICE_ID) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["STRIPE_PRO_PRICE_ID"],
+          message: "Required for legacy Stripe billing",
+        });
       }
     }
     if (config.MEDIA_SCAN_MODE === "clamav" && (!config.CLAMAV_HOST || !config.S3_ENDPOINT)) {

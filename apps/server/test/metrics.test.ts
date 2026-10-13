@@ -2,6 +2,68 @@ import { describe, expect, it } from "vitest";
 import { MetricsService } from "../src/metrics.js";
 
 describe("MetricsService", () => {
+  it("omits projection availability when business health is not enabled", async () => {
+    const metrics = new MetricsService();
+    expect(await metrics.render()).not.toContain("openround_business_projection_up");
+  });
+
+  it("reports a failed initial business health collection as unavailable", async () => {
+    const metrics = new MetricsService();
+    metrics.bindBusinessHealth(async () => {
+      throw new Error("Database unavailable");
+    });
+    expect(await metrics.render()).toContain("openround_business_projection_up 0");
+  });
+
+  it("projects durable business health without tenant or external identifiers", async () => {
+    const metrics = new MetricsService();
+    metrics.bindBusinessHealth(async () => ({
+      billing: { pending: 4, processing: 1, failed: 2, oldestPendingAgeSeconds: 950 },
+      integrations: [
+        {
+          integration: "hubspot",
+          pending: 3,
+          processing: 0,
+          failed: 1,
+          ambiguous: 2,
+          oldestPendingAgeSeconds: 120,
+        },
+      ],
+      reservations: { active: 9, expired: 1 },
+      productQueues: [
+        {
+          kind: "round-report",
+          pending: 1,
+          processing: 0,
+          failed: 2,
+          oldestPendingAgeSeconds: 500,
+          failedIds: ["private-report-id"],
+          retryableFailedIds: ["private-report-id"],
+        },
+      ],
+      heartbeats: [{ id: "jobs", status: "degraded", ageSeconds: 110 }],
+    }));
+    const rendered = await metrics.render();
+    expect(rendered).toContain("openround_business_projection_up 1");
+    expect(rendered).toContain('openround_business_queue_jobs{queue="billing",state="failed"} 2');
+    expect(rendered).toContain(
+      'openround_business_queue_jobs{queue="hubspot",state="ambiguous"} 2',
+    );
+    expect(rendered).toContain('openround_business_queue_oldest_seconds{queue="billing"} 950');
+    expect(rendered).toContain(
+      'openround_business_queue_jobs{queue="round-report",state="failed"} 2',
+    );
+    expect(rendered).not.toContain("private-report-id");
+    expect(rendered).toContain(
+      'openround_business_worker_heartbeat_age_seconds{worker="jobs"} 110',
+    );
+    expect(rendered).toContain('openround_event_credit_reservations{state="expired"} 1');
+    expect(rendered).not.toMatch(/organizationId|workspaceId|roomId|externalId/);
+    metrics.bindBusinessHealth(async () => {
+      throw new Error("Database unavailable");
+    });
+    expect(await metrics.render()).toContain("openround_business_projection_up 0");
+  });
   it("records bounded client event receipt dimensions", async () => {
     const metrics = new MetricsService();
 

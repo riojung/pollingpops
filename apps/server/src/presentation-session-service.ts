@@ -22,14 +22,22 @@ import {
 import {
   SessionCodeConflictError,
   WorkspaceDeletionInProgressError,
+  createPlatformRepository,
+  PlatformError,
   type PresentationRepository,
   type PresentationSessionRecord,
   type PresentationSessionRepository,
   type RecoveryPackRepository,
   type Repository,
 } from "@openround/db";
-import type { AppConfig } from "./config.js";
-import { entitlementsFor, retentionExpiry } from "./entitlements.js";
+import { retentionExpiry } from "./entitlements.js";
+import {
+  roomCreationPolicy,
+  roomEntitlements,
+  coverageRequest,
+  roomCreationIdentity,
+} from "./room-entitlements.js";
+import type { RoomEntitlementConfig } from "./room-entitlements.js";
 import {
   PresentationLiveMutationService,
   type SubmitPresentationResponseInput,
@@ -122,13 +130,7 @@ export class PresentationSessionService {
       presentations: PresentationRepository;
       sessions: PresentationSessionRepository;
       packs?: RecoveryPackRepository;
-      config: Pick<
-        AppConfig,
-        | "COMMUNITY_MODE"
-        | "COMMUNITY_REPORT_RETENTION_DAYS"
-        | "MAX_SESSION_PARTICIPANTS"
-        | "MAX_PRACTICE_PERSONAL_LINKS"
-      >;
+      config: RoomEntitlementConfig;
       storage: StorageService;
       productEvents?: ProductEventDispatcher;
       productEventsEnabled?: (workspaceId: string) => boolean;
@@ -142,6 +144,14 @@ export class PresentationSessionService {
       sessions: dependencies.sessions,
       repository: dependencies.repository,
       config: dependencies.config,
+      resolveRoomEntitlements: (sessionId, workspaceId) =>
+        roomEntitlements(
+          dependencies.repository,
+          dependencies.config,
+          "presentation",
+          sessionId,
+          workspaceId,
+        ),
       packs: dependencies.packs,
       recoveryPackLiveInsertionEnabled: dependencies.recoveryPackLiveInsertionEnabled,
       quickCheckLiveInsertionEnabled: dependencies.quickCheckLiveInsertionEnabled,
@@ -238,7 +248,47 @@ export class PresentationSessionService {
     presentationId: string;
     timeMode?: PresentationTimeMode;
     requestId: string;
+    useEventCredit?: boolean;
+    idempotencyKey?: string;
   }) {
+    const creation =
+      this.dependencies.config.BUSINESS_PLATFORM_ENABLED && !this.dependencies.config.COMMUNITY_MODE
+        ? roomCreationIdentity(input.workspaceId, "presentation", input.idempotencyKey, {
+            presentationId: input.presentationId,
+            timeMode: input.timeMode ?? "timed",
+            useEventCredit: input.useEventCredit ?? false,
+          })
+        : null;
+    const replay = async (existing: PresentationSessionRecord) => {
+      const coverage = await createPlatformRepository(this.dependencies.repository).getRoomCoverage(
+        "presentation",
+        existing.id,
+      );
+      if (!creation || coverage?.creationKey !== creation.creationKey) {
+        throw new PlatformError(
+          "CONFLICT",
+          "Room idempotency key was used for a different request",
+        );
+      }
+      const pass = await this.createControlPass({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        sessionId: existing.id,
+        requestId: input.requestId,
+      });
+      return {
+        snapshot: await this.restHostSnapshot(existing),
+        controlToken: pass.controlToken,
+        controlCredentialId: pass.credentialId,
+      };
+    };
+    if (creation) {
+      const existing = await this.sessions.getSessionForWorkspace(
+        input.workspaceId,
+        creation.roomId,
+      );
+      if (existing) return replay(existing);
+    }
     const institutionPolicy = await this.dependencies.repository.getInstitutionPolicy(
       input.workspaceId,
     );
@@ -275,12 +325,17 @@ export class PresentationSessionService {
       );
     }
     const now = new Date();
-    const plan = await this.dependencies.repository.getPlan(input.workspaceId);
+    const policy = await roomCreationPolicy(
+      this.dependencies.repository,
+      this.dependencies.config,
+      input.workspaceId,
+      input.useEventCredit,
+    );
     let session: PresentationSessionRecord | null = null;
     let controlToken: string | null = null;
     let controlCredentialId: string | null = null;
     for (let attempt = 0; attempt < 20 && !session; attempt += 1) {
-      const candidateSessionId = randomUUID();
+      const candidateSessionId = creation?.roomId ?? randomUUID();
       const candidateControlToken = presentationCredentialToken();
       try {
         const liveExpiresAt = new Date(now.getTime() + PRESENTATION_SESSION_LIFETIME_MS);
@@ -288,6 +343,14 @@ export class PresentationSessionService {
           {
             id: candidateSessionId,
             workspaceId: input.workspaceId,
+            commercialCoverage: coverageRequest(policy, {
+              artifactType: "presentation",
+              roomId: candidateSessionId,
+              workspaceId: input.workspaceId,
+              actorId: input.userId,
+              expiresAt: liveExpiresAt,
+              creationKey: creation?.creationKey,
+            }),
             presentationId: presentation.id,
             presentationVersionId: version.id,
             title: version.content.title,
@@ -309,10 +372,7 @@ export class PresentationSessionService {
             updatedAt: now,
             finishedAt: null,
             liveExpiresAt,
-            retentionExpiresAt: retentionExpiry(
-              now,
-              entitlementsFor(plan, this.dependencies.config),
-            ),
+            retentionExpiresAt: retentionExpiry(now, policy.entitlements),
           },
           {
             id: randomUUID(),
@@ -337,6 +397,13 @@ export class PresentationSessionService {
           );
         }
         const databaseError = error as { code?: string; constraint?: string; message?: string };
+        if (creation && databaseError.code === "23505") {
+          const existing = await this.sessions.getSessionForWorkspace(
+            input.workspaceId,
+            creation.roomId,
+          );
+          if (existing) return replay(existing);
+        }
         const codeConflict =
           error instanceof SessionCodeConflictError ||
           (databaseError.code === "23505" &&
@@ -628,8 +695,15 @@ export class PresentationSessionService {
     }
     const participantToken = `${randomUUID()}.${randomBytes(24).toString("base64url")}`;
     const now = new Date();
-    const plan = await this.dependencies.repository.getPlan(session.workspaceId);
-    const participantLimit = entitlementsFor(plan, this.dependencies.config).maxParticipants;
+    const participantLimit = (
+      await roomEntitlements(
+        this.dependencies.repository,
+        this.dependencies.config,
+        "presentation",
+        session.id,
+        session.workspaceId,
+      )
+    ).maxParticipants;
     const joined = await this.sessions
       .joinParticipantWithinLimit(
         {

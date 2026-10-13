@@ -30,6 +30,9 @@ import {
   SessionNotActiveError,
   SessionVersionConflictError,
   WorkspaceDeletionInProgressError,
+  createPlatformRepository,
+  PlatformError,
+  MemoryRepository,
   type AudienceOutboxRecord,
   type CreatorContext,
   type ParticipantRecord,
@@ -65,7 +68,13 @@ import {
 } from "./security.js";
 import { createPendingReport } from "./reporting.js";
 import type { MetricsService } from "./metrics.js";
-import { entitlementsFor, retentionExpiry } from "./entitlements.js";
+import { retentionExpiry } from "./entitlements.js";
+import {
+  roomCreationPolicy,
+  roomEntitlements,
+  coverageRequest,
+  roomCreationIdentity,
+} from "./room-entitlements.js";
 import { ProductEventDispatcher, type ProductEventInput } from "./product-events.js";
 import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 import { decisionEventsForTransition } from "./session-decision-replay.js";
@@ -471,6 +480,15 @@ export class SessionService {
     allowedRoles: SessionStaffRole[],
   ): Promise<{ rootHost: boolean; credential: SessionStaffCredentialRecord | null }> {
     if (safeHashEqual(session.hostTokenHash, tokenHash)) {
+      const principal = await this.repository.getUserPrincipalById(session.hostId);
+      // Memory-only protocol fixtures may use synthetic hosts; persisted customers must exist.
+      if (
+        !principal &&
+        (!(this.repository instanceof MemoryRepository) ||
+          this.repository.users.has(session.hostId))
+      ) {
+        throw new SessionError("UNAUTHORIZED", "The hosting account no longer has access");
+      }
       return { rootHost: true, credential: null };
     }
     const credential = await this.staffForTokenHash(tokenHash);
@@ -549,15 +567,26 @@ export class SessionService {
     if (creator.role === "viewer") {
       throw new SessionError("UNAUTHORIZED", "Viewers cannot create session staff credentials");
     }
-    if (input.role === "cohost" && !entitlementsFor(creator.plan, this.config).cohosting) {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session || session.workspaceId !== creator.workspaceId) {
+      throw new SessionError("NOT_FOUND", "Session not found");
+    }
+    if (
+      input.role === "cohost" &&
+      !(
+        await roomEntitlements(
+          this.repository,
+          this.config,
+          "round",
+          sessionId,
+          creator.workspaceId,
+        )
+      ).cohosting
+    ) {
       throw new SessionError(
         "ENTITLEMENT_LIMIT",
         "Shareable cohost access is available on Pro, Team, and Community plans",
       );
-    }
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.workspaceId !== creator.workspaceId) {
-      throw new SessionError("NOT_FOUND", "Session not found");
     }
     const token = opaqueToken();
     const embedPolicyKey = input.role === "presenter" ? opaqueToken() : undefined;
@@ -788,10 +817,45 @@ export class SessionService {
       experiencePresetOverride?: ExperiencePresetId;
       presenterSoundEnabled?: boolean;
       clientCapabilities?: RoundClientCapabilities;
+      useEventCredit?: boolean;
+      idempotencyKey?: string;
     } = {},
   ): Promise<{ sessionId: string; code: string; hostToken: string; snapshot: SessionSnapshot }> {
     if (creator.role === "viewer") {
       throw new SessionError("UNAUTHORIZED", "Viewers cannot host live rounds");
+    }
+    const creation =
+      this.config.BUSINESS_PLATFORM_ENABLED && !this.config.COMMUNITY_MODE
+        ? roomCreationIdentity(creator.workspaceId, "round", experience.idempotencyKey, {
+            quizId,
+            settings,
+            experiencePresetOverride: experience.experiencePresetOverride,
+            presenterSoundEnabled: experience.presenterSoundEnabled ?? false,
+            useEventCredit: experience.useEventCredit ?? false,
+          })
+        : null;
+    const replay = async (existing: StoredSession) => {
+      const coverage = await createPlatformRepository(this.repository).getRoomCoverage(
+        "round",
+        existing.id,
+      );
+      if (!creation || coverage?.creationKey !== creation.creationKey) {
+        throw new PlatformError(
+          "CONFLICT",
+          "Room idempotency key was used for a different request",
+        );
+      }
+      const pass = await this.createCreatorControlPass(creator, existing.id);
+      return {
+        sessionId: existing.id,
+        code: existing.state.code,
+        hostToken: pass.token,
+        snapshot: snapshotForRole(existing.state, { role: "host" }),
+      };
+    };
+    if (creation) {
+      const existing = await this.repository.getSessionById(creation.roomId);
+      if (existing) return replay(existing);
     }
     if (
       settings.timeMode === "flex" &&
@@ -821,10 +885,13 @@ export class SessionService {
     );
     if (!version) throw new SessionError("NOT_FOUND", "Published quiz version not found");
     requireRoundClient({ roundProtocol: legacyRoundProtocol() }, experience.clientCapabilities);
-    const plan = this.config.COMMUNITY_MODE
-      ? "team"
-      : await this.repository.getPlan(creator.workspaceId);
-    const entitlements = entitlementsFor(plan, this.config);
+    const policy = await roomCreationPolicy(
+      this.repository,
+      this.config,
+      creator.workspaceId,
+      experience.useEventCredit,
+    );
+    const entitlements = policy.entitlements;
     if (settings.audienceLimit > entitlements.maxParticipants) {
       throw new SessionError(
         "ENTITLEMENT_LIMIT",
@@ -842,7 +909,7 @@ export class SessionService {
       brandTheme,
     });
 
-    const sessionId = randomUUID();
+    const sessionId = creation?.roomId ?? randomUUID();
     const hostToken = opaqueToken();
     const now = new Date();
     const ttlMs = 24 * 60 * 60_000;
@@ -868,6 +935,14 @@ export class SessionService {
           quizVersionId: version.id,
           hostId: creator.userId,
           hostTokenHash: hashToken(hostToken),
+          commercialCoverage: coverageRequest(policy, {
+            artifactType: "round",
+            roomId: sessionId,
+            workspaceId: creator.workspaceId,
+            actorId: creator.userId,
+            expiresAt: new Date(now.getTime() + ttlMs),
+            creationKey: creation?.creationKey,
+          }),
           trustMode: settings.trustMode ?? "learning",
           decisionReplayEnabled: evidenceWorkspaceFeatureEnabled(
             this.config,
@@ -900,6 +975,10 @@ export class SessionService {
           updatedAt: now,
         };
         return await this.mutate(sessionId, "create", async () => {
+          if (creation) {
+            const existing = await this.repository.getSessionById(sessionId);
+            if (existing) return replay(existing);
+          }
           await this.repository.createSession(session);
           retained = true;
           await this.cache.set(session.state, ttlMs / 1_000).catch(() => undefined);
@@ -924,9 +1003,16 @@ export class SessionService {
           };
         });
       } catch (error) {
+        if (creation && (error as { code?: string }).code === "23505") {
+          const existing = await this.repository.getSessionById(creation.roomId);
+          if (existing) return replay(existing);
+        }
         if (error instanceof SessionCodeConflictError) continue;
         if (error instanceof WorkspaceDeletionInProgressError) {
           throw new SessionError("CONFLICT", "This workspace is being deleted");
+        }
+        if (error instanceof SessionNotActiveError) {
+          throw new SessionError("SESSION_LOCKED", "This session has ended or expired");
         }
         throw error;
       } finally {
@@ -1146,6 +1232,9 @@ export class SessionService {
         session.state = priorState;
         if (error instanceof WorkspaceDeletionInProgressError) {
           throw new SessionError("CONFLICT", "This workspace is being deleted");
+        }
+        if (error instanceof SessionNotActiveError) {
+          throw new SessionError("SESSION_LOCKED", "This session has ended or expired");
         }
         throw error;
       }
@@ -1686,12 +1775,15 @@ export class SessionService {
                 const expectedVersion = session.state.version;
                 session.state = result.state;
                 if (priorPhase !== "finished" && session.state.phase === "finished") {
-                  const plan = this.config.COMMUNITY_MODE
-                    ? "team"
-                    : await this.repository.getPlan(session.workspaceId);
                   session.retentionExpiresAt = retentionExpiry(
                     commandTime,
-                    entitlementsFor(plan, this.config),
+                    await roomEntitlements(
+                      this.repository,
+                      this.config,
+                      "round",
+                      session.id,
+                      session.workspaceId,
+                    ),
                   );
                 }
                 const report =

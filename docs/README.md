@@ -25,6 +25,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 
 ## Build and operate
 
+- [Hosted business management](business-management.md) covers organization billing, workspace
+  licenses, event credits, the operator console, dedicated jobs, and commercial launch gates.
 - [Local operations quick guide](quick-start.md#day-to-day-commands) covers routine profile-aware
   restarts, logs, data-preserving stops, and the boundary between cleanup and an intentional reset.
 - [Implementation status](implementation-status.md) describes what is implemented and what remains a release gate.

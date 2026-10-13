@@ -374,7 +374,7 @@ describe("presentation response acceptance", () => {
 
   it("enforces the participant limit inside the session mutation", async () => {
     const repository = createPresentationSessionRepository(new MemoryRepository());
-    const setup = fixture();
+    const setup = { ...fixture(), now: new Date() };
     await repository.createSession({
       id: setup.sessionId,
       workspaceId: setup.workspaceId,

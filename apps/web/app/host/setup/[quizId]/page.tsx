@@ -14,6 +14,7 @@ import {
   type SessionSnapshot,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../../components/brand";
+import { EventCreditChoice } from "../../../../components/event-credit-choice";
 import { ExperiencePicker } from "../../../../components/experience-picker";
 import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
@@ -84,6 +85,9 @@ export default function HostSetupPage() {
   const [quiz, setQuiz] = useState<QuizRecord | null>(null);
   const [publishedContent, setPublishedContent] = useState<QuizDraft | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [useEventCredit, setUseEventCredit] = useState(false);
+  const [eventEntitlements, setEventEntitlements] = useState<Entitlements | null>(null);
+  const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const [settings, setSettings] = useState<SessionSettings | null>(null);
   const [experiencePreset, setExperiencePreset] = useState<ExperiencePresetId>("focus");
   const [presenterSoundEnabled, setPresenterSoundEnabled] = useState(false);
@@ -260,6 +264,19 @@ export default function HostSetupPage() {
     setBusy(true);
     setError("");
     setErrorIsRaw(false);
+    const body = JSON.stringify({
+      quizId: quiz.id,
+      settings,
+      clientCapabilities: currentRoundClientCapabilities(),
+      ...(roundExperiencesAvailable &&
+      experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
+        ? { experiencePresetOverride: experiencePreset }
+        : {}),
+      presenterSoundEnabled: roundExperiencesAvailable && presenterSoundEnabled,
+      useEventCredit,
+    });
+    if (creationIntent.current?.body !== body)
+      creationIntent.current = { body, key: crypto.randomUUID() };
     try {
       const session = await apiFetch<{
         sessionId: string;
@@ -268,16 +285,8 @@ export default function HostSetupPage() {
         snapshot: SessionSnapshot;
       }>("/v1/sessions", {
         method: "POST",
-        body: JSON.stringify({
-          quizId: quiz.id,
-          settings,
-          clientCapabilities: currentRoundClientCapabilities(),
-          ...(roundExperiencesAvailable &&
-          experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
-            ? { experiencePresetOverride: experiencePreset }
-            : {}),
-          presenterSoundEnabled: roundExperiencesAvailable && presenterSoundEnabled,
-        }),
+        headers: { "x-idempotency-key": creationIntent.current.key },
+        body,
       });
       sessionStorage.setItem(`openround:host:${session.sessionId}`, session.hostToken);
       sessionStorage.setItem(`openround:code:${session.sessionId}`, session.code);
@@ -373,6 +382,19 @@ export default function HostSetupPage() {
               </section>
             ) : null}
             <SetupReview uxBeta={uxBeta}>
+              <EventCreditChoice
+                checked={useEventCredit}
+                disabled={busy}
+                onChange={(checked, benefits) => {
+                  setUseEventCredit(checked);
+                  setEventEntitlements(benefits);
+                  if (!checked)
+                    setSettings({
+                      ...settings,
+                      audienceLimit: Math.min(settings.audienceLimit, entitlements.maxParticipants),
+                    });
+                }}
+              />
               <div className="settings-grid">
                 <section className="panel">
                   <p className="eyebrow">{t("live.roundSetup.room")}</p>
@@ -382,7 +404,11 @@ export default function HostSetupPage() {
                     <input
                       className="input"
                       id="audience-limit"
-                      max={entitlements.maxParticipants}
+                      max={
+                        useEventCredit && eventEntitlements
+                          ? eventEntitlements.maxParticipants
+                          : entitlements.maxParticipants
+                      }
                       min={1}
                       onChange={(event) => {
                         setRecipe("custom");
@@ -393,7 +419,12 @@ export default function HostSetupPage() {
                       value={settings.audienceLimit}
                     />
                     <small className="muted">
-                      {t("live.roundSetup.planLimit", { count: entitlements.maxParticipants })}
+                      {t("live.roundSetup.planLimit", {
+                        count:
+                          useEventCredit && eventEntitlements
+                            ? eventEntitlements.maxParticipants
+                            : entitlements.maxParticipants,
+                      })}
                     </small>
                   </label>
                   <label className="checkbox-field">

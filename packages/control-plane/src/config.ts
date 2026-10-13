@@ -31,6 +31,10 @@ const configSchema = z
       .default("false")
       .transform((value) => value === "true"),
     CONTROL_PUBLIC_ORIGIN: optionalValue,
+    CONTROL_PRODUCT_ORIGIN: z.preprocess(
+      (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+      optionalValue,
+    ),
     CONTROL_DATABASE_URL: optionalValue,
     CONTROL_ALLOW_LOCAL_HTTP: z
       .enum(["true", "false"])
@@ -63,6 +67,30 @@ const configSchema = z
   })
   .superRefine((config, context) => {
     if (!config.CONTROL_ENABLED) return;
+    if (config.CONTROL_PRODUCT_ORIGIN) {
+      try {
+        const url = new URL(config.CONTROL_PRODUCT_ORIGIN);
+        const local =
+          config.NODE_ENV !== "production" &&
+          config.CONTROL_ALLOW_LOCAL_HTTP &&
+          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+        if (
+          (url.protocol !== "https:" && !(local && url.protocol === "http:")) ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash ||
+          url.pathname !== "/"
+        )
+          throw new Error();
+      } catch {
+        context.addIssue({
+          code: "custom",
+          path: ["CONTROL_PRODUCT_ORIGIN"],
+          message: "Expected an explicit HTTPS product origin without path or credentials",
+        });
+      }
+    }
     for (const field of [
       "CONTROL_PUBLIC_ORIGIN",
       "CONTROL_DATABASE_URL",
@@ -131,7 +159,13 @@ export function loadControlConfig(
   environment: Record<string, string | undefined> = process.env,
 ): ControlConfig {
   const parsed = configSchema.parse(environment);
-  return parsed.CONTROL_ENABLED && parsed.CONTROL_PUBLIC_ORIGIN
-    ? { ...parsed, CONTROL_PUBLIC_ORIGIN: new URL(parsed.CONTROL_PUBLIC_ORIGIN).origin }
-    : parsed;
+  return {
+    ...parsed,
+    ...(parsed.CONTROL_ENABLED && parsed.CONTROL_PUBLIC_ORIGIN
+      ? { CONTROL_PUBLIC_ORIGIN: new URL(parsed.CONTROL_PUBLIC_ORIGIN).origin }
+      : {}),
+    ...(parsed.CONTROL_ENABLED && parsed.CONTROL_PRODUCT_ORIGIN
+      ? { CONTROL_PRODUCT_ORIGIN: new URL(parsed.CONTROL_PRODUCT_ORIGIN).origin }
+      : {}),
+  };
 }

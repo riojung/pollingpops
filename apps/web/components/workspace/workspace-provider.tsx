@@ -18,6 +18,8 @@ import type {
 import { apiFetch, humanError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
 import { useConfirmNavigation } from "../navigation-guard";
+import { useManagementNavigation, type ManagementNavigationState } from "../management-navigation";
+import { fetchCustomerManagementNavigation } from "../../lib/management-navigation";
 
 export interface WorkspaceCreator {
   userId: string;
@@ -39,6 +41,7 @@ interface WorkspaceAccountResponse {
 }
 
 interface WorkspaceContextValue {
+  management: ManagementNavigationState;
   creator: WorkspaceCreator | null;
   entitlements: Entitlements | null;
   productFeatures: WorkspaceProductFeatures | null;
@@ -55,6 +58,7 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 export function WorkspaceProvider({ children }: Readonly<{ children: React.ReactNode }>) {
   const router = useRouter();
   const confirmNavigation = useConfirmNavigation();
+  const management = useManagementNavigation();
   const { locale, loadError: localeLoadError, setLocale } = useLocale();
   const localeRef = useRef(locale);
   const localeLoadErrorRef = useRef(localeLoadError);
@@ -68,6 +72,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
 
   const refreshAccount = useCallback(async () => {
     setError("");
+    let redirecting = false;
     try {
       const account = await apiFetch<WorkspaceAccountResponse>("/v1/auth/me");
       setCreator(account.creator);
@@ -98,12 +103,19 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       }
     } catch (caught) {
       if ((caught as { status?: number }).status === 401) {
-        router.replace("/signin");
+        // An authenticated billing-only user has no workspace context.
+        const navigation = await fetchCustomerManagementNavigation().catch(() => null);
+        redirecting = true;
+        router.replace(
+          navigation?.user && navigation.organizationManagementEnabled
+            ? "/organization"
+            : "/signin",
+        );
         return;
       }
       setError(humanError(caught));
     } finally {
-      setLoading(false);
+      if (!redirecting) setLoading(false);
     }
   }, [router, setLocale]);
 
@@ -113,6 +125,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
+      management,
       creator,
       entitlements,
       productFeatures,
@@ -139,6 +152,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       entitlements,
       error,
       loading,
+      management,
       productFeatures,
       refreshAccount,
       router,

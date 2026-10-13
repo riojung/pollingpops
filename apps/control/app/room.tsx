@@ -14,6 +14,21 @@ const views: View[] = [
   "integrations",
   "audit",
 ];
+const returnViewKey = "pollingpops-operator-return-view";
+const knownView = (value: string | null): View | undefined => views.find((item) => item === value);
+function updateViewUrl(selected: View, replace = false) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("view", selected);
+  window.history[replace ? "replaceState" : "pushState"](null, "", url);
+}
+function rememberLoginView() {
+  const selected = knownView(new URL(window.location.href).searchParams.get("view"));
+  try {
+    if (selected) window.sessionStorage.setItem(returnViewKey, selected);
+  } catch {
+    // Login still works when browser storage is unavailable.
+  }
+}
 const label = (value: string) =>
   value
     .replaceAll("-", " ")
@@ -63,23 +78,53 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [contacts, setContacts] = useState<Row[]>([]);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
+  const loadSequence = useRef(0);
   const can = (capability: string) => Boolean(identity?.capabilities.includes(capability));
-  const refresh = useCallback(async (selected: View) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/views/${selected}`, { cache: "no-store" });
-      const body = record(await response.json());
-      if (!response.ok) throw new Error(text(record(body.error).message));
-      setData(body);
-      if (selected === "organizations") setOrganizations(rows(body.organizations));
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load the view");
-    } finally {
-      setLoading(false);
-    }
+  const clearAccess = useCallback(() => {
+    loadSequence.current += 1;
+    setIdentity(null);
+    setCsrf("");
+    setData({});
+    setOrganizations([]);
+    setContacts([]);
+    setPending(null);
+    setLoading(false);
+    exactCommand.current = null;
   }, []);
+  const refresh = useCallback(
+    async (selected: View, primeOrganizations = false) => {
+      const sequence = ++loadSequence.current;
+      setLoading(true);
+      setData({});
+      try {
+        const responses = await Promise.all([
+          fetch(`/api/views/${selected}`, { cache: "no-store" }),
+          ...(primeOrganizations ? [fetch("/api/views/organizations", { cache: "no-store" })] : []),
+        ]);
+        const bodies = await Promise.all(
+          responses.map(async (response) => record(await response.json())),
+        );
+        if (sequence !== loadSequence.current) return;
+        for (const [index, response] of responses.entries()) {
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 403) clearAccess();
+            throw new Error(text(record(bodies[index]?.error).message));
+          }
+        }
+        setData(bodies[0]!);
+        if (selected === "organizations") setOrganizations(rows(bodies[0]!.organizations));
+        else if (primeOrganizations) setOrganizations(rows(bodies[1]!.organizations));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to load the view");
+      } finally {
+        if (sequence === loadSequence.current) setLoading(false);
+      }
+    },
+    [clearAccess],
+  );
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
@@ -88,12 +133,31 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
     let current = true;
     void fetch("/api/me", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (response.status === 401) return;
+          throw new Error("Operator service is temporarily unavailable");
+        }
         const body = (await response.json()) as { operator: Identity; csrfToken: string };
         if (!current) return;
         setIdentity(body.operator);
         setCsrf(body.csrfToken ?? "");
-        await refresh("organizations");
+        const allowed = views.filter((item) => body.operator.capabilities.includes(`${item}.read`));
+        let requested = knownView(new URL(window.location.href).searchParams.get("view"));
+        try {
+          requested ??= knownView(window.sessionStorage.getItem(returnViewKey));
+          window.sessionStorage.removeItem(returnViewKey);
+        } catch {
+          // URL links and ordinary login do not depend on browser storage.
+        }
+        const selected = requested && allowed.includes(requested) ? requested : allowed[0];
+        if (!selected) {
+          clearAccess();
+          setMessage("This operator has no permitted console areas");
+          return;
+        }
+        setView(selected);
+        updateViewUrl(selected, true);
+        await refresh(selected, selected !== "organizations" && allowed.includes("organizations"));
       })
       .catch(() => {
         if (current) setMessage("Operator service is temporarily unavailable");
@@ -104,7 +168,23 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
     return () => {
       current = false;
     };
-  }, [enabled, refresh]);
+  }, [enabled, refresh, clearAccess]);
+  useEffect(() => {
+    if (!identity) return;
+    const handleHistory = () => {
+      const allowed = views.filter((item) => identity.capabilities.includes(`${item}.read`));
+      const requested = knownView(new URL(window.location.href).searchParams.get("view"));
+      const selected = requested && allowed.includes(requested) ? requested : allowed[0];
+      if (!selected) return;
+      if (selected !== requested) updateViewUrl(selected, true);
+      setView(selected);
+      setMessage("");
+      setPending(null);
+      void refresh(selected);
+    };
+    window.addEventListener("popstate", handleHistory);
+    return () => window.removeEventListener("popstate", handleHistory);
+  }, [identity, refresh]);
   async function command(payload: Row, reason: string) {
     setBusy(true);
     setMessage("");
@@ -118,7 +198,10 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         body: JSON.stringify({ ...payload, idempotencyKey: exactCommand.current.key, reason }),
       });
       const body = record(await response.json());
-      if (!response.ok) throw new Error(text(record(body.error).message));
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) clearAccess();
+        throw new Error(text(record(body.error).message));
+      }
       exactCommand.current = null;
       setMessage("Command completed and recorded in the audit timeline.");
       setPending(null);
@@ -129,6 +212,27 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function signOut() {
+    setSigningOut(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/logout", {
+        method: "POST",
+        headers: { "x-operator-csrf": csrf },
+      });
+      if (response.ok || response.status === 401) clearAccess();
+      else
+        setMessage(
+          "Sign-out could not be confirmed. Your session may still be active. Reload this page before trying again.",
+        );
+    } catch {
+      setMessage(
+        "Sign-out could not be confirmed. Your session may still be active. Check your connection and try again.",
+      );
+    } finally {
+      setSigningOut(false);
     }
   }
   function submitForm(event: FormEvent<HTMLFormElement>, action: string) {
@@ -248,7 +352,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         <p>Manage organizations, billing, credits, support, and operational controls.</p>
         {enabled ? (
           <>
-            <a className="button" href="/auth/start">
+            <a className="button" href="/auth/start" onClick={rememberLoginView}>
               Sign in with operator identity
             </a>
             <p className="note">Only provisioned operators with verified MFA can sign in.</p>
@@ -276,10 +380,13 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
               <button
                 key={item}
                 className={item === view ? "active" : ""}
+                aria-current={item === view ? "page" : undefined}
                 onClick={() => {
                   setView(item);
+                  updateViewUrl(item);
                   setData({});
                   setMessage("");
+                  setPending(null);
                   void refresh(item);
                 }}
               >
@@ -290,20 +397,7 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         <div className="identity">
           <strong>{identity.name}</strong>
           <small>{label(identity.role)}</small>
-          <button
-            onClick={() => {
-              void fetch("/api/logout", {
-                method: "POST",
-                headers: { "x-operator-csrf": csrf },
-              }).then((response) => {
-                if (response.ok) {
-                  setIdentity(null);
-                  setCsrf("");
-                  setData({});
-                } else setMessage("Sign-out could not be confirmed");
-              });
-            }}
-          >
+          <button disabled={signingOut} onClick={() => void signOut()}>
             Sign out
           </button>
         </div>
@@ -321,7 +415,11 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
         {message && (
           <p role="status" className="notice">
             {message}{" "}
-            {message.includes("Sign in again") && <a href="/auth/start">Verify identity again</a>}
+            {message.includes("Sign in again") && (
+              <a href="/auth/start" onClick={rememberLoginView}>
+                Verify identity again
+              </a>
+            )}
           </p>
         )}
         {loading ? (
@@ -948,6 +1046,11 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
                                 `/api/views/integrations?organizationId=${encodeURIComponent(event.target.value)}`,
                                 { cache: "no-store" },
                               ).then(async (response) => {
+                                if (response.status === 401 || response.status === 403) {
+                                  clearAccess();
+                                  setMessage("Operator sign-in required");
+                                  return;
+                                }
                                 if (response.ok)
                                   setContacts(rows(record(await response.json()).contacts));
                               });
@@ -1000,6 +1103,11 @@ export default function ControlRoom({ enabled }: { enabled: boolean }) {
                                 `/api/views/integrations?organizationId=${encodeURIComponent(event.target.value)}`,
                                 { cache: "no-store" },
                               ).then(async (response) => {
+                                if (response.status === 401 || response.status === 403) {
+                                  clearAccess();
+                                  setMessage("Operator sign-in required");
+                                  return;
+                                }
                                 if (response.ok) setData(record(await response.json()));
                               });
                           }}

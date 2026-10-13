@@ -12,6 +12,7 @@ import { dashboardMessage } from "../../components/workspace/workspace-model";
 import { RoundLibraryViewToggle } from "../../components/workspace/round-library-view-toggle";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
+import { ManagementNavigationLinks } from "../../components/management-navigation";
 import {
   DEFAULT_ROUND_LIBRARY_VIEW,
   readRoundLibraryView,
@@ -49,6 +50,7 @@ interface FolderRecord {
 
 function LegacyDashboardPage() {
   const router = useRouter();
+  const { management } = useWorkspace();
   const [creator, setCreator] = useState<Creator | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
@@ -87,13 +89,19 @@ function LegacyDashboardPage() {
         setQuizzes(list.quizzes);
         setFolders(folderList.folders);
       } catch (caught) {
-        if ((caught as { status?: number }).status === 401) router.replace("/signin");
-        else setError(humanError(caught));
+        if ((caught as { status?: number }).status === 401) {
+          // WorkspaceProvider resolves user-only access before rendering this page.
+          router.replace(
+            management.user && management.organizationManagementEnabled
+              ? "/organization"
+              : "/signin",
+          );
+        } else setError(humanError(caught));
       } finally {
         setLoading(false);
       }
     },
-    [router],
+    [management.organizationManagementEnabled, management.user, router],
   );
 
   useEffect(() => {
@@ -299,6 +307,7 @@ function LegacyDashboardPage() {
         <CreatorBrand productFeatures={productFeatures} />
         <nav className="button-row" aria-label="Account navigation">
           <Link href="/account">Account</Link>
+          <ManagementNavigationLinks navigation={management} />
           <Link href="/pricing">
             {creator?.plan === "free" ? "Free plan" : `${creator?.plan} plan`}
           </Link>

@@ -11,6 +11,7 @@ import type { MessageKey } from "../../lib/i18n/catalog";
 import { ColorModeMenu } from "./color-mode-menu";
 import { LanguageMenu } from "./language-menu";
 import { FeedbackButton } from "./feedback-button";
+import { ManagementNavigationLinks } from "../management-navigation";
 import {
   useWorkspace,
   WorkspaceProvider,
@@ -326,7 +327,7 @@ export function WorkspaceShell({
   const router = useRouter();
   const confirmNavigation = useConfirmNavigation();
   const { locale, t } = useLocale();
-  const { creator, productFeatures, loading, error, canEdit, signOut, startUpgrade } =
+  const { creator, productFeatures, loading, error, canEdit, signOut, startUpgrade, management } =
     useWorkspace();
   const [actionError, setActionError] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
@@ -380,6 +381,9 @@ export function WorkspaceShell({
           <CreatorBrand productFeatures={productFeatures} />
         </div>
         <WorkspaceNav />
+        {management ? (
+          <ManagementNavigationLinks navigation={management} variant="sections" />
+        ) : null}
         <div className={styles.sidebarFooter}>
           <p className={styles.identity} title={creator?.email}>
             <strong>{creator?.email}</strong>
@@ -472,6 +476,11 @@ export function WorkspaceShell({
           </div>
         </header>
         <WorkspaceNav mobile />
+        {management ? (
+          <div className={styles.mobileManagement}>
+            <ManagementNavigationLinks navigation={management} />
+          </div>
+        ) : null}
         <main
           className={styles.main}
           id="main"

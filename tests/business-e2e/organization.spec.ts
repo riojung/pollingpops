@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { testEmail } from "../e2e/test-email";
 
 const api = "http://127.0.0.1:4300";
@@ -11,6 +12,110 @@ async function signIn(page: Page, email: string) {
   await page.getByRole("link", { name: "Continue to dashboard" }).click();
 }
 
+async function expectSectionAtTop(page: Page, section: string, maxTop = 60) {
+  await expect
+    .poll(async () =>
+      page
+        .locator(section)
+        .evaluate((element) => ({
+          top: element.getBoundingClientRect().top,
+          scroll: window.scrollY,
+        }))
+        .then(({ top, scroll }) => top >= 0 && top <= maxTop && scroll > 200),
+    )
+    .toBe(true);
+}
+
+test("organization menus scroll to delayed sections and preserve later manual scrolling", async ({
+  page,
+}, testInfo) => {
+  await signIn(page, testEmail("business-section-scroll", testInfo));
+  const organizationList = (await (await page.request.get(`${api}/v1/organizations`)).json())
+    .organizations as Array<{ id: string }>;
+  const firstId = organizationList[0]!.id;
+  const created = await page.request.post(`${api}/v1/organizations`, {
+    headers: { "x-idempotency-key": randomUUID() },
+    data: { name: "Second scrolling organization" },
+  });
+  expect(created.ok()).toBe(true);
+  const secondId = ((await created.json()) as { organization: { id: string } }).organization.id;
+
+  let releaseCollection!: () => void;
+  const collectionGate = new Promise<void>((resolve) => {
+    releaseCollection = resolve;
+  });
+  let collectionStarted!: () => void;
+  const collectionPending = new Promise<void>((resolve) => {
+    collectionStarted = resolve;
+  });
+  await page.route(`${api}/v1/organizations`, async (route) => {
+    if (route.request().method() === "GET") {
+      collectionStarted();
+      await collectionGate;
+    }
+    await route.continue();
+  });
+  const accountNavigation = page.getByRole("navigation", { name: "Account navigation" });
+  await accountNavigation.locator("summary").filter({ hasText: "Organization" }).click();
+  await accountNavigation.getByRole("link", { name: "Billing", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/organization\\?organizationId=${firstId}#billing$`));
+  await collectionPending;
+  await expect(page.locator("#billing")).toHaveCount(0);
+  releaseCollection();
+  await expectSectionAtTop(page, "#billing");
+  await page.unroute(`${api}/v1/organizations`);
+
+  // An ordinary financial refresh must not reapply the already-served fragment.
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  const refreshed = page.waitForResponse((response) =>
+    response.url().endsWith(`/organizations/${firstId}/billing`),
+  );
+  await page
+    .getByRole("button", { name: "Refresh billing", exact: true })
+    .evaluate((button) => (button as HTMLButtonElement).click());
+  await (await refreshed).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  // Native history updates from the organization picker keep the same fragment,
+  // but must wait for the new organization's sections rather than scroll old data.
+  let releaseDetails!: () => void;
+  const detailsGate = new Promise<void>((resolve) => {
+    releaseDetails = resolve;
+  });
+  let detailsStarted!: () => void;
+  const detailsPending = new Promise<void>((resolve) => {
+    detailsStarted = resolve;
+  });
+  await page.route(`${api}/v1/organizations/${secondId}/**`, async (route) => {
+    if (route.request().method() === "GET") {
+      detailsStarted();
+      await detailsGate;
+    }
+    await route.continue();
+  });
+  await page.getByRole("combobox", { name: "Organization", exact: true }).selectOption(secondId);
+  await detailsPending;
+  await expect(page).toHaveURL(new RegExp(`/organization\\?organizationId=${secondId}#billing$`));
+  await expect(page.locator("#billing")).toHaveCount(0);
+  releaseDetails();
+  await expectSectionAtTop(page, "#billing");
+  await page.unroute(`${api}/v1/organizations/${secondId}/**`);
+
+  // Existing hash-only section links still work once the sections have mounted.
+  await page
+    .getByRole("navigation", { name: "Organization management sections" })
+    .getByRole("link", { name: "Members", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#members$/);
+  await expectSectionAtTop(page, "#members");
+});
+
 test("organization owner invites billing-only administrator and funds a premium Round with one event credit", async ({
   page: owner,
   browser,
@@ -22,8 +127,10 @@ test("organization owner invites billing-only administrator and funds a premium 
   const ownerIdentity = (await (await owner.request.get(`${api}/v1/auth/me`)).json()).creator as {
     userId: string;
   };
-  await owner.goto("/account");
-  await owner.getByRole("link", { name: "Organization and billing", exact: true }).click();
+  const accountNavigation = owner.getByRole("navigation", { name: "Account navigation" });
+  await accountNavigation.locator("summary").filter({ hasText: "Organization" }).click();
+  await expect(accountNavigation.getByRole("link", { name: "Members", exact: true })).toBeVisible();
+  await accountNavigation.getByRole("link", { name: "Organization", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
   await owner.getByLabel("Organization name", { exact: true }).fill("Browser business launch");
   await owner.getByRole("button", { name: "Create organization", exact: true }).click();
@@ -108,7 +215,7 @@ test("organization owner invites billing-only administrator and funds a premium 
   await expect(
     finance.getByRole("heading", { name: "Personal account", exact: true }),
   ).toBeVisible();
-  await expect(finance.getByText(financeEmail, { exact: true })).toBeVisible();
+  await expect(finance.getByRole("main").getByText(financeEmail, { exact: true })).toBeVisible();
   await expect(
     finance.getByRole("button", { name: "Delete personal account", exact: true }),
   ).toBeDisabled();
@@ -153,4 +260,36 @@ test("organization owner invites billing-only administrator and funds a premium 
   expect(authoring.entitlements.authoringJobsPerMonth).toBe(3);
   await audienceContext.close();
   await financeContext.close();
+});
+
+test("organization entry explains sign-in and disabled deployments without creation controls", async ({
+  page,
+}) => {
+  await page.goto("/organization");
+  await expect(
+    page.getByRole("heading", { name: "Sign in to manage your organization" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create organization", exact: true })).toHaveCount(
+    0,
+  );
+  await page.route(`${api}/v1/auth/navigation`, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: {
+        user: null,
+        organizationManagementEnabled: false,
+        organizations: [],
+        operatorConsoleOrigin: null,
+      },
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Organization management is unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create organization", exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Request failed (404)", { exact: true })).toHaveCount(0);
 });

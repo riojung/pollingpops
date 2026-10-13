@@ -8,9 +8,14 @@ import { useLocale } from "../../components/locale-provider";
 import { LocalizedPolicyConsent } from "../../components/localized-policy-consent";
 import { apiFetch, humanError } from "../../lib/api";
 import { resolveSignInEnvironment, type SignInEnvironment } from "../../lib/signin-environment";
+import {
+  ManagementNavigationLinks,
+  useManagementNavigation,
+} from "../../components/management-navigation";
 
 export default function SignInPage() {
   const { t } = useLocale();
+  const management = useManagementNavigation();
   const [email, setEmail] = useState("");
   const [segment, setSegment] = useState<"education" | "workplace">("workplace");
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -241,6 +246,19 @@ export default function SignInPage() {
               {status === "sending" ? t("delivery.auth.sending") : t("delivery.auth.sendLink")}
             </button>
           </form>
+          {management.operatorConsoleOrigin ? (
+            <section
+              className="institution-signin"
+              aria-label="Business administration"
+              lang="en-CA"
+            >
+              <h2>Business administration</h2>
+              <p className="muted">
+                Manage tenants, billing, and product operations with your staff account.
+              </p>
+              <ManagementNavigationLinks navigation={management} showAdminSignIn />
+            </section>
+          ) : null}
         </section>
       </main>
     </>

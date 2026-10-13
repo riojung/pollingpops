@@ -1,12 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "../../components/brand";
-import { API_URL, apiFetch, humanError } from "../../lib/api";
-import { FundingGuide, OrganizationAccessGuide } from "./organization-panels";
+import {
+  ManagementNavigationLinks,
+  useManagementNavigation,
+} from "../../components/management-navigation";
+import { API_URL, ApiClientError, apiFetch, humanError } from "../../lib/api";
+import {
+  FundingGuide,
+  OrganizationAccessGuide,
+  OrganizationEntryState,
+  OrganizationSections,
+} from "./organization-panels";
 import {
   offerPrice,
+  organizationAccessState,
+  organizationFragmentTarget,
   organizationPermissions,
   type BillingView,
   type Offer,
@@ -19,8 +31,34 @@ import {
 import styles from "./organization.module.css";
 
 export default function OrganizationPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className={styles.page}>
+          <h1>Organization</h1>
+          <p role="status">Loading organization management…</p>
+        </main>
+      }
+    >
+      <OrganizationManagementPage />
+    </Suspense>
+  );
+}
+
+function OrganizationManagementPage() {
+  const searchParams = useSearchParams();
+  const requestedOrganization =
+    searchParams.get("organizationId") ?? searchParams.get("organization");
+  const navigation = useManagementNavigation();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [collectionUserId, setCollectionUserId] = useState<string | null>(null);
+  const [collectionUnavailable, setCollectionUnavailable] = useState(false);
+  const [collectionNeedsSignIn, setCollectionNeedsSignIn] = useState(false);
+  const [collectionFailed, setCollectionFailed] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [selected, setSelected] = useState("");
+  const [loadedOrganizationId, setLoadedOrganizationId] = useState("");
+  const [fragmentVersion, setFragmentVersion] = useState(0);
   const [workspaces, setWorkspaces] = useState<OrganizationWorkspace[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
@@ -45,15 +83,44 @@ export default function OrganizationPage() {
   const [licenseQuantity, setLicenseQuantity] = useState(1);
   const [ownershipTargets, setOwnershipTargets] = useState<Record<string, string>>({});
   const requestKeys = useRef(new Map<string, string>());
-  const organization = organizations.find((candidate) => candidate.id === selected);
+  const handledFragment = useRef<string | null>(null);
+  const accessState = organizationAccessState(navigation, {
+    unavailable: collectionUnavailable,
+    needsSignIn: collectionNeedsSignIn,
+  });
+  const collectionUserMatches = collectionUserId === navigation.user?.userId;
+  const canManage = accessState === "ready" && collectionUserMatches && !collectionFailed;
+  const organization = canManage
+    ? organizations.find((candidate) => candidate.id === selected)
+    : undefined;
   const permissions = organization ? organizationPermissions(organization.role) : null;
   const base = `/v1/organizations/${selected}`;
+  const currentOrganizationId = organization?.id ?? "";
+  const currentOrganizationRole = organization?.role ?? null;
+  const requestedSelection =
+    organizations.find((item) => item.id === requestedOrganization)?.id ??
+    organizations[0]?.id ??
+    "";
+
+  const reportReadFailure = useCallback((failure: unknown) => {
+    if (failure instanceof ApiClientError && failure.status === 404) {
+      setCollectionUnavailable(true);
+      setError("");
+    } else if (failure instanceof ApiClientError && failure.status === 401) {
+      setCollectionNeedsSignIn(true);
+      setError("");
+    } else {
+      setCollectionFailed(true);
+      setError(humanError(failure));
+    }
+  }, []);
 
   const refresh = useCallback(async (id: string, signal?: AbortSignal) => {
     const organizationList = await apiFetch<{ organizations: Organization[] }>(
       "/v1/organizations",
       { signal },
     );
+    if (signal?.aborted) return;
     setOrganizations(organizationList.organizations);
     const current = organizationList.organizations.find((candidate) => candidate.id === id);
     if (!current) return;
@@ -74,6 +141,7 @@ export default function OrganizationPage() {
         ? apiFetch<{ invitations: OrganizationInvitation[] }>(`${prefix}/invitations`, { signal })
         : Promise.resolve({ invitations: [] }),
     ]);
+    if (signal?.aborted) return;
     setWorkspaces(workspaceList.workspaces);
     setMembers(memberList.members);
     setInvitations(invitationList.invitations);
@@ -85,27 +153,52 @@ export default function OrganizationPage() {
     );
     setCheckoutEnabled(catalog.checkoutEnabled);
     setLicenseQuantity(billingData?.subscription.licenseQuantity || 1);
+    setLoadedOrganizationId(id);
   }, []);
 
   useEffect(() => {
+    if (
+      navigation.loading ||
+      navigation.error ||
+      !navigation.organizationManagementEnabled ||
+      !navigation.user
+    )
+      return;
     const controller = new AbortController();
+    const userId = navigation.user.userId;
+    setLoading(true);
+    setCollectionUnavailable(false);
+    setCollectionNeedsSignIn(false);
+    setCollectionFailed(false);
+    setError("");
     apiFetch<{ organizations: Organization[] }>("/v1/organizations", { signal: controller.signal })
       .then(({ organizations: list }) => {
+        if (controller.signal.aborted) return;
         setOrganizations(list);
-        const requested = new URL(window.location.href).searchParams.get("organization");
-        setSelected(list.find((item) => item.id === requested)?.id ?? list[0]?.id ?? "");
+        setCollectionUserId(userId);
+        setSelected(
+          list.find((item) => item.id === requestedOrganization)?.id ?? list[0]?.id ?? "",
+        );
       })
       .catch((failure: unknown) => {
-        if (!controller.signal.aborted) setError(humanError(failure));
+        if (!controller.signal.aborted) reportReadFailure(failure);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [
+    navigation.loading,
+    navigation.error,
+    navigation.organizationManagementEnabled,
+    navigation.user?.userId,
+    reloadVersion,
+    requestedOrganization,
+    reportReadFailure,
+  ]);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || accessState !== "ready" || !collectionUserMatches) return;
     const controller = new AbortController();
     setLoading(true);
     setBilling(null);
@@ -117,16 +210,69 @@ export default function OrganizationPage() {
     setError("");
     refresh(selected, controller.signal)
       .catch((failure: unknown) => {
-        if (!controller.signal.aborted) setError(humanError(failure));
+        if (!controller.signal.aborted) reportReadFailure(failure);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [refresh, selected]);
+  }, [refresh, selected, accessState, collectionUserMatches, reloadVersion, reportReadFailure]);
+
+  useEffect(() => {
+    const onFragmentNavigation = () => {
+      handledFragment.current = null;
+      setFragmentVersion((version) => version + 1);
+    };
+    window.addEventListener("hashchange", onFragmentNavigation);
+    window.addEventListener("popstate", onFragmentNavigation);
+    return () => {
+      window.removeEventListener("hashchange", onFragmentNavigation);
+      window.removeEventListener("popstate", onFragmentNavigation);
+    };
+  }, []);
+
+  useEffect(() => {
+    const location = new URL(window.location.href);
+    if (!location.hash) {
+      handledFragment.current = null;
+      return;
+    }
+    if (
+      (location.searchParams.get("organizationId") ?? location.searchParams.get("organization")) !==
+      requestedOrganization
+    )
+      return;
+    // Next may consume a fragment before its section exists. Restore it once the
+    // requested organization's details are committed, never after ordinary refreshes.
+    if (
+      !canManage ||
+      loading ||
+      !currentOrganizationRole ||
+      loadedOrganizationId !== currentOrganizationId ||
+      currentOrganizationId !== requestedSelection
+    )
+      return;
+    const targetId = organizationFragmentTarget(location.hash, currentOrganizationRole);
+    const href = location.href;
+    if (!targetId || handledFragment.current === href) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ block: "start", behavior: "instant" });
+    handledFragment.current = href;
+  }, [
+    canManage,
+    loading,
+    currentOrganizationId,
+    currentOrganizationRole,
+    loadedOrganizationId,
+    requestedSelection,
+    requestedOrganization,
+    fragmentVersion,
+  ]);
 
   async function mutate(action: string, path: string, body: unknown, method = "POST") {
-    const intent = JSON.stringify({ action, path, body });
+    if (!canManage) return;
+    const intent = JSON.stringify({ userId: navigation.user?.userId, action, path, body });
     const key = requestKeys.current.get(intent) ?? crypto.randomUUID();
     requestKeys.current.set(intent, key);
     setBusy(action);
@@ -153,12 +299,14 @@ export default function OrganizationPage() {
       }
       if (result.organization) {
         await refresh(result.organization.id);
-        setSelected(result.organization.id);
+        selectOrganization(result.organization.id);
         setOrganizationName("");
       } else await refresh(selected);
       setMessage("Changes saved.");
     } catch (failure) {
-      setError(humanError(failure));
+      if (failure instanceof ApiClientError && [401, 404].includes(failure.status))
+        reportReadFailure(failure);
+      else setError(humanError(failure));
     } finally {
       setBusy("");
     }
@@ -169,14 +317,43 @@ export default function OrganizationPage() {
     action();
   }
 
-  return (
-    <main className={styles.page}>
+  function selectOrganization(id: string) {
+    setSelected(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("organizationId", id);
+    url.searchParams.delete("organization");
+    window.history.replaceState(null, "", url);
+  }
+
+  function retry() {
+    if (navigation.error) void navigation.refresh();
+    else setReloadVersion((previous) => previous + 1);
+  }
+
+  const viewState =
+    accessState !== "ready"
+      ? accessState
+      : collectionFailed
+        ? "error"
+        : !collectionUserMatches || loading
+          ? "loading"
+          : "ready";
+
+  const chrome = (
+    <>
       <header className={styles.header}>
         <Brand href="/home" />
-        <nav aria-label="Organization navigation">
+        <nav aria-label="Organization navigation" aria-busy={navigation.loading}>
           <Link href="/home">Workspace</Link>
-          <Link href="/account">Account</Link>
-          <Link href="/signin?returnTo=%2Forganization">Sign in</Link>
+          {navigation.user ? (
+            <>
+              <span className={styles.identity}>{navigation.user.email}</span>
+              <Link href="/account">Account</Link>
+            </>
+          ) : (
+            !navigation.loading && <Link href="/signin?returnTo=%2Forganization">Sign in</Link>
+          )}
+          <ManagementNavigationLinks navigation={navigation} />
         </nav>
       </header>
       <div className={styles.row}>
@@ -185,7 +362,7 @@ export default function OrganizationPage() {
           <h1>Organization</h1>
           <p>Manage independent workspaces, shared billing, and event credits.</p>
         </div>
-        {organizations.length > 0 && (
+        {canManage && organizations.length > 0 && (
           <label className="field">
             <span>Organization</span>
             <select
@@ -194,7 +371,7 @@ export default function OrganizationPage() {
               disabled={Boolean(busy)}
               onChange={(event) => {
                 setMessage("");
-                setSelected(event.target.value);
+                selectOrganization(event.target.value);
               }}
             >
               {organizations.map((item) => (
@@ -206,71 +383,112 @@ export default function OrganizationPage() {
           </label>
         )}
       </div>
-      {error && (
+    </>
+  );
+
+  if (!canManage) {
+    return (
+      <main className={styles.page}>
+        {chrome}
+        <OrganizationEntryState
+          state={viewState === "ready" ? "loading" : viewState}
+          error={error || navigation.error}
+          onRetry={retry}
+        />
+      </main>
+    );
+  }
+
+  return (
+    <main className={styles.page}>
+      {chrome}
+      {error && !collectionFailed && (
         <p className={styles.error} role="alert">
           {error}
         </p>
       )}
-      {message && (
+      {canManage && message && (
         <p className={styles.success} role="status">
           {message}
         </p>
       )}
-      {loading && <p role="status">Loading organization management…</p>}
+      {viewState !== "ready" && (
+        <OrganizationEntryState
+          state={viewState}
+          error={error || navigation.error}
+          onRetry={retry}
+        />
+      )}
       <div className={styles.stack}>
         {!loading && organizations.length === 0 && !error && (
           <p>Create an organization to bring your workspaces and billing together.</p>
         )}
-        {organization && <OrganizationAccessGuide role={organization.role} />}
+        {organization && (
+          <>
+            <OrganizationSections role={organization.role} />
+            <OrganizationAccessGuide role={organization.role} />
+          </>
+        )}
         {organization && (
           <div className={styles.grid}>
-            {organization && permissions?.appointOwner && (
-              <section className="panel">
-                <h2>Close organization</h2>
-                {organization.status === "closed" ? (
-                  <p>
-                    This organization is closed. Its content and financial history are retained.
-                  </p>
+            {organization && permissions?.administer && (
+              <section className="panel" id="settings">
+                <h2>Organization settings</h2>
+                <p>
+                  Workspace access and organization membership are managed in their sections above.
+                  Organization owners control closure.
+                </p>
+                {!permissions.appointOwner ? (
+                  <p>Ask an organization owner to close this organization.</p>
                 ) : (
                   <>
-                    <p>
-                      Cancel your subscription through billing management, cancel unfinished
-                      checkouts, and finish all active rooms before closing. Closing stops new paid
-                      activity and keeps your content and financial records.
-                    </p>
-                    <form
-                      className={styles.form}
-                      onSubmit={(event) =>
-                        submit(
-                          event,
-                          () =>
-                            void mutate("close", `${base}/close`, {
-                              confirmation: closeConfirmation,
-                            }),
-                        )
-                      }
-                    >
-                      <label>
-                        <span>Type {organization.name} to confirm closure</span>
-                        <input
-                          className="input"
-                          value={closeConfirmation}
-                          onChange={(event) => setCloseConfirmation(event.target.value)}
-                          autoComplete="off"
-                        />
-                      </label>
-                      <button
-                        className="button button-danger"
-                        disabled={Boolean(busy) || closeConfirmation !== organization.name}
-                      >
-                        Close organization
-                      </button>
-                    </form>
+                    <h3>Close organization</h3>
+                    {organization.status === "closed" ? (
+                      <p>
+                        This organization is closed. Its content and financial history are retained.
+                      </p>
+                    ) : (
+                      <>
+                        <p>
+                          Cancel your subscription through billing management, cancel unfinished
+                          checkouts, and finish all active rooms before closing. Closing stops new
+                          paid activity and keeps your content and financial records.
+                        </p>
+                        <form
+                          className={styles.form}
+                          onSubmit={(event) =>
+                            submit(
+                              event,
+                              () =>
+                                void mutate("close", `${base}/close`, {
+                                  confirmation: closeConfirmation,
+                                }),
+                            )
+                          }
+                        >
+                          <label>
+                            <span>Type {organization.name} to confirm closure</span>
+                            <input
+                              className="input"
+                              value={closeConfirmation}
+                              onChange={(event) => setCloseConfirmation(event.target.value)}
+                              autoComplete="off"
+                            />
+                          </label>
+                          <button
+                            className="button button-danger"
+                            disabled={Boolean(busy) || closeConfirmation !== organization.name}
+                          >
+                            Close organization
+                          </button>
+                        </form>
+                      </>
+                    )}
                   </>
                 )}
               </section>
             )}
-            <section className="panel">
+            <section className="panel" id="workspaces">
               <h2>Workspaces</h2>
               <p>Each workspace keeps its content and audience data separate.</p>
               <ul className={styles.list}>
@@ -396,7 +614,7 @@ export default function OrganizationPage() {
               )}
             </section>
             {permissions?.administer && (
-              <section className="panel">
+              <section className="panel" id="members">
                 <h2>Members and roles</h2>
                 <p>Adding a member here does not give them access to workspace content.</p>
                 <ul className={styles.list}>
@@ -738,7 +956,9 @@ export default function OrganizationPage() {
                     submit(
                       event,
                       () =>
-                        void mutate("promotion", `${base}/promotions/redeem`, { code: promotion }),
+                        void mutate("promotion", `${base}/promotions/redeem`, {
+                          code: promotion,
+                        }),
                     )
                   }
                 >

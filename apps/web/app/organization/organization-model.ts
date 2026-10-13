@@ -76,6 +76,48 @@ export function organizationPermissions(role: OrganizationRole) {
   };
 }
 
+export type OrganizationAccessState = "loading" | "signed-out" | "unavailable" | "error" | "ready";
+
+export function organizationAccessState(
+  navigation: {
+    loading: boolean;
+    error: string;
+    user: { userId: string } | null;
+    organizationManagementEnabled: boolean;
+  },
+  collection: { unavailable: boolean; needsSignIn: boolean },
+): OrganizationAccessState {
+  if (navigation.loading) return "loading";
+  if (collection.unavailable) return "unavailable";
+  if (navigation.error) return "error";
+  if (!navigation.organizationManagementEnabled) return "unavailable";
+  if (!navigation.user || collection.needsSignIn) return "signed-out";
+  return "ready";
+}
+
+export function organizationSections(role: OrganizationRole) {
+  const permissions = organizationPermissions(role);
+  return [
+    { label: "Overview", href: "#overview" },
+    { label: "Workspaces", href: "#workspaces" },
+    ...(permissions.administer ? [{ label: "Members", href: "#members" }] : []),
+    ...(permissions.billing ? [{ label: "Billing and credits", href: "#event-credits" }] : []),
+    ...(permissions.administer ? [{ label: "Organization settings", href: "#settings" }] : []),
+  ];
+}
+
+export function organizationFragmentTarget(hash: string, role: OrganizationRole): string | null {
+  let fragment: string;
+  try {
+    fragment = decodeURIComponent(hash.replace(/^#/, ""));
+  } catch {
+    return null;
+  }
+  const sections = organizationSections(role).map((section) => section.href.slice(1));
+  if (organizationPermissions(role).billing) sections.push("billing");
+  return sections.includes(fragment) ? fragment : null;
+}
+
 export function offerPrice(offer: Offer): string {
   if (offer.currency === null || offer.amountMinor === null) return "Price not published";
   // All catalog amounts are provider minor units, including currencies without cents.

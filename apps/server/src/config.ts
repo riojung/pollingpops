@@ -261,6 +261,7 @@ export const ConfigSchema = z
     POLICY_VERSION: z.string().trim().min(1).max(80).default("2026-09-14-draft"),
     BILLING_MODE: z.enum(["disabled", "stripe"]).default("disabled"),
     BUSINESS_PLATFORM_ENABLED: booleanString,
+    CONTROL_PUBLIC_ORIGIN: optionalHttpUrl,
     BUSINESS_EVENT_CREDITS_ENABLED: booleanString,
     BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED: booleanString,
     BACKGROUND_JOBS_MODE: z.enum(["in_process", "separate"]).default("in_process"),
@@ -315,6 +316,44 @@ export const ConfigSchema = z
       .default("info"),
   })
   .superRefine((config, ctx) => {
+    if (config.CONTROL_PUBLIC_ORIGIN) {
+      let origin: URL | undefined;
+      try {
+        origin = new URL(config.CONTROL_PUBLIC_ORIGIN);
+      } catch {
+        // The URL schema already reports malformed input without throwing from safeParse.
+      }
+      const localHttp =
+        origin &&
+        (config.NODE_ENV !== "production" || config.ALLOW_INSECURE_LOCAL_HTTP) &&
+        isLoopbackHttpUrl(config.CONTROL_PUBLIC_ORIGIN);
+      if (
+        !origin ||
+        origin.username ||
+        origin.password ||
+        origin.search ||
+        origin.hash ||
+        origin.pathname !== "/" ||
+        (origin.protocol !== "https:" && !localHttp)
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["CONTROL_PUBLIC_ORIGIN"],
+          message: "Expected an operator HTTPS origin; explicit local HTTP may use loopback only",
+        });
+      let productOrigin: string | undefined;
+      try {
+        productOrigin = new URL(config.WEB_ORIGIN).origin;
+      } catch {
+        // WEB_ORIGIN has its own URL validation.
+      }
+      if (origin && origin.origin === productOrigin)
+        ctx.addIssue({
+          code: "custom",
+          path: ["CONTROL_PUBLIC_ORIGIN"],
+          message: "The operator console must use a separate origin",
+        });
+    }
     if (config.COOKIE_NAME === LOCALE_COOKIE_NAME) {
       ctx.addIssue({
         code: "custom",

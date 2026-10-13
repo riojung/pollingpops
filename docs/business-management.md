@@ -78,6 +78,32 @@ addresses remain in Stripe rather than the webhook inbox or PollingPops audit re
 
 ## Processes and operator access
 
+The product sign-in screen includes **Business admin sign in** when the API is configured with
+`CONTROL_PUBLIC_ORIGIN`. After managed operator sign-in, the product header and workspace menus
+show the permitted business areas: tenant management, billing, credits and promotions, operations,
+support, integrations and audit. Founder operators are presented as **Super admin**; other operators
+see their permitted administrative areas. Selecting an area opens the restricted console at that
+area, including after an authentication refresh.
+
+Customer organization navigation is also available from product headers, desktop/mobile workspace
+menus and account navigation. Members see their organization; owners/admins see workspace, membership
+and settings controls, while billing members see billing and event credits. Links select the
+organization that grants the required permission. A customer organization role never grants operator
+access. Direct visits to `/organization` ask signed-out users to sign in, and show an unavailable
+state when hosted management is disabled, including Community deployments.
+
+Set `CONTROL_PRODUCT_ORIGIN` on the operator app to the exact product origin to allow credentialed,
+read-only navigation discovery. The hosted business overlay defaults to its HTTPS product domain.
+The local business overlay leaves discovery unset unless an exact trusted HTTPS product origin is
+configured, because its console also enforces production HTTPS policy. An HTTP local product keeps
+the explicit admin sign-in entry and full console navigation. Discovery returns only the current
+operator's name, role and permitted links; credentials, CSRF tokens and customer records remain
+private to the console. The product reads this endpoint independently with a bounded timeout, so a
+console outage does not block customer navigation or gameplay. Browser detection uses the existing
+SameSite operator cookie and works when product and
+console are on the same site (for example separate subdomains); independent sites retain the explicit
+admin sign-in entry and full console navigation.
+
 - `apps/web` and the Fastify/realtime server continue serving customers.
 - `apps/control` serves the separate operator UI and same-origin API.
 - `node apps/server/dist/jobs.js` runs reports, authoring, retention, billing reconciliation and

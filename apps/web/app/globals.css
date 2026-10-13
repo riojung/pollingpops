@@ -205,6 +205,12 @@ button:disabled {
   position: relative;
 }
 
+.site-desktop-nav {
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: flex-end;
+}
+
 .brand {
   align-items: center;
   display: inline-flex;

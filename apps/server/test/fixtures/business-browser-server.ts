@@ -17,6 +17,7 @@ const config = ConfigSchema.parse({
   ALLOW_IN_MEMORY: "true",
   COMMUNITY_MODE: "false",
   BUSINESS_PLATFORM_ENABLED: "true",
+  CONTROL_PUBLIC_ORIGIN: process.env.CONTROL_PUBLIC_ORIGIN,
   BUSINESS_EVENT_CREDITS_ENABLED: "true",
   BILLING_MODE: "disabled",
   LOG_LEVEL: "silent",

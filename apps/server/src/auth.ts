@@ -185,16 +185,20 @@ export class AuthService {
   }
 
   async requireUser(request: FastifyRequest, reply: FastifyReply) {
-    const token = request.cookies[this.config.COOKIE_NAME];
-    const user = token
-      ? await this.repository.getUserPrincipalBySession(hashToken(token), new Date())
-      : null;
+    const user = await this.userFromRequest(request);
     if (!user) {
       await reply.code(401).send({
         error: { code: "UNAUTHORIZED", message: "Sign in required", requestId: request.id },
       });
     }
     return user;
+  }
+
+  async userFromRequest(request: FastifyRequest): Promise<UserPrincipal | null> {
+    const token = request.cookies[this.config.COOKIE_NAME];
+    return token
+      ? await this.repository.getUserPrincipalBySession(hashToken(token), new Date())
+      : null;
   }
 
   async logout(request: FastifyRequest, reply: FastifyReply) {

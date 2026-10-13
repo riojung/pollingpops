@@ -14,6 +14,42 @@ const productionConfig = {
 } as const;
 
 describe("production configuration", () => {
+  it.each([
+    "https://control.example.ca/path",
+    "https://control.example.ca/?token=anything",
+    "https://control.example.ca/#view",
+    "https://user:password@control.example.ca",
+    "http://control.example.ca",
+    "https://quiz.example.ca",
+  ])("rejects unsafe or shared operator origins: %s", (origin) => {
+    expect(() =>
+      ConfigSchema.parse({ ...productionConfig, CONTROL_PUBLIC_ORIGIN: origin }),
+    ).toThrow();
+  });
+  it("accepts a dedicated HTTPS console origin and explicit loopback development origin", () => {
+    expect(
+      ConfigSchema.parse({
+        ...productionConfig,
+        CONTROL_PUBLIC_ORIGIN: "https://control.example.ca",
+      }).CONTROL_PUBLIC_ORIGIN,
+    ).toBe("https://control.example.ca");
+    expect(
+      ConfigSchema.parse({ NODE_ENV: "test", CONTROL_PUBLIC_ORIGIN: "http://127.0.0.1:3002" })
+        .CONTROL_PUBLIC_ORIGIN,
+    ).toBe("http://127.0.0.1:3002");
+  });
+  it.each(["production", "development", "test"] as const)(
+    "returns validation errors for malformed console origins without throwing from safeParse in %s",
+    (nodeEnv) => {
+      expect(
+        ConfigSchema.safeParse({
+          ...productionConfig,
+          NODE_ENV: nodeEnv,
+          CONTROL_PUBLIC_ORIGIN: "invalid",
+        }).success,
+      ).toBe(false);
+    },
+  );
   it("accepts a secure profile with sign-ups paused", () => {
     const config = ConfigSchema.parse(productionConfig);
 

@@ -44,6 +44,7 @@ import {
   LtiRegistrationSchema,
   LocalReturnPathSchema,
   MagicLinkRequestSchema,
+  ManagementNavigationSchema,
   MediaUploadRequestSchema,
   ModerateQnaQuestionSchema,
   ModerateQnaReplySchema,
@@ -804,6 +805,25 @@ export async function registerRoutes(
     return reply.redirect(
       auth.localeAwareWebRedirect(verified.creator, returnTo ?? "/dashboard?welcome=1"),
     );
+  });
+
+  app.get("/v1/auth/navigation", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const user = await auth.userFromRequest(request);
+    const organizationManagementEnabled =
+      config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE;
+    const organizations =
+      user && organizationManagementEnabled
+        ? await createPlatformRepository(repository).listOrganizations(user.userId)
+        : [];
+    return ManagementNavigationSchema.parse({
+      user: user ? { userId: user.userId, email: user.email } : null,
+      organizationManagementEnabled,
+      organizations: organizations.map(({ id, name, role }) => ({ id, name, role })),
+      operatorConsoleOrigin: config.CONTROL_PUBLIC_ORIGIN
+        ? new URL(config.CONTROL_PUBLIC_ORIGIN).origin
+        : null,
+    });
   });
 
   app.get("/v1/auth/user", async (request, reply) => {

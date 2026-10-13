@@ -38,6 +38,8 @@
   display: flex;
   width: 244px;
   flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-right: 1px solid var(--ui-border);
   /* The logo halo fades to neutral instead of tinting the full-height sidebar. */
   background:
@@ -462,6 +464,10 @@
   gap: 0.75rem;
 }
 
+.mobileManagement {
+  display: none;
+}
+
 .mobileNav {
   display: none;
 }
@@ -508,6 +514,12 @@
 }
 
 @media (max-width: 820px) {
+  .mobileManagement {
+    border-bottom: 1px solid var(--line);
+    display: block;
+    padding: 8px 20px;
+  }
+
   .sidebar {
     display: none;
   }

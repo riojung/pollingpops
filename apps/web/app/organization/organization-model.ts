@@ -106,6 +106,18 @@ export function organizationSections(role: OrganizationRole) {
   ];
 }
 
+export function organizationFragmentTarget(hash: string, role: OrganizationRole): string | null {
+  let fragment: string;
+  try {
+    fragment = decodeURIComponent(hash.replace(/^#/, ""));
+  } catch {
+    return null;
+  }
+  const sections = organizationSections(role).map((section) => section.href.slice(1));
+  if (organizationPermissions(role).billing) sections.push("billing");
+  return sections.includes(fragment) ? fragment : null;
+}
+
 export function offerPrice(offer: Offer): string {
   if (offer.currency === null || offer.amountMinor === null) return "Price not published";
   // All catalog amounts are provider minor units, including currencies without cents.

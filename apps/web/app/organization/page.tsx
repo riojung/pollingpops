@@ -18,6 +18,7 @@ import {
 import {
   offerPrice,
   organizationAccessState,
+  organizationFragmentTarget,
   organizationPermissions,
   type BillingView,
   type Offer,
@@ -56,6 +57,8 @@ function OrganizationManagementPage() {
   const [collectionFailed, setCollectionFailed] = useState(false);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [selected, setSelected] = useState("");
+  const [loadedOrganizationId, setLoadedOrganizationId] = useState("");
+  const [fragmentVersion, setFragmentVersion] = useState(0);
   const [workspaces, setWorkspaces] = useState<OrganizationWorkspace[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
@@ -80,6 +83,7 @@ function OrganizationManagementPage() {
   const [licenseQuantity, setLicenseQuantity] = useState(1);
   const [ownershipTargets, setOwnershipTargets] = useState<Record<string, string>>({});
   const requestKeys = useRef(new Map<string, string>());
+  const handledFragment = useRef<string | null>(null);
   const accessState = organizationAccessState(navigation, {
     unavailable: collectionUnavailable,
     needsSignIn: collectionNeedsSignIn,
@@ -91,6 +95,12 @@ function OrganizationManagementPage() {
     : undefined;
   const permissions = organization ? organizationPermissions(organization.role) : null;
   const base = `/v1/organizations/${selected}`;
+  const currentOrganizationId = organization?.id ?? "";
+  const currentOrganizationRole = organization?.role ?? null;
+  const requestedSelection =
+    organizations.find((item) => item.id === requestedOrganization)?.id ??
+    organizations[0]?.id ??
+    "";
 
   const reportReadFailure = useCallback((failure: unknown) => {
     if (failure instanceof ApiClientError && failure.status === 404) {
@@ -143,6 +153,7 @@ function OrganizationManagementPage() {
     );
     setCheckoutEnabled(catalog.checkoutEnabled);
     setLicenseQuantity(billingData?.subscription.licenseQuantity || 1);
+    setLoadedOrganizationId(id);
   }, []);
 
   useEffect(() => {
@@ -206,6 +217,58 @@ function OrganizationManagementPage() {
       });
     return () => controller.abort();
   }, [refresh, selected, accessState, collectionUserMatches, reloadVersion, reportReadFailure]);
+
+  useEffect(() => {
+    const onFragmentNavigation = () => {
+      handledFragment.current = null;
+      setFragmentVersion((version) => version + 1);
+    };
+    window.addEventListener("hashchange", onFragmentNavigation);
+    window.addEventListener("popstate", onFragmentNavigation);
+    return () => {
+      window.removeEventListener("hashchange", onFragmentNavigation);
+      window.removeEventListener("popstate", onFragmentNavigation);
+    };
+  }, []);
+
+  useEffect(() => {
+    const location = new URL(window.location.href);
+    if (!location.hash) {
+      handledFragment.current = null;
+      return;
+    }
+    if (
+      (location.searchParams.get("organizationId") ?? location.searchParams.get("organization")) !==
+      requestedOrganization
+    )
+      return;
+    // Next may consume a fragment before its section exists. Restore it once the
+    // requested organization's details are committed, never after ordinary refreshes.
+    if (
+      !canManage ||
+      loading ||
+      !currentOrganizationRole ||
+      loadedOrganizationId !== currentOrganizationId ||
+      currentOrganizationId !== requestedSelection
+    )
+      return;
+    const targetId = organizationFragmentTarget(location.hash, currentOrganizationRole);
+    const href = location.href;
+    if (!targetId || handledFragment.current === href) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ block: "start", behavior: "instant" });
+    handledFragment.current = href;
+  }, [
+    canManage,
+    loading,
+    currentOrganizationId,
+    currentOrganizationRole,
+    loadedOrganizationId,
+    requestedSelection,
+    requestedOrganization,
+    fragmentVersion,
+  ]);
 
   async function mutate(action: string, path: string, body: unknown, method = "POST") {
     if (!canManage) return;

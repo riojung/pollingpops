@@ -9,6 +9,7 @@ import {
 import {
   offerPrice,
   organizationAccessState,
+  organizationFragmentTarget,
   organizationPermissions,
   type BillingView,
 } from "./organization-model";
@@ -134,6 +135,15 @@ describe("organization administration", () => {
     expect(member).not.toContain('href="#members"');
     expect(member).not.toContain('href="#event-credits"');
     expect(member).not.toContain('href="#settings"');
+  });
+  it("resolves only permitted organization fragments, including the billing alias", () => {
+    expect(organizationFragmentTarget("#billing", "owner")).toBe("billing");
+    expect(organizationFragmentTarget("#event%2Dcredits", "billing")).toBe("event-credits");
+    expect(organizationFragmentTarget("#members", "billing")).toBeNull();
+    expect(organizationFragmentTarget("#settings", "member")).toBeNull();
+    expect(organizationFragmentTarget("#workspaces", "member")).toBe("workspaces");
+    expect(organizationFragmentTarget("#missing", "owner")).toBeNull();
+    expect(organizationFragmentTarget("#%invalid", "owner")).toBeNull();
   });
   it("keeps billing permission independent from content and organization administration", () => {
     expect(organizationPermissions("billing")).toEqual({

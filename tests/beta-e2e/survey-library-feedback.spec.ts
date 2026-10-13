@@ -16,7 +16,7 @@ for (const surface of ["", "@mobile "]) {
     expect(created.ok()).toBe(true);
     const survey = (await created.json()).survey;
     const folderResponse = await page.request.post(`${api}/v1/folders`, {
-      data: { name: `Feedback ${randomUUID().slice(0, 8)}` },
+      data: { name: `Feedback ${randomUUID().slice(0, 8)}`, artifactType: "survey" },
     });
     expect(folderResponse.ok()).toBe(true);
     const folder = (await folderResponse.json()).folder;

@@ -581,7 +581,9 @@ class MemorySurveyStore {
       const tx: Transaction = {
         assertAudienceAdmission: async (workspace) =>
           assertAudienceAdmissionInMemory(this.parent, workspace),
-        folderExists: async (id) => this.parent.folders.get(id)?.workspaceId === workspaceId,
+        folderExists: async (id) =>
+          this.parent.folders.get(id)?.workspaceId === workspaceId &&
+          this.parent.folders.get(id)?.artifactType === "survey",
         get: async (table, id) => {
           const row = this[table].get(id);
           return row && (!workspaceId || row.workspaceId === workspaceId)
@@ -597,7 +599,22 @@ class MemorySurveyStore {
             )
             .map((r) => compatibleDocument(table, structuredClone(r))) as never,
         put: async (table, row, insert) => {
-          if (table === "surveys") (row as SurveyRecord).updatedAt = new Date().toISOString();
+          if (table === "surveys") {
+            const survey = row as SurveyRecord;
+            if (survey.folderId) {
+              const folder = this.parent.folders.get(survey.folderId);
+              if (
+                !folder ||
+                folder.workspaceId !== survey.workspaceId ||
+                folder.artifactType !== "survey"
+              )
+                throw new SurveyError(
+                  "NOT_FOUND",
+                  "Selected folder not found in this content library",
+                );
+            }
+            survey.updatedAt = new Date().toISOString();
+          }
           if (table === "survey_feedback_rooms" && insert) {
             const room = row as SurveyRoom;
             await this.parent.assertWorkspaceLiveSessionCreationAllowed(room.workspaceId);
@@ -648,6 +665,11 @@ class MemorySurveyStore {
           this[table].clear();
           for (const [id, row] of maps[table])
             (this[table] as Map<string, Documents[Table]>).set(id, row);
+        }
+        // Folder deletion can occur while an asynchronous Survey transaction is running.
+        // Never restore a stale folder assignment from its rollback snapshot.
+        for (const survey of this.surveys.values()) {
+          if (survey.folderId && !this.parent.folders.has(survey.folderId)) survey.folderId = null;
         }
         this.receipts = maps.receipts;
         // Roll back only this extension's claims; unrelated Round/Presentation claims remain intact.
@@ -753,7 +775,7 @@ function postgresRun(repository: PostgresRepository): Run {
           Boolean(
             (
               await client.query(
-                "SELECT id FROM folders WHERE workspace_id = $1 AND id = $2 FOR KEY SHARE",
+                "SELECT id FROM folders WHERE workspace_id = $1 AND id = $2 AND artifact_type = 'survey' FOR KEY SHARE",
                 [workspaceId, id],
               )
             ).rowCount,

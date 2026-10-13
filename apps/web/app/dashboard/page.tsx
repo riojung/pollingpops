@@ -8,6 +8,7 @@ import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { CreatorBrand } from "../../components/brand";
 import { CheckpointSetImport } from "../../components/checkpoint-set-import";
 import { API_URL, apiFetch, humanError } from "../../lib/api";
+import { folderPathLabel, getFolderOptions, type FolderRecord } from "../../lib/folders";
 import { dashboardMessage } from "../../components/workspace/workspace-model";
 import { RoundLibraryViewToggle } from "../../components/workspace/round-library-view-toggle";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
@@ -43,11 +44,6 @@ interface QuizRecord {
   lastHostedAt: string | null;
 }
 
-interface FolderRecord {
-  id: string;
-  name: string;
-}
-
 function LegacyDashboardPage() {
   const router = useRouter();
   const { management } = useWorkspace();
@@ -58,8 +54,6 @@ function LegacyDashboardPage() {
   const [title, setTitle] = useState("");
   const [search, setSearch] = useState("");
   const [folderFilter, setFolderFilter] = useState("all");
-  const [newFolderName, setNewFolderName] = useState("");
-  const [editingFolder, setEditingFolder] = useState<FolderRecord | null>(null);
   const [organizingId, setOrganizingId] = useState("");
   const [organizationFolderId, setOrganizationFolderId] = useState("");
   const [organizationTags, setOrganizationTags] = useState("");
@@ -81,13 +75,13 @@ function LegacyDashboardPage() {
           apiFetch<{ quizzes: QuizRecord[] }>(
             `/v1/quizzes${includeArchived ? "?archived=true" : ""}`,
           ),
-          apiFetch<{ folders: FolderRecord[] }>("/v1/folders"),
+          apiFetch<{ folders: FolderRecord[] }>("/v1/folders?artifactType=round"),
         ]);
         setCreator(me.creator);
         setEntitlements(me.entitlements);
         setProductFeatures({ workspaceShell: me.productFeatures?.workspaceShell === true });
         setQuizzes(list.quizzes);
-        setFolders(folderList.folders);
+        setFolders(folderList.folders.filter((folder) => folder.artifactType === "round"));
       } catch (caught) {
         if ((caught as { status?: number }).status === 401) {
           // WorkspaceProvider resolves user-only access before rendering this page.
@@ -143,63 +137,6 @@ function LegacyDashboardPage() {
         method: "POST",
         body: JSON.stringify({ archived }),
       });
-      await refresh(showArchived);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function createFolder(event: FormEvent) {
-    event.preventDefault();
-    setBusyId("folder-create");
-    setError("");
-    try {
-      await apiFetch("/v1/folders", {
-        method: "POST",
-        body: JSON.stringify({ name: newFolderName }),
-      });
-      setNewFolderName("");
-      await refresh(showArchived);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function renameFolder(event: FormEvent) {
-    event.preventDefault();
-    if (!editingFolder) return;
-    setBusyId(editingFolder.id);
-    setError("");
-    try {
-      await apiFetch(`/v1/folders/${editingFolder.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: editingFolder.name }),
-      });
-      setEditingFolder(null);
-      await refresh(showArchived);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function deleteFolder(folder: FolderRecord) {
-    if (
-      !window.confirm(
-        `Delete the folder “${folder.name}”? Its checkpoint sets will remain in the library.`,
-      )
-    )
-      return;
-    setBusyId(folder.id);
-    setError("");
-    try {
-      await apiFetch(`/v1/folders/${folder.id}`, { method: "DELETE" });
-      if (folderFilter === folder.id) setFolderFilter("all");
       await refresh(showArchived);
     } catch (caught) {
       setError(humanError(caught));
@@ -390,88 +327,11 @@ function LegacyDashboardPage() {
           />
         ) : null}
         {creator ? <AuthoringAssistant canEdit={canEdit} /> : null}
-        {canEdit ? (
-          <details className="panel folder-manager">
-            <summary>Manage folders</summary>
-            <form className="toolbar folder-create" onSubmit={createFolder}>
-              <label className="field">
-                <span>New folder name</span>
-                <input
-                  className="input"
-                  maxLength={80}
-                  onChange={(event) => setNewFolderName(event.target.value)}
-                  required
-                  value={newFolderName}
-                />
-              </label>
-              <button
-                className="button-quiet small-button"
-                disabled={busyId === "folder-create"}
-                type="submit"
-              >
-                Add folder
-              </button>
-            </form>
-            {folders.length ? (
-              <ul className="folder-list">
-                {folders.map((folder) => (
-                  <li key={folder.id}>
-                    {editingFolder?.id === folder.id ? (
-                      <form className="toolbar" onSubmit={renameFolder}>
-                        <label className="field">
-                          <span className="sr-only">Rename {folder.name}</span>
-                          <input
-                            autoFocus
-                            className="input"
-                            maxLength={80}
-                            onChange={(event) =>
-                              setEditingFolder({ ...editingFolder, name: event.target.value })
-                            }
-                            required
-                            value={editingFolder.name}
-                          />
-                        </label>
-                        <button className="button-quiet small-button" type="submit">
-                          Save
-                        </button>
-                        <button
-                          className="button-quiet small-button"
-                          onClick={() => setEditingFolder(null)}
-                          type="button"
-                        >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <>
-                        <span>{folder.name}</span>
-                        <div className="button-row">
-                          <button
-                            className="button-quiet small-button"
-                            onClick={() => setEditingFolder(folder)}
-                            type="button"
-                          >
-                            Rename
-                          </button>
-                          <button
-                            className="danger-link"
-                            disabled={busyId === folder.id}
-                            onClick={() => void deleteFolder(folder)}
-                            type="button"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted">No folders yet.</p>
-            )}
-          </details>
-        ) : null}
+        <p>
+          <Link className="button-quiet small-button" href="/library/folders?type=rounds">
+            Manage Round folders
+          </Link>
+        </p>
         <section className="library-controls" aria-label="Checkpoint-set library filters">
           <label className="field library-search">
             <span>Search checkpoint sets</span>
@@ -492,9 +352,9 @@ function LegacyDashboardPage() {
             >
               <option value="all">All folders</option>
               <option value="unfiled">Unfiled</option>
-              {folders.map((folder) => (
+              {getFolderOptions(folders).map((folder) => (
                 <option key={folder.id} value={folder.id}>
-                  {folder.name}
+                  {folder.label}
                 </option>
               ))}
             </select>
@@ -534,7 +394,7 @@ function LegacyDashboardPage() {
                 <div className="library-metadata">
                   {quiz.folderId ? (
                     <span className="folder-label">
-                      {folders.find((folder) => folder.id === quiz.folderId)?.name ?? "Folder"}
+                      {folderPathLabel(folders, quiz.folderId) ?? "Folder"}
                     </span>
                   ) : null}
                   {quiz.tags.map((tag) => (
@@ -653,9 +513,9 @@ function LegacyDashboardPage() {
                       value={organizationFolderId}
                     >
                       <option value="">Unfiled</option>
-                      {folders.map((folder) => (
+                      {getFolderOptions(folders).map((folder) => (
                         <option key={folder.id} value={folder.id}>
-                          {folder.name}
+                          {folder.label}
                         </option>
                       ))}
                     </select>
@@ -699,8 +559,6 @@ function BetaDashboard() {
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [folderFilter, setFolderFilter] = useState("all");
-  const [newFolderName, setNewFolderName] = useState("");
-  const [editingFolder, setEditingFolder] = useState<FolderRecord | null>(null);
   const [organizingId, setOrganizingId] = useState("");
   const [organizationFolderId, setOrganizationFolderId] = useState("");
   const [organizationTags, setOrganizationTags] = useState("");
@@ -726,10 +584,10 @@ function BetaDashboard() {
           apiFetch<{ quizzes: QuizRecord[] }>(
             `/v1/quizzes${includeArchived ? "?archived=true" : ""}`,
           ),
-          apiFetch<{ folders: FolderRecord[] }>("/v1/folders"),
+          apiFetch<{ folders: FolderRecord[] }>("/v1/folders?artifactType=round"),
         ]);
         setQuizzes(list.quizzes);
-        setFolders(folderList.folders);
+        setFolders(folderList.folders.filter((folder) => folder.artifactType === "round"));
       } catch (caught) {
         if ((caught as { status?: number }).status === 401) router.replace("/signin");
         else setError(humanError(caught));
@@ -784,62 +642,6 @@ function BetaDashboard() {
         method: "POST",
         body: JSON.stringify({ archived }),
       });
-      await refresh(showArchived);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function createFolder(event: FormEvent) {
-    event.preventDefault();
-    setBusyId("folder-create");
-    setError("");
-    try {
-      await apiFetch("/v1/folders", {
-        method: "POST",
-        body: JSON.stringify({ name: newFolderName }),
-      });
-      setNewFolderName("");
-      await refresh(showArchived);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function renameFolder(event: FormEvent) {
-    event.preventDefault();
-    if (!editingFolder) return;
-    setBusyId(editingFolder.id);
-    setError("");
-    try {
-      await apiFetch(`/v1/folders/${editingFolder.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: editingFolder.name }),
-      });
-      setEditingFolder(null);
-      await refresh(showArchived);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function deleteFolder(folder: FolderRecord) {
-    if (
-      !window.confirm(`Delete the folder “${folder.name}”? Its Rounds will remain in the library.`)
-    ) {
-      return;
-    }
-    setBusyId(folder.id);
-    setError("");
-    try {
-      await apiFetch(`/v1/folders/${folder.id}`, { method: "DELETE" });
-      if (folderFilter === folder.id) setFolderFilter("all");
       await refresh(showArchived);
     } catch (caught) {
       setError(humanError(caught));
@@ -978,9 +780,9 @@ function BetaDashboard() {
           >
             <option value="all">All folders</option>
             <option value="unfiled">Unfiled</option>
-            {folders.map((folder) => (
+            {getFolderOptions(folders).map((folder) => (
               <option key={folder.id} value={folder.id}>
-                {folder.name}
+                {folder.label}
               </option>
             ))}
           </select>
@@ -998,79 +800,11 @@ function BetaDashboard() {
         </div>
       </section>
 
-      {canEdit ? (
-        <details className={styles.folderManager}>
-          <summary>Manage folders</summary>
-          <form className={styles.folderForm} onSubmit={createFolder}>
-            <label className="field">
-              <span>New folder name</span>
-              <input
-                className="input"
-                maxLength={80}
-                onChange={(event) => setNewFolderName(event.target.value)}
-                required
-                value={newFolderName}
-              />
-            </label>
-            <button
-              className="button-quiet small-button"
-              disabled={busyId === "folder-create"}
-              type="submit"
-            >
-              Add folder
-            </button>
-          </form>
-          {folders.length ? (
-            <ul className={styles.folderList}>
-              {folders.map((folder) => (
-                <li key={folder.id}>
-                  {editingFolder?.id === folder.id ? (
-                    <form className={styles.folderForm} onSubmit={renameFolder}>
-                      <label className="field">
-                        <span className="sr-only">Rename {folder.name}</span>
-                        <input
-                          autoFocus
-                          className="input"
-                          maxLength={80}
-                          onChange={(event) =>
-                            setEditingFolder({ ...editingFolder, name: event.target.value })
-                          }
-                          required
-                          value={editingFolder.name}
-                        />
-                      </label>
-                      <button className="button-quiet small-button" type="submit">
-                        Save
-                      </button>
-                      <button
-                        className="button-quiet small-button"
-                        onClick={() => setEditingFolder(null)}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </form>
-                  ) : (
-                    <>
-                      <span>{folder.name}</span>
-                      <span className={styles.folderActions}>
-                        <button onClick={() => setEditingFolder(folder)} type="button">
-                          Rename
-                        </button>
-                        <button onClick={() => void deleteFolder(folder)} type="button">
-                          Delete
-                        </button>
-                      </span>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={styles.muted}>No folders yet.</p>
-          )}
-        </details>
-      ) : null}
+      <p>
+        <Link className="button-quiet small-button" href="/library/folders?type=rounds">
+          Manage Round folders
+        </Link>
+      </p>
 
       {loading ? <p className={styles.muted}>Loading Rounds…</p> : null}
       {!loading && visibleQuizzes.length === 0 ? (
@@ -1126,7 +860,7 @@ function BetaDashboard() {
                   <div className={styles.conceptList}>
                     {quiz.folderId ? (
                       <span className={styles.subtlePill}>
-                        {folders.find((folder) => folder.id === quiz.folderId)?.name ?? "Folder"}
+                        {folderPathLabel(folders, quiz.folderId) ?? "Folder"}
                       </span>
                     ) : null}
                     {quiz.tags.map((tag) => (
@@ -1242,9 +976,9 @@ function BetaDashboard() {
                       value={organizationFolderId}
                     >
                       <option value="">Unfiled</option>
-                      {folders.map((folder) => (
+                      {getFolderOptions(folders).map((folder) => (
                         <option key={folder.id} value={folder.id}>
-                          {folder.name}
+                          {folder.label}
                         </option>
                       ))}
                     </select>

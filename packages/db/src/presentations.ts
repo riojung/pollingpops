@@ -6,7 +6,7 @@ import {
   type MemoryRepositoryLifecycleExtension,
 } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
-import type { LibraryArtifactDeletionResult, Repository } from "./types.js";
+import { FolderError, type LibraryArtifactDeletionResult, type Repository } from "./types.js";
 import { presentationMediaIds } from "./media-references.js";
 import {
   PRESENTATION_CONTENT_SCHEMA_VERSION,
@@ -231,6 +231,7 @@ export class MemoryPresentationRepository
     private readonly repository?: Pick<
       MemoryRepository,
       | "listFolders"
+      | "folders"
       | "replaceMediaReferences"
       | "validateMediaReferences"
       | "isLibraryArtifactReferenced"
@@ -280,9 +281,20 @@ export class MemoryPresentationRepository
     }
   }
 
+  deleteFolderMetadata(workspaceId: string, folderId: string) {
+    for (const presentation of this.presentations.values()) {
+      if (presentation.workspaceId === workspaceId && presentation.folderId === folderId) {
+        presentation.folderId = null;
+        presentation.updatedAt = new Date();
+      }
+    }
+  }
+
   async listPresentations(workspaceId: string, includeArchived = false) {
     const folderIds = new Set(
-      (await this.repository?.listFolders(workspaceId))?.map((folder) => folder.id) ?? [],
+      (await this.repository?.listFolders(workspaceId, "presentation"))?.map(
+        (folder) => folder.id,
+      ) ?? [],
     );
     return [...this.presentations.values()]
       .filter(
@@ -304,6 +316,15 @@ export class MemoryPresentationRepository
 
   async createPresentation(input: PresentationRecord) {
     const created = clone(normalizePresentationRecord(input));
+    if (created.folderId) {
+      const folder = this.repository?.folders.get(created.folderId);
+      if (
+        !folder ||
+        folder.workspaceId !== created.workspaceId ||
+        folder.artifactType !== "presentation"
+      )
+        throw new FolderError("NOT_FOUND", "Selected folder not found in this content library");
+    }
     this.repository?.validateMediaReferences(
       created.workspaceId,
       presentationMediaIds(created.draft),
@@ -342,7 +363,7 @@ export class MemoryPresentationRepository
     const presentation = this.presentations.get(presentationId);
     if (!presentation || presentation.workspaceId !== workspaceId) return null;
     if (presentation.folderId) {
-      const folders = await this.repository?.listFolders(workspaceId);
+      const folders = await this.repository?.listFolders(workspaceId, "presentation");
       if (!folders?.some((folder) => folder.id === presentation.folderId)) {
         presentation.folderId = null;
       }
@@ -582,8 +603,9 @@ export class MemoryPresentationRepository
     const presentation = this.presentations.get(presentationId);
     if (!presentation || presentation.workspaceId !== workspaceId) return null;
     if (folderId) {
-      const folders = await this.repository?.listFolders(workspaceId);
-      if (!folders?.some((folder) => folder.id === folderId)) return null;
+      const folder = this.repository?.folders.get(folderId);
+      if (!folder || folder.workspaceId !== workspaceId || folder.artifactType !== "presentation")
+        return null;
     }
     presentation.folderId = folderId;
     presentation.updatedAt = new Date();
@@ -1038,7 +1060,7 @@ export class PostgresPresentationRepository implements PresentationRepository {
         `UPDATE presentations SET folder_id = $3, updated_at = now()
          WHERE workspace_id = $1 AND id = $2
            AND ($3::uuid IS NULL OR EXISTS (
-             SELECT 1 FROM folders WHERE workspace_id = $1 AND id = $3
+             SELECT 1 FROM folders WHERE workspace_id = $1 AND id = $3 AND artifact_type = 'presentation'
            ))
          RETURNING *`,
         [workspaceId, presentationId, folderId],

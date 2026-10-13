@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "../../components/locale-provider";
 import type { QuizDraft } from "@openround/contracts";
 import type { SurveyDraft } from "@openround/contracts/surveys";
@@ -11,6 +11,7 @@ import { WorkspaceProvider, useWorkspace } from "../../components/workspace/work
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../lib/api";
 import { clearBuilderRecovery } from "../../lib/builder-recovery";
+import { folderPathLabel, getFolderOptions, type FolderRecord } from "../../lib/folders";
 import { pluralCategory } from "../../lib/i18n/format";
 import {
   filterLibraryItems,
@@ -68,11 +69,7 @@ interface SurveyRecord {
 type LibraryType = "rounds" | "presentations" | "surveys";
 type ArtifactType = "round" | "presentation" | "survey";
 type BulkAction = "duplicate" | "archive" | "restore" | "delete";
-
-interface FolderRecord {
-  id: string;
-  name: string;
-}
+const EMPTY_FOLDERS: FolderRecord[] = [];
 
 interface FavoriteRecord {
   artifactType: ArtifactType;
@@ -106,6 +103,7 @@ function LibraryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canEdit, creator, productFeatures } = useWorkspace();
+  const workspaceId = creator?.workspaceId ?? "";
   const canDelete = creator?.role === "owner";
   const presentationsEnabled = productFeatures?.presentations === true;
   const requestedType = searchParams.get("type");
@@ -119,7 +117,11 @@ function LibraryContent() {
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
   const [presentations, setPresentations] = useState<PresentationRecord[]>([]);
   const [surveys, setSurveys] = useState<SurveyRecord[]>([]);
-  const [folders, setFolders] = useState<FolderRecord[]>([]);
+  const [foldersByType, setFoldersByType] = useState<Record<LibraryType, FolderRecord[]>>({
+    rounds: [],
+    presentations: [],
+    surveys: [],
+  });
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
   const [status, setStatus] = useState<LibraryStatusFilter>(() =>
@@ -135,10 +137,21 @@ function LibraryContent() {
   const [targetFolderId, setTargetFolderId] = useState("unfiled");
   const [busyAction, setBusyAction] = useState<BulkAction | "favorite" | "folder" | "">("");
   const [announcement, setAnnouncement] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [fetching, setLoading] = useState(true);
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const refreshSequence = useRef(0);
+  const mounted = useRef(false);
+  const activeType = useRef(type);
+  const activeWorkspace = useRef(workspaceId);
+  const selectionSequence = useRef(0);
+  const loading = fetching || loadedWorkspaceId !== workspaceId;
+  const folders = loadedWorkspaceId === workspaceId ? foldersByType[type] : EMPTY_FOLDERS;
+  const folderOptions = useMemo(() => getFolderOptions(folders), [folders]);
 
   const refresh = useCallback(async () => {
+    if (!mounted.current) return;
+    const sequence = ++refreshSequence.current;
     setLoading(true);
     setError("");
     try {
@@ -146,7 +159,9 @@ function LibraryContent() {
         roundResponse,
         presentationResponse,
         surveyResponse,
-        folderResponse,
+        roundFolderResponse,
+        presentationFolderResponse,
+        surveyFolderResponse,
         favoriteResponse,
       ] = await Promise.all([
         apiFetch<{ quizzes: RoundRecord[] }>("/v1/quizzes?archived=true"),
@@ -172,13 +187,24 @@ function LibraryContent() {
           } while (cursor);
           return rows;
         })(),
-        apiFetch<{ folders: FolderRecord[] }>("/v1/folders"),
+        apiFetch<{ folders: FolderRecord[] }>("/v1/folders?artifactType=round"),
+        presentationsEnabled
+          ? apiFetch<{ folders: FolderRecord[] }>("/v1/folders?artifactType=presentation")
+          : Promise.resolve({ folders: [] }),
+        apiFetch<{ folders: FolderRecord[] }>("/v1/folders?artifactType=survey"),
         apiFetch<{ favorites: FavoriteRecord[] }>("/v1/library/favorites"),
       ]);
+      if (sequence !== refreshSequence.current) return;
       setRounds(roundResponse.quizzes);
       setPresentations(presentationResponse.presentations);
       setSurveys(surveyResponse);
-      setFolders(folderResponse.folders);
+      setFoldersByType({
+        rounds: roundFolderResponse.folders.filter((folder) => folder.artifactType === "round"),
+        presentations: presentationFolderResponse.folders.filter(
+          (folder) => folder.artifactType === "presentation",
+        ),
+        surveys: surveyFolderResponse.folders.filter((folder) => folder.artifactType === "survey"),
+      });
       setFavoriteIds(
         new Set(
           favoriteResponse.favorites.map((favorite) =>
@@ -186,32 +212,77 @@ function LibraryContent() {
           ),
         ),
       );
+      setLoadedWorkspaceId(workspaceId);
     } catch (caught) {
+      if (sequence !== refreshSequence.current) return;
+      setLoadedWorkspaceId(workspaceId);
       if ((caught as { status?: number }).status === 401) router.replace("/signin");
       else setError(humanError(caught));
     } finally {
-      setLoading(false);
+      if (sequence === refreshSequence.current) setLoading(false);
     }
-  }, [presentationsEnabled, router]);
+  }, [presentationsEnabled, router, workspaceId]);
+  const refreshCurrent = useRef(refresh);
+  refreshCurrent.current = refresh;
 
   useEffect(() => {
+    mounted.current = true;
+    if (activeWorkspace.current !== workspaceId) {
+      activeWorkspace.current = workspaceId;
+      ++selectionSequence.current;
+      setRounds([]);
+      setPresentations([]);
+      setSurveys([]);
+      setFoldersByType({ rounds: [], presentations: [], surveys: [] });
+      setFavoriteIds(new Set());
+      setSelectedIds(new Set());
+      setFolderId("all");
+      setTargetFolderId("unfiled");
+      setAnnouncement("");
+    }
     void refresh();
-  }, [refresh]);
+    return () => {
+      mounted.current = false;
+      ++refreshSequence.current;
+      ++selectionSequence.current;
+    };
+  }, [refresh, workspaceId]);
 
   useEffect(() => {
-    setType(
+    const nextType =
       requestedType === "surveys"
         ? "surveys"
         : requestedType === "presentations" && presentationsEnabled
           ? "presentations"
-          : "rounds",
-    );
+          : "rounds";
+    if (activeType.current !== nextType) {
+      activeType.current = nextType;
+      ++selectionSequence.current;
+      setSelectedIds(new Set());
+      setTargetFolderId("unfiled");
+      setAnnouncement("");
+    }
+    setType(nextType);
     setSearch(searchParams.get("q") ?? "");
     setStatus(statusFromQuery(searchParams.get("status")));
     setOwnership(searchParams.get("owner") === "workspace" ? "workspace" : "all");
     setFolderId(searchParams.get("folder") ?? "all");
     setFavoritesOnly(searchParams.get("favorites") === "true");
   }, [presentationsEnabled, requestedType, searchParams]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (
+      folderId !== "all" &&
+      folderId !== "unfiled" &&
+      !folders.some((folder) => folder.id === folderId)
+    ) {
+      setFolderId("all");
+    }
+    if (targetFolderId !== "unfiled" && !folders.some((folder) => folder.id === targetFolderId)) {
+      setTargetFolderId("unfiled");
+    }
+  }, [folderId, folders, loading, targetFolderId]);
 
   useEffect(() => {
     if (!creator?.workspaceId) return;
@@ -250,12 +321,12 @@ function LibraryContent() {
           favorite: favoriteIds.has(favoriteKey("round", round.id)),
           searchTerms: [
             ...(round.tags ?? []),
-            folders.find((folder) => folder.id === round.folderId)?.name ?? "",
+            folderPathLabel(foldersByType.rounds, round.folderId) ?? "",
           ],
         })),
         filters,
       ),
-    [favoriteIds, filters, folders, rounds],
+    [favoriteIds, filters, foldersByType.rounds, rounds],
   );
   const visiblePresentations = useMemo(
     () =>
@@ -263,11 +334,11 @@ function LibraryContent() {
         presentations.map((presentation) => ({
           ...presentation,
           favorite: favoriteIds.has(favoriteKey("presentation", presentation.id)),
-          searchTerms: [folders.find((folder) => folder.id === presentation.folderId)?.name ?? ""],
+          searchTerms: [folderPathLabel(foldersByType.presentations, presentation.folderId) ?? ""],
         })),
         filters,
       ),
-    [favoriteIds, filters, folders, presentations],
+    [favoriteIds, filters, foldersByType.presentations, presentations],
   );
   const bulkTargets = useMemo(
     () =>
@@ -284,11 +355,11 @@ function LibraryContent() {
         surveys.map((survey) => ({
           ...survey,
           favorite: favoriteIds.has(favoriteKey("survey", survey.id)),
-          searchTerms: [folders.find((folder) => folder.id === survey.folderId)?.name ?? ""],
+          searchTerms: [folderPathLabel(foldersByType.surveys, survey.folderId) ?? ""],
         })),
         filters,
       ),
-    [surveys, favoriteIds, folders, filters],
+    [surveys, favoriteIds, foldersByType.surveys, filters],
   );
   const typeLabel =
     type === "surveys"
@@ -335,8 +406,14 @@ function LibraryContent() {
     type === "rounds" ? rounds.length : type === "surveys" ? surveys.length : presentations.length;
 
   function chooseType(next: LibraryType) {
+    if (next === type) return;
+    activeType.current = next;
+    ++selectionSequence.current;
     setType(next);
     setSelectedIds(new Set());
+    setFolderId("all");
+    setTargetFolderId("unfiled");
+    setAnnouncement("");
     const params = new URLSearchParams(searchParams.toString());
     if (next !== "rounds") params.set("type", next);
     else params.delete("type");
@@ -346,8 +423,7 @@ function LibraryContent() {
     else params.set("status", status);
     if (ownership === "workspace") params.set("owner", "workspace");
     else params.delete("owner");
-    if (folderId !== "all") params.set("folder", folderId);
-    else params.delete("folder");
+    params.delete("folder");
     if (favoritesOnly) params.set("favorites", "true");
     else params.delete("favorites");
     router.replace(`/library${params.size ? `?${params}` : ""}`);
@@ -372,6 +448,7 @@ function LibraryContent() {
   }
 
   function toggleSelection(artifactId: string) {
+    ++selectionSequence.current;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(artifactId)) next.delete(artifactId);
@@ -381,6 +458,7 @@ function LibraryContent() {
   }
 
   function toggleVisible() {
+    ++selectionSequence.current;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
@@ -390,8 +468,10 @@ function LibraryContent() {
   }
 
   async function runArtifactAction(action: BulkAction, ids: string[]) {
-    if (!ids.length || busyAction) return;
+    if (loading || !canEdit || !ids.length || busyAction) return;
     const actionType = type;
+    const actionWorkspaceId = workspaceId;
+    const sequence = selectionSequence.current;
     if (actionType === "surveys" && (action === "delete" || action === "restore")) return;
     if (action === "delete") {
       if (!canDelete) return;
@@ -440,32 +520,39 @@ function LibraryContent() {
     );
     const succeeded = ids.filter((_, index) => results[index]?.status === "fulfilled");
     const failed = results.find((result) => result.status === "rejected");
+    if (!mounted.current) return;
     if (action === "delete") {
       const deleted = new Set(succeeded);
-      if (actionType === "rounds")
-        setRounds((current) => current.filter((item) => !deleted.has(item.id)));
-      else setPresentations((current) => current.filter((item) => !deleted.has(item.id)));
-      setFavoriteIds((current) => {
-        const next = new Set(current);
-        succeeded.forEach((id) =>
-          next.delete(favoriteKey(actionType === "rounds" ? "round" : "presentation", id)),
-        );
-        return next;
-      });
+      if (activeWorkspace.current === actionWorkspaceId) {
+        if (actionType === "rounds")
+          setRounds((current) => current.filter((item) => !deleted.has(item.id)));
+        else setPresentations((current) => current.filter((item) => !deleted.has(item.id)));
+        setFavoriteIds((current) => {
+          const next = new Set(current);
+          succeeded.forEach((id) =>
+            next.delete(favoriteKey(actionType === "rounds" ? "round" : "presentation", id)),
+          );
+          return next;
+        });
+      }
       await Promise.allSettled(
         succeeded.map((id) =>
           clearBuilderRecovery(`${actionType === "rounds" ? "round" : "presentation"}:${id}`),
         ),
       );
     }
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      succeeded.forEach((id) => next.delete(id));
-      return next;
-    });
-    await refresh();
-    if (failed?.status === "rejected") setError(humanError(failed.reason));
-    if (succeeded.length) {
+    if (sequence === selectionSequence.current) {
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        succeeded.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+    await refreshCurrent.current();
+    if (sequence === selectionSequence.current && failed?.status === "rejected") {
+      setError(humanError(failed.reason));
+    }
+    if (sequence === selectionSequence.current && succeeded.length) {
       setAnnouncement(
         t("pages.library.actionComplete", {
           count: succeeded.length,
@@ -481,22 +568,29 @@ function LibraryContent() {
   }
 
   async function applyFolder(ids: string[]) {
-    if (!ids.length) return;
+    if (loading || !canEdit || !ids.length || busyAction) return;
+    const actionType = type;
+    const sequence = selectionSequence.current;
+    const nextFolderId = targetFolderId === "unfiled" ? null : targetFolderId;
+    if (nextFolderId !== null && !folders.some((folder) => folder.id === nextFolderId)) return;
+    const items =
+      actionType === "rounds" ? rounds : actionType === "surveys" ? surveys : presentations;
+    if (ids.some((id) => !items.some((item) => item.id === id))) return;
+    const folderName =
+      nextFolderId === null
+        ? t("pages.library.unfiled")
+        : (folderPathLabel(folders, nextFolderId) ?? t("pages.library.selectedFolder"));
     setBusyAction("folder");
     setAnnouncement("");
     setError("");
-    const nextFolderId = targetFolderId === "unfiled" ? null : targetFolderId;
     const results = await Promise.allSettled(
       ids.map((id) =>
-        type === "rounds"
+        actionType === "rounds"
           ? apiFetch(`/v1/quizzes/${id}/organization`, {
               method: "PATCH",
-              body: JSON.stringify({
-                folderId: nextFolderId,
-                tags: rounds.find((round) => round.id === id)?.tags ?? [],
-              }),
+              body: JSON.stringify({ folderId: nextFolderId }),
             })
-          : type === "surveys"
+          : actionType === "surveys"
             ? apiFetch(`/v1/surveys/${id}/organization`, {
                 method: "PATCH",
                 body: JSON.stringify({
@@ -513,20 +607,21 @@ function LibraryContent() {
     );
     const succeeded = ids.filter((_, index) => results[index]?.status === "fulfilled");
     const failed = results.find((result) => result.status === "rejected");
-    await refresh();
-    if (failed?.status === "rejected") setError(humanError(failed.reason));
-    if (succeeded.length) {
-      const folderName =
-        nextFolderId === null
-          ? t("pages.library.unfiled")
-          : (folders.find((folder) => folder.id === nextFolderId)?.name ??
-            t("pages.library.selectedFolder"));
+    if (!mounted.current) return;
+    await refreshCurrent.current();
+    if (sequence === selectionSequence.current && failed?.status === "rejected") {
+      setError(humanError(failed.reason));
+    }
+    if (sequence === selectionSequence.current && succeeded.length) {
       setAnnouncement(t("pages.library.moved", { count: succeeded.length, folder: folderName }));
     }
     setBusyAction("");
   }
 
   async function toggleFavorite(artifactType: ArtifactType, artifactId: string) {
+    if (loading || busyAction) return;
+    const sequence = selectionSequence.current;
+    const actionWorkspaceId = workspaceId;
     const key = favoriteKey(artifactType, artifactId);
     const favorite = !favoriteIds.has(key);
     setBusyAction("favorite");
@@ -542,19 +637,24 @@ function LibraryContent() {
         method: "PUT",
         body: JSON.stringify({ favorite }),
       });
-      setAnnouncement(
-        t(favorite ? "pages.library.favoriteAdded" : "pages.library.favoriteRemoved"),
-      );
+      if (mounted.current && sequence === selectionSequence.current) {
+        setAnnouncement(
+          t(favorite ? "pages.library.favoriteAdded" : "pages.library.favoriteRemoved"),
+        );
+      }
     } catch (caught) {
-      setFavoriteIds((current) => {
-        const next = new Set(current);
-        if (favorite) next.delete(key);
-        else next.add(key);
-        return next;
-      });
-      setError(humanError(caught));
+      if (!mounted.current) return;
+      if (activeWorkspace.current === actionWorkspaceId) {
+        setFavoriteIds((current) => {
+          const next = new Set(current);
+          if (favorite) next.delete(key);
+          else next.add(key);
+          return next;
+        });
+      }
+      if (sequence === selectionSequence.current) setError(humanError(caught));
     } finally {
-      setBusyAction("");
+      if (mounted.current) setBusyAction("");
     }
   }
 
@@ -636,7 +736,7 @@ function LibraryContent() {
             value={search}
           />
         </label>
-        <Link className={styles.manageLink} href="/dashboard">
+        <Link className={styles.manageLink} href={`/library/folders?type=${type}`}>
           {t("pages.library.manageFolders")}
         </Link>
         <Link className={styles.manageLink} href="/recovery-packs" lang="en-CA">
@@ -668,9 +768,9 @@ function LibraryContent() {
           >
             <option value="all">{t("pages.library.allFolders")}</option>
             <option value="unfiled">{t("pages.library.unfiled")}</option>
-            {folders.map((folder) => (
+            {folderOptions.map((folder) => (
               <option key={folder.id} lang="" value={folder.id}>
-                {folder.name}
+                {folder.label}
               </option>
             ))}
           </select>
@@ -797,9 +897,9 @@ function LibraryContent() {
                     value={targetFolderId}
                   >
                     <option value="unfiled">{t("pages.library.unfiled")}</option>
-                    {folders.map((folder) => (
+                    {folderOptions.map((folder) => (
                       <option key={folder.id} lang="" value={folder.id}>
-                        {folder.name}
+                        {folder.label}
                       </option>
                     ))}
                   </select>
@@ -813,7 +913,10 @@ function LibraryContent() {
                 </button>
                 <button
                   disabled={Boolean(busyAction)}
-                  onClick={() => setSelectedIds(new Set())}
+                  onClick={() => {
+                    ++selectionSequence.current;
+                    setSelectedIds(new Set());
+                  }}
                   type="button"
                 >
                   {t("pages.library.clear")}
@@ -842,7 +945,7 @@ function LibraryContent() {
               {visibleRounds.map((round) => {
                 const archived = round.status === "archived";
                 const selected = selectedIds.has(round.id);
-                const folderName = folders.find((folder) => folder.id === round.folderId)?.name;
+                const folderName = folderPathLabel(foldersByType.rounds, round.folderId);
                 return (
                   <article
                     className={`${styles.card} ${selected ? styles.cardSelected : ""}`}
@@ -996,9 +1099,10 @@ function LibraryContent() {
                 {visiblePresentations.map((presentation) => {
                   const archived = presentation.status === "archived";
                   const selected = selectedIds.has(presentation.id);
-                  const folderName = folders.find(
-                    (folder) => folder.id === presentation.folderId,
-                  )?.name;
+                  const folderName = folderPathLabel(
+                    foldersByType.presentations,
+                    presentation.folderId,
+                  );
                   return (
                     <article
                       className={`${styles.card} ${selected ? styles.cardSelected : ""}`}
@@ -1162,7 +1266,10 @@ function LibraryContent() {
               visibleSurveys.length ? (
                 <SurveyLibraryCards
                   surveys={visibleSurveys}
-                  folders={folders}
+                  folders={getFolderOptions(foldersByType.surveys).map((folder) => ({
+                    id: folder.id,
+                    name: folder.label,
+                  }))}
                   view={view}
                   canEdit={canEdit}
                   canCreate={productFeatures?.surveys === true}

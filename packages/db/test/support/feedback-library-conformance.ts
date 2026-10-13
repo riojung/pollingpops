@@ -96,6 +96,7 @@ export async function expectSurveyLibraryConformance(
     id: folderId,
     workspaceId: actor.workspaceId,
     name: "Survey feedback",
+    artifactType: "survey",
     createdAt: now,
     updatedAt: now,
   });

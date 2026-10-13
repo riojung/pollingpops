@@ -53,6 +53,7 @@ const destinations: Array<{
     label: "workspace.nav.library",
     match: (path) =>
       path === "/library" ||
+      path.startsWith("/library/") ||
       path === "/dashboard" ||
       (path.startsWith("/surveys") && !path.startsWith("/surveys/rooms")),
   },

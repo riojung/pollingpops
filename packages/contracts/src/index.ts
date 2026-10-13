@@ -1441,9 +1441,15 @@ export const ImportValidationReportSchema = z.object({
 });
 export type ImportValidationReport = z.infer<typeof ImportValidationReportSchema>;
 
+export const FolderArtifactTypeSchema = z.enum(["round", "presentation", "survey"]);
+export type FolderArtifactType = z.infer<typeof FolderArtifactTypeSchema>;
+
 export const FolderSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
+  artifactType: FolderArtifactTypeSchema,
+  parentId: z.string().uuid().nullable(),
+  position: z.number().int().nonnegative(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -1451,9 +1457,21 @@ export type Folder = z.infer<typeof FolderSchema>;
 
 export const CreateFolderSchema = z.object({
   name: z.string().trim().min(1).max(80),
+  artifactType: FolderArtifactTypeSchema.default("round"),
+  parentId: z.string().uuid().nullable().default(null),
 });
 
-export const UpdateFolderSchema = CreateFolderSchema;
+export const FolderListQuerySchema = z.object({
+  artifactType: FolderArtifactTypeSchema.default("round"),
+});
+
+export const UpdateFolderSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    parentId: z.string().uuid().nullable().optional(),
+    position: z.number().int().nonnegative().optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, "A folder change is required");
 
 export const OrganizeQuizSchema = z.object({
   folderId: z.string().uuid().nullable(),
@@ -1469,7 +1487,8 @@ export const OrganizeQuizSchema = z.object({
         }
       }
       return [...unique.values()];
-    }),
+    })
+    .optional(),
 });
 
 export function questionPurpose(question: Pick<QuestionDraft, "type" | "purpose">) {

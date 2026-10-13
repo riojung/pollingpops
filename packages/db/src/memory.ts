@@ -1,3 +1,5 @@
+import type { FolderArtifactType } from "@openround/contracts";
+import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
 import type { EngineAnswer } from "@openround/game-engine";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
@@ -5,6 +7,7 @@ import { reserveRoomCoverageInMemory, releaseRoomCoverageInMemory } from "./plat
 import {
   AudienceStoreError,
   FollowupAccessLimitError,
+  FolderError,
   FollowupVersionConflictError,
   MEDIA_DELETION_TOMBSTONE_HOLD_MS,
   PublishedQuizLimitError,
@@ -32,6 +35,8 @@ import type {
   ChatReactionSummaryRecord,
   CreatorContext,
   FolderRecord,
+  FolderCreateInput,
+  FolderUpdateInput,
   FollowupAccessRecord,
   FollowupAnswerRecord,
   FollowupAttemptRecord,
@@ -912,54 +917,54 @@ export class MemoryRepository implements Repository {
     return { questions, hasMore: false };
   }
 
-  async listFolders(workspaceId: string) {
+  async listFolders(workspaceId: string, artifactType?: FolderArtifactType) {
     return [...this.folders.values()]
-      .filter((folder) => folder.workspaceId === workspaceId)
-      .sort((left, right) => left.name.localeCompare(right.name))
+      .filter(
+        (folder) =>
+          folder.workspaceId === workspaceId &&
+          (!artifactType || folder.artifactType === artifactType),
+      )
+      .sort(folderOrder)
       .map((folder) => structuredClone(folder));
   }
 
-  async createFolder(input: FolderRecord) {
-    const duplicate = [...this.folders.values()].some(
-      (folder) =>
-        folder.workspaceId === input.workspaceId &&
-        folder.name.toLocaleLowerCase() === input.name.toLocaleLowerCase(),
+  private storeFolderState(folders: FolderRecord[]) {
+    for (const folder of folders) this.folders.set(folder.id, structuredClone(folder));
+  }
+
+  async createFolder(input: FolderCreateInput) {
+    if (this.folders.has(input.id))
+      throw new FolderError("CONFLICT", "Folder identifier already exists");
+    const existing = [...this.folders.values()].filter(
+      (folder) => folder.workspaceId === input.workspaceId,
     );
-    if (duplicate) {
-      const error = new Error("A folder with this name already exists") as Error & {
-        code?: string;
-      };
-      error.code = "23505";
-      throw error;
-    }
-    this.folders.set(input.id, structuredClone(input));
-    return structuredClone(input);
+    const state = createFolderState(existing, input);
+    this.storeFolderState(state.folders);
+    return structuredClone(state.folder);
+  }
+
+  async updateFolder(workspaceId: string, folderId: string, input: FolderUpdateInput) {
+    const state = updateFolderState(
+      [...this.folders.values()].filter((folder) => folder.workspaceId === workspaceId),
+      folderId,
+      input,
+    );
+    if (!state) return null;
+    this.storeFolderState(state.folders);
+    return structuredClone(state.folder);
   }
 
   async renameFolder(workspaceId: string, folderId: string, name: string) {
-    const folder = this.folders.get(folderId);
-    if (!folder || folder.workspaceId !== workspaceId) return null;
-    const duplicate = [...this.folders.values()].some(
-      (candidate) =>
-        candidate.id !== folderId &&
-        candidate.workspaceId === workspaceId &&
-        candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
-    );
-    if (duplicate) {
-      const error = new Error("A folder with this name already exists") as Error & {
-        code?: string;
-      };
-      error.code = "23505";
-      throw error;
-    }
-    folder.name = name;
-    folder.updatedAt = new Date();
-    return structuredClone(folder);
+    return this.updateFolder(workspaceId, folderId, { name });
   }
 
   async deleteFolder(workspaceId: string, folderId: string) {
-    const folder = this.folders.get(folderId);
-    if (!folder || folder.workspaceId !== workspaceId) return false;
+    const state = deleteFolderState(
+      [...this.folders.values()].filter((folder) => folder.workspaceId === workspaceId),
+      folderId,
+    );
+    if (!state) return false;
+    this.storeFolderState(state);
     this.folders.delete(folderId);
     for (const { lifecycle } of this.lifecycleExtensions.values())
       lifecycle.deleteFolderMetadata?.(workspaceId, folderId);
@@ -972,12 +977,22 @@ export class MemoryRepository implements Repository {
     return true;
   }
 
-  async organizeQuiz(workspaceId: string, quizId: string, folderId: string | null, tags: string[]) {
+  async organizeQuiz(
+    workspaceId: string,
+    quizId: string,
+    folderId: string | null,
+    tags?: string[],
+  ) {
     const quiz = this.quizzes.get(quizId);
     if (!quiz || quiz.workspaceId !== workspaceId) return null;
-    if (folderId && this.folders.get(folderId)?.workspaceId !== workspaceId) return null;
+    if (
+      folderId &&
+      (this.folders.get(folderId)?.workspaceId !== workspaceId ||
+        this.folders.get(folderId)?.artifactType !== "round")
+    )
+      return null;
     quiz.folderId = folderId;
-    quiz.tags = [...tags];
+    if (tags !== undefined) quiz.tags = [...tags];
     quiz.updatedAt = new Date();
     return structuredClone(normalizeQuizRecord(quiz));
   }
@@ -992,6 +1007,15 @@ export class MemoryRepository implements Repository {
       publishedDraftRevision: parsed.publishedDraftRevision ?? null,
       lastEditedBy: parsed.lastEditedBy ?? null,
     };
+    if (normalized.folderId) {
+      const folder = this.folders.get(normalized.folderId);
+      if (
+        !folder ||
+        folder.workspaceId !== normalized.workspaceId ||
+        folder.artifactType !== "round"
+      )
+        throw new FolderError("NOT_FOUND", "Selected folder not found in this content library");
+    }
     this.validateMediaReferences(normalized.workspaceId, quizMediaIds(normalized.draft));
     this.quizzes.set(input.id, structuredClone(normalized));
     const historyId = crypto.randomUUID();

@@ -86,6 +86,21 @@ Library shares filters and grid/list preferences across Rounds, Presentations an
 `/surveys` redirects to its tab while `/surveys/runs` retains delivery history. Reading existing
 content remains available when the Survey creation rollout is disabled.
 
+Migration 066 gives folders an immutable artifact type (`round`, `presentation`, or `survey`), a
+parent, and sibling ordering. Existing folder IDs remain Round folders; Presentation and Survey
+assignments are remapped to copies of their previously shared folders. Folder changes leave
+published content, versions, sessions, and favorites intact. Folder parents and content assignments
+must match both workspace and artifact type, and names are unique within a sibling group. Structural
+changes serialize per workspace before checking ancestry and updating sibling positions, preventing
+cycles from concurrent moves. Deleting a folder unfiles its directly assigned content and promotes
+its children to the root; a sibling-name conflict rejects the whole operation.
+
+`GET /v1/folders?artifactType=round|presentation|survey` returns the selected tree; an omitted type
+defaults to Round for legacy HTTP clients. Creation accepts a type and optional parent, while the
+existing PATCH endpoint accepts name, parent, or sibling-position changes. Deploy migration 066 with
+the matching API before enabling the new folder manager. The Library link carries the selected tab
+to `/library/folders`, and folder filters and move destinations use full paths from that type's tree.
+
 Product feedback is separate from audience/Survey submissions. Strict contracts accept bounded
 plain text, an explicit contact preference and redacted page type. Creator authentication and
 distributed admission limits protect submission; forced RLS scopes records to the author and

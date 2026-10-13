@@ -114,6 +114,19 @@ const configSchema = z
             message: "Local operator authentication requires an exact loopback HTTP origin",
           });
       }
+      if (
+        isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) &&
+        isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN)
+      ) {
+        const consoleUrl = new URL(config.CONTROL_PUBLIC_ORIGIN!);
+        const productUrl = new URL(config.CONTROL_PRODUCT_ORIGIN!);
+        if (consoleUrl.hostname !== productUrl.hostname || consoleUrl.origin === productUrl.origin)
+          context.addIssue({
+            code: "custom",
+            path: ["CONTROL_PRODUCT_ORIGIN"],
+            message: "Local product and console must share a loopback hostname on separate origins",
+          });
+      }
       if (config.CONTROL_ENABLED && !config.CONTROL_DATABASE_URL)
         context.addIssue({
           code: "custom",
@@ -212,14 +225,19 @@ const configSchema = z
 
 export type ControlConfig = z.infer<typeof configSchema>;
 export function isLocalControlDevelopment(config: ControlConfig): boolean {
-  return (
-    config.CONTROL_ENABLED &&
-    config.CONTROL_AUTH_MODE === "local" &&
-    config.CONTROL_LOCAL_DEVELOPMENT &&
-    config.OPENROUND_DEPLOYMENT_ENVIRONMENT === "development" &&
-    isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) &&
-    (!config.CONTROL_PRODUCT_ORIGIN || isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN))
-  );
+  if (
+    !config.CONTROL_ENABLED ||
+    config.CONTROL_AUTH_MODE !== "local" ||
+    !config.CONTROL_LOCAL_DEVELOPMENT ||
+    config.OPENROUND_DEPLOYMENT_ENVIRONMENT !== "development" ||
+    !isLoopbackHttpOrigin(config.CONTROL_PUBLIC_ORIGIN) ||
+    (config.CONTROL_PRODUCT_ORIGIN && !isLoopbackHttpOrigin(config.CONTROL_PRODUCT_ORIGIN))
+  )
+    return false;
+  if (!config.CONTROL_PRODUCT_ORIGIN) return true;
+  const consoleUrl = new URL(config.CONTROL_PUBLIC_ORIGIN!);
+  const productUrl = new URL(config.CONTROL_PRODUCT_ORIGIN);
+  return consoleUrl.hostname === productUrl.hostname && consoleUrl.origin !== productUrl.origin;
 }
 export function loadControlConfig(
   environment: Record<string, string | undefined> = process.env,

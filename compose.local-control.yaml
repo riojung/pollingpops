@@ -34,5 +34,3 @@ services:
       OPERATOR_OIDC_REQUIRED_AMR: ""
       OPERATOR_OIDC_ALLOWED_ACR: ""
       OPERATOR_BOOTSTRAP_IDENTITIES: "[]"
-    ports: !override
-      - "127.0.0.1:3002:3002"

@@ -12,7 +12,6 @@ import {
 const root = resolve(import.meta.dirname, "../..");
 
 async function composeFile(name: string) {
-  // Compose's !override applies to lists; the document retains its value for these contracts.
   return parseDocument(await readFile(join(root, name), "utf8")).toJS();
 }
 
@@ -67,7 +66,16 @@ describe("default local management console", () => {
     ]) {
       expect(env[key], key).toBe("");
     }
-    expect(local.services.control.ports).toEqual(["127.0.0.1:3002:3002"]);
+    // The shared overlay already restricts ingress. Avoid newer YAML tags in default profiles.
+    expect(local.services.control).not.toHaveProperty("ports");
+    expect((await composeFile("compose.business.yaml")).services.control.ports).toEqual([
+      "127.0.0.1:3002:3002",
+    ]);
+    const document = parseDocument(
+      await readFile(join(root, "compose.local-control.yaml"), "utf8"),
+    );
+    expect(document.errors).toEqual([]);
+    expect(document.warnings).toEqual([]);
     expect(local.services.server.environment.CONTROL_PUBLIC_ORIGIN).toBe(env.CONTROL_PUBLIC_ORIGIN);
     expect(local.services.server.environment).toMatchObject({
       CONTROL_ENABLED: "true",

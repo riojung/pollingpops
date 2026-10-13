@@ -66,9 +66,6 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
   const loggedOut = path === "/v1/auth/logout" && init.method?.toUpperCase() === "POST";
   if (response.status === 204) {
-    if (loggedOut) {
-      persistLogoutWarning(null);
-    }
     return undefined as T;
   }
   let body: unknown;
@@ -84,11 +81,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     body !== null &&
     "operatorSessionRevoked" in body &&
     body.operatorSessionRevoked === false;
-  if (loggedOut) {
-    // Confirmed callers redirect; only uncertain logout needs a live navigation refresh.
-    persistLogoutWarning(uncertainRevocation ? LOGOUT_REVOCATION_WARNING : null);
-  }
   if (uncertainRevocation) {
+    // After cookies clear, later logouts cannot confirm revocation of the original token.
+    // Keep this warning until explicitly dismissed; successful callers still redirect.
+    persistLogoutWarning(LOGOUT_REVOCATION_WARNING);
     notifyAuthChange();
     throw new ApiClientError(
       LOGOUT_REVOCATION_WARNING,

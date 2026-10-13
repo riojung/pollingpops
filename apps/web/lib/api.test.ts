@@ -166,18 +166,49 @@ describe("product logout and admin session revocation", () => {
     expect(storage.getItem(LOGOUT_WARNING_STORAGE_KEY)).toBeNull();
   });
 
-  it("clears a prior warning on confirmed logout and accepts only the bounded stored message", async () => {
+  it("accepts only the bounded stored warning", () => {
     const storage = memoryStorage();
     vi.stubGlobal("window", Object.assign(new EventTarget(), { sessionStorage: storage }));
     storage.setItem(LOGOUT_WARNING_STORAGE_KEY, "Untrusted account-specific warning");
     expect(readLogoutWarning()).toBeNull();
     storage.setItem(LOGOUT_WARNING_STORAGE_KEY, LOGOUT_REVOCATION_WARNING);
+    expect(readLogoutWarning()).toBe(LOGOUT_REVOCATION_WARNING);
+  });
+
+  it("retains an unresolved warning through cookie-free logout retries until explicit dismissal", async () => {
+    const storage = memoryStorage();
+    const browser = Object.assign(new EventTarget(), { sessionStorage: storage });
+    const listener = vi.fn();
+    browser.addEventListener(AUTH_CHANGE_EVENT, listener);
+    vi.stubGlobal("window", browser);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => Response.json({ ok: true, operatorSessionRevoked: true })),
+      vi.fn(async () => Response.json({ ok: true, operatorSessionRevoked: false })),
     );
-    await apiFetch("/v1/auth/logout", { method: "POST" });
+    await expect(apiFetch("/v1/auth/logout", { method: "POST" })).rejects.toMatchObject({
+      code: "OPERATOR_SESSION_REVOCATION_UNCONFIRMED",
+    });
+    expect(readLogoutWarning()).toBe(LOGOUT_REVOCATION_WARNING);
+    expect(listener).toHaveBeenCalledOnce();
+
+    // These responses cannot identify or revoke the original now-cookie-free session.
+    for (const response of [
+      Response.json({ ok: true }),
+      new Response(null, { status: 204 }),
+      Response.json({ ok: true, operatorSessionRevoked: true }),
+    ]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response),
+      );
+      await apiFetch("/v1/auth/logout", { method: "POST" });
+      expect(readLogoutWarning()).toBe(LOGOUT_REVOCATION_WARNING);
+      expect(listener).toHaveBeenCalledOnce();
+    }
+    dismissLogoutWarning();
     expect(readLogoutWarning()).toBeNull();
+    expect(storage.getItem(LOGOUT_WARNING_STORAGE_KEY)).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it("still reports uncertain logout when browser storage is blocked", async () => {

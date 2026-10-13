@@ -2,6 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
+import { assertAudienceAdmissionForTransaction } from "./platform-postgres.js";
+import {
+  reserveRoomCoverageForTransaction,
+  consumeRoomCoverageForTransaction,
+  releaseRoomCoverageForTransaction,
+  PostgresPlatformStore,
+  PostgresPlatformRepository,
+} from "./platform-postgres.js";
+import { PlatformService } from "./platform-service.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
 import {
   MAX_SESSION_DECISION_EVENTS,
@@ -1332,6 +1341,9 @@ export class PostgresRepository implements Repository {
   }
 
   async consumeMagicToken(tokenHash: string, now: Date): Promise<CreatorContext | null> {
+    return (await this.consumeMagicLinkIdentity(tokenHash, now))?.creator ?? null;
+  }
+  async consumeMagicLinkIdentity(tokenHash: string, now: Date) {
     return this.transaction(
       async (client) => {
         const tokenResult = await client.query(
@@ -1399,7 +1411,14 @@ export class PostgresRepository implements Repository {
             );
           }
         }
-        return row
+        const principal = (
+          await client.query(
+            "SELECT id,email,locale,locale_explicit FROM users WHERE id=$1 AND deleted_at IS NULL",
+            [user.id],
+          )
+        ).rows[0];
+        if (!principal) return null;
+        const creator: CreatorContext | null = row
           ? {
               userId: row.user_id,
               workspaceId: row.workspace_id,
@@ -1408,9 +1427,18 @@ export class PostgresRepository implements Repository {
               localePreferenceSet: Boolean(row.locale_explicit),
               segment: row.segment,
               role: row.role,
-              plan: row.plan,
+              plan: await this.getPlan(row.workspace_id),
             }
           : null;
+        return {
+          user: {
+            userId: String(principal.id),
+            email: String(principal.email),
+            locale: supportedLocale(principal.locale),
+            localePreferenceSet: Boolean(principal.locale_explicit),
+          },
+          creator,
+        };
       },
       { system: true },
     );
@@ -1465,7 +1493,39 @@ export class PostgresRepository implements Repository {
           localePreferenceSet: Boolean(row.locale_explicit),
           segment: row.segment,
           role: row.role,
-          plan: row.plan,
+          plan: await this.getPlan(row.workspace_id),
+        }
+      : null;
+  }
+  async getUserPrincipalBySession(tokenHash: string, now: Date) {
+    const result = await this.systemQuery(
+      `SELECT u.id,u.email,u.locale,u.locale_explicit
+      FROM creator_sessions session JOIN users u ON u.id=session.user_id
+      WHERE session.token_hash=$1 AND session.revoked_at IS NULL AND session.expires_at>$2 AND u.deleted_at IS NULL`,
+      [tokenHash, now],
+    );
+    const user = result.rows[0];
+    return user
+      ? {
+          userId: String(user.id),
+          email: String(user.email),
+          locale: supportedLocale(user.locale),
+          localePreferenceSet: Boolean(user.locale_explicit),
+        }
+      : null;
+  }
+  async getUserPrincipalById(userId: string) {
+    const result = await this.systemQuery(
+      "SELECT id,email,locale,locale_explicit FROM users WHERE id=$1 AND deleted_at IS NULL",
+      [userId],
+    );
+    const user = result.rows[0];
+    return user
+      ? {
+          userId: String(user.id),
+          email: String(user.email),
+          locale: supportedLocale(user.locale),
+          localePreferenceSet: Boolean(user.locale_explicit),
         }
       : null;
   }
@@ -1688,7 +1748,7 @@ export class PostgresRepository implements Repository {
               localePreferenceSet: Boolean(row.locale_explicit),
               segment: row.segment,
               role: row.role,
-              plan: row.plan,
+              plan: await this.getPlan(row.workspace_id),
             }
           : null;
       },
@@ -1725,7 +1785,7 @@ export class PostgresRepository implements Repository {
           localePreferenceSet: Boolean(row.locale_explicit),
           segment: row.segment,
           role: row.role,
-          plan: row.plan,
+          plan: await this.getPlan(row.workspace_id),
         }
       : null;
   }
@@ -3226,9 +3286,10 @@ export class PostgresRepository implements Repository {
   async createSession(input: StoredSession) {
     const state = input.state;
     try {
-      await this.workspaceQuery(
-        input.workspaceId,
-        `WITH eligible_workspace AS (
+      await this.transaction(
+        async (client) => {
+          const result = await client.query(
+            `WITH eligible_workspace AS (
            SELECT id FROM workspaces
            WHERE id = $2 AND deletion_started_at IS NULL
            FOR SHARE
@@ -3245,32 +3306,37 @@ export class PostgresRepository implements Repository {
          INSERT INTO session_interaction_settings (session_id, workspace_id)
          SELECT id, workspace_id FROM inserted_session
          RETURNING session_id`,
-        [
-          input.id,
-          input.workspaceId,
-          input.quizVersionId,
-          input.hostId,
-          state.code,
-          state.phase,
-          state.version,
-          state.seq,
-          state.deadlineMs ? new Date(state.deadlineMs) : null,
-          JSON.stringify(state.settings),
-          JSON.stringify(state),
-          state.stateSchemaVersion,
-          input.hostTokenHash,
-          input.trustMode ?? state.settings.trustMode ?? "learning",
-          input.decisionReplayEnabled ?? false,
-          input.expiresAt,
-          input.retentionExpiresAt,
-          input.createdAt,
-          input.updatedAt,
-        ],
-      ).then((result) => {
-        if (result.rowCount !== 1) {
-          throw new WorkspaceDeletionInProgressError(input.workspaceId);
-        }
-      });
+            [
+              input.id,
+              input.workspaceId,
+              input.quizVersionId,
+              input.hostId,
+              state.code,
+              state.phase,
+              state.version,
+              state.seq,
+              state.deadlineMs ? new Date(state.deadlineMs) : null,
+              JSON.stringify(state.settings),
+              JSON.stringify(state),
+              state.stateSchemaVersion,
+              input.hostTokenHash,
+              input.trustMode ?? state.settings.trustMode ?? "learning",
+              input.decisionReplayEnabled ?? false,
+              input.expiresAt,
+              input.retentionExpiresAt,
+              input.createdAt,
+              input.updatedAt,
+            ],
+          );
+          if (result.rowCount !== 1) {
+            throw new WorkspaceDeletionInProgressError(input.workspaceId);
+          }
+          if (input.commercialCoverage) {
+            await reserveRoomCoverageForTransaction(client, input.commercialCoverage);
+          }
+        },
+        { workspaceId: input.workspaceId },
+      );
     } catch (error) {
       const postgresError = error as { code?: string; constraint?: string };
       if (
@@ -3545,6 +3611,7 @@ export class PostgresRepository implements Repository {
           }
         }
         if (state.phase === "finished") {
+          await releaseRoomCoverageForTransaction(client, "round", input.id);
           await client.query(
             `UPDATE session_interaction_settings
              SET closed_at = COALESCE(closed_at, now()), signals_enabled = false,
@@ -3581,12 +3648,22 @@ export class PostgresRepository implements Repository {
   }
 
   async deleteSession(workspaceId: string, sessionId: string) {
-    const result = await this.workspaceQuery(
-      workspaceId,
-      "DELETE FROM game_sessions WHERE workspace_id = $1 AND id = $2 RETURNING id",
-      [workspaceId, sessionId],
+    return this.transaction(
+      async (client) => {
+        const parent = await client.query(
+          "SELECT id FROM game_sessions WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+          [workspaceId, sessionId],
+        );
+        if (!parent.rows[0]) return false;
+        await releaseRoomCoverageForTransaction(client, "round", sessionId);
+        const result = await client.query(
+          "DELETE FROM game_sessions WHERE workspace_id = $1 AND id = $2 RETURNING id",
+          [workspaceId, sessionId],
+        );
+        return result.rowCount === 1;
+      },
+      { workspaceId },
     );
-    return result.rowCount === 1;
   }
 
   async createParticipant(input: ParticipantRecord) {
@@ -3614,6 +3691,21 @@ export class PostgresRepository implements Repository {
         if (!workspace.rows[0]) {
           throw new WorkspaceDeletionInProgressError(session.workspaceId);
         }
+        const parent = await client.query(
+          "SELECT state, ended_at, expires_at FROM game_sessions WHERE id = $1 FOR UPDATE",
+          [session.id],
+        );
+        const clock = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
+        const room = parent.rows[0];
+        if (
+          !room ||
+          room.state === "finished" ||
+          room.ended_at !== null ||
+          new Date(room.expires_at) <= clock.rows[0]!.now
+        ) {
+          throw new SessionNotActiveError(session.id);
+        }
+        await assertAudienceAdmissionForTransaction(client, session.workspaceId);
         const inserted = await client.query(
           `INSERT INTO participants (id, session_id, nickname, token_hash, status, joined_at)
            SELECT id, session_id, nickname, token_hash, status, joined_at
@@ -3656,6 +3748,7 @@ export class PostgresRepository implements Repository {
         if (saved.rowCount !== 1) {
           throw new SessionVersionConflictError(session.id, expectedVersion);
         }
+        await consumeRoomCoverageForTransaction(client, "round", session.id);
       },
       { workspaceId: session.workspaceId },
     );
@@ -5709,7 +5802,7 @@ export class PostgresRepository implements Repository {
         const row = selected.rows[0];
         if (!row) return null;
         const updated = await client.query(
-          `UPDATE reports SET attempts = attempts + 1, available_at = $2, updated_at = now()
+          `UPDATE reports SET attempts = attempts + 1, available_at = $2, last_error = NULL, updated_at = now()
            WHERE id = $1 AND status = 'pending' RETURNING attempts`,
           [row.id, leaseUntil],
         );
@@ -6800,6 +6893,10 @@ export class PostgresRepository implements Repository {
   }
 
   async getPlan(workspaceId: string): Promise<Plan> {
+    const platformPlan = await new PostgresPlatformRepository(this).effectiveWorkspacePlan(
+      workspaceId,
+    );
+    if (platformPlan !== null) return platformPlan;
     const result = await this.workspaceQuery(
       workspaceId,
       "SELECT plan FROM subscriptions WHERE workspace_id = $1",
@@ -7638,6 +7735,84 @@ export class PostgresRepository implements Repository {
     );
   }
 
+  private async deleteCollaborationGroupMemberships(client: PoolClient, userId: string) {
+    const groupOwnerships = await client.query<{ group_id: string }>(
+      `SELECT groups.id AS group_id
+       FROM collaboration_groups groups
+       JOIN collaboration_group_members members ON members.group_id = groups.id
+       WHERE members.user_id = $1 AND members.role = 'owner'
+       ORDER BY groups.id
+       FOR UPDATE OF groups`,
+      [userId],
+    );
+    for (const { group_id: groupId } of groupOwnerships.rows) {
+      const otherOwner = await client.query(
+        `SELECT 1 FROM collaboration_group_members
+         WHERE group_id = $1 AND user_id <> $2 AND role = 'owner'
+         LIMIT 1`,
+        [groupId, userId],
+      );
+      if (otherOwner.rows[0]) continue;
+      const successor = await client.query<{ user_id: string }>(
+        `SELECT user_id FROM collaboration_group_members
+         WHERE group_id = $1 AND user_id <> $2
+         ORDER BY joined_at, user_id
+         LIMIT 1`,
+        [groupId, userId],
+      );
+      if (successor.rows[0]) {
+        await client.query(
+          `UPDATE collaboration_group_members SET role = 'owner'
+           WHERE group_id = $1 AND user_id = $2`,
+          [groupId, successor.rows[0].user_id],
+        );
+      } else {
+        await client.query("DELETE FROM collaboration_groups WHERE id = $1", [groupId]);
+      }
+    }
+    await client.query("DELETE FROM collaboration_group_members WHERE user_id = $1", [userId]);
+  }
+
+  async deleteUserIdentity(userId: string) {
+    await this.transaction(
+      async (client) => {
+        const platform = new PlatformService(new PostgresPlatformStore(null, client));
+        await platform.deleteIdentityMemberships(userId);
+        await this.deleteCollaborationGroupMemberships(client, userId);
+        await client.query("DELETE FROM external_identities WHERE user_id=$1", [userId]);
+        await client.query("DELETE FROM library_favorites WHERE user_id=$1", [userId]);
+        await client.query("DELETE FROM beta_feedback WHERE user_id=$1", [userId]);
+        await client.query("DELETE FROM consent_records WHERE user_id=$1", [userId]);
+        await client.query(
+          "UPDATE session_staff_credentials SET revoked_at=now() WHERE created_by=$1 AND revoked_at IS NULL",
+          [userId],
+        );
+        await client.query(
+          `UPDATE presentation_session_credentials credential SET revoked_at=now()
+        FROM presentation_live_sessions session WHERE credential.session_id=session.id
+          AND session.created_by=$1 AND credential.revoked_at IS NULL`,
+          [userId],
+        );
+        await client.query("UPDATE creator_sessions SET revoked_at=now() WHERE user_id=$1", [
+          userId,
+        ]);
+        await client.query(
+          `DELETE FROM auth_magic_tokens WHERE email=(SELECT email FROM users WHERE id=$1)`,
+          [userId],
+        );
+        await client.query(
+          `UPDATE users SET email=$2,locale='en-CA',locale_explicit=false,deleted_at=now()
+        WHERE id=$1 AND deleted_at IS NULL`,
+          [
+            userId,
+            `deleted-${createHash("sha256").update(userId).digest("hex").slice(0, 16)}@invalid.local`,
+          ],
+        );
+      },
+      { system: true },
+    );
+  }
+
   async deleteAccount(userId: string) {
     await this.transaction(
       async (client) => {
@@ -7648,37 +7823,7 @@ export class PostgresRepository implements Repository {
         for (const row of workspaceResult.rows) {
           await client.query("DELETE FROM workspaces WHERE id = $1", [row.workspace_id]);
         }
-        const groupOwnerships = await client.query<{ group_id: string }>(
-          `SELECT group_id FROM collaboration_group_members
-           WHERE user_id = $1 AND role = 'owner'`,
-          [userId],
-        );
-        for (const { group_id: groupId } of groupOwnerships.rows) {
-          const otherOwner = await client.query(
-            `SELECT 1 FROM collaboration_group_members
-             WHERE group_id = $1 AND user_id <> $2 AND role = 'owner'
-             LIMIT 1`,
-            [groupId, userId],
-          );
-          if (otherOwner.rows[0]) continue;
-          const successor = await client.query<{ user_id: string }>(
-            `SELECT user_id FROM collaboration_group_members
-             WHERE group_id = $1 AND user_id <> $2
-             ORDER BY joined_at, user_id
-             LIMIT 1`,
-            [groupId, userId],
-          );
-          if (successor.rows[0]) {
-            await client.query(
-              `UPDATE collaboration_group_members SET role = 'owner'
-               WHERE group_id = $1 AND user_id = $2`,
-              [groupId, successor.rows[0].user_id],
-            );
-          } else {
-            await client.query("DELETE FROM collaboration_groups WHERE id = $1", [groupId]);
-          }
-        }
-        await client.query("DELETE FROM collaboration_group_members WHERE user_id = $1", [userId]);
+        await this.deleteCollaborationGroupMemberships(client, userId);
         await client.query("DELETE FROM library_favorites WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
@@ -7702,18 +7847,37 @@ export class PostgresRepository implements Repository {
   }
 
   async expireLiveSessions(now: Date) {
-    const result = await this.systemQuery(
-      `UPDATE game_sessions SET ended_at = COALESCE(ended_at, $1), updated_at = now()
+    return this.transaction(
+      async (client) => {
+        const result = await client.query(
+          `UPDATE game_sessions SET ended_at = COALESCE(ended_at, $1), updated_at = now()
        WHERE expires_at <= $1 AND ended_at IS NULL AND deleted_at IS NULL
        RETURNING id`,
-      [now],
+          [now],
+        );
+        for (const row of result.rows)
+          await releaseRoomCoverageForTransaction(client, "round", String(row.id));
+        return result.rows.map((row) => String(row.id));
+      },
+      { system: true },
     );
-    return result.rows.map((row) => String(row.id));
   }
 
   async purgeExpired(now: Date) {
     return this.transaction(
       async (client) => {
+        const rounds = await client.query(
+          "SELECT id FROM game_sessions WHERE retention_expires_at <= $1 FOR UPDATE",
+          [now],
+        );
+        for (const row of rounds.rows)
+          await releaseRoomCoverageForTransaction(client, "round", String(row.id));
+        const presentations = await client.query(
+          "SELECT id FROM presentation_live_sessions WHERE retention_expires_at <= $1 FOR UPDATE",
+          [now],
+        );
+        for (const row of presentations.rows)
+          await releaseRoomCoverageForTransaction(client, "presentation", String(row.id));
         const result = await client.query(
           "DELETE FROM game_sessions WHERE retention_expires_at <= $1 RETURNING id",
           [now],

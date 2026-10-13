@@ -1,4 +1,7 @@
 import type { EngineAnswer } from "@openround/game-engine";
+import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
+import { getMemoryPlatformRepository } from "./platform-memory.js";
+import { reserveRoomCoverageInMemory, releaseRoomCoverageInMemory } from "./platform-memory.js";
 import {
   AudienceStoreError,
   FollowupAccessLimitError,
@@ -506,6 +509,9 @@ export class MemoryRepository implements Repository {
   }
 
   async consumeMagicToken(tokenHash: string, now: Date) {
+    return (await this.consumeMagicLinkIdentity(tokenHash, now))?.creator ?? null;
+  }
+  async consumeMagicLinkIdentity(tokenHash: string, now: Date) {
     const token = this.magicTokens.get(tokenHash);
     if (!token || token.consumedAt || token.expiresAt <= now) return null;
     token.consumedAt = now;
@@ -565,7 +571,15 @@ export class MemoryRepository implements Repository {
         });
       }
     }
-    return this.contextFor(user);
+    return {
+      user: {
+        userId: user.userId,
+        email: user.email,
+        locale: user.locale,
+        localePreferenceSet: user.localePreferenceSet ?? false,
+      },
+      creator: this.contextFor(user),
+    };
   }
 
   async createCreatorSession(input: {
@@ -590,6 +604,22 @@ export class MemoryRepository implements Repository {
     if (!session || session.revoked || session.expiresAt <= now) return null;
     const user = this.users.get(session.userId);
     return user && !user.deletedAt ? this.contextFor(user, session.activeWorkspaceId) : null;
+  }
+  async getUserPrincipalBySession(tokenHash: string, now: Date) {
+    const session = this.creatorSessions.get(tokenHash);
+    if (!session || session.revoked || session.expiresAt <= now) return null;
+    return this.getUserPrincipalById(session.userId);
+  }
+  async getUserPrincipalById(userId: string) {
+    const user = this.users.get(userId);
+    return user && !user.deletedAt
+      ? {
+          userId: user.userId,
+          email: user.email,
+          locale: user.locale,
+          localePreferenceSet: user.localePreferenceSet ?? false,
+        }
+      : null;
   }
 
   async updateUserLocale(userId: string, locale: CreatorContext["locale"]) {
@@ -802,7 +832,10 @@ export class MemoryRepository implements Repository {
       localePreferenceSet: user.localePreferenceSet,
       segment: workspace.segment,
       role: workspaceId === user.workspaceId ? user.role : membership.role,
-      plan: this.plans.get(workspaceId) ?? "free",
+      plan:
+        getMemoryPlatformRepository(this).effectivePlanSync(workspaceId) ??
+        this.plans.get(workspaceId) ??
+        "free",
     };
   }
 
@@ -1860,9 +1893,27 @@ export class MemoryRepository implements Repository {
     }
   }
 
+  assertNewRoomLaunchAllowed(workspaceId: string) {
+    this.assertWorkspaceLiveSessionCreationAllowed(workspaceId);
+    getMemoryPlatformRepository(this).assertWorkspaceCreationSync(workspaceId);
+  }
+
   async claimLiveRoomCode(input: LiveRoomCodeClaim) {
-    this.assertWorkspaceLiveSessionCreationAllowed(input.workspaceId);
+    this.assertNewRoomLaunchAllowed(input.workspaceId);
     const now = new Date();
+    if (
+      [...this.liveRoomCodes.values()].some(
+        (claim) =>
+          claim.artifactType === input.artifactType &&
+          claim.artifactId === input.artifactId &&
+          claim.releasedAt === null,
+      )
+    ) {
+      throw Object.assign(new Error("Room already exists"), {
+        code: "23505",
+        constraint: "live_room_codes_artifact_type_artifact_id_key",
+      });
+    }
     const current = this.liveRoomCodes.get(input.code);
     if (current && current.releasedAt === null && current.expiresAt > now) {
       throw new SessionCodeConflictError(input.code);
@@ -1881,7 +1932,10 @@ export class MemoryRepository implements Repository {
     releasedAt = new Date(),
   ) {
     const claim = [...this.liveRoomCodes.values()].find(
-      (candidate) => candidate.artifactType === artifactType && candidate.artifactId === artifactId,
+      (candidate) =>
+        candidate.artifactType === artifactType &&
+        candidate.artifactId === artifactId &&
+        candidate.releasedAt === null,
     );
     if (!claim) return false;
     claim.releasedAt ??= new Date(releasedAt);
@@ -1900,10 +1954,16 @@ export class MemoryRepository implements Repository {
     try {
       // `claimLiveRoomCode` is awaited by callers, so account deletion can start between the
       // reservation and this write. Recheck synchronously before publishing any session state.
-      this.assertWorkspaceLiveSessionCreationAllowed(input.workspaceId);
+      this.assertNewRoomLaunchAllowed(input.workspaceId);
+      if (this.sessions.has(input.id))
+        throw Object.assign(new Error("Room already exists"), {
+          code: "23505",
+          constraint: "game_sessions_pkey",
+        });
       if (this.deletedQuizVersions.has(`${input.workspaceId}:${input.quizVersionId}`)) {
         throw new Error("Quiz version not found");
       }
+      if (input.commercialCoverage) reserveRoomCoverageInMemory(this, input.commercialCoverage);
       this.sessions.set(
         input.id,
         structuredClone({
@@ -2145,6 +2205,7 @@ export class MemoryRepository implements Repository {
       ]);
     }
     if (storedSession.state.phase === "finished") {
+      releaseRoomCoverageInMemory(this, "round", input.id);
       await this.releaseLiveRoomCode("round", storedSession.id, storedSession.updatedAt);
       const settings = this.interactionSettings.get(input.id);
       if (settings) {
@@ -2185,6 +2246,7 @@ export class MemoryRepository implements Repository {
   }
 
   private deleteSessionTree(sessionId: string) {
+    releaseRoomCoverageInMemory(this, "round", sessionId);
     for (const [code, claim] of this.liveRoomCodes) {
       if (claim.artifactType === "round" && claim.artifactId === sessionId) {
         this.liveRoomCodes.delete(code);
@@ -2293,22 +2355,39 @@ export class MemoryRepository implements Repository {
     participants: ParticipantRecord[],
     expectedVersion: number,
   ) {
-    this.assertWorkspaceLiveSessionCreationAllowed(session.workspaceId);
-    const current = this.sessions.get(session.id);
-    if (!current || current.state.version !== expectedVersion) {
-      throw new SessionVersionConflictError(session.id, expectedVersion);
-    }
-    const existingIds = new Set([...this.participants.values()].map(({ id }) => id));
-    for (const participant of participants) {
-      if (this.participants.has(participant.tokenHash) || existingIds.has(participant.id)) {
-        throw new Error("Participant state changed during persistence");
+    await getMemoryPlatformRepository(this).withTransaction(async (platform) => {
+      this.assertWorkspaceLiveSessionCreationAllowed(session.workspaceId);
+      const current = this.sessions.get(session.id);
+      if (!current || current.state.version !== expectedVersion) {
+        throw new SessionVersionConflictError(session.id, expectedVersion);
       }
-      existingIds.add(participant.id);
-    }
-    for (const participant of participants) {
-      this.participants.set(participant.tokenHash, structuredClone(participant));
-    }
-    await this.saveSession(session, expectedVersion);
+      if (
+        current.expiresAt <= new Date() ||
+        current.state.phase === "finished" ||
+        this.expiredLiveSessions.has(session.id)
+      )
+        throw new SessionNotActiveError(session.id);
+      assertAudienceAdmissionInMemory(this, session.workspaceId);
+      const existingIds = new Set([...this.participants.values()].map(({ id }) => id));
+      for (const participant of participants) {
+        if (this.participants.has(participant.tokenHash) || existingIds.has(participant.id)) {
+          throw new Error("Participant state changed during persistence");
+        }
+        existingIds.add(participant.id);
+      }
+      // Validate and persist the parent before publishing participants or the credit transition.
+      // A rejected parent write must leave the reservation and participant set untouched.
+      try {
+        await this.saveSession(session, expectedVersion);
+        if (participants.length > 0) await platform.consumeRoomCoverage("round", session.id);
+      } catch (error) {
+        this.sessions.set(session.id, structuredClone(current));
+        throw error;
+      }
+      for (const participant of participants) {
+        this.participants.set(participant.tokenHash, structuredClone(participant));
+      }
+    });
   }
 
   async getParticipantByToken(tokenHash: string) {
@@ -3760,6 +3839,7 @@ export class MemoryRepository implements Repository {
   }
 
   async claimReportJob(now: Date, leaseUntil: Date) {
+    getMemoryPlatformRepository(this).memoryStore.assertMutationAllowed();
     const candidate = [...this.reportJobs.entries()]
       .filter(([id, job]) => this.reports.get(id)?.status === "pending" && job.availableAt <= now)
       .sort((left, right) => left[1].availableAt.getTime() - right[1].availableAt.getTime())[0];
@@ -3768,6 +3848,7 @@ export class MemoryRepository implements Repository {
     const report = this.reports.get(reportId)!;
     metadata.attempts += 1;
     metadata.availableAt = leaseUntil;
+    metadata.lastError = null;
     return {
       reportId,
       workspaceId: metadata.workspaceId,
@@ -3778,6 +3859,7 @@ export class MemoryRepository implements Repository {
   }
 
   async completeReportJob(job: ReportJob, report: Report) {
+    getMemoryPlatformRepository(this).memoryStore.assertMutationAllowed();
     if (job.reportId !== report.id || job.sessionId !== report.sessionId) {
       throw new Error("Completed report does not match the claimed job");
     }
@@ -3787,6 +3869,7 @@ export class MemoryRepository implements Repository {
   }
 
   async retryReportJob(job: ReportJob, error: string, availableAt: Date, failed: boolean) {
+    getMemoryPlatformRepository(this).memoryStore.assertMutationAllowed();
     const report = this.reports.get(job.reportId);
     const metadata = this.reportJobs.get(job.reportId);
     if (!report || !metadata) return;
@@ -3794,7 +3877,7 @@ export class MemoryRepository implements Repository {
     metadata.availableAt = availableAt;
     if (failed) {
       this.reports.set(job.reportId, { ...report, status: "failed" });
-      this.reportJobs.delete(job.reportId);
+      // Retain attempts/error evidence for a guarded operator retry.
     }
   }
 
@@ -4569,6 +4652,7 @@ export class MemoryRepository implements Repository {
   }
 
   async claimAuthoringJob(now: Date, leaseUntil: Date) {
+    getMemoryPlatformRepository(this).memoryStore.assertMutationAllowed();
     const job = [...this.authoringJobs.values()]
       .filter(
         (candidate) =>
@@ -4590,6 +4674,7 @@ export class MemoryRepository implements Repository {
     output: NonNullable<AuthoringJobRecord["output"]>,
     completedAt: Date,
   ) {
+    getMemoryPlatformRepository(this).memoryStore.assertMutationAllowed();
     const job = this.authoringJobs.get(jobId);
     if (!job || !output || job.status !== "processing" || job.attempts !== expectedAttempts) {
       return false;
@@ -4625,6 +4710,7 @@ export class MemoryRepository implements Repository {
     availableAt: Date,
     failed: boolean,
   ) {
+    getMemoryPlatformRepository(this).memoryStore.assertMutationAllowed();
     const job = this.authoringJobs.get(jobId);
     if (!job || job.status !== "processing" || job.attempts !== expectedAttempts) return false;
     job.status = failed ? "failed" : "pending";
@@ -4639,7 +4725,11 @@ export class MemoryRepository implements Repository {
   }
 
   async getPlan(workspaceId: string) {
-    return this.plans.get(workspaceId) ?? "free";
+    return (
+      getMemoryPlatformRepository(this).effectivePlanSync(workspaceId) ??
+      this.plans.get(workspaceId) ??
+      "free"
+    );
   }
 
   async getBillingProfile(workspaceId: string) {
@@ -5004,6 +5094,36 @@ export class MemoryRepository implements Repository {
     );
   }
 
+  async deleteUserIdentity(userId: string) {
+    const platform = getMemoryPlatformRepository(this);
+    await platform.withTransaction(async (transaction) => {
+      await transaction.deleteIdentityMemberships(userId);
+      await Promise.all(
+        [...this.lifecycleExtensions.values()].map(({ lifecycle }) =>
+          lifecycle.deleteAccount({ userId, ownedWorkspaceIds: new Set<string>() }),
+        ),
+      );
+      const user = this.users.get(userId);
+      if (!user || user.deletedAt) return;
+      const originalEmail = user.email;
+      user.deletedAt = new Date();
+      user.email = `deleted-${userId.slice(0, 8)}@invalid.local`;
+      user.locale = "en-CA";
+      user.localePreferenceSet = false;
+      for (const [token, session] of this.creatorSessions)
+        if (session.userId === userId) this.creatorSessions.delete(token);
+      for (const [token, value] of this.magicTokens)
+        if (value.email === originalEmail) this.magicTokens.delete(token);
+      for (const [id, identity] of this.externalIdentities)
+        if (identity.userId === userId) this.externalIdentities.delete(id);
+      for (const credential of this.sessionStaff.values())
+        if (credential.createdBy === userId && !credential.revokedAt)
+          credential.revokedAt = new Date();
+      for (let index = this.consents.length - 1; index >= 0; index--)
+        if (this.consents[index]?.userId === userId) this.consents.splice(index, 1);
+    });
+  }
+
   async deleteAccount(userId: string) {
     const user = this.users.get(userId);
     if (!user) return;
@@ -5198,6 +5318,7 @@ export class MemoryRepository implements Repository {
         !this.expiredLiveSessions.has(id)
       ) {
         this.expiredLiveSessions.add(id);
+        releaseRoomCoverageInMemory(this, "round", id);
         await this.releaseLiveRoomCode("round", id, now);
         expired.push(id);
       }

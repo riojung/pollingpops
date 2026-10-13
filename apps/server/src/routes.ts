@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import Stripe from "stripe";
+import { createPlatformRepository, PlatformError } from "@openround/db";
+import { roomEntitlements } from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
   RoundClientCapabilitiesQuerySchema,
@@ -600,6 +602,33 @@ export async function registerRoutes(
   };
 
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof PlatformError) {
+      const status =
+        error.code === "NOT_FOUND"
+          ? 404
+          : error.code === "FORBIDDEN" || error.code === "UNAUTHORIZED"
+            ? 403
+            : error.code === "ENTITLEMENT_LIMIT" || error.code === "INSUFFICIENT_CREDITS"
+              ? 402
+              : error.code === "VALIDATION_ERROR"
+                ? 400
+                : 409;
+      return apiError(
+        reply,
+        status,
+        error.code === "NOT_FOUND"
+          ? "NOT_FOUND"
+          : status === 403
+            ? "UNAUTHORIZED"
+            : status === 402
+              ? "ENTITLEMENT_LIMIT"
+              : status === 400
+                ? "VALIDATION_ERROR"
+                : "CONFLICT",
+        error.message,
+        request.id,
+      );
+    }
     if (error instanceof ZodError) {
       return apiError(
         reply,
@@ -770,9 +799,21 @@ export async function registerRoutes(
         request.id,
       );
     auth.setSessionCookie(reply, verified.sessionToken);
+    if (!verified.creator)
+      return reply.redirect(auth.localeAwareWebRedirect(verified.user, "/organization"));
     return reply.redirect(
       auth.localeAwareWebRedirect(verified.creator, returnTo ?? "/dashboard?welcome=1"),
     );
+  });
+
+  app.get("/v1/auth/user", async (request, reply) => {
+    const user = await auth.requireUser(request, reply);
+    if (!user) return;
+    reply.header("cache-control", "private, no-store");
+    return {
+      user,
+      businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
+    };
   });
 
   app.get("/v1/auth/me", async (request, reply) => {
@@ -781,6 +822,7 @@ export async function registerRoutes(
     const entitlements = entitlementsFor(creator.plan, config);
     return {
       creator,
+      businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
       entitlements,
       productFeatures: await workspaceProductFeatures(creator.workspaceId),
       brandTheme: entitlements.brandTheme
@@ -790,10 +832,10 @@ export async function registerRoutes(
   });
 
   app.put("/v1/account/locale", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
+    const user = await auth.requireUser(request, reply);
+    if (!user) return;
     const { locale } = UpdateLocalePreferenceSchema.parse(request.body);
-    const updated = await repository.updateUserLocale(creator.userId, locale);
+    const updated = await repository.updateUserLocale(user.userId, locale);
     if (!updated) {
       return apiError(reply, 404, "NOT_FOUND", "Account not found", request.id);
     }
@@ -2111,6 +2153,11 @@ export async function registerRoutes(
       experiencePresetOverride: experiencesAvailable ? input.experiencePresetOverride : "focus",
       presenterSoundEnabled: experiencesAvailable && input.presenterSoundEnabled,
       clientCapabilities: input.clientCapabilities,
+      useEventCredit: input.useEventCredit,
+      idempotencyKey:
+        typeof request.headers["x-idempotency-key"] === "string"
+          ? request.headers["x-idempotency-key"]
+          : undefined,
     });
     return reply.code(201).send(session);
   });
@@ -2535,7 +2582,17 @@ export async function registerRoutes(
     return {
       report,
       context: await reportContext(report),
-      entitlements: entitlementsFor(creator.plan, config),
+      entitlements: {
+        ...(await roomEntitlements(
+          repository,
+          config,
+          "round",
+          report.sessionId,
+          creator.workspaceId,
+        )),
+        followups: entitlementsFor(creator.plan, config).followups,
+        maxPracticePersonalLinks: entitlementsFor(creator.plan, config).maxPracticePersonalLinks,
+      },
       followup: await followups.getForReport(creator.workspaceId, id),
     };
   });
@@ -2562,7 +2619,12 @@ export async function registerRoutes(
     if (!creator) return;
     const { id } = IdParamsSchema.parse(request.params);
     const query = InteractionTranscriptQuerySchema.parse(request.query);
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    const report = await repository.getReport(creator.workspaceId, id);
+    if (!report) return apiError(reply, 404, "NOT_FOUND", "Report not found", request.id);
+    if (
+      !(await roomEntitlements(repository, config, "round", report.sessionId, creator.workspaceId))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -2604,7 +2666,10 @@ export async function registerRoutes(
         request.id,
       );
     }
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    if (
+      !(await roomEntitlements(repository, config, "round", report.sessionId, creator.workspaceId))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -2636,7 +2701,10 @@ export async function registerRoutes(
         request.id,
       );
     }
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    if (
+      !(await roomEntitlements(repository, config, "round", report.sessionId, creator.workspaceId))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -3276,164 +3344,166 @@ export async function registerRoutes(
     };
   });
 
-  app.get("/v1/billing/status", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    return creator
-      ? {
-          billing: await repository.getBillingProfile(creator.workspaceId),
-          mode: config.BILLING_MODE,
-        }
-      : undefined;
-  });
-
-  app.post("/v1/billing/checkout", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
-    if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
-    if (!stripe)
-      return apiError(
-        reply,
-        409,
-        "CONFLICT",
-        "Billing is disabled for this deployment",
-        request.id,
-      );
-    const billing = await repository.getBillingProfile(creator.workspaceId);
-    if (
-      billing.plan !== "free" ||
-      !["free", "canceled", "incomplete_expired"].includes(billing.status)
-    ) {
-      return apiError(
-        reply,
-        409,
-        "CONFLICT",
-        "A subscription already exists for this workspace; use the billing portal",
-        request.id,
-      );
-    }
-    const attemptKey = createHash("sha256")
-      .update(
-        [
-          creator.workspaceId,
-          billing.customerId ?? "new-customer",
-          billing.subscriptionId ?? "first-subscription",
-          billing.status,
-          config.STRIPE_PRO_PRICE_ID,
-        ].join(":"),
-      )
-      .digest("hex");
-    const checkout = await stripe.checkout.sessions.create(
-      {
-        mode: "subscription",
-        line_items: [{ price: config.STRIPE_PRO_PRICE_ID!, quantity: 1 }],
-        ...(billing.customerId
-          ? { customer: billing.customerId }
-          : { customer_email: creator.email }),
-        client_reference_id: creator.workspaceId,
-        metadata: { workspaceId: creator.workspaceId },
-        subscription_data: { metadata: { workspaceId: creator.workspaceId } },
-        success_url: `${config.WEB_ORIGIN}/dashboard?billing=success`,
-        cancel_url: `${config.WEB_ORIGIN}/pricing?billing=cancelled`,
-      },
-      { idempotencyKey: `openround-pro-${attemptKey}` },
-    );
-    if (!checkout.url) {
-      return apiError(
-        reply,
-        503,
-        "DEPENDENCY_UNAVAILABLE",
-        "Stripe did not return a checkout address",
-        request.id,
-      );
-    }
-    return { url: checkout.url };
-  });
-
-  app.post("/v1/billing/portal", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
-    if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
-    if (!stripe)
-      return apiError(
-        reply,
-        409,
-        "CONFLICT",
-        "Billing is disabled for this deployment",
-        request.id,
-      );
-    const billing = await repository.getBillingProfile(creator.workspaceId);
-    if (!billing.customerId)
-      return apiError(reply, 409, "CONFLICT", "No billing customer exists yet", request.id);
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: billing.customerId,
-      return_url: `${config.WEB_ORIGIN}/dashboard`,
+  if (!config.BUSINESS_PLATFORM_ENABLED) {
+    app.get("/v1/billing/status", async (request, reply) => {
+      const creator = await auth.requireCreator(request, reply);
+      return creator
+        ? {
+            billing: await repository.getBillingProfile(creator.workspaceId),
+            mode: config.BILLING_MODE,
+          }
+        : undefined;
     });
-    return { url: portal.url };
-  });
 
-  app.post("/v1/webhooks/stripe", { config: { rawBody: true } }, async (request, reply) => {
-    if (!stripe) return reply.code(204).send();
-    const signature = request.headers["stripe-signature"];
-    const rawBody = (request as FastifyRequest & { rawBody?: Buffer }).rawBody;
-    if (typeof signature !== "string" || !rawBody)
-      return apiError(reply, 400, "VALIDATION_ERROR", "Missing Stripe signature", request.id);
-    let event: Stripe.Event;
-    try {
-      event = stripe.webhooks.constructEvent(rawBody, signature, config.STRIPE_WEBHOOK_SECRET!);
-    } catch {
-      metrics.recordBillingEvent("unknown", "invalid_signature");
-      return apiError(reply, 400, "UNAUTHORIZED", "Invalid Stripe signature", request.id);
-    }
+    app.post("/v1/billing/checkout", async (request, reply) => {
+      const creator = await auth.requireCreator(request, reply);
+      if (!creator) return;
+      if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
+      if (!stripe)
+        return apiError(
+          reply,
+          409,
+          "CONFLICT",
+          "Billing is disabled for this deployment",
+          request.id,
+        );
+      const billing = await repository.getBillingProfile(creator.workspaceId);
+      if (
+        billing.plan !== "free" ||
+        !["free", "canceled", "incomplete_expired"].includes(billing.status)
+      ) {
+        return apiError(
+          reply,
+          409,
+          "CONFLICT",
+          "A subscription already exists for this workspace; use the billing portal",
+          request.id,
+        );
+      }
+      const attemptKey = createHash("sha256")
+        .update(
+          [
+            creator.workspaceId,
+            billing.customerId ?? "new-customer",
+            billing.subscriptionId ?? "first-subscription",
+            billing.status,
+            config.STRIPE_PRO_PRICE_ID,
+          ].join(":"),
+        )
+        .digest("hex");
+      const checkout = await stripe.checkout.sessions.create(
+        {
+          mode: "subscription",
+          line_items: [{ price: config.STRIPE_PRO_PRICE_ID!, quantity: 1 }],
+          ...(billing.customerId
+            ? { customer: billing.customerId }
+            : { customer_email: creator.email }),
+          client_reference_id: creator.workspaceId,
+          metadata: { workspaceId: creator.workspaceId },
+          subscription_data: { metadata: { workspaceId: creator.workspaceId } },
+          success_url: `${config.WEB_ORIGIN}/dashboard?billing=success`,
+          cancel_url: `${config.WEB_ORIGIN}/pricing?billing=cancelled`,
+        },
+        { idempotencyKey: `openround-pro-${attemptKey}` },
+      );
+      if (!checkout.url) {
+        return apiError(
+          reply,
+          503,
+          "DEPENDENCY_UNAVAILABLE",
+          "Stripe did not return a checkout address",
+          request.id,
+        );
+      }
+      return { url: checkout.url };
+    });
 
-    const billingEvent: BillingEventInput = {
-      providerEventId: event.id,
-      eventType: event.type,
-      providerCreatedAt: new Date(event.created * 1_000),
-    };
-    if (event.type === "checkout.session.completed") {
-      const checkout = event.data.object;
-      const workspaceId = z.string().uuid().safeParse(checkout.metadata?.workspaceId);
-      if (workspaceId.success) {
-        Object.assign(billingEvent, {
-          workspaceId: workspaceId.data,
-          plan: "pro" as const,
-          customerId:
-            typeof checkout.customer === "string" ? checkout.customer : checkout.customer?.id,
-          subscriptionId:
-            typeof checkout.subscription === "string"
-              ? checkout.subscription
-              : checkout.subscription?.id,
-          status: "active",
-        });
+    app.post("/v1/billing/portal", async (request, reply) => {
+      const creator = await auth.requireCreator(request, reply);
+      if (!creator) return;
+      if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
+      if (!stripe)
+        return apiError(
+          reply,
+          409,
+          "CONFLICT",
+          "Billing is disabled for this deployment",
+          request.id,
+        );
+      const billing = await repository.getBillingProfile(creator.workspaceId);
+      if (!billing.customerId)
+        return apiError(reply, 409, "CONFLICT", "No billing customer exists yet", request.id);
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: billing.customerId,
+        return_url: `${config.WEB_ORIGIN}/dashboard`,
+      });
+      return { url: portal.url };
+    });
+
+    app.post("/v1/webhooks/stripe", { config: { rawBody: true } }, async (request, reply) => {
+      if (!stripe) return reply.code(204).send();
+      const signature = request.headers["stripe-signature"];
+      const rawBody = (request as FastifyRequest & { rawBody?: Buffer }).rawBody;
+      if (typeof signature !== "string" || !rawBody)
+        return apiError(reply, 400, "VALIDATION_ERROR", "Missing Stripe signature", request.id);
+      let event: Stripe.Event;
+      try {
+        event = stripe.webhooks.constructEvent(rawBody, signature, config.STRIPE_WEBHOOK_SECRET!);
+      } catch {
+        metrics.recordBillingEvent("unknown", "invalid_signature");
+        return apiError(reply, 400, "UNAUTHORIZED", "Invalid Stripe signature", request.id);
       }
-    }
-    if (
-      event.type === "customer.subscription.updated" ||
-      event.type === "customer.subscription.deleted"
-    ) {
-      const subscription = event.data.object;
-      const workspaceId = z.string().uuid().safeParse(subscription.metadata.workspaceId);
-      if (workspaceId.success) {
-        const active =
-          event.type !== "customer.subscription.deleted" &&
-          ["active", "trialing"].includes(subscription.status);
-        Object.assign(billingEvent, {
-          workspaceId: workspaceId.data,
-          plan: active ? ("pro" as const) : ("free" as const),
-          customerId:
-            typeof subscription.customer === "string"
-              ? subscription.customer
-              : subscription.customer.id,
-          subscriptionId: subscription.id,
-          status: subscription.status,
-        });
+
+      const billingEvent: BillingEventInput = {
+        providerEventId: event.id,
+        eventType: event.type,
+        providerCreatedAt: new Date(event.created * 1_000),
+      };
+      if (event.type === "checkout.session.completed") {
+        const checkout = event.data.object;
+        const workspaceId = z.string().uuid().safeParse(checkout.metadata?.workspaceId);
+        if (workspaceId.success) {
+          Object.assign(billingEvent, {
+            workspaceId: workspaceId.data,
+            plan: "pro" as const,
+            customerId:
+              typeof checkout.customer === "string" ? checkout.customer : checkout.customer?.id,
+            subscriptionId:
+              typeof checkout.subscription === "string"
+                ? checkout.subscription
+                : checkout.subscription?.id,
+            status: "active",
+          });
+        }
       }
-    }
-    metrics.observeBillingLag((Date.now() - event.created * 1_000) / 1_000);
-    const applied = await repository.applyBillingEvent(billingEvent);
-    metrics.recordBillingEvent(event.type, applied ? "applied" : "duplicate");
-    return reply.code(204).send();
-  });
+      if (
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.deleted"
+      ) {
+        const subscription = event.data.object;
+        const workspaceId = z.string().uuid().safeParse(subscription.metadata.workspaceId);
+        if (workspaceId.success) {
+          const active =
+            event.type !== "customer.subscription.deleted" &&
+            ["active", "trialing"].includes(subscription.status);
+          Object.assign(billingEvent, {
+            workspaceId: workspaceId.data,
+            plan: active ? ("pro" as const) : ("free" as const),
+            customerId:
+              typeof subscription.customer === "string"
+                ? subscription.customer
+                : subscription.customer.id,
+            subscriptionId: subscription.id,
+            status: subscription.status,
+          });
+        }
+      }
+      metrics.observeBillingLag((Date.now() - event.created * 1_000) / 1_000);
+      const applied = await repository.applyBillingEvent(billingEvent);
+      metrics.recordBillingEvent(event.type, applied ? "applied" : "duplicate");
+      return reply.code(204).send();
+    });
+  }
 
   app.get("/v1/account/export", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
@@ -3519,6 +3589,16 @@ export async function registerRoutes(
   });
 
   app.delete("/v1/account", async (request, reply) => {
+    if (config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE) {
+      const user = await auth.requireUser(request, reply);
+      if (!user) return;
+      z.object({ confirmation: z.literal("DELETE") }).parse(request.body);
+      const platform = createPlatformRepository(repository);
+      await platform.assertIdentityDeletionAllowed(user.userId);
+      await repository.deleteUserIdentity(user.userId);
+      auth.clearSessionCookie(reply);
+      return reply.code(204).send();
+    }
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     const { confirmation } = z.object({ confirmation: z.literal("DELETE") }).parse(request.body);

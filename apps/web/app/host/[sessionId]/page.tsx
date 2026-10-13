@@ -377,17 +377,20 @@ export default function HostPage() {
       entitlements: { cohosting?: boolean };
       productFeatures?: { workspaceShell?: boolean };
     }>("/v1/auth/me")
-      .then(({ entitlements, productFeatures }) => {
+      .then(async ({ entitlements, productFeatures }) => {
         setCreatorHref(
           creatorLandingHref({ workspaceShell: productFeatures?.workspaceShell === true }),
         );
-        setCohostingAvailable(Boolean(entitlements.cohosting));
+        const room = await apiFetch<{ entitlements: { cohosting?: boolean } }>(
+          `/v1/sessions/${sessionId}/entitlements`,
+        );
+        setCohostingAvailable(Boolean(room.entitlements.cohosting ?? entitlements.cohosting));
       })
       .catch(() => {
         setCreatorHref("/");
         setCohostingAvailable(false);
       });
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     if (!audienceOpen) return;

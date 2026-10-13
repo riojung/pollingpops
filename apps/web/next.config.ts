@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const buildId = process.env.OPENROUND_BUILD_ID?.trim() || "unversioned";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.PLAYWRIGHT_BUSINESS === "true" ? ".next-business" : ".next",
   allowedDevOrigins: ["127.0.0.1"],
   output: "standalone",
   poweredByHeader: false,

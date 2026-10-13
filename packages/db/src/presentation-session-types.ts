@@ -4,10 +4,13 @@ import type {
   PresentationSessionPhase,
   PresentationSessionResponse,
 } from "@openround/contracts";
+import type { PlatformRoomCoverageInput } from "./platform-types.js";
 
 export interface PresentationSessionRecord {
   id: string;
   workspaceId: string;
+  /** Creation-only commercial request; not part of the audience protocol. */
+  commercialCoverage?: PlatformRoomCoverageInput;
   presentationId: string;
   presentationVersionId: string;
   title: string;

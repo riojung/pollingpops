@@ -2920,6 +2920,7 @@ export const ProductEventBatchSchema = z
 export type ProductEventBatch = z.infer<typeof ProductEventBatchSchema>;
 
 export const CreateSessionSchema = z.object({
+  useEventCredit: z.boolean().default(false),
   clientCapabilities: RoundClientCapabilitiesSchema.optional(),
   quizId: z.string().uuid(),
   settings: SessionSettingsSchema,
@@ -5279,6 +5280,7 @@ export const PresentationControlCommandSchema = z.union([
 export type PresentationControlCommand = z.infer<typeof PresentationControlCommandSchema>;
 
 export const CreatePresentationSessionSchema = z.object({
+  useEventCredit: z.boolean().default(false),
   presentationId: z.string().uuid(),
   timeMode: PresentationTimeModeSchema.default("timed"),
 });

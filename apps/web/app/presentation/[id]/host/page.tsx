@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CreatorBrand } from "../../../../components/brand";
+import { EventCreditChoice } from "../../../../components/event-credit-choice";
 import { useLocale } from "../../../../components/locale-provider";
 import {
   useWorkspace,
@@ -79,6 +80,8 @@ function PresentationHostSetupContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [timeMode, setTimeMode] = useState<"timed" | "flex">("timed");
+  const [useEventCredit, setUseEventCredit] = useState(false);
+  const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const liveCreationAvailable = productFeatures?.presentationRealtime === true;
 
   useEffect(() => {
@@ -91,18 +94,24 @@ function PresentationHostSetupContent() {
   }, [id, router]);
 
   async function startSession() {
+    if (busy) return;
     setBusy(true);
     setError("");
+    const body = JSON.stringify({
+      presentationId: id,
+      ...(productFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
+      useEventCredit,
+    });
+    if (creationIntent.current?.body !== body)
+      creationIntent.current = { body, key: crypto.randomUUID() };
     try {
       const { snapshot, controlToken } = await apiFetch<{
         snapshot: { sessionId?: string; id?: string };
         controlToken?: string;
       }>("/v1/presentation-sessions", {
         method: "POST",
-        body: JSON.stringify({
-          presentationId: id,
-          ...(productFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
-        }),
+        headers: { "x-idempotency-key": creationIntent.current.key },
+        body,
       });
       const sessionId = snapshot.sessionId ?? snapshot.id;
       if (!sessionId) throw new Error("Presentation session identifier is missing");
@@ -124,6 +133,11 @@ function PresentationHostSetupContent() {
         <Link href={`/presentation/${id}`}>{t("live.presentationHost.backEditor")}</Link>
       </div>
       <section className={styles.setup}>
+        <EventCreditChoice
+          checked={useEventCredit}
+          disabled={busy}
+          onChange={(checked) => setUseEventCredit(checked)}
+        />
         <span className={styles.statusPill}>{t("live.presentationHost.live")}</span>
         {presentation ? <h1 lang="">{presentation.title}</h1> : <h1>{t("common.loading")}</h1>}
         <p>{t("live.presentationHost.description")}</p>

@@ -1090,6 +1090,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 62, name: "survey_room_receipt_cleanup" },
       { version: 63, name: "survey_multiselection" },
       { version: 64, name: "survey_library_and_beta_feedback" },
+      { version: 65, name: "business_platform" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the

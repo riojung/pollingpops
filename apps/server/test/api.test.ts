@@ -633,6 +633,7 @@ describe("creator to report journey", () => {
       error: { code: "INSTITUTION_AUTH_REQUIRED" },
     });
 
+    await repository.setPlan(creator.creator.workspaceId, "pro");
     const hosted = await app.inject({
       method: "POST",
       url: "/v1/sessions",
@@ -655,8 +656,10 @@ describe("creator to report journey", () => {
       hostToken: string;
       snapshot: SessionSnapshot;
     }>();
-    expect(session.snapshot.brandTheme).toBeNull();
+    expect(session.snapshot.brandTheme).toMatchObject({ organizationName: "Northern Learning" });
     expect(session.snapshot.settings.trustMode).toBe("learning");
+    // A downgrade changes subsequent launches, while this room keeps its purchased terms.
+    await repository.setPlan(creator.creator.workspaceId, "free");
 
     const embedOriginsPreflight = await app.inject({
       method: "OPTIONS",
@@ -1273,8 +1276,8 @@ describe("creator to report journey", () => {
     });
     const generatedAt = new Date((report as Report).generatedAt!).getTime();
     const expiresAt = new Date((report as Report).expiresAt).getTime();
-    expect(expiresAt - generatedAt).toBeGreaterThanOrEqual(30 * 24 * 60 * 60_000 - 5_000);
-    expect(expiresAt - generatedAt).toBeLessThanOrEqual(30 * 24 * 60 * 60_000 + 5_000);
+    expect(expiresAt - generatedAt).toBeGreaterThanOrEqual(365 * 24 * 60 * 60_000 - 5_000);
+    expect(expiresAt - generatedAt).toBeLessThanOrEqual(365 * 24 * 60 * 60_000 + 5_000);
 
     const reportResponse = await app.inject({
       method: "GET",
@@ -1284,15 +1287,15 @@ describe("creator to report journey", () => {
     expect(reportResponse.statusCode).toBe(200);
     expect(reportResponse.json()).toMatchObject({
       report: { expiresAt: (report as Report).expiresAt },
-      entitlements: { plan: "free", reportRetentionDays: 30, csvExport: false },
+      entitlements: { plan: "pro", reportRetentionDays: 365, csvExport: true },
     });
     const freeCsv = await app.inject({
       method: "GET",
       url: `/v1/reports/${(report as Report).id}.csv`,
       headers: { cookie },
     });
-    expect(freeCsv.statusCode).toBe(402);
-    expect(freeCsv.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
+    expect(freeCsv.statusCode).toBe(200);
+    expect(freeCsv.headers["content-type"]).toContain("text/csv");
     await repository.setPlan(storedSession!.workspaceId, "pro");
     const proCsv = await app.inject({
       method: "GET",

@@ -1399,6 +1399,66 @@ describe("operations environment contract", () => {
       ),
     ).toThrow("Fly secrets and checked Fly environment must not both define: PUBLIC_API_URL");
   });
+  it("accepts the exact business/operator overlay configuration and keeps image overrides and owner credentials excluded", () => {
+    const businessKeys = [
+      "BACKGROUND_JOBS_MODE",
+      "BUSINESS_PLATFORM_ENABLED",
+      "BUSINESS_EVENT_CREDITS_ENABLED",
+      "BUSINESS_CATALOG_JSON",
+      "BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED",
+      "BUSINESS_BILLING_WORKER_INTERVAL_MS",
+      "BUSINESS_BILLING_WORKER_LEASE_MS",
+      "BUSINESS_BILLING_RECONCILE_INTERVAL_MS",
+      "CONTROL_ENABLED",
+      "CONTROL_PUBLIC_ORIGIN",
+      "CONTROL_DATABASE_URL",
+      "CONTROL_DOMAIN",
+      "CONTROL_ALLOWED_CIDRS",
+      "OPERATOR_OIDC_ISSUER",
+      "OPERATOR_OIDC_CLIENT_ID",
+      "OPERATOR_OIDC_CLIENT_SECRET",
+      "OPERATOR_OIDC_MFA_POLICY_ENFORCED",
+      "OPERATOR_OIDC_REQUIRED_AMR",
+      "OPERATOR_OIDC_ALLOWED_ACR",
+      "OPERATOR_BOOTSTRAP_IDENTITIES",
+      "INTEGRATION_SECRET_KEY",
+      "QUICKBOOKS_ENVIRONMENT",
+      "QUICKBOOKS_PRODUCTION_READS_ENABLED",
+      "OPENROUND_JOBS_CPUS",
+      "OPENROUND_JOBS_MEMORY_LIMIT",
+      "OPENROUND_CONTROL_CPUS",
+      "OPENROUND_CONTROL_MEMORY_LIMIT",
+    ];
+    const environment = `${singleVmRuntimeEnvironment()}${businessKeys.map((key) => `${key}=synthetic-test-value`).join("\n")}\n`;
+    expect(validateEnvFileKeys(environment, "single-vm-runtime")).toEqual(
+      expect.arrayContaining(businessKeys),
+    );
+    for (const prohibited of [
+      "OPENROUND_CONTROL_IMAGE",
+      "OPENROUND_SERVER_IMAGE",
+      "OPENROUND_WEB_IMAGE",
+      "OPENROUND_BUILD_ID",
+      "CONTROL_DATABASE_MIGRATION_URL",
+      "OPERATOR_OIDC_JWKS_URI",
+      "QUICKBOOKS_API_URL",
+      "CONTROL_ALLOW_LOCAL_HTTP",
+    ]) {
+      expect(
+        () =>
+          validateEnvFileKeys(
+            `${environment}${prohibited}=synthetic-test-value\n`,
+            "single-vm-runtime",
+          ),
+        prohibited,
+      ).toThrow(`must not contain ${prohibited}`);
+    }
+    expect(() =>
+      validateEnvFileKeys(
+        "DATABASE_MIGRATION_URL=postgres://owner\nCONTROL_DATABASE_URL=postgres://operator\n",
+        "migration",
+      ),
+    ).toThrow("migration environment must not contain CONTROL_DATABASE_URL");
+  });
 
   it("distributes live-card playback as a separate default-off environment flag", async () => {
     const [example, compose, singleVmCompose] = await Promise.all(

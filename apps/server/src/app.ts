@@ -16,11 +16,14 @@ import {
   createPresentationRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
+  createPlatformRepository,
   MemoryRepository,
   PostgresRepository,
   type Repository,
 } from "@openround/db";
 import { AuthService } from "./auth.js";
+import { registerPlatformRoutes } from "./platform-routes.js";
+import { registerRoomFundingRoutes } from "./room-funding-routes.js";
 import { AudienceOutboxWorker } from "./audience-outbox-worker.js";
 import { AudienceScopeService } from "./audience-scope-service.js";
 import { registerAudienceScopeRoutes } from "./audience-scope-routes.js";
@@ -144,6 +147,16 @@ export async function buildApp(
             throw new Error("DATABASE_URL is required unless ALLOW_IN_MEMORY=true");
           })());
   const metrics = new MetricsService();
+  if (config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE) {
+    const healthRepository = createPlatformRepository(repository);
+    metrics.bindBusinessHealth(async () => {
+      const [health, productQueues] = await Promise.all([
+        healthRepository.getBusinessHealth(),
+        healthRepository.getProductQueueHealth(),
+      ]);
+      return { ...health, productQueues };
+    });
+  }
   const presentations = createPresentationRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
@@ -397,6 +410,13 @@ export async function buildApp(
     stripeClient: overrides.stripe,
   });
   await registerQuestionHealthRoutes(app, { config, repository, auth });
+  const { platformBillingWorker } = await registerPlatformRoutes(app, {
+    config,
+    repository,
+    auth,
+    stripeClient: overrides.stripe,
+  });
+  await registerRoomFundingRoutes(app, { config, repository, auth });
   await registerAudienceScopeRoutes(app, audienceScopeService, cache.consumeRateLimit.bind(cache));
   await registerRecoveryPackRoutes(app, { config, repository, packs: recoveryPacks, auth });
   await registerRecoveryPackPortabilityRoutes(app, { packs: recoveryPacks, auth });
@@ -523,6 +543,7 @@ export async function buildApp(
     retention,
     reportWorker,
     presentationReportWorker,
+    platformBillingWorker,
     metrics,
     productEvents,
     presentations,

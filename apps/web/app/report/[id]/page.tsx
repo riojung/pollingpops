@@ -970,7 +970,7 @@ export default function ReportPage() {
             </div>
           ) : !uxBeta && report && entitlements ? (
             <Link className="button-quiet" href="/pricing">
-              CSV export requires Pro
+              CSV was not included for this room
             </Link>
           ) : null}
         </div>
@@ -1218,14 +1218,14 @@ export default function ReportPage() {
                     </div>
                   ) : entitlements ? (
                     <Link className="button-quiet" href="/pricing">
-                      CSV export requires Pro
+                      CSV was not included for this room
                     </Link>
                   ) : null}
                   <p className="muted" style={{ marginBottom: 0 }}>
                     This report&apos;s stored retention deadline is{" "}
-                    {new Date(report.expiresAt).toLocaleDateString()}. The current{" "}
-                    {entitlements?.plan ?? "account"} plan defaults to{" "}
-                    {entitlements?.reportRetentionDays ?? ""} days.
+                    {new Date(report.expiresAt).toLocaleDateString()}. This room&apos;s{" "}
+                    {entitlements?.plan ?? "recorded"} reporting terms provide{" "}
+                    {entitlements?.reportRetentionDays ?? ""} days of retention.
                   </p>
                 </section>
                 <section className="panel danger-panel">

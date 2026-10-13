@@ -4,6 +4,8 @@
 .env.local
 artifacts/
 .next/
+.next-business/
+.next-control-test/
 .turbo/
 coverage/
 dist/
@@ -12,6 +14,8 @@ playwright-report/
 playwright-report-beta/
 test-results/
 test-results-beta/
+test-results-business/
+playwright-report-business/
 *.tsbuildinfo
 *.log
 data/

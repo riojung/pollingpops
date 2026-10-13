@@ -1,4 +1,7 @@
 import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from "@prometheus-io/client";
+import type { BusinessHealth, ProductQueueHealth } from "@openround/db";
+
+type OperationalHealth = BusinessHealth & { productQueues?: ProductQueueHealth[] };
 
 interface DatabasePoolMetrics {
   totalCount: number;
@@ -50,6 +53,36 @@ const recoveryFunnelStageByProductEvent = new Map<string, RecoveryFunnelStage>([
 export class MetricsService {
   readonly registry = new Registry();
   private pool: DatabasePoolMetrics | null = null;
+  private businessHealth: (() => Promise<OperationalHealth>) | null = null;
+  private readonly businessProjection = new Gauge({
+    name: "openround_business_projection_up",
+    help: "Whether the durable business health projection can be read",
+    registers: [],
+  });
+  private readonly businessQueue = new Gauge({
+    name: "openround_business_queue_jobs",
+    help: "Business jobs by bounded queue and state",
+    labelNames: ["queue", "state"] as const,
+    registers: [this.registry],
+  });
+  private readonly businessQueueAge = new Gauge({
+    name: "openround_business_queue_oldest_seconds",
+    help: "Age of the oldest outstanding job in a bounded business queue",
+    labelNames: ["queue"] as const,
+    registers: [this.registry],
+  });
+  private readonly businessHeartbeatAge = new Gauge({
+    name: "openround_business_worker_heartbeat_age_seconds",
+    help: "Age of each expected business worker heartbeat; -1 means missing",
+    labelNames: ["worker"] as const,
+    registers: [this.registry],
+  });
+  private readonly creditReservations = new Gauge({
+    name: "openround_event_credit_reservations",
+    help: "Event credit reservations by expiry state",
+    labelNames: ["state"] as const,
+    registers: [this.registry],
+  });
 
   private readonly httpDuration = new Histogram({
     name: "openround_http_request_duration_seconds",
@@ -366,6 +399,64 @@ export class MetricsService {
     this.pool = pool;
   }
 
+  bindBusinessHealth(collect: () => Promise<OperationalHealth>) {
+    if (!this.businessHealth) this.registry.registerMetric(this.businessProjection);
+    this.businessHealth = collect;
+  }
+
+  private async collectBusinessHealth() {
+    if (!this.businessHealth) return;
+    try {
+      const health = await this.businessHealth();
+      this.businessProjection.set(1);
+      this.businessQueue.reset();
+      this.businessQueueAge.reset();
+      const queues = [
+        { queue: "billing", ...health.billing },
+        ...health.integrations.map(({ integration, ...stats }) => ({
+          queue: integration,
+          ...stats,
+        })),
+        ...(health.productQueues ?? []).map(({ kind, ...stats }) => ({ queue: kind, ...stats })),
+      ];
+      for (const queue of queues) {
+        const boundedQueue = [
+          "billing",
+          "jira-service-management",
+          "hubspot",
+          "quickbooks",
+          "round-report",
+          "presentation-report",
+          "authoring",
+        ].includes(queue.queue)
+          ? queue.queue
+          : "other";
+        for (const state of ["pending", "processing", "failed", "ambiguous"] as const) {
+          this.businessQueue.set(
+            { queue: boundedQueue, state },
+            "ambiguous" === state ? ("ambiguous" in queue ? queue.ambiguous : 0) : queue[state],
+          );
+        }
+        this.businessQueueAge.set({ queue: boundedQueue }, queue.oldestPendingAgeSeconds);
+      }
+      for (const heartbeat of health.heartbeats) {
+        const worker = [
+          "jobs",
+          "platform-billing",
+          "platform-billing-reconciliation",
+          "business-integrations",
+        ].includes(heartbeat.id)
+          ? heartbeat.id
+          : "other";
+        this.businessHeartbeatAge.set({ worker }, heartbeat.ageSeconds);
+      }
+      this.creditReservations.set({ state: "active" }, health.reservations.active);
+      this.creditReservations.set({ state: "expired" }, health.reservations.expired);
+    } catch {
+      this.businessProjection.set(0);
+    }
+  }
+
   recordProductEvent(event: {
     name: string;
     authoritative?: boolean;
@@ -628,6 +719,7 @@ export class MetricsService {
   }
 
   async render() {
+    await this.collectBusinessHealth();
     if (this.pool) {
       this.databaseConnections.set({ state: "total" }, this.pool.totalCount);
       this.databaseConnections.set({ state: "idle" }, this.pool.idleCount);

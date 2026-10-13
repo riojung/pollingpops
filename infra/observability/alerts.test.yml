@@ -301,3 +301,81 @@ tests:
             exp_annotations:
               runbook: docs/runbooks/observability.md
               summary: Invalid billing webhook signatures are elevated
+
+  - name: disabled and Community deployments omit business projection metrics
+    interval: 1m
+    input_series:
+      - series: 'up{job="openround",deployment="community"}'
+        values: "1+0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PollingPopsBusinessProjectionUnavailable
+        exp_alerts: []
+
+  - name: enabled deployments alert on unavailable business health
+    interval: 1m
+    input_series:
+      - series: "openround_business_projection_up"
+        values: "0+0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PollingPopsBusinessProjectionUnavailable
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PollingPopsBusinessProjectionUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Durable business health cannot be read
+              runbook: docs/business-management.md
+
+  - interval: 1m
+    input_series:
+      - series: "openround_business_projection_up"
+        values: "1+0x10"
+      - series: 'openround_business_queue_oldest_seconds{queue="billing"}'
+        values: "901+0x10"
+      - series: 'openround_business_queue_jobs{queue="jira-service-management",state="ambiguous"}'
+        values: "1+0x10"
+      - series: 'openround_business_worker_heartbeat_age_seconds{worker="jobs"}'
+        values: "-1+0x10"
+      - series: 'openround_event_credit_reservations{state="expired"}'
+        values: "1+0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PollingPopsBusinessQueueDelayed
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              queue: billing
+            exp_annotations:
+              summary: Business delivery or billing processing is delayed
+              runbook: docs/business-management.md
+      - eval_time: 6m
+        alertname: PollingPopsBusinessDeliveryNeedsAttention
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              queue: jira-service-management
+            exp_annotations:
+              summary: Business jobs require retry or reconciliation
+              runbook: docs/business-management.md
+      - eval_time: 6m
+        alertname: PollingPopsJobsHeartbeatMissing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              worker: jobs
+            exp_annotations:
+              summary: The jobs process is not reporting a heartbeat
+              runbook: docs/business-management.md
+      - eval_time: 6m
+        alertname: PollingPopsExpiredCreditReservations
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              state: expired
+            exp_annotations:
+              summary: Empty expired rooms still reserve event credits
+              runbook: docs/business-management.md

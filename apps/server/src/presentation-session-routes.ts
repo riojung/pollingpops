@@ -294,6 +294,11 @@ export async function registerPresentationSessionRoutes(
         presentationId: input.presentationId,
         timeMode: input.timeMode,
         requestId: request.id,
+        useEventCredit: input.useEventCredit,
+        idempotencyKey:
+          typeof request.headers["x-idempotency-key"] === "string"
+            ? request.headers["x-idempotency-key"]
+            : undefined,
       });
       const response = PresentationRestV1CreateSessionResponseSchema.parse({
         ...created,

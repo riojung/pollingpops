@@ -1,6 +1,9 @@
 :80 {
   encode zstd gzip
 
+  @operator_paths path /v1/admin /v1/admin/* /api/ops/*
+  respond @operator_paths 404
+
   @backend path /v1/* /health/* /socket.io/*
   reverse_proxy @backend server:4000
   reverse_proxy web:3000

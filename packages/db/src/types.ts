@@ -31,6 +31,7 @@ import type {
   EngineRound,
   GameState,
 } from "@openround/game-engine";
+import type { PlatformRoomCoverageInput } from "./platform-types.js";
 
 export type Segment = "education" | "workplace";
 export type Plan = "free" | "pro" | "team";
@@ -86,6 +87,16 @@ export interface CreatorContext {
   segment: Segment;
   role: "owner" | "editor" | "viewer";
   plan: Plan;
+}
+export interface UserPrincipal {
+  userId: string;
+  email: string;
+  locale: SupportedLocale;
+  localePreferenceSet: boolean;
+}
+export interface MagicLinkIdentity {
+  user: UserPrincipal;
+  creator: CreatorContext | null;
 }
 
 export interface WorkspaceSummaryRecord {
@@ -337,6 +348,8 @@ export interface StoredSession {
   quizVersionId: string;
   hostId: string;
   hostTokenHash: string;
+  /** Creation-only commercial request; durable coverage is stored separately. */
+  commercialCoverage?: PlatformRoomCoverageInput;
   /** Frozen identity/privacy promise for this session. */
   trustMode?: TrustMode;
   /** Whether the optional decision timeline was enabled when the session was created. */
@@ -1056,6 +1069,7 @@ export interface Repository {
   ): Promise<OperationalFeaturesRecord>;
   createMagicToken(input: MagicTokenRecord): Promise<void>;
   consumeMagicToken(tokenHash: string, now: Date): Promise<CreatorContext | null>;
+  consumeMagicLinkIdentity(tokenHash: string, now: Date): Promise<MagicLinkIdentity | null>;
   createCreatorSession(input: {
     id: string;
     userId: string;
@@ -1064,6 +1078,8 @@ export interface Repository {
     activeWorkspaceId?: string;
   }): Promise<void>;
   getCreatorBySession(tokenHash: string, now: Date): Promise<CreatorContext | null>;
+  getUserPrincipalBySession(tokenHash: string, now: Date): Promise<UserPrincipal | null>;
+  getUserPrincipalById(userId: string): Promise<UserPrincipal | null>;
   updateUserLocale(userId: string, locale: SupportedLocale): Promise<SupportedLocale | null>;
   listWorkspaces(userId: string): Promise<WorkspaceSummaryRecord[]>;
   setCreatorSessionWorkspace(
@@ -1651,6 +1667,7 @@ export interface Repository {
   purgeProductEvents(now: Date): Promise<number>;
   exportAccount(userId: string): Promise<Record<string, unknown>>;
   deleteAccount(userId: string): Promise<void>;
+  deleteUserIdentity(userId: string): Promise<void>;
   expireLiveSessions(now: Date): Promise<string[]>;
   purgeExpired(now: Date): Promise<string[]>;
   purgeExpiredPracticeAssignments(now: Date): Promise<number>;

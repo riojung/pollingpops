@@ -105,7 +105,7 @@ export function resolveReleaseCertificateIdentity(binding) {
   return `https://github.com/${repository}/.github/workflows/release.yml@refs/tags/${binding.tag}`;
 }
 
-export function requiredReleaseAssetNames(tag) {
+export function requiredReleaseAssetNames(tag, components = ["server", "web"]) {
   validateReleaseTag(tag);
   const version = tag.slice(1);
   return [
@@ -114,7 +114,7 @@ export function requiredReleaseAssetNames(tag) {
     `openround-${tag}-preflight.json`,
     `openround-${version}-source.tar.gz`,
     "release-notes.md",
-    ...["server", "web"].flatMap((component) => [
+    ...components.flatMap((component) => [
       `openround-${component}-${tag}-cosign-verification.json`,
       `openround-${component}-${tag}-provenance.slsa.json`,
       `openround-${component}-${tag}-sbom.spdx.json`,
@@ -125,7 +125,7 @@ export function requiredReleaseAssetNames(tag) {
 
 function validateBoundReleaseAssets(assets, binding) {
   if (!Array.isArray(assets)) fail("releaseBinding.assets must be an array");
-  const expectedNames = requiredReleaseAssetNames(binding.tag);
+  const expectedNames = requiredReleaseAssetNames(binding.tag, Object.keys(binding.imageDigests));
   const actualNames = assets.map((asset) => asset?.name).sort();
   if (!isDeepStrictEqual(actualNames, expectedNames)) {
     fail("releaseBinding.assets must contain the exact required release asset set");
@@ -253,8 +253,9 @@ export function validateReleaseBinding(binding, expected = {}) {
   ) {
     fail("releaseBinding.manifestDigest must be a sha256 digest");
   }
-  assertExactKeys(binding.imageDigests, ["server", "web"], "releaseBinding.imageDigests");
-  for (const component of ["server", "web"]) {
+  const imageComponents = ["server", "web", ...(binding.imageDigests?.control ? ["control"] : [])];
+  assertExactKeys(binding.imageDigests, imageComponents, "releaseBinding.imageDigests");
+  for (const component of imageComponents) {
     if (
       typeof binding.imageDigests[component] !== "string" ||
       !SHA256_DIGEST_PATTERN.test(binding.imageDigests[component])
@@ -417,9 +418,10 @@ export function validateReleaseChecksums(content, binding) {
     if (!match || entries.has(match[2])) fail("SHA256SUMS contains an invalid or duplicate entry");
     entries.set(match[2], `sha256:${match[1]}`);
   }
-  const expectedNames = requiredReleaseAssetNames(binding.tag).filter(
-    (name) => name !== SHA256_SUMS_ASSET,
-  );
+  const expectedNames = requiredReleaseAssetNames(
+    binding.tag,
+    Object.keys(binding.imageDigests),
+  ).filter((name) => name !== SHA256_SUMS_ASSET);
   if (!isDeepStrictEqual([...entries.keys()].sort(), expectedNames)) {
     fail("SHA256SUMS must contain every required release asset except itself and no others");
   }

@@ -132,6 +132,10 @@ jobs:
         env:
           BETA_E2E_AUTHORING: "true"
           BETA_E2E_ROUND_PROTOCOL: "true"
+      - name: Run business administration browser journeys
+        run: pnpm test:e2e:business
+      - name: Run operator administration browser journeys
+        run: pnpm test:e2e:control
       - name: Upload browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -142,4 +146,6 @@ jobs:
             playwright-report-beta/
             test-results/
             test-results-beta/
+            test-results-business/
+            playwright-report-business/
           if-no-files-found: ignore

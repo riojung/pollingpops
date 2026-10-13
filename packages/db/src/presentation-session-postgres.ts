@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
+import { assertAudienceAdmissionForTransaction } from "./platform-postgres.js";
+import {
+  reserveRoomCoverageForTransaction,
+  consumeRoomCoverageForTransaction,
+  releaseRoomCoverageForTransaction,
+} from "./platform-postgres.js";
 import type { PostgresRepository } from "./postgres.js";
 import { WorkspaceDeletionInProgressError } from "./types.js";
 import {
@@ -305,6 +311,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         return { status: "active" };
       }
       // Child foreign keys and the live-room-code trigger remove the entire durable room.
+      await releaseRoomCoverageForTransaction(client, "presentation", sessionId);
       await client.query(
         "DELETE FROM presentation_live_sessions WHERE workspace_id = $1 AND id = $2",
         [workspaceId, sessionId],
@@ -332,6 +339,9 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     return this.transaction(normalized.workspaceId, async (client) => {
       const session = await this.insertSession(client, normalized);
       const storedCredential = await this.insertCredential(client, credential);
+      if (input.commercialCoverage) {
+        await reserveRoomCoverageForTransaction(client, input.commercialCoverage);
+      }
       return { session, credential: storedCredential };
     });
   }
@@ -498,6 +508,9 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       [input.workspaceId, input.sessionId],
     );
     const stored = mapSession(current.rows[0]!);
+    if (stored.status === "finished") {
+      await releaseRoomCoverageForTransaction(client, "presentation", stored.id);
+    }
     await client.query(
       `INSERT INTO presentation_session_timeline
         (id, workspace_id, session_id, sequence, event_type, block_index, block_id, occurred_at,
@@ -591,13 +604,18 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     return this.transaction(input.workspaceId, async (client) => {
       await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
       const locked = await client.query(
-        `SELECT status, $3::timestamptz < live_expires_at AS live_open
+        `SELECT status, live_expires_at
          FROM presentation_live_sessions
          WHERE workspace_id = $1 AND id = $2
          FOR UPDATE`,
-        [input.workspaceId, input.sessionId, input.joinedAt],
+        [input.workspaceId, input.sessionId],
       );
-      if (!locked.rows[0] || locked.rows[0].status !== "active" || !locked.rows[0].live_open) {
+      const clock = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
+      if (
+        !locked.rows[0] ||
+        locked.rows[0].status !== "active" ||
+        new Date(locked.rows[0].live_expires_at) <= clock.rows[0]!.now
+      ) {
         return { status: "closed" };
       }
       const count = await client.query<{ count: string }>(
@@ -605,6 +623,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         [input.sessionId],
       );
       if (Number(count.rows[0]?.count ?? 0) >= participantLimit) return { status: "full" };
+      await assertAudienceAdmissionForTransaction(client, input.workspaceId);
       const result = await client.query(
         `INSERT INTO presentation_live_participants
           (id, workspace_id, session_id, nickname, token_hash, joined_at, last_seen_at)
@@ -619,6 +638,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
           input.lastSeenAt,
         ],
       );
+      await consumeRoomCoverageForTransaction(client, "presentation", input.sessionId);
       return { status: "accepted", participant: mapParticipant(result.rows[0]!) };
     });
   }

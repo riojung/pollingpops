@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/server/package.json apps/server/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/control-plane/package.json packages/control-plane/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/experience/package.json packages/experience/package.json
 COPY packages/game-engine/package.json packages/game-engine/package.json

@@ -315,7 +315,7 @@ describe("production release target boundary", () => {
     expect(draft).not.toContain("id-token: write");
     expect(draft).not.toContain("packages: write");
     expect(draft).not.toContain("security-events: write");
-    expect(draft).toContain("actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c");
+    expect(draft).toContain("actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333");
     expect(draft).toContain("sbom.spdx.json");
     expect(draft).toContain("provenance.slsa.json");
     expect(draft).toContain("trivy.sarif");

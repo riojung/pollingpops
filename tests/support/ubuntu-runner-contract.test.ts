@@ -84,7 +84,7 @@ describe("GitHub-hosted runner migration contract", () => {
     expect(Object.keys(parsed.jobs).sort()).toEqual(canaryJobs.map(([job]) => job).sort());
     for (const job of ["ubuntu26-production-compose"]) {
       const setupNode = parsed.jobs[job].steps?.find(({ uses }) =>
-        uses?.startsWith("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"),
+        uses?.startsWith("actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1"),
       );
       expect(setupNode?.with?.["node-version"]).toBe(22);
     }

@@ -18,6 +18,8 @@ import { ParticipantIdentity } from "../../../components/participant-avatar";
 import { QuestionMedia } from "../../../components/question-media";
 import { RecoveryPackLiveCardView } from "../../../components/recovery-pack-live-card";
 import { ResponseDistributionView } from "../../../components/response-distribution";
+import { TextLiveResults } from "../../../components/text-live-results";
+import { isTextQuestion } from "../../../lib/text-response";
 import { formatNumber } from "../../../lib/i18n/format";
 import {
   audienceContextKey,
@@ -42,6 +44,8 @@ export default function PresenterPage() {
   const [error, setError] = useState("");
   const [errorIsEnglish, setErrorIsEnglish] = useState(false);
   const [mediaCredential, setMediaCredential] = useState("");
+  const [textReadAuthorized, setTextReadAuthorized] = useState(false);
+  const [textReadEpoch, setTextReadEpoch] = useState(0);
   const [embedded, setEmbedded] = useState(false);
   const [audienceSyncRevision, setAudienceSyncRevision] = useState(0);
   const [audienceRealtimeBatch, setAudienceRealtimeBatch] = useState<AudienceRealtimeBatch | null>(
@@ -84,8 +88,11 @@ export default function PresenterPage() {
         },
         (response: Ack<{ snapshot: SessionSnapshot }>) => {
           if (response.data) {
+            setTextReadAuthorized(socket.connected);
             setSnapshot(response.data.snapshot);
           } else if (response.error) {
+            setTextReadAuthorized(false);
+            setTextReadEpoch((current) => current + 1);
             setError(response.error.message);
             setErrorIsEnglish(true);
           } else {
@@ -113,6 +120,7 @@ export default function PresenterPage() {
       setErrorIsEnglish(true);
     });
     socket.on("connect", () => {
+      setTextReadAuthorized(false);
       setAudienceSyncRevision((current) => current + 1);
       sync();
     });
@@ -127,6 +135,7 @@ export default function PresenterPage() {
       "leaderboard.updated",
       "game.finished",
       "session.snapshot",
+      "response.moderated",
     ])
       socket.on(event, update);
     for (const event of [
@@ -140,6 +149,10 @@ export default function PresenterPage() {
       "audience.event",
     ])
       socket.on(event, audienceUpdate);
+    socket.on("disconnect", () => {
+      setTextReadAuthorized(false);
+      setTextReadEpoch((current) => current + 1);
+    });
     socket.connect();
     return () => {
       socket.removeAllListeners();
@@ -268,6 +281,21 @@ export default function PresenterPage() {
                 sessionId={sessionId}
               />
             </span>
+            {snapshot.question.type === "poll" && (snapshot.question.maxSelections ?? 1) > 1 ? (
+              <p className="muted">
+                {t("live.roundPlay.pollSelectionInstructions", {
+                  limit: snapshot.question.maxSelections ?? 1,
+                })}
+              </p>
+            ) : null}
+            {snapshot.question.type === "ranking" ? (
+              <p className="muted">
+                {t("live.ranking.instructions", {
+                  count: snapshot.question.rankCount ?? snapshot.question.choices.length,
+                  total: snapshot.question.choices.length,
+                })}
+              </p>
+            ) : null}
             {snapshot.question.choices.length > 0 ? (
               <div className="answer-grid">
                 {snapshot.question.choices.map((choice, index) => {
@@ -336,7 +364,21 @@ export default function PresenterPage() {
                 {snapshot.explanation}
               </p>
             ) : null}
-            {snapshot.uxBeta === true && snapshot.responseDistribution ? (
+            {isTextQuestion(snapshot.question.type) && snapshot.roundId ? (
+              <TextLiveResults
+                sessionId={sessionId}
+                roundId={snapshot.roundId}
+                version={snapshot.version}
+                phase={snapshot.phase}
+                credential={textReadAuthorized ? mediaCredential : ""}
+                freshness={textReadEpoch}
+                role="presenter"
+              />
+            ) : null}
+            {(snapshot.uxBeta === true ||
+              snapshot.question?.type === "ranking" ||
+              (snapshot.question?.type === "poll" && (snapshot.question.maxSelections ?? 1) > 1)) &&
+            snapshot.responseDistribution ? (
               <ResponseDistributionView distribution={snapshot.responseDistribution} />
             ) : null}
             {snapshot.phase === "leaderboard" &&

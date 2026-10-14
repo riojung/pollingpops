@@ -16,10 +16,36 @@
 7. Roll back by deploying the prior immutable image. Do not reverse a destructive database migration; use the documented forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Live response format compatibility
+
+Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.
+Deploy compatible server, worker, and web readers before enabling `FEATURE_ROUND_CLIENT_PROTOCOL`
+for an allowlisted workspace. New extended Round content uses artifact schema 2, multiple-selection
+poll answers use response schema 3, and their reports use Report V5. Native JSON export uses
+interchange version 5. Existing artifact/answer/report versions remain readable.
+
+Disabling the writer flag prevents new extended drafts, publications, imports, duplicates,
+restorations, and rooms. Existing rooms, accepted answers, reports, and retries retain their frozen
+requirements and remain usable by compatible clients. A rollback target must keep these readers
+and migration 067 once extended content has been accepted; do not rewrite immutable published data.
+
+Migration 068 extends ranking artifacts to version 3 and response payloads to version 4. Ranking
+rooms use state 8, native JSON 6, and Report V6. Migration 069 (`069_text_opinion_moderation.sql`) extends artifacts to
+version 4 and text responses to version 5; text rooms use state 9, native JSON 7, and Report V7.
+Apply the ordered migrations and deploy matching readers in every server/worker/web binary before
+enabling writers. A rollback must retain readers for the richest data already accepted.
+
+Text approval metadata and revision-fenced moderator receipts are retained in state 9 across
+round advancement; accepted bodies remain immutable answer records. Missing approval metadata
+fails closed. Public snapshots/events contain no text bodies, and pending/removed text is excluded
+from normal reports and account exports. Hosts/cohosts use the dedicated paginated queue. New
+moderation is read-only after finish; accepted command retries remain usable when flags are off.
+Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted responses per round.
+
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`058_recovery_pack_source_authoring.sql`. Apply the complete ordered migration set with the restricted
+`069_text_opinion_moderation.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
 

@@ -1,3 +1,4 @@
+import { questionTypeDefinition } from "@openround/contracts";
 import type { QuestionDraft } from "@openround/contracts";
 import type { QuestionUpdater } from "./types";
 import { useLocale } from "../locale-provider";
@@ -36,7 +37,7 @@ export function DeliveryScoring({
           <span>{t("delivery.builder.basePoints")}</span>
           <select
             className="select"
-            disabled={question.type === "poll" || question.type === "rating"}
+            disabled={!questionTypeDefinition(question.type).scored}
             onChange={(event) =>
               onUpdateQuestion((item) => ({
                 ...item,

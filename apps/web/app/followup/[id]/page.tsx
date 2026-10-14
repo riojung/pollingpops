@@ -238,6 +238,12 @@ function FollowupContent() {
   function response(): ResponsePayload | null {
     const question = snapshot?.question;
     if (!question) return null;
+    if (
+      question.type === "ranking" ||
+      question.type === "open_text" ||
+      question.type === "word_cloud"
+    )
+      return null;
     if (["single_select", "true_false", "multi_select"].includes(question.type)) {
       return selectedChoiceIds.length ? { kind: "choice", choiceIds: selectedChoiceIds } : null;
     }
@@ -475,9 +481,15 @@ function FollowupContent() {
                 sessionId={id}
               />
             </div>
-            {["single_select", "true_false", "multi_select", "poll"].includes(
-              snapshot.question.type,
-            ) ? (
+            {snapshot.question.type === "ranking" ||
+            snapshot.question.type === "open_text" ||
+            snapshot.question.type === "word_cloud" ? (
+              <p className="notice" lang="en-CA">
+                These opinion formats currently support live Rounds only.
+              </p>
+            ) : ["single_select", "true_false", "multi_select", "poll"].includes(
+                snapshot.question.type,
+              ) ? (
               <div className="answer-grid" aria-label="Response choices">
                 {snapshot.question.choices.map((choice, index) => {
                   const selected = displayedChoiceIds.includes(choice.id);

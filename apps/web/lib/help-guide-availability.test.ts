@@ -6,6 +6,10 @@ import {
 } from "./help-guide-availability";
 
 const enabledFeatures: WorkspaceProductFeatures = {
+  multiSelectPolls: true,
+  rankingPolls: true,
+  openTextPolls: true,
+  wordCloudPolls: true,
   roundExperiences: true,
   audiencePulse: true,
   roomChat: true,

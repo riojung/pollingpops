@@ -1,7 +1,11 @@
 import { createServer, type Server as HttpServer } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { io as createClient, type Socket } from "socket.io-client";
-import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
+import {
+  canUseRoundProtocol,
+  currentRoundClientCapabilities,
+  ROUND_CLIENT_UPDATE_MESSAGE,
+} from "@openround/contracts";
 import {
   acceptAnswer,
   addParticipant,
@@ -41,8 +45,10 @@ describe("realtime authorization", () => {
 
   it.each([
     undefined,
+    { protocolVersion: 2 as const, capabilities: [] },
     currentRoundClientCapabilities(),
     { protocolVersion: 3 as const, capabilities: ["poll.multiselect" as const] },
+    { protocolVersion: 3 as const, capabilities: ["response.ranking" as const] },
   ])("fences unsupported realtime projections for profile %j", async (clientCapabilities) => {
     const state = createGameState({
       sessionId: crypto.randomUUID(),
@@ -135,7 +141,7 @@ describe("realtime authorization", () => {
     );
     const received = vi.fn();
     client.on("lobby.updated", received);
-    const supported = clientCapabilities?.protocolVersion === 3;
+    const supported = canUseRoundProtocol(state.roundProtocol, clientCapabilities);
     const nextEvent = new Promise<unknown>((resolve) =>
       client!.once(supported ? "lobby.updated" : "client.update.required", resolve),
     );

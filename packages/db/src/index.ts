@@ -11,6 +11,7 @@ export * from "./groups.js";
 export * from "./media-references.js";
 export * from "./library-metadata.js";
 export * from "./artifact-schemas.js";
+export * from "./response-schemas.js";
 export * from "./published-question-live-metadata.js";
 export * from "./audience-scope-types.js";
 export * from "./audience-scopes.js";

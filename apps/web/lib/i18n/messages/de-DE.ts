@@ -3,6 +3,13 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "Freitext",
+  "questionType.open_text.description": "Eine moderierte Erklärung ohne richtige Antwort.",
+  "questionType.word_cloud.label": "Wortwolke",
+  "questionType.word_cloud.description":
+    "Moderierte Wörter oder kurze Ausdrücke als gemeinsame Wortwolke.",
+  "questionType.ranking.label": "Rangfolge",
+  "questionType.ranking.description": "Prioritäten ohne Punkte oder richtige Antwort ordnen.",
   ...creationMessages("de-DE"),
   ...feedbackMessages("de-DE"),
   "common.create": "Erstellen",

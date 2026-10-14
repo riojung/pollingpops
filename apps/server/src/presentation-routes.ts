@@ -710,6 +710,21 @@ export async function registerPresentationRoutes(
     const selected: QuestionDraft[] = source.content.questions.filter((question) =>
       selectedQuestionIds.has(question.id),
     );
+    if (
+      selected.some(
+        (question) =>
+          ["ranking", "open_text", "word_cloud"].includes(question.type) ||
+          (question.type === "poll" && (question.maxSelections ?? 1) > 1),
+      )
+    ) {
+      return apiError(
+        reply,
+        422,
+        "VALIDATION_ERROR",
+        "This response format currently supports live Rounds only",
+        request.id,
+      );
+    }
     const questionIdMap = new Map(
       selected.map((question) => [
         question.id,

@@ -1,5 +1,6 @@
 import type { SessionSnapshot } from "@openround/contracts";
 import { useLocale } from "./locale-provider";
+import { RankingDistribution } from "./ranking-distribution";
 
 export function ResponseDistributionView({
   distribution,
@@ -7,6 +8,13 @@ export function ResponseDistributionView({
   distribution: NonNullable<SessionSnapshot["responseDistribution"]>;
 }) {
   const { t } = useLocale();
+  if (distribution.kind === "ranking")
+    return (
+      <section aria-label={t("live.distribution.ariaLabel")} className="distribution-card">
+        <strong>{t("live.distribution.title")}</strong>
+        <RankingDistribution distribution={distribution} />
+      </section>
+    );
   if (distribution.kind === "numeric") {
     const correctPercent = Math.round((distribution.correct / distribution.respondents) * 100);
     return (

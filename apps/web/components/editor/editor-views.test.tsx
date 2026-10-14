@@ -65,6 +65,161 @@ const draft: QuizDraft = {
 };
 
 describe("editor views", () => {
+  it("gates text authoring, enforces ten checkpoints and avoids rating or confidence fallback", () => {
+    const text: QuestionDraft = {
+      id: choiceQuestion.id,
+      type: "open_text",
+      prompt: "Share an idea",
+      purpose: "opinion",
+      confidence: "off",
+      delivery: "main",
+      basePoints: 0,
+      timeLimitSeconds: 60,
+      explanation: "",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const nav = (enabled: boolean, count: number) =>
+      renderLocalized(
+        <QuestionNavigator
+          draft={{
+            ...draft,
+            questions: Array.from({ length: count }, (_, index) => ({
+              ...text,
+              id: String(index),
+            })),
+          }}
+          insertType="open_text"
+          selectedQuestionId={text.id}
+          uxBeta
+          openTextPollsEnabled={enabled}
+          wordCloudPollsEnabled={enabled}
+          onAddQuestion={noopUpdate}
+          onInsertTypeChange={noopUpdate}
+          onSelectQuestion={noopUpdate}
+        />,
+      );
+    expect(nav(false, 1)).not.toContain('<option value="open_text">');
+    expect(nav(false, 1)).not.toContain('<option value="word_cloud">');
+    expect(nav(true, 1)).toMatch(/<option value="open_text"[^>]*>Open text<\/option>/);
+    expect(nav(true, 10)).toMatch(/disabled=""[^>]*>Add question/);
+    const editor = renderLocalized(
+      <ResponseEditor
+        question={text}
+        uxBeta
+        onStructuralChange={noopUpdate}
+        onUpdateChoiceQuestion={noopUpdate}
+        onUpdateQuestion={noopUpdate}
+      />,
+    );
+    expect(editor).toContain("up to 1000 characters");
+    expect(editor).not.toContain("Minimum");
+    const preview = renderLocalized(<ParticipantPreview question={text} />);
+    expect(preview).toContain("Your response");
+    expect(preview).not.toContain("Confidence will be requested");
+    expect(preview).not.toContain("preview-rating");
+    expect(
+      renderLocalized(
+        <DiagnosticDetails
+          question={text}
+          questions={[text]}
+          uxBeta
+          onUpdateQuestion={noopUpdate}
+        />,
+      ),
+    ).not.toContain("Paired recheck question");
+  });
+  it("gates ranking insertion and keeps ranking authoring, delivery and previews unscored", () => {
+    const ranking: QuestionDraft = {
+      ...choiceQuestion,
+      type: "ranking",
+      purpose: "opinion",
+      confidence: "off",
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+      basePoints: 0,
+      rankCount: 2,
+      maxSelections: undefined,
+      choices: choiceQuestion.choices.map((choice) => ({ ...choice, isCorrect: false })),
+    };
+    const navigation = (enabled: boolean) =>
+      renderLocalized(
+        <QuestionNavigator
+          draft={draft}
+          insertType="single_select"
+          selectedQuestionId={choiceQuestion.id}
+          uxBeta
+          rankingPollsEnabled={enabled}
+          onAddQuestion={noopUpdate}
+          onInsertTypeChange={noopUpdate}
+          onSelectQuestion={noopUpdate}
+        />,
+      );
+    expect(navigation(false)).not.toContain('<option value="ranking">');
+    expect(navigation(true)).toContain('<option value="ranking">Ranking</option>');
+    const editor = renderLocalized(
+      <ResponseEditor
+        question={ranking}
+        uxBeta
+        rankingPollsEnabled
+        onStructuralChange={noopUpdate}
+        onUpdateChoiceQuestion={noopUpdate}
+        onUpdateQuestion={noopUpdate}
+      />,
+    );
+    expect(editor).toContain("Choices to rank");
+    expect(editor).not.toContain("Mark choice");
+    expect(editor).not.toContain("Diagnostic rationale");
+    expect(
+      renderLocalized(<DeliveryScoring question={ranking} onUpdateQuestion={noopUpdate} />),
+    ).toContain('<select class="select" disabled=""');
+    const preview = renderLocalized(<ParticipantPreview question={ranking} />);
+    expect(preview).toContain("Your ranking");
+    expect(preview).toContain('aria-label="Move Model A down"');
+    expect(preview).not.toContain("Confidence will be requested");
+  });
+  it("gates the live poll limit picker and previews multiple selection without scoring controls", () => {
+    const poll: QuestionDraft = {
+      ...choiceQuestion,
+      type: "poll",
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      maxSelections: 2,
+      choices: choiceQuestion.choices.map((choice) => ({ ...choice, isCorrect: false })),
+    };
+    const renderPoll = (enabled: boolean) =>
+      renderLocalized(
+        <ResponseEditor
+          question={poll}
+          uxBeta
+          multiSelectPollsEnabled={enabled}
+          onStructuralChange={() => undefined}
+          onUpdateQuestion={noopUpdate}
+          onUpdateChoiceQuestion={noopUpdate}
+        />,
+      );
+    expect(renderPoll(true)).toContain("Maximum selections");
+    expect(renderPoll(true)).toContain("Participants may select up to this limit");
+    expect(renderPoll(true)).not.toContain("Mark choice");
+    expect(renderPoll(false)).toContain('<select class="select" disabled=""');
+    expect(renderPoll(false)).toContain("not enabled for this workspace");
+    const preview = renderLocalized(<ParticipantPreview question={poll} />);
+    expect(preview).toContain("Select up to 2 options");
+    expect(preview.match(/type="checkbox"/g)).toHaveLength(2);
+    expect(preview).not.toContain("Confidence will be requested");
+    expect(
+      renderLocalized(
+        <ResponseEditor
+          question={{ ...poll, maxSelections: 1 }}
+          uxBeta
+          onStructuralChange={() => undefined}
+          onUpdateQuestion={noopUpdate}
+          onUpdateChoiceQuestion={noopUpdate}
+        />,
+      ),
+    ).not.toContain("Maximum selections");
+  });
   it("keeps stable-id navigation and the beta Insert menu labels", () => {
     const markup = renderLocalized(
       <QuestionNavigator
@@ -168,6 +323,7 @@ describe("editor views", () => {
         question={{
           ...choiceQuestion,
           type: "numeric",
+          maxSelections: undefined,
           correctValue: "42",
           tolerance: "0.5",
           unit: "kg",
@@ -183,6 +339,7 @@ describe("editor views", () => {
         question={{
           ...choiceQuestion,
           type: "rating",
+          maxSelections: undefined,
           min: 1,
           max: 5,
           minLabel: "Low",

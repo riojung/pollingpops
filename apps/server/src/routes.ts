@@ -7,6 +7,9 @@ import { roomEntitlements } from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
   RoundClientCapabilitiesQuerySchema,
+  RoundResponseModerationPageSchema,
+  RoundTextResponseResultsSchema,
+  type requiresExtendedRoundResponses,
   AcceptWorkspaceInvitationSchema,
   ApplyAuthoringJobSchema,
   BrandThemeSchema,
@@ -93,6 +96,7 @@ import {
   FolderError,
   QuizDraftMutationConflictError,
   QuizDraftRevisionConflictError,
+  roundArtifactSchemaVersion,
   type BillingEventInput,
   type CreatorContext,
   type Repository,
@@ -122,6 +126,13 @@ import { InteractionError, type InteractionService } from "./interaction-service
 import { instantiateStarter, starterSummaries } from "./starters.js";
 import type { ProductEventDispatcher } from "./product-events.js";
 import { ROUND_DRAFT_BODY_LIMIT } from "./draft-limits.js";
+import { TextResponseReadError } from "./response-moderation.js";
+import {
+  extendedRoundResponseWriteAllowed,
+  multiSelectPollsEnabled,
+  richerRoundResponsesEnabled,
+  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+} from "./round-response-rollout.js";
 import {
   evidenceWorkspaceFeatureEnabled,
   professionalWorkspaceEligible,
@@ -223,11 +234,13 @@ const SessionHistoryQuerySchema = z.object({
 });
 const ReportHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
+  search: SessionHistorySearchSchema.optional(),
   status: z.enum(["pending", "ready", "failed"]).optional(),
   quizId: z.string().uuid().optional(),
 });
 const FollowupHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
+  search: SessionHistorySearchSchema.optional(),
   purpose: FollowupPurposeSchema.optional(),
   status: z.enum(["scheduled", "open", "closed", "expired"]).optional(),
   quizId: z.string().uuid().optional(),
@@ -510,6 +523,10 @@ export async function registerRoutes(
       liveFlexMode: evidenceWorkspaceFeatureEnabled(config, workspaceId, "liveFlexMode"),
       questionHealth: evidenceWorkspaceFeatureEnabled(config, workspaceId, "questionHealth"),
       surveys: coreParityCreationEnabled(config, workspaceId, "surveys"),
+      multiSelectPolls: multiSelectPollsEnabled(config, workspaceId),
+      rankingPolls: richerRoundResponsesEnabled(config, workspaceId),
+      openTextPolls: richerRoundResponsesEnabled(config, workspaceId),
+      wordCloudPolls: richerRoundResponsesEnabled(config, workspaceId),
       recoveryPacks: evidenceWorkspaceFeatureEnabled(config, workspaceId, "recoveryPacks"),
       groups: professionalWorkspaceFeatureEnabled(config, workspaceId, "groups"),
       discover: professionalWorkspaceFeatureEnabled(config, workspaceId, "discover"),
@@ -530,6 +547,35 @@ export async function registerRoutes(
           "Your workspace role does not allow this action",
           requestId,
         );
+
+  const requireRoundResponseWrite = (
+    workspaceId: string,
+    content: Parameters<typeof requiresExtendedRoundResponses>[0],
+    reply: FastifyReply,
+    requestId: string,
+  ) => {
+    if (!extendedRoundResponseWriteAllowed(config, workspaceId, content))
+      return apiError(
+        reply,
+        404,
+        "NOT_FOUND",
+        EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+        requestId,
+      );
+    if (
+      content.questions.filter(
+        (question) => question.type === "open_text" || question.type === "word_cloud",
+      ).length > 10
+    )
+      return apiError(
+        reply,
+        400,
+        "VALIDATION_ERROR",
+        "Use up to 10 text checkpoints in a Round",
+        requestId,
+      );
+    return true;
+  };
 
   const interactionTranscript = async (
     creator: CreatorContext,
@@ -680,6 +726,15 @@ export async function registerRoutes(
     }
     if (error instanceof SessionError) {
       return apiError(reply, sessionStatus(error.code), error.code, error.message, request.id);
+    }
+    if (error instanceof TextResponseReadError) {
+      return apiError(
+        reply,
+        error.code === "NOT_FOUND" ? 404 : 409,
+        error.code,
+        error.message,
+        request.id,
+      );
     }
     if (error instanceof QnaError) {
       return apiError(reply, qnaStatus(error.code), error.code, error.message, request.id);
@@ -1623,6 +1678,7 @@ export async function registerRoutes(
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id } = StarterParamsSchema.parse(request.params);
     const draft = instantiateStarter(id);
+    if (requireRoundResponseWrite(creator.workspaceId, draft, reply, request.id) !== true) return;
     const now = new Date();
     const quiz = await repository.createQuiz({
       id: randomUUID(),
@@ -1631,7 +1687,7 @@ export async function registerRoutes(
       description: draft.description,
       status: "draft",
       draft,
-      draftSchemaVersion: 1,
+      draftSchemaVersion: roundArtifactSchemaVersion(draft),
       lastEditedBy: creator.userId,
       currentVersionId: null,
       folderId: null,
@@ -1717,6 +1773,8 @@ export async function registerRoutes(
         validation: result.validation,
       });
     }
+    if (requireRoundResponseWrite(creator.workspaceId, result.draft, reply, request.id) !== true)
+      return;
     // A Pack baseline is immutable evidence, unlike portable destination question media. Never
     // strip its media IDs under an unchanged hash or grant access to another workspace's media.
     const baselineMediaIds = new Set(
@@ -1761,7 +1819,7 @@ export async function registerRoutes(
       description: result.draft.description,
       status: "draft",
       draft: result.draft,
-      draftSchemaVersion: 1,
+      draftSchemaVersion: roundArtifactSchemaVersion(result.draft),
       lastEditedBy: creator.userId,
       currentVersionId: null,
       folderId: null,
@@ -1893,6 +1951,8 @@ export async function registerRoutes(
     const input = revisioned
       ? UpdateQuizRequestSchema.parse(request.body)
       : { draft: UpdateQuizSchema.parse(request.body), expectedDraftRevision: undefined };
+    if (requireRoundResponseWrite(creator.workspaceId, input.draft, reply, request.id) !== true)
+      return;
     const quiz = await repository.updateQuiz(
       creator.workspaceId,
       id,
@@ -1914,6 +1974,8 @@ export async function registerRoutes(
       if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
       const { id } = IdParamsSchema.parse(request.params);
       const input = RoundDraftMutationSchema.parse(request.body);
+      if (requireRoundResponseWrite(creator.workspaceId, input.draft, reply, request.id) !== true)
+        return;
       const quiz = await repository.updateQuizDraft({
         workspaceId: creator.workspaceId,
         quizId: id,
@@ -1921,7 +1983,7 @@ export async function registerRoutes(
         expectedRevision: input.expectedRevision,
         mutationId: input.mutationId,
         editorId: creator.userId,
-        schemaVersion: input.schemaVersion,
+        schemaVersion: roundArtifactSchemaVersion(input.draft),
         draftHash: createHash("sha256").update(JSON.stringify(input.draft)).digest("hex"),
       });
       if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
@@ -1954,6 +2016,12 @@ export async function registerRoutes(
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id, revision } = RoundHistoryParamsSchema.parse(request.params);
     const input = RestoreRoundDraftHistorySchema.parse(request.body);
+    const history = await repository.getQuizDraftHistory(creator.workspaceId, id, revision);
+    if (
+      history &&
+      requireRoundResponseWrite(creator.workspaceId, history.draft, reply, request.id) !== true
+    )
+      return;
     const quiz = await repository.restoreQuizDraftHistory({
       workspaceId: creator.workspaceId,
       quizId: id,
@@ -2022,6 +2090,8 @@ export async function registerRoutes(
     const input = revisioned ? PublishQuizRequestSchema.parse(request.body) : null;
     const quiz = await repository.getQuiz(creator.workspaceId, id);
     if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
+    if (requireRoundResponseWrite(creator.workspaceId, quiz.draft, reply, request.id) !== true)
+      return;
     const expectedDraftRevision = input?.expectedDraftRevision ?? quiz.draftRevision ?? 0;
     if (expectedDraftRevision !== (quiz.draftRevision ?? 0)) {
       throw new QuizDraftRevisionConflictError(
@@ -2082,6 +2152,7 @@ export async function registerRoutes(
         quizId: quiz.id,
         version: (current?.version ?? 0) + 1,
         content,
+        contentSchemaVersion: roundArtifactSchemaVersion(content),
         contentHash,
         sourceDraftRevision: expectedDraftRevision,
         publishedAt: new Date(),
@@ -2116,6 +2187,8 @@ export async function registerRoutes(
     const { id } = IdParamsSchema.parse(request.params);
     const source = await repository.getQuiz(creator.workspaceId, id);
     if (!source) return apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
+    if (requireRoundResponseWrite(creator.workspaceId, source.draft, reply, request.id) !== true)
+      return;
     const now = new Date();
     const title = `${source.title} copy`.slice(0, 160);
     const quiz = await repository.duplicateQuiz({
@@ -2125,7 +2198,7 @@ export async function registerRoutes(
       status: "draft",
       currentVersionId: null,
       draftRevision: 0,
-      draftSchemaVersion: 1,
+      draftSchemaVersion: roundArtifactSchemaVersion(source.draft),
       publishedDraftRevision: null,
       lastEditedBy: creator.userId,
       draft: { ...source.draft, title },
@@ -2380,6 +2453,48 @@ export async function registerRoutes(
     return { snapshot: await sessions.hostCommand(command) };
   });
 
+  app.get("/v1/sessions/:id/response-moderation", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const { id } = IdParamsSchema.parse(request.params);
+    const query = z
+      .object({
+        status: z.enum(["pending", "approved", "removed"]).default("pending"),
+        roundId: z.string().uuid().optional(),
+        cursor: z.string().max(2_000).optional(),
+        limit: z.coerce.number().int().min(1).max(50).default(50),
+        clientCapabilities: RoundClientCapabilitiesQuerySchema,
+      })
+      .parse(request.query);
+    return RoundResponseModerationPageSchema.parse(
+      await sessions.responseModerationPage({
+        ...query,
+        sessionId: id,
+        hostToken: request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "",
+      }),
+    );
+  });
+
+  app.get("/v1/sessions/:id/response-results", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const { id } = IdParamsSchema.parse(request.params);
+    const query = z
+      .object({
+        roundId: z.string().uuid(),
+        role: z.enum(["host", "presenter", "participant"]).default("participant"),
+        cursor: z.string().max(2_000).optional(),
+        limit: z.coerce.number().int().min(1).max(50).default(50),
+        clientCapabilities: RoundClientCapabilitiesQuerySchema,
+      })
+      .parse(request.query);
+    return RoundTextResponseResultsSchema.parse(
+      await sessions.approvedResponseResults({
+        ...query,
+        sessionId: id,
+        token: request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "",
+      }),
+    );
+  });
+
   app.post("/v1/sessions/:id/answers", async (request) => {
     const { id } = IdParamsSchema.parse(request.params);
     const participantToken = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
@@ -2606,6 +2721,7 @@ export async function registerRoutes(
     const query = ReportHistoryQuerySchema.parse(request.query);
     const page = await repository.listReportHistory(creator.workspaceId, {
       limit: query.limit,
+      ...(query.search ? { search: query.search } : {}),
       ...(query.cursor
         ? {
             cursor: {
@@ -2905,6 +3021,7 @@ export async function registerRoutes(
     const query = FollowupHistoryQuerySchema.parse(request.query);
     const page = await repository.listFollowupHistory(creator.workspaceId, {
       limit: query.limit,
+      ...(query.search ? { search: query.search } : {}),
       ...(query.cursor
         ? {
             cursor: {

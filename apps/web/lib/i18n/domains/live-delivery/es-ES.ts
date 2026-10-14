@@ -1,7 +1,37 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["es-ES"].live,
+  "live.ranking.yourRanking": "Tu clasificación",
+  "live.ranking.instructions":
+    "Ordena {count} de {total} opciones. La primera tiene la máxima prioridad.",
+  "live.ranking.selected": "{selected} de {count} opciones ordenadas.",
+  "live.ranking.moveUp": "Subir {choice}",
+  "live.ranking.moveDown": "Bajar {choice}",
+  "live.ranking.up": "Subir",
+  "live.ranking.down": "Bajar",
+  "live.ranking.removeChoice": "Quitar {choice} de la clasificación",
+  "live.ranking.remove": "Quitar",
+  "live.ranking.addChoice": "Añadir {choice} a la clasificación",
+  "live.ranking.chooseCount": "Ordena exactamente {count} opciones antes de enviar.",
+  "live.ranking.summary": "{respondents} participantes · cada uno ordenó {count} opciones.",
+  "live.ranking.weights":
+    "El primer puesto recibe {firstPoints} puntos y cada puesto siguiente uno menos. Los empates siguen el orden original de las opciones.",
+  "live.ranking.results": "Resultados de la clasificación",
+  "live.ranking.option": "Opción",
+  "live.ranking.score": "Puntuación ponderada",
+  "live.ranking.rankedBy": "Ordenada por",
+  "live.ranking.averageRank": "Posición media",
+  "live.ranking.currentOrder": "Orden actual: {choices}",
+  "live.roundPlay.pollSelectionInstructions":
+    "Selecciona hasta {limit} opciones y envía tu respuesta.",
+  "live.roundPlay.pollSelectionLimit":
+    "Selecciona hasta {limit} opciones. {selected} seleccionadas.",
+  "live.roundPlay.chooseMultiplePoll": "Elige entre 1 y {limit} opciones de la encuesta.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "Pulso Aggregate aparece después de cinco personas señal para proteger la privacidad individual.",

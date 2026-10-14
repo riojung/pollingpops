@@ -6,7 +6,6 @@ import {
   RecoveryPackContentSchema,
   RecoveryPackDraftSchema,
   RecoveryPackJsonSchema,
-  type QuestionDraft,
   type RecoveryPackDraft,
   type QuizDraft,
 } from "@openround/contracts";
@@ -1119,8 +1118,8 @@ function CheckpointEditor({
   onChange,
 }: {
   label: string;
-  question: QuestionDraft;
-  onChange: (question: QuestionDraft) => void;
+  question: RecoveryPackDraft["diagnostic"];
+  onChange: (question: RecoveryPackDraft["diagnostic"]) => void;
 }) {
   return (
     <section className={styles.subsection}>

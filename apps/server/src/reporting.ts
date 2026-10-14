@@ -2,16 +2,84 @@ import { randomUUID } from "node:crypto";
 import {
   questionDelivery,
   questionPurpose,
+  requiresExtendedRoundResponses,
+  hasRankingQuestions,
+  ReportV3Schema,
   ReportV4Schema,
+  ReportV5Schema,
+  ReportV6Schema,
+  ReportV7Schema,
   type Report,
   type ReportV3,
   type ReportV4,
+  type ReportV5,
+  type ReportV6,
+  type ReportV7,
 } from "@openround/contracts";
 import type { SessionEvidence } from "@openround/db";
-import { avatarIdForSeed, responseDistributionFor, type GameState } from "@openround/game-engine";
+import {
+  approvedTextResponseDistribution,
+  avatarIdForSeed,
+  responseDistributionFor,
+  type GameState,
+} from "@openround/game-engine";
 
 const evidenceNote =
   "Recovery is evidence from this session and should not be interpreted as proof of long-term learning.";
+
+type ReportBase = Omit<
+  ReportV7,
+  "schemaVersion" | "decisionReplayAvailable" | "decisionReplayComplete" | "decisionTimeline"
+>;
+type ReportReplay = Pick<
+  ReportV7,
+  "decisionReplayAvailable" | "decisionReplayComplete" | "decisionTimeline"
+> & { enabled: boolean };
+
+function versionedReport(
+  state: GameState,
+  report: ReportBase,
+  replay: ReportReplay,
+): ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7 {
+  const replayFields = {
+    decisionReplayAvailable: replay.decisionReplayAvailable,
+    decisionReplayComplete: replay.decisionReplayComplete,
+    decisionTimeline: replay.decisionTimeline,
+  };
+  if (!requiresExtendedRoundResponses(state.quiz)) {
+    return replay.enabled
+      ? ReportV4Schema.parse({ ...report, schemaVersion: 4, ...replayFields })
+      : ReportV3Schema.parse({ ...report, schemaVersion: 3 });
+  }
+  const questions = new Map(state.quiz.questions.map((question) => [question.id, question]));
+  const extended = {
+    ...report,
+    metrics: {
+      ...report.metrics,
+      accuracyPercent: report.initialAccuracy.responses ? report.metrics.accuracyPercent : null,
+    },
+    initialAccuracy: {
+      ...report.initialAccuracy,
+      percent: report.initialAccuracy.responses ? report.initialAccuracy.percent : null,
+    },
+    questions: report.questions.map((entry) => {
+      const question = questions.get(entry.questionId);
+      return question && questionPurpose(question) === "opinion"
+        ? { ...entry, correct: null, accuracyPercent: null, difficult: false }
+        : entry;
+    }),
+    ...replayFields,
+  };
+  // Select the final schema before parsing so a ranking distribution never passes through
+  // a historical reader whose aggregate response vocabulary is intentionally narrower.
+  return state.quiz.questions.some(
+    (question) => question.type === "open_text" || question.type === "word_cloud",
+  )
+    ? ReportV7Schema.parse({ ...extended, schemaVersion: 7 })
+    : hasRankingQuestions(state.quiz)
+      ? ReportV6Schema.parse({ ...extended, schemaVersion: 6 })
+      : ReportV5Schema.parse({ ...extended, schemaVersion: 5 });
+}
 
 function percent(numerator: number, denominator: number) {
   return denominator ? Math.round((numerator / denominator) * 1_000) / 10 : 0;
@@ -107,32 +175,28 @@ export function createPendingReport(
   state: GameState,
   expiresAt: Date,
   decisionReplayEnabled = false,
-): ReportV3 | ReportV4 {
-  const report: ReportV3 = {
+): ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7 {
+  const report: ReportBase = {
     id: randomUUID(),
     sessionId: state.sessionId,
-    schemaVersion: 3,
     status: "pending",
     generatedAt: null,
     expiresAt: expiresAt.toISOString(),
     ...emptyReportFields(state),
   };
-  return decisionReplayEnabled
-    ? ReportV4Schema.parse({
-        ...report,
-        schemaVersion: 4,
-        decisionReplayAvailable: false,
-        decisionReplayComplete: false,
-        decisionTimeline: [],
-      })
-    : report;
+  return versionedReport(state, report, {
+    enabled: decisionReplayEnabled,
+    decisionReplayAvailable: false,
+    decisionReplayComplete: false,
+    decisionTimeline: [],
+  });
 }
 
 export function generateReport(
   state: GameState,
   expiresAt: Date,
   options: { id?: string; evidence?: SessionEvidence; generatedAt?: Date } = {},
-): ReportV3 | ReportV4 {
+): ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7 {
   const evidence = options.evidence ?? stateEvidence(state);
   const interactions = evidence.interactions ?? {
     signalEvents: [],
@@ -179,7 +243,10 @@ export function generateReport(
         question.type !== "poll" &&
         question.type !== "rating" &&
         questionPurpose(question) !== "opinion";
-      const responseDistribution = responseDistributionFor(question, roundAnswers);
+      const responseDistribution =
+        question.type === "open_text" || question.type === "word_cloud"
+          ? approvedTextResponseDistribution(question, roundAnswers, state.responseModeration)
+          : responseDistributionFor(question, roundAnswers);
       return {
         questionId: question.id,
         prompt: question.prompt,
@@ -358,12 +425,11 @@ export function generateReport(
     const minute = message.createdAt.toISOString().slice(0, 16);
     messagesPerMinute.set(minute, (messagesPerMinute.get(minute) ?? 0) + 1);
   }
-  const report: ReportV3 = {
+  const report: ReportBase = {
     id: options.id ?? randomUUID(),
     sessionId: state.sessionId,
     trustMode: state.settings.trustMode ?? "learning",
     timeMode: state.settings.timeMode ?? "timed",
-    schemaVersion: 3,
     status: "ready",
     generatedAt: (options.generatedAt ?? new Date()).toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -447,16 +513,15 @@ export function generateReport(
       transcriptAvailable: interactions.chatMessages.length > 0,
     },
   };
-  if (!evidence.decisionReplayEnabled) return report;
   const hasReplayEvents = evidence.decisionEvents.some(
     (event) => event.type !== "capture_truncated",
   );
-  return ReportV4Schema.parse({
-    ...report,
-    schemaVersion: 4,
-    decisionReplayAvailable: hasReplayEvents,
-    decisionReplayComplete: hasReplayEvents && evidence.decisionEventsComplete,
-    decisionTimeline: evidence.decisionEvents,
+  return versionedReport(state, report, {
+    enabled: evidence.decisionReplayEnabled,
+    decisionReplayAvailable: evidence.decisionReplayEnabled && hasReplayEvents,
+    decisionReplayComplete:
+      evidence.decisionReplayEnabled && hasReplayEvents && evidence.decisionEventsComplete,
+    decisionTimeline: evidence.decisionReplayEnabled ? evidence.decisionEvents : [],
   });
 }
 
@@ -479,13 +544,20 @@ export function reportCsv(report: Report): string {
     [],
     ["time_mode", report.timeMode ?? "timed"],
   ];
-  if (report.schemaVersion === 2 || report.schemaVersion === 3 || report.schemaVersion === 4) {
+  if (
+    report.schemaVersion === 2 ||
+    report.schemaVersion === 3 ||
+    report.schemaVersion === 4 ||
+    report.schemaVersion === 5 ||
+    report.schemaVersion === 6 ||
+    report.schemaVersion === 7
+  ) {
     rows.push(
       [],
       ["report_schema_version", report.schemaVersion],
       ["initial_correct", report.initialAccuracy.correct],
       ["initial_responses", report.initialAccuracy.responses],
-      ["initial_accuracy_percent", report.initialAccuracy.percent],
+      ["initial_accuracy_percent", report.initialAccuracy.percent ?? ""],
       [],
       [
         "evidence_type",
@@ -546,7 +618,13 @@ export function reportCsv(report: Report): string {
       ["evidence_note", report.evidenceNote],
     );
   }
-  if (report.schemaVersion === 3 || report.schemaVersion === 4) {
+  if (
+    report.schemaVersion === 3 ||
+    report.schemaVersion === 4 ||
+    report.schemaVersion === 5 ||
+    report.schemaVersion === 6 ||
+    report.schemaVersion === 7
+  ) {
     rows.push(
       [],
       ["experience_category", report.experience.category],
@@ -576,7 +654,12 @@ export function reportCsv(report: Report): string {
       ]),
     );
   }
-  if (report.schemaVersion === 4) {
+  if (
+    report.schemaVersion === 4 ||
+    report.schemaVersion === 5 ||
+    report.schemaVersion === 6 ||
+    report.schemaVersion === 7
+  ) {
     rows.push(
       [],
       ["decision_replay_available", String(report.decisionReplayAvailable)],
@@ -595,6 +678,113 @@ export function reportCsv(report: Report): string {
         ]),
       );
     }
+  }
+  if (report.schemaVersion === 5 || report.schemaVersion === 6 || report.schemaVersion === 7) {
+    rows.push(
+      [],
+      ["question_id", "prompt", "respondents", "correct", "accuracy_percent"],
+      ...report.questions.map((question) => [
+        question.questionId,
+        question.prompt,
+        question.responses,
+        question.correct ?? "",
+        question.accuracyPercent ?? "",
+      ]),
+      [],
+      [
+        "question_id",
+        "choice_id",
+        "choice_label",
+        "selection_count",
+        "respondent_percent",
+        "percent_basis",
+        "respondents",
+        "total_selections",
+      ],
+      ...report.questions.flatMap((question) => {
+        const distribution = question.responseDistribution;
+        return distribution?.kind === "choice"
+          ? distribution.buckets.map((bucket) => [
+              question.questionId,
+              bucket.value,
+              bucket.label,
+              bucket.count,
+              bucket.percent,
+              distribution.percentBasis,
+              distribution.respondents,
+              distribution.totalSelections,
+            ])
+          : [];
+      }),
+    );
+  }
+  if (report.schemaVersion === 6 || report.schemaVersion === 7) {
+    rows.push(
+      [],
+      [
+        "question_id",
+        "choice_id",
+        "choice_label",
+        "weighted_score",
+        "ranked_respondents",
+        "average_rank",
+        "rank_count",
+        "respondents",
+        "total_rankings",
+      ],
+      ...report.questions.flatMap((question) => {
+        const distribution = question.responseDistribution;
+        return distribution?.kind === "ranking"
+          ? distribution.buckets.map((bucket) => [
+              question.questionId,
+              bucket.value,
+              bucket.label,
+              bucket.weightedScore,
+              bucket.rankedRespondents,
+              bucket.averageRank ?? "",
+              distribution.rankCount,
+              distribution.respondents,
+              distribution.totalRankings,
+            ])
+          : [];
+      }),
+    );
+  }
+  if (report.schemaVersion === 7) {
+    rows.push(
+      [],
+      [
+        "question_id",
+        "response_format",
+        "approved_response",
+        "approved_respondents",
+        "count",
+        "percent",
+      ],
+      ...report.questions.flatMap((question) => {
+        const distribution = question.responseDistribution;
+        if (distribution?.kind === "open_text") {
+          return distribution.entries.map((entry) => [
+            question.questionId,
+            "open_text",
+            entry.value,
+            distribution.respondents,
+            1,
+            "",
+          ]);
+        }
+        return distribution?.kind === "word_cloud"
+          ? distribution.buckets.map((bucket) => [
+              question.questionId,
+              "word_cloud",
+              bucket.label,
+              distribution.respondents,
+              bucket.count,
+              bucket.percent,
+            ])
+          : [];
+      }),
+    );
   }
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }

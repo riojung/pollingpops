@@ -238,6 +238,7 @@ export function ActiveRehearsal({
         ? t("reportRound.rehearsal.command.linkedRecheck")
         : t("reportRound.rehearsal.command.revote");
     }
+    if (command.action === "response.moderate") return "Moderate response";
     return t(`reportRound.rehearsal.command.${command.action}`);
   };
   const displayPhaseLabel = t(`reportRound.rehearsal.phase.${step.id}`);

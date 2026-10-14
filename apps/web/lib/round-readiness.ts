@@ -1,4 +1,9 @@
-import { QuizContentSchema, type QuizDraft } from "@openround/contracts";
+import {
+  QuizContentSchema,
+  TEXT_RESPONSE_MAX_QUESTIONS,
+  isTextOpinionQuestion,
+  type QuizDraft,
+} from "@openround/contracts";
 import { isChoiceQuestion } from "../components/editor/types";
 
 export interface RoundReadinessIssue {
@@ -36,6 +41,13 @@ export function roundReadinessIssues(draft: QuizDraft, uxBeta: boolean): RoundRe
     return issues;
   }
 
+  if (draft.questions.filter(isTextOpinionQuestion).length > TEXT_RESPONSE_MAX_QUESTIONS)
+    issues.push({
+      id: "text-question-limit",
+      source: "Text questions",
+      resolution: `Use up to ${TEXT_RESPONSE_MAX_QUESTIONS} open-text or word-cloud questions in one Round. Split additional questions into another Round.`,
+    });
+
   for (const [questionIndex, question] of draft.questions.entries()) {
     const actions: string[] = [];
     if (!question.prompt.trim()) {
@@ -54,11 +66,12 @@ export function roundReadinessIssues(draft: QuizDraft, uxBeta: boolean): RoundRe
       } else if (
         question.type !== "multi_select" &&
         question.type !== "poll" &&
+        question.type !== "ranking" &&
         correctCount !== 1
       ) {
         actions.push("select exactly one correct answer");
-      } else if (question.type === "poll" && correctCount > 0) {
-        actions.push("clear correct answers because polls are unscored");
+      } else if ((question.type === "poll" || question.type === "ranking") && correctCount > 0) {
+        actions.push("clear correct answers because opinion questions are unscored");
       }
 
       if (

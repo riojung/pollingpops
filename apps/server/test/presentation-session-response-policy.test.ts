@@ -13,6 +13,7 @@ import {
   presentationResponseTiming,
   presentationResponseValidationMessage,
 } from "../src/presentation-session-response-policy.js";
+import { presentationParticipantBlock } from "../src/presentation-session-projections.js";
 
 const correctChoiceId = randomUUID();
 const alternateChoiceId = randomUUID();
@@ -76,6 +77,39 @@ function sessionFor(question: QuestionDraft, timeMode: "timed" | "flex") {
 }
 
 describe("Presentation response policy", () => {
+  it.each(["ranking", "open_text", "word_cloud"] as const)(
+    "rejects %s before legacy Presentation delivery",
+    (type) => {
+      const common: Record<string, unknown> = { ...choiceQuestion() };
+      delete common.choices;
+      const question = QuestionDraftSchema.parse({
+        ...common,
+        type,
+        purpose: "opinion",
+        confidence: "off",
+        basePoints: 0,
+        conceptKeys: [],
+        linkedRecheckQuestionId: null,
+        ...(type === "ranking"
+          ? {
+              choices: [
+                { id: correctChoiceId, label: "One", isCorrect: false },
+                { id: alternateChoiceId, label: "Two", isCorrect: false },
+              ],
+            }
+          : {}),
+      });
+      const response = { choiceIds: [correctChoiceId] };
+      expect(presentationResponseValidationMessage(question, response)).toContain(
+        "Live Rounds only",
+      );
+      expect(presentationResponseCorrect(question, response)).toBeNull();
+      expect(presentationResponseScore(question, true, 1)).toBe(0);
+      expect(() =>
+        presentationParticipantBlock({ id: randomUUID(), kind: "question", question }),
+      ).toThrow("Live Rounds only");
+    },
+  );
   it("canonicalizes multi-select choice order without weakening the revision or payload fence", () => {
     const first = presentationResponseRequestHash({
       blockId: "block-1",

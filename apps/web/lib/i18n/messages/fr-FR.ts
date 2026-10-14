@@ -3,6 +3,13 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "Texte libre",
+  "questionType.open_text.description": "Une explication modérée sans bonne réponse.",
+  "questionType.word_cloud.label": "Nuage de mots",
+  "questionType.word_cloud.description":
+    "Un mot ou une expression modérés affichés dans un nuage collectif.",
+  "questionType.ranking.label": "Classement",
+  "questionType.ranking.description": "Classez des priorités sans score ni bonne réponse.",
   ...creationMessages("fr-FR"),
   ...feedbackMessages("fr-FR"),
   "common.create": "Créer",

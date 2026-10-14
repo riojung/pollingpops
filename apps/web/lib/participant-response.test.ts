@@ -4,14 +4,54 @@ import {
   participantRevealState,
   participantResponseControlsDisabled,
   participantResponseView,
+  multipleSelectionPoll,
+  togglePollSelection,
+  legacyResponseRequiresSubmit,
 } from "./participant-response";
 import type { SessionSnapshot } from "@openround/contracts";
 
 describe("participantResponseView", () => {
+  it("restores the exact ordered ranking from a receipt and the authoritative snapshot", () => {
+    const response = { kind: "ranking" as const, choiceIds: ["choice-c", "choice-a"] };
+    expect(
+      participantResponseView(
+        null,
+        null,
+        { accepted: true, duplicate: false },
+        { response, confidence: null },
+      ),
+    ).toMatchObject({
+      saved: true,
+      rankingChoiceIds: ["choice-c", "choice-a"],
+      choiceIds: [],
+      confidence: null,
+    });
+    expect(participantResponseView(response, null, null)).toMatchObject({
+      rankingChoiceIds: ["choice-c", "choice-a"],
+    });
+    expect(legacyResponseRequiresSubmit({ type: "ranking", confidence: "off" })).toBe(true);
+  });
+  it("restores every saved poll selection after acknowledgement and reconnect", () => {
+    const response = { kind: "poll" as const, choiceIds: ["choice-a", "choice-c"] };
+    expect(
+      participantResponseView(
+        null,
+        null,
+        { accepted: true, duplicate: false },
+        { response, confidence: null },
+      ),
+    ).toMatchObject({ saved: true, choiceIds: response.choiceIds, confidence: null });
+    expect(participantResponseView(response, null, null)).toMatchObject({
+      saved: true,
+      choiceIds: response.choiceIds,
+      confidence: null,
+    });
+  });
   it("rehydrates a durable choice receipt after reconnect", () => {
     expect(participantResponseView({ kind: "choice", choiceIds: ["choice-b"] }, 3, null)).toEqual({
       saved: true,
       choiceIds: ["choice-b"],
+      rankingChoiceIds: [],
       numericValue: "",
       ratingValue: null,
       confidence: 3,
@@ -83,6 +123,31 @@ describe("participantResponseView", () => {
         submitting: false,
       }),
     ).toBe(true);
+  });
+});
+
+describe("live opinion poll selections", () => {
+  it("requires explicit submission for multiple polls in the legacy player", () => {
+    expect(
+      legacyResponseRequiresSubmit({ type: "poll", maxSelections: 2, confidence: "off" }),
+    ).toBe(true);
+    expect(
+      legacyResponseRequiresSubmit({ type: "poll", maxSelections: 1, confidence: "off" }),
+    ).toBe(false);
+    expect(legacyResponseRequiresSubmit({ type: "poll" })).toBe(false);
+    expect(legacyResponseRequiresSubmit({ type: "multi_select", confidence: "off" })).toBe(true);
+  });
+  it("enforces the selection ceiling while allowing a selected option to be removed", () => {
+    expect(togglePollSelection(["a", "b"], "c", 2)).toEqual(["a", "b"]);
+    expect(togglePollSelection(["a", "b"], "a", 2)).toEqual(["b"]);
+    expect(togglePollSelection(["b"], "c", 2)).toEqual(["b", "c"]);
+  });
+
+  it("keeps legacy single-choice polls separate from multiple-selection opinion polls", () => {
+    expect(multipleSelectionPoll({ type: "poll" })).toBe(false);
+    expect(multipleSelectionPoll({ type: "poll", maxSelections: 1 })).toBe(false);
+    expect(multipleSelectionPoll({ type: "poll", maxSelections: 2 })).toBe(true);
+    expect(multipleSelectionPoll({ type: "multi_select" })).toBe(false);
   });
 });
 

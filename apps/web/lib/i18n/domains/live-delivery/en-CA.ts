@@ -1,6 +1,31 @@
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const liveDeliveryEnglishMessages = {
+  ...textPollLiveEnglishMessages,
+  "live.ranking.yourRanking": "Your ranking",
+  "live.ranking.instructions": "Rank {count} of {total} choices. First is the highest priority.",
+  "live.ranking.selected": "{selected} of {count} choices ranked.",
+  "live.ranking.moveUp": "Move {choice} up",
+  "live.ranking.moveDown": "Move {choice} down",
+  "live.ranking.up": "Move up",
+  "live.ranking.down": "Move down",
+  "live.ranking.removeChoice": "Remove {choice} from ranking",
+  "live.ranking.remove": "Remove",
+  "live.ranking.addChoice": "Add {choice} to ranking",
+  "live.ranking.chooseCount": "Rank exactly {count} choices before submitting.",
+  "live.ranking.summary": "{respondents} respondents · each ranked {count} choices.",
+  "live.ranking.weights":
+    "First place earns {firstPoints} points, decreasing by one for each rank. Ties follow the authored option order.",
+  "live.ranking.results": "Ranking results",
+  "live.ranking.option": "Option",
+  "live.ranking.score": "Weighted score",
+  "live.ranking.rankedBy": "Ranked by",
+  "live.ranking.averageRank": "Average rank",
+  "live.ranking.currentOrder": "Current order: {choices}",
+  "live.roundPlay.pollSelectionInstructions": "Select up to {limit} options, then submit.",
+  "live.roundPlay.pollSelectionLimit": "Select up to {limit} options. {selected} selected.",
+  "live.roundPlay.chooseMultiplePoll": "Choose between 1 and {limit} poll options.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "Aggregate Pulse appears after five people signal to protect individual privacy.",

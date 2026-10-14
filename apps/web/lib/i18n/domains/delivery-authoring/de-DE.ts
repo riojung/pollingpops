@@ -1,6 +1,22 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 import type { DeliveryAuthoringMessages } from "./en-CA";
 
 export default {
+  ...textPollAuthoringEnglishMessages,
+  ...textPollTranslations["de-DE"].authoring,
+  "delivery.builder.type.ranking": "Rangfolge",
+  "delivery.builder.rankingCount": "Zu ordnende Optionen",
+  "delivery.builder.rankingHelp":
+    "Teilnehmende ordnen genau diese Anzahl von Optionen und senden einmal ab. Es gibt keine Punkte und keine richtige Antwort.",
+  "delivery.builder.rankingLiveOnly": "Rangfolge-Umfragen unterstützen derzeit nur Live-Rounds.",
+  "delivery.builder.pollMaximumSelections": "Maximale Auswahlanzahl",
+  "delivery.builder.pollMultipleHelp":
+    "Teilnehmende können bis zu dieser Grenze Optionen auswählen und einmal absenden. Umfragen haben keine richtige Antwort und keine Punkte.",
+  "delivery.builder.pollMultipleUnavailable":
+    "Umfragen mit mehreren Auswahlmöglichkeiten sind für diesen Arbeitsbereich nicht aktiviert.",
+  "delivery.builder.pollMultipleLiveOnly":
+    "Umfragen mit mehreren Auswahlmöglichkeiten sind in Live-Rounds verfügbar. Präsentationen und Übungen erfordern derzeit eine einzelne Auswahl.",
   "delivery.landing.polls": "Live-Umfragen",
   "delivery.landing.presentations": "Interaktive Präsentationen",
   "delivery.landing.learning": "Lernrunden",

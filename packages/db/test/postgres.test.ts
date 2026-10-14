@@ -1,5 +1,8 @@
 import { expectFolderConformance } from "./support/folder-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
+import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
+import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
+import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1228,6 +1231,9 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 64, name: "survey_library_and_beta_feedback" },
       { version: 65, name: "business_platform" },
       { version: 66, name: "scoped_nested_folders" },
+      { version: 67, name: "live_poll_multiselection" },
+      { version: 68, name: "ranking_opinion_responses" },
+      { version: 69, name: "text_opinion_moderation" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1292,6 +1298,14 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       repository,
       await creator("session-history-owner"),
       await creator("session-history-outsider"),
+    );
+  });
+
+  it("searches retained Round and practice results before pagination under restricted PostgreSQL permissions", async () => {
+    await expectResultsHistorySearchConformance(
+      repository,
+      await creator("results-history-owner"),
+      await creator("results-history-outsider"),
     );
   });
 
@@ -2734,6 +2748,170 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       }
     } finally {
       await restarted.close();
+    }
+  });
+
+  it.each([false, true])(
+    "preserves extended opinion artifacts and durable responses under restricted PostgreSQL (ranking %s)",
+    async (ranking) => {
+      const owner = await creator("multiselect-poll-owner");
+      const other = await creator("multiselect-poll-other");
+      const result = await expectLivePollPersistenceConformance({
+        repository,
+        workspaceId: owner.workspaceId,
+        editorId: owner.userId,
+        otherWorkspaceId: other.workspaceId,
+        code: String(randomInt(1_000_000, 10_000_000)),
+        ranking,
+      });
+      const restarted = new PostgresRepository(runtimeUrl!);
+      try {
+        expect((await restarted.getSessionById(result.sessionId))?.state).toEqual(result.state);
+        expect(
+          (await restarted.getSessionEvidence(owner.workspaceId, result.sessionId)).answers,
+        ).toEqual([result.answer]);
+      } finally {
+        await restarted.close();
+      }
+      const client = await runtimePool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.workspace_id', $1, true)", [owner.workspaceId]);
+        expect(
+          (
+            await client.query(
+              "SELECT response_schema_version, score, correct FROM answers WHERE id = $1",
+              [result.answer.answerId],
+            )
+          ).rows,
+        ).toEqual([{ response_schema_version: ranking ? 4 : 3, score: 0, correct: false }]);
+        await client.query("SAVEPOINT wrong_answer_version");
+        await expect(
+          client.query("UPDATE answers SET response_schema_version = $2 WHERE id = $1", [
+            result.answer.answerId,
+            ranking ? 3 : 2,
+          ]),
+        ).rejects.toMatchObject({ code: "23514" });
+        await client.query("ROLLBACK TO SAVEPOINT wrong_answer_version");
+        await client.query("SAVEPOINT wrong_artifact_version");
+        await expect(
+          client.query("UPDATE quizzes SET draft_schema_version = $2 WHERE id = $1", [
+            result.quizId,
+            ranking ? 2 : 1,
+          ]),
+        ).rejects.toMatchObject({ code: "23514" });
+        await client.query("ROLLBACK TO SAVEPOINT wrong_artifact_version");
+        if (ranking) {
+          await client.query("SAVEPOINT wrong_state_version");
+          await expect(
+            client.query("UPDATE game_sessions SET state_schema_version = 7 WHERE id = $1", [
+              result.sessionId,
+            ]),
+          ).rejects.toMatchObject({ code: "23514" });
+          await client.query("ROLLBACK TO SAVEPOINT wrong_state_version");
+        }
+        await client.query("ROLLBACK");
+      } finally {
+        client.release();
+      }
+    },
+  );
+
+  it("persists moderated text with atomic CAS, restricted lookups and safe account exports", async () => {
+    const owner = await creator("text-opinion-owner");
+    const other = await creator("text-opinion-other");
+    const result = await expectTextOpinionPersistenceConformance({
+      repository,
+      workspaceId: owner.workspaceId,
+      editorId: owner.userId,
+      otherWorkspaceId: other.workspaceId,
+      code: String(randomInt(1_000_000, 10_000_000)),
+    });
+    const restarted = new PostgresRepository(runtimeUrl!);
+    try {
+      expect((await restarted.getSessionById(result.sessionId))?.state).toEqual(result.state);
+      expect(
+        await restarted.getSessionAnswersByIds(
+          owner.workspaceId,
+          result.sessionId,
+          result.answers.map((answer) => answer.answerId),
+        ),
+      ).toEqual(result.answers);
+      const exported = JSON.stringify(await restarted.exportAccount(owner.userId));
+      expect(exported).not.toContain("pending-pg-private-marker");
+      expect(exported).not.toContain("removed-pg-private-marker");
+      expect(exported).toContain("approved-pg-feedback-0");
+    } finally {
+      await restarted.close();
+    }
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [owner.workspaceId]);
+      expect(
+        (
+          await client.query(
+            "SELECT response_schema_version, score, correct FROM answers WHERE session_id = $1",
+            [result.sessionId],
+          )
+        ).rows,
+      ).toEqual(
+        Array.from({ length: 8 }, () => ({ response_schema_version: 5, score: 0, correct: false })),
+      );
+      for (const [label, sql, parameters] of [
+        [
+          "answer_version",
+          "UPDATE answers SET response_schema_version = 4 WHERE id = $1",
+          [result.answers[0]!.answerId],
+        ],
+        [
+          "artifact_version",
+          "UPDATE quizzes SET draft_schema_version = 3 WHERE id = $1",
+          [result.quizId],
+        ],
+        [
+          "content_version",
+          "UPDATE quiz_versions SET content_schema_version = 3 WHERE id = $1",
+          [result.versionId],
+        ],
+        [
+          "state_version",
+          "UPDATE game_sessions SET state_schema_version = 8 WHERE id = $1",
+          [result.sessionId],
+        ],
+        [
+          "missing_metadata",
+          "UPDATE game_sessions SET state_snapshot = state_snapshot - 'responseModeration' WHERE id = $1",
+          [result.sessionId],
+        ],
+        [
+          "hidden_text_state",
+          "UPDATE game_sessions SET state_schema_version = 8, state_snapshot = jsonb_set(state_snapshot - 'responseModeration' - 'responseModerationReceipts', '{quiz,questions}', '[]'::jsonb) || jsonb_build_object('answers', $2::jsonb) WHERE id = $1",
+          [result.sessionId, JSON.stringify(result.initialAnsweredState.answers)],
+        ],
+        [
+          "legacy_metadata",
+          "UPDATE game_sessions SET state_schema_version = 8, state_snapshot = jsonb_set(state_snapshot, '{quiz,questions}', '[]'::jsonb) WHERE id = $1",
+          [result.sessionId],
+        ],
+      ] as const) {
+        await client.query(`SAVEPOINT ${label}`);
+        await expect(client.query(sql, [...parameters])).rejects.toMatchObject({
+          code: label === "content_version" ? "55000" : "23514",
+        });
+        await client.query(`ROLLBACK TO SAVEPOINT ${label}`);
+      }
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [other.workspaceId]);
+      expect(
+        (
+          await client.query("SELECT id FROM answers WHERE id = ANY($1::uuid[])", [
+            result.answers.map((answer) => answer.answerId),
+          ])
+        ).rows,
+      ).toEqual([]);
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
     }
   });
 

@@ -8,6 +8,48 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### IDEA 004 Live Round response formats October 13 2026
+
+Implemented locally on `codex/idea-004-response-formats`. The first increment covers Live Rounds;
+Presentation and Survey expansion remains deferred. See the
+[implementation plan](idea-004-response-formats-plan.md) for behavior and compatibility details.
+
+- Multiple-selection opinion polls provide authored selection limits, checkbox submission,
+  refresh recovery and respondent-based percentages.
+- Ranking supports full-list or top-N ordering, labelled keyboard/touch controls and aggregate
+  weighted scores with deterministic ties.
+- Open text and word clouds accept bounded plain text through a private host/cohost moderation
+  queue. Public results require reveal and five approved respondents. Pending/removed text stays
+  out of normal snapshots, realtime events, reports and account exports.
+- Body-free approval metadata and moderator receipts survive round advancement; revision fencing
+  resolves moderation/finish races. Removed text is terminal and reports freeze after finish.
+- Migrations 067–069 introduce explicit artifact/answer/state versions. Native JSON/CSV, Report
+  V5–V7, compatibility negotiation, immutable publication and rollback readers are covered.
+- New writers require `FEATURE_ROUND_CLIENT_PROTOCOL` and the core-parity workspace allowlist.
+  Disabling the gate preserves existing compatible rooms, accepted retries and reports.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds, including 857 web, 693 server, 364 contract, 46 engine
+and 191 DB unit tests. The separate restricted PostgreSQL 17 integration suite passes 155 tests
+with one existing skip, including migration replay, moderation races, workspace isolation and
+account-export privacy. All 12 production-browser journeys pass on desktop Chromium, mobile
+Chromium and mobile WebKit, with automated axe checks, body-free saved refresh, private queue
+pagination, approval/removal, disconnect/401 cache clearing, earlier-question moderation, Unicode
+cloud grouping and Report V7. All ten supported locale catalogs include the new workflow copy.
+Physical-device, manual assistive-tech, native-speaker copy review, Firefox and external production
+acceptance remain separate gates. Other backlog ideas remain deferred.
+
+Review follow-up: Event-credit participant limits survive setup and recipe changes, and classic
+reports show the new opinion distributions without requiring UX beta. Ten report page regressions
+and three additional production-browser capacity checks pass across desktop Chromium, mobile
+Chromium and mobile WebKit. Text limits and approved-only reporting remain enforced.
+
+PR #113 review follow-up (October 14): authoritative Recovery Pack insert/update and Question
+Health apply mutations derive the schema version from the complete Round draft. Mixed-format
+history, published content, retries and undo remain intact, and fresh writes retain the rollout
+gate. All 59 focused API tests and the full repository check pass, including 16 new regression
+cases. Database versions and browser journeys are unchanged by this server correction.
+
 ### Survey draft autosave October 11 2026
 
 Implemented on `codex/survey-draft-autosave` from merged PR #104 (`14d397e`).

@@ -71,6 +71,15 @@ const questionTypeKeys: Record<QuestionType, { label: MessageKey; description: M
     label: "questionType.rating.label",
     description: "questionType.rating.description",
   },
+  open_text: {
+    label: "questionType.open_text.label",
+    description: "questionType.open_text.description",
+  },
+  word_cloud: {
+    label: "questionType.word_cloud.label",
+    description: "questionType.word_cloud.description",
+  },
+  ranking: { label: "questionType.ranking.label", description: "questionType.ranking.description" },
   poll: {
     label: "questionType.poll.label",
     description: "questionType.poll.description",
@@ -85,7 +94,7 @@ function CreateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useLocale();
-  const { canEdit, entitlements } = useWorkspace();
+  const { canEdit, entitlements, productFeatures } = useWorkspace();
   const [legacyHashMethod, setLegacyHashMethod] = useState<StartMethod | null>(null);
   const [title, setTitle] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>("single_select");
@@ -103,13 +112,20 @@ function CreateContent() {
     kind === "poll" && (requestedMethod === "source" || requestedMethod === "import")
       ? null
       : requestedMethod;
-  const availableTypes = questionTypeOptions.filter((option) =>
-    kind === "quiz"
-      ? questionTypeDefinition(option.type).scored
-      : kind === "poll"
-        ? !questionTypeDefinition(option.type).scored
-        : true,
-  );
+  const availableTypes = questionTypeOptions
+    .filter(
+      (option) =>
+        (option.type !== "ranking" || productFeatures?.rankingPolls) &&
+        (option.type !== "open_text" || productFeatures?.openTextPolls) &&
+        (option.type !== "word_cloud" || productFeatures?.wordCloudPolls),
+    )
+    .filter((option) =>
+      kind === "quiz"
+        ? questionTypeDefinition(option.type).scored
+        : kind === "poll"
+          ? !questionTypeDefinition(option.type).scored
+          : true,
+    );
   const effectiveType = availableTypes.some((option) => option.type === questionType)
     ? questionType
     : kind === "poll"

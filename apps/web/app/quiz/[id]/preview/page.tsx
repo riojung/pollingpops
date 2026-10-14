@@ -14,6 +14,11 @@ import { resolveExperienceTheme } from "@openround/experience";
 import { CreatorBrand } from "../../../../components/brand";
 import { ExperiencePreferences } from "../../../../components/experience-preferences";
 import { useLocale } from "../../../../components/locale-provider";
+import { LivePollChoices } from "../../../../components/live-poll-choices";
+import { RankingChoices } from "../../../../components/ranking-choices";
+import { initialRanking } from "../../../../lib/ranking-response";
+import { TextResponseControl } from "../../../../components/text-response-control";
+import { isTextQuestion } from "../../../../lib/text-response";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { experienceThemeStyle } from "../../../../lib/theme";
 
@@ -225,7 +230,17 @@ export default function QuizPreviewPage() {
                 width={640}
               />
             ) : null}
-            {isChoiceQuestion(question) ? (
+            {isTextQuestion(question.type) ? (
+              <TextResponseControl type={question.type} disabled />
+            ) : question.type === "ranking" ? (
+              <RankingChoices
+                question={question}
+                selectedChoiceIds={initialRanking(question)}
+                disabled
+              />
+            ) : question.type === "poll" && (question.maxSelections ?? 1) > 1 ? (
+              <LivePollChoices question={question} disabled />
+            ) : isChoiceQuestion(question) ? (
               <div className="answer-grid" aria-label={t("reportRound.preview.answerChoices")}>
                 {question.choices.map((choice, index) => (
                   <div
@@ -256,7 +271,7 @@ export default function QuizPreviewPage() {
                   </p>
                 ) : null}
               </div>
-            ) : (
+            ) : question.type === "rating" ? (
               <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
                 <legend className="field-label">{t("reportRound.preview.chooseRating")}</legend>
                 <div className="button-row">
@@ -273,8 +288,8 @@ export default function QuizPreviewPage() {
                   {question.minLabel} · {question.maxLabel}
                 </p>
               </fieldset>
-            )}
-            {revealed ? (
+            ) : null}
+            {revealed && question.type !== "ranking" && !isTextQuestion(question.type) ? (
               <div className="success" role="status">
                 <strong>{t("reportRound.preview.correctRevealed")}</strong>
                 {question.explanation ? <div>{question.explanation}</div> : null}
@@ -291,6 +306,7 @@ export default function QuizPreviewPage() {
               </button>
               <button
                 className="button-quiet"
+                disabled={question.type === "ranking" || isTextQuestion(question.type)}
                 onClick={() => setRevealed((current) => !current)}
                 type="button"
               >

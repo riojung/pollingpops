@@ -93,7 +93,8 @@ export function participantSubmissionRecovery(
   pendingRoundId: string,
   snapshot: SessionSnapshot,
 ): ParticipantSubmissionRecovery {
-  if (snapshot.roundId === pendingRoundId && snapshot.myResponse) return "saved";
+  if (snapshot.roundId === pendingRoundId && (snapshot.myResponse || snapshot.myResponseAccepted))
+    return "saved";
   if (snapshot.roundId === pendingRoundId && snapshot.phase === "question_open") {
     return "unconfirmed";
   }

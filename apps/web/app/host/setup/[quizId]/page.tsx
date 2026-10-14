@@ -7,6 +7,8 @@ import {
   ExperiencePresetIdSchema,
   currentRoundClientCapabilities,
   SessionSettingsSchema,
+  hasTextOpinionQuestions,
+  TEXT_RESPONSE_MAX_PER_ROUND,
   type Entitlements,
   type ExperiencePresetId,
   type QuizDraft,
@@ -103,6 +105,16 @@ export default function HostSetupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errorIsRaw, setErrorIsRaw] = useState(false);
+  const fundingParticipantLimit =
+    useEventCredit && eventEntitlements
+      ? eventEntitlements.maxParticipants
+      : entitlements?.maxParticipants;
+  const maximumParticipants =
+    fundingParticipantLimit === undefined
+      ? undefined
+      : publishedContent && hasTextOpinionQuestions(publishedContent)
+        ? Math.min(fundingParticipantLimit, TEXT_RESPONSE_MAX_PER_ROUND)
+        : fundingParticipantLimit;
 
   useEffect(() => {
     Promise.all([
@@ -136,7 +148,14 @@ export default function HostSetupPage() {
           roomChatAvailable: account.productFeatures.roomChat,
         });
         setUxBeta(account.productFeatures.uxBeta);
+        const maximumParticipants = Math.min(
+          account.entitlements.maxParticipants,
+          hasTextOpinionQuestions(quizResponse.currentVersion.content)
+            ? TEXT_RESPONSE_MAX_PER_ROUND
+            : account.entitlements.maxParticipants,
+        );
         const defaults = defaultsFor(account.creator, account.entitlements);
+        defaults.audienceLimit = Math.min(defaults.audienceLimit, maximumParticipants);
         if (!account.productFeatures.uxBeta) {
           preserveFlexPreferenceRef.current = false;
           setSettings(defaults);
@@ -174,7 +193,7 @@ export default function HostSetupPage() {
               timeMode: account.productFeatures.liveFlexMode ? restoredSettings.timeMode : "timed",
               audienceLimit: Math.min(
                 Math.max(1, restoredSettings.audienceLimit),
-                account.entitlements.maxParticipants,
+                maximumParticipants,
               ),
             });
             setRecipe(parsedRecipe);
@@ -197,7 +216,7 @@ export default function HostSetupPage() {
           preserveFlexPreferenceRef.current = false;
           const resolved = resolveSetupRecipe("recovery", defaults, {
             segment: account.creator.segment,
-            maxParticipants: account.entitlements.maxParticipants,
+            maxParticipants: maximumParticipants,
             roundExperiencesAvailable: account.productFeatures.roundExperiences,
           });
           setSettings(resolved.settings);
@@ -226,11 +245,11 @@ export default function HostSetupPage() {
   }, [creator, experiencePreset, presenterSoundEnabled, recipe, settings, uxBeta]);
 
   function applyRecipe(nextRecipe: SetupRecipe) {
-    if (!settings || !creator || !entitlements) return;
+    if (!settings || !creator || maximumParticipants === undefined) return;
     if (nextRecipe === "competition") preserveFlexPreferenceRef.current = false;
     const resolved = resolveSetupRecipe(nextRecipe, settings, {
       segment: creator.segment,
-      maxParticipants: entitlements.maxParticipants,
+      maxParticipants: maximumParticipants,
       roundExperiencesAvailable,
     });
     setRecipe(nextRecipe);
@@ -332,6 +351,11 @@ export default function HostSetupPage() {
           ) : null
         ) : (
           <form onSubmit={createSession}>
+            {publishedContent && hasTextOpinionQuestions(publishedContent) ? (
+              <p className="muted" lang="en-CA">
+                {t("live.text.roomCapacity", { limit: TEXT_RESPONSE_MAX_PER_ROUND })}
+              </p>
+            ) : null}
             {uxBeta ? (
               <section className="panel setup-recipes" data-testid="session-setup">
                 <p className="eyebrow">{t("live.roundSetup.recipe")}</p>
@@ -404,11 +428,7 @@ export default function HostSetupPage() {
                     <input
                       className="input"
                       id="audience-limit"
-                      max={
-                        useEventCredit && eventEntitlements
-                          ? eventEntitlements.maxParticipants
-                          : entitlements.maxParticipants
-                      }
+                      max={maximumParticipants}
                       min={1}
                       onChange={(event) => {
                         setRecipe("custom");

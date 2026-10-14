@@ -34,6 +34,9 @@ import {
   RecoveryPackLiveCardView,
 } from "../../../components/recovery-pack-live-card";
 import { ResponseDistributionView } from "../../../components/response-distribution";
+import { TextModerationPanel } from "../../../components/text-moderation-panel";
+import { TextLiveResults } from "../../../components/text-live-results";
+import { isTextQuestion } from "../../../lib/text-response";
 import { QnaPanel } from "../../../components/qna-panel";
 import { apiFetch, humanError } from "../../../lib/api";
 import {
@@ -131,6 +134,8 @@ export default function HostPage() {
   const [error, setError] = useState("");
   const [reportId, setReportId] = useState("");
   const [mediaCredential, setMediaCredential] = useState("");
+  const [textReadAuthorized, setTextReadAuthorized] = useState(false);
+  const [textReadEpoch, setTextReadEpoch] = useState(0);
   const [qnaRevision, setQnaRevision] = useState(0);
   const [audienceSyncRevision, setAudienceSyncRevision] = useState(0);
   const [audienceRealtimeBatch, setAudienceRealtimeBatch] = useState<AudienceRealtimeBatch | null>(
@@ -256,11 +261,14 @@ export default function HostPage() {
           (response: Ack<{ snapshot: SessionSnapshot }>) => {
             if (disposed || attemptedToken !== activeHostToken) return;
             if (response.error) {
+              setTextReadAuthorized(false);
+              setTextReadEpoch((current) => current + 1);
               void recoverHostCredential(response.error, attemptedToken);
               return;
             }
             if (response.data) {
               recovery.succeeded();
+              setTextReadAuthorized(socket.connected);
               if (!commandRecoveryRef.current?.current()) setError("");
               setSnapshot(response.data.snapshot);
             }
@@ -287,12 +295,17 @@ export default function HostPage() {
         if (envelope.type.startsWith("qna.")) setQnaRevision((current) => current + 1);
       });
       socket.on("connect", () => {
+        setTextReadAuthorized(false);
         setConnected(true);
         if (!commandRecoveryRef.current?.current()) setError("");
         setAudienceSyncRevision((current) => current + 1);
         sync();
       });
-      socket.on("disconnect", () => setConnected(false));
+      socket.on("disconnect", () => {
+        setConnected(false);
+        setTextReadAuthorized(false);
+        setTextReadEpoch((current) => current + 1);
+      });
       for (const event of [
         "lobby.updated",
         "question.open",
@@ -304,6 +317,7 @@ export default function HostPage() {
         "leaderboard.updated",
         "game.finished",
         "session.snapshot",
+        "response.moderated",
       ])
         socket.on(event, update);
       for (const event of [
@@ -446,6 +460,8 @@ export default function HostPage() {
       interventionType?: InterventionType;
       recheckMode?: "linked" | "revote";
       recoveryPackCard?: RecoveryPackCardSelection;
+      answerId?: string;
+      responseStatus?: "approved" | "removed";
     } = {},
   ) {
     if (!snapshot || commandPending) return;
@@ -864,6 +880,22 @@ export default function HostPage() {
                       mediaId={snapshot.question.mediaId}
                       sessionId={sessionId}
                     />
+                    {snapshot.question.type === "poll" &&
+                    (snapshot.question.maxSelections ?? 1) > 1 ? (
+                      <p className="muted">
+                        {t("live.roundPlay.pollSelectionInstructions", {
+                          limit: snapshot.question.maxSelections ?? 1,
+                        })}
+                      </p>
+                    ) : null}
+                    {snapshot.question.type === "ranking" ? (
+                      <p className="muted">
+                        {t("live.ranking.instructions", {
+                          count: snapshot.question.rankCount ?? snapshot.question.choices.length,
+                          total: snapshot.question.choices.length,
+                        })}
+                      </p>
+                    ) : null}
                     {snapshot.question.choices.length > 0 ? (
                       <div className="answer-grid">
                         {snapshot.question.choices.map((choice, index) => (
@@ -935,6 +967,27 @@ export default function HostPage() {
                     )}
                   </>
                 ) : null}
+                {snapshot.roundProtocol?.requiredCapabilities.some(
+                  (capability) =>
+                    capability === "response.open_text" || capability === "response.word_cloud",
+                ) ? (
+                  <TextModerationPanel
+                    sessionId={sessionId}
+                    roundId={
+                      snapshot.question && isTextQuestion(snapshot.question.type)
+                        ? snapshot.roundId
+                        : null
+                    }
+                    version={snapshot.version}
+                    phase={snapshot.phase}
+                    credential={textReadAuthorized ? mediaCredential : ""}
+                    freshness={textReadEpoch}
+                    disabled={commandPending || !connected || snapshot.phase === "finished"}
+                    onModerate={(answerId, responseStatus) =>
+                      command("response.moderate", { answerId, responseStatus })
+                    }
+                  />
+                ) : null}
               </HostStage>
               <RecoveryCompass phaseView={phaseView!} showSteps={uxBeta} snapshot={snapshot}>
                 {snapshot.phase === "question_reveal" &&
@@ -950,7 +1003,23 @@ export default function HostPage() {
                   />
                 ) : null}
                 {snapshot.phase === "lobby" ? <JoinAccess code={snapshot.code} editable /> : null}
-                {uxBeta && snapshot.responseDistribution ? (
+                {snapshot.question && isTextQuestion(snapshot.question.type) && snapshot.roundId ? (
+                  <TextLiveResults
+                    sessionId={sessionId}
+                    roundId={snapshot.roundId}
+                    version={snapshot.version}
+                    phase={snapshot.phase}
+                    credential={textReadAuthorized ? mediaCredential : ""}
+                    freshness={textReadEpoch}
+                    headingLevel={3}
+                    role="host"
+                  />
+                ) : null}
+                {(uxBeta ||
+                  snapshot.question?.type === "ranking" ||
+                  (snapshot.question?.type === "poll" &&
+                    (snapshot.question.maxSelections ?? 1) > 1)) &&
+                snapshot.responseDistribution ? (
                   <ResponseDistributionView distribution={snapshot.responseDistribution} />
                 ) : null}
                 {!uxBeta && legacyRecoveryActions.length > 0 ? (

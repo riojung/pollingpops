@@ -10,7 +10,12 @@ import type {
   ResponsePayload,
   SessionSnapshot,
 } from "@openround/contracts";
-import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
+import {
+  currentRoundClientCapabilities,
+  ROUND_CLIENT_UPDATE_MESSAGE,
+  normalizeTextResponse,
+  textResponseCharacterLimit,
+} from "@openround/contracts";
 import { Brand } from "../../../components/brand";
 import {
   AudiencePanel,
@@ -20,6 +25,12 @@ import {
 import { ExperiencePreferences } from "../../../components/experience-preferences";
 import { Countdown } from "../../../components/countdown";
 import { useLocale } from "../../../components/locale-provider";
+import { LivePollChoices } from "../../../components/live-poll-choices";
+import { RankingChoices } from "../../../components/ranking-choices";
+import { TextResponseControl } from "../../../components/text-response-control";
+import { TextLiveResults } from "../../../components/text-live-results";
+import { isTextQuestion, textResponseError, textResponseReceipt } from "../../../lib/text-response";
+import { initialRanking, rankingCount } from "../../../lib/ranking-response";
 import { ParticipantAvatar, ParticipantIdentity } from "../../../components/participant-avatar";
 import { QuestionMedia } from "../../../components/question-media";
 import { RecoveryPackLiveCardView } from "../../../components/recovery-pack-live-card";
@@ -38,6 +49,9 @@ import {
   participantRevealState,
   participantResponseControlsDisabled,
   participantResponseView,
+  multipleSelectionPoll,
+  togglePollSelection,
+  legacyResponseRequiresSubmit,
   type LocalResponseReceipt,
 } from "../../../lib/participant-response";
 import {
@@ -78,7 +92,11 @@ export default function PlayerPage() {
     null,
   );
   const [mediaCredential, setMediaCredential] = useState("");
+  const [textReadAuthorized, setTextReadAuthorized] = useState(false);
+  const [textReadEpoch, setTextReadEpoch] = useState(0);
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([]);
+  const [rankingChoiceIds, setRankingChoiceIds] = useState<string[]>([]);
+  const [textValue, setTextValue] = useState("");
   const [numericValue, setNumericValue] = useState("");
   const [ratingValue, setRatingValue] = useState<number | null>(null);
   const [confidence, setConfidence] = useState<ConfidenceValue | null>(null);
@@ -126,12 +144,14 @@ export default function PlayerPage() {
     return Boolean(submissionRecoveryRef.current?.settle(idempotencyKey));
   }
 
-  function resetResponse() {
+  function resetResponse(question: SessionSnapshot["question"] = null) {
     clearPendingSubmission();
     setAcknowledged(null);
     setLocalReceipt(null);
     setRetryableSubmission(null);
     setSelectedChoiceIds([]);
+    setTextValue("");
+    setRankingChoiceIds(question?.type === "ranking" ? initialRanking(question) : []);
     setNumericValue("");
     setRatingValue(null);
     setConfidence(null);
@@ -142,7 +162,11 @@ export default function PlayerPage() {
   function reconcilePendingSubmission(nextSnapshot: SessionSnapshot) {
     const pending = submissionRecoveryRef.current?.current();
     if (!pending) {
-      if (nextSnapshot.myResponse) {
+      if (nextSnapshot.myResponse || nextSnapshot.myResponseAccepted) {
+        if (nextSnapshot.myResponseAccepted) {
+          setTextValue("");
+          setLocalReceipt(null);
+        }
         setRetryableSubmission(null);
         setError((current) =>
           current === PARTICIPANT_ACK_TIMEOUT_MESSAGE ||
@@ -157,6 +181,10 @@ export default function PlayerPage() {
     if (resolution !== "saved") return;
     if (!clearPendingSubmission(pending.id)) return;
     setRetryableSubmission(null);
+    if (nextSnapshot.myResponseAccepted) {
+      setTextValue("");
+      setLocalReceipt(null);
+    }
     setError("");
     setErrorIsEnglish(false);
   }
@@ -185,12 +213,16 @@ export default function PlayerPage() {
         },
         (response: Ack<{ snapshot: SessionSnapshot }>) => {
           if (response.error) {
+            setTextReadAuthorized(false);
+            setTextReadEpoch((current) => current + 1);
             setError(response.error.message);
             setErrorIsEnglish(true);
           }
           if (response.data) {
+            setTextReadAuthorized(socket.connected);
             const nextSnapshot = response.data.snapshot;
-            if (nextSnapshot.roundId !== snapshotRef.current?.roundId) resetResponse();
+            if (nextSnapshot.roundId !== snapshotRef.current?.roundId)
+              resetResponse(nextSnapshot.question);
             else reconcilePendingSubmission(nextSnapshot);
             setSnapshot(nextSnapshot);
           }
@@ -205,7 +237,8 @@ export default function PlayerPage() {
         setAudienceSyncRevision((current) => current + 1);
       }
       const nextSnapshot = envelope.payload.snapshot;
-      if (nextSnapshot.roundId !== snapshotRef.current?.roundId) resetResponse();
+      if (nextSnapshot.roundId !== snapshotRef.current?.roundId)
+        resetResponse(nextSnapshot.question);
       else reconcilePendingSubmission(nextSnapshot);
       setSnapshot(nextSnapshot);
     });
@@ -217,6 +250,7 @@ export default function PlayerPage() {
       if (envelope.type.startsWith("qna.")) setQnaRevision((current) => current + 1);
     });
     socket.on("connect", () => {
+      setTextReadAuthorized(false);
       setConnected(true);
       setError((current) =>
         current === PARTICIPANT_ACK_TIMEOUT_MESSAGE || current === PARTICIPANT_ACK_CHECKING_MESSAGE
@@ -226,7 +260,11 @@ export default function PlayerPage() {
       setAudienceSyncRevision((current) => current + 1);
       sync();
     });
-    socket.on("disconnect", () => setConnected(false));
+    socket.on("disconnect", () => {
+      setConnected(false);
+      setTextReadAuthorized(false);
+      setTextReadEpoch((current) => current + 1);
+    });
     for (const event of [
       "lobby.updated",
       "question.open",
@@ -238,6 +276,7 @@ export default function PlayerPage() {
       "leaderboard.updated",
       "game.finished",
       "session.snapshot",
+      "response.moderated",
     ])
       socket.on(event, update);
     for (const event of [
@@ -309,6 +348,10 @@ export default function PlayerPage() {
         } else if (response.data) {
           setAcknowledged(response.data);
           if (response.data.accepted) {
+            if (submission.response.kind === "text") {
+              setTextValue("");
+              setLocalReceipt(null);
+            }
             setRetryableSubmission(null);
             setError("");
             setErrorIsEnglish(false);
@@ -336,6 +379,7 @@ export default function PlayerPage() {
       !snapshot?.roundId ||
       acknowledged?.accepted ||
       snapshot.myResponse ||
+      snapshot.myResponseAccepted ||
       submitting ||
       retryableSubmission
     )
@@ -355,7 +399,8 @@ export default function PlayerPage() {
   }
 
   function retrySubmission() {
-    if (!retryableSubmission || submitting || snapshot?.myResponse) return;
+    if (!retryableSubmission || submitting || snapshot?.myResponse || snapshot?.myResponseAccepted)
+      return;
     if (snapshot?.roundId !== retryableSubmission.roundId || snapshot.phase !== "question_open") {
       resetResponse();
       setError(t("live.roundPlay.closed"));
@@ -372,15 +417,18 @@ export default function PlayerPage() {
       snapshot.phase !== "question_open" ||
       acknowledged?.accepted ||
       snapshot.myResponse ||
+      snapshot.myResponseAccepted ||
       submitting ||
       retryableSubmission
     )
       return;
-    if (question.type === "multi_select") {
+    if (question.type === "multi_select" || multipleSelectionPoll(question)) {
       setSelectedChoiceIds((current) =>
-        current.includes(choiceId)
-          ? current.filter((selected) => selected !== choiceId)
-          : [...current, choiceId],
+        question.type === "poll"
+          ? togglePollSelection(current, choiceId, question.maxSelections ?? 1)
+          : current.includes(choiceId)
+            ? current.filter((selected) => selected !== choiceId)
+            : [...current, choiceId],
       );
       setError("");
       setErrorIsEnglish(false);
@@ -401,7 +449,24 @@ export default function PlayerPage() {
   function submitSelectedResponse() {
     const question = snapshot?.question;
     if (!question) return;
-    if (["single_select", "true_false", "multi_select"].includes(question.type)) {
+    if (isTextQuestion(question.type)) {
+      const validation = textResponseError(question.type, textValue);
+      if (validation) {
+        setError(
+          t(`live.text.error.${validation}`, { limit: textResponseCharacterLimit(question.type) }),
+        );
+        setErrorIsEnglish(false);
+        return;
+      }
+      submitResponse({ kind: "text", value: normalizeTextResponse(textValue, question.type) });
+    } else if (question.type === "ranking") {
+      if (rankingChoiceIds.length !== rankingCount(question)) {
+        setError(t("live.ranking.chooseCount", { count: rankingCount(question) }));
+        setErrorIsEnglish(false);
+        return;
+      }
+      submitResponse({ kind: "ranking", choiceIds: rankingChoiceIds });
+    } else if (["single_select", "true_false", "multi_select"].includes(question.type)) {
       if (selectedChoiceIds.length === 0) {
         setError(t("live.roundPlay.chooseAnswer"));
         setErrorIsEnglish(false);
@@ -409,8 +474,18 @@ export default function PlayerPage() {
       }
       submitResponse({ kind: "choice", choiceIds: selectedChoiceIds });
     } else if (question.type === "poll") {
-      if (selectedChoiceIds.length !== 1) {
-        setError(t("live.roundPlay.choosePoll"));
+      if (
+        selectedChoiceIds.length < 1 ||
+        selectedChoiceIds.length > (question.maxSelections ?? 1)
+      ) {
+        setError(
+          t(
+            multipleSelectionPoll(question)
+              ? "live.roundPlay.chooseMultiplePoll"
+              : "live.roundPlay.choosePoll",
+            { limit: question.maxSelections ?? 1 },
+          ),
+        );
         setErrorIsEnglish(false);
         return;
       }
@@ -443,6 +518,7 @@ export default function PlayerPage() {
     snapshot?.myConfidence,
     acknowledged,
     localReceipt,
+    snapshot?.myResponseAccepted,
   );
   const retryResponse = retryableSubmission?.response;
   const retryChoiceIds =
@@ -454,6 +530,13 @@ export default function PlayerPage() {
     : durableResponse.choiceIds.length
       ? durableResponse.choiceIds
       : selectedChoiceIds;
+  const displayedRankingIds = retryableSubmission
+    ? retryResponse?.kind === "ranking"
+      ? retryResponse.choiceIds
+      : []
+    : durableResponse.saved
+      ? durableResponse.rankingChoiceIds
+      : rankingChoiceIds;
   const responseSaved = durableResponse.saved;
   const displayedNumericValue = retryableSubmission
     ? retryResponse?.kind === "numeric"
@@ -490,11 +573,7 @@ export default function PlayerPage() {
     ["complete", t("live.common.complete"), undefined],
   ] as const;
   const legacyNeedsSubmit = Boolean(
-    snapshot?.question &&
-    (snapshot.question.type === "multi_select" ||
-      snapshot.question.type === "numeric" ||
-      snapshot.question.type === "rating" ||
-      snapshot.question.confidence !== "off"),
+    snapshot?.question && legacyResponseRequiresSubmit(snapshot.question),
   );
   const [checkpointOpenBefore, checkpointOpenAfter = ""] = t("live.presenter.checkpointOpen", {
     prompt: LOCALIZED_VALUE_MARKER,
@@ -663,9 +742,40 @@ export default function PlayerPage() {
             {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
               <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
             ) : null}
-            {["single_select", "true_false", "multi_select", "poll"].includes(
-              snapshot.question.type,
-            ) ? (
+            {isTextQuestion(snapshot.question.type) ? (
+              responseSaved ? null : (
+                <TextResponseControl
+                  type={snapshot.question.type}
+                  value={retryResponse?.kind === "text" ? retryResponse.value : textValue}
+                  disabled={responseControlsDisabled}
+                  onChange={(value) => {
+                    setTextValue(value);
+                    setError("");
+                    setErrorIsEnglish(false);
+                  }}
+                />
+              )
+            ) : snapshot.question.type === "ranking" ? (
+              <RankingChoices
+                question={snapshot.question}
+                selectedChoiceIds={displayedRankingIds}
+                disabled={responseControlsDisabled}
+                onChange={(selected) => {
+                  setRankingChoiceIds(selected);
+                  setError("");
+                  setErrorIsEnglish(false);
+                }}
+              />
+            ) : multipleSelectionPoll(snapshot.question) ? (
+              <LivePollChoices
+                question={snapshot.question}
+                selectedChoiceIds={displayedChoiceIds}
+                disabled={responseControlsDisabled}
+                onChoose={chooseChoice}
+              />
+            ) : ["single_select", "true_false", "multi_select", "poll"].includes(
+                snapshot.question.type,
+              ) ? (
               <div className="answer-grid" aria-label={t("live.roundPlay.answerChoices")}>
                 {snapshot.question.choices.map((choice, index) => {
                   const selected = displayedChoiceIds.includes(choice.id);
@@ -821,7 +931,11 @@ export default function PlayerPage() {
                 </button>
               )
             ) : null}
-            {responseSaved && !revealed ? (
+            {responseSaved && isTextQuestion(snapshot.question.type) ? (
+              <p className="success" role="status" lang={locale}>
+                {t(textResponseReceipt(snapshot.myResponseModerationStatus))}
+              </p>
+            ) : responseSaved && !revealed ? (
               <p
                 aria-label={t("live.roundPlay.saveStatusAria")}
                 className="success"
@@ -830,6 +944,17 @@ export default function PlayerPage() {
               >
                 Answer received and saved.
               </p>
+            ) : null}
+            {isTextQuestion(snapshot.question.type) && snapshot.roundId ? (
+              <TextLiveResults
+                sessionId={sessionId}
+                roundId={snapshot.roundId}
+                version={snapshot.version}
+                phase={snapshot.phase}
+                credential={textReadAuthorized ? mediaCredential : ""}
+                freshness={textReadEpoch}
+                role="participant"
+              />
             ) : null}
             {revealed ? (
               <div className={snapshot.myCorrect ? "success" : "notice"}>

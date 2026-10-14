@@ -592,10 +592,12 @@ function QuestionComparison({
               Accepted value {question.correctValue} · tolerance {question.tolerance}
               {question.unit ? ` ${question.unit}` : ""}
             </p>
-          ) : (
+          ) : question.type === "rating" ? (
             <p>
               Rating {question.min}–{question.max}
             </p>
+          ) : (
+            <p>This response format is available in live Rounds only.</p>
           )}
           <details>
             <summary>All checkpoint fields</summary>

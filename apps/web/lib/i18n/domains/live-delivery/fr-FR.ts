@@ -1,7 +1,37 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["fr-FR"].live,
+  "live.ranking.yourRanking": "Votre classement",
+  "live.ranking.instructions":
+    "Classez {count} options sur {total}. La première est la plus prioritaire.",
+  "live.ranking.selected": "{selected} options classées sur {count}.",
+  "live.ranking.moveUp": "Monter {choice}",
+  "live.ranking.moveDown": "Descendre {choice}",
+  "live.ranking.up": "Monter",
+  "live.ranking.down": "Descendre",
+  "live.ranking.removeChoice": "Retirer {choice} du classement",
+  "live.ranking.remove": "Retirer",
+  "live.ranking.addChoice": "Ajouter {choice} au classement",
+  "live.ranking.chooseCount": "Classez exactement {count} options avant d’envoyer.",
+  "live.ranking.summary": "{respondents} répondants · chacun a classé {count} options.",
+  "live.ranking.weights":
+    "La première place vaut {firstPoints} points, puis un point de moins par rang. Les égalités suivent l’ordre des options défini à la création.",
+  "live.ranking.results": "Résultats du classement",
+  "live.ranking.option": "Option",
+  "live.ranking.score": "Score pondéré",
+  "live.ranking.rankedBy": "Classée par",
+  "live.ranking.averageRank": "Rang moyen",
+  "live.ranking.currentOrder": "Ordre actuel : {choices}",
+  "live.roundPlay.pollSelectionInstructions":
+    "Sélectionnez jusqu’à {limit} options, puis envoyez votre réponse.",
+  "live.roundPlay.pollSelectionLimit":
+    "Sélectionnez jusqu’à {limit} options. {selected} sélectionnées.",
+  "live.roundPlay.chooseMultiplePoll": "Choisissez entre 1 et {limit} options.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "Agrégate Pulse apparaît après cinq personnes signal pour protéger la vie privée individuelle.",

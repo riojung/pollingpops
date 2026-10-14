@@ -1,7 +1,35 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["ko-KR"].live,
+  "live.ranking.yourRanking": "나의 순위",
+  "live.ranking.instructions":
+    "{total}개 중 {count}개의 순위를 정하세요. 첫 번째가 가장 높은 우선순위입니다.",
+  "live.ranking.selected": "{count}개 중 {selected}개 순위 지정됨.",
+  "live.ranking.moveUp": "{choice} 위로 이동",
+  "live.ranking.moveDown": "{choice} 아래로 이동",
+  "live.ranking.up": "위로 이동",
+  "live.ranking.down": "아래로 이동",
+  "live.ranking.removeChoice": "순위에서 {choice} 제거",
+  "live.ranking.remove": "제거",
+  "live.ranking.addChoice": "순위에 {choice} 추가",
+  "live.ranking.chooseCount": "제출 전에 정확히 {count}개의 순위를 정하세요.",
+  "live.ranking.summary": "응답자 {respondents}명 · 각자 {count}개 순위 지정.",
+  "live.ranking.weights":
+    "1위는 {firstPoints}점이며 다음 순위마다 1점씩 줄어듭니다. 동점은 작성된 항목 순서를 따릅니다.",
+  "live.ranking.results": "순위 결과",
+  "live.ranking.option": "항목",
+  "live.ranking.score": "가중 점수",
+  "live.ranking.rankedBy": "순위 지정 인원",
+  "live.ranking.averageRank": "평균 순위",
+  "live.ranking.currentOrder": "현재 순서: {choices}",
+  "live.roundPlay.pollSelectionInstructions": "최대 {limit}개를 선택한 후 제출하세요.",
+  "live.roundPlay.pollSelectionLimit": "최대 {limit}개를 선택하세요. {selected}개 선택됨.",
+  "live.roundPlay.chooseMultiplePoll": "설문 항목을 1개부터 {limit}개까지 선택하세요.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "개인정보 보호를 위해 5명 이상이 신호를 보낸 후 집계된 Pulse가 표시됩니다.",

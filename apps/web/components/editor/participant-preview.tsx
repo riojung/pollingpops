@@ -1,6 +1,11 @@
 import type { QuestionDraft } from "@openround/contracts";
 import { isChoiceQuestion } from "./types";
 import { useLocale } from "../locale-provider";
+import { LivePollChoices } from "../live-poll-choices";
+import { RankingChoices } from "../ranking-choices";
+import { initialRanking } from "../../lib/ranking-response";
+import { TextResponseControl } from "../text-response-control";
+import { isTextQuestion } from "../../lib/text-response";
 
 export function ParticipantPreview({ question }: { question: QuestionDraft }) {
   const { t } = useLocale();
@@ -14,7 +19,13 @@ export function ParticipantPreview({ question }: { question: QuestionDraft }) {
           t("delivery.builder.questionPrompt")
         )}
       </h3>
-      {isChoiceQuestion(question) ? (
+      {isTextQuestion(question.type) ? (
+        <TextResponseControl type={question.type} disabled />
+      ) : question.type === "ranking" ? (
+        <RankingChoices question={question} selectedChoiceIds={initialRanking(question)} disabled />
+      ) : question.type === "poll" && (question.maxSelections ?? 1) > 1 ? (
+        <LivePollChoices question={question} disabled />
+      ) : isChoiceQuestion(question) ? (
         <div className="preview-options">
           {question.choices.map((choice, index) => (
             <span className="preview-option" key={choice.id}>
@@ -32,7 +43,7 @@ export function ParticipantPreview({ question }: { question: QuestionDraft }) {
           disabled
           placeholder={t("delivery.builder.answer", { number: 1 })}
         />
-      ) : (
+      ) : question.type === "rating" ? (
         <div className="preview-options">
           {Array.from({ length: question.max - question.min + 1 }, (_, index) => (
             <span className="preview-rating" key={question.min + index}>
@@ -40,8 +51,11 @@ export function ParticipantPreview({ question }: { question: QuestionDraft }) {
             </span>
           ))}
         </div>
-      )}
-      {question.confidence !== "off" && question.type !== "poll" && question.type !== "rating" ? (
+      ) : null}
+      {question.confidence !== "off" &&
+      question.type !== "poll" &&
+      question.type !== "rating" &&
+      question.type !== "ranking" ? (
         <p className="muted" lang="en-CA">
           Confidence will be requested before Submit.
         </p>

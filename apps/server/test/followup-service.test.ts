@@ -4,6 +4,9 @@ import {
   ReportV2Schema,
   ReportV3Schema,
   ReportV4Schema,
+  ReportV5Schema,
+  ReportV6Schema,
+  ReportV7Schema,
   type QuizDraft,
 } from "@openround/contracts";
 import { MemoryRepository, type CreatorContext } from "@openround/db";
@@ -11,7 +14,10 @@ import { createGameState } from "@openround/game-engine";
 import { FollowupService } from "../src/followup-service.js";
 import type { FollowupError } from "../src/followup-service.js";
 
-async function fixture(timeMode: "timed" | "flex" = "timed", reportVersion: 2 | 3 | 4 = 2) {
+async function fixture(
+  timeMode: "timed" | "flex" = "timed",
+  reportVersion: 2 | 3 | 4 | 5 | 6 | 7 = 2,
+) {
   const repository = new MemoryRepository();
   const service = new FollowupService(repository);
   const workspaceId = randomUUID();
@@ -214,10 +220,17 @@ async function fixture(timeMode: "timed" | "flex" = "timed", reportVersion: 2 | 
   };
   await repository.saveReport(
     workspaceId,
-    reportVersion === 4
-      ? ReportV4Schema.parse({
+    reportVersion === 4 || reportVersion === 5 || reportVersion === 6 || reportVersion === 7
+      ? (reportVersion === 7
+          ? ReportV7Schema
+          : reportVersion === 6
+            ? ReportV6Schema
+            : reportVersion === 5
+              ? ReportV5Schema
+              : ReportV4Schema
+        ).parse({
           ...reportV3,
-          schemaVersion: 4,
+          schemaVersion: reportVersion,
           decisionReplayAvailable: true,
           decisionReplayComplete: true,
           decisionTimeline: [
@@ -444,13 +457,19 @@ describe("self-paced follow-up", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
-  it("creates follow-ups from ready Report V2, V3, and V4 evidence", async () => {
+  it("creates follow-ups from ready Report V2 through V7 evidence", async () => {
     const v2 = await fixture("flex", 2);
     const v3 = await fixture("flex", 3);
     const v4 = await fixture("flex", 4);
+    const v5 = await fixture("flex", 5);
+    const v6 = await fixture("flex", 6);
+    const v7 = await fixture("flex", 7);
     expect(v2.created.followup.conceptKeys).toEqual(["lockout"]);
     expect(v3.created.followup.conceptKeys).toEqual(["lockout"]);
     expect(v4.created.followup.conceptKeys).toEqual(["lockout"]);
+    expect(v5.created.followup.conceptKeys).toEqual(["lockout"]);
+    expect(v6.created.followup.conceptKeys).toEqual(["lockout"]);
+    expect(v7.created.followup.conceptKeys).toEqual(["lockout"]);
   });
 
   it("uses an immutable linked recheck and resumes one personal attempt", async () => {
@@ -779,6 +798,56 @@ describe("self-paced follow-up", () => {
         token: expect.any(String),
       }),
     });
+  });
+
+  it("rejects live multiple-selection opinion polls before creating a practice assignment", async () => {
+    const { repository, service, creator, quizId, quizVersionId, now } = await assignmentFixture();
+    const source = await repository.getQuizVersion(creator.workspaceId, quizVersionId);
+    if (!source) throw new Error("Expected source version");
+    const question = source.content.questions[0]!;
+    if (question.type !== "single_select") throw new Error("Expected single-choice fixture");
+    const version = await repository.publishQuiz({
+      ...source,
+      id: randomUUID(),
+      version: 2,
+      contentSchemaVersion: 2,
+      contentHash: "extended-opinion-assignment-fixture",
+      content: {
+        ...source.content,
+        questions: [
+          {
+            ...question,
+            type: "poll",
+            purpose: "opinion",
+            confidence: "off",
+            basePoints: 0,
+            conceptKeys: [],
+            linkedRecheckQuestionId: null,
+            maxSelections: 2,
+            choices: question.choices.map(({ id, label }) => ({ id, label, isCorrect: false })),
+          },
+        ],
+      },
+    });
+    await expect(
+      service.createAssignment(
+        creator,
+        quizId,
+        {
+          sourceQuizVersionId: version.id,
+          timeMode: "flex",
+          closesAt: new Date(now.getTime() + 86_400_000).toISOString(),
+          personalLabels: [],
+        },
+        30,
+        100,
+        now,
+      ),
+    ).rejects.toMatchObject({
+      code: "ANSWER_INVALID",
+      message: expect.stringContaining("live Rounds only"),
+    });
+    expect(repository.followups.size).toBe(0);
   });
 
   it("enforces assignment retention and the plan's personal-link ceiling", async () => {

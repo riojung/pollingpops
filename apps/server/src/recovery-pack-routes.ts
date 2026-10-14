@@ -19,7 +19,7 @@ import {
   RecoveryPackNotFoundError,
   RecoveryPackMediaValidationError,
   RecoveryPackSourceReviewRequiredError,
-  ROUND_DRAFT_SCHEMA_VERSION,
+  roundArtifactSchemaVersion,
   WorkspaceDeletionInProgressError,
   type CreatorContext,
   type RecoveryPackRepository,
@@ -31,6 +31,10 @@ import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 import { RECOVERY_PACK_BODY_LIMIT, ROUND_PACK_INSERTION_DRAFT_LIMIT } from "./draft-limits.js";
 import { registerRecoveryPackUpdateRoutes } from "./recovery-pack-update-routes.js";
 import { recoveryPackQuestions } from "./recovery-pack-copies.js";
+import {
+  extendedRoundResponseWriteAllowed,
+  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+} from "./round-response-rollout.js";
 export { recoveryPackQuestions } from "./recovery-pack-copies.js";
 
 const IdParams = z.object({ id: z.string().uuid() });
@@ -406,7 +410,7 @@ export async function registerRecoveryPackRoutes(
         expectedRevision: input.expectedRevision,
         mutationId: input.mutationId,
         editorId: creator.userId,
-        schemaVersion: ROUND_DRAFT_SCHEMA_VERSION,
+        schemaVersion: roundArtifactSchemaVersion(draft),
         draftHash,
       });
     try {
@@ -452,6 +456,14 @@ export async function registerRecoveryPackRoutes(
           "This Pack would make the Round too large to safely edit. Use a smaller Pack or another Round.",
           request.id,
         );
+      if (!extendedRoundResponseWriteAllowed(config, creator.workspaceId, draft))
+        return apiError(
+          reply,
+          404,
+          "NOT_FOUND",
+          EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+          request.id,
+        );
       const updated = await save(draft);
       if (!updated)
         return apiError(reply, 409, "CONFLICT", "Archived Rounds cannot accept a Pack", request.id);
@@ -461,5 +473,5 @@ export async function registerRecoveryPackRoutes(
       return conflict(error, reply, request.id);
     }
   });
-  registerRecoveryPackUpdateRoutes(app, { repository, packs, authorize, conflict });
+  registerRecoveryPackUpdateRoutes(app, { config, repository, packs, authorize, conflict });
 }

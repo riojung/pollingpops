@@ -138,7 +138,7 @@ describe("Round client admission and recovery", () => {
       response: { kind: "numeric" as const, value: "4" },
       clientCapabilities:
         index === 1
-          ? currentRoundClientCapabilities()
+          ? { protocolVersion: 2 as const, capabilities: [] }
           : { protocolVersion: 3 as const, capabilities: ["poll.multiselect" as const] },
     }));
     const results = await Promise.allSettled(requests.map((request) => service.answer(request)));

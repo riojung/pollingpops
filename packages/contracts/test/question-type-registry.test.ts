@@ -8,7 +8,7 @@ import {
 
 describe("question type registry", () => {
   it("covers every public question type from one versioned source", () => {
-    expect(QUESTION_TYPE_REGISTRY_VERSION).toBe(1);
+    expect(QUESTION_TYPE_REGISTRY_VERSION).toBe(3);
     expect(Object.keys(QUESTION_TYPE_REGISTRY).sort()).toEqual(
       [...QuestionTypeSchema.options].sort(),
     );

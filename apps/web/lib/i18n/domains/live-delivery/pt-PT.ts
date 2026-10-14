@@ -1,7 +1,35 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["pt-PT"].live,
+  "live.ranking.yourRanking": "A sua ordenação",
+  "live.ranking.instructions":
+    "Ordene {count} de {total} opções. A primeira tem a maior prioridade.",
+  "live.ranking.selected": "{selected} de {count} opções ordenadas.",
+  "live.ranking.moveUp": "Mover {choice} para cima",
+  "live.ranking.moveDown": "Mover {choice} para baixo",
+  "live.ranking.up": "Mover para cima",
+  "live.ranking.down": "Mover para baixo",
+  "live.ranking.removeChoice": "Remover {choice} da ordenação",
+  "live.ranking.remove": "Remover",
+  "live.ranking.addChoice": "Adicionar {choice} à ordenação",
+  "live.ranking.chooseCount": "Ordene exatamente {count} opções antes de enviar.",
+  "live.ranking.summary": "{respondents} participantes · cada um ordenou {count} opções.",
+  "live.ranking.weights":
+    "O primeiro lugar recebe {firstPoints} pontos, diminuindo um ponto por posição. Os empates seguem a ordem original das opções.",
+  "live.ranking.results": "Resultados da ordenação",
+  "live.ranking.option": "Opção",
+  "live.ranking.score": "Pontuação ponderada",
+  "live.ranking.rankedBy": "Ordenada por",
+  "live.ranking.averageRank": "Posição média",
+  "live.ranking.currentOrder": "Ordem atual: {choices}",
+  "live.roundPlay.pollSelectionInstructions": "Selecione até {limit} opções e envie a resposta.",
+  "live.roundPlay.pollSelectionLimit": "Selecione até {limit} opções. {selected} selecionadas.",
+  "live.roundPlay.chooseMultiplePoll": "Escolha entre 1 e {limit} opções da sondagem.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "Pulso agregado aparece após cinco pessoas sinal para proteger a privacidade individual.",

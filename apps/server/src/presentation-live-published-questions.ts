@@ -1,6 +1,7 @@
 import {
   PresentationContentSchema,
   QuestionSchema,
+  requiresExtendedRoundResponses,
   type PresentationCompanionCommand,
 } from "@openround/contracts";
 import {
@@ -40,6 +41,13 @@ export function presentationPublishedQuestionInsertionTransition(
     (question) => question.id === selection.sourceQuestionId,
   );
   const source = matches[0];
+  if (source && requiresExtendedRoundResponses({ questions: [source] })) {
+    throw new PresentationSessionServiceError(
+      422,
+      "VALIDATION_ERROR",
+      "This response format currently supports live Rounds only",
+    );
+  }
   if (
     matches.length !== 1 ||
     !source ||

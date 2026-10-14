@@ -3,6 +3,7 @@ import {
   type PresentationSessionResponse,
   type QuestionDraft,
   questionTypeDefinition,
+  requiresExtendedRoundResponses,
 } from "@openround/contracts";
 import type { PresentationSessionRecord } from "@openround/db";
 import { presentationCurrentBlock } from "./presentation-session-projections.js";
@@ -75,6 +76,9 @@ export function presentationResponseValidationMessage(
   question: QuestionDraft,
   response: PresentationSessionResponse,
 ): string | null {
+  if (requiresExtendedRoundResponses({ questions: [question] })) {
+    return "This response format currently supports Live Rounds only";
+  }
   if (question.confidence === "required" && response.confidence == null) {
     return "Choose a confidence level before submitting";
   }
@@ -100,6 +104,7 @@ export function presentationResponseValidationMessage(
     return null;
   }
   const selected = response.choiceIds ?? [];
+  if (!("choices" in question)) return "Unsupported Presentation response format";
   const validIds = new Set(question.choices.map((choice) => choice.id));
   if (!selected.length || selected.some((choiceId) => !validIds.has(choiceId))) {
     return "Choose a valid response option";
@@ -114,6 +119,7 @@ export function presentationResponseCorrect(
   question: QuestionDraft,
   response: PresentationSessionResponse,
 ): boolean | null {
+  if (requiresExtendedRoundResponses({ questions: [question] })) return null;
   if (question.type === "poll" || question.type === "rating") return null;
   if (question.type === "numeric") {
     const actual = Number(response.numericValue);
@@ -122,6 +128,7 @@ export function presentationResponseCorrect(
     return Math.abs(actual - expected) <= tolerance;
   }
   const selected = new Set(response.choiceIds ?? []);
+  if (!("choices" in question)) return null;
   const correct = new Set(
     question.choices.filter((choice) => choice.isCorrect).map((choice) => choice.id),
   );

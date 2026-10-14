@@ -1,6 +1,22 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 import type { DeliveryAuthoringMessages } from "./en-CA";
 
 export default {
+  ...textPollAuthoringEnglishMessages,
+  ...textPollTranslations["ko-KR"].authoring,
+  "delivery.builder.type.ranking": "순위 지정",
+  "delivery.builder.rankingCount": "순위를 지정할 항목 수",
+  "delivery.builder.rankingHelp":
+    "참여자는 정확히 이 수만큼 순위를 정하고 한 번 제출합니다. 정답이나 점수는 없습니다.",
+  "delivery.builder.rankingLiveOnly": "순위 지정 설문은 현재 라이브 Round에서만 지원합니다.",
+  "delivery.builder.pollMaximumSelections": "최대 선택 수",
+  "delivery.builder.pollMultipleHelp":
+    "참여자는 이 한도까지 선택한 후 한 번만 제출할 수 있습니다. 설문에는 정답이나 점수가 없습니다.",
+  "delivery.builder.pollMultipleUnavailable":
+    "이 워크스페이스에서는 복수 선택 설문 작성이 활성화되지 않았습니다.",
+  "delivery.builder.pollMultipleLiveOnly":
+    "복수 선택 설문은 라이브 Round에서 사용할 수 있습니다. 프레젠테이션과 연습에서는 현재 단일 선택 설문만 지원합니다.",
   "delivery.landing.polls": "실시간 투표",
   "delivery.landing.presentations": "참여형 프레젠테이션",
   "delivery.landing.learning": "학습 라운드",

@@ -314,6 +314,53 @@ function expectSafe(value: unknown) {
     expect(text).not.toContain(`"${field}"`);
 }
 describe("Companion standalone published Round questions", () => {
+  it("excludes multiple-selection opinion polls from the catalog and rejects insertion without mutation", async () => {
+    const f = await fixture();
+    const question = sourceQuestion("Multiple opinion priorities");
+    const source = await f.publishRound([
+      {
+        ...question,
+        type: "poll",
+        purpose: "opinion",
+        basePoints: 0,
+        conceptKeys: [],
+        explanation: "",
+        maxSelections: 2,
+        choices: question.choices.map(({ id, label }) => ({ id, label, isCorrect: false })),
+      },
+    ]);
+    const response = await f.app.inject({
+      method: "GET",
+      url: `/v1/presentation-sessions/${f.sessionId}/companion-published-questions`,
+      headers: { authorization: `Bearer ${f.pass.companionToken}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().questions).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ sourceQuizVersionId: source.version.id })]),
+    );
+    await expectNoMutation(
+      f,
+      f.command(0, {
+        sourceQuizVersionId: source.version.id,
+        sourceQuestionId: source.version.content.questions[0]!.id,
+        contentHash: source.version.contentHash,
+      }),
+      "VALIDATION_ERROR",
+    );
+    const live = await f.current();
+    expect(() =>
+      presentationPublishedQuestionInsertionTransition(
+        live,
+        source.version,
+        f.command(0, {
+          sourceQuizVersionId: source.version.id,
+          sourceQuestionId: source.version.content.questions[0]!.id,
+          contentHash: source.version.contentHash,
+        }),
+      ),
+    ).toThrow("live Rounds only");
+  });
+
   it.each(["timed", "flex"] as const)(
     "freezes one standalone source with %s timing and ordinary scored report evidence",
     async (timeMode) => {

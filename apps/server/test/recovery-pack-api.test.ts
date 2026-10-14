@@ -10,6 +10,7 @@ import {
 import {
   createRecoveryPackRepository,
   MemoryRepository,
+  type QuizRecord,
   type RecoveryPackRecord,
   type RecoveryPackVersionRecord,
 } from "@openround/db";
@@ -17,6 +18,10 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { openRoundJson } from "../src/portability.js";
+import {
+  extendedPackDestinationFormats,
+  extendedPackDestinationQuestion,
+} from "./fixtures/recovery-pack-extended-round.js";
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -112,6 +117,8 @@ async function setup(
   allowlisted = true,
   existing?: MemoryRepository,
   workspaceId = randomUUID(),
+  roundProtocolEnabled = false,
+  roundAllowlisted = true,
 ) {
   const repository = existing ?? new MemoryRepository({ initialWorkspaceId: workspaceId });
   const { app } = await buildApp(
@@ -124,6 +131,8 @@ async function setup(
       LOG_LEVEL: "silent",
       FEATURE_RECOVERY_PACKS: String(enabled),
       EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST: allowlisted ? workspaceId : "",
+      FEATURE_ROUND_CLIENT_PROTOCOL: String(roundProtocolEnabled),
+      CORE_PARITY_WORKSPACE_ALLOWLIST: roundAllowlisted ? workspaceId : "",
     }),
     { repository, cache: new MemorySessionCache() },
   );
@@ -151,6 +160,152 @@ async function publish(app: FastifyInstance, cookie: string, content = draft()) 
 }
 
 describe("Recovery Pack API", () => {
+  it.each(extendedPackDestinationFormats)(
+    "inserts into an existing %s Round without downgrading its artifact, receipts, or history",
+    async (type, schemaVersion) => {
+      const { app, cookie, repository, workspaceId } = await setup(
+        true,
+        true,
+        undefined,
+        randomUUID(),
+        true,
+      );
+      const headers = { cookie };
+      const { pack, version } = await publish(app, cookie);
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/quizzes",
+        headers,
+        payload: { title: "Extended destination" },
+      });
+      const quizId = created.json<{ quiz: QuizRecord }>().quiz.id;
+      const originalDraft = QuizDraftSchema.parse({
+        title: "Extended destination",
+        description: "",
+        questions: [extendedPackDestinationQuestion(type)],
+      });
+      const saved = await app.inject({
+        method: "PATCH",
+        url: `/v1/quizzes/${quizId}`,
+        headers,
+        payload: { draft: originalDraft, expectedDraftRevision: 0 },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json()).toMatchObject({ quiz: { draftSchemaVersion: schemaVersion } });
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/quizzes/${quizId}/publish`,
+        headers,
+        payload: {},
+      });
+      expect(published.statusCode).toBe(200);
+      const publishedVersionId = (await repository.getQuiz(workspaceId, quizId))!.currentVersionId!;
+      const payload = {
+        quizId,
+        packVersionId: version.id,
+        expectedRevision: 1,
+        mutationId: randomUUID(),
+      };
+      const request = {
+        method: "POST" as const,
+        url: "/v1/recovery-packs/insert",
+        headers,
+        payload,
+      };
+      const inserted = await app.inject(request);
+      expect(inserted.statusCode).toBe(200);
+      const quiz = inserted.json<{ quiz: QuizRecord }>().quiz;
+      expect(quiz.draftSchemaVersion).toBe(schemaVersion);
+      expect(quiz.draftRevision).toBe(2);
+      expect(quiz.draft.questions).toHaveLength(3);
+      expect(quiz.draft.questions[0]).toEqual(originalDraft.questions[0]);
+      expect(quiz.draft.recoveryPackInsertions![0]!.originalContent).toEqual(version.content);
+      expect(quiz.draft.questions[1]!.linkedRecheckQuestionId).toBe(quiz.draft.questions[2]!.id);
+      expect((await repository.getQuizVersion(workspaceId, publishedVersionId))!.content).toEqual(
+        originalDraft,
+      );
+
+      const laterDraft = { ...quiz.draft, title: "Unrelated later edit" };
+      expect(
+        (
+          await app.inject({
+            method: "PATCH",
+            url: `/v1/quizzes/${quizId}`,
+            headers,
+            payload: { draft: laterDraft, expectedDraftRevision: 2 },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const disabled = await setup(true, true, repository, workspaceId, false);
+      const blocked = await disabled.app.inject({
+        ...request,
+        headers: { cookie: disabled.cookie },
+        payload: { ...payload, expectedRevision: 3, mutationId: randomUUID() },
+      });
+      expect(blocked.statusCode).toBe(404);
+      expect(blocked.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+      expect((await repository.getQuiz(workspaceId, quizId))!.draftRevision).toBe(3);
+      await app.inject({ method: "DELETE", url: `/v1/recovery-packs/${pack.id}`, headers });
+      const retry = await disabled.app.inject({ ...request, headers: { cookie: disabled.cookie } });
+      expect(retry.statusCode).toBe(200);
+      expect(retry.json()).toEqual(inserted.json());
+      expect((await repository.getQuiz(workspaceId, quizId))!.draft).toEqual(laterDraft);
+
+      const restored = await app.inject({
+        method: "POST",
+        url: `/v1/quizzes/${quizId}/history/1/restore`,
+        headers,
+        payload: { expectedRevision: 3, mutationId: randomUUID() },
+      });
+      expect(restored.statusCode).toBe(200);
+      expect(restored.json()).toMatchObject({ quiz: { draftSchemaVersion: schemaVersion } });
+      expect((await repository.getQuiz(workspaceId, quizId))!.draft).toEqual(originalDraft);
+    },
+  );
+
+  it("blocks a fresh extended-Round insertion outside the protocol workspace allowlist", async () => {
+    const { app, cookie, repository, workspaceId } = await setup(
+      true,
+      true,
+      undefined,
+      randomUUID(),
+      true,
+    );
+    const { version } = await publish(app, cookie);
+    const now = new Date();
+    const quiz = await repository.createQuiz({
+      id: randomUUID(),
+      workspaceId,
+      title: "Existing ranking",
+      description: "",
+      status: "draft",
+      draft: {
+        title: "Existing ranking",
+        description: "",
+        questions: [extendedPackDestinationQuestion("ranking")],
+      },
+      draftSchemaVersion: 3,
+      currentVersionId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const unlisted = await setup(true, true, repository, workspaceId, true, false);
+    const result = await unlisted.app.inject({
+      method: "POST",
+      url: "/v1/recovery-packs/insert",
+      headers: { cookie: unlisted.cookie },
+      payload: {
+        quizId: quiz.id,
+        packVersionId: version.id,
+        expectedRevision: 0,
+        mutationId: randomUUID(),
+      },
+    });
+    expect(result.statusCode).toBe(404);
+    expect((await repository.getQuiz(workspaceId, quiz.id))!.draft).toEqual(quiz.draft);
+    expect((await repository.getQuiz(workspaceId, quiz.id))!.draftRevision).toBe(0);
+  });
+
   it("rejects altered frozen baselines through both Round save APIs and native v3 import", async () => {
     const { app, cookie, repository, workspaceId } = await setup();
     repository.plans.set(workspaceId, "pro");

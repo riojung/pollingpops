@@ -3,6 +3,12 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "Texto abierto",
+  "questionType.open_text.description": "Una explicación moderada sin respuesta correcta.",
+  "questionType.word_cloud.label": "Nube de palabras",
+  "questionType.word_cloud.description": "Palabras o frases moderadas en una nube agregada.",
+  "questionType.ranking.label": "Clasificación",
+  "questionType.ranking.description": "Ordena prioridades sin puntuación ni respuesta correcta.",
   ...creationMessages("es-ES"),
   ...feedbackMessages("es-ES"),
   "common.create": "Crear",

@@ -727,7 +727,7 @@ export interface ReportHistoryRecord {
   title: string;
   status: Report["status"];
   participantCount: number;
-  initialAccuracyPercent: number;
+  initialAccuracyPercent: number | null;
   recovery: { recovered: number; eligible: number; percent: number | null };
   unresolvedConceptCount: number;
   interventionCount: number;
@@ -785,6 +785,7 @@ export interface HistoryPage<T> {
 export interface FollowupHistoryListOptions {
   cursor?: HistoryCursor;
   limit: number;
+  search?: string;
   purpose?: FollowupPurpose;
   status?: FollowupHistoryRecord["status"];
   quizId?: string;
@@ -1180,6 +1181,11 @@ export interface Repository {
     quizId: string,
     limit?: number,
   ): Promise<QuizDraftHistoryRecord[]>;
+  getQuizDraftHistory(
+    workspaceId: string,
+    quizId: string,
+    revision: number,
+  ): Promise<QuizDraftHistoryRecord | null>;
   restoreQuizDraftHistory(input: {
     workspaceId: string;
     quizId: string;
@@ -1467,6 +1473,11 @@ export interface Repository {
     sessionId: string,
     lookups: AnswerLookup[],
   ): Promise<EngineAnswer[]>;
+  getSessionAnswersByIds(
+    workspaceId: string,
+    sessionId: string,
+    ids: string[],
+  ): Promise<EngineAnswer[]>;
   findParticipantIdsWithAnswers(
     workspaceId: string,
     sessionId: string,
@@ -1559,6 +1570,7 @@ export interface Repository {
     options: {
       cursor?: HistoryCursor;
       limit: number;
+      search?: string;
       status?: Report["status"];
       quizId?: string;
       from?: Date;

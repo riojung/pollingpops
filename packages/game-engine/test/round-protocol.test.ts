@@ -101,8 +101,8 @@ describe("protocol-aware game state", () => {
     expect(() => upgradeGameState({ ...state, stateSchemaVersion: 6 })).toThrow(
       "requires game state schema 7",
     );
-    expect(() => upgradeGameState({ ...state, stateSchemaVersion: 8 })).toThrow(
-      "newer than supported schema 7",
+    expect(() => upgradeGameState({ ...state, stateSchemaVersion: 10 })).toThrow(
+      "newer than supported schema 9",
     );
     expect(() =>
       upgradeGameState({

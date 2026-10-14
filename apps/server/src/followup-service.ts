@@ -7,6 +7,7 @@ import {
   canonicalizeResponse,
   questionConfidence,
   questionDelivery,
+  requiresExtendedRoundResponses,
   type CreateFollowup,
   type CreatePracticeAssignment,
   type FollowupAdvance,
@@ -175,10 +176,7 @@ export class FollowupService {
   async create(creator: CreatorContext, reportId: string, input: CreateFollowup, now = new Date()) {
     const report = await this.repository.getReport(creator.workspaceId, reportId);
     if (!report) throw new FollowupError("NOT_FOUND", "Report not found");
-    if (
-      report.status !== "ready" ||
-      (report.schemaVersion !== 2 && report.schemaVersion !== 3 && report.schemaVersion !== 4)
-    ) {
+    if (report.status !== "ready" || !("unresolvedConcepts" in report)) {
       throw new FollowupError("CONFLICT", "A ready evidence report is required for follow-up");
     }
     const allowedConcepts = new Set(
@@ -308,6 +306,12 @@ export class FollowupService {
       throw new FollowupError(
         "CONFLICT",
         "The published Round changed. Refresh before assigning practice",
+      );
+    }
+    if (requiresExtendedRoundResponses(version.content)) {
+      throw new FollowupError(
+        "ANSWER_INVALID",
+        "These response formats currently support live Rounds only. Use a Survey for supported self-paced opinions.",
       );
     }
     if (input.personalLabels.length > maximumPersonalLinks) {

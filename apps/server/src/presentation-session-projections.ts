@@ -8,6 +8,7 @@ import {
   type PresentationParticipantSnapshot,
   type QuestionDraft,
   questionPurpose,
+  requiresExtendedRoundResponses,
 } from "@openround/contracts";
 import {
   comparePresentationLeaderboardEntries,
@@ -102,6 +103,9 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
     };
   }
   const question = block.question;
+  if (requiresExtendedRoundResponses({ questions: [question] })) {
+    throw new Error("This response format currently supports Live Rounds only");
+  }
   const base = {
     id: question.id,
     type: question.type,
@@ -125,6 +129,7 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
       },
     };
   }
+  if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
   return {
     id: block.id,
     kind: block.kind,
@@ -136,6 +141,9 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
 }
 
 function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean) {
+  if (requiresExtendedRoundResponses({ questions: [question] })) {
+    throw new Error("This response format currently supports Live Rounds only");
+  }
   const projected = {
     id: question.id,
     type: question.type,
@@ -171,6 +179,9 @@ function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean)
 }
 
 function presentationRevealedAnswer(question: QuestionDraft) {
+  if (requiresExtendedRoundResponses({ questions: [question] })) {
+    throw new Error("This response format currently supports Live Rounds only");
+  }
   if (question.type === "numeric") {
     return {
       kind: "numeric" as const,
@@ -183,6 +194,7 @@ function presentationRevealedAnswer(question: QuestionDraft) {
   if (question.type === "rating" || question.type === "poll") {
     return { kind: "unscored" as const, explanation: question.explanation };
   }
+  if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
   return {
     kind: "choice" as const,
     correctChoiceIds: question.choices

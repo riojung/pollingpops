@@ -3,6 +3,12 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "开放文本",
+  "questionType.open_text.description": "经主持人审核的解释，没有正确答案。",
+  "questionType.word_cloud.label": "词云",
+  "questionType.word_cloud.description": "将审核通过的单词或短语汇总显示。",
+  "questionType.ranking.label": "排序",
+  "questionType.ranking.description": "为优先事项排序，没有正确答案或分数。",
   ...creationMessages("zh-CN"),
   ...feedbackMessages("zh-CN"),
   "common.create": "创建",

@@ -56,6 +56,31 @@ function draft(): PresentationDraft {
 }
 
 describe("presentation builder model", () => {
+  it("rejects text and cloud formats rather than silently creating ratings", () => {
+    for (const type of ["open_text", "word_cloud"] as const)
+      expect(() => createPresentationQuestion(type)).toThrow("live Rounds only");
+  });
+  it("explicitly rejects ranking insertion into the unsupported Presentation builder", () => {
+    expect(() => createPresentationQuestion("ranking")).toThrow(
+      "Ranking polls currently support live Rounds only.",
+    );
+    const source = draft();
+    const block = source.blocks.find((candidate) => candidate.kind === "question")!;
+    if (block.kind !== "question" || !("choices" in block.question)) return;
+    block.question = {
+      ...block.question,
+      type: "ranking",
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      maxSelections: undefined,
+      rankCount: 2,
+      choices: block.question.choices.map((choice) => ({ ...choice, isCorrect: false })),
+    };
+    expect(
+      presentationReadiness(source).some((issue) => issue.message.includes("live Rounds only")),
+    ).toBe(true);
+  });
   function expectClearOfImage(frame: ContentSlideFrame) {
     expect(
       frame.x + frame.width <= contentSlideMediaFrame.x ||
@@ -551,6 +576,27 @@ describe("presentation builder model", () => {
       expect(changed.question.id).toBe(question.question.id);
       expect(changed.question.type).toBe("numeric");
     }
+  });
+
+  it("rejects multiple-selection poll publication and clears its limit when changing formats", () => {
+    const source = draft();
+    const block = source.blocks.find((candidate) => candidate.kind === "question")!;
+    if (block.kind !== "question" || !("choices" in block.question)) return;
+    block.question = {
+      ...block.question,
+      type: "poll",
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      maxSelections: 2,
+      choices: block.question.choices.map((choice) => ({ ...choice, isCorrect: false })),
+    };
+    expect(
+      presentationReadiness(source).some((issue) => issue.message.includes("live Rounds only")),
+    ).toBe(true);
+    const changed = changePresentationQuestionType(source, block.id, "rating");
+    const updated = changed.blocks.find((candidate) => candidate.id === block.id)!;
+    expect(updated.kind === "question" && "maxSelections" in updated.question).toBe(false);
   });
 
   it("clears inbound recovery links when a recheck becomes an opinion question", () => {

@@ -1,7 +1,34 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["ja-JP"].live,
+  "live.ranking.yourRanking": "あなたの順位",
+  "live.ranking.instructions": "{total}個のうち{count}個に順位を付けてください。1位が最優先です。",
+  "live.ranking.selected": "{count}個のうち{selected}個に順位を付けました。",
+  "live.ranking.moveUp": "{choice}を上へ移動",
+  "live.ranking.moveDown": "{choice}を下へ移動",
+  "live.ranking.up": "上へ移動",
+  "live.ranking.down": "下へ移動",
+  "live.ranking.removeChoice": "{choice}を順位から外す",
+  "live.ranking.remove": "外す",
+  "live.ranking.addChoice": "{choice}を順位に追加",
+  "live.ranking.chooseCount": "送信前にちょうど{count}個に順位を付けてください。",
+  "live.ranking.summary": "回答者{respondents}人・各自{count}個に順位を付けました。",
+  "live.ranking.weights":
+    "1位は{firstPoints}点、以降は順位ごとに1点ずつ減ります。同点の場合は作成時の選択肢の順序を使います。",
+  "live.ranking.results": "順位付けの結果",
+  "live.ranking.option": "選択肢",
+  "live.ranking.score": "加重点",
+  "live.ranking.rankedBy": "順位を付けた人数",
+  "live.ranking.averageRank": "平均順位",
+  "live.ranking.currentOrder": "現在の順序：{choices}",
+  "live.roundPlay.pollSelectionInstructions": "最大{limit}個の選択肢を選んで送信してください。",
+  "live.roundPlay.pollSelectionLimit": "最大{limit}個の選択肢を選べます。{selected}個を選択済み。",
+  "live.roundPlay.chooseMultiplePoll": "投票の選択肢を1個から{limit}個選んでください。",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "個人のプライバシーを守るため、5人以上がシグナルを送ると集計されたPulseが表示されます。",

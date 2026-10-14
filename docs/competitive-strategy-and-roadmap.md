@@ -16,6 +16,13 @@ This document uses public product and pricing material as market evidence. It is
 and delivery plan, not a claim that planned capabilities already exist. Prices, limits, provider
 terms, and competitor features must be checked again before a launch or pricing decision.
 
+## Future product ideas
+
+The [future product ideas backlog](future-product-ideas.md) captures product-owner requests and
+additional customer enhancement suggestions. Social sign-in, virtual meeting integrations, and
+a creator template/theme marketplace were added on 2026-10-13 as deferred ideas. Capturing them
+does not schedule implementation or change the delivery gates in this roadmap.
+
 ## Implementation update — 2026-09-19
 
 This document records the strategy baseline that led to the Recovery Loop. The merged P0 beta now

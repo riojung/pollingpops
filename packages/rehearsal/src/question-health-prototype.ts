@@ -119,11 +119,21 @@ function questionContent(question: QuestionDraft) {
             unit: question.unit,
           }
         : {
-            min: question.min,
-            max: question.max,
-            minLabel: question.minLabel,
-            maxLabel: question.maxLabel,
+            ...(question.type === "rating"
+              ? {
+                  min: question.min,
+                  max: question.max,
+                  minLabel: question.minLabel,
+                  maxLabel: question.maxLabel,
+                }
+              : {}),
           }),
+    ...(question.type === "poll" && (question.maxSelections ?? 1) > 1
+      ? { maxSelections: question.maxSelections }
+      : {}),
+    ...(question.type === "ranking"
+      ? { rankCount: question.rankCount ?? question.choices.length }
+      : {}),
   });
 }
 
@@ -357,8 +367,13 @@ function questionFindings(question: QuestionDraft, questionIndex: number) {
     }
   }
 
-  const supportsPublishValidOpinionConfiguration =
-    question.type !== "poll" && question.type !== "rating";
+  const supportsPublishValidOpinionConfiguration = ![
+    "poll",
+    "rating",
+    "ranking",
+    "open_text",
+    "word_cloud",
+  ].includes(question.type);
   const opinionConfigurationMismatch =
     supportsPublishValidOpinionConfiguration &&
     questionPurpose(question) === "opinion" &&

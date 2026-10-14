@@ -3,6 +3,12 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "자유 응답",
+  "questionType.open_text.description": "진행자가 검토하는 정답 없는 설명입니다.",
+  "questionType.word_cloud.label": "워드 클라우드",
+  "questionType.word_cloud.description": "검토된 단어나 짧은 구문을 모아서 표시합니다.",
+  "questionType.ranking.label": "순위 지정",
+  "questionType.ranking.description": "정답이나 점수 없이 우선순위를 정합니다.",
   ...creationMessages("ko-KR"),
   ...feedbackMessages("ko-KR"),
   "common.create": "만들기",

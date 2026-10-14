@@ -17,7 +17,10 @@ describe("published question live metadata", () => {
   it("does not guess an unsupported published content schema for metadata reads", async () => {
     expect(() => assertRoundContentSchemaVersion(undefined)).not.toThrow();
     expect(() => assertRoundContentSchemaVersion(1)).not.toThrow();
-    for (const version of [0, 2, 99, "1", 1.5]) {
+    expect(() => assertRoundContentSchemaVersion(2)).not.toThrow();
+    expect(() => assertRoundContentSchemaVersion(3)).not.toThrow();
+    expect(() => assertRoundContentSchemaVersion(4)).not.toThrow();
+    for (const version of [0, 5, 99, "1", 1.5]) {
       expect(() => assertRoundContentSchemaVersion(version)).toThrow(
         "Unsupported round content schema version",
       );

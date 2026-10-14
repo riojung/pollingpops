@@ -9,17 +9,23 @@ import {
   buildRecoveryPackUpdatePreview,
 } from "@openround/contracts";
 import {
-  ROUND_DRAFT_SCHEMA_VERSION,
+  roundArtifactSchemaVersion,
   type CreatorContext,
   type RecoveryPackRepository,
   type Repository,
 } from "@openround/db";
 import { ROUND_PACK_INSERTION_DRAFT_LIMIT } from "./draft-limits.js";
+import type { AppConfig } from "./config.js";
+import {
+  extendedRoundResponseWriteAllowed,
+  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+} from "./round-response-rollout.js";
 
 /** Pack changes are proposals for one Round draft, never mutations of published content. */
 export function registerRecoveryPackUpdateRoutes(
   app: FastifyInstance,
   dependencies: {
+    config: AppConfig;
     repository: Repository;
     packs: RecoveryPackRepository;
     authorize: (
@@ -30,7 +36,7 @@ export function registerRecoveryPackUpdateRoutes(
     conflict: (error: unknown, reply: FastifyReply, requestId: string) => unknown;
   },
 ) {
-  const { repository, packs, authorize, conflict } = dependencies;
+  const { config, repository, packs, authorize, conflict } = dependencies;
   const error = (reply: FastifyReply, status: number, message: string, requestId: string) =>
     reply.code(status).send({
       error: { code: status === 404 ? "NOT_FOUND" : "CONFLICT", message, requestId },
@@ -101,7 +107,7 @@ export function registerRecoveryPackUpdateRoutes(
         expectedRevision: input.expectedRevision,
         mutationId: input.mutationId,
         editorId: creator.userId,
-        schemaVersion: ROUND_DRAFT_SCHEMA_VERSION,
+        schemaVersion: roundArtifactSchemaVersion(draft),
         draftHash,
         recoveryPackUpdateSourceRevision: input.expectedRevision,
       });
@@ -141,6 +147,8 @@ export function registerRecoveryPackUpdateRoutes(
             requestId: request.id,
           },
         });
+      if (!extendedRoundResponseWriteAllowed(config, creator.workspaceId, draft))
+        return error(reply, 404, EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE, request.id);
       const updated = await save(draft);
       if (!updated)
         return error(reply, 409, "Archived Rounds cannot accept a Pack update", request.id);

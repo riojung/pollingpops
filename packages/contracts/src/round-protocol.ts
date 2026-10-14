@@ -1,10 +1,15 @@
 import { z } from "zod";
 
-/** Reserved capability: current clients must not advertise it until the full poll journey ships. */
-export const RoundCapabilitySchema = z.enum(["poll.multiselect"]);
+/** Capabilities required by extended live response formats. */
+export const RoundCapabilitySchema = z.enum([
+  "poll.multiselect",
+  "response.ranking",
+  "response.open_text",
+  "response.word_cloud",
+]);
 const capabilities = z
   .array(RoundCapabilitySchema)
-  .max(1)
+  .max(4)
   .refine((values) => new Set(values).size === values.length, "Declare each capability once");
 export const RoundClientCapabilitiesSchema = z
   .object({
@@ -47,12 +52,52 @@ export const RoundProtocolSchema = z
   );
 export type RoundProtocol = z.infer<typeof RoundProtocolSchema>;
 
-/** The legacy response formats are still the only formats accepted in this reader-first release. */
 export function legacyRoundProtocol(): RoundProtocol {
   return { schemaVersion: 1, minimumClientVersion: 2, requiredCapabilities: [] };
 }
+type RoundResponseContent = {
+  questions: readonly { type: string; maxSelections?: number }[];
+};
+export function requiresExtendedRoundResponses(content: RoundResponseContent): boolean {
+  return content.questions.some(
+    (question) =>
+      question.type === "ranking" ||
+      question.type === "open_text" ||
+      question.type === "word_cloud" ||
+      (question.type === "poll" && (question.maxSelections ?? 1) > 1),
+  );
+}
+export function hasRankingQuestions(content: RoundResponseContent): boolean {
+  return content.questions.some((question) => question.type === "ranking");
+}
+/** Derive requirements from the immutable content rather than the creating client's profile. */
+export function deriveRoundProtocol(content: RoundResponseContent): RoundProtocol {
+  const requiredCapabilities: RoundProtocol["requiredCapabilities"] = [];
+  if (
+    content.questions.some(
+      (question) => question.type === "poll" && (question.maxSelections ?? 1) > 1,
+    )
+  )
+    requiredCapabilities.push("poll.multiselect");
+  if (hasRankingQuestions(content)) requiredCapabilities.push("response.ranking");
+  if (content.questions.some((question) => question.type === "open_text"))
+    requiredCapabilities.push("response.open_text");
+  if (content.questions.some((question) => question.type === "word_cloud"))
+    requiredCapabilities.push("response.word_cloud");
+  return requiredCapabilities.length
+    ? { schemaVersion: 1, minimumClientVersion: 3, requiredCapabilities }
+    : legacyRoundProtocol();
+}
 export function currentRoundClientCapabilities(): RoundClientCapabilities {
-  return { protocolVersion: 2, capabilities: [] };
+  return {
+    protocolVersion: 3,
+    capabilities: [
+      "poll.multiselect",
+      "response.ranking",
+      "response.open_text",
+      "response.word_cloud",
+    ],
+  };
 }
 export function canUseRoundProtocol(
   protocol: RoundProtocol | undefined,
@@ -60,7 +105,7 @@ export function canUseRoundProtocol(
 ): boolean {
   const requirements = RoundProtocolSchema.safeParse(protocol ?? legacyRoundProtocol());
   const supported = RoundClientCapabilitiesSchema.safeParse(
-    client ?? currentRoundClientCapabilities(),
+    client ?? { protocolVersion: 2, capabilities: [] },
   );
   return (
     requirements.success &&

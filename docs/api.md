@@ -15,19 +15,29 @@ embed, and follow-up routes use their own scoped credentials as documented by th
 Round create, join, answer, command, and sync requests accept optional `clientCapabilities`:
 
 ```json
-{ "protocolVersion": 2, "capabilities": [] }
+{
+  "protocolVersion": 3,
+  "capabilities": [
+    "poll.multiselect",
+    "response.ranking",
+    "response.open_text",
+    "response.word_cloud"
+  ]
+}
 ```
 
 This is the current browser profile. Omitted profiles retain implicit legacy version-2 support.
-Profile version 3 and `poll.multiselect` are reserved for the next format release; declaring them
-does not enable multiple-selection live poll responses. Unknown versions/capabilities, duplicate
-capabilities, and capabilities attached to version 2 are rejected at request validation.
+Capabilities cover live multiple-selection polls, ranking, open text, and word clouds. Rooms
+require only the capabilities derived from their immutable published content.
+Unknown versions/capabilities, duplicate capabilities, and capabilities attached to version 2
+are rejected at request validation.
 
 For `GET /v1/sessions/:id/snapshot`, pass the same profile as URL-encoded JSON in the
 `clientCapabilities` query parameter (maximum 256 characters before URL encoding). Credentials
 remain in Authorization, never the query string. Legacy requests may omit the parameter.
 
-Allowlisted sessions created with `FEATURE_ROUND_CLIENT_PROTOCOL=true` use state schema 7 and
+Allowlisted sessions created with `FEATURE_ROUND_CLIENT_PROTOCOL=true` use state schema 7, 8
+(ranking), or 9 (text) and
 expose `snapshot.roundProtocol`:
 
 ```json
@@ -42,9 +52,59 @@ errors before compatibility details. Realtime fanout additionally emits `client.
 and disconnects an incompatible socket without sending a game snapshot. Compatible game and
 audience event envelopes keep their existing versions and independent sequences.
 
+For an immutable Round containing a poll with `maxSelections > 1`, the server freezes
+`minimumClientVersion:3` and `requiredCapabilities:["poll.multiselect"]`. New extended drafts,
+publication/import/duplication/restoration, and room creation require
+`FEATURE_ROUND_CLIENT_PROTOCOL=true` plus the workspace UUID in `CORE_PARITY_WORKSPACE_ALLOWLIST`.
+`GET /v1/auth/me` exposes `productFeatures.multiSelectPolls`, `rankingPolls`, `openTextPolls`, and
+`wordCloudPolls` for authoring availability. All four formats use the same writer gate.
+
+Poll questions may set `maxSelections` from one to the number of options, up to six; omission
+retains exactly-one behavior. Submit `{kind:"poll",choiceIds:[...]}` with one or more distinct
+permitted UUIDs, within the authored limit. Choice order is normalized for idempotent retries.
+Opinions remain unscored and confidence-free. Report V5 uses null opinion correctness and
+respondent-based option percentages; a poll-only report has null learning accuracy. Aggregate
+distributions retain the five-respondent minimum and stay hidden before lock/reveal.
+
+Ranking questions contain two to six options and optional `rankCount` from one to the option count;
+omission requires the full list. Submit `{kind:"ranking",choiceIds:[...]}` in rank order with exactly
+the authored count. Reordering changes retry intent. Results weight each rank by the total option
+count minus its zero-based position, with unranked options worth zero and ties in authored order.
+
+Open text and word clouds submit `{kind:"text",value:"..."}` once per participant/checkpoint.
+NFC-normalized, trimmed responses are limited to 1,000 and 80 UTF-16 code units respectively.
+Controls are rejected except open-text tabs/newlines. Clouds collapse whitespace and lowercase
+Unicode for grouping. Text rooms are limited to ten text checkpoints and 250 participants, with
+at most 250 accepted text responses per round, including audience turnover.
+
+Text starts pending. Hosts/cohosts use `GET /v1/sessions/:id/response-moderation` with
+`status=pending|approved|removed`, optional `roundId`, `limit` (1–50), and `cursor` to review.
+Presenters and participants cannot read this queue. Host commands accept
+`{action:"response.moderate",answerId,responseStatus:"approved"|"removed",commandId,expectedVersion}`;
+the server supplies moderator identity. Approval/removal is revision-fenced and idempotent;
+removal is terminal. New moderation stops after session finish; exact accepted retries remain valid.
+
+Authorized session roles read `GET /v1/sessions/:id/response-results?roundId=...` with optional
+`limit` and `cursor`. Results appear only after reveal and at least five approved respondents.
+Cursors are version-fenced; refresh after a state change. Ordinary snapshots/realtime never carry
+text bodies; participants recover `myResponseAccepted` and `myResponseModerationStatus` while
+`myResponse` stays null. Pending/removed bodies are absent from public results, reports and standard
+account exports. Moderation metadata survives round advancement; finished reports are immutable.
+
+| Richest format          | Artifact | Answer response | Native JSON | Report | Game state |
+| ----------------------- | -------- | --------------- | ----------- | ------ | ---------- |
+| Multiple-selection poll | 2        | 3               | 5           | 5      | 7          |
+| Ranking                 | 3        | 4               | 6           | 6      | 8          |
+| Open text / word cloud  | 4        | 5               | 7           | 7      | 9          |
+
+Legacy readers reject newer meanings in older versions; unknown future versions fail closed.
+CSV carries optional `max_selections` and `rank_count`; older polls default to one selection.
+QTI, Presentations, Companion insertion, practice and Recovery Packs explicitly reject these new
+live formats. Surveys retain their independent version-2 multiple-selection support.
+
 Flag-off new sessions retain state schema 5 or 6 without protocol metadata. Readers preserve
-existing schema-7 sessions even after the writer flag is disabled. No legacy scoring, deadlines,
-response shapes, artifact schemas, or report schemas change in this foundation release.
+existing schema-7/8/9 sessions even after the writer flag is disabled. Legacy scoring and deadlines
+are preserved; opinion formats remain outside learning accuracy and recovery denominators.
 
 ## Audience-scope foundation (partial M1)
 
@@ -104,7 +164,7 @@ published. This uses the existing API and schemas; no new migration is required.
 New Survey documents/drafts use `schemaVersion:2`; readers also accept version 1 and reject future
 versions. A v2 `poll` question may set `maxSelections` from 1 to the number of options (maximum six).
 Omission means one. Limits above one are invalid in v1; ratings cannot set this field. This setting
-is Survey-only; live Round opinion polls remain single-choice. Polls remain unscored opinions.
+also applies to gated live Round opinion polls. Polls remain unscored opinions.
 Migration 063 expands storage checks without rewriting old rows.
 Compatible web/API readers must remain deployed after any v2 writes.
 
@@ -636,6 +696,10 @@ least five people answered. Choice and rating payloads contain aggregate buckets
 `percentBasis: respondents`; numeric payloads expose only correct/incorrect totals. Participant
 snapshots never contain this field.
 
+Ranking adds aggregate weighted scores and average ranks. Moderated text uses the dedicated
+approved-results endpoint above, with a five-approved-respondent threshold; snapshot invalidations
+contain no text bodies.
+
 Normal routes deny framing. `/embed/present/{sessionId}` is constrained by a server-issued policy
 and the workspace's allowlist of at most ten HTTPS origins.
 
@@ -691,7 +755,7 @@ moderation, kick/ban, retention, export, and deletion are enforced server-side.
 
 - `GET /v1/sessions/{id}/report`
 - `GET /v1/reports` — tenant-scoped recovery-oriented result summaries; filters are
-  `status=pending|ready|failed`, `quizId`, `from`, and `to`.
+  `status=pending|ready|failed`, `quizId`, `from`, `to`, and optional title `search`.
 - `GET /v1/reports/{id}`
 - `GET /v1/reports/{id}.csv`
 - `GET /v1/reports/{id}.json`
@@ -704,7 +768,8 @@ moderation, kick/ban, retention, export, and deletion are enforced server-side.
   one-attempt links exactly once.
 - `GET /v1/followups` — tenant-scoped recovery-follow-up and standalone-assignment summaries and
   attempt counts; filters are
-  `purpose=recovery|assignment`, `status=scheduled|open|closed|expired`, `quizId`, `from`, and `to`.
+  `purpose=recovery|assignment`, `status=scheduled|open|closed|expired`, `quizId`, `from`, `to`,
+  and optional title `search`.
 - `GET /v1/followups/{id}` — creator view, immutable Round/version context, aggregate progress, and
   access management; bearer tokens and answer bodies are never returned.
 - `POST /v1/followups/{id}/personal-passes` — create a labelled, revocable, single-attempt link for
@@ -745,10 +810,13 @@ idempotency, revocation, and expiry are server-owned.
 
 The session, report, and follow-up history endpoints return `{ items, nextCursor }`, default to 25
 rows, cap at 50, and order by `(createdAt DESC, id DESC)`. Cursors are opaque base64url values;
-malformed cursors return a validation error. These endpoints expose summaries only—never answer
+malformed cursors return a validation error. Report and practice title searches are trimmed,
+limited to 160 characters, and match case-insensitive literal substrings before pagination.
+Report searches use the frozen session title; practice searches use the assignment or follow-up title.
+These endpoints expose summaries only—never answer
 bodies, aliases, chat content, or state snapshots. Report detail keeps the versioned `report` and
 adds Round/session context (`quizId`, `quizTitle`, `sessionCreatedAt`, `sessionUpdatedAt`) when
-available. Recovery-follow-up creation accepts ready Report V2, V3, and V4 evidence. Standalone
+available. Recovery-follow-up creation accepts ready Report V2, V3, V4, and V5 evidence. Standalone
 assignment creation and personal-link issuance require the independent practice-assignment beta
 feature plus the workspace beta allowlist; existing practice remains manageable and answerable if
 that creation switch is later disabled.

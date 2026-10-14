@@ -8,6 +8,7 @@ import {
 } from "@openround/contracts";
 import {
   MemoryRepository,
+  roundArtifactSchemaVersion,
   type QuizRecord,
   type RecoveryPackRecord,
   type RecoveryPackVersionRecord,
@@ -16,6 +17,11 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { openRoundJson } from "../src/portability.js";
+import {
+  extendedPackDestinationFormats,
+  extendedPackDestinationQuestion,
+  type ExtendedPackDestinationFormat,
+} from "./fixtures/recovery-pack-extended-round.js";
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -38,7 +44,13 @@ async function signIn(app: FastifyInstance, email = "pack-update@example.com") {
   return (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
 }
 
-async function application(repository: MemoryRepository, workspaceId: string, enabled = true) {
+async function application(
+  repository: MemoryRepository,
+  workspaceId: string,
+  enabled = true,
+  roundProtocolEnabled = false,
+  roundAllowlisted = true,
+) {
   const { app } = await buildApp(
     ConfigSchema.parse({
       NODE_ENV: "test",
@@ -49,6 +61,8 @@ async function application(repository: MemoryRepository, workspaceId: string, en
       PUBLIC_API_URL: "http://localhost:4000",
       FEATURE_RECOVERY_PACKS: String(enabled),
       EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST: workspaceId,
+      FEATURE_ROUND_CLIENT_PROTOCOL: String(roundProtocolEnabled),
+      CORE_PARITY_WORKSPACE_ALLOWLIST: roundAllowlisted ? workspaceId : "",
     }),
     { repository, cache: new MemorySessionCache() },
   );
@@ -95,10 +109,10 @@ function content() {
   });
 }
 
-async function fixture() {
+async function fixture(extendedType?: ExtendedPackDestinationFormat) {
   const workspaceId = randomUUID();
   const repository = new MemoryRepository({ initialWorkspaceId: workspaceId });
-  const app = await application(repository, workspaceId);
+  const app = await application(repository, workspaceId, true, Boolean(extendedType));
   const cookie = await signIn(app);
   const headers = { cookie };
   const created = await app.inject({
@@ -124,6 +138,22 @@ async function fixture() {
     payload: { title: "Recovery destination" },
   });
   const quizId = round.json<{ quiz: QuizRecord }>().quiz.id;
+  if (extendedType) {
+    const saved = await app.inject({
+      method: "PATCH",
+      url: `/v1/quizzes/${quizId}`,
+      headers,
+      payload: {
+        draft: {
+          title: "Recovery destination",
+          description: "",
+          questions: [extendedPackDestinationQuestion(extendedType)],
+        },
+        expectedDraftRevision: 0,
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+  }
   const inserted = await app.inject({
     method: "POST",
     url: "/v1/recovery-packs/insert",
@@ -131,7 +161,7 @@ async function fixture() {
     payload: {
       quizId,
       packVersionId: original.id,
-      expectedRevision: 0,
+      expectedRevision: extendedType ? 1 : 0,
       mutationId: randomUUID(),
     },
   });
@@ -185,7 +215,7 @@ async function fixture() {
       payload: {
         draft: next,
         expectedRevision: current.draftRevision,
-        schemaVersion: 1,
+        schemaVersion: roundArtifactSchemaVersion(next),
         mutationId: randomUUID(),
       },
     });
@@ -217,6 +247,112 @@ async function fixture() {
 }
 
 describe("Recovery Pack three-way update API", () => {
+  it.each(extendedPackDestinationFormats)(
+    "updates an existing %s Round and preserves its artifact, immutable evidence, and undo",
+    async (type, schemaVersion) => {
+      const f = await fixture(type);
+      const publishedRound = await f.app.inject({
+        method: "POST",
+        url: `/v1/quizzes/${f.quiz.id}/publish`,
+        headers: f.headers,
+        payload: {},
+      });
+      expect(publishedRound.statusCode).toBe(200);
+      const publishedVersionId = (await f.repository.getQuiz(f.workspaceId, f.quiz.id))!
+        .currentVersionId!;
+      const latest = await f.publishNext((draft) => {
+        draft.diagnostic.prompt = "Updated evidence checkpoint";
+      });
+      const preview = await f.review();
+      const payload = f.requestFor(preview);
+      const request = {
+        method: "POST" as const,
+        url: "/v1/recovery-packs/update",
+        headers: f.headers,
+        payload,
+      };
+      const result = await f.app.inject(request);
+      expect(result.statusCode).toBe(200);
+      const { quiz, undo } = result.json<{
+        quiz: QuizRecord;
+        undo: { sourceRevision: number; appliedRevision: number };
+      }>();
+      expect(quiz.draftSchemaVersion).toBe(schemaVersion);
+      expect(quiz.draftRevision).toBe(3);
+      expect(undo).toEqual({ sourceRevision: 2, appliedRevision: 3 });
+      expect(quiz.draft.questions[0]).toEqual(f.quiz.draft.questions[0]);
+      expect(quiz.draft.questions[1]).toMatchObject({
+        id: f.quiz.draft.questions[1]!.id,
+        prompt: latest.content.diagnostic.prompt,
+        recoveryPackSource: { packVersionId: latest.id },
+      });
+      expect(quiz.draft.recoveryPackInsertions![0]).toMatchObject({
+        originalContent: f.original.content,
+        updateBaseline: { content: latest.content, packVersionId: latest.id },
+      });
+      expect(
+        (await f.repository.getQuizVersion(f.workspaceId, publishedVersionId))!.content,
+      ).toEqual(f.quiz.draft);
+
+      const disabled = await application(f.repository, f.workspaceId, true, false);
+      const disabledHeaders = { cookie: await signIn(disabled) };
+      const retry = await disabled.inject({ ...request, headers: disabledHeaders });
+      expect(retry.statusCode).toBe(200);
+      expect(retry.json()).toEqual(result.json());
+      await f.publishNext((draft) => {
+        draft.diagnostic.prompt = "New proposal after protocol rollback";
+      });
+      const newPayload = f.requestFor(await f.review());
+      const blocked = await disabled.inject({
+        ...request,
+        headers: disabledHeaders,
+        payload: newPayload,
+      });
+      expect(blocked.statusCode).toBe(404);
+      expect(blocked.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+      expect((await f.repository.getQuiz(f.workspaceId, f.quiz.id))!.draftRevision).toBe(3);
+
+      const later = await f.saveLocal((draft) => {
+        draft.title = "Later unrelated Round edit";
+      });
+      expect((await disabled.inject({ ...request, headers: disabledHeaders })).json()).toEqual(
+        result.json(),
+      );
+      expect((await f.repository.getQuiz(f.workspaceId, f.quiz.id))!.draft).toEqual(later.draft);
+      expect(
+        (
+          await f.app.inject({
+            method: "POST",
+            url: `/v1/quizzes/${f.quiz.id}/history/${undo.sourceRevision}/restore`,
+            headers: f.headers,
+            payload: { expectedRevision: 4, mutationId: randomUUID() },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const restored = (await f.repository.getQuiz(f.workspaceId, f.quiz.id))!;
+      expect(restored.draftSchemaVersion).toBe(schemaVersion);
+      expect(restored.draft).toEqual(f.quiz.draft);
+    },
+  );
+
+  it("blocks a fresh extended-Round Pack update outside the protocol workspace allowlist", async () => {
+    const f = await fixture("word_cloud");
+    await f.publishNext((draft) => {
+      draft.diagnostic.prompt = "Updated proposal";
+    });
+    const payload = f.requestFor(await f.review());
+    const unlisted = await application(f.repository, f.workspaceId, true, true, false);
+    const result = await unlisted.inject({
+      method: "POST",
+      url: "/v1/recovery-packs/update",
+      headers: { cookie: await signIn(unlisted) },
+      payload,
+    });
+    expect(result.statusCode).toBe(404);
+    expect((await f.repository.getQuiz(f.workspaceId, f.quiz.id))!.draft).toEqual(f.quiz.draft);
+    expect((await f.repository.getQuiz(f.workspaceId, f.quiz.id))!.draftRevision).toBe(2);
+  });
+
   it("updates only the draft, preserves original evidence/IDs, and can undo idempotently", async () => {
     const f = await fixture();
     const publishedRound = await f.app.inject({

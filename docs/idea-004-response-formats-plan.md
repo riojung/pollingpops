@@ -1,6 +1,6 @@
 # IDEA 004 richer response formats implementation plan
 
-Updated: 2026-10-13
+Updated: 2026-10-14
 
 IDEA-004 adds live multiple-selection opinion polls, ranking, moderated open text, and word clouds.
 Implementation was requested on 2026-10-13. Existing research supplies the initial behavior;
@@ -105,7 +105,7 @@ from a shared type union. Existing production, privacy, accessibility, and capac
 
 `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types, package and
 support tests, and production builds. Current suites include 364 contract, 46 engine, 191 DB unit,
-677 server, 857 web and 243 smoke-support tests. The separate restricted PostgreSQL 17 integration
+693 server, 857 web and 243 smoke-support tests. The separate restricted PostgreSQL 17 integration
 suite has 155 passing tests and one existing skip, including migration replay, workspace isolation,
 moderation CAS races, restart and account-export privacy. The isolated test databases were cleaned up.
 
@@ -122,6 +122,13 @@ distributions independently of UX beta; missing distributions still reveal no te
 report regression tests pass across all four formats and both layouts. Three additional
 production-browser checks pass on desktop Chromium, mobile Chromium and mobile WebKit, covering
 Free-plan/Event-credit selection, submission, funding changes and the text ceiling in both layouts.
+
+PR #113 review follow-up (2026-10-14): Recovery Pack insert/update and Question Health apply now
+derive the artifact version from the complete resulting Round draft. Mixed-format drafts preserve
+versions 2–4, draft history and immutable published snapshots. Fresh edits obey the extended writer
+gate; accepted receipts remain replayable after rollback, and existing Question Health undo remains
+available. All 59 focused API tests pass, including 16 new regression cases, and the full repository
+check passes. No database or browser behavior changed in this server-only correction.
 
 To enable the initial increment, apply migrations 067–069 and deploy matching server, worker and
 web readers, then set `FEATURE_ROUND_CLIENT_PROTOCOL=true` and include the workspace UUID in

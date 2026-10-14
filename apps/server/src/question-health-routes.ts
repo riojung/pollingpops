@@ -16,13 +16,17 @@ import {
   QuizDraftSchema,
 } from "@openround/contracts";
 import type { QuestionHealthFinding } from "@openround/contracts";
-import type { Repository } from "@openround/db";
+import { roundArtifactSchemaVersion, type Repository } from "@openround/db";
 import { evaluateQuestionHealth } from "@openround/insights";
 import { proposeQuestionHealthRevision } from "./question-health-revisions.js";
 import { buildQuestionHealthPostUseResult } from "./question-health-post-use.js";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
 import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
+import {
+  extendedRoundResponseWriteAllowed,
+  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+} from "./round-response-rollout.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const VersionParamsSchema = IdParamsSchema.extend({ versionId: z.string().uuid() });
@@ -536,6 +540,15 @@ export async function registerQuestionHealthRoutes(
     }
     const proposal = await proposedRevision(creator.workspaceId, id, findingId, input);
     if (proposal.status !== "ok") return proposalError(reply, proposal.status, request.id);
+    if (!extendedRoundResponseWriteAllowed(config, creator.workspaceId, proposal.proposal.draft)) {
+      return apiError(
+        reply,
+        404,
+        "NOT_FOUND",
+        EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+        request.id,
+      );
+    }
     const quiz = await repository.updateQuizDraft({
       workspaceId: creator.workspaceId,
       quizId: id,
@@ -543,7 +556,7 @@ export async function registerQuestionHealthRoutes(
       expectedRevision: input.draftRevision,
       mutationId: input.mutationId,
       editorId: creator.userId,
-      schemaVersion: 1,
+      schemaVersion: roundArtifactSchemaVersion(proposal.proposal.draft),
       draftHash: createHash("sha256").update(JSON.stringify(proposal.proposal.draft)).digest("hex"),
       questionHealthApplication: {
         workspaceId: creator.workspaceId,

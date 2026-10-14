@@ -29,7 +29,7 @@ Presentation and Survey expansion remains deferred. See the
   Disabling the gate preserves existing compatible rooms, accepted retries and reports.
 
 Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
-package/support tests and production builds, including 857 web, 677 server, 364 contract, 46 engine
+package/support tests and production builds, including 857 web, 693 server, 364 contract, 46 engine
 and 191 DB unit tests. The separate restricted PostgreSQL 17 integration suite passes 155 tests
 with one existing skip, including migration replay, moderation races, workspace isolation and
 account-export privacy. All 12 production-browser journeys pass on desktop Chromium, mobile
@@ -43,6 +43,12 @@ Review follow-up: Event-credit participant limits survive setup and recipe chang
 reports show the new opinion distributions without requiring UX beta. Ten report page regressions
 and three additional production-browser capacity checks pass across desktop Chromium, mobile
 Chromium and mobile WebKit. Text limits and approved-only reporting remain enforced.
+
+PR #113 review follow-up (October 14): authoritative Recovery Pack insert/update and Question
+Health apply mutations derive the schema version from the complete Round draft. Mixed-format
+history, published content, retries and undo remain intact, and fresh writes retain the rollout
+gate. All 59 focused API tests and the full repository check pass, including 16 new regression
+cases. Database versions and browser journeys are unchanged by this server correction.
 
 ### Survey draft autosave October 11 2026
 

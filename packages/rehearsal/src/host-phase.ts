@@ -133,6 +133,14 @@ export function getHostPhaseView(snapshot: SessionSnapshot): HostPhaseView {
         };
       }
       if (snapshot.intervention?.finishedAt) {
+        if (snapshot.question?.type === "open_text" || snapshot.question?.type === "word_cloud") {
+          return {
+            phaseLabel: "Choose the next step",
+            primary: continueCommand(snapshot),
+            secondary: [],
+            suggestionKind: "none",
+          };
+        }
         return {
           phaseLabel: "Verify recovery",
           primary: snapshot.question?.linkedRecheckAvailable

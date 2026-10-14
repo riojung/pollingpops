@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { currentRoundClientCapabilities, type QuizDraft } from "@openround/contracts";
+import {
+  currentRoundClientCapabilities,
+  type HostAction,
+  type InterventionType,
+  type QuizDraft,
+  type ReportSummary,
+} from "@openround/contracts";
 import { MemoryRepository, type CreatorContext } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
@@ -324,4 +330,117 @@ describe("live ranking opinion polls", () => {
     });
     expect(reportCsv(report)).toContain(",'=Priority A,13,5,1.4,2,5,10");
   });
+
+  it.each(["full", "top_n"] as const)(
+    "keeps a five-participant %s ranking revote out of Recovery reports and summaries",
+    async (mode) => {
+      const f = await fixture();
+      f.config.CORE_PARITY_WORKSPACE_ALLOWLIST.push(f.owner.workspaceId);
+      const question = f.draft.questions[0]!;
+      if (question.type !== "ranking") throw new Error("Expected ranking question");
+      if (mode === "full") delete question.rankCount;
+      expect((await f.save()).statusCode).toBe(200);
+      expect((await f.publish()).statusCode).toBe(200);
+      const capable = currentRoundClientCapabilities();
+      const room = await f.sessions.createSession(f.owner, f.quizId, settings, {
+        clientCapabilities: capable,
+      });
+      const guests = await Promise.all(
+        Array.from({ length: 5 }, (_, index) =>
+          f.sessions.join({
+            code: room.code,
+            nickname: `Guest ${index + 1}`,
+            clientCapabilities: capable,
+          }),
+        ),
+      );
+      async function command(
+        action: HostAction,
+        options: { interventionType?: InterventionType; recheckMode?: "revote" } = {},
+      ) {
+        const snapshot = await f.sessions.snapshot({
+          sessionId: room.sessionId,
+          hostToken: room.hostToken,
+          clientCapabilities: capable,
+        });
+        return f.sessions.hostCommand({
+          sessionId: room.sessionId,
+          hostToken: room.hostToken,
+          clientCapabilities: capable,
+          action,
+          ...options,
+          commandId: randomUUID(),
+          expectedVersion: snapshot.version,
+        });
+      }
+      const initial = await command("start");
+      const initialIds = question.choices
+        .slice(0, question.rankCount ?? question.choices.length)
+        .map((choice) => choice.id);
+      async function vote(roundId: string, choiceIds: string[]) {
+        for (const guest of guests) {
+          const accepted = await f.sessions.answer({
+            sessionId: room.sessionId,
+            participantToken: guest.participantToken,
+            roundId,
+            response: { kind: "ranking", choiceIds },
+            clientCapabilities: capable,
+            idempotencyKey: randomUUID(),
+          });
+          expect(accepted).toMatchObject({ accepted: true, score: 0 });
+        }
+      }
+      await vote(initial.roundId!, initialIds);
+      await command("lock");
+      const initialReveal = await command("reveal");
+      await command("intervention.start", { interventionType: "explain" });
+      await command("intervention.finish");
+      const revote = await command("recheck.open", { recheckMode: "revote" });
+      await vote(revote.roundId!, [...initialIds].reverse());
+      await command("lock");
+      await command("reveal");
+      expect((await command("next")).phase).toBe("finished");
+      expect(await new ReportWorker(f.repository, 60_000).runOnce()).toBe("completed");
+      const report = (await f.repository.getReportBySession(f.owner.workspaceId, room.sessionId))!;
+      expect(report).toMatchObject({
+        schemaVersion: 6,
+        status: "ready",
+        metrics: { participantCount: 5, completedCount: 5, answerCount: 10, accuracyPercent: null },
+        initialAccuracy: { correct: 0, responses: 0, percent: null },
+        recovery: [],
+        confidenceMatrix: [1, 2, 3].map((confidence) => ({
+          confidence,
+          correct: 0,
+          incorrect: 0,
+          total: 0,
+        })),
+        unresolvedConcepts: [],
+        participantFeedback: guests.map((guest) => ({
+          participantId: guest.participantId,
+          correct: 0,
+          responses: 0,
+          unresolvedConcepts: [],
+        })),
+        interventions: [{ sourceRoundId: initial.roundId, linkedRecheckRoundId: revote.roundId }],
+        questions: [
+          {
+            correct: null,
+            accuracyPercent: null,
+            responseDistribution: initialReveal.responseDistribution,
+          },
+        ],
+      });
+      const summaries = await f.app.inject({ url: "/v1/reports", headers: { cookie: f.cookie } });
+      expect(summaries.statusCode).toBe(200);
+      expect(
+        summaries
+          .json<{ items: ReportSummary[] }>()
+          .items.find((item) => item.sessionId === room.sessionId),
+      ).toMatchObject({
+        initialAccuracyPercent: null,
+        recovery: { recovered: 0, eligible: 0, percent: null },
+      });
+      expect(reportCsv(report)).not.toContain(`revote,${question.id},${question.id},`);
+    },
+  );
 });

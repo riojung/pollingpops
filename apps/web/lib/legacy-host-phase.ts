@@ -53,9 +53,11 @@ export function getLegacyPhaseActions(snapshot: SessionSnapshot): LegacyHostComm
 
 export function getLegacyRecoveryActions(snapshot: SessionSnapshot): LegacyHostCommand[] {
   if (snapshot.roundKind !== "main") return [];
+  const textOpinion =
+    snapshot.question?.type === "open_text" || snapshot.question?.type === "word_cloud";
 
   if (snapshot.phase === "question_locked") {
-    return [
+    const actions: LegacyHostCommand[] = [
       {
         action: "intervention.start",
         label: "Start peer discussion",
@@ -79,10 +81,11 @@ export function getLegacyRecoveryActions(snapshot: SessionSnapshot): LegacyHostC
           ] satisfies LegacyHostCommand[])
         : []),
     ];
+    return textOpinion ? actions.filter((command) => command.action !== "recheck.open") : actions;
   }
 
   if (snapshot.phase === "question_reveal") {
-    return [
+    const actions: LegacyHostCommand[] = [
       {
         action: "intervention.start",
         label: "Record explanation",
@@ -112,6 +115,7 @@ export function getLegacyRecoveryActions(snapshot: SessionSnapshot): LegacyHostC
           ] satisfies LegacyHostCommand[])
         : []),
     ];
+    return textOpinion ? actions.filter((command) => command.action !== "recheck.open") : actions;
   }
 
   return [];

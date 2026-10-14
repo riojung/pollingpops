@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { Report } from "@openround/contracts";
+import { deriveRoundProtocol, type Report } from "@openround/contracts";
+import type { SessionEvidence } from "@openround/db";
 import { addParticipant, createGameState, type EngineAnswer } from "@openround/game-engine";
 import { createPendingReport, generateReport, reportCsv } from "../src/reporting.js";
 
@@ -484,5 +485,192 @@ describe("report CSV", () => {
       evidence: evidence(answers.slice(0, 4)),
     });
     expect(smallReport.questions[0]?.responseDistribution).toBeUndefined();
+  });
+
+  it("retains assessed revote recovery while excluding opinion revotes in mixed evidence", () => {
+    const numeric = {
+      id: randomUUID(),
+      type: "numeric" as const,
+      prompt: "Synthetic checkpoint",
+      purpose: "diagnostic" as const,
+      confidence: "off" as const,
+      delivery: "main" as const,
+      conceptKeys: ["synthetic-concept"],
+      linkedRecheckQuestionId: null,
+      correctValue: "4",
+      tolerance: "0",
+      unit: null,
+      timeLimitSeconds: 30,
+      basePoints: 100,
+      explanation: "Synthetic explanation",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const ranking = {
+      id: randomUUID(),
+      type: "ranking" as const,
+      prompt: "Synthetic priorities",
+      purpose: "opinion" as const,
+      confidence: "off" as const,
+      delivery: "main" as const,
+      conceptKeys: ["opinion-concept"],
+      linkedRecheckQuestionId: null,
+      rankCount: 2,
+      choices: ["Option A", "Option B", "Option C"].map((label) => ({
+        id: randomUUID(),
+        label,
+        isCorrect: false,
+      })),
+      timeLimitSeconds: 30,
+      basePoints: 0,
+      explanation: "",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const quiz = {
+      title: "Mixed recovery evidence",
+      description: "",
+      questions: [numeric, ranking],
+    };
+    let state = createGameState({
+      sessionId: randomUUID(),
+      code: "1234567",
+      quiz,
+      roundProtocol: deriveRoundProtocol(quiz),
+      settings: {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+    });
+    const participants = Array.from({ length: 5 }, () => randomUUID());
+    for (const [index, id] of participants.entries())
+      state = addParticipant(state, {
+        id,
+        nickname: `Guest ${index + 1}`,
+        score: 0,
+        correctCount: 0,
+        acceptedResponseMs: 0,
+        connected: false,
+        kicked: false,
+      }).state;
+    const [scoredMain, scoredRevote, opinionMain, opinionRevote] = Array.from({ length: 4 }, () =>
+      randomUUID(),
+    ) as [string, string, string, string];
+    const answer = (
+      participantId: string,
+      roundId: string,
+      response: EngineAnswer["response"],
+      correct: boolean,
+    ): EngineAnswer => ({
+      answerId: randomUUID(),
+      participantId,
+      roundId,
+      response,
+      confidence: null,
+      choiceId: null,
+      acceptedAtMs: 2_000,
+      responseMs: 1_000,
+      score: correct ? 100 : 0,
+      correct,
+      idempotencyKey: randomUUID(),
+    });
+    const evidence: SessionEvidence = {
+      decisionReplayEnabled: false,
+      decisionEvents: [],
+      decisionEventsComplete: false,
+      answers: participants.flatMap((id, index) => [
+        answer(id, scoredMain, { kind: "numeric", value: index < 2 ? "4" : "5" }, index < 2),
+        answer(id, scoredRevote, { kind: "numeric", value: index < 4 ? "4" : "5" }, index < 4),
+        answer(
+          id,
+          opinionMain,
+          { kind: "ranking", choiceIds: ranking.choices.slice(0, 2).map((choice) => choice.id) },
+          false,
+        ),
+        answer(
+          id,
+          opinionRevote,
+          {
+            kind: "ranking",
+            choiceIds: ranking.choices
+              .slice(0, 2)
+              .reverse()
+              .map((choice) => choice.id),
+          },
+          false,
+        ),
+      ]),
+      rounds: [
+        {
+          id: scoredMain,
+          questionId: numeric.id,
+          position: 0,
+          kind: "main" as const,
+          sourceRoundId: null,
+        },
+        {
+          id: scoredRevote,
+          questionId: numeric.id,
+          position: 0,
+          kind: "revote" as const,
+          sourceRoundId: scoredMain,
+        },
+        {
+          id: opinionMain,
+          questionId: ranking.id,
+          position: 1,
+          kind: "main" as const,
+          sourceRoundId: null,
+        },
+        {
+          id: opinionRevote,
+          questionId: ranking.id,
+          position: 1,
+          kind: "revote" as const,
+          sourceRoundId: opinionMain,
+        },
+      ].map((round) => ({
+        ...round,
+        interventionId: null,
+        openedAtMs: 1_000,
+        deadlineMs: 31_000,
+        lockedAtMs: 3_000,
+      })),
+      interventions: [],
+      qna: { questions: 0, answered: 0, unresolved: 0 },
+    };
+    const report = generateReport(state, new Date("2099-11-01T00:00:00.000Z"), { evidence });
+    expect(report).toMatchObject({
+      schemaVersion: 6,
+      metrics: { answerCount: 20, accuracyPercent: 40 },
+      initialAccuracy: { correct: 2, responses: 5, percent: 40 },
+      recovery: [
+        {
+          sourceQuestionId: numeric.id,
+          evidenceType: "revote",
+          recovered: 2,
+          initiallyIncorrectWithBoth: 3,
+          recoveryPercent: 66.7,
+        },
+      ],
+      unresolvedConcepts: [
+        { conceptKey: "synthetic-concept", initiallyIncorrect: 3, recovered: 2, unresolved: 1 },
+      ],
+    });
+    if (report.schemaVersion !== 6) throw new Error("Expected ranking report");
+    expect(report.recovery).toHaveLength(1);
+    expect(report.participantFeedback).toHaveLength(5);
+    expect(
+      report.participantFeedback.every(
+        (feedback) =>
+          feedback.responses === 1 && !feedback.unresolvedConcepts.includes("opinion-concept"),
+      ),
+    ).toBe(true);
+    const csv = reportCsv(report);
+    expect(csv).toContain(`revote,${numeric.id},${numeric.id},2,3,66.7,true`);
+    expect(csv).not.toContain(`revote,${ranking.id},${ranking.id},`);
   });
 });

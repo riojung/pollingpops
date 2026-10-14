@@ -196,6 +196,7 @@ function finding(input: FindingInput): QuestionHealthFinding {
 
 function choiceFindings(question: ChoiceQuestion, questionIndex: number) {
   const findings: QuestionHealthFinding[] = [];
+  const scoredPurpose = questionPurpose(question) !== "opinion";
   const normalizedChoices = question.choices.map((choice) => normalizedText(choice.label));
 
   for (let index = 0; index < question.choices.length; index += 1) {
@@ -220,7 +221,7 @@ function choiceFindings(question: ChoiceQuestion, questionIndex: number) {
     }
 
     if (
-      question.type !== "poll" &&
+      scoredPurpose &&
       !choice.isCorrect &&
       !choice.feedback?.trim() &&
       !choice.misconceptionKey?.trim()
@@ -264,7 +265,7 @@ function choiceFindings(question: ChoiceQuestion, questionIndex: number) {
     }
   }
 
-  if (question.type !== "poll" && question.choices.length >= 3) {
+  if (scoredPurpose && question.choices.length >= 3) {
     const lengths = normalizedChoices.map((choice) => choice.length);
     const longest = Math.max(...lengths);
     const longestIndex = lengths.indexOf(longest);

@@ -293,7 +293,12 @@ export function generateReport(
 
   const recoveredParticipantKeys = new Set<string>();
   const recovery = evidence.rounds
-    .filter((round) => round.kind !== "main" && round.sourceRoundId)
+    .filter(
+      (round) =>
+        round.kind !== "main" &&
+        round.sourceRoundId &&
+        scorableMainRoundIds.has(round.sourceRoundId),
+    )
     .map((round) => {
       const sourceRoundId = round.sourceRoundId!;
       const sourceRound = roundById.get(sourceRoundId)!;

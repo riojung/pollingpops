@@ -340,7 +340,20 @@ for (const suffix of ["desktop", "@mobile"]) {
       await moderate(bodies[5]!, "approved");
       await expect(publicGuest.getByText("Another approved idea", { exact: true })).toBeVisible();
       expect(snapshotLeaked).toBe(false);
-      await page.getByRole("button", { name: "Next question", exact: true }).click();
+      const hostCommands = page.getByTestId("host-command-bar");
+      await hostCommands.getByRole("button", { name: "Explain or reinforce", exact: true }).click();
+      await hostCommands.getByRole("button", { name: "Finish intervention", exact: true }).click();
+      const nextQuestion = hostCommands
+        .locator(".host-command-primary")
+        .getByRole("button", { name: "Next question", exact: true });
+      await expect(nextQuestion).toBeEnabled();
+      await expect(
+        page.getByRole("button", { name: "Recheck by revote", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Open linked recheck", exact: true }),
+      ).toHaveCount(0);
+      await nextQuestion.click();
       await moderation.getByRole("button", { name: "Pending", exact: true }).click();
       await moderation.getByRole("button", { name: "All questions", exact: true }).click();
       await expect(moderation.getByText("UNAPPROVED_SECRET", { exact: true })).toBeVisible();
@@ -402,7 +415,19 @@ for (const suffix of ["desktop", "@mobile"]) {
         }),
       ).toBeVisible();
       await expect(guest.getByLabel("A word or short phrase", { exact: true })).toHaveCount(0);
-      await page.getByRole("button", { name: "Finish round", exact: true }).click();
+      await hostCommands.getByRole("button", { name: "Work an example", exact: true }).click();
+      await hostCommands.getByRole("button", { name: "Finish intervention", exact: true }).click();
+      const finishRound = hostCommands
+        .locator(".host-command-primary")
+        .getByRole("button", { name: "Finish round", exact: true });
+      await expect(finishRound).toBeEnabled();
+      await expect(
+        page.getByRole("button", { name: "Recheck by revote", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Open linked recheck", exact: true }),
+      ).toHaveCount(0);
+      await finishRound.click();
       await expect(moderation).toContainText("Text responses can no longer be moderated");
       await expect(
         moderation.getByRole("button", { name: "Remove response", exact: true }),

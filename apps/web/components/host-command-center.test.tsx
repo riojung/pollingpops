@@ -154,4 +154,48 @@ describe("host command center", () => {
     expect(markup.indexOf("Lock answers")).toBeLessThan(markup.indexOf("Pause"));
     expect(markup.indexOf("Lock answers")).toBeLessThan(markup.indexOf("End"));
   });
+
+  for (const type of ["open_text", "word_cloud"] as const) {
+    it.each([false, true])(
+      `renders a usable next action for ${type} after intervention (final checkpoint: %s)`,
+      (lastQuestion) => {
+        const revealed = snapshot("question_reveal");
+        revealed.question = {
+          id: "00000000-0000-4000-8000-000000000004",
+          type,
+          prompt: "What should change?",
+          timeLimitSeconds: 20,
+          choices: [],
+          basePoints: 0,
+          mediaId: null,
+          mediaAlt: null,
+          purpose: "opinion",
+          confidence: "off",
+          linkedRecheckAvailable: false,
+        };
+        revealed.questionIndex = 2;
+        revealed.questionPosition = 1;
+        revealed.questionCount = lastQuestion ? 2 : 3;
+        revealed.intervention = {
+          id: "00000000-0000-4000-8000-000000000003",
+          type: "example",
+          sourceRoundId: revealed.roundId!,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          finishedAt: "2026-01-01T00:01:00.000Z",
+        };
+        const phaseView = getHostPhaseView(revealed);
+        const markup = renderLocalized(
+          <>
+            <RecoveryCompass phaseView={phaseView} snapshot={revealed} />
+            <HostCommandBar busy={false} onCommand={() => undefined} phaseView={phaseView} />
+          </>,
+        );
+        expect(markup).toContain(lastQuestion ? "Finish round" : "Next question");
+        expect(markup).toContain("Choose the next step");
+        expect(markup).not.toContain("Recheck by revote");
+        expect(markup).not.toContain("Open linked recheck");
+        expect(markup).not.toContain("Verify recovery");
+      },
+    );
+  }
 });

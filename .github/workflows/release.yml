@@ -398,28 +398,28 @@ jobs:
         with:
           fetch-depth: 0
       - name: Download release preflight evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-preflight-${{ github.ref_name }}
           path: artifacts/release-input/preflight
       - name: Download server release evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-evidence-server-${{ github.ref_name }}
           path: artifacts/release-input/server
       - name: Download web release evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-evidence-web-${{ github.ref_name }}
           path: artifacts/release-input/web
       - name: Download release deployment manifest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-deployment-manifest-${{ github.ref_name }}
           path: artifacts/release-input/manifest
       - name: Download control release evidence
         if: needs.images.outputs.control_ref != ''
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-evidence-control-${{ github.ref_name }}
           path: artifacts/release-input/control

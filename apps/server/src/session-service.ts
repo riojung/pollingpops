@@ -4,7 +4,7 @@ import { SpanStatusCode, trace, type Attributes } from "@opentelemetry/api";
 import {
   canonicalizeResponse,
   canUseRoundProtocol,
-  legacyRoundProtocol,
+  deriveRoundProtocol,
   ROUND_CLIENT_UPDATE_MESSAGE,
   type RoundClientCapabilities,
   responseForAnswer,
@@ -78,6 +78,19 @@ import {
 import { ProductEventDispatcher, type ProductEventInput } from "./product-events.js";
 import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 import { decisionEventsForTransition } from "./session-decision-replay.js";
+import {
+  approvedTextAnswerIds,
+  moderationPage,
+  moderationPageSelection,
+  textResults,
+  type TextModerationPageQuery,
+  type TextResponsePageQuery,
+} from "./response-moderation.js";
+import {
+  extendedRoundResponseWriteAllowed,
+  richerRoundResponsesEnabled,
+  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
+} from "./round-response-rollout.js";
 
 export interface SessionMutation {
   state: GameState;
@@ -835,6 +848,7 @@ export class SessionService {
           })
         : null;
     const replay = async (existing: StoredSession) => {
+      requireRoundClient(existing.state, experience.clientCapabilities);
       const coverage = await createPlatformRepository(this.repository).getRoomCoverage(
         "round",
         existing.id,
@@ -884,7 +898,20 @@ export class SessionService {
       quiz.currentVersionId,
     );
     if (!version) throw new SessionError("NOT_FOUND", "Published quiz version not found");
-    requireRoundClient({ roundProtocol: legacyRoundProtocol() }, experience.clientCapabilities);
+    if (!extendedRoundResponseWriteAllowed(this.config, creator.workspaceId, version.content)) {
+      throw new SessionError("NOT_FOUND", EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE);
+    }
+    const roundProtocol = deriveRoundProtocol(version.content);
+    requireRoundClient({ roundProtocol }, experience.clientCapabilities);
+    const textCount = version.content.questions.filter(
+      (question) => question.type === "open_text" || question.type === "word_cloud",
+    ).length;
+    if (textCount > 10 || (textCount > 0 && settings.audienceLimit > 250)) {
+      throw new SessionError(
+        "ENTITLEMENT_LIMIT",
+        "Text sessions support up to 10 text checkpoints and 250 participants",
+      );
+    }
     const policy = await roomCreationPolicy(
       this.repository,
       this.config,
@@ -956,9 +983,8 @@ export class SessionService {
             settings,
             brandTheme,
             experienceTheme,
-            ...(this.config.FEATURE_ROUND_CLIENT_PROTOCOL &&
-            this.config.CORE_PARITY_WORKSPACE_ALLOWLIST.includes(creator.workspaceId)
-              ? { roundProtocol: legacyRoundProtocol() }
+            ...(richerRoundResponsesEnabled(this.config, creator.workspaceId)
+              ? { roundProtocol }
               : {}),
             uxBeta: this.uxBetaEnabled(creator.workspaceId),
             // Freeze live Pack use with the room. Disabling rollout must not strand an
@@ -1766,6 +1792,11 @@ export class SessionService {
                 participantId: input.participantId,
                 interventionType: input.interventionType,
                 recoveryPackCard: input.recoveryPackCard,
+                answerId: input.answerId,
+                responseStatus: input.responseStatus,
+                moderationActor: staffActor.rootHost
+                  ? { kind: "host", userId: session.hostId }
+                  : { kind: "cohost", credentialId: staffActor.credential!.id },
                 recheckMode: input.recheckMode,
                 recheckQuestionId: input.recheckQuestionId,
                 nowMs: commandTime.getTime(),
@@ -1905,6 +1936,124 @@ export class SessionService {
       return snapshotForRole(session.state, { role: "participant", participantId: participant.id });
     }
     throw new SessionError("UNAUTHORIZED", "A session credential is required");
+  }
+
+  async responseModerationPage(
+    input: TextModerationPageQuery & {
+      sessionId: string;
+      hostToken: string;
+      clientCapabilities?: RoundClientCapabilities;
+    },
+  ) {
+    return this.readTextResponses(input, true);
+  }
+
+  async approvedResponseResults(
+    input: TextResponsePageQuery & {
+      sessionId: string;
+      roundId: string;
+      role: "participant" | "host" | "presenter";
+      token: string;
+      clientCapabilities?: RoundClientCapabilities;
+    },
+  ) {
+    return this.readTextResponses(input, false);
+  }
+
+  private async readTextResponses(
+    input: TextModerationPageQuery & {
+      sessionId: string;
+      hostToken: string;
+      clientCapabilities?: RoundClientCapabilities;
+    },
+    moderation: true,
+  ): Promise<ReturnType<typeof moderationPage>>;
+  private async readTextResponses(
+    input: TextResponsePageQuery & {
+      sessionId: string;
+      roundId: string;
+      role: "participant" | "host" | "presenter";
+      token: string;
+      clientCapabilities?: RoundClientCapabilities;
+    },
+    moderation: false,
+  ): Promise<ReturnType<typeof textResults>>;
+  private async readTextResponses(
+    input:
+      | (TextModerationPageQuery & {
+          sessionId: string;
+          hostToken: string;
+          clientCapabilities?: RoundClientCapabilities;
+        })
+      | (TextResponsePageQuery & {
+          sessionId: string;
+          roundId: string;
+          role: "participant" | "host" | "presenter";
+          token: string;
+          clientCapabilities?: RoundClientCapabilities;
+        }),
+    moderation: boolean,
+  ) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const session = await this.loadSession(input.sessionId);
+      if (!session) throw new SessionError("NOT_FOUND", "Session not found");
+      if ("hostToken" in input) {
+        await this.authorizeStaff(session, input.hostToken, ["cohost"]);
+      } else if (input.role === "participant") {
+        const participant = await this.participantForToken(input.token);
+        const runtime = participant && session.state.participants[participant.id];
+        if (
+          !participant ||
+          participant.sessionId !== session.id ||
+          !runtime ||
+          runtime.kicked ||
+          participant.status === "kicked"
+        )
+          throw new SessionError("UNAUTHORIZED", "Participant access is invalid or revoked");
+      } else {
+        await this.authorizeStaff(
+          session,
+          input.token,
+          input.role === "presenter" ? ["cohost", "presenter"] : ["cohost"],
+        );
+      }
+      requireRoundClient(session.state, input.clientCapabilities);
+      const ids =
+        "hostToken" in input
+          ? moderationPageSelection(session.state, input).entries.map((entry) => entry.answerId)
+          : approvedTextAnswerIds(session.state, input.roundId);
+      const batches: string[][] = [];
+      for (let index = 0; index < ids.length; index += 100)
+        batches.push(ids.slice(index, index + 100));
+      const answers = (
+        await Promise.all(
+          batches.map((batch) =>
+            this.repository.getSessionAnswersByIds(session.workspaceId, session.id, batch),
+          ),
+        )
+      ).flat();
+      const durable = await this.repository.getSessionById(session.id);
+      if (!durable || durable.workspaceId !== session.workspaceId)
+        throw new SessionError("NOT_FOUND", "Session not found");
+      if (durable.state.version !== session.state.version) continue;
+      if (await this.repository.workspaceDeletionStarted(session.workspaceId))
+        throw new SessionError("NOT_FOUND", "Session not found");
+      // Credential revocation does not advance the game revision. Recheck staff access
+      // after loading bodies so an in-flight private queue cannot outlive its credential.
+      if ("hostToken" in input) {
+        await this.authorizeStaff(session, input.hostToken, ["cohost"]);
+      } else if (input.role !== "participant") {
+        await this.authorizeStaff(
+          session,
+          input.token,
+          input.role === "presenter" ? ["cohost", "presenter"] : ["cohost"],
+        );
+      }
+      return moderation && "hostToken" in input
+        ? moderationPage(session.state, input, answers)
+        : textResults(session.state, input.roundId!, input, answers);
+    }
+    throw new SessionError("CONFLICT", "Responses changed. Refresh the current view");
   }
 
   async sync(input: SyncRequest): Promise<SyncResponse> {

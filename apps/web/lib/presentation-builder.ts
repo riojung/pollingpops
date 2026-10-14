@@ -51,6 +51,9 @@ function choiceSet(
 }
 
 export function createPresentationQuestion(type: QuestionType): QuestionDraft {
+  if (type === "open_text" || type === "word_cloud")
+    throw new Error("Moderated text polls currently support live Rounds only.");
+  if (type === "ranking") throw new Error("Ranking polls currently support live Rounds only.");
   const common = {
     id: clientUuid(),
     prompt: "",

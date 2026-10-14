@@ -18,7 +18,7 @@ describe("Round draft mutation contracts", () => {
         draft: { title: "Draft", description: "", questions: [] },
         expectedRevision: 3,
         mutationId,
-        schemaVersion: 2,
+        schemaVersion: 5,
       }).success,
     ).toBe(false);
   });

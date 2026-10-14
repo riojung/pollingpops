@@ -1,7 +1,34 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["zh-CN"].live,
+  "live.ranking.yourRanking": "你的排序",
+  "live.ranking.instructions": "为 {total} 个选项中的 {count} 个排序。第一项优先级最高。",
+  "live.ranking.selected": "已排序 {selected} 个，共需 {count} 个。",
+  "live.ranking.moveUp": "上移 {choice}",
+  "live.ranking.moveDown": "下移 {choice}",
+  "live.ranking.up": "上移",
+  "live.ranking.down": "下移",
+  "live.ranking.removeChoice": "从排序中移除 {choice}",
+  "live.ranking.remove": "移除",
+  "live.ranking.addChoice": "将 {choice} 加入排序",
+  "live.ranking.chooseCount": "提交前必须为 {count} 个选项排序。",
+  "live.ranking.summary": "{respondents} 位回答者 · 每人排序 {count} 个选项。",
+  "live.ranking.weights":
+    "第一名获得 {firstPoints} 分，此后每个名次减一分。同分时按照创建时的选项顺序排列。",
+  "live.ranking.results": "排序结果",
+  "live.ranking.option": "选项",
+  "live.ranking.score": "加权分数",
+  "live.ranking.rankedBy": "排序人数",
+  "live.ranking.averageRank": "平均名次",
+  "live.ranking.currentOrder": "当前顺序：{choices}",
+  "live.roundPlay.pollSelectionInstructions": "最多选择 {limit} 个选项，然后提交。",
+  "live.roundPlay.pollSelectionLimit": "最多选择 {limit} 个选项。已选择 {selected} 个。",
+  "live.roundPlay.chooseMultiplePoll": "请选择 1 到 {limit} 个投票选项。",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy": "综合脉冲出现于5人发出信号后,以保护个人隐私.",
   "live.audience.alias": "别名",

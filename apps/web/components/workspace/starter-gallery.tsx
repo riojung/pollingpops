@@ -30,6 +30,9 @@ const questionTypeLabelKeys: Record<QuestionType, MessageKey> = {
   numeric: "questionType.numeric.label",
   rating: "questionType.rating.label",
   poll: "questionType.poll.label",
+  ranking: "questionType.ranking.label",
+  open_text: "questionType.open_text.label",
+  word_cloud: "questionType.word_cloud.label",
 };
 
 export function StarterGallery({

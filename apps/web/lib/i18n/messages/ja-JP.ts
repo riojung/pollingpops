@@ -3,6 +3,12 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "自由記述",
+  "questionType.open_text.description": "正解のない、進行役が確認する説明です。",
+  "questionType.word_cloud.label": "ワードクラウド",
+  "questionType.word_cloud.description": "確認済みの単語や短い語句をまとめて表示します。",
+  "questionType.ranking.label": "順位付け",
+  "questionType.ranking.description": "正解や得点のない優先順位付けです。",
   ...creationMessages("ja-JP"),
   ...feedbackMessages("ja-JP"),
   "common.create": "作成",

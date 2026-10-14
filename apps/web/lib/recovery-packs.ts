@@ -1,6 +1,7 @@
 import {
   InsertRecoveryPackSchema,
   QUESTION_TYPE_REGISTRY,
+  LegacyQuestionDraftSchema,
   type QuestionDraft,
   type RecoveryPackDraft,
 } from "@openround/contracts";
@@ -16,12 +17,21 @@ export function recoveryPackRoundHref(value: string) {
   return id ? `/quiz/${encodeURIComponent(id)}` : null;
 }
 
+function supportsRecoveryPack(
+  question: QuestionDraft,
+): question is RecoveryPackDraft["diagnostic"] {
+  return (
+    LegacyQuestionDraftSchema.safeParse(question).success &&
+    QUESTION_TYPE_REGISTRY[question.type].supportsRecovery
+  );
+}
+
 export function recoveryPackPairs(questions: readonly QuestionDraft[]) {
   const ids = questions.map((question) => question.id);
   return questions.flatMap((diagnostic) => {
     if (
       (diagnostic.delivery ?? "main") !== "main" ||
-      !QUESTION_TYPE_REGISTRY[diagnostic.type].supportsRecovery ||
+      !supportsRecoveryPack(diagnostic) ||
       !diagnostic.linkedRecheckQuestionId ||
       ids.filter((id) => id === diagnostic.id).length !== 1
     )
@@ -30,9 +40,7 @@ export function recoveryPackPairs(questions: readonly QuestionDraft[]) {
       (question) => question.id === diagnostic.linkedRecheckQuestionId,
     );
     const recheck = rechecks[0];
-    return rechecks.length === 1 &&
-      recheck?.delivery === "recheck" &&
-      QUESTION_TYPE_REGISTRY[recheck.type].supportsRecovery
+    return rechecks.length === 1 && recheck?.delivery === "recheck" && supportsRecoveryPack(recheck)
       ? [{ diagnostic, recheck }]
       : [];
   });
@@ -57,7 +65,9 @@ export function recoveryPackDraftFromPair(
   cardId: string,
 ): RecoveryPackDraft {
   const clone = (question: QuestionDraft) => {
-    const copied = structuredClone(question);
+    if (!supportsRecoveryPack(question))
+      throw new Error("Only learning checkpoints can become Recovery Packs");
+    const copied = LegacyQuestionDraftSchema.parse(structuredClone(question));
     delete copied.recoveryPackSource;
     return copied;
   };

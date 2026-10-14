@@ -172,6 +172,7 @@ the Compose-oriented `.env.example` unchanged.
 | [Operations runbook](docs/runbooks/deployment.md)                                       | Build, restart, clean up, deploy, and roll back            |
 | [Implementation status](docs/implementation-status.md)                                  | Separate implemented code from unmet evidence gates        |
 | [Market research and staged plan](docs/market-research-and-development-plan-2026-09.md) | Review product evidence and roadmap gates                  |
+| [Future product ideas](docs/future-product-ideas.md)                                    | Keep adding deferred customer enhancement ideas            |
 | [Documentation index](docs/README.md)                                                   | Browse all product, operations, privacy, and decision docs |
 
 ## Contributing

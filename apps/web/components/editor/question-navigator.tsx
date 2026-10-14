@@ -1,4 +1,6 @@
 import type { QuestionType, QuizDraft } from "@openround/contracts";
+import { TEXT_RESPONSE_MAX_QUESTIONS, hasTextOpinionQuestions } from "@openround/contracts";
+import { isTextQuestion } from "../../lib/text-response";
 import { responseTypeGuidance } from "./question-labels";
 import { useLocale } from "../locale-provider";
 import styles from "./round-builder.module.css";
@@ -10,6 +12,9 @@ const QUESTION_TYPES: QuestionType[] = [
   "numeric",
   "rating",
   "poll",
+  "ranking",
+  "open_text",
+  "word_cloud",
 ];
 
 export function QuestionNavigator({
@@ -17,6 +22,9 @@ export function QuestionNavigator({
   insertType,
   selectedQuestionId,
   uxBeta,
+  rankingPollsEnabled = false,
+  openTextPollsEnabled = false,
+  wordCloudPollsEnabled = false,
   canReuseQuestions,
   collapsed = false,
   issueQuestionIds = new Set<string>(),
@@ -34,6 +42,9 @@ export function QuestionNavigator({
   insertType: QuestionType;
   selectedQuestionId: string | null;
   uxBeta: boolean;
+  rankingPollsEnabled?: boolean;
+  openTextPollsEnabled?: boolean;
+  wordCloudPollsEnabled?: boolean;
   canReuseQuestions?: boolean;
   collapsed?: boolean;
   issueQuestionIds?: ReadonlySet<string>;
@@ -55,7 +66,19 @@ export function QuestionNavigator({
     numeric: t("delivery.builder.type.numeric"),
     rating: t("delivery.builder.type.rating"),
     poll: t("delivery.builder.type.poll"),
+    ranking: t("delivery.builder.type.ranking"),
+    open_text: t("delivery.builder.type.open_text"),
+    word_cloud: t("delivery.builder.type.word_cloud"),
   };
+  const availableTypes = QUESTION_TYPES.filter(
+    (type) =>
+      (type !== "ranking" || rankingPollsEnabled) &&
+      (type !== "open_text" || openTextPollsEnabled) &&
+      (type !== "word_cloud" || wordCloudPollsEnabled),
+  );
+  const textLimitReached =
+    draft.questions.filter((question) => isTextQuestion(question.type)).length >=
+    TEXT_RESPONSE_MAX_QUESTIONS;
   if (!uxBeta) {
     return (
       <aside className="panel">
@@ -80,10 +103,11 @@ export function QuestionNavigator({
           ))}
         </div>
         <div className="button-row" style={{ marginTop: 16 }}>
-          {QUESTION_TYPES.map((type) => (
+          {availableTypes.map((type) => (
             <button
               className="button-quiet small-button"
               key={type}
+              disabled={isTextQuestion(type) && textLimitReached}
               onClick={() => onAddQuestion(type)}
               type="button"
             >
@@ -277,7 +301,7 @@ export function QuestionNavigator({
               onChange={(event) => onInsertTypeChange(event.target.value as QuestionType)}
               value={insertType}
             >
-              {QUESTION_TYPES.map((type) => (
+              {availableTypes.map((type) => (
                 <option key={type} value={type}>
                   {localizedTypeLabels[type]}
                 </option>
@@ -289,11 +313,17 @@ export function QuestionNavigator({
           </p>
           <button
             className="button small-button"
+            disabled={isTextQuestion(insertType) && textLimitReached}
             onClick={() => onAddQuestion(insertType)}
             type="button"
           >
             {t("delivery.builder.addQuestion")}
           </button>
+          {hasTextOpinionQuestions(draft) && textLimitReached ? (
+            <p className="muted">
+              {t("delivery.builder.textQuestionLimit", { limit: TEXT_RESPONSE_MAX_QUESTIONS })}
+            </p>
+          ) : null}
           {canReuseQuestions && onOpenQuestionReuse ? (
             <button
               aria-controls="private-question-bank"

@@ -1,3 +1,4 @@
+import { questionTypeDefinition } from "@openround/contracts";
 import type { QuestionDraft } from "@openround/contracts";
 import { BetaDisclosure } from "./beta-disclosure";
 import { responseTypeLabel } from "./question-labels";
@@ -28,6 +29,7 @@ export function DiagnosticDetails({
           <span lang="en-CA">Purpose</span>
           <select
             className="select"
+            disabled={!questionTypeDefinition(question.type).scored}
             onChange={(event) =>
               onUpdateQuestion((item) => ({
                 ...item,
@@ -36,7 +38,7 @@ export function DiagnosticDetails({
             }
             value={
               question.purpose ??
-              (question.type === "poll" || question.type === "rating" ? "opinion" : "diagnostic")
+              (!questionTypeDefinition(question.type).scored ? "opinion" : "diagnostic")
             }
           >
             <option lang="en-CA" value="diagnostic">
@@ -54,7 +56,7 @@ export function DiagnosticDetails({
           <span>{t("delivery.builder.confidence")}</span>
           <select
             className="select"
-            disabled={question.type === "poll" || question.type === "rating"}
+            disabled={!questionTypeDefinition(question.type).scored}
             onChange={(event) =>
               onUpdateQuestion((item) => ({
                 ...item,
@@ -98,7 +100,9 @@ export function DiagnosticDetails({
       </div>
       {(question.delivery ?? "main") === "main" &&
       question.type !== "poll" &&
-      question.type !== "rating" ? (
+      question.type !== "rating" &&
+      question.type !== "ranking" &&
+      questionTypeDefinition(question.type).supportsRecovery ? (
         <label className="field">
           <span>
             {uxBeta

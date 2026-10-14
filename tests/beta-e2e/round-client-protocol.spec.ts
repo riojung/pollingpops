@@ -2,9 +2,18 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { signInBeta } from "./sign-in";
+import { joinBetaRound } from "./round-join";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
-const expectedClientProfile = { protocolVersion: 2, capabilities: [] };
+const expectedClientProfile = {
+  protocolVersion: 3,
+  capabilities: [
+    "poll.multiselect",
+    "response.ranking",
+    "response.open_text",
+    "response.word_cloud",
+  ],
+};
 
 function observeProfiles(page: Page) {
   const profiles: Array<{ type: string; profile: unknown }> = [];
@@ -30,6 +39,7 @@ for (const suffix of ["desktop", "@mobile"]) {
     browser,
   }) => {
     test.skip(process.env.BETA_E2E_ROUND_PROTOCOL !== "true", "Opt-in protocol-v7 writer test");
+    test.setTimeout(90_000);
     await signInBeta(page);
     const choiceId = randomUUID();
     const created = await page.request.post(`${apiUrl}/v1/quizzes`, {
@@ -91,11 +101,8 @@ for (const suffix of ["desktop", "@mobile"]) {
       const guest = await guestContext.newPage();
       const guestProfiles = observeProfiles(guest);
       await guest.goto(`/join?code=${session.code}`);
-      const joinResponse = guest.waitForResponse(
-        (candidate) => new URL(candidate.url()).pathname === "/v1/sessions/join",
-      );
-      await guest.getByRole("button", { name: "Join round" }).click();
-      expect((await joinResponse).request().postDataJSON().clientCapabilities).toEqual(
+      const joinResponse = await joinBetaRound(guest);
+      expect(joinResponse.request().postDataJSON().clientCapabilities).toEqual(
         expectedClientProfile,
       );
       await expect(guest).toHaveURL(/\/play\//);

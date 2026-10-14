@@ -1,6 +1,12 @@
 import { creationMessages } from "../creation-messages";
 
 export const englishMessages = {
+  "questionType.open_text.label": "Open text",
+  "questionType.open_text.description": "A moderated explanation with no right answer.",
+  "questionType.word_cloud.label": "Word cloud",
+  "questionType.word_cloud.description": "A moderated word or phrase shown as an aggregate cloud.",
+  "questionType.ranking.label": "Ranking",
+  "questionType.ranking.description": "An unscored ordering of priorities with no right answer.",
   "feedback.button": "Feedback",
   "feedback.title": "Share feedback",
   "feedback.description": "Found a problem or have an idea? Help us improve Polling Pops.",

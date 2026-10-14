@@ -21,6 +21,9 @@ import {
   QuestionHealthRevisionAppliedSchema,
   QuestionHealthRevisionUndoneSchema,
   RecoveryPackUpdatePreviewSchema,
+  requiresExtendedRoundResponses,
+  questionTypeDefinition,
+  TEXT_RESPONSE_MAX_QUESTIONS,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../components/brand";
 import { BuilderCommandBar } from "../../../components/editor/builder-command-bar";
@@ -70,6 +73,7 @@ import {
 } from "../../../lib/question-health-draft-sync";
 import { retryWithBackoff } from "../../../lib/retry";
 import { clientUuid } from "../../../lib/uuid";
+import { isTextQuestion } from "../../../lib/text-response";
 import { recordAuthoringEvent } from "../../../components/workspace/product-events";
 
 interface QuizRecord {
@@ -89,6 +93,10 @@ interface EditorProductFeatures {
   workspaceShell: boolean;
   questionHealth?: boolean;
   recoveryPacks?: boolean;
+  multiSelectPolls?: boolean;
+  rankingPolls?: boolean;
+  openTextPolls?: boolean;
+  wordCloudPolls?: boolean;
 }
 
 function newChoices(type: ChoiceQuestionDraft["type"]): ChoiceDraft[] {
@@ -99,7 +107,7 @@ function newChoices(type: ChoiceQuestionDraft["type"]): ChoiceDraft[] {
     ];
   }
   return [
-    { id: clientUuid(), label: "", isCorrect: type !== "poll" },
+    { id: clientUuid(), label: "", isCorrect: type !== "poll" && type !== "ranking" },
     { id: clientUuid(), label: "", isCorrect: false },
     { id: clientUuid(), label: "", isCorrect: false },
     { id: clientUuid(), label: "", isCorrect: false },
@@ -111,13 +119,13 @@ function commonQuestion(type: QuestionType) {
     id: clientUuid(),
     type,
     prompt: "",
-    purpose: type === "rating" || type === "poll" ? ("opinion" as const) : ("diagnostic" as const),
+    purpose: !questionTypeDefinition(type).scored ? ("opinion" as const) : ("diagnostic" as const),
     confidence: "off" as const,
     delivery: "main" as const,
     conceptKeys: [],
     linkedRecheckQuestionId: null,
     timeLimitSeconds: 20,
-    basePoints: type === "rating" || type === "poll" ? 0 : 1_000,
+    basePoints: !questionTypeDefinition(type).scored ? 0 : 1_000,
     explanation: "",
     mediaId: null,
     mediaAlt: null,
@@ -126,6 +134,7 @@ function commonQuestion(type: QuestionType) {
 
 function newQuestion(type: QuestionType): QuestionDraft {
   const common = commonQuestion(type);
+  if (isTextQuestion(type)) return { ...common, type };
   if (type === "numeric") {
     return { ...common, type, correctValue: "", tolerance: "0", unit: null };
   }
@@ -252,7 +261,13 @@ export default function QuizEditorPage() {
               draft: candidate,
               expectedRevision,
               mutationId,
-              schemaVersion: 1,
+              schemaVersion: candidate.questions.some((question) => isTextQuestion(question.type))
+                ? 4
+                : candidate.questions.some((question) => question.type === "ranking")
+                  ? 3
+                  : requiresExtendedRoundResponses(candidate)
+                    ? 2
+                    : 1,
             }),
           });
         });
@@ -649,6 +664,9 @@ export default function QuizEditorPage() {
       "numeric",
       "rating",
       "poll",
+      ...(productFeatures?.rankingPolls ? ["ranking" as const] : []),
+      ...(productFeatures?.openTextPolls ? ["open_text" as const] : []),
+      ...(productFeatures?.wordCloudPolls ? ["word_cloud" as const] : []),
     ];
     initialInsertHandled.current = true;
     if (
@@ -662,7 +680,16 @@ export default function QuizEditorPage() {
       initialInsertNeedsFocus.current = true;
     }
     if (requestedType) router.replace(`/quiz/${id}`);
-  }, [draft, id, router, searchParams, uxBeta]);
+  }, [
+    draft,
+    id,
+    router,
+    searchParams,
+    uxBeta,
+    productFeatures?.rankingPolls,
+    productFeatures?.openTextPolls,
+    productFeatures?.wordCloudPolls,
+  ]);
 
   useEffect(() => {
     if (!initialInsertNeedsFocus.current || !selectedQuestionId) return;
@@ -795,7 +822,22 @@ export default function QuizEditorPage() {
   }
 
   function addQuestion(type: QuestionType) {
-    if (!draft) return;
+    if (
+      !draft ||
+      (type === "ranking" && !productFeatures?.rankingPolls) ||
+      (type === "open_text" && !productFeatures?.openTextPolls) ||
+      (type === "word_cloud" && !productFeatures?.wordCloudPolls)
+    )
+      return;
+    if (
+      isTextQuestion(type) &&
+      draft.questions.filter((question) => isTextQuestion(question.type)).length >=
+        TEXT_RESPONSE_MAX_QUESTIONS
+    ) {
+      setError(t("delivery.builder.textQuestionLimit", { limit: TEXT_RESPONSE_MAX_QUESTIONS }));
+      setErrorIsRaw(false);
+      return;
+    }
     const inserted = newQuestion(type);
     applyStructuralChange({ ...draft, questions: [...draft.questions, inserted] }, inserted.id, {
       draft,
@@ -825,6 +867,15 @@ export default function QuizEditorPage() {
     if (!draft) return;
     const cloned = cloneQuestionReuseSelections(questionReuseSources, selections, clientUuid);
     if (cloned.includedQuestionCount === 0) return;
+    if (
+      draft.questions.filter((item) => isTextQuestion(item.type)).length +
+        cloned.questions.filter((item) => isTextQuestion(item.type)).length >
+      TEXT_RESPONSE_MAX_QUESTIONS
+    ) {
+      setError(t("delivery.builder.textQuestionLimit", { limit: TEXT_RESPONSE_MAX_QUESTIONS }));
+      setErrorIsRaw(false);
+      return;
+    }
     if (draft.questions.length + cloned.includedQuestionCount > 200) {
       setError(t("reportRound.editor.reuseLimit"));
       setErrorIsRaw(false);
@@ -871,6 +922,15 @@ export default function QuizEditorPage() {
     const sourceIndex = draft.questions.findIndex((candidate) => candidate.id === questionId);
     const question = draft.questions[sourceIndex];
     if (!question) return;
+    if (
+      isTextQuestion(question.type) &&
+      draft.questions.filter((item) => isTextQuestion(item.type)).length >=
+        TEXT_RESPONSE_MAX_QUESTIONS
+    ) {
+      setError(t("delivery.builder.textQuestionLimit", { limit: TEXT_RESPONSE_MAX_QUESTIONS }));
+      setErrorIsRaw(false);
+      return;
+    }
     const copy: QuestionDraft = {
       ...question,
       id: clientUuid(),
@@ -891,7 +951,7 @@ export default function QuizEditorPage() {
   function addLinkedRecheck() {
     if (!draft) return;
     const source = draft.questions[selectedIndex];
-    if (!source || source.type === "poll" || source.type === "rating") return;
+    if (!source || !questionTypeDefinition(source.type).supportsRecovery) return;
     const recheck = newQuestion(source.type);
     const linked: QuestionDraft = {
       ...recheck,
@@ -1193,6 +1253,9 @@ export default function QuizEditorPage() {
     numeric: t(uxBeta ? "delivery.builder.type.numeric" : "delivery.builder.type.numericLegacy"),
     rating: t("delivery.builder.type.rating"),
     poll: t("delivery.builder.type.poll"),
+    ranking: t("delivery.builder.type.ranking"),
+    open_text: t("delivery.builder.type.open_text"),
+    word_cloud: t("delivery.builder.type.word_cloud"),
   };
   const publishLimitReached = Boolean(
     quiz &&
@@ -1450,6 +1513,9 @@ export default function QuizEditorPage() {
               </section>
               <div className="editor-layout">
                 <QuestionNavigator
+                  rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
+                  openTextPollsEnabled={Boolean(productFeatures?.openTextPolls)}
+                  wordCloudPollsEnabled={Boolean(productFeatures?.wordCloudPolls)}
                   canReuseQuestions={canEdit}
                   draft={draft}
                   insertType={insertType}
@@ -1508,6 +1574,8 @@ export default function QuizEditorPage() {
                           {(question.delivery ?? "main") === "main" &&
                           question.type !== "poll" &&
                           question.type !== "rating" &&
+                          question.type !== "ranking" &&
+                          !isTextQuestion(question.type) &&
                           !question.linkedRecheckQuestionId ? (
                             <button
                               className="button-quiet small-button"
@@ -1559,6 +1627,8 @@ export default function QuizEditorPage() {
                         uxBeta={false}
                       />
                       <ResponseEditor
+                        multiSelectPollsEnabled={Boolean(productFeatures?.multiSelectPolls)}
+                        rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
                         onStructuralChange={applyQuestionStructuralChange}
                         onUpdateChoiceQuestion={updateChoiceQuestion}
                         onUpdateQuestion={updateQuestion}
@@ -1728,6 +1798,9 @@ export default function QuizEditorPage() {
               data-map-collapsed={questionMapCollapsed}
             >
               <QuestionNavigator
+                rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
+                openTextPollsEnabled={Boolean(productFeatures?.openTextPolls)}
+                wordCloudPollsEnabled={Boolean(productFeatures?.wordCloudPolls)}
                 canReuseQuestions={canEdit}
                 collapsed={questionMapCollapsed}
                 draft={draft}
@@ -1913,6 +1986,8 @@ export default function QuizEditorPage() {
                             </span>
                           </div>
                           <ResponseEditor
+                            multiSelectPollsEnabled={Boolean(productFeatures?.multiSelectPolls)}
+                            rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
                             onStructuralChange={applyQuestionStructuralChange}
                             onUpdateChoiceQuestion={updateChoiceQuestion}
                             onUpdateQuestion={updateQuestion}
@@ -2053,7 +2128,10 @@ export default function QuizEditorPage() {
                           <strong lang="en-CA">This is a recheck question</strong>
                           <p lang="en-CA">Use Diagnose to connect it to a main question.</p>
                         </div>
-                      ) : question.type !== "poll" && question.type !== "rating" ? (
+                      ) : question.type !== "poll" &&
+                        question.type !== "rating" &&
+                        question.type !== "ranking" &&
+                        !isTextQuestion(question.type) ? (
                         <button
                           className="button"
                           lang="en-CA"
@@ -2064,7 +2142,7 @@ export default function QuizEditorPage() {
                         </button>
                       ) : (
                         <p className="notice" lang="en-CA">
-                          Polls and ratings do not use scored rechecks.
+                          Opinion polls, ratings, and rankings do not use scored rechecks.
                         </p>
                       )}
                     </>

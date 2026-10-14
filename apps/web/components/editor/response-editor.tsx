@@ -3,36 +3,102 @@ import { clientUuid } from "../../lib/uuid";
 import { BetaDisclosure } from "./beta-disclosure";
 import {
   isChoiceQuestion,
+  removeQuestionChoice,
   type ChoiceQuestionDraft,
   type ChoiceQuestionUpdater,
   type QuestionStructuralChange,
   type QuestionUpdater,
 } from "./types";
 import { useLocale } from "../locale-provider";
+import { textResponseCharacterLimit } from "@openround/contracts";
+import { isTextQuestion } from "../../lib/text-response";
 
 function ChoiceResponseEditor({
   question,
   uxBeta,
+  multiSelectPollsEnabled,
+  rankingPollsEnabled,
   onStructuralChange,
   onUpdateChoiceQuestion,
 }: {
   question: ChoiceQuestionDraft;
   uxBeta: boolean;
+  multiSelectPollsEnabled: boolean;
+  rankingPollsEnabled: boolean;
   onStructuralChange: QuestionStructuralChange;
   onUpdateChoiceQuestion: ChoiceQuestionUpdater;
 }) {
   const { locale, t } = useLocale();
   return (
     <>
+      {question.type === "ranking" ? (
+        <>
+          <label className="field">
+            <span>{t("delivery.builder.rankingCount")}</span>
+            <select
+              className="select"
+              disabled={!rankingPollsEnabled}
+              value={question.rankCount ?? question.choices.length}
+              onChange={(event) =>
+                onUpdateChoiceQuestion((item) =>
+                  item.type === "ranking"
+                    ? { ...item, rankCount: Number(event.target.value) }
+                    : item,
+                )
+              }
+            >
+              {question.choices.map((_, index) => (
+                <option key={index + 1} value={index + 1}>
+                  {index + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted">{t("delivery.builder.rankingHelp")}</p>
+        </>
+      ) : null}
+      {question.type === "poll" &&
+      (multiSelectPollsEnabled || (question.maxSelections ?? 1) > 1) ? (
+        <>
+          <label className="field">
+            <span>{t("delivery.builder.pollMaximumSelections")}</span>
+            <select
+              className="select"
+              disabled={!multiSelectPollsEnabled}
+              value={question.maxSelections ?? 1}
+              onChange={(event) =>
+                onUpdateChoiceQuestion((item) =>
+                  item.type === "poll"
+                    ? { ...item, maxSelections: Number(event.target.value) }
+                    : item,
+                )
+              }
+            >
+              {question.choices.map((_, index) => (
+                <option key={index + 1} value={index + 1}>
+                  {index + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted">
+            {t(
+              multiSelectPollsEnabled
+                ? "delivery.builder.pollMultipleHelp"
+                : "delivery.builder.pollMultipleUnavailable",
+            )}
+          </p>
+        </>
+      ) : null}
       <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
         <legend className="field-label" style={{ marginBottom: 10 }}>
-          {question.type === "poll"
-            ? t("questionType.poll.label")
+          {question.type === "poll" || question.type === "ranking"
+            ? t(`questionType.${question.type}.label`)
             : t("delivery.builder.choicesAndCorrect")}
         </legend>
         {question.choices.map((choice, index) => (
           <div className="choice-row" key={choice.id}>
-            {question.type !== "poll" ? (
+            {question.type !== "poll" && question.type !== "ranking" ? (
               <input
                 aria-label={`Mark choice ${index + 1} correct`}
                 checked={choice.isCorrect}
@@ -83,7 +149,7 @@ function ChoiceResponseEditor({
                 }
                 value={choice.label}
               />
-              {question.type !== "poll" ? (
+              {question.type !== "poll" && question.type !== "ranking" ? (
                 <div lang="en-CA">
                   <BetaDisclosure
                     className="choice-diagnostics"
@@ -149,13 +215,7 @@ function ChoiceResponseEditor({
               <button
                 className="danger-link"
                 onClick={() =>
-                  onStructuralChange(
-                    {
-                      ...question,
-                      choices: question.choices.filter((candidate) => candidate.id !== choice.id),
-                    },
-                    "Choice removed.",
-                  )
+                  onStructuralChange(removeQuestionChoice(question, choice.id), "Choice removed.")
                 }
                 type="button"
               >
@@ -186,17 +246,29 @@ function ChoiceResponseEditor({
 export function ResponseEditor({
   question,
   uxBeta,
+  multiSelectPollsEnabled = false,
+  rankingPollsEnabled = false,
   onStructuralChange,
   onUpdateChoiceQuestion,
   onUpdateQuestion,
 }: {
   question: QuestionDraft;
   uxBeta: boolean;
+  multiSelectPollsEnabled?: boolean;
+  rankingPollsEnabled?: boolean;
   onStructuralChange: QuestionStructuralChange;
   onUpdateChoiceQuestion: ChoiceQuestionUpdater;
   onUpdateQuestion: QuestionUpdater;
 }) {
   const { t } = useLocale();
+  if (isTextQuestion(question.type))
+    return (
+      <p className="muted">
+        {t("delivery.builder.textResponseHelp", {
+          limit: textResponseCharacterLimit(question.type),
+        })}
+      </p>
+    );
   if (isChoiceQuestion(question)) {
     return (
       <ChoiceResponseEditor
@@ -204,6 +276,8 @@ export function ResponseEditor({
         onUpdateChoiceQuestion={onUpdateChoiceQuestion}
         question={question}
         uxBeta={uxBeta}
+        multiSelectPollsEnabled={multiSelectPollsEnabled}
+        rankingPollsEnabled={rankingPollsEnabled}
       />
     );
   }
@@ -256,6 +330,8 @@ export function ResponseEditor({
       </div>
     );
   }
+
+  if (question.type !== "rating") return null;
 
   return (
     <div className="toolbar">

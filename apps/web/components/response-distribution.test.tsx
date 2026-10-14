@@ -8,6 +8,51 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("ResponseDistributionView", () => {
+  it("shows ranking weights and respondent counts in an accessible table, including unranked options", () => {
+    const markup = renderToStaticMarkup(
+      withEnglishLocale(
+        <ResponseDistributionView
+          distribution={{
+            kind: "ranking",
+            respondents: 5,
+            rankCount: 2,
+            totalRankings: 10,
+            buckets: [
+              {
+                value: "a",
+                label: "Priority A",
+                weightedScore: 15,
+                rankedRespondents: 5,
+                averageRank: 1,
+              },
+              {
+                value: "b",
+                label: "Priority B",
+                weightedScore: 10,
+                rankedRespondents: 5,
+                averageRank: 2,
+              },
+              {
+                value: "c",
+                label: "Priority C",
+                weightedScore: 0,
+                rankedRespondents: 0,
+                averageRank: null,
+              },
+            ],
+          }}
+        />,
+      ),
+    );
+    expect(markup).toContain("5 respondents · each ranked 2 choices.");
+    expect(markup).toContain("First place earns 3 points");
+    expect(markup).toContain('<th scope="col">Weighted score</th>');
+    expect(markup).toContain('<th scope="col">Average rank</th>');
+    expect(markup).toContain(
+      '<th scope="row" lang="">Priority C</th><td>0</td><td>0</td><td>—</td>',
+    );
+    expect(markup).not.toContain("% correct");
+  });
   it("labels multi-select percentages by respondents", () => {
     const markup = renderToStaticMarkup(
       withEnglishLocale(

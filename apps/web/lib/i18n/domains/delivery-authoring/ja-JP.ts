@@ -1,6 +1,22 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 import type { DeliveryAuthoringMessages } from "./en-CA";
 
 export default {
+  ...textPollAuthoringEnglishMessages,
+  ...textPollTranslations["ja-JP"].authoring,
+  "delivery.builder.type.ranking": "順位付け",
+  "delivery.builder.rankingCount": "順位を付ける選択肢の数",
+  "delivery.builder.rankingHelp":
+    "指定された数の選択肢に順位を付け、一度だけ送信します。正解や得点はありません。",
+  "delivery.builder.rankingLiveOnly": "順位付けの投票は現在ライブRoundのみで利用できます。",
+  "delivery.builder.pollMaximumSelections": "選択数の上限",
+  "delivery.builder.pollMultipleHelp":
+    "参加者は上限まで選択し、一度だけ送信できます。投票に正解や得点はありません。",
+  "delivery.builder.pollMultipleUnavailable":
+    "このワークスペースでは複数選択の投票を作成できません。",
+  "delivery.builder.pollMultipleLiveOnly":
+    "複数選択の投票はライブRoundで利用できます。プレゼンテーションと練習では現在、単一選択の投票が必要です。",
   "delivery.landing.polls": "ライブ投票",
   "delivery.landing.presentations": "インタラクティブなプレゼン",
   "delivery.landing.learning": "学習ラウンド",

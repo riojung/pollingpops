@@ -1,7 +1,36 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["de-DE"].live,
+  "live.ranking.yourRanking": "Deine Rangfolge",
+  "live.ranking.instructions":
+    "Ordne {count} von {total} Optionen. Die erste hat die höchste Priorität.",
+  "live.ranking.selected": "{selected} von {count} Optionen geordnet.",
+  "live.ranking.moveUp": "{choice} nach oben verschieben",
+  "live.ranking.moveDown": "{choice} nach unten verschieben",
+  "live.ranking.up": "Nach oben",
+  "live.ranking.down": "Nach unten",
+  "live.ranking.removeChoice": "{choice} aus der Rangfolge entfernen",
+  "live.ranking.remove": "Entfernen",
+  "live.ranking.addChoice": "{choice} zur Rangfolge hinzufügen",
+  "live.ranking.chooseCount": "Ordne vor dem Absenden genau {count} Optionen.",
+  "live.ranking.summary": "{respondents} Teilnehmende · jeweils {count} Optionen geordnet.",
+  "live.ranking.weights":
+    "Der erste Platz erhält {firstPoints} Punkte, jeder weitere Rang einen Punkt weniger. Gleichstände folgen der erstellten Optionsreihenfolge.",
+  "live.ranking.results": "Ergebnisse der Rangfolge",
+  "live.ranking.option": "Option",
+  "live.ranking.score": "Gewichtete Punkte",
+  "live.ranking.rankedBy": "Geordnet von",
+  "live.ranking.averageRank": "Durchschnittlicher Rang",
+  "live.ranking.currentOrder": "Aktuelle Reihenfolge: {choices}",
+  "live.roundPlay.pollSelectionInstructions":
+    "Wähle bis zu {limit} Optionen und sende deine Antwort ab.",
+  "live.roundPlay.pollSelectionLimit": "Wähle bis zu {limit} Optionen. {selected} ausgewählt.",
+  "live.roundPlay.chooseMultiplePoll": "Wähle zwischen 1 und {limit} Umfrageoptionen.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "Aggregate Pulse erscheint, nachdem fünf Personen signalisiert haben, die Privatsphäre des Einzelnen zu schützen.",

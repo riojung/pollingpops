@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTextOpinionQuestion } from "./text-opinions";
 import {
   QuestionDraftSchema,
   QuizContentSchema,
@@ -12,6 +13,13 @@ export const CURRENT_SURVEY_SCHEMA_VERSION = 2;
 export const SurveyQuestionDraftSchema = QuestionDraftSchema.and(
   z.object({ maxSelections: z.number().int().min(1).max(6).optional() }),
 ).superRefine((question, ctx) => {
+  if (question.type === "ranking" || isTextOpinionQuestion(question)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Rankings currently support live Rounds only",
+      path: ["type"],
+    });
+  }
   if (question.maxSelections === undefined) return;
   if (question.type !== "poll" || question.maxSelections > question.choices.length) {
     ctx.addIssue({

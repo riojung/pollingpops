@@ -2019,6 +2019,76 @@ html[data-openround-motion="reduced"] *::after {
   text-align: left;
 }
 
+.poll-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.poll-choice input {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.poll-choice:focus-within {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+.ranking-response {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.ranking-list {
+  padding-left: 28px;
+}
+
+.ranking-list li {
+  padding: 12px 0;
+}
+
+.ranking-list .button-row {
+  margin-top: 8px;
+}
+
+.text-response-list {
+  padding-left: 24px;
+}
+
+.text-response-list p,
+.word-cloud span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.word-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 18px;
+  padding: 24px 8px;
+  font-weight: 750;
+}
+
+.text-moderation-list {
+  list-style: none;
+  padding: 0;
+}
+
+.text-moderation-list li {
+  border-top: 1px solid currentColor;
+  padding: 16px 0;
+}
+
+.text-moderation-list p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .live-shell .answer-button:nth-child(6n + 1) {
   border-color: var(--choice-1);
 }
@@ -3623,4 +3693,16 @@ html[data-openround-motion="reduced"] *::after {
   .participant-submit-bar {
     align-items: stretch;
   }
+}
+
+.ranking-results-table th,
+.ranking-results-table td {
+  padding: 10px 6px;
+  overflow-wrap: anywhere;
+}
+.ranking-results-table {
+  table-layout: fixed;
+}
+.ranking-results-table th:first-child {
+  width: 34%;
 }

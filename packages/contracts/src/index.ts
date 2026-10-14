@@ -5,6 +5,17 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 export { PRODUCT_BRAND } from "./product-brand";
 export * from "./audience-scopes";
 export * from "./qna-policy";
+export * from "./text-opinions";
+import {
+  hasTextOpinionQuestions,
+  isTextOpinionQuestion,
+  normalizeTextResponse,
+  TextResponseValueSchema,
+  TextResponseDistributionSchema,
+  TextResponseModerationStatusSchema,
+  TextResponseModerationCountsSchema,
+  TEXT_RESPONSE_MAX_QUESTIONS,
+} from "./text-opinions";
 
 export {
   clampContentSlideFrame,
@@ -34,7 +45,12 @@ export {
   type PresentationRecoveryPackUpdateComparison,
 } from "./presentation-recovery-pack-updates";
 
-import { RoundClientCapabilitiesSchema, RoundProtocolSchema } from "./round-protocol";
+import {
+  RoundClientCapabilitiesSchema,
+  RoundProtocolSchema,
+  requiresExtendedRoundResponses,
+  hasRankingQuestions,
+} from "./round-protocol";
 export * from "./round-protocol";
 export * from "./management-navigation";
 
@@ -141,6 +157,10 @@ export const PublicFeaturesSchema = z.object({
 export type PublicFeatures = z.infer<typeof PublicFeaturesSchema>;
 
 export const WorkspaceProductFeaturesSchema = z.object({
+  multiSelectPolls: z.boolean().default(false),
+  rankingPolls: z.boolean().default(false),
+  openTextPolls: z.boolean().default(false),
+  wordCloudPolls: z.boolean().default(false),
   roundExperiences: z.boolean(),
   audiencePulse: z.boolean(),
   roomChat: z.boolean(),
@@ -340,17 +360,20 @@ export const QuestionTypeSchema = z.enum([
   "numeric",
   "rating",
   "poll",
+  "ranking",
+  "open_text",
+  "word_cloud",
 ]);
 export type QuestionType = z.infer<typeof QuestionTypeSchema>;
 
-export const QUESTION_TYPE_REGISTRY_VERSION = 1;
+export const QUESTION_TYPE_REGISTRY_VERSION = 3;
 
 export interface QuestionTypeDefinition {
   type: QuestionType;
   label: string;
   editorLabel: string;
   description: string;
-  responseKind: "choice" | "number" | "scale";
+  responseKind: "choice" | "number" | "scale" | "ranking" | "text";
   scored: boolean;
   supportsConfidence: boolean;
   supportsRecovery: boolean;
@@ -422,6 +445,36 @@ export const QUESTION_TYPE_REGISTRY = {
     supportsConfidence: false,
     supportsRecovery: false,
   },
+  ranking: {
+    type: "ranking",
+    label: "Ranking",
+    editorLabel: "Ranking",
+    description: "An unscored ordering of priorities with no right answer.",
+    responseKind: "ranking",
+    scored: false,
+    supportsConfidence: false,
+    supportsRecovery: false,
+  },
+  open_text: {
+    type: "open_text",
+    label: "Open text",
+    editorLabel: "Open text",
+    description: "Moderated plain-text feedback with no right answer.",
+    responseKind: "text",
+    scored: false,
+    supportsConfidence: false,
+    supportsRecovery: false,
+  },
+  word_cloud: {
+    type: "word_cloud",
+    label: "Word cloud",
+    editorLabel: "Word cloud",
+    description: "Moderated short responses grouped into an accessible word cloud.",
+    responseKind: "text",
+    scored: false,
+    supportsConfidence: false,
+    supportsRecovery: false,
+  },
 } as const satisfies Record<QuestionType, QuestionTypeDefinition>;
 
 export function questionTypeDefinition(type: QuestionType): QuestionTypeDefinition {
@@ -464,9 +517,24 @@ export type Choice = z.infer<typeof ChoiceSchema>;
 type ChoiceQuestionRuleInput = {
   type: QuestionType;
   choices: Array<{ isCorrect: boolean }>;
+  maxSelections?: number;
 };
 
+function applySelectionLimitRules(question: ChoiceQuestionRuleInput, ctx: z.RefinementCtx) {
+  if (
+    question.maxSelections !== undefined &&
+    (question.type !== "poll" || question.maxSelections > question.choices.length)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Set a poll selection limit within the available choices",
+      path: ["maxSelections"],
+    });
+  }
+}
+
 function applyChoiceRules(question: ChoiceQuestionRuleInput, ctx: z.RefinementCtx) {
+  applySelectionLimitRules(question, ctx);
   const correct = question.choices.filter((choice) => choice.isCorrect);
   const requiredCorrect = question.type === "multi_select" ? "one or more" : "exactly one";
   if (
@@ -514,25 +582,30 @@ function applyCommonQuestionRules(question: CommonQuestionRuleInput, ctx: z.Refi
       path: ["mediaAlt"],
     });
   }
-  if (question.type === "poll" || question.type === "rating") {
+  if (
+    question.type === "poll" ||
+    question.type === "rating" ||
+    question.type === "ranking" ||
+    isTextOpinionQuestion(question)
+  ) {
     if ((question.purpose ?? "opinion") !== "opinion") {
       ctx.addIssue({
         code: "custom",
-        message: "Poll and rating checkpoints must have an opinion purpose",
+        message: "Opinion checkpoints must have an opinion purpose",
         path: ["purpose"],
       });
     }
     if ((question.confidence ?? "off") !== "off") {
       ctx.addIssue({
         code: "custom",
-        message: "Poll and rating checkpoints cannot collect confidence",
+        message: "Opinion checkpoints cannot collect confidence",
         path: ["confidence"],
       });
     }
     if (question.basePoints !== 0) {
       ctx.addIssue({
         code: "custom",
-        message: "Poll and rating checkpoints are unscored",
+        message: "Opinion checkpoints are unscored",
         path: ["basePoints"],
       });
     }
@@ -584,6 +657,11 @@ export const SourceCitationSchema = z.object({
 export type SourceCitation = z.infer<typeof SourceCitationSchema>;
 
 const CommonQuestionDraftSchema = z.object({
+  maxSelections: z.never().optional(),
+  rankCount: z
+    .number()
+    .optional()
+    .refine((value): boolean => value === undefined, "Only rankings may set a rank count"),
   id: z.string().uuid(),
   prompt: z.string().trim().max(500),
   purpose: QuestionPurposeSchema.optional(),
@@ -603,7 +681,8 @@ const CommonQuestionDraftSchema = z.object({
 const ChoiceQuestionDraftSchema = CommonQuestionDraftSchema.extend({
   type: z.enum(["single_select", "true_false", "multi_select", "poll"]),
   choices: z.array(ChoiceDraftSchema).min(2).max(6),
-});
+  maxSelections: z.number().int().min(1).max(6).optional(),
+}).superRefine(applySelectionLimitRules);
 
 const NumericQuestionDraftSchema = CommonQuestionDraftSchema.extend({
   type: z.literal("numeric"),
@@ -620,14 +699,70 @@ const RatingQuestionDraftSchema = CommonQuestionDraftSchema.extend({
   maxLabel: z.string().trim().max(80),
 });
 
+type RankingQuestionRuleInput = CommonQuestionRuleInput & {
+  rankCount?: number;
+  choices: Array<{ isCorrect: boolean }>;
+};
+function applyRankingRules(question: RankingQuestionRuleInput, ctx: z.RefinementCtx) {
+  if (question.rankCount !== undefined && question.rankCount > question.choices.length) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Rank no more than the available choices",
+      path: ["rankCount"],
+    });
+  }
+  if (question.choices.some((choice) => choice.isCorrect)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Ranking choices cannot be marked correct",
+      path: ["choices"],
+    });
+  }
+  if ((question.delivery ?? "main") !== "main" || question.linkedRecheckQuestionId) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Rankings cannot be linked rechecks",
+      path: ["delivery"],
+    });
+  }
+}
+const RankingQuestionDraftSchema = CommonQuestionDraftSchema.extend({
+  type: z.literal("ranking"),
+  choices: z.array(ChoiceDraftSchema).min(2).max(6),
+  rankCount: z.number().int().min(1).max(6).optional(),
+}).superRefine((question, ctx) => {
+  applyRankingRules(question, ctx);
+  applyCommonQuestionRules(question, ctx);
+});
+
 /**
  * Drafts validate bounded storage shape, not publish-time correctness. This deliberately permits
  * transient editor states such as an unanswered multi-select or an unfinished rating range.
  */
-export const QuestionDraftSchema = z.union([
+export const LegacyQuestionDraftSchema = z.union([
   ChoiceQuestionDraftSchema,
   NumericQuestionDraftSchema,
   RatingQuestionDraftSchema,
+]);
+function applyTextOpinionRules(question: CommonQuestionRuleInput, ctx: z.RefinementCtx) {
+  if ((question.delivery ?? "main") !== "main" || question.linkedRecheckQuestionId) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Text opinions cannot be linked rechecks",
+      path: ["delivery"],
+    });
+  }
+  applyCommonQuestionRules(question, ctx);
+}
+const TextOpinionQuestionDraftSchema = CommonQuestionDraftSchema.extend({
+  type: z.enum(["open_text", "word_cloud"]),
+})
+  .strict()
+  .superRefine(applyTextOpinionRules);
+export const QuestionDraftSchema = z.union([
+  LegacyQuestionDraftSchema,
+  RankingQuestionDraftSchema,
+  TextOpinionQuestionDraftSchema,
 ]);
 export type QuestionDraft = z.infer<typeof QuestionDraftSchema>;
 
@@ -869,7 +1004,14 @@ const CommonQuestionSchema = CommonQuestionDraftSchema.extend({
 const ChoiceQuestionSchema = CommonQuestionSchema.extend({
   type: z.enum(["single_select", "true_false", "multi_select", "poll"]),
   choices: z.array(ChoiceSchema).min(2, "Add at least two answer choices").max(6),
+  maxSelections: z.number().int().min(1).max(6).optional(),
 }).superRefine(applyChoiceRules);
+
+const RankingQuestionSchema = CommonQuestionSchema.extend({
+  type: z.literal("ranking"),
+  choices: z.array(ChoiceSchema).min(2).max(6),
+  rankCount: z.number().int().min(1).max(6).optional(),
+}).superRefine(applyRankingRules);
 
 export function normalizeDecimalString(value: string): string {
   const trimmed = value.trim();
@@ -950,10 +1092,24 @@ const RatingQuestionSchema = CommonQuestionSchema.extend({
   path: ["max"],
 });
 
+const TextOpinionQuestionSchema = CommonQuestionSchema.extend({
+  type: z.enum(["open_text", "word_cloud"]),
+})
+  .strict()
+  .superRefine(applyTextOpinionRules);
 export const QuestionSchema = z
-  .union([ChoiceQuestionSchema, NumericQuestionSchema, RatingQuestionSchema])
+  .union([
+    ChoiceQuestionSchema,
+    NumericQuestionSchema,
+    RatingQuestionSchema,
+    RankingQuestionSchema,
+    TextOpinionQuestionSchema,
+  ])
   .superRefine(applyCommonQuestionRules);
 export type Question = z.infer<typeof QuestionSchema>;
+export const LegacyQuestionSchema = z
+  .union([ChoiceQuestionSchema, NumericQuestionSchema, RatingQuestionSchema])
+  .superRefine(applyCommonQuestionRules);
 
 export const RecoveryInterventionCardDraftSchema = z.object({
   id: z.string().uuid(),
@@ -1033,10 +1189,10 @@ export const RecoveryPackDraftSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   title: z.string().trim().max(160),
   description: z.string().trim().max(1_000).default(""),
-  diagnostic: QuestionDraftSchema,
+  diagnostic: LegacyQuestionDraftSchema,
   interventions: z.array(RecoveryInterventionCardDraftSchema).max(5),
-  recheck: QuestionDraftSchema,
-  delayedProbe: QuestionDraftSchema.nullable().default(null),
+  recheck: LegacyQuestionDraftSchema,
+  delayedProbe: LegacyQuestionDraftSchema.nullable().default(null),
   conceptKeys: z.array(ConceptKeySchema).max(12),
   misconceptionKeys: z.array(ConceptKeySchema).max(12).default([]),
   citations: z.array(SourceCitationSchema).max(20).default([]),
@@ -1045,10 +1201,10 @@ export type RecoveryPackDraft = z.infer<typeof RecoveryPackDraftSchema>;
 
 export const RecoveryPackContentSchema = RecoveryPackDraftSchema.extend({
   title: z.string().trim().min(1).max(160),
-  diagnostic: QuestionSchema,
+  diagnostic: LegacyQuestionSchema,
   interventions: z.array(RecoveryInterventionCardSchema).min(1).max(5),
-  recheck: QuestionSchema,
-  delayedProbe: QuestionSchema.nullable().default(null),
+  recheck: LegacyQuestionSchema,
+  delayedProbe: LegacyQuestionSchema.nullable().default(null),
   conceptKeys: z.array(ConceptKeySchema).min(1).max(12),
 }).superRefine((pack, context) => {
   const issue = (path: (string | number)[], message: string) =>
@@ -1262,7 +1418,13 @@ export const QuizDraftSchema = z.object({
   description: z.string().trim().max(1_000).default(""),
   category: RoundCategorySchema.default("general"),
   experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-  questions: z.array(QuestionDraftSchema).max(200),
+  questions: z
+    .array(QuestionDraftSchema)
+    .max(200)
+    .refine(
+      (questions) => questions.filter(isTextOpinionQuestion).length <= TEXT_RESPONSE_MAX_QUESTIONS,
+      "A Round supports at most ten text opinion checkpoints",
+    ),
   recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
 });
 type ParsedQuizDraft = z.infer<typeof QuizDraftSchema>;
@@ -1278,7 +1440,15 @@ export const QuizContentSchema = z
     description: z.string().trim().max(1_000).default(""),
     category: RoundCategorySchema.default("general"),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    questions: z.array(QuestionSchema).min(1, "Add at least one question").max(200),
+    questions: z
+      .array(QuestionSchema)
+      .min(1, "Add at least one question")
+      .max(200)
+      .refine(
+        (questions) =>
+          questions.filter(isTextOpinionQuestion).length <= TEXT_RESPONSE_MAX_QUESTIONS,
+        "A Round supports at most ten text opinion checkpoints",
+      ),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
   })
   .superRefine((quiz, context) => {
@@ -1373,14 +1543,20 @@ export const OpenRoundCheckpointSetExportV1Schema = z.object({
   format: z.literal("openround.checkpoint-set"),
   version: z.literal(1),
   exportedAt: z.string().datetime(),
-  checkpointSet: QuizDraftSchema.omit({ category: true, experiencePreset: true }),
+  checkpointSet: QuizDraftSchema.omit({ category: true, experiencePreset: true }).refine(
+    (content) => !requiresExtendedRoundResponses(content),
+    "Multiple-selection polls require checkpoint-set format version 5",
+  ),
 });
 
 export const OpenRoundCheckpointSetExportV2Schema = z.object({
   format: z.literal("openround.checkpoint-set"),
   version: z.literal(2),
   exportedAt: z.string().datetime(),
-  checkpointSet: QuizDraftSchema,
+  checkpointSet: QuizDraftSchema.refine(
+    (content) => !requiresExtendedRoundResponses(content),
+    "Multiple-selection polls require checkpoint-set format version 5",
+  ),
 });
 
 /** v3 declares Pack lineage/baselines so older importers fail rather than silently losing them. */
@@ -1393,7 +1569,31 @@ export const OpenRoundCheckpointSetExportV4Schema = OpenRoundCheckpointSetExport
   version: z.literal(4),
 });
 
+/** v5 preserves multiple-selection opinion poll limits without reinterpreting older formats. */
+export const OpenRoundCheckpointSetExportV5Schema = OpenRoundCheckpointSetExportV4Schema.extend({
+  version: z.literal(5),
+  checkpointSet: QuizDraftSchema.refine(
+    (content) => !hasRankingQuestions(content) && !hasTextOpinionQuestions(content),
+    "Rankings require checkpoint-set format version 6",
+  ),
+});
+
+export const OpenRoundCheckpointSetExportV6Schema = OpenRoundCheckpointSetExportV5Schema.extend({
+  version: z.literal(6),
+  checkpointSet: QuizDraftSchema.refine(
+    (content) => !hasTextOpinionQuestions(content),
+    "Text opinions require checkpoint-set format version 7",
+  ),
+});
+export const OpenRoundCheckpointSetExportV7Schema = OpenRoundCheckpointSetExportV6Schema.extend({
+  version: z.literal(7),
+  checkpointSet: QuizDraftSchema,
+});
+
 export const OpenRoundCheckpointSetExportSchema = z.union([
+  OpenRoundCheckpointSetExportV7Schema,
+  OpenRoundCheckpointSetExportV6Schema,
+  OpenRoundCheckpointSetExportV5Schema,
   OpenRoundCheckpointSetExportV4Schema,
   OpenRoundCheckpointSetExportV3Schema,
   OpenRoundCheckpointSetExportV2Schema,
@@ -1494,7 +1694,12 @@ export const OrganizeQuizSchema = z.object({
 export function questionPurpose(question: Pick<QuestionDraft, "type" | "purpose">) {
   return (
     question.purpose ??
-    (question.type === "poll" || question.type === "rating" ? "opinion" : "diagnostic")
+    (question.type === "poll" ||
+    question.type === "rating" ||
+    question.type === "ranking" ||
+    isTextOpinionQuestion(question)
+      ? "opinion"
+      : "diagnostic")
   );
 }
 
@@ -1543,6 +1748,69 @@ export const SessionPhaseSchema = z.enum([
 ]);
 export type SessionPhase = z.infer<typeof SessionPhaseSchema>;
 
+export const RoundResponseModerationPageSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    version: z.number().int().nonnegative(),
+    phase: SessionPhaseSchema,
+    items: z
+      .array(
+        z
+          .object({
+            answerId: z.string().uuid(),
+            roundId: z.string().uuid(),
+            questionId: z.string().uuid(),
+            questionPrompt: z.string().trim().min(1).max(500),
+            body: TextResponseValueSchema.nullable(),
+            status: TextResponseModerationStatusSchema,
+            submittedAt: z.string().datetime(),
+            authorAlias: z.string().max(80).nullable(),
+          })
+          .strict()
+          .refine(
+            (item) => item.status !== "removed" || item.body === null,
+            "Removed responses cannot expose a body",
+          ),
+      )
+      .max(50),
+    nextCursor: z.string().max(2_000).nullable(),
+  })
+  .strict();
+export type RoundResponseModerationPage = z.infer<typeof RoundResponseModerationPageSchema>;
+export const RoundTextResponseResultsSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    roundId: z.string().uuid(),
+    version: z.number().int().nonnegative(),
+    type: z.enum(["open_text", "word_cloud"]),
+    visible: z.boolean(),
+    approvedRespondents: z.number().int().min(0).max(250),
+    items: z
+      .array(z.object({ answerId: z.string().uuid(), body: TextResponseValueSchema }).strict())
+      .max(50),
+    terms: z
+      .array(
+        z
+          .object({
+            value: z.string().min(1).max(240),
+            label: z.string().min(1).max(240),
+            count: z.number().int().positive().max(250),
+          })
+          .strict(),
+      )
+      .max(50),
+    nextCursor: z.string().max(2_000).nullable(),
+  })
+  .strict()
+  .refine(
+    (result) =>
+      result.visible
+        ? result.approvedRespondents >= 5
+        : result.items.length === 0 && result.terms.length === 0 && result.nextCursor === null,
+    "Unrevealed or small-sample text results cannot expose bodies",
+  );
+export type RoundTextResponseResults = z.infer<typeof RoundTextResponseResultsSchema>;
+
 export const AVATAR_IDS = [
   "comet",
   "fox",
@@ -1571,6 +1839,8 @@ const LiveQuestionBaseSchema = z.object({
   type: QuestionTypeSchema.default("single_select"),
   prompt: z.string(),
   confidence: ConfidenceModeSchema.default("off"),
+  maxSelections: z.number().int().min(1).max(6).optional(),
+  rankCount: z.number().int().min(1).max(6).optional(),
   choices: z
     .array(ChoiceSchema.omit({ isCorrect: true, feedback: true, misconceptionKey: true }))
     .default([]),
@@ -1700,8 +1970,21 @@ const RatingResponseSchema = z.object({
 
 const PollResponseSchema = z.object({
   kind: z.literal("poll"),
-  choiceIds: z.array(z.string().uuid()).length(1),
+  choiceIds: z.array(z.string().uuid()).min(1).max(6),
 });
+const RankingResponseSchema = z.object({
+  kind: z.literal("ranking"),
+  choiceIds: z.array(z.string().uuid()).min(1).max(6),
+});
+
+const TextResponseSchema = z.object({ kind: z.literal("text"), value: TextResponseValueSchema });
+export const PreTextResponsePayloadSchema = z.discriminatedUnion("kind", [
+  ChoiceResponseSchema,
+  NumericResponseSchema,
+  RatingResponseSchema,
+  PollResponseSchema,
+  RankingResponseSchema,
+]);
 
 export const ResponsePayloadSchema = z
   .discriminatedUnion("kind", [
@@ -1709,10 +1992,12 @@ export const ResponsePayloadSchema = z
     NumericResponseSchema,
     RatingResponseSchema,
     PollResponseSchema,
+    RankingResponseSchema,
+    TextResponseSchema,
   ])
   .superRefine((response, context) => {
     if (
-      (response.kind === "choice" || response.kind === "poll") &&
+      (response.kind === "choice" || response.kind === "poll" || response.kind === "ranking") &&
       new Set(response.choiceIds).size !== response.choiceIds.length
     ) {
       context.addIssue({ code: "custom", message: "A choice can only be selected once" });
@@ -1727,6 +2012,11 @@ export function canonicalizeResponse(response: ResponsePayload): ResponsePayload
   if (response.kind === "numeric") {
     return { ...response, value: normalizeDecimalString(response.value) };
   }
+  if (response.kind === "ranking") {
+    return { ...response, choiceIds: [...response.choiceIds] };
+  }
+  if (response.kind === "text")
+    return { kind: "text", value: normalizeTextResponse(response.value) };
   return response;
 }
 
@@ -1741,7 +2031,7 @@ const ResponseDistributionBucketSchema = z.object({
  * Aggregate response evidence that is safe to expose to authenticated session staff only.
  * It is omitted before lock/reveal and whenever fewer than five people responded.
  */
-export const ResponseDistributionSchema = z.discriminatedUnion("kind", [
+export const LegacyResponseDistributionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("choice"),
     respondents: z.number().int().min(5),
@@ -1761,9 +2051,39 @@ export const ResponseDistributionSchema = z.discriminatedUnion("kind", [
     incorrect: z.number().int().nonnegative(),
   }),
 ]);
+export const RankingResponseDistributionSchema = z.object({
+  kind: z.literal("ranking"),
+  respondents: z.number().int().min(5),
+  rankCount: z.number().int().min(1).max(6),
+  totalRankings: z.number().int().nonnegative(),
+  buckets: z
+    .array(
+      z.object({
+        value: z.string().uuid(),
+        label: z.string().min(1).max(500),
+        weightedScore: z.number().int().nonnegative(),
+        rankedRespondents: z.number().int().nonnegative(),
+        averageRank: z.number().min(1).max(6).nullable(),
+      }),
+    )
+    .min(2)
+    .max(6),
+});
+export const PreTextResponseDistributionSchema = z.union([
+  LegacyResponseDistributionSchema,
+  RankingResponseDistributionSchema,
+]);
+export type PreTextResponseDistribution = z.infer<typeof PreTextResponseDistributionSchema>;
+export const ResponseDistributionSchema = z.union([
+  PreTextResponseDistributionSchema,
+  TextResponseDistributionSchema,
+]);
 export type ResponseDistribution = z.infer<typeof ResponseDistributionSchema>;
 
 export const SessionSnapshotSchema = z.object({
+  myResponseAccepted: z.boolean().optional(),
+  myResponseModerationStatus: TextResponseModerationStatusSchema.nullable().optional(),
+  responseModerationCounts: TextResponseModerationCountsSchema.optional(),
   roundProtocol: RoundProtocolSchema.optional(),
   mode: z.literal("live").default("live"),
   uxBeta: z.boolean().optional(),
@@ -1795,16 +2115,16 @@ export const SessionSnapshotSchema = z.object({
   pausedRemainingMs: z.number().int().nonnegative().nullable(),
   myParticipantId: z.string().uuid().nullable().optional(),
   myAnswerChoiceId: z.string().uuid().nullable().optional(),
-  myResponse: ResponsePayloadSchema.nullable().optional(),
+  myResponse: PreTextResponsePayloadSchema.nullable().optional(),
   myConfidence: ConfidenceValueSchema.nullable().optional(),
   myCorrect: z.boolean().nullable().optional(),
   correctChoiceId: z.string().uuid().nullable().optional(),
-  correctResponse: ResponsePayloadSchema.nullable().optional(),
+  correctResponse: PreTextResponsePayloadSchema.nullable().optional(),
   explanation: z.string().nullable().optional(),
   feedback: z.string().nullable().optional(),
   intervention: InterventionStateSchema.nullable().default(null),
   insight: CheckpointInsightSchema.optional(),
-  responseDistribution: ResponseDistributionSchema.optional(),
+  responseDistribution: PreTextResponseDistributionSchema.optional(),
   recoveryPackCards: z.array(RecoveryPackLiveCardSchema).max(5).optional(),
   recoveryPackCard: RecoveryPackLiveCardSchema.optional(),
 });
@@ -2451,6 +2771,7 @@ export const HostActionSchema = z.enum([
   "intervention.start",
   "intervention.finish",
   "recheck.open",
+  "response.moderate",
 ]);
 export type HostAction = z.infer<typeof HostActionSchema>;
 
@@ -2463,12 +2784,25 @@ export const HostCommandSchema = z
     expectedVersion: z.number().int().nonnegative(),
     action: HostActionSchema,
     participantId: z.string().uuid().optional(),
+    answerId: z.string().uuid().optional(),
+    responseStatus: z.enum(["approved", "removed"]).optional(),
     interventionType: InterventionTypeSchema.optional(),
     recheckMode: z.enum(["linked", "revote"]).optional(),
     recheckQuestionId: z.string().uuid().optional(),
     recoveryPackCard: RecoveryPackCardSelectionSchema.optional(),
   })
   .superRefine((command, context) => {
+    if (
+      (command.action === "response.moderate") !==
+        Boolean(command.answerId && command.responseStatus) ||
+      (command.action !== "response.moderate" && (command.answerId || command.responseStatus))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Moderation commands require an answer and approval/removal status",
+        path: ["answerId"],
+      });
+    }
     if (
       command.recoveryPackCard &&
       (command.action !== "intervention.start" ||
@@ -2592,12 +2926,28 @@ export const RevisionedUpdateQuizSchema = z.object({
 export type RevisionedUpdateQuiz = z.infer<typeof RevisionedUpdateQuizSchema>;
 
 /** Revision-fenced, idempotent Round draft replacement used by the professional Builder. */
-export const RoundDraftMutationSchema = z.object({
-  draft: QuizDraftSchema,
-  expectedRevision: DraftRevisionSchema,
-  mutationId: z.string().uuid(),
-  schemaVersion: z.literal(1),
-});
+export const RoundDraftMutationSchema = z
+  .object({
+    draft: QuizDraftSchema,
+    expectedRevision: DraftRevisionSchema,
+    mutationId: z.string().uuid(),
+    schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  })
+  .refine(
+    (input) =>
+      input.schemaVersion >=
+      (hasTextOpinionQuestions(input.draft)
+        ? 4
+        : hasRankingQuestions(input.draft)
+          ? 3
+          : requiresExtendedRoundResponses(input.draft)
+            ? 2
+            : 1),
+    {
+      message: "Declare the Round artifact version required by its response formats",
+      path: ["schemaVersion"],
+    },
+  );
 export type RoundDraftMutation = z.infer<typeof RoundDraftMutationSchema>;
 
 export const RestoreRoundDraftHistorySchema = z.object({
@@ -2719,7 +3069,7 @@ export const ReportSummarySchema = z.object({
   title: z.string().min(1).max(160),
   status: z.enum(["pending", "ready", "failed"]),
   participantCount: z.number().int().nonnegative(),
-  initialAccuracyPercent: z.number().min(0).max(100),
+  initialAccuracyPercent: z.number().min(0).max(100).nullable(),
   recovery: RecoverySummarySchema,
   unresolvedConceptCount: z.number().int().nonnegative(),
   interventionCount: z.number().int().nonnegative(),
@@ -3004,7 +3354,7 @@ const ReportQuestionSchema = z.object({
   correct: z.number().int().nonnegative(),
   accuracyPercent: z.number().min(0).max(100),
   difficult: z.boolean(),
-  responseDistribution: ResponseDistributionSchema.optional(),
+  responseDistribution: LegacyResponseDistributionSchema.optional(),
 });
 
 const ReportParticipantSchema = z.object({
@@ -3236,7 +3586,42 @@ export const ReportV4Schema = ReportV3Schema.extend({
   decisionTimeline: z.array(SessionDecisionEventSchema).max(MAX_SESSION_DECISION_EVENTS + 1),
 });
 
+/** Opinion correctness is absent rather than reported as zero-percent understanding. */
+export const ReportV5Schema = ReportV4Schema.extend({
+  schemaVersion: z.literal(5),
+  metrics: ReportMetricsSchema.extend({ accuracyPercent: z.number().min(0).max(100).nullable() }),
+  initialAccuracy: ReportV4Schema.shape.initialAccuracy.extend({
+    percent: z.number().min(0).max(100).nullable(),
+  }),
+  questions: z.array(
+    ReportQuestionSchema.extend({
+      correct: z.number().int().nonnegative().nullable(),
+      accuracyPercent: z.number().min(0).max(100).nullable(),
+    }),
+  ),
+});
+
+export const ReportV6Schema = ReportV5Schema.extend({
+  schemaVersion: z.literal(6),
+  questions: z.array(
+    ReportV5Schema.shape.questions.element.extend({
+      responseDistribution: PreTextResponseDistributionSchema.optional(),
+    }),
+  ),
+});
+
+export const ReportV7Schema = ReportV6Schema.extend({
+  schemaVersion: z.literal(7),
+  questions: z.array(
+    ReportV6Schema.shape.questions.element.extend({
+      responseDistribution: ResponseDistributionSchema.optional(),
+    }),
+  ),
+});
 export const ReportSchema = z.union([
+  ReportV7Schema,
+  ReportV6Schema,
+  ReportV5Schema,
   ReportV4Schema,
   ReportV3Schema,
   ReportV2Schema,
@@ -3247,10 +3632,16 @@ export type Report = z.input<typeof ReportSchema>;
 export type ReportV2 = z.input<typeof ReportV2Schema>;
 export type ReportV3 = z.input<typeof ReportV3Schema>;
 export type ReportV4 = z.input<typeof ReportV4Schema>;
+export type ReportV5 = z.input<typeof ReportV5Schema>;
+export type ReportV6 = z.input<typeof ReportV6Schema>;
+export type ReportV7 = z.input<typeof ReportV7Schema>;
 export type ResolvedReport = z.output<typeof ReportSchema>;
 export type ResolvedReportV2 = z.output<typeof ReportV2Schema>;
 export type ResolvedReportV3 = z.output<typeof ReportV3Schema>;
 export type ResolvedReportV4 = z.output<typeof ReportV4Schema>;
+export type ResolvedReportV5 = z.output<typeof ReportV5Schema>;
+export type ResolvedReportV6 = z.output<typeof ReportV6Schema>;
+export type ResolvedReportV7 = z.output<typeof ReportV7Schema>;
 
 export const FollowupTimeModeSchema = z.enum(["timed", "flex"]);
 export type FollowupTimeMode = z.infer<typeof FollowupTimeModeSchema>;
@@ -4041,6 +4432,8 @@ function applyPresentationTopology(
           kind: "question";
           question: {
             id: string;
+            type?: QuestionType;
+            maxSelections?: number;
             delivery?: QuestionDelivery;
             linkedRecheckQuestionId?: string | null;
             choices?: Array<{ id: string }>;
@@ -4067,6 +4460,17 @@ function applyPresentationTopology(
     }
     blockIds.add(block.id);
     if (block.kind !== "question") continue;
+    if (
+      block.question.type === "ranking" ||
+      isTextOpinionQuestion(block.question) ||
+      (block.question.type === "poll" && (block.question.maxSelections ?? 1) > 1)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Multiple-selection polls currently support live Rounds only",
+        path: ["blocks", blockIndex, "question", "maxSelections"],
+      });
+    }
     if (questionIds.has(block.question.id)) {
       ctx.addIssue({
         code: "custom",

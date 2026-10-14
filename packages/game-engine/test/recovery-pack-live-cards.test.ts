@@ -243,8 +243,8 @@ describe("frozen live Recovery Pack cards", () => {
       stateSchemaVersion: 6,
       recoveryPackCardsEnabled: false,
     });
-    expect(() => upgradeGameState({ ...enabled, stateSchemaVersion: 8 })).toThrow(
-      "newer than supported schema 7",
+    expect(() => upgradeGameState({ ...enabled, stateSchemaVersion: 10 })).toThrow(
+      "newer than supported schema 9",
     );
   });
 

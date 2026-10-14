@@ -274,7 +274,11 @@ function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
             </div>
             <div className={styles.metricGrid}>
               <div className={styles.metric}>
-                <strong>{formatPercent(report.initialAccuracyPercent)}</strong>
+                <strong>
+                  {report.initialAccuracyPercent === null
+                    ? "—"
+                    : formatPercent(report.initialAccuracyPercent)}
+                </strong>
                 <span>{t("pages.common.initialAccuracy")}</span>
               </div>
               <div className={styles.metric}>

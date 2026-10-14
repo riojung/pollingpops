@@ -1,6 +1,7 @@
 import type { FolderArtifactType } from "@openround/contracts";
 import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
-import type { EngineAnswer } from "@openround/game-engine";
+import { upgradeGameState, type EngineAnswer } from "@openround/game-engine";
+import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { reserveRoomCoverageInMemory, releaseRoomCoverageInMemory } from "./platform-memory.js";
@@ -120,11 +121,13 @@ import {
   assertRoundContentSchemaVersion,
   upcastRoundContent,
   upcastRoundDraft,
+  roundArtifactSchemaVersion,
 } from "./artifact-schemas.js";
 import {
   MAX_SESSION_DECISION_EVENTS,
   QUESTION_HEALTH_POST_USE_MAX_REPORTS,
   ReportSchema,
+  TextResponseAnswerIdsSchema,
   SessionDecisionEventSchema,
   questionDelivery,
   type BrandTheme,
@@ -1002,7 +1005,10 @@ export class MemoryRepository implements Repository {
   }
 
   async createQuiz(input: QuizRecord) {
-    const parsed = normalizeQuizRecord(input);
+    const parsed = normalizeQuizRecord({
+      ...input,
+      draftSchemaVersion: input.draftSchemaVersion ?? roundArtifactSchemaVersion(input.draft),
+    });
     const normalized = {
       ...parsed,
       folderId: parsed.folderId ?? null,
@@ -1065,7 +1071,8 @@ export class MemoryRepository implements Repository {
   ) {
     const quiz = this.quizzes.get(quizId);
     if (!quiz || quiz.workspaceId !== workspaceId || quiz.status === "archived") return null;
-    const normalizedDraft = upcastRoundDraft(draft, ROUND_DRAFT_SCHEMA_VERSION);
+    const draftSchemaVersion = roundArtifactSchemaVersion(draft);
+    const normalizedDraft = upcastRoundDraft(draft, draftSchemaVersion);
     const currentDraftRevision = quiz.draftRevision ?? 0;
     if (expectedDraftRevision !== undefined && expectedDraftRevision !== currentDraftRevision) {
       throw new QuizDraftRevisionConflictError(
@@ -1081,7 +1088,7 @@ export class MemoryRepository implements Repository {
       description: normalizedDraft.description,
       draft: structuredClone(normalizedDraft),
       draftRevision: currentDraftRevision + 1,
-      draftSchemaVersion: ROUND_DRAFT_SCHEMA_VERSION,
+      draftSchemaVersion,
       lastEditedBy: editorId ?? quiz.lastEditedBy ?? null,
       updatedAt: new Date(),
     });
@@ -1092,7 +1099,7 @@ export class MemoryRepository implements Repository {
       quizId,
       revision: quiz.draftRevision ?? currentDraftRevision + 1,
       draft: structuredClone(normalizedDraft),
-      draftSchemaVersion: ROUND_DRAFT_SCHEMA_VERSION,
+      draftSchemaVersion,
       savedBy: editorId ?? quiz.lastEditedBy ?? null,
       mutationId: null,
       createdAt: quiz.updatedAt,
@@ -1417,6 +1424,13 @@ export class MemoryRepository implements Repository {
       .map((snapshot) => structuredClone(normalizeQuizHistory(snapshot)));
   }
 
+  async getQuizDraftHistory(workspaceId: string, quizId: string, revision: number) {
+    const snapshot = this.quizDraftHistory.get(`${quizId}:${revision}`);
+    return snapshot?.workspaceId === workspaceId
+      ? structuredClone(normalizeQuizHistory(snapshot))
+      : null;
+  }
+
   async restoreQuizDraftHistory(input: {
     workspaceId: string;
     quizId: string;
@@ -1578,7 +1592,10 @@ export class MemoryRepository implements Repository {
         quiz.lastEditedBy ?? null,
       );
     }
-    const normalizedInput = normalizeQuizVersion(input);
+    const normalizedInput = normalizeQuizVersion({
+      ...input,
+      contentSchemaVersion: input.contentSchemaVersion ?? roundArtifactSchemaVersion(input.content),
+    });
     const publishedQuizCount = [...this.quizzes.values()].filter(
       (candidate) =>
         candidate.workspaceId === input.workspaceId && candidate.status === "published",
@@ -1971,6 +1988,7 @@ export class MemoryRepository implements Repository {
   }
 
   async createSession(input: StoredSession) {
+    upgradeGameState(input.state);
     await this.claimLiveRoomCode({
       code: input.state.code,
       workspaceId: input.workspaceId,
@@ -2168,6 +2186,7 @@ export class MemoryRepository implements Repository {
     report?: Report,
     decisionEvents: SessionDecisionEventWrite[] = [],
   ) {
+    upgradeGameState(input.state);
     if (this.workspaceMediaDeletionClaims.has(input.workspaceId)) {
       throw new WorkspaceDeletionInProgressError(input.workspaceId);
     }
@@ -2405,6 +2424,7 @@ export class MemoryRepository implements Repository {
     participants: ParticipantRecord[],
     expectedVersion: number,
   ) {
+    upgradeGameState(session.state);
     await getMemoryPlatformRepository(this).withTransaction(async (platform) => {
       this.assertWorkspaceLiveSessionCreationAllowed(session.workspaceId);
       const current = this.sessions.get(session.id);
@@ -3349,6 +3369,16 @@ export class MemoryRepository implements Repository {
       .map(([, answer]) => structuredClone(answer));
   }
 
+  async getSessionAnswersByIds(workspaceId: string, sessionId: string, ids: string[]) {
+    const requested = new Set(TextResponseAnswerIdsSchema.parse(ids));
+    const session = this.sessions.get(sessionId);
+    if (!session || session.workspaceId !== workspaceId || requested.size === 0) return [];
+    return [...this.answers.entries()]
+      .filter(([key, answer]) => key.startsWith(`${sessionId}:`) && requested.has(answer.answerId))
+      .map(([, answer]) => structuredClone(answer))
+      .sort((a, b) => a.acceptedAtMs - b.acceptedAtMs || a.answerId.localeCompare(b.answerId));
+  }
+
   async findParticipantIdsWithAnswers(
     workspaceId: string,
     sessionId: string,
@@ -3834,6 +3864,7 @@ export class MemoryRepository implements Repository {
     expectedVersion: number,
     _options: { roundEvidencePersisted?: boolean } = {},
   ) {
+    upgradeGameState(session.state);
     if (this.workspaceMediaDeletionClaims.has(session.workspaceId)) {
       throw new WorkspaceDeletionInProgressError(session.workspaceId);
     }
@@ -3994,25 +4025,28 @@ export class MemoryRepository implements Repository {
         trustMode: session.trustMode ?? report.trustMode ?? "learning",
         timeMode: report.timeMode ?? session.state.settings.timeMode ?? "timed",
         scoringMode: session.state.settings.scoringMode,
-        questions: report.questions.map((question) => {
+        questions: report.questions.flatMap((question) => {
+          if (question.correct === null) return [];
           const distribution = question.responseDistribution;
-          return {
-            questionId: question.questionId,
-            responses: question.responses,
-            correct: question.correct,
-            ...(distribution?.kind === "choice"
-              ? {
-                  responseDistribution: {
-                    kind: "choice" as const,
-                    buckets: distribution.buckets.flatMap((bucket) =>
-                      typeof bucket.value === "string"
-                        ? [{ value: bucket.value, count: bucket.count }]
-                        : [],
-                    ),
-                  },
-                }
-              : {}),
-          };
+          return [
+            {
+              questionId: question.questionId,
+              responses: question.responses,
+              correct: question.correct,
+              ...(distribution?.kind === "choice"
+                ? {
+                    responseDistribution: {
+                      kind: "choice" as const,
+                      buckets: distribution.buckets.flatMap((bucket) =>
+                        typeof bucket.value === "string"
+                          ? [{ value: bucket.value, count: bucket.count }]
+                          : [],
+                      ),
+                    },
+                  }
+                : {}),
+            },
+          ];
         }),
       })),
     };
@@ -4991,6 +5025,9 @@ export class MemoryRepository implements Repository {
       ownedWorkspaceIds.has(session.workspaceId),
     );
     const sessionIds = new Set(sessions.map((session) => session.id));
+    const exportedSessionStates = new Map(
+      sessions.map((session) => [session.id, roundStateForExport(session.state)]),
+    );
     const participants = [...this.participants.values()].filter((participant) =>
       sessionIds.has(participant.sessionId),
     );
@@ -5052,10 +5089,16 @@ export class MemoryRepository implements Repository {
             ownedWorkspaceIdList.map((workspaceId) => this.listMediaReferences(workspaceId)),
           )
         ).flat(),
-        sessions: sessions.map(({ hostTokenHash: _hostTokenHash, ...session }) => session),
+        sessions: sessions.map(({ hostTokenHash: _hostTokenHash, ...session }) => ({
+          ...session,
+          state: exportedSessionStates.get(session.id)!,
+        })),
         participants: participants.map(({ tokenHash: _tokenHash, ...participant }) => participant),
         answers: [...this.answers.entries()]
-          .filter(([key]) => sessionIds.has(key.split(":", 1)[0]!))
+          .filter(([key, answer]) => {
+            const state = exportedSessionStates.get(key.split(":", 1)[0]!);
+            return state !== undefined && roundAnswerExportAllowed(state, answer);
+          })
           .map(([, answer]) => structuredClone(answer)),
         reports: [...this.reports.values()]
           .filter((report) => sessionIds.has(report.sessionId))

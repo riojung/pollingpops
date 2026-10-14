@@ -272,6 +272,7 @@ describe("Recovery Pack three-way comparison", () => {
       correctValue: "+01.000",
       tolerance: "0.00",
       unit: null,
+      maxSelections: undefined,
     };
     expect(
       buildRecoveryPackUpdatePreview(draft, numericInsertion, { ...target, content }).items[1]!

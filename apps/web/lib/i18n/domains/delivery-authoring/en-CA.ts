@@ -1,4 +1,18 @@
+import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 export const deliveryAuthoringEnglishMessages = {
+  ...textPollAuthoringEnglishMessages,
+  "delivery.builder.type.ranking": "Ranking",
+  "delivery.builder.rankingCount": "Choices to rank",
+  "delivery.builder.rankingHelp":
+    "Participants rank exactly this many choices, then submit once. Ranking polls are unscored and have no correct answer.",
+  "delivery.builder.rankingLiveOnly": "Ranking polls currently support live Rounds only.",
+  "delivery.builder.pollMaximumSelections": "Maximum selections",
+  "delivery.builder.pollMultipleHelp":
+    "Participants may select up to this limit, then submit once. Polls have no correct answer or score.",
+  "delivery.builder.pollMultipleUnavailable":
+    "Multiple-selection poll authoring is not enabled for this workspace.",
+  "delivery.builder.pollMultipleLiveOnly":
+    "Multiple-selection polls are available in live Rounds. Presentations and practice currently require single-choice polls.",
   "delivery.landing.polls": "Live polls",
   "delivery.landing.presentations": "Interactive presentations",
   "delivery.landing.learning": "Learning rounds",

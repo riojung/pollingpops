@@ -48,6 +48,9 @@ const typeLabels: Record<QuestionType, string> = {
   numeric: "numeric response",
   rating: "rating",
   poll: "poll",
+  ranking: "ranking",
+  open_text: "open text",
+  word_cloud: "word cloud",
 };
 
 function normalizeSearchText(value: string) {

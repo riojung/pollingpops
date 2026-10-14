@@ -168,6 +168,18 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
         body: "Rating and poll questions are unscored and have confidence turned off. They collect audience views rather than correct/incorrect judgments.",
       },
       {
+        title: "Allow several poll selections",
+        body: "When enabled for your workspace, live Round polls offer Maximum selections. Set a limit from one to the number of options. Participants select up to that limit, review their choices, then submit once. Saved selections survive refresh. Results use the percentage of respondents, so percentages can total more than 100%. Presentations and practice currently require single-choice polls.",
+      },
+      {
+        title: "Rank audience priorities",
+        body: "When enabled for your workspace, choose Ranking in a live Round and set Choices to rank. Full-list rankings start in the authored order; top-N rankings start empty. Participants add choices and use Move up/Move down buttons, then submit once. Results show weighted scores, the number who ranked each option, and average rank. Ranking is unscored and currently supported only in live Rounds.",
+      },
+      {
+        title: "Review text before sharing",
+        body: "When enabled for your workspace, Open text and Word cloud collect unscored feedback in live Rounds. Participants submit once, then see a saved-review status without retaining their response on screen. The facilitator reviews Pending responses, chooses Approve or permanent Remove, and can review All questions before finishing. Approved results appear only after reveal with at least five approved respondents. Word clouds include an accessible count table. Use up to ten text questions and 250 participants per Round.",
+      },
+      {
         title: "Set delivery and feedback",
         body: "Choose the timer, points where applicable, and explanation. For a private instructional image, provide meaningful alt text and wait for upload/scanning to finish. Image upload depends on operator configuration.",
       },
@@ -272,7 +284,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
     notes: [
       "One completion per room credential is enforced, not verified one-person participation. Another browser/device is a new credential.",
       "No alias, learning identity, score or timer is collected. Clearing browser site data loses resume access.",
-      "Open text, word clouds, ranking, advanced exports, passcodes and individual credential revocation remain pending. Free shares five published items across Rounds and Surveys.",
+      "Live Rounds support gated open text, word clouds and ranking. Survey extensions for open text, word clouds, ranking, advanced exports, passcodes and individual credential revocation remain pending. Free shares five published items across Rounds and Surveys.",
     ],
     troubleshooting: [
       {

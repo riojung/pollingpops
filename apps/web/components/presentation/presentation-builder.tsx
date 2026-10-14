@@ -1,5 +1,7 @@
 "use client";
 
+import { isTextQuestion } from "../../lib/text-response";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -70,6 +72,7 @@ import { ContentSlideView, contentSlideRegionLabels } from "./content-slide-view
 import { isChoiceQuestion } from "../editor/types";
 import { useLocale } from "../locale-provider";
 import { questionTypeOptions, responseTypeLabel } from "../workspace/workspace-model";
+import { multipleSelectionPoll } from "../../lib/participant-response";
 import { recordAuthoringEvent } from "../workspace/product-events";
 import { useWorkspace } from "../workspace/workspace-provider";
 import {
@@ -134,6 +137,9 @@ const questionTypeMessageKeys = {
   numeric: "delivery.builder.type.numeric",
   rating: "delivery.builder.type.rating",
   poll: "delivery.builder.type.poll",
+  ranking: "delivery.builder.type.ranking",
+  open_text: "delivery.builder.type.open_text",
+  word_cloud: "delivery.builder.type.word_cloud",
 } as const satisfies Record<QuestionType, string>;
 
 function updateBlock(
@@ -271,10 +277,12 @@ function PresentationPreview({
                 </div>
               ) : block.question.type === "numeric" ? (
                 <div className={styles.previewAnswer}>Participants enter a number</div>
-              ) : (
+              ) : block.question.type === "rating" ? (
                 <div className={styles.previewAnswer}>
                   {block.question.min} — {block.question.max}
                 </div>
+              ) : (
+                <p>This response format is available in live Rounds only.</p>
               )}
             </article>
           )}
@@ -1337,6 +1345,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   }
 
   function toggleImportedQuestion(questionId: string) {
+    const question = publishedRound?.questions.find((candidate) => candidate.id === questionId);
+    if (
+      question &&
+      (multipleSelectionPoll(question) ||
+        question.type === "ranking" ||
+        isTextQuestion(question.type))
+    )
+      return;
     setSelectedQuestionIds((current) =>
       current.includes(questionId)
         ? current.filter((candidate) => candidate !== questionId)
@@ -1907,6 +1923,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                   question={selectedBlock.question}
                   uxBeta
                 />
+                {selectedBlock.question.type === "poll" ? (
+                  <p className="muted">{t("delivery.builder.pollMultipleLiveOnly")}</p>
+                ) : null}
               </div>
             </section>
           )}
@@ -2409,11 +2428,15 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         }}
                         value={selectedBlock.question.type}
                       >
-                        {questionTypeOptions.map((option) => (
-                          <option key={option.type} value={option.type}>
-                            {t(questionTypeMessageKeys[option.type])}
-                          </option>
-                        ))}
+                        {questionTypeOptions
+                          .filter(
+                            (option) => option.type !== "ranking" && !isTextQuestion(option.type),
+                          )
+                          .map((option) => (
+                            <option key={option.type} value={option.type}>
+                              {t(questionTypeMessageKeys[option.type])}
+                            </option>
+                          ))}
                       </select>
                     </label>
                     <label className={styles.field}>
@@ -2651,6 +2674,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 <label key={question.id}>
                   <input
                     checked={selectedQuestionIds.includes(question.id)}
+                    disabled={
+                      multipleSelectionPoll(question) ||
+                      question.type === "ranking" ||
+                      isTextQuestion(question.type)
+                    }
                     onChange={() => toggleImportedQuestion(question.id)}
                     type="checkbox"
                   />
@@ -2660,6 +2688,21 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     </strong>
                     <small>
                       {responseTypeLabel(question.type)} · {question.delivery ?? "main"}
+                      {multipleSelectionPoll(question) ||
+                      question.type === "ranking" ||
+                      isTextQuestion(question.type) ? (
+                        <span lang={locale}>
+                          {" "}
+                          ·{" "}
+                          {t(
+                            question.type === "ranking"
+                              ? "delivery.builder.rankingLiveOnly"
+                              : isTextQuestion(question.type)
+                                ? "delivery.builder.textLiveOnly"
+                                : "delivery.builder.pollMultipleLiveOnly",
+                          )}
+                        </span>
+                      ) : null}
                     </small>
                   </span>
                 </label>

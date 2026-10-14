@@ -1,6 +1,15 @@
-import type { ReportV2, ReportV3, ReportV4 } from "@openround/contracts";
+import type {
+  ReportV2,
+  ReportV3,
+  ReportV4,
+  ReportV5,
+  ReportV6,
+  ReportV7,
+} from "@openround/contracts";
 
-export function deriveRecoverySummary(report: ReportV2 | ReportV3 | ReportV4) {
+export function deriveRecoverySummary(
+  report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7,
+) {
   const recovered = report.recovery.reduce((total, item) => total + item.recovered, 0);
   const denominator = report.recovery.reduce(
     (total, item) => total + item.initiallyIncorrectWithBoth,

@@ -1,6 +1,23 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 import type { DeliveryAuthoringMessages } from "./en-CA";
 
 export default {
+  ...textPollAuthoringEnglishMessages,
+  ...textPollTranslations["es-ES"].authoring,
+  "delivery.builder.type.ranking": "Clasificación",
+  "delivery.builder.rankingCount": "Opciones para ordenar",
+  "delivery.builder.rankingHelp":
+    "Los participantes ordenan exactamente este número de opciones y envían una respuesta. No hay puntuación ni respuesta correcta.",
+  "delivery.builder.rankingLiveOnly":
+    "Las clasificaciones solo están disponibles actualmente en Rounds en directo.",
+  "delivery.builder.pollMaximumSelections": "Máximo de selecciones",
+  "delivery.builder.pollMultipleHelp":
+    "Los participantes pueden seleccionar opciones hasta este límite y enviar una sola respuesta. Las encuestas no tienen respuestas correctas ni puntuación.",
+  "delivery.builder.pollMultipleUnavailable":
+    "La creación de encuestas de selección múltiple no está habilitada para este espacio de trabajo.",
+  "delivery.builder.pollMultipleLiveOnly":
+    "Las encuestas de selección múltiple están disponibles en Rounds en directo. Las presentaciones y la práctica requieren actualmente una sola opción.",
   "delivery.landing.polls": "Encuestas en directo",
   "delivery.landing.presentations": "Presentaciones interactivas",
   "delivery.landing.learning": "Rondas de aprendizaje",

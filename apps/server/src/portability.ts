@@ -4,6 +4,10 @@ import {
   QuestionDraftSchema,
   QuizContentSchema,
   QuizDraftSchema,
+  requiresExtendedRoundResponses,
+  hasRankingQuestions,
+  hasTextOpinionQuestions,
+  questionPurpose,
   type ImportValidationReport,
   type QuestionDraft,
   type QuizDraft,
@@ -37,6 +41,8 @@ const csvHeaders = [
   "time_limit_seconds",
   "base_points",
   "explanation",
+  "max_selections",
+  "rank_count",
 ] as const;
 
 function issue(
@@ -142,12 +148,18 @@ export function openRoundJson(draft: QuizDraft) {
   return JSON.stringify(
     OpenRoundCheckpointSetExportSchema.parse({
       format: "openround.checkpoint-set",
-      version: draft.recoveryPackInsertions?.some((insertion) => insertion.updateBaseline)
-        ? 4
-        : draft.recoveryPackInsertions?.length ||
-            draft.questions.some((question) => question.recoveryPackSource)
-          ? 3
-          : 2,
+      version: hasTextOpinionQuestions(draft)
+        ? 7
+        : hasRankingQuestions(draft)
+          ? 6
+          : requiresExtendedRoundResponses(draft)
+            ? 5
+            : draft.recoveryPackInsertions?.some((insertion) => insertion.updateBaseline)
+              ? 4
+              : draft.recoveryPackInsertions?.length ||
+                  draft.questions.some((question) => question.recoveryPackSource)
+                ? 3
+                : 2,
       exportedAt: new Date().toISOString(),
       checkpointSet: draft,
     }),
@@ -164,8 +176,7 @@ export function checkpointSetCsv(draft: QuizDraft) {
       checkpoint.linkedRecheckQuestionId ?? "",
       checkpoint.type,
       checkpoint.prompt,
-      checkpoint.purpose ??
-        (checkpoint.type === "poll" || checkpoint.type === "rating" ? "opinion" : "diagnostic"),
+      questionPurpose(checkpoint),
       checkpoint.confidence ?? "off",
       checkpoint.delivery ?? "main",
       JSON.stringify(checkpoint.conceptKeys ?? []),
@@ -189,6 +200,8 @@ export function checkpointSetCsv(draft: QuizDraft) {
       checkpoint.timeLimitSeconds,
       checkpoint.basePoints,
       checkpoint.explanation,
+      checkpoint.type === "poll" ? (checkpoint.maxSelections ?? 1) : "",
+      checkpoint.type === "ranking" ? (checkpoint.rankCount ?? checkpoint.choices.length) : "",
     ]);
   }
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
@@ -321,7 +334,10 @@ function importCsv(data: string, title?: string): CheckpointSetImportResult {
   }
   const headers = rows.shift()?.map((header) => header.trim()) ?? [];
   const duplicateHeaders = headers.filter((header, index) => headers.indexOf(header) !== index);
-  const missingHeaders = csvHeaders.filter((header) => !headers.includes(header));
+  // Older CSV files predate opinion-poll selection limits and retain a limit of one.
+  const missingHeaders = csvHeaders.filter(
+    (header) => !["max_selections", "rank_count"].includes(header) && !headers.includes(header),
+  );
   if (duplicateHeaders.length || missingHeaders.length) {
     if (duplicateHeaders.length) {
       issues.push(
@@ -361,8 +377,26 @@ function importCsv(data: string, title?: string): CheckpointSetImportResult {
     try {
       const sourceId = value(row, "source_id") || `row-${rowNumber}`;
       const type = value(row, "type");
+      const selectionLimit = value(row, "max_selections");
+      if (selectionLimit && (type !== "poll" || !/^[1-6]$/.test(selectionLimit))) {
+        throw new Error("max_selections must be a whole number from one to six for a poll");
+      }
+      const rankCount = value(row, "rank_count");
+      if (rankCount && (type !== "ranking" || !/^[1-6]$/.test(rankCount))) {
+        throw new Error("rank_count must be a whole number from one to six for a ranking question");
+      }
       if (
-        !["single_select", "true_false", "multi_select", "numeric", "rating", "poll"].includes(type)
+        ![
+          "single_select",
+          "true_false",
+          "multi_select",
+          "numeric",
+          "rating",
+          "poll",
+          "ranking",
+          "open_text",
+          "word_cloud",
+        ].includes(type)
       ) {
         throw new Error(`Unsupported checkpoint type: ${type || "blank"}`);
       }
@@ -376,7 +410,9 @@ function importCsv(data: string, title?: string): CheckpointSetImportResult {
         prompt: value(row, "prompt"),
         purpose:
           value(row, "purpose") ||
-          (type === "poll" || type === "rating" ? "opinion" : "diagnostic"),
+          (["poll", "rating", "ranking", "open_text", "word_cloud"].includes(type)
+            ? "opinion"
+            : "diagnostic"),
         confidence: value(row, "confidence") || "off",
         delivery: value(row, "delivery") || "main",
         conceptKeys: JSON.parse(value(row, "concept_keys_json") || "[]") as unknown,
@@ -384,20 +420,22 @@ function importCsv(data: string, title?: string): CheckpointSetImportResult {
         timeLimitSeconds: integer(value(row, "time_limit_seconds"), 20),
         basePoints: integer(
           value(row, "base_points"),
-          type === "poll" || type === "rating" ? 0 : 1_000,
+          ["poll", "rating", "ranking", "open_text", "word_cloud"].includes(type) ? 0 : 1_000,
         ),
         explanation: value(row, "explanation"),
         mediaId: null,
         mediaAlt: null,
       };
       let checkpoint: unknown;
-      if (["single_select", "true_false", "multi_select", "poll"].includes(type)) {
+      if (["single_select", "true_false", "multi_select", "poll", "ranking"].includes(type)) {
         const choices = JSON.parse(value(row, "choices_json") || "[]") as Array<
           Record<string, unknown>
         >;
         checkpoint = {
           ...common,
           choices: choices.map((choice) => ({ ...choice, id: randomUUID() })),
+          ...(type === "poll" && selectionLimit ? { maxSelections: Number(selectionLimit) } : {}),
+          ...(type === "ranking" && rankCount ? { rankCount: Number(rankCount) } : {}),
         };
       } else if (type === "numeric") {
         checkpoint = {
@@ -406,7 +444,7 @@ function importCsv(data: string, title?: string): CheckpointSetImportResult {
           tolerance: value(row, "tolerance"),
           unit: value(row, "unit") || null,
         };
-      } else {
+      } else if (type === "rating") {
         checkpoint = {
           ...common,
           min: integer(value(row, "rating_min"), 1),
@@ -414,6 +452,8 @@ function importCsv(data: string, title?: string): CheckpointSetImportResult {
           minLabel: value(row, "rating_min_label"),
           maxLabel: value(row, "rating_max_label"),
         };
+      } else {
+        checkpoint = common;
       }
       const parsed = QuestionDraftSchema.safeParse(checkpoint);
       if (!parsed.success) {

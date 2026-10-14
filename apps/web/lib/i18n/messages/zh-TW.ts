@@ -3,6 +3,12 @@ import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  "questionType.open_text.label": "開放文字",
+  "questionType.open_text.description": "經主持人審核的解釋，沒有正確答案。",
+  "questionType.word_cloud.label": "詞雲",
+  "questionType.word_cloud.description": "將審核通過的單字或短語彙總顯示。",
+  "questionType.ranking.label": "排序",
+  "questionType.ranking.description": "為優先事項排序，沒有正確答案或分數。",
   ...creationMessages("zh-TW"),
   ...feedbackMessages("zh-TW"),
   "common.create": "建立",

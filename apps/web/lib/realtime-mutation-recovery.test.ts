@@ -6,12 +6,26 @@ import {
 } from "./realtime-mutation-recovery";
 
 function snapshot(
-  input: Pick<SessionSnapshot, "phase" | "roundId" | "myResponse">,
+  input: Pick<SessionSnapshot, "phase" | "roundId" | "myResponse"> &
+    Partial<Pick<SessionSnapshot, "myResponseAccepted">>,
 ): SessionSnapshot {
   return input as SessionSnapshot;
 }
 
 describe("participantSubmissionRecovery", () => {
+  it("reconciles accepted text from a body-free marker after acknowledgement loss", () => {
+    expect(
+      participantSubmissionRecovery(
+        "round-1",
+        snapshot({
+          phase: "question_open",
+          roundId: "round-1",
+          myResponse: null,
+          myResponseAccepted: true,
+        }),
+      ),
+    ).toBe("saved");
+  });
   it("uses the authoritative saved response after a reconnect", () => {
     expect(
       participantSubmissionRecovery(

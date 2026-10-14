@@ -61,6 +61,36 @@ describe("Recovery Pack authoring", () => {
     expect(recoveryPackPairs([{ ...main, delivery: "recheck" }, recheck])).toEqual([]);
   });
 
+  it("does not turn an opinion ranking into a learning Recovery Pack", () => {
+    const ranking: QuestionDraft = {
+      id: main.id,
+      prompt: "Choose your priorities",
+      timeLimitSeconds: 30,
+      explanation: "",
+      mediaId: null,
+      mediaAlt: null,
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+      type: "ranking",
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      choices: [
+        { id: "10000000-0000-4000-8000-000000000011", label: "First priority", isCorrect: false },
+        { id: "10000000-0000-4000-8000-000000000012", label: "Second priority", isCorrect: false },
+      ],
+    };
+    expect(recoveryPackPairs([ranking, recheck])).toEqual([]);
+    expect(() =>
+      recoveryPackDraftFromPair(
+        "Recovery",
+        ranking,
+        recheck,
+        "10000000-0000-4000-8000-000000000003",
+      ),
+    ).toThrow("Only learning checkpoints");
+  });
+
   it("copies the pair without changing the published source", () => {
     const draft = recoveryPackDraftFromPair(
       "Recovery",

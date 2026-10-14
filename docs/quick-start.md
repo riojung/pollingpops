@@ -9,8 +9,9 @@ The guides are currently in English and label optional capabilities that are not
 This guide starts the complete community stack and walks through one live checkpoint round. The
 normal path takes about ten minutes after container images are available.
 
-Core-parity includes Presentation Q&A and a gated self-paced Survey beta. Word clouds, ranking,
-open text, standalone Q&A feedback rooms and advanced feedback exports remain pending.
+Core-parity includes Presentation Q&A, a gated self-paced Survey beta, and gated Live Round
+multiple-selection polls, ranking, moderated open text and word clouds. Standalone Q&A feedback
+rooms and advanced feedback exports remain pending.
 
 ## Try the new creation workflows
 
@@ -34,7 +35,14 @@ The service launcher passes these keys. The flags enable an opt-in beta, not pro
 Choose **Survey → Training feedback**, edit and wait for **Saved.**, publish, and create a sharing link. Participants
 scan/open the QR/link or enter its code, save progress, and submit without a nickname or account.
 In a Survey poll, **Maximum selections** controls single-choice radios or multi-choice checkboxes,
-up to the number of available options. Live Round polls remain single-choice in this increment.
+up to the number of available options. Live Round polls offer the same bounded setting when
+`FEATURE_ROUND_CLIENT_PROTOCOL=true` and the workspace UUID is in
+`CORE_PARITY_WORKSPACE_ALLOWLIST`. Their multiple-selection player uses explicit submission;
+polls remain unscored, and Presentation/practice delivery of this setting remains unsupported.
+The same gate enables Ranking, Open text and Word cloud in Live Round builders. Text responses
+start in a private moderation queue; approve at least five responses and reveal results before
+they appear publicly. Review responses before ending the session. See
+[response-format guidance](user-guide.md#create-and-organize-rounds) for controls and limits.
 Creator draft changes autosave; **Save draft** saves immediately. Publishing waits for the latest
 save and remains an explicit action. If a save fails, select **Retry save**. A revision conflict
 pauses saving: download your local draft before confirming **Reload latest version**. Keep the
@@ -230,7 +238,8 @@ default by running the normal `docker compose up -d` command again.
 1. In the professional workspace, select **Create**, then **Round**, choose a starting method, and
    give the Round a title. In the classic view, enter a title under **Your checkpoint sets** and
    select **Create checkpoint set**.
-2. Add a single-select, true/false, multiple-select, numeric, rating, or poll checkpoint.
+2. Add a single-select, true/false, multiple-select, numeric, rating, or poll checkpoint. Enabled
+   Live Round workspaces also offer ranking, open text and word clouds.
 3. Choose a topic category and one of the seven Round Experience presets. New blank work starts
    with Candy Pop, the Polling Pops signature. The category recommends a
    preset but does not replace an explicit selection. Preview the host, presenter, and phone

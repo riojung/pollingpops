@@ -236,19 +236,19 @@ describe("persisted artifact schema upcasters", () => {
   });
 
   it.each([
-    ["Round draft", () => upcastRoundDraft({}, 2)],
-    ["Round content", () => upcastRoundContent({}, 2)],
+    ["Round draft", () => upcastRoundDraft({}, 5)],
+    ["Round content", () => upcastRoundContent({}, 5)],
     ["Presentation draft", () => upcastPresentationDraft({}, 4)],
     ["Presentation content", () => upcastPresentationContent({}, 4)],
-  ])("rejects an unknown schema version for %s", (_label, parse) => {
+  ])("rejects an unknown schema version for %s", (label, parse) => {
     expect(parse).toThrow(UnsupportedArtifactSchemaVersionError);
     try {
       parse();
     } catch (error) {
       expect(error).toMatchObject({
         code: "UNSUPPORTED_ARTIFACT_SCHEMA_VERSION",
-        schemaVersion: _label.startsWith("Presentation") ? 4 : 2,
-        supportedVersions: _label.startsWith("Presentation") ? [1, 2, 3] : [1],
+        schemaVersion: label.startsWith("Round") ? 5 : 4,
+        supportedVersions: label.startsWith("Round") ? [1, 2, 3, 4] : [1, 2, 3],
       });
     }
   });
@@ -268,7 +268,7 @@ describe("persisted artifact schema upcasters", () => {
         description: "",
         status: "draft",
         draft,
-        draftSchemaVersion: 2,
+        draftSchemaVersion: 5,
         currentVersionId: null,
         createdAt: now,
         updatedAt: now,
@@ -292,7 +292,7 @@ describe("persisted artifact schema upcasters", () => {
       quizId,
       revision: 99,
       draft,
-      draftSchemaVersion: 2,
+      draftSchemaVersion: 5,
       savedBy: null,
       mutationId: null,
       createdAt: now,

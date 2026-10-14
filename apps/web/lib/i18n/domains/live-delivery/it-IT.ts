@@ -1,7 +1,36 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...textPollLiveEnglishMessages,
+  ...textPollTranslations["it-IT"].live,
+  "live.ranking.yourRanking": "La tua classifica",
+  "live.ranking.instructions":
+    "Ordina {count} opzioni su {total}. La prima ha la massima priorità.",
+  "live.ranking.selected": "{selected} opzioni ordinate su {count}.",
+  "live.ranking.moveUp": "Sposta {choice} in alto",
+  "live.ranking.moveDown": "Sposta {choice} in basso",
+  "live.ranking.up": "Sposta in alto",
+  "live.ranking.down": "Sposta in basso",
+  "live.ranking.removeChoice": "Rimuovi {choice} dalla classifica",
+  "live.ranking.remove": "Rimuovi",
+  "live.ranking.addChoice": "Aggiungi {choice} alla classifica",
+  "live.ranking.chooseCount": "Ordina esattamente {count} opzioni prima di inviare.",
+  "live.ranking.summary": "{respondents} partecipanti · ciascuno ha ordinato {count} opzioni.",
+  "live.ranking.weights":
+    "Il primo posto vale {firstPoints} punti, ogni posizione successiva un punto in meno. A parità di punteggio si usa l’ordine originale delle opzioni.",
+  "live.ranking.results": "Risultati della classifica",
+  "live.ranking.option": "Opzione",
+  "live.ranking.score": "Punteggio ponderato",
+  "live.ranking.rankedBy": "Classificata da",
+  "live.ranking.averageRank": "Posizione media",
+  "live.ranking.currentOrder": "Ordine attuale: {choices}",
+  "live.roundPlay.pollSelectionInstructions":
+    "Seleziona fino a {limit} opzioni, poi invia la risposta.",
+  "live.roundPlay.pollSelectionLimit": "Seleziona fino a {limit} opzioni. {selected} selezionate.",
+  "live.roundPlay.chooseMultiplePoll": "Scegli tra 1 e {limit} opzioni del sondaggio.",
   ...companionEnglishMessages,
   "live.audience.aggregatePrivacy":
     "Aggregate Pulse appare dopo cinque persone segnale per proteggere la privacy individuale.",

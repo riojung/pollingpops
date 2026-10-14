@@ -1,6 +1,21 @@
+import { textPollTranslations } from "../../text-poll-translations";
+import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 import type { DeliveryAuthoringMessages } from "./en-CA";
 
 export default {
+  ...textPollAuthoringEnglishMessages,
+  ...textPollTranslations["zh-CN"].authoring,
+  "delivery.builder.type.ranking": "排序",
+  "delivery.builder.rankingCount": "排序选项数",
+  "delivery.builder.rankingHelp":
+    "参与者必须为此数量的选项排序，然后提交一次。排序投票没有正确答案或分数。",
+  "delivery.builder.rankingLiveOnly": "排序投票目前仅支持实时 Round。",
+  "delivery.builder.pollMaximumSelections": "最多选择数",
+  "delivery.builder.pollMultipleHelp":
+    "参与者可选择不超过此数量的选项，然后提交一次。投票没有正确答案或分数。",
+  "delivery.builder.pollMultipleUnavailable": "此工作区尚未启用多选投票创建功能。",
+  "delivery.builder.pollMultipleLiveOnly":
+    "多选投票可用于实时 Round。演示和练习目前要求使用单选投票。",
   "delivery.landing.polls": "实时投票",
   "delivery.landing.presentations": "互动演示",
   "delivery.landing.learning": "学习轮次",

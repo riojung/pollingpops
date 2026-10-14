@@ -10,6 +10,9 @@ import type {
   ReportV2,
   ReportV3,
   ReportV4,
+  ReportV5,
+  ReportV6,
+  ReportV7,
   ResponseDistribution,
   WorkspaceProductFeatures,
 } from "@openround/contracts";
@@ -19,6 +22,8 @@ import { RecoveryStorySummary } from "../../../components/recovery-story";
 import { recordFollowupShared } from "../../../components/workspace/product-events";
 import { API_URL, apiFetch, humanError } from "../../../lib/api";
 import { deriveRecoverySummary } from "../../../lib/report-summary";
+import { RankingDistribution } from "../../../components/ranking-distribution";
+import { TextResultsView } from "../../../components/text-results-view";
 
 interface ReportContext {
   quizId: string;
@@ -30,7 +35,11 @@ interface ReportContext {
 type ReportTab =
   "evidence" | "decision_replay" | "questions" | "participants" | "interactions" | "manage";
 
-function RecoveryStory({ report }: { report: ReportV2 | ReportV3 | ReportV4 }) {
+function RecoveryStory({
+  report,
+}: {
+  report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
+}) {
   const summary = deriveRecoverySummary(report);
   const evidenceLabel =
     summary.evidenceTypes.length === 0
@@ -85,6 +94,32 @@ function ReportDistribution({
   if (!distribution) {
     return responses < 5 ? "Hidden below five responses" : "Not available";
   }
+  if (distribution.kind === "open_text" || distribution.kind === "word_cloud")
+    return (
+      <details>
+        <summary>{distribution.respondents} approved respondents</summary>
+        <TextResultsView
+          type={distribution.kind}
+          respondents={distribution.respondents}
+          items={
+            distribution.kind === "open_text"
+              ? distribution.entries.map((entry, index) => ({
+                  answerId: String(index),
+                  body: entry.value,
+                }))
+              : []
+          }
+          terms={distribution.kind === "word_cloud" ? distribution.buckets : []}
+        />
+      </details>
+    );
+  if (distribution.kind === "ranking")
+    return (
+      <details>
+        <summary>{distribution.respondents} respondents</summary>
+        <RankingDistribution distribution={distribution} />
+      </details>
+    );
   if (distribution.kind === "numeric") {
     return `${distribution.correct} correct · ${distribution.incorrect} incorrect`;
   }
@@ -106,7 +141,11 @@ function ReportDistribution({
   );
 }
 
-function EvidenceSections({ report }: { report: ReportV2 | ReportV3 | ReportV4 }) {
+function EvidenceSections({
+  report,
+}: {
+  report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
+}) {
   const recovered = report.recovery.reduce((total, item) => total + item.recovered, 0);
   const recoveryDenominator = report.recovery.reduce(
     (total, item) => total + item.initiallyIncorrectWithBoth,
@@ -119,8 +158,12 @@ function EvidenceSections({ report }: { report: ReportV2 | ReportV3 | ReportV4 }
       </p>
       <section className="metric-grid" aria-label="Recovery evidence" style={{ marginBottom: 26 }}>
         <div className="metric">
-          <strong>{report.initialAccuracy.percent}%</strong>
-          <span>initial accuracy</span>
+          <strong>
+            {report.initialAccuracy.percent === null ? "—" : `${report.initialAccuracy.percent}%`}
+          </strong>
+          <span>
+            {report.initialAccuracy.percent === null ? "No assessed answers" : "initial accuracy"}
+          </span>
         </div>
         <div className="metric">
           <strong>{report.participation.percent}%</strong>
@@ -261,7 +304,7 @@ function EvidenceSections({ report }: { report: ReportV2 | ReportV3 | ReportV4 }
   );
 }
 
-function DecisionTimeline({ report }: { report: ReportV4 }) {
+function DecisionTimeline({ report }: { report: ReportV4 | ReportV5 | ReportV6 | ReportV7 }) {
   const labelForEvent = (event: ReportV4["decisionTimeline"][number]) => {
     switch (event.type) {
       case "insight_shown":
@@ -329,7 +372,7 @@ function InteractionEvidenceSections({
   transcriptExport,
   uxBeta,
 }: {
-  report: ReportV3 | ReportV4;
+  report: ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
   transcriptExport: boolean;
   uxBeta: boolean;
 }) {
@@ -457,7 +500,7 @@ function FollowupBuilder({
   initialFollowup,
   uxBeta,
 }: {
-  report: ReportV2 | ReportV3 | ReportV4;
+  report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
   entitlement: boolean;
   initialFollowup: Followup | null;
   uxBeta: boolean;
@@ -888,17 +931,31 @@ export default function ReportPage() {
   }, []);
 
   const uxBeta = productFeatures?.uxBeta === true;
+  const showResponseDistributions =
+    uxBeta || report?.questions.some((question) => question.correct === null) === true;
 
   const evidence =
-    report?.schemaVersion === 2 || report?.schemaVersion === 3 || report?.schemaVersion === 4
+    report?.schemaVersion === 2 ||
+    report?.schemaVersion === 3 ||
+    report?.schemaVersion === 4 ||
+    report?.schemaVersion === 5 ||
+    report?.schemaVersion === 6 ||
+    report?.schemaVersion === 7
       ? report
       : null;
   const detailTabs: { id: ReportTab; label: string }[] = [
     ...(evidence ? [{ id: "evidence" as const, label: "Evidence" }] : []),
-    ...(report?.schemaVersion === 4
+    ...(report?.schemaVersion === 4 ||
+    report?.schemaVersion === 5 ||
+    report?.schemaVersion === 6 ||
+    report?.schemaVersion === 7
       ? [{ id: "decision_replay" as const, label: "Decision replay" }]
       : []),
-    ...(report?.schemaVersion === 3 || report?.schemaVersion === 4
+    ...(report?.schemaVersion === 3 ||
+    report?.schemaVersion === 4 ||
+    report?.schemaVersion === 5 ||
+    report?.schemaVersion === 6 ||
+    report?.schemaVersion === 7
       ? [{ id: "interactions" as const, label: "Conversation" }]
       : []),
     { id: "questions", label: "Questions" },
@@ -1025,8 +1082,14 @@ export default function ReportPage() {
                   <span>answers</span>
                 </div>
                 <div className="metric">
-                  <strong>{report.metrics.accuracyPercent}%</strong>
-                  <span>accuracy</span>
+                  <strong>
+                    {report.metrics.accuracyPercent === null
+                      ? "—"
+                      : `${report.metrics.accuracyPercent}%`}
+                  </strong>
+                  <span>
+                    {report.metrics.accuracyPercent === null ? "No assessed answers" : "accuracy"}
+                  </span>
                 </div>
                 <div className="metric">
                   <strong>
@@ -1071,12 +1134,21 @@ export default function ReportPage() {
                 role={uxBeta ? "tabpanel" : undefined}
               >
                 <EvidenceSections report={evidence} />
-                {!uxBeta && report.schemaVersion === 4 ? (
+                {!uxBeta &&
+                (report.schemaVersion === 4 ||
+                  report.schemaVersion === 5 ||
+                  report.schemaVersion === 6 ||
+                  report.schemaVersion === 7) ? (
                   <DecisionTimeline report={report} />
                 ) : null}
               </div>
             ) : null}
-            {uxBeta && selectedTab === "decision_replay" && report.schemaVersion === 4 ? (
+            {uxBeta &&
+            selectedTab === "decision_replay" &&
+            (report.schemaVersion === 4 ||
+              report.schemaVersion === 5 ||
+              report.schemaVersion === 6 ||
+              report.schemaVersion === 7) ? (
               <div
                 aria-labelledby="report-tab-decision_replay"
                 id="report-panel-decision_replay"
@@ -1086,7 +1158,11 @@ export default function ReportPage() {
               </div>
             ) : null}
             {(!uxBeta || selectedTab === "interactions") &&
-            (report.schemaVersion === 3 || report.schemaVersion === 4) ? (
+            (report.schemaVersion === 3 ||
+              report.schemaVersion === 4 ||
+              report.schemaVersion === 5 ||
+              report.schemaVersion === 6 ||
+              report.schemaVersion === 7) ? (
               <div
                 aria-labelledby={uxBeta ? "report-tab-interactions" : undefined}
                 id={uxBeta ? "report-panel-interactions" : undefined}
@@ -1131,7 +1207,7 @@ export default function ReportPage() {
                         <th>Responses</th>
                         <th>Correct</th>
                         <th>Accuracy</th>
-                        {uxBeta ? <th>Distribution</th> : null}
+                        {showResponseDistributions ? <th>Distribution</th> : null}
                         <th>Follow-up</th>
                       </tr>
                     </thead>
@@ -1140,9 +1216,13 @@ export default function ReportPage() {
                         <tr key={question.questionId}>
                           <td lang="">{question.prompt}</td>
                           <td>{question.responses}</td>
-                          <td>{question.correct}</td>
-                          <td>{question.accuracyPercent}%</td>
-                          {uxBeta ? (
+                          <td>{question.correct === null ? "Not scored" : question.correct}</td>
+                          <td>
+                            {question.accuracyPercent === null
+                              ? "Not scored"
+                              : `${question.accuracyPercent}%`}
+                          </td>
+                          {showResponseDistributions ? (
                             <td>
                               <ReportDistribution
                                 distribution={question.responseDistribution}
@@ -1150,7 +1230,13 @@ export default function ReportPage() {
                               />
                             </td>
                           ) : null}
-                          <td>{question.difficult ? "Review" : "On track"}</td>
+                          <td>
+                            {question.correct === null
+                              ? "Opinion feedback"
+                              : question.difficult
+                                ? "Review"
+                                : "On track"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

@@ -2,6 +2,26 @@ import {
   AvatarIdSchema,
   AVATAR_IDS,
   canonicalizeResponse,
+  deriveRoundProtocol,
+  requiresExtendedRoundResponses,
+  hasRankingQuestions,
+  hasTextOpinionQuestions,
+  isTextOpinionQuestion,
+  normalizeTextResponse,
+  wordCloudGroupKey,
+  textResponseModerationIntentHash,
+  TextResponseModerationMapSchema,
+  TextResponseModerationReceiptsSchema,
+  TextResponseModeratorActorSchema,
+  TEXT_RESPONSE_MAX_PER_ROUND,
+  TEXT_RESPONSE_MAX_QUESTIONS,
+  TEXT_RESPONSE_MAX_ENTRIES,
+  TEXT_RESPONSE_MAX_RECEIPTS,
+  type TextResponseModerationMap,
+  type TextResponseModerationReceipt,
+  type TextResponseModeratorActor,
+  type TextResponseDistribution,
+  type PreTextResponseDistribution,
   normalizeDecimalString,
   questionConfidence,
   questionDelivery,
@@ -24,7 +44,6 @@ import {
   type RecoveryPackCardReference,
   type RecoveryPackCardSelection,
   type RecoveryPackLiveCard,
-  type ResponseDistribution,
   type ResponsePayload,
   type ResolvedSessionSettings,
   type RoundKind,
@@ -38,7 +57,9 @@ import { deriveCheckpointInsight } from "@openround/insights";
 // Flag-off rooms retain v5/v6 readability. Protocol-aware rooms use v7 to fence old writers.
 export const BASE_GAME_STATE_SCHEMA_VERSION = 5;
 export const RECOVERY_PACK_GAME_STATE_SCHEMA_VERSION = 6;
-export const CURRENT_GAME_STATE_SCHEMA_VERSION = 7;
+export const POLL_PROTOCOL_GAME_STATE_SCHEMA_VERSION = 7;
+export const RANKING_GAME_STATE_SCHEMA_VERSION = 8;
+export const CURRENT_GAME_STATE_SCHEMA_VERSION = 9;
 
 /** Browser-safe stable fallback used for legacy and avatar-less participants. */
 export function avatarIdForSeed(seed: string): AvatarId {
@@ -112,6 +133,7 @@ export interface EngineRound {
   openedAtMs: number;
   deadlineMs: number | null;
   lockedAtMs: number | null;
+  revealedAtMs?: number | null;
 }
 
 export interface EngineIntervention {
@@ -153,6 +175,8 @@ export interface GameState {
   answers: Record<string, EngineAnswer>;
   rounds: Record<string, EngineRound>;
   processedCommands: Record<string, number>;
+  responseModeration?: TextResponseModerationMap;
+  responseModerationReceipts?: Record<string, TextResponseModerationReceipt>;
 }
 
 export type EngineEventType =
@@ -165,7 +189,9 @@ export type EngineEventType =
   | "recheck.open"
   | "leaderboard.updated"
   | "game.finished"
-  | "session.snapshot";
+  | "session.snapshot"
+  | "response.moderated";
+// Moderation fan-out uses role-filtered body-free snapshots only.
 
 export interface EngineEvent {
   type: EngineEventType;
@@ -191,6 +217,139 @@ export class EngineError extends Error {
   ) {
     super(message);
   }
+}
+
+export function isApprovedTextAnswer(
+  answer: Pick<EngineAnswer, "answerId" | "roundId" | "acceptedAtMs">,
+  moderation: GameState["responseModeration"],
+  expectedQuestionId?: string,
+): boolean {
+  const entry = moderation?.[answer.answerId];
+  return Boolean(
+    entry &&
+    entry.status === "approved" &&
+    entry.roundId === answer.roundId &&
+    entry.acceptedAtMs === answer.acceptedAtMs &&
+    (expectedQuestionId === undefined || entry.questionId === expectedQuestionId),
+  );
+}
+
+export function approvedTextResponseDistribution(
+  question: QuestionDraft | undefined,
+  answers: readonly EngineAnswer[],
+  moderation: GameState["responseModeration"],
+): TextResponseDistribution | undefined {
+  if (!question || !isTextOpinionQuestion(question)) return undefined;
+  const seen = new Set<string>();
+  const values: string[] = [];
+  for (const answer of [...answers].sort(
+    (a, b) => a.acceptedAtMs - b.acceptedAtMs || a.answerId.localeCompare(b.answerId),
+  )) {
+    if (
+      answer.response.kind !== "text" ||
+      seen.has(answer.participantId) ||
+      !isApprovedTextAnswer(answer, moderation, question.id)
+    )
+      continue;
+    try {
+      const value = normalizeTextResponse(answer.response.value, question.type);
+      seen.add(answer.participantId);
+      values.push(value);
+    } catch {
+      /* Corrupt/missing bodies never count as approved evidence. */
+    }
+  }
+  if (values.length < 5 || values.length > TEXT_RESPONSE_MAX_PER_ROUND) return undefined;
+  if (question.type === "open_text")
+    return {
+      kind: "open_text",
+      respondents: values.length,
+      entries: values.map((value) => ({ value })),
+    };
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const key = wordCloudGroupKey(value);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return {
+    kind: "word_cloud",
+    respondents: values.length,
+    buckets: [...counts]
+      .sort(([left, a], [right, b]) => b - a || (left < right ? -1 : left > right ? 1 : 0))
+      .map(([value, count]) => ({
+        value,
+        label: value,
+        count,
+        percent: Math.round((count / values.length) * 10_000) / 100,
+      })),
+  };
+}
+
+export function moderateTextResponse(
+  state: GameState,
+  input: {
+    commandId: string;
+    expectedVersion: number;
+    answerId: string;
+    status: "approved" | "removed";
+    actor: TextResponseModeratorActor;
+    nowMs: number;
+  },
+): TransitionResult & { receipt: TextResponseModerationReceipt } {
+  state = upgradeGameState(state);
+  const actor = TextResponseModeratorActorSchema.safeParse(input.actor);
+  if (
+    !actor.success ||
+    input.commandId.length < 8 ||
+    input.commandId.length > 160 ||
+    (input.status !== "approved" && input.status !== "removed")
+  )
+    throw new EngineError("CONFLICT", "Provide a valid moderation command and moderator identity");
+  const intentHash = textResponseModerationIntentHash({ ...input, actor: actor.data });
+  const receipt = state.responseModerationReceipts?.[input.commandId];
+  if (receipt) {
+    if (receipt.intentHash !== intentHash)
+      throw new EngineError("CONFLICT", "The moderation command identifier has a different intent");
+    return { state, events: [], duplicate: true, receipt };
+  }
+  if (state.processedCommands[input.commandId] !== undefined)
+    throw new EngineError("CONFLICT", "The command identifier belongs to another session action");
+  if (state.phase === "finished")
+    throw new EngineError("CONFLICT", "Text moderation is read-only after the session finishes");
+  if (input.expectedVersion !== state.version)
+    throw new EngineError("STALE_VERSION", "Session state changed; synchronize and retry");
+  const entry = state.responseModeration?.[input.answerId];
+  if (!entry || entry.status === "removed")
+    throw new EngineError("NOT_FOUND", "An active text response was not found");
+  if (entry.status === "approved" && input.status !== "removed")
+    throw new EngineError("CONFLICT", "This response is already approved");
+  if (Object.keys(state.responseModerationReceipts ?? {}).length >= TEXT_RESPONSE_MAX_RECEIPTS)
+    throw new EngineError("CONFLICT", "The text moderation receipt limit has been reached");
+  const accepted: TextResponseModerationReceipt = {
+    intentHash,
+    answerId: input.answerId,
+    actor: actor.data,
+    previousStatus: entry.status,
+    status: input.status,
+    expectedVersion: input.expectedVersion,
+    resultingVersion: state.version + 1,
+    occurredAtMs: input.nowMs,
+  };
+  const result = nextState(
+    state,
+    {
+      responseModeration: {
+        ...state.responseModeration,
+        [input.answerId]: { ...entry, status: input.status },
+      },
+      responseModerationReceipts: {
+        ...state.responseModerationReceipts,
+        [input.commandId]: accepted,
+      },
+    },
+    ["response.moderated"],
+  );
+  return { ...result, receipt: accepted };
 }
 
 function legacyAnswer(answer: Partial<EngineAnswer> & { choiceId?: string | null }): EngineAnswer {
@@ -241,14 +400,64 @@ export function upgradeGameState(input: GameState): GameState {
     );
   }
   if (
-    (legacy.stateSchemaVersion ?? 1) < CURRENT_GAME_STATE_SCHEMA_VERSION &&
+    (legacy.stateSchemaVersion ?? 1) < 9 &&
+    (hasTextOpinionQuestions(legacy.quiz) ||
+      Object.values(legacy.answers ?? {}).some((answer) => answer.response?.kind === "text") ||
+      legacy.responseModeration !== undefined ||
+      legacy.responseModerationReceipts !== undefined ||
+      legacy.roundProtocol?.requiredCapabilities.some(
+        (capability) => capability === "response.open_text" || capability === "response.word_cloud",
+      ))
+  ) {
+    throw new Error("Text opinions and moderation metadata require game state schema 9");
+  }
+  if (legacy.stateSchemaVersion === 9) {
+    if (legacy.responseModeration === undefined || legacy.responseModerationReceipts === undefined)
+      throw new Error("Text moderation metadata is required for game state schema 9");
+    TextResponseModerationMapSchema.parse(legacy.responseModeration);
+    TextResponseModerationReceiptsSchema.parse(legacy.responseModerationReceipts);
+    const perRound = new Map<string, number>();
+    for (const entry of Object.values(legacy.responseModeration)) {
+      const round = legacy.rounds[entry.roundId];
+      const question = legacy.quiz.questions.find((candidate) => candidate.id === entry.questionId);
+      if (!round || round.questionId !== entry.questionId || !isTextOpinionQuestion(question))
+        throw new Error("Text moderation metadata must reference its original text checkpoint");
+      const count = (perRound.get(entry.roundId) ?? 0) + 1;
+      if (count > TEXT_RESPONSE_MAX_PER_ROUND)
+        throw new Error("Text response per-round limit exceeded");
+      perRound.set(entry.roundId, count);
+    }
+  }
+  if (
+    requiresExtendedRoundResponses(legacy.quiz) &&
+    (!legacy.roundProtocol ||
+      legacy.roundProtocol.minimumClientVersion !== 3 ||
+      !deriveRoundProtocol(legacy.quiz).requiredCapabilities.every((capability) =>
+        legacy.roundProtocol!.requiredCapabilities.includes(capability),
+      ))
+  ) {
+    throw new Error("Extended opinion formats require their frozen Round protocol");
+  }
+  if (
+    (legacy.stateSchemaVersion ?? 1) < 8 &&
+    (hasRankingQuestions(legacy.quiz) ||
+      legacy.roundProtocol?.requiredCapabilities.includes("response.ranking"))
+  ) {
+    throw new Error("Rankings require game state schema 8");
+  }
+  if (
+    (legacy.stateSchemaVersion ?? 1) < POLL_PROTOCOL_GAME_STATE_SCHEMA_VERSION &&
     legacy.roundProtocol !== undefined
   ) {
     throw new Error("Round protocol metadata requires game state schema 7");
   }
   const participants = participantsWithAvatars(legacy.participants);
   const settings = resolvedSettings(legacy.settings);
-  if (legacy.stateSchemaVersion === CURRENT_GAME_STATE_SCHEMA_VERSION) {
+  if (
+    legacy.stateSchemaVersion === CURRENT_GAME_STATE_SCHEMA_VERSION ||
+    legacy.stateSchemaVersion === RANKING_GAME_STATE_SCHEMA_VERSION ||
+    legacy.stateSchemaVersion === POLL_PROTOCOL_GAME_STATE_SCHEMA_VERSION
+  ) {
     return {
       ...legacy,
       participants,
@@ -327,9 +536,36 @@ export function createGameState(input: {
   roundProtocol?: RoundProtocol;
 }): GameState {
   const brandTheme = input.brandTheme ?? null;
+  const textEnabled = hasTextOpinionQuestions(input.quiz);
+  if (
+    textEnabled &&
+    (input.settings.audienceLimit > TEXT_RESPONSE_MAX_PER_ROUND ||
+      input.quiz.questions.filter(isTextOpinionQuestion).length > TEXT_RESPONSE_MAX_QUESTIONS)
+  )
+    throw new Error("Text opinion rooms support at most 250 participants and ten text checkpoints");
+  if (
+    requiresExtendedRoundResponses(input.quiz) &&
+    (!input.roundProtocol ||
+      input.roundProtocol.minimumClientVersion <
+        deriveRoundProtocol(input.quiz).minimumClientVersion ||
+      !deriveRoundProtocol(input.quiz).requiredCapabilities.every((capability) =>
+        input.roundProtocol!.requiredCapabilities.includes(capability),
+      ))
+  ) {
+    throw new Error("Extended opinion formats require their frozen Round protocol");
+  }
   return {
     stateSchemaVersion: input.roundProtocol
-      ? CURRENT_GAME_STATE_SCHEMA_VERSION
+      ? textEnabled ||
+        input.roundProtocol.requiredCapabilities.some(
+          (capability) =>
+            capability === "response.open_text" || capability === "response.word_cloud",
+        )
+        ? CURRENT_GAME_STATE_SCHEMA_VERSION
+        : hasRankingQuestions(input.quiz) ||
+            input.roundProtocol.requiredCapabilities.includes("response.ranking")
+          ? RANKING_GAME_STATE_SCHEMA_VERSION
+          : POLL_PROTOCOL_GAME_STATE_SCHEMA_VERSION
       : input.recoveryPackCardsEnabled
         ? RECOVERY_PACK_GAME_STATE_SCHEMA_VERSION
         : BASE_GAME_STATE_SCHEMA_VERSION,
@@ -369,6 +605,12 @@ export function createGameState(input: {
     answers: {},
     rounds: {},
     processedCommands: {},
+    ...(textEnabled ||
+    input.roundProtocol?.requiredCapabilities.some(
+      (capability) => capability === "response.open_text" || capability === "response.word_cloud",
+    )
+      ? { responseModeration: {}, responseModerationReceipts: {} }
+      : {}),
   };
 }
 
@@ -408,9 +650,51 @@ function isChoiceQuestion(
 export function responseDistributionFor(
   question: QuestionDraft | undefined,
   answers: ReadonlyArray<Pick<EngineAnswer, "response" | "correct">>,
-): ResponseDistribution | undefined {
-  if (!question || answers.length < 5) return undefined;
+): PreTextResponseDistribution | undefined {
+  if (!question || isTextOpinionQuestion(question) || answers.length < 5) return undefined;
   const percent = (count: number) => Math.round((count / answers.length) * 10_000) / 100;
+  if (question.type === "ranking") {
+    const ranked = answers.filter((answer) => answer.response.kind === "ranking");
+    if (ranked.length < 5) return undefined;
+    const rankCount = question.rankCount ?? question.choices.length;
+    const buckets = question.choices.map((choice, authoredIndex) => {
+      let weightedScore = 0;
+      let rankedRespondents = 0;
+      let sumRank = 0;
+      for (const answer of ranked) {
+        if (answer.response.kind !== "ranking") continue;
+        const rankIndex = answer.response.choiceIds.indexOf(choice.id);
+        if (rankIndex < 0) continue;
+        weightedScore += question.choices.length - rankIndex;
+        rankedRespondents += 1;
+        sumRank += rankIndex + 1;
+      }
+      return {
+        value: choice.id,
+        label: choice.label,
+        weightedScore,
+        rankedRespondents,
+        averageRank: rankedRespondents
+          ? Math.round((sumRank / rankedRespondents) * 100) / 100
+          : null,
+        authoredIndex,
+      };
+    });
+    buckets.sort((a, b) => b.weightedScore - a.weightedScore || a.authoredIndex - b.authoredIndex);
+    return {
+      kind: "ranking",
+      respondents: ranked.length,
+      rankCount,
+      totalRankings: ranked.length * rankCount,
+      buckets: buckets.map((bucket) => ({
+        value: bucket.value,
+        label: bucket.label,
+        weightedScore: bucket.weightedScore,
+        rankedRespondents: bucket.rankedRespondents,
+        averageRank: bucket.averageRank,
+      })),
+    };
+  }
   if (isChoiceQuestion(question)) {
     const counts = new Map<string, number>();
     for (const answer of answers) {
@@ -424,7 +708,11 @@ export function responseDistributionFor(
       kind: "choice",
       respondents: answers.length,
       totalSelections,
-      percentBasis: question.type === "multi_select" ? "respondents" : "responses",
+      percentBasis:
+        question.type === "multi_select" ||
+        (question.type === "poll" && (question.maxSelections ?? 1) > 1)
+          ? "respondents"
+          : "responses",
       buckets: question.choices.map((choice) => ({
         value: choice.id,
         label: choice.label,
@@ -462,7 +750,7 @@ export function responseDistributionFor(
 function distributionFor(
   state: GameState,
   question: QuestionDraft | undefined,
-): ResponseDistribution | undefined {
+): PreTextResponseDistribution | undefined {
   if (!state.roundId) return undefined;
   return responseDistributionFor(
     question,
@@ -527,6 +815,7 @@ function openQuestion(
           openedAtMs: nowMs,
           deadlineMs,
           lockedAtMs: null,
+          ...(state.stateSchemaVersion === 9 ? { revealedAtMs: null } : {}),
         },
       },
     },
@@ -609,12 +898,30 @@ export function applyHostCommand(
     recheckMode?: "linked" | "revote";
     recheckQuestionId?: string;
     recoveryPackCard?: RecoveryPackCardSelection;
+    answerId?: string;
+    responseStatus?: "approved" | "removed";
+    moderationActor?: TextResponseModeratorActor;
     nowMs: number;
     newRoundId: () => string;
     newInterventionId?: () => string;
   },
 ): TransitionResult {
   state = upgradeGameState(state);
+  if (input.action === "response.moderate") {
+    if (!input.answerId || !input.responseStatus || !input.moderationActor)
+      throw new EngineError(
+        "CONFLICT",
+        "Provide the text response, moderation action and moderator identity",
+      );
+    return moderateTextResponse(state, {
+      ...input,
+      answerId: input.answerId,
+      status: input.responseStatus,
+      actor: input.moderationActor,
+    });
+  }
+  if (state.responseModerationReceipts?.[input.commandId])
+    throw new EngineError("CONFLICT", "The command identifier belongs to a text moderation action");
   if (state.processedCommands[input.commandId] !== undefined) {
     return { state, events: [], duplicate: true };
   }
@@ -718,7 +1025,21 @@ export function applyHostCommand(
       if (state.phase !== "question_locked") {
         throw new EngineError("CONFLICT", "Lock the checkpoint before revealing the answer");
       }
-      result = nextState(state, { phase: "question_reveal" }, ["question.reveal"]);
+      result = nextState(
+        state,
+        {
+          phase: "question_reveal",
+          ...(state.stateSchemaVersion === 9 && state.roundId
+            ? {
+                rounds: {
+                  ...state.rounds,
+                  [state.roundId]: { ...state.rounds[state.roundId]!, revealedAtMs: input.nowMs },
+                },
+              }
+            : {}),
+        },
+        ["question.reveal"],
+      );
       break;
     case "intervention.start": {
       const interventionType = input.interventionType;
@@ -815,6 +1136,8 @@ export function applyHostCommand(
         throw new EngineError("CONFLICT", "A recheck can only follow a locked main checkpoint");
       }
       const sourceQuestion = state.quiz.questions[state.questionIndex]!;
+      if (isTextOpinionQuestion(sourceQuestion))
+        throw new EngineError("CONFLICT", "Text opinions cannot be rechecked or revoted");
       const mode = input.recheckMode;
       if (!mode) throw new EngineError("CONFLICT", "Choose a linked recheck or revote");
       let targetIndex = state.questionIndex;
@@ -970,21 +1293,62 @@ function decimalWithinTolerance(actual: string, expected: string, tolerance: str
 
 export function evaluateResponse(question: QuestionDraft, response: ResponsePayload) {
   const canonical = canonicalizeResponse(response);
+  if (isTextOpinionQuestion(question)) {
+    if (canonical.kind !== "text")
+      throw new EngineError("ANSWER_INVALID", "Enter a plain-text response");
+    try {
+      return {
+        response: {
+          kind: "text" as const,
+          value: normalizeTextResponse(canonical.value, question.type),
+        },
+        correct: false,
+        choiceId: null,
+      };
+    } catch (error) {
+      throw new EngineError("ANSWER_INVALID", (error as Error).message);
+    }
+  }
+  if (question.type === "ranking") {
+    const permitted = new Set(question.choices.map((choice) => choice.id));
+    if (
+      canonical.kind !== "ranking" ||
+      canonical.choiceIds.length !== (question.rankCount ?? question.choices.length) ||
+      new Set(canonical.choiceIds).size !== canonical.choiceIds.length ||
+      canonical.choiceIds.some((id) => !permitted.has(id))
+    ) {
+      throw new EngineError(
+        "ANSWER_INVALID",
+        "Rank the requested number of distinct available choices",
+      );
+    }
+    return { response: canonical, correct: false, choiceId: null };
+  }
   if (isChoiceQuestion(question)) {
     const expectedKind = question.type === "poll" ? "poll" : "choice";
     if (canonical.kind !== expectedKind) {
       throw new EngineError("ANSWER_INVALID", "Response type does not match the checkpoint");
     }
     const selected = canonical.choiceIds;
+    if (!selected.length || new Set(selected).size !== selected.length || selected.length > 6) {
+      throw new EngineError("ANSWER_INVALID", "Select distinct valid choices");
+    }
     const choicesById = new Map(question.choices.map((choice) => [choice.id, choice]));
     if (selected.some((id) => !choicesById.has(id))) {
       throw new EngineError("ANSWER_INVALID", "Choice not found");
     }
-    if (question.type !== "multi_select" && selected.length !== 1) {
+    if (question.type === "poll" && selected.length > (question.maxSelections ?? 1)) {
+      throw new EngineError("ANSWER_INVALID", "Too many poll choices selected");
+    }
+    if (question.type !== "multi_select" && question.type !== "poll" && selected.length !== 1) {
       throw new EngineError("ANSWER_INVALID", "Select exactly one choice");
     }
     if (question.type === "poll") {
-      return { response: canonical, correct: false, choiceId: selected[0] ?? null };
+      return {
+        response: canonical,
+        correct: false,
+        choiceId: selected.length === 1 ? selected[0]! : null,
+      };
     }
     const correctIds = question.choices
       .filter((choice) => choice.isCorrect)
@@ -1064,6 +1428,23 @@ export function acceptAnswer(
   if (prior) return { state, answer: prior };
   const question = state.quiz.questions[state.questionIndex ?? -1];
   if (!question) throw new EngineError("NOT_FOUND", "Checkpoint not found");
+  if (isTextOpinionQuestion(question)) {
+    if (state.roundKind !== "main" || state.stateSchemaVersion !== 9)
+      throw new EngineError(
+        "ANSWER_INVALID",
+        "Text opinions require their original main checkpoint",
+      );
+    const entries = Object.values(state.responseModeration ?? {});
+    if (
+      entries.length >= TEXT_RESPONSE_MAX_ENTRIES ||
+      entries.filter((entry) => entry.roundId === input.roundId).length >=
+        TEXT_RESPONSE_MAX_PER_ROUND
+    )
+      throw new EngineError(
+        "CONFLICT",
+        "The text response limit for this checkpoint has been reached",
+      );
+  }
   const confidenceMode = questionConfidence(question);
   if (confidenceMode === "required" && input.confidence === undefined) {
     throw new EngineError("ANSWER_INVALID", "Select a confidence level");
@@ -1110,6 +1491,19 @@ export function acceptAnswer(
       version: state.version + 1,
       seq: state.seq + 1,
       answers: { ...state.answers, [answer.answerId]: answer },
+      ...(isTextOpinionQuestion(question)
+        ? {
+            responseModeration: {
+              ...state.responseModeration,
+              [answer.answerId]: {
+                roundId: answer.roundId,
+                questionId: question.id,
+                status: "pending" as const,
+                acceptedAtMs: answer.acceptedAtMs,
+              },
+            },
+          }
+        : {}),
       participants: {
         ...state.participants,
         [participant.id]: {
@@ -1154,10 +1548,17 @@ function sharedQuestion(question: QuestionDraft): ParticipantQuestion {
     mediaId: question.mediaId,
     mediaAlt: question.mediaAlt,
   };
-  if (isChoiceQuestion(question)) {
+  if (isTextOpinionQuestion(question)) return { ...common, choices: [] };
+  if (isChoiceQuestion(question) || question.type === "ranking") {
     return {
       ...common,
       choices: question.choices.map(({ id, label }) => ({ id, label })),
+      ...(question.type === "ranking"
+        ? { rankCount: question.rankCount ?? question.choices.length }
+        : {}),
+      ...(question.type === "poll" && question.maxSelections !== undefined
+        ? { maxSelections: question.maxSelections }
+        : {}),
     };
   }
   if (question.type === "numeric") {
@@ -1192,8 +1593,17 @@ export function publicQuestion(question: QuestionDraft | undefined): PublicQuest
   };
 }
 
-export function correctResponse(question: QuestionDraft | undefined): ResponsePayload | null {
-  if (!question || question.type === "poll" || question.type === "rating") return null;
+export function correctResponse(
+  question: QuestionDraft | undefined,
+): Exclude<ResponsePayload, { kind: "text" }> | null {
+  if (
+    !question ||
+    question.type === "poll" ||
+    question.type === "rating" ||
+    question.type === "ranking" ||
+    isTextOpinionQuestion(question)
+  )
+    return null;
   if (isChoiceQuestion(question)) {
     return {
       kind: "choice",
@@ -1310,9 +1720,32 @@ export function snapshotForRole(
     pausedRemainingMs: state.pausedRemainingMs,
     myParticipantId: options.participantId ?? null,
     myAnswerChoiceId: participantAnswer?.choiceId ?? null,
-    myResponse: participantAnswer?.response ?? null,
+    myResponse:
+      participantAnswer?.response.kind === "text" ? null : (participantAnswer?.response ?? null),
+    ...(question && isTextOpinionQuestion(question)
+      ? {
+          myResponseAccepted: Boolean(participantAnswer),
+          myResponseModerationStatus: participantAnswer
+            ? (state.responseModeration?.[participantAnswer.answerId]?.status ?? null)
+            : null,
+          ...(options.role === "host"
+            ? {
+                responseModerationCounts: Object.values(state.responseModeration ?? {})
+                  .filter((entry) => entry.roundId === state.roundId)
+                  .reduce(
+                    (counts, entry) => ({ ...counts, [entry.status]: counts[entry.status] + 1 }),
+                    { pending: 0, approved: 0, removed: 0 },
+                  ),
+              }
+            : {}),
+        }
+      : {}),
     myConfidence: participantAnswer?.confidence ?? null,
-    myCorrect: revealed ? (participantAnswer?.correct ?? null) : undefined,
+    myCorrect: revealed
+      ? question && questionPurpose(question) !== "opinion"
+        ? (participantAnswer?.correct ?? null)
+        : null
+      : undefined,
     ...(options.role === "host" && revealed
       ? {
           correctChoiceId:

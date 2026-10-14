@@ -368,7 +368,7 @@ export async function exportQtiPackage(
     }
   }
   for (const [index, question] of draft.questions.entries()) {
-    if (question.type === "rating" || question.type === "poll") {
+    if (["rating", "poll", "ranking", "open_text", "word_cloud"].includes(question.type)) {
       issues.push(
         issue(
           "error",

@@ -822,7 +822,9 @@
 
   .commandActions {
     grid-column: 1 / -1;
-    justify-content: space-between;
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .historyActions a,

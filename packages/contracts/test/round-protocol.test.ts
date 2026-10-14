@@ -9,6 +9,7 @@ import {
   canUseRoundProtocol,
   currentRoundClientCapabilities,
   legacyRoundProtocol,
+  deriveRoundProtocol,
 } from "../src/index";
 
 const required = {
@@ -19,11 +20,24 @@ const required = {
 const capable = { protocolVersion: 3 as const, capabilities: ["poll.multiselect" as const] };
 const id = "00000000-0000-4000-8000-000000000001";
 describe("Round protocol compatibility", () => {
-  it("retains implicit legacy clients and does not advertise the reserved response format", () => {
+  it("retains implicit legacy clients while updated clients advertise multiple-selection polls", () => {
     expect(canUseRoundProtocol(undefined, undefined)).toBe(true);
     expect(canUseRoundProtocol(legacyRoundProtocol(), undefined)).toBe(true);
-    expect(currentRoundClientCapabilities()).toEqual({ protocolVersion: 2, capabilities: [] });
-    expect(canUseRoundProtocol(required, currentRoundClientCapabilities())).toBe(false);
+    expect(currentRoundClientCapabilities()).toEqual({
+      protocolVersion: 3,
+      capabilities: [
+        "poll.multiselect",
+        "response.ranking",
+        "response.open_text",
+        "response.word_cloud",
+      ],
+    });
+    expect(canUseRoundProtocol(required, currentRoundClientCapabilities())).toBe(true);
+    expect(canUseRoundProtocol(required, undefined)).toBe(false);
+    expect(deriveRoundProtocol({ questions: [{ type: "poll" }] })).toEqual(legacyRoundProtocol());
+    expect(deriveRoundProtocol({ questions: [{ type: "poll", maxSelections: 2 }] })).toEqual(
+      required,
+    );
   });
   it("requires both the protocol version and every frozen response capability", () => {
     expect(canUseRoundProtocol(required, undefined)).toBe(false);
@@ -71,7 +85,7 @@ describe("Round protocol compatibility", () => {
       }),
     ).not.toHaveProperty("clientCapabilities");
   });
-  it("continues to reject multiple live poll selections in this reader-first increment", () => {
+  it("accepts bounded multiple live poll selections for server-side authored-limit validation", () => {
     expect(
       AnswerSubmitSchema.safeParse({
         sessionId: id,
@@ -81,7 +95,7 @@ describe("Round protocol compatibility", () => {
         clientCapabilities: capable,
         response: { kind: "poll", choiceIds: [id, "00000000-0000-4000-8000-000000000002"] },
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
   it("returns independent profiles so callers cannot change the shared defaults", () => {
     const first = legacyRoundProtocol();

@@ -30,6 +30,7 @@ export function participantProgressStage(
 export interface ParticipantResponseView {
   saved: boolean;
   choiceIds: string[];
+  rankingChoiceIds: string[];
   numericValue: string;
   ratingValue: number | null;
   confidence: ConfidenceValue | null;
@@ -44,6 +45,29 @@ export interface ParticipantRevealState {
   revealed: boolean;
   selectedCorrect: boolean;
   selectedIncorrect: boolean;
+}
+
+export function togglePollSelection(selected: string[], choiceId: string, maxSelections: number) {
+  if (selected.includes(choiceId)) return selected.filter((id) => id !== choiceId);
+  return selected.length < maxSelections ? [...selected, choiceId] : selected;
+}
+
+export function multipleSelectionPoll(question: { type: string; maxSelections?: number }) {
+  return question.type === "poll" && (question.maxSelections ?? 1) > 1;
+}
+
+export function legacyResponseRequiresSubmit(question: {
+  type: string;
+  maxSelections?: number;
+  confidence?: string;
+}) {
+  return (
+    ["multi_select", "numeric", "rating", "ranking", "open_text", "word_cloud"].includes(
+      question.type,
+    ) ||
+    multipleSelectionPoll(question) ||
+    (question.confidence ?? "off") !== "off"
+  );
 }
 
 /**
@@ -74,15 +98,17 @@ export function participantResponseView(
   serverConfidence: ConfidenceValue | null | undefined,
   acknowledgement: AnswerAck | null,
   localReceipt: LocalResponseReceipt | null = null,
+  responseAccepted = false,
 ): ParticipantResponseView {
   const acknowledgedResponse = acknowledgement?.accepted ? localReceipt?.response : null;
   const visibleResponse = serverResponse ?? acknowledgedResponse;
   return {
-    saved: Boolean(serverResponse || acknowledgement?.accepted),
+    saved: Boolean(serverResponse || acknowledgement?.accepted || responseAccepted),
     choiceIds:
       visibleResponse?.kind === "choice" || visibleResponse?.kind === "poll"
         ? visibleResponse.choiceIds
         : [],
+    rankingChoiceIds: visibleResponse?.kind === "ranking" ? visibleResponse.choiceIds : [],
     numericValue: visibleResponse?.kind === "numeric" ? visibleResponse.value : "",
     ratingValue: visibleResponse?.kind === "rating" ? visibleResponse.value : null,
     confidence: serverResponse

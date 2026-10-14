@@ -8,7 +8,8 @@ For a local first run, complete the [quick start](quick-start.md) first.
 
 The Core-Parity foundation includes gated Presentation Q&A and a gated self-paced Survey beta
 using single- or multiple-selection opinion polls and ratings. Presentation replies/chat/Pulse,
-Q&A-only feedback rooms, open text, word clouds, ranking and advanced feedback exports remain pending.
+Q&A-only feedback rooms and advanced feedback exports remain pending. Live Rounds support gated
+multiple-selection polls, ranking, moderated open text and word clouds.
 Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
@@ -65,7 +66,8 @@ Submitting feedback does not mean public beta or production launch has been appr
    more uses checkboxes. The limit cannot exceed the number of options (two to six). Participants
    may deselect choices, but cannot select more than the limit. Removing an option reduces the
    limit if necessary. These opinion polls have no correct answers, confidence or scores.
-   Open text, word clouds and ranking are not included yet.
+   Open text, word clouds and ranking are available in enabled Live Rounds; Surveys currently
+   support polls and ratings.
 3. Draft edits autosave after a short pause. Watch **Waiting to save…**, **Saving…**, then **Saved.**
    You can keep typing during a save, or use **Save draft** to save immediately. Preview, then
    **Publish Survey**; publishing first waits for all current edits to be saved. Autosave does not
@@ -198,13 +200,40 @@ The editor supports:
 - Single select and true/false
 - Multiple select with exact-set scoring
 - Numeric responses with decimal normalization, absolute tolerance, and an optional unit
-- Unscored ratings and polls
+- Unscored ratings and polls, plus gated live ranking, open text and word clouds
 
 For a diagnostic or practice checkpoint, choose whether confidence is off, optional, or required.
 Confidence uses **Not sure**, **Somewhat sure**, and **Very sure**. Add concept keys to connect
 evidence across a main checkpoint and its linked recheck. For wrong choices, optional private
 misconception keys and participant feedback turn the distribution into a more useful diagnosis.
-Ratings and polls are always opinion checkpoints, unscored, and confidence-free.
+Ratings, polls, ranking and text are always opinion checkpoints, unscored, and confidence-free.
+
+When live multiple-selection polls are enabled for your workspace, a Poll question offers
+**Maximum selections** from one to the number of options, up to six. Participants select their
+choices with checkboxes and then submit; reaching the limit still permits deselection. A refresh
+restores all saved choices. Removing an option in the editor lowers the limit when necessary.
+
+Results count people choosing each option, so percentages can total more than 100%. Polls do not
+have correct answers or contribute to learning accuracy. Multiple-selection opinion polls currently
+run in live Rounds; use a Survey for self-paced opinions. Presentation imports and practice
+assignments explain when a Round contains this unsupported format.
+
+A **Ranking** question offers two to six options. Choose the full list or a top-N count.
+Participants add options and use labelled Move up/Move down buttons before submitting; the same
+controls work by keyboard and on phones. Refresh restores the submitted order. Results show
+weighted scores, the number of people ranking each option, and average rank. Ranking is unscored.
+
+**Open text** accepts one response up to 1,000 characters. **Word cloud** accepts one phrase up
+to 80 characters. Participants see a saved receipt after submission and on refresh; their text
+is not copied into ordinary session snapshots. Hosts and cohosts review the private queue and
+approve or remove each response. Removed responses cannot be restored. Finish moderation before
+ending the session, when reports become immutable.
+
+Public text results require reveal and at least five approved responses. Pending and removed
+text stays out of public results, reports and ordinary account exports. Word clouds group
+normalized phrases without case differences and include a readable frequency list. These formats
+are available in enabled Live Rounds; Presentation, practice, Companion and Recovery Pack paths
+do not accept them yet. Text rooms support up to ten text checkpoints and 250 participants.
 
 Use **Add linked recheck** to create a differently worded check for the same concept. Rechecks are
 unscored by default. A main checkpoint may link to one recheck; a recheck cannot link onward.

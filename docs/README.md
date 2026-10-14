@@ -19,6 +19,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 | Review current market evidence and the gated roadmap         | [2026 market research and development plan](market-research-and-development-plan-2026-09.md) |
 | Review the 2026 Kahoot-alternatives UX benchmark and plan    | [Kahoot-alternatives UX gap plan](kahoot-alternatives-2026-ux-gap-plan.md)                   |
 | Review the competitive position and post-P0 roadmap          | [Competitive strategy and roadmap](competitive-strategy-and-roadmap.md)                      |
+| Capture or revisit future customer feature ideas             | [Future product ideas backlog](future-product-ideas.md)                                      |
+| Follow IDEA 004 richer response format delivery              | [Response formats implementation plan](idea-004-response-formats-plan.md)                    |
 | Understand services, state, storage, and trust boundaries    | [Architecture and protocol](architecture.md)                                                 |
 | Integrate with REST or realtime interfaces                   | [API and realtime reference](api.md)                                                         |
 | Configure a gated institution pilot                          | [Institution integration guide](institution-integrations.md)                                 |

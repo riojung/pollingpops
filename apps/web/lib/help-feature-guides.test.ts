@@ -12,6 +12,10 @@ import {
 } from "./help-feature-guides";
 
 const enabled: WorkspaceProductFeatures = {
+  multiSelectPolls: true,
+  rankingPolls: true,
+  openTextPolls: true,
+  wordCloudPolls: true,
   roundExperiences: true,
   audiencePulse: true,
   roomChat: true,

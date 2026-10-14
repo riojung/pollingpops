@@ -6,6 +6,9 @@ import {
   RecoveryPackContentSchema,
   RecoveryPackDraftSchema,
   migratePresentationV1,
+  requiresExtendedRoundResponses,
+  hasRankingQuestions,
+  hasTextOpinionQuestions,
   type PresentationContent,
   type PresentationDraft,
   type QuizDraft,
@@ -15,6 +18,36 @@ import {
 
 export const ROUND_DRAFT_SCHEMA_VERSION = 1;
 export const ROUND_CONTENT_SCHEMA_VERSION = 1;
+export const ROUND_EXTENDED_RESPONSE_SCHEMA_VERSION = 2;
+export const ROUND_RANKING_SCHEMA_VERSION = 3;
+export const ROUND_TEXT_OPINION_SCHEMA_VERSION = 4;
+export function roundArtifactSchemaVersion(content: QuizDraft): 1 | 2 | 3 | 4 {
+  return hasTextOpinionQuestions(content)
+    ? 4
+    : hasRankingQuestions(content)
+      ? 3
+      : requiresExtendedRoundResponses(content)
+        ? 2
+        : 1;
+}
+function assertLegacyRoundResponses(content: QuizDraft): QuizDraft {
+  assertPreRankingRound(content);
+  if (requiresExtendedRoundResponses(content)) {
+    throw new Error("Multiple-selection polls require Round artifact schema version 2");
+  }
+  return content;
+}
+function assertPreRankingRound(content: QuizDraft): QuizDraft {
+  assertPreTextRound(content);
+  if (hasRankingQuestions(content))
+    throw new Error("Rankings require Round artifact schema version 3");
+  return content;
+}
+function assertPreTextRound(content: QuizDraft): QuizDraft {
+  if (hasTextOpinionQuestions(content))
+    throw new Error("Text opinions require Round artifact schema version 4");
+  return content;
+}
 export const PRESENTATION_DRAFT_SCHEMA_VERSION = 2;
 export const PRESENTATION_CONTENT_SCHEMA_VERSION = 2;
 /** Complete frozen Pack baselines opt into v3; pre-existing question provenance stays valid in v2. */
@@ -78,11 +111,26 @@ function parseVersioned<T>(
 }
 
 const roundDraftUpcasters = new Map<number, Upcaster<QuizDraft>>([
-  [ROUND_DRAFT_SCHEMA_VERSION, (value) => QuizDraftSchema.parse(value)],
+  [ROUND_DRAFT_SCHEMA_VERSION, (value) => assertLegacyRoundResponses(QuizDraftSchema.parse(value))],
+  [
+    ROUND_EXTENDED_RESPONSE_SCHEMA_VERSION,
+    (value) => assertPreRankingRound(QuizDraftSchema.parse(value)),
+  ],
+  [ROUND_RANKING_SCHEMA_VERSION, (value) => assertPreTextRound(QuizDraftSchema.parse(value))],
+  [ROUND_TEXT_OPINION_SCHEMA_VERSION, (value) => QuizDraftSchema.parse(value)],
 ]);
 
 const roundContentUpcasters = new Map<number, Upcaster<QuizDraft>>([
-  [ROUND_CONTENT_SCHEMA_VERSION, (value) => QuizContentSchema.parse(value)],
+  [
+    ROUND_CONTENT_SCHEMA_VERSION,
+    (value) => assertLegacyRoundResponses(QuizContentSchema.parse(value)),
+  ],
+  [
+    ROUND_EXTENDED_RESPONSE_SCHEMA_VERSION,
+    (value) => assertPreRankingRound(QuizContentSchema.parse(value)),
+  ],
+  [ROUND_RANKING_SCHEMA_VERSION, (value) => assertPreTextRound(QuizContentSchema.parse(value))],
+  [ROUND_TEXT_OPINION_SCHEMA_VERSION, (value) => QuizContentSchema.parse(value)],
 ]);
 
 const recoveryPackDraftUpcasters = new Map<number, Upcaster<RecoveryPackDraft>>([

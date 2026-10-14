@@ -13,6 +13,7 @@ import {
 } from "./platform-postgres.js";
 import { PlatformService } from "./platform-service.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
+import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
 import {
   MAX_SESSION_DECISION_EVENTS,
   QUESTION_HEALTH_POST_USE_MAX_REPORTS,
@@ -20,7 +21,7 @@ import {
   RecoveryPackPracticeSourceSchema,
   RecoveryPackPracticeSequenceSchema,
   ReportSchema,
-  ResponsePayloadSchema,
+  TextResponseAnswerIdsSchema,
   SessionDecisionEventSchema,
   SupportedLocaleSchema,
   TrustModeSchema,
@@ -46,6 +47,7 @@ import {
   WorkspaceDeletionInProgressError,
 } from "./types.js";
 import { runMigrations } from "./migrations.js";
+import { roundResponseSchemaVersion, upcastRoundResponse } from "./response-schemas.js";
 import {
   publishedQuestionCatalogOptions,
   publishedQuestionMetadata,
@@ -69,6 +71,7 @@ import {
   upcastRoundContent,
   assertRoundContentSchemaVersion,
   upcastRoundDraft,
+  roundArtifactSchemaVersion,
   upcastRecoveryPackContent,
   upcastRecoveryPackDraft,
 } from "./artifact-schemas.js";
@@ -553,7 +556,7 @@ function mapAnswer(row: QueryResultRow): EngineAnswer {
     answerId: row.id,
     participantId: row.participant_id,
     roundId: row.round_id,
-    response: ResponsePayloadSchema.parse(row.response_payload),
+    response: upcastRoundResponse(row.response_payload, Number(row.response_schema_version ?? 1)),
     confidence: row.confidence,
     choiceId: row.choice_id,
     acceptedAtMs: date(row.accepted_at).getTime(),
@@ -865,7 +868,7 @@ function mapFollowupAnswer(row: QueryResultRow): FollowupAnswerRecord {
     followupId: String(row.followup_id),
     attemptId: String(row.attempt_id),
     checkpointId: String(row.checkpoint_id),
-    response: ResponsePayloadSchema.parse(row.response_payload),
+    response: upcastRoundResponse(row.response_payload, Number(row.response_schema_version ?? 1)),
     confidence: row.confidence === null ? null : (Number(row.confidence) as 1 | 2 | 3),
     correct: row.correct === null ? null : Boolean(row.correct),
     idempotencyKey: String(row.idempotency_key),
@@ -1997,7 +2000,7 @@ export class PostgresRepository implements Repository {
   }
 
   async createQuiz(input: QuizRecord) {
-    const draftSchemaVersion = input.draftSchemaVersion ?? ROUND_DRAFT_SCHEMA_VERSION;
+    const draftSchemaVersion = input.draftSchemaVersion ?? roundArtifactSchemaVersion(input.draft);
     const draft = upcastRoundDraft(input.draft, draftSchemaVersion);
     return this.transaction(
       async (client) => {
@@ -2064,7 +2067,8 @@ export class PostgresRepository implements Repository {
     expectedDraftRevision?: number,
     editorId?: string,
   ) {
-    const normalizedDraft = upcastRoundDraft(draft, ROUND_DRAFT_SCHEMA_VERSION);
+    const draftSchemaVersion = roundArtifactSchemaVersion(draft);
+    const normalizedDraft = upcastRoundDraft(draft, draftSchemaVersion);
     return this.transaction(
       async (client) => {
         const current = await client.query(
@@ -2084,7 +2088,7 @@ export class PostgresRepository implements Repository {
         }
         const result = await client.query(
           `UPDATE quizzes SET title = $3, description = $4, draft = $5,
-             draft_revision = draft_revision + 1, draft_schema_version = 1,
+             draft_revision = draft_revision + 1, draft_schema_version = $7,
              last_edited_by = COALESCE($6::uuid, last_edited_by), updated_at = now()
            WHERE workspace_id = $1 AND id = $2 RETURNING *`,
           [
@@ -2094,6 +2098,7 @@ export class PostgresRepository implements Repository {
             normalizedDraft.description,
             JSON.stringify(normalizedDraft),
             editorId ?? null,
+            draftSchemaVersion,
           ],
         );
         const quiz = mapQuiz(result.rows[0]!);
@@ -2108,7 +2113,7 @@ export class PostgresRepository implements Repository {
             quizId,
             quiz.draftRevision,
             JSON.stringify(normalizedDraft),
-            ROUND_DRAFT_SCHEMA_VERSION,
+            draftSchemaVersion,
             quiz.lastEditedBy ?? null,
             quiz.updatedAt,
           ],
@@ -2583,6 +2588,16 @@ export class PostgresRepository implements Repository {
     return result.rows.map(mapQuizDraftHistory);
   }
 
+  async getQuizDraftHistory(workspaceId: string, quizId: string, revision: number) {
+    const result = await this.workspaceQuery(
+      workspaceId,
+      `SELECT * FROM quiz_draft_history
+       WHERE workspace_id = $1 AND quiz_id = $2 AND revision = $3`,
+      [workspaceId, quizId, revision],
+    );
+    return result.rows[0] ? mapQuizDraftHistory(result.rows[0]) : null;
+  }
+
   async restoreQuizDraftHistory(input: {
     workspaceId: string;
     quizId: string;
@@ -2756,7 +2771,8 @@ export class PostgresRepository implements Repository {
             current.rows[0].last_edited_by ? String(current.rows[0].last_edited_by) : null,
           );
         }
-        const contentSchemaVersion = input.contentSchemaVersion ?? ROUND_CONTENT_SCHEMA_VERSION;
+        const contentSchemaVersion =
+          input.contentSchemaVersion ?? roundArtifactSchemaVersion(input.content);
         const content = upcastRoundContent(input.content, contentSchemaVersion);
         if (current.rows[0].status !== "published" && maxPublishedQuizzes !== null) {
           const count = await client.query(
@@ -3350,6 +3366,7 @@ export class PostgresRepository implements Repository {
   }
 
   async createSession(input: StoredSession) {
+    upgradeGameState(input.state);
     const state = input.state;
     try {
       await this.transaction(
@@ -3578,6 +3595,7 @@ export class PostgresRepository implements Repository {
     report?: Report,
     decisionEvents: SessionDecisionEventWrite[] = [],
   ) {
+    upgradeGameState(input.state);
     const state = input.state;
     const trustMode = input.trustMode ?? state.settings.trustMode ?? "learning";
     const decisionReplayEnabled = input.decisionReplayEnabled ?? false;
@@ -3770,6 +3788,7 @@ export class PostgresRepository implements Repository {
     participants: ParticipantRecord[],
     expectedVersion: number,
   ) {
+    upgradeGameState(session.state);
     if (participants.length === 0) return;
     await this.transaction(
       async (client) => {
@@ -5207,6 +5226,17 @@ export class PostgresRepository implements Repository {
     return result.rows.map(mapAnswer);
   }
 
+  async getSessionAnswersByIds(workspaceId: string, sessionId: string, ids: string[]) {
+    const requested = TextResponseAnswerIdsSchema.parse(ids);
+    if (!requested.length) return [];
+    const result = await this.workspaceQuery(
+      workspaceId,
+      "SELECT * FROM answers WHERE workspace_id = $1 AND session_id = $2 AND id = ANY($3::uuid[]) ORDER BY accepted_at, id",
+      [workspaceId, sessionId, requested],
+    );
+    return result.rows.map(mapAnswer);
+  }
+
   async findParticipantIdsWithAnswers(
     workspaceId: string,
     sessionId: string,
@@ -5699,7 +5729,7 @@ export class PostgresRepository implements Repository {
        (id, workspace_id, session_id, round_id, participant_id, choice_id, accepted_at,
         response_payload, response_schema_version, confidence, response_ms, score, correct,
         idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,2,$9,$10,$11,$12,$13)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$14,$9,$10,$11,$12,$13)
        ON CONFLICT (session_id, idempotency_key) DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
        RETURNING *`,
       [
@@ -5716,6 +5746,7 @@ export class PostgresRepository implements Repository {
         answer.score,
         answer.correct,
         answer.idempotencyKey,
+        roundResponseSchemaVersion(answer.response),
       ],
     );
     return mapAnswer(result.rows[0]!);
@@ -5731,6 +5762,7 @@ export class PostgresRepository implements Repository {
     expectedVersion: number,
     options: { roundEvidencePersisted?: boolean } = {},
   ) {
+    upgradeGameState(session.state);
     if (answers.length === 0) return [];
     return this.transaction(
       async (client) => {
@@ -5748,7 +5780,7 @@ export class PostgresRepository implements Repository {
           `WITH answer_input AS (
              SELECT * FROM jsonb_to_recordset($1::jsonb) AS input(
                id uuid, round_id uuid, participant_id uuid, choice_id uuid,
-               accepted_at timestamptz, response_payload jsonb, confidence smallint,
+               accepted_at timestamptz, response_payload jsonb, response_schema_version smallint, confidence smallint,
                response_ms integer, score integer, correct boolean, idempotency_key text
              )
            ),
@@ -5758,7 +5790,7 @@ export class PostgresRepository implements Repository {
                 response_payload, response_schema_version, confidence, response_ms, score, correct,
                 idempotency_key)
              SELECT id, $2, $3, round_id, participant_id, choice_id, accepted_at,
-                    response_payload, 2, confidence, response_ms, score, correct, idempotency_key
+                    response_payload, response_schema_version, confidence, response_ms, score, correct, idempotency_key
              FROM answer_input
              ON CONFLICT (session_id, idempotency_key) DO UPDATE
                SET idempotency_key = EXCLUDED.idempotency_key
@@ -5804,6 +5836,7 @@ export class PostgresRepository implements Repository {
                 choice_id: answer.choiceId,
                 accepted_at: new Date(answer.acceptedAtMs).toISOString(),
                 response_payload: answer.response,
+                response_schema_version: roundResponseSchemaVersion(answer.response),
                 confidence: answer.confidence,
                 response_ms: answer.responseMs,
                 score: answer.score,
@@ -7472,6 +7505,12 @@ export class PostgresRepository implements Repository {
                   retention_expires_at, created_at, updated_at
            FROM game_sessions WHERE workspace_id = ANY($1::uuid[]) ORDER BY created_at, id`,
         );
+        const exportedSessionStates = new Map<string, GameState>(
+          sessions.rows.map((row) => [
+            String(row.id),
+            roundStateForExport(row.state_snapshot as GameState),
+          ]),
+        );
         const presentationSessions = await queryWorkspaceData(
           `SELECT id, workspace_id, presentation_id, presentation_version_id, title,
                   content_snapshot, join_code, status, phase, current_block_index, revision,
@@ -7776,7 +7815,10 @@ export class PostgresRepository implements Repository {
           productFeedback: productFeedback.rows,
           mediaAssets: mediaAssets.rows,
           mediaReferences: mediaReferences.rows,
-          sessions: sessions.rows,
+          sessions: sessions.rows.map((row) => ({
+            ...row,
+            state_snapshot: exportedSessionStates.get(String(row.id))!,
+          })),
           presentationSessions: presentationSessions.rows,
           audienceScopes: audienceScopes.rows,
           scopedQnaSettings: scopedQnaSettings.rows,
@@ -7791,7 +7833,10 @@ export class PostgresRepository implements Repository {
           presentationSessionCredentials: presentationSessionCredentials.rows,
           presentationSessionReports: presentationSessionReports.rows,
           participants: participants.rows,
-          answers: answers.rows,
+          answers: answers.rows.filter((row) => {
+            const state = exportedSessionStates.get(String(row.session_id));
+            return state !== undefined && roundAnswerExportAllowed(state, mapAnswer(row));
+          }),
           reports: reports.rows.map(({ source_trust_mode: sourceTrustMode, ...row }) => ({
             ...row,
             metrics: normalizeAccountExportReport(row.metrics, sourceTrustMode),

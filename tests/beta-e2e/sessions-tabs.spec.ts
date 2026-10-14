@@ -4,6 +4,16 @@ import { expect, test, type Page } from "@playwright/test";
 import { signInBeta } from "./sign-in";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
+const web = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
+
+function canceledReadKey(rawUrl: string) {
+  const url = new URL(rawUrl);
+  if (url.origin === api && url.pathname.startsWith("/v1/")) return url.href;
+  if (url.origin === web && url.searchParams.has("_rsc")) {
+    return `${url.origin}${url.pathname}?_rsc=${url.searchParams.get("_rsc")}`;
+  }
+  return null;
+}
 
 async function createSessions(page: Page) {
   const title = `Synthetic delivery ${randomUUID().slice(0, 8)}`;
@@ -148,17 +158,40 @@ for (const mobile of [false, true]) {
     page,
   }) => {
     test.setTimeout(90_000);
-    const pageErrors: string[] = [];
-    page.on("pageerror", (error) => {
-      // WebKit reports canceled cross-origin API reads as access-control errors
-      // during full-page navigation. Keep application and hydration errors visible.
-      const canceledApiRead =
+    const pageErrors: Array<{ message: string; at: number }> = [];
+    const canceledReads = new Map<string, number[]>();
+    const failedReads: Array<{
+      path: string;
+      rsc: string | null;
+      prefetch: string | undefined;
+      failure: string | undefined;
+      at: number;
+    }> = [];
+    page.on("requestfailed", (request) => {
+      const url = new URL(request.url());
+      failedReads.push({
+        path: `${url.origin}${url.pathname}`,
+        rsc: url.searchParams.get("_rsc"),
+        prefetch: request.headers()["next-router-prefetch"],
+        failure: request.failure()?.errorText,
+        at: Date.now(),
+      });
+      if (
         test.info().project.name.startsWith("webkit") &&
-        error.message.startsWith(`/${new URL(api).host}/v1/`) &&
-        error.message.endsWith(" due to access control checks.");
-      if (!canceledApiRead) pageErrors.push(error.message);
+        request.method() === "GET" &&
+        request.failure()?.errorText.toLowerCase() === "cancelled"
+      ) {
+        const key = canceledReadKey(request.url());
+        if (key) canceledReads.set(key, [...(canceledReads.get(key) ?? []), Date.now()]);
+      }
+    });
+    page.on("pageerror", (error) => {
+      pageErrors.push({ message: error.message, at: Date.now() });
     });
     await signInBeta(page);
+    // Let the auth landing page finish its reads and Next prefetches before
+    // replacing the document; WebKit otherwise reports aborted reads as errors.
+    await page.waitForLoadState("networkidle");
     const fixture = await createSessions(page);
     const historyReads = { presentations: 0, surveys: 0 };
     page.on("request", (request) => {
@@ -358,6 +391,23 @@ for (const mobile of [false, true]) {
       "aria-selected",
       "true",
     );
-    expect(pageErrors).toEqual([]);
+    const canceledReadDiagnostics = Array.from(canceledReads.entries()).slice(-30);
+    const unexpectedPageErrors = pageErrors.filter(({ message, at }) => {
+      const match = message.match(/^\/([^\s]+) due to access control checks\.$/);
+      if (!match) return true;
+      const key = canceledReadKey(`http://${match[1]}`);
+      const times = key ? canceledReads.get(key) : undefined;
+      const index = times?.findIndex((time) => Math.abs(time - at) < 1_000) ?? -1;
+      if (index < 0) return true;
+      // WebKit reports some navigation-canceled fetches as access-control
+      // errors. Only consume a matching, confirmed canceled read; genuine
+      // CORS and application errors still fail this assertion.
+      times!.splice(index, 1);
+      return false;
+    });
+    expect(
+      unexpectedPageErrors,
+      JSON.stringify({ canceledReadDiagnostics, failedReads: failedReads.slice(-30) }, null, 2),
+    ).toEqual([]);
   });
 }

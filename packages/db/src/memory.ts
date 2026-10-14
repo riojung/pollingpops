@@ -4057,6 +4057,7 @@ export class MemoryRepository implements Repository {
     options: {
       cursor?: HistoryCursor;
       limit: number;
+      search?: string;
       status?: Report["status"];
       quizId?: string;
       from?: Date;
@@ -4064,6 +4065,7 @@ export class MemoryRepository implements Repository {
       now: Date;
     },
   ) {
+    const search = options.search?.trim().toLowerCase();
     const records = [...this.reports.values()]
       .flatMap((report): ReportHistoryRecord[] => {
         const session = this.sessions.get(report.sessionId);
@@ -4121,6 +4123,7 @@ export class MemoryRepository implements Repository {
           },
         ];
       })
+      .filter((item) => !search || item.title.toLowerCase().includes(search))
       .filter((item) => !options.status || item.status === options.status)
       .filter((item) => !options.quizId || item.quizId === options.quizId)
       .filter((item) => !options.from || item.createdAt.getTime() >= options.from.getTime())
@@ -4384,8 +4387,10 @@ export class MemoryRepository implements Repository {
   }
 
   async listFollowupHistory(workspaceId: string, options: FollowupHistoryListOptions) {
+    const search = options.search?.trim().toLowerCase();
     const records = [...this.followups.values()]
       .filter((followup) => followup.workspaceId === workspaceId)
+      .filter((followup) => !search || followup.title.toLowerCase().includes(search))
       .filter((followup) => !options.purpose || followup.purpose === options.purpose)
       .flatMap((followup): FollowupHistoryRecord[] => {
         const version = followup.sourceQuizVersionId

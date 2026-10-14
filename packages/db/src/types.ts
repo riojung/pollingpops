@@ -785,6 +785,7 @@ export interface HistoryPage<T> {
 export interface FollowupHistoryListOptions {
   cursor?: HistoryCursor;
   limit: number;
+  search?: string;
   purpose?: FollowupPurpose;
   status?: FollowupHistoryRecord["status"];
   quizId?: string;
@@ -1569,6 +1570,7 @@ export interface Repository {
     options: {
       cursor?: HistoryCursor;
       limit: number;
+      search?: string;
       status?: Report["status"];
       quizId?: string;
       from?: Date;

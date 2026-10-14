@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
-import { buildHistoryQuery } from "../../lib/history-query";
+import { buildHistoryQuery, type HistoryQueryFilters } from "../../lib/history-query";
 import { formatPercent } from "../../components/workspace/workspace-model";
 import { formatDateTime, pluralCategory } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
@@ -18,10 +18,145 @@ import type {
   RoundFilterOption,
 } from "../../components/workspace/workspace-types";
 import styles from "../../components/workspace/workspace-content.module.css";
+import controls from "../../components/workspace/workspace-history-controls.module.css";
+import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 
 type ReportStatusFilter = "all" | ReportSummary["status"];
 type FollowupStatusFilter = "all" | FollowupSummary["status"];
+
+type ResultsLayout = "grid" | "list";
+interface ListControls {
+  search: string;
+  layout: ResultsLayout;
+  onLayoutChange: (value: ResultsLayout) => void;
+  onSearchClear: () => void;
+}
+
+function ResultsSummary({
+  count,
+  loading,
+  hasMore = false,
+  practice = false,
+  layout,
+  onLayoutChange,
+}: ListControls & { count: number; loading: boolean; hasMore?: boolean; practice?: boolean }) {
+  const { t } = useLocale();
+  const summary = t(practice ? "pages.results.practiceCount" : "pages.results.resultCount", {
+    count,
+  });
+  return (
+    <>
+      <p className={controls.resultSummary} role="status">
+        {loading
+          ? t("pages.results.loading")
+          : hasMore
+            ? t("pages.results.moreAvailable", { summary })
+            : summary}
+      </p>
+      <div aria-label={t("pages.results.layoutLabel")} className={controls.viewToggle} role="group">
+        {(["grid", "list"] as const).map((value) => (
+          <button
+            aria-label={t(value === "grid" ? "pages.library.gridView" : "pages.library.listView")}
+            aria-pressed={layout === value}
+            key={value}
+            onClick={() => onLayoutChange(value)}
+            type="button"
+          >
+            {t(value === "grid" ? "pages.library.grid" : "pages.library.list")}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
+  const { creator } = useWorkspace();
+  const workspaceId = creator?.workspaceId ?? "";
+  const { status, quizId, fromDate, toDate, search } = filters;
+  const queryKey = `${workspaceId}\u0000${path}?${buildHistoryQuery(filters)}`;
+  const activeQueryKey = useRef(queryKey);
+  activeQueryKey.current = queryKey;
+  const loadMoreController = useRef<AbortController | null>(null);
+  const [page, setPage] = useState<{ key: string; items: T[]; nextCursor: string | null }>({
+    key: "",
+    items: [],
+    nextCursor: null,
+  });
+  const [fetching, setFetching] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [failure, setFailure] = useState({ key: "", message: "" });
+  const fetchPage = useCallback(
+    (cursor?: string, signal?: AbortSignal) =>
+      apiFetch<CursorPage<T>>(
+        `${path}?${buildHistoryQuery({ status, quizId, fromDate, toDate, search }, cursor)}`,
+        { signal },
+      ),
+    [path, status, quizId, fromDate, toDate, search],
+  );
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const controller = new AbortController();
+    loadMoreController.current?.abort();
+    loadMoreController.current = null;
+    setFetching(true);
+    setLoadingMore(false);
+    setFailure({ key: queryKey, message: "" });
+    void fetchPage(undefined, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
+        setPage({ key: queryKey, ...response });
+      })
+      .catch((caught) => {
+        if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
+        setPage({ key: queryKey, items: [], nextCursor: null });
+        setFailure({ key: queryKey, message: humanError(caught) });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && activeQueryKey.current === queryKey) setFetching(false);
+      });
+    return () => {
+      controller.abort();
+      loadMoreController.current?.abort();
+    };
+  }, [fetchPage, queryKey, workspaceId]);
+
+  async function more() {
+    if (page.key !== queryKey || !page.nextCursor || loadMoreController.current) return;
+    const controller = new AbortController();
+    loadMoreController.current = controller;
+    setLoadingMore(true);
+    setFailure({ key: queryKey, message: "" });
+    try {
+      const response = await fetchPage(page.nextCursor, controller.signal);
+      if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
+      setPage((current) => ({
+        key: queryKey,
+        items: [...current.items, ...response.items],
+        nextCursor: response.nextCursor,
+      }));
+    } catch (caught) {
+      if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
+      setFailure({ key: queryKey, message: humanError(caught) });
+    } finally {
+      if (loadMoreController.current === controller) {
+        loadMoreController.current = null;
+        if (activeQueryKey.current === queryKey) setLoadingMore(false);
+      }
+    }
+  }
+
+  return {
+    items: page.key === queryKey ? page.items : [],
+    nextCursor: page.key === queryKey ? page.nextCursor : null,
+    loading: fetching || page.key !== queryKey,
+    loadingMore,
+    error: failure.key === queryKey ? failure.message : "",
+    more,
+  };
+}
 
 function HistoryFilters({
   status,
@@ -36,6 +171,13 @@ function HistoryFilters({
   onFromDateChange,
   onToDateChange,
   onClear,
+  listControls,
+  count,
+  loading,
+  hasMore,
+  practice,
+  sourceLabel,
+  allSourcesLabel,
 }: {
   status: string;
   statusLabel: string;
@@ -49,18 +191,26 @@ function HistoryFilters({
   onFromDateChange: (value: string) => void;
   onToDateChange: (value: string) => void;
   onClear: () => void;
+  listControls: ListControls;
+  count: number;
+  loading: boolean;
+  hasMore: boolean;
+  practice?: boolean;
+  sourceLabel?: string;
+  allSourcesLabel?: string;
 }) {
   const { t } = useLocale();
-  const hasFilters = status !== "all" || quizId !== "all" || fromDate !== "" || toDate !== "";
+  const hasFilters =
+    status !== "all" ||
+    quizId !== "all" ||
+    fromDate !== "" ||
+    toDate !== "" ||
+    Boolean(listControls.search);
   return (
-    <section aria-label={t("pages.results.historyFilters")} className={styles.filters}>
-      <label className="field">
+    <section aria-label={t("pages.results.historyFilters")} className={controls.filterBar}>
+      <label className={controls.filterField}>
         <span>{statusLabel}</span>
-        <select
-          className="select"
-          onChange={(event) => onStatusChange(event.target.value)}
-          value={status}
-        >
+        <select onChange={(event) => onStatusChange(event.target.value)} value={status}>
           {statusOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -68,14 +218,10 @@ function HistoryFilters({
           ))}
         </select>
       </label>
-      <label className="field">
-        <span>{t("pages.common.round")}</span>
-        <select
-          className="select"
-          onChange={(event) => onQuizChange(event.target.value)}
-          value={quizId}
-        >
-          <option value="all">{t("pages.results.allRounds")}</option>
+      <label className={controls.filterField}>
+        <span>{sourceLabel ?? t("pages.common.round")}</span>
+        <select onChange={(event) => onQuizChange(event.target.value)} value={quizId}>
+          <option value="all">{allSourcesLabel ?? t("pages.results.allRounds")}</option>
           {rounds.map((round) => (
             <option key={round.id} lang="" value={round.id}>
               {round.title}
@@ -83,28 +229,39 @@ function HistoryFilters({
           ))}
         </select>
       </label>
-      <label className="field">
+      <label className={controls.filterField}>
         <span>{t("pages.common.from")}</span>
         <input
-          className="input"
           onChange={(event) => onFromDateChange(event.target.value)}
           type="date"
           value={fromDate}
         />
       </label>
-      <label className="field">
+      <label className={controls.filterField}>
         <span>{t("pages.common.to")}</span>
         <input
-          className="input"
           min={fromDate || undefined}
           onChange={(event) => onToDateChange(event.target.value)}
           type="date"
           value={toDate}
         />
       </label>
-      <button className="button-quiet" disabled={!hasFilters} onClick={onClear} type="button">
-        {t("pages.results.clearFilters")}
-      </button>
+      {hasFilters ? (
+        <button
+          className={`button-quiet ${resultStyles.clearFilters}`}
+          onClick={onClear}
+          type="button"
+        >
+          {t("pages.results.clearFilters")}
+        </button>
+      ) : null}
+      <ResultsSummary
+        {...listControls}
+        count={count}
+        loading={loading}
+        hasMore={hasMore}
+        practice={practice}
+      />
     </section>
   );
 }
@@ -117,97 +274,42 @@ function followupLifecycleLabel(report: ReportSummary, t: ReturnType<typeof useL
   });
 }
 
-function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
+function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
   const [status, setStatus] = useState<ReportStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [reports, setReports] = useState<ReportSummary[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
-  const queryKey = `${status}\u0000${quizId}\u0000${fromDate}\u0000${toDate}`;
-  const activeQueryKey = useRef(queryKey);
-  const loadMoreController = useRef<AbortController | null>(null);
-  activeQueryKey.current = queryKey;
-
-  const fetchPage = useCallback(
-    (cursor?: string, signal?: AbortSignal) =>
-      apiFetch<CursorPage<ReportSummary>>(
-        `/v1/reports?${buildHistoryQuery({ status, quizId, fromDate, toDate }, cursor)}`,
-        { signal },
-      ),
-    [fromDate, quizId, status, toDate],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const requestedQueryKey = queryKey;
-    loadMoreController.current?.abort();
-    loadMoreController.current = null;
-    setLoading(true);
-    setLoadingMore(false);
-    setReports([]);
-    setNextCursor(null);
-    setError("");
-    void fetchPage(undefined, controller.signal)
-      .then((response) => {
-        if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-        setReports(response.items);
-        setNextCursor(response.nextCursor);
-      })
-      .catch((caught) => {
-        if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-        setError(humanError(caught));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted && activeQueryKey.current === requestedQueryKey) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      controller.abort();
-      loadMoreController.current?.abort();
-    };
-  }, [fetchPage, queryKey]);
-
-  async function more() {
-    if (!nextCursor) return;
-    const requestedQueryKey = queryKey;
-    const requestedCursor = nextCursor;
-    loadMoreController.current?.abort();
-    const controller = new AbortController();
-    loadMoreController.current = controller;
-    setLoadingMore(true);
-    setError("");
-    try {
-      const response = await fetchPage(requestedCursor, controller.signal);
-      if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-      setReports((current) => [...current, ...response.items]);
-      setNextCursor(response.nextCursor);
-    } catch (caught) {
-      if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-      setError(humanError(caught));
-    } finally {
-      if (loadMoreController.current === controller) {
-        loadMoreController.current = null;
-        if (activeQueryKey.current === requestedQueryKey) setLoadingMore(false);
-      }
-    }
-  }
+  const {
+    items: reports,
+    nextCursor,
+    loading,
+    loadingMore,
+    error,
+    more,
+  } = useHistoryPage<ReportSummary>("/v1/reports", {
+    status,
+    quizId,
+    fromDate,
+    toDate,
+    search: listControls.search,
+  });
 
   function clearFilters() {
     setStatus("all");
     setQuizId("all");
     setFromDate("");
     setToDate("");
+    listControls.onSearchClear();
   }
 
   return (
     <>
       <HistoryFilters
+        listControls={listControls}
+        count={reports.length}
+        loading={loading}
+        hasMore={Boolean(nextCursor)}
         fromDate={fromDate}
         onClear={clearFilters}
         onFromDateChange={setFromDate}
@@ -240,7 +342,7 @@ function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
         <div className={styles.emptyState}>
           <h2>{t("pages.results.emptyTitle")}</h2>
           <p>
-            {status === "all" && quizId === "all" && !fromDate && !toDate
+            {status === "all" && quizId === "all" && !fromDate && !toDate && !listControls.search
               ? t("pages.results.emptyDescription")
               : t("pages.results.noMatches")}
           </p>
@@ -249,10 +351,14 @@ function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
           </Link>
         </div>
       ) : null}
-      <section className={styles.list} aria-label={t("pages.common.results")}>
+      <section
+        className={resultStyles.collection}
+        data-view={listControls.layout}
+        aria-label={t("pages.common.results")}
+      >
         {reports.map((report) => (
-          <article className={styles.listCard} key={report.id}>
-            <div className={styles.rowTopline}>
+          <article className={`${styles.listCard} ${resultStyles.card}`} key={report.id}>
+            <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
                 <h2 lang="">{report.title}</h2>
                 <p className={styles.summaryLine}>
@@ -272,7 +378,7 @@ function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
                 )}
               </span>
             </div>
-            <div className={styles.metricGrid}>
+            <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
               <div className={styles.metric}>
                 <strong>
                   {report.initialAccuracyPercent === null
@@ -299,7 +405,7 @@ function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
                 <span>{t("pages.results.interventions")}</span>
               </div>
             </div>
-            <div className={styles.listCardActions}>
+            <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
               <Link className="button small-button" href={`/report/${report.id}`}>
                 {report.status === "ready"
                   ? t("pages.results.openRecoveryStory")
@@ -325,97 +431,43 @@ function ReportList({ rounds }: { rounds: RoundFilterOption[] }) {
   );
 }
 
-function PracticeList({ rounds }: { rounds: RoundFilterOption[] }) {
+function PracticeList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
   const [status, setStatus] = useState<FollowupStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [followups, setFollowups] = useState<FollowupSummary[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
-  const queryKey = `${status}\u0000${quizId}\u0000${fromDate}\u0000${toDate}`;
-  const activeQueryKey = useRef(queryKey);
-  const loadMoreController = useRef<AbortController | null>(null);
-  activeQueryKey.current = queryKey;
-
-  const fetchPage = useCallback(
-    (cursor?: string, signal?: AbortSignal) =>
-      apiFetch<CursorPage<FollowupSummary>>(
-        `/v1/followups?${buildHistoryQuery({ status, quizId, fromDate, toDate }, cursor)}`,
-        { signal },
-      ),
-    [fromDate, quizId, status, toDate],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const requestedQueryKey = queryKey;
-    loadMoreController.current?.abort();
-    loadMoreController.current = null;
-    setLoading(true);
-    setLoadingMore(false);
-    setFollowups([]);
-    setNextCursor(null);
-    setError("");
-    void fetchPage(undefined, controller.signal)
-      .then((response) => {
-        if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-        setFollowups(response.items);
-        setNextCursor(response.nextCursor);
-      })
-      .catch((caught) => {
-        if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-        setError(humanError(caught));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted && activeQueryKey.current === requestedQueryKey) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      controller.abort();
-      loadMoreController.current?.abort();
-    };
-  }, [fetchPage, queryKey]);
-
-  async function more() {
-    if (!nextCursor) return;
-    const requestedQueryKey = queryKey;
-    const requestedCursor = nextCursor;
-    loadMoreController.current?.abort();
-    const controller = new AbortController();
-    loadMoreController.current = controller;
-    setLoadingMore(true);
-    setError("");
-    try {
-      const response = await fetchPage(requestedCursor, controller.signal);
-      if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-      setFollowups((current) => [...current, ...response.items]);
-      setNextCursor(response.nextCursor);
-    } catch (caught) {
-      if (controller.signal.aborted || activeQueryKey.current !== requestedQueryKey) return;
-      setError(humanError(caught));
-    } finally {
-      if (loadMoreController.current === controller) {
-        loadMoreController.current = null;
-        if (activeQueryKey.current === requestedQueryKey) setLoadingMore(false);
-      }
-    }
-  }
+  const {
+    items: followups,
+    nextCursor,
+    loading,
+    loadingMore,
+    error,
+    more,
+  } = useHistoryPage<FollowupSummary>("/v1/followups", {
+    status,
+    quizId,
+    fromDate,
+    toDate,
+    search: listControls.search,
+  });
 
   function clearFilters() {
     setStatus("all");
     setQuizId("all");
     setFromDate("");
     setToDate("");
+    listControls.onSearchClear();
   }
 
   return (
     <>
       <HistoryFilters
+        listControls={listControls}
+        count={followups.length}
+        loading={loading}
+        hasMore={Boolean(nextCursor)}
+        practice
         fromDate={fromDate}
         onClear={clearFilters}
         onFromDateChange={setFromDate}
@@ -449,16 +501,20 @@ function PracticeList({ rounds }: { rounds: RoundFilterOption[] }) {
         <div className={styles.emptyState}>
           <h2>{t("pages.results.emptyPracticeTitle")}</h2>
           <p>
-            {status === "all" && quizId === "all" && !fromDate && !toDate
+            {status === "all" && quizId === "all" && !fromDate && !toDate && !listControls.search
               ? t("pages.results.emptyPracticeDescription")
               : t("pages.results.noPracticeMatches")}
           </p>
         </div>
       ) : null}
-      <section className={styles.list} aria-label={t("pages.results.practiceListLabel")}>
+      <section
+        className={resultStyles.collection}
+        data-view={listControls.layout}
+        aria-label={t("pages.results.practiceListLabel")}
+      >
         {followups.map((followup) => (
-          <article className={styles.listCard} key={followup.id}>
-            <div className={styles.rowTopline}>
+          <article className={`${styles.listCard} ${resultStyles.card}`} key={followup.id}>
+            <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
                 <h2 lang="">{followup.title}</h2>
                 <PackPracticeAttribution source={followup.recoveryPackSource} />
@@ -480,7 +536,7 @@ function PracticeList({ rounds }: { rounds: RoundFilterOption[] }) {
                   })}
                 </p>
               </div>
-              <div className={styles.conceptList}>
+              <div className={`${styles.conceptList} ${resultStyles.concepts}`}>
                 <span className={styles.subtlePill}>
                   {followup.purpose === "assignment"
                     ? t("pages.results.assignment")
@@ -491,7 +547,7 @@ function PracticeList({ rounds }: { rounds: RoundFilterOption[] }) {
                 </span>
               </div>
             </div>
-            <div className={styles.metricGrid}>
+            <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
               <div className={styles.metric}>
                 <strong>{followup.attemptCount}</strong>
                 <span>{t("pages.common.attempts")}</span>
@@ -510,7 +566,10 @@ function PracticeList({ rounds }: { rounds: RoundFilterOption[] }) {
               </div>
             </div>
             {followup.conceptKeys.length ? (
-              <div className={styles.conceptList} aria-label={t("pages.results.conceptsPractised")}>
+              <div
+                className={`${styles.conceptList} ${resultStyles.concepts}`}
+                aria-label={t("pages.results.conceptsPractised")}
+              >
                 {followup.conceptKeys.map((concept) => (
                   <span className={styles.subtlePill} key={concept}>
                     {concept}
@@ -518,7 +577,7 @@ function PracticeList({ rounds }: { rounds: RoundFilterOption[] }) {
                 ))}
               </div>
             ) : null}
-            <div className={styles.listCardActions}>
+            <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
               <Link className="button small-button" href={`/practice/${followup.id}`}>
                 {t("pages.results.managePractice")}
               </Link>
@@ -558,11 +617,15 @@ interface PresentationResultSummary {
   finishedAt?: string | null;
 }
 
-function PresentationResultList() {
+function PresentationResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const [sessions, setSessions] = useState<PresentationResultSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("all");
+  const [sourceId, setSourceId] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -581,83 +644,147 @@ function PresentationResultList() {
     return () => controller.abort();
   }, []);
 
-  if (loading) return <p className={styles.muted}>{t("pages.results.loadingPresentations")}</p>;
-  if (error)
+  const search = listControls.search.trim().toLocaleLowerCase();
+  const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
+  const to = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
+  const visible = sessions.filter((session) => {
+    const createdAt = new Date(session.createdAt).getTime();
     return (
-      <p className="error" lang="en-CA" role="alert">
-        {error}
-      </p>
+      (!search || session.title.toLocaleLowerCase().includes(search)) &&
+      (status === "all" || session.status === status) &&
+      (sourceId === "all" || session.presentationId === sourceId) &&
+      createdAt >= from &&
+      createdAt <= to
     );
-  if (!sessions.length) {
-    return (
-      <div className={styles.emptyState}>
-        <h2>{t("pages.results.emptyPresentationsTitle")}</h2>
-        <p>{t("pages.results.emptyPresentationsDescription")}</p>
-        <Link className="button" href="/library?type=presentations">
-          {t("pages.results.choosePresentation")}
-        </Link>
-      </div>
-    );
+  });
+  const sources = Array.from(
+    new Map(
+      sessions.map((session) => [
+        session.presentationId,
+        { id: session.presentationId, title: session.title },
+      ]),
+    ).values(),
+  );
+  const filtered = Boolean(search || status !== "all" || sourceId !== "all" || fromDate || toDate);
+
+  function clearFilters() {
+    setStatus("all");
+    setSourceId("all");
+    setFromDate("");
+    setToDate("");
+    listControls.onSearchClear();
   }
+
   return (
-    <section className={styles.list} aria-label={t("pages.results.presentationResults")}>
-      {sessions.map((session) => (
-        <article className={styles.listCard} key={session.id}>
-          <div className={styles.rowTopline}>
-            <div>
-              <p className="eyebrow">{t("pages.common.presentation")}</p>
-              <h2 lang="">{session.title}</h2>
-              <p className={styles.summaryLine}>
-                {t("pages.results.presentationStarted", {
-                  date: formatDateTime(locale, session.createdAt),
-                  count: session.blockCount,
-                })}
-              </p>
+    <>
+      <HistoryFilters
+        listControls={listControls}
+        count={visible.length}
+        loading={loading}
+        hasMore={false}
+        status={status}
+        statusLabel={t("pages.common.statusLabel")}
+        statusOptions={[
+          { value: "all", label: t("pages.results.allResults") },
+          { value: "active", label: t("pages.common.status.active") },
+          { value: "finished", label: t("pages.common.status.finished") },
+        ]}
+        quizId={sourceId}
+        rounds={sources}
+        sourceLabel={t("pages.common.presentation")}
+        allSourcesLabel={t("pages.sessions.allPresentations")}
+        fromDate={fromDate}
+        toDate={toDate}
+        onStatusChange={setStatus}
+        onQuizChange={setSourceId}
+        onFromDateChange={setFromDate}
+        onToDateChange={setToDate}
+        onClear={clearFilters}
+      />
+      {loading ? <p className={styles.muted}>{t("pages.results.loadingPresentations")}</p> : null}
+      {error ? (
+        <p className="error" lang="en-CA" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {!loading && !error && !visible.length ? (
+        <div className={styles.emptyState}>
+          <h2>{t("pages.results.emptyPresentationsTitle")}</h2>
+          <p>
+            {t(
+              filtered ? "pages.results.noMatches" : "pages.results.emptyPresentationsDescription",
+            )}
+          </p>
+          <Link className="button" href="/library?type=presentations">
+            {t("pages.results.choosePresentation")}
+          </Link>
+        </div>
+      ) : null}
+      <section
+        className={resultStyles.collection}
+        data-view={listControls.layout}
+        aria-label={t("pages.results.presentationResults")}
+      >
+        {visible.map((session) => (
+          <article className={`${styles.listCard} ${resultStyles.card}`} key={session.id}>
+            <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
+              <div>
+                <p className="eyebrow">{t("pages.common.presentation")}</p>
+                <h2 lang="">{session.title}</h2>
+                <p className={styles.summaryLine}>
+                  {t("pages.results.presentationStarted", {
+                    date: formatDateTime(locale, session.createdAt),
+                    count: session.blockCount,
+                  })}
+                </p>
+              </div>
+              <span className={styles.status} data-tone={session.status}>
+                {t(`pages.common.status.${session.status}`)}
+              </span>
             </div>
-            <span className={styles.status} data-tone={session.status}>
-              {t(`pages.common.status.${session.status}`)}
-            </span>
-          </div>
-          <div className={styles.metricGrid}>
-            <div className={styles.metric}>
-              <strong>{session.participantCount}</strong>
-              <span>{t("pages.common.participants")}</span>
+            <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
+              <div className={styles.metric}>
+                <strong>{session.participantCount}</strong>
+                <span>{t("pages.common.participants")}</span>
+              </div>
+              <div className={styles.metric}>
+                <strong>{session.responseCount}</strong>
+                <span>{t("pages.results.responses")}</span>
+              </div>
+              <div className={styles.metric}>
+                <strong>
+                  <SessionPhaseLabel phase={session.phase} />
+                </strong>
+                <span>{t("pages.results.sessionPhase")}</span>
+              </div>
             </div>
-            <div className={styles.metric}>
-              <strong>{session.responseCount}</strong>
-              <span>{t("pages.results.responses")}</span>
+            <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
+              <Link
+                className="button small-button"
+                href={`/presentation-session/${session.id}/report`}
+              >
+                {t("pages.results.openReport")}
+              </Link>
+              <Link
+                className="button-quiet small-button"
+                href={`/presentation/${session.presentationId}`}
+              >
+                {t("pages.sessions.viewPresentation")}
+              </Link>
             </div>
-            <div className={styles.metric}>
-              <strong>
-                <SessionPhaseLabel phase={session.phase} />
-              </strong>
-              <span>{t("pages.results.sessionPhase")}</span>
-            </div>
-          </div>
-          <div className={styles.listCardActions}>
-            <Link
-              className="button small-button"
-              href={`/presentation-session/${session.id}/report`}
-            >
-              {t("pages.results.openReport")}
-            </Link>
-            <Link
-              className="button-quiet small-button"
-              href={`/presentation/${session.presentationId}`}
-            >
-              {t("pages.sessions.viewPresentation")}
-            </Link>
-          </div>
-        </article>
-      ))}
-    </section>
+          </article>
+        ))}
+      </section>
+    </>
   );
 }
 
 function ResultsContent() {
   const { t } = useLocale();
+  const router = useRouter();
   const params = useSearchParams();
-  const { productFeatures } = useWorkspace();
+  const { creator, productFeatures } = useWorkspace();
+  const workspaceId = creator?.workspaceId ?? "";
   const presentationsEnabled = productFeatures?.presentations === true;
   const requestedView = params.get("view");
   const view =
@@ -666,73 +793,150 @@ function ResultsContent() {
       : requestedView === "presentations" && presentationsEnabled
         ? "presentations"
         : "results";
-  const [rounds, setRounds] = useState<RoundFilterOption[]>([]);
+  const search = (params.get("q") ?? "").slice(0, 160);
+  const [sources, setSources] = useState<{ workspaceId: string; rounds: RoundFilterOption[] }>({
+    workspaceId: "",
+    rounds: [],
+  });
+  const [preference, setPreference] = useState<{ workspaceId: string; layout: ResultsLayout }>({
+    workspaceId: "",
+    layout: "grid",
+  });
+  const layout = preference.workspaceId === workspaceId ? preference.layout : "grid";
+  const storageKey = `openround:results-view:v1:${workspaceId}`;
+  const rounds = sources.workspaceId === workspaceId ? sources.rounds : [];
 
   useEffect(() => {
+    if (!workspaceId) return;
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem(storageKey);
+    } catch {
+      /* Use the default layout. */
+    }
+    setPreference({ workspaceId, layout: saved === "list" ? "list" : "grid" });
+  }, [storageKey, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
     const controller = new AbortController();
     void apiFetch<{ quizzes: RoundFilterOption[] }>("/v1/quizzes?archived=true&summary=true", {
       signal: controller.signal,
     })
       .then((response) => {
-        if (!controller.signal.aborted) setRounds(response.quizzes);
+        if (!controller.signal.aborted) setSources({ workspaceId, rounds: response.quizzes });
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, []);
+  }, [workspaceId]);
+
+  function chooseLayout(value: ResultsLayout) {
+    setPreference({ workspaceId, layout: value });
+    try {
+      window.localStorage.setItem(storageKey, value);
+    } catch {
+      /* Keep the in-memory preference. */
+    }
+  }
+
+  function updateSearch(value: string) {
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set("q", value);
+    else next.delete("q");
+    router.replace(`/results${next.size ? `?${next}` : ""}`, { scroll: false });
+  }
+
+  const listControls: ListControls = {
+    search,
+    layout,
+    onLayoutChange: chooseLayout,
+    onSearchClear: () => updateSearch(""),
+  };
+  const searchLabel = t(
+    view === "practice"
+      ? "pages.results.searchPractice"
+      : view === "presentations"
+        ? "pages.results.searchPresentations"
+        : "pages.results.searchRounds",
+  );
 
   return (
-    <>
-      <nav className={styles.tabList} aria-label={t("pages.results.evidenceViews")}>
-        <Link
-          aria-current={view === "results" ? "page" : undefined}
-          className={view === "results" ? styles.tabActive : styles.tab}
-          href="/results"
-        >
-          {t("pages.results.recoveryResults")}
-        </Link>
-        {presentationsEnabled ? (
+    <WorkspaceShell
+      description={t("page.results.description")}
+      eyebrow={t("page.results.eyebrow")}
+      title={t("page.results.title")}
+      translationLevel="full"
+    >
+      <div className={controls.toolbar}>
+        <nav className={controls.tabs} aria-label={t("pages.results.evidenceViews")}>
           <Link
-            aria-current={view === "presentations" ? "page" : undefined}
-            className={view === "presentations" ? styles.tabActive : styles.tab}
-            href="/results?view=presentations"
+            aria-current={view === "results" ? "page" : undefined}
+            className={view === "results" ? controls.tabActive : controls.tab}
+            href="/results"
           >
-            {t("pages.results.presentationResults")}
+            {t("pages.common.rounds")}
           </Link>
-        ) : null}
+          {presentationsEnabled ? (
+            <Link
+              aria-current={view === "presentations" ? "page" : undefined}
+              className={view === "presentations" ? controls.tabActive : controls.tab}
+              href="/results?view=presentations"
+            >
+              {t("pages.common.presentations")}
+            </Link>
+          ) : null}
+          <Link
+            aria-current={view === "practice" ? "page" : undefined}
+            className={view === "practice" ? controls.tabActive : controls.tab}
+            href="/results?view=practice"
+          >
+            {t("pages.results.practice")}
+          </Link>
+        </nav>
+        <label className={controls.searchField}>
+          <span className="sr-only">{searchLabel}</span>
+          <input
+            maxLength={160}
+            onChange={(event) => updateSearch(event.target.value)}
+            placeholder={searchLabel}
+            type="search"
+            value={search}
+          />
+        </label>
         <Link
-          aria-current={view === "practice" ? "page" : undefined}
-          className={view === "practice" ? styles.tabActive : styles.tab}
-          href="/results?view=practice"
+          className={controls.libraryLink}
+          href={`/library?type=${view === "presentations" ? "presentations" : "rounds"}`}
         >
-          {t("pages.results.practice")}
+          {t("pages.sessions.backToLibrary", {
+            type: t(view === "presentations" ? "pages.common.presentation" : "pages.common.round"),
+          })}
         </Link>
-      </nav>
-      {view === "practice" ? (
-        <PracticeList rounds={rounds} />
-      ) : view === "presentations" ? (
-        <PresentationResultList />
-      ) : (
-        <ReportList rounds={rounds} />
-      )}
-    </>
+        <Link
+          className={`${controls.libraryLink} ${resultStyles.surveyLink}`}
+          href="/sessions?type=surveys"
+        >
+          {t("pages.library.surveyRuns")}
+        </Link>
+      </div>
+      <div key={`${workspaceId}\u0000${view}`}>
+        {view === "practice" ? (
+          <PracticeList {...listControls} rounds={rounds} />
+        ) : view === "presentations" ? (
+          <PresentationResultList {...listControls} />
+        ) : (
+          <ReportList {...listControls} rounds={rounds} />
+        )}
+      </div>
+    </WorkspaceShell>
   );
 }
 
 export default function ResultsPage() {
-  const { t } = useLocale();
   return (
-    <WorkspaceProvider>
-      <WorkspaceShell
-        description={t("page.results.description")}
-        eyebrow={t("page.results.eyebrow")}
-        title={t("page.results.title")}
-        translationLevel="full"
-      >
-        <p>
-          <Link href="/surveys">{t("create.kind.browseSurveys")}</Link>
-        </p>
+    <Suspense>
+      <WorkspaceProvider>
         <ResultsContent />
-      </WorkspaceShell>
-    </WorkspaceProvider>
+      </WorkspaceProvider>
+    </Suspense>
   );
 }

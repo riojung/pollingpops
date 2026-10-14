@@ -755,7 +755,7 @@ moderation, kick/ban, retention, export, and deletion are enforced server-side.
 
 - `GET /v1/sessions/{id}/report`
 - `GET /v1/reports` — tenant-scoped recovery-oriented result summaries; filters are
-  `status=pending|ready|failed`, `quizId`, `from`, and `to`.
+  `status=pending|ready|failed`, `quizId`, `from`, `to`, and optional title `search`.
 - `GET /v1/reports/{id}`
 - `GET /v1/reports/{id}.csv`
 - `GET /v1/reports/{id}.json`
@@ -768,7 +768,8 @@ moderation, kick/ban, retention, export, and deletion are enforced server-side.
   one-attempt links exactly once.
 - `GET /v1/followups` — tenant-scoped recovery-follow-up and standalone-assignment summaries and
   attempt counts; filters are
-  `purpose=recovery|assignment`, `status=scheduled|open|closed|expired`, `quizId`, `from`, and `to`.
+  `purpose=recovery|assignment`, `status=scheduled|open|closed|expired`, `quizId`, `from`, `to`,
+  and optional title `search`.
 - `GET /v1/followups/{id}` — creator view, immutable Round/version context, aggregate progress, and
   access management; bearer tokens and answer bodies are never returned.
 - `POST /v1/followups/{id}/personal-passes` — create a labelled, revocable, single-attempt link for
@@ -809,7 +810,10 @@ idempotency, revocation, and expiry are server-owned.
 
 The session, report, and follow-up history endpoints return `{ items, nextCursor }`, default to 25
 rows, cap at 50, and order by `(createdAt DESC, id DESC)`. Cursors are opaque base64url values;
-malformed cursors return a validation error. These endpoints expose summaries only—never answer
+malformed cursors return a validation error. Report and practice title searches are trimmed,
+limited to 160 characters, and match case-insensitive literal substrings before pagination.
+Report searches use the frozen session title; practice searches use the assignment or follow-up title.
+These endpoints expose summaries only—never answer
 bodies, aliases, chat content, or state snapshots. Report detail keeps the versioned `report` and
 adds Round/session context (`quizId`, `quizTitle`, `sessionCreatedAt`, `sessionUpdatedAt`) when
 available. Recovery-follow-up creation accepts ready Report V2, V3, V4, and V5 evidence. Standalone

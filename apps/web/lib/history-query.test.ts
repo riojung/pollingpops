@@ -24,4 +24,12 @@ describe("history query", () => {
     expect(query.get("from")).toBe(new Date("2026-09-17T00:00:00").toISOString());
     expect(query.get("to")).toBe(new Date("2026-09-18T23:59:59.999").toISOString());
   });
+
+  it("preserves a literal title search on subsequent history pages", () => {
+    const filters = { status: "all", quizId: "all", fromDate: "", toDate: "" };
+    expect(
+      buildHistoryQuery({ ...filters, search: "  100%_Round  " }, "next-page").get("search"),
+    ).toBe("100%_Round");
+    expect(buildHistoryQuery({ ...filters, search: "   " }).has("search")).toBe(false);
+  });
 });

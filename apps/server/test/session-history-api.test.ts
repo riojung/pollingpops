@@ -308,3 +308,84 @@ describe("Sessions Library history APIs", () => {
     expect((await get(`?search=${"x".repeat(161)}`)).statusCode).toBe(400);
   });
 });
+
+describe("Results history search APIs", () => {
+  it.each([
+    { path: "/v1/reports", method: "listReportHistory" as const, status: "pending" },
+    { path: "/v1/followups", method: "listFollowupHistory" as const, status: "scheduled" },
+  ])(
+    "passes bounded literal title search and existing filters to $path within the active workspace",
+    async ({ path, method, status }) => {
+      const f = await fixture();
+      const history = vi
+        .spyOn(f.repository, method)
+        .mockResolvedValue({ items: [], hasMore: false });
+      const query = new URLSearchParams({
+        search: "  NeEdLe 50%_  ",
+        limit: "1",
+        status,
+        quizId: randomUUID(),
+        from: "2026-01-01T00:00:00.000Z",
+        to: "2026-12-31T00:00:00.000Z",
+      });
+      if (method === "listFollowupHistory") query.set("purpose", "assignment");
+      const exactCreatedAt = "2026-09-18T12:00:00.000900Z";
+      const anchorId = randomUUID();
+      query.set(
+        "cursor",
+        Buffer.from(JSON.stringify({ createdAt: exactCreatedAt, id: anchorId })).toString(
+          "base64url",
+        ),
+      );
+      expect((await f.app.inject({ method: "GET", url: `${path}?${query}` })).statusCode).toBe(401);
+      expect(history).not.toHaveBeenCalled();
+      const response = await f.app.inject({
+        method: "GET",
+        url: `${path}?${query}`,
+        headers: f.owner.headers,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ items: [], nextCursor: null });
+      expect(history).toHaveBeenLastCalledWith(f.owner.creator.workspaceId, {
+        search: "NeEdLe 50%_",
+        limit: 1,
+        status,
+        quizId: query.get("quizId"),
+        from: new Date(query.get("from")!),
+        to: new Date(query.get("to")!),
+        cursor: {
+          createdAt: new Date(exactCreatedAt),
+          cursorCreatedAt: exactCreatedAt,
+          id: anchorId,
+        },
+        now: expect.any(Date),
+        ...(method === "listFollowupHistory" ? { purpose: "assignment" } : {}),
+      });
+      const get = (search: string) =>
+        f.app.inject({
+          method: "GET",
+          url: `${path}?search=${encodeURIComponent(search)}`,
+          headers: f.owner.headers,
+        });
+      expect((await get("x".repeat(160))).statusCode).toBe(200);
+      history.mockClear();
+      expect((await get("x".repeat(161))).statusCode).toBe(400);
+      expect(history).not.toHaveBeenCalled();
+      expect((await get("   ")).statusCode).toBe(200);
+      expect(history).toHaveBeenLastCalledWith(f.owner.creator.workspaceId, {
+        limit: 25,
+        now: expect.any(Date),
+      });
+      await f.app.inject({
+        method: "GET",
+        url: `${path}?search=needle`,
+        headers: f.outsider.headers,
+      });
+      expect(history).toHaveBeenLastCalledWith(f.outsider.creator.workspaceId, {
+        search: "needle",
+        limit: 25,
+        now: expect.any(Date),
+      });
+    },
+  );
+});

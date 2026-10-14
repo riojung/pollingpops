@@ -30,6 +30,7 @@ import {
 } from "../../lib/session-controls";
 import contentStyles from "../../components/workspace/workspace-content.module.css";
 import styles from "./sessions.module.css";
+import controls from "../../components/workspace/workspace-history-controls.module.css";
 
 type SessionCounts = Record<SessionType, number>;
 type SourceOption = { id: string; title: string };
@@ -568,13 +569,13 @@ function SessionsContent() {
       title={t("page.sessions.title")}
       translationLevel="full"
     >
-      <div className={styles.toolbar}>
-        <div className={styles.tabs} role="tablist" aria-label={t("pages.sessions.typeLabel")}>
+      <div className={controls.toolbar}>
+        <div className={controls.tabs} role="tablist" aria-label={t("pages.sessions.typeLabel")}>
           {availableTypes.map((value, index) => (
             <button
               aria-controls={`${value}-panel`}
               aria-selected={type === value}
-              className={type === value ? styles.tabActive : styles.tab}
+              className={type === value ? controls.tabActive : controls.tab}
               id={`${value}-tab`}
               key={value}
               onClick={() => updateFilters(sessionFiltersForType(filters, value), true)}
@@ -594,7 +595,7 @@ function SessionsContent() {
             </button>
           ))}
         </div>
-        <label className={styles.searchField}>
+        <label className={controls.searchField}>
           <span className="sr-only">{searchLabel}</span>
           <input
             maxLength={160}
@@ -604,12 +605,12 @@ function SessionsContent() {
             value={query}
           />
         </label>
-        <Link className={styles.libraryLink} href={`/library?type=${type}`}>
+        <Link className={controls.libraryLink} href={`/library?type=${type}`}>
           {t("pages.sessions.backToLibrary", { type: singularTypeLabel })}
         </Link>
       </div>
-      <section className={styles.filterBar} aria-label={t("pages.sessions.filtersLabel")}>
-        <label className={styles.filterField}>
+      <section className={controls.filterBar} aria-label={t("pages.sessions.filtersLabel")}>
+        <label className={controls.filterField}>
           <span>{t("pages.common.statusLabel")}</span>
           <select
             onChange={(event) =>
@@ -623,7 +624,7 @@ function SessionsContent() {
             <option value="expired">{statusLabel("expired")}</option>
           </select>
         </label>
-        <label className={styles.filterField}>
+        <label className={controls.filterField}>
           <span>{singularTypeLabel}</span>
           <select
             onChange={(event) => updateFilters({ ...filters, sourceId: event.target.value })}
@@ -650,7 +651,7 @@ function SessionsContent() {
             ))}
           </select>
         </label>
-        <label className={styles.filterField}>
+        <label className={controls.filterField}>
           <span>
             {t(type === "surveys" ? "pages.sessions.closesFrom" : "pages.sessions.startedFrom")}
           </span>
@@ -660,7 +661,7 @@ function SessionsContent() {
             value={from}
           />
         </label>
-        <label className={styles.filterField}>
+        <label className={controls.filterField}>
           <span>
             {t(type === "surveys" ? "pages.sessions.closesTo" : "pages.sessions.startedTo")}
           </span>
@@ -671,14 +672,14 @@ function SessionsContent() {
             value={to}
           />
         </label>
-        <p className={styles.resultSummary} role="status">
+        <p className={controls.resultSummary} role="status">
           {loading
             ? t("pages.sessions.loading")
             : t("pages.sessions.resultCount", { count: visibleCount })}
         </p>
         <div
           aria-label={t("pages.sessions.layoutLabel")}
-          className={styles.viewToggle}
+          className={controls.viewToggle}
           role="group"
         >
           <button

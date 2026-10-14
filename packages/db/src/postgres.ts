@@ -6104,6 +6104,7 @@ export class PostgresRepository implements Repository {
     options: {
       cursor?: HistoryCursor;
       limit: number;
+      search?: string;
       status?: Report["status"];
       quizId?: string;
       from?: Date;
@@ -6137,6 +6138,8 @@ export class PostgresRepository implements Repository {
          AND ($5::uuid IS NULL OR quiz_versions.quiz_id = $5)
        AND ($6::timestamptz IS NULL OR reports.created_at >= $6)
        AND ($7::timestamptz IS NULL OR reports.created_at <= $7)
+       AND ($10::text IS NULL
+         OR strpos(lower(game_sessions.state_snapshot #>> '{quiz,title}'), lower($10)) > 0)
        ORDER BY reports.created_at DESC, reports.id DESC
        LIMIT $9`,
       [
@@ -6149,6 +6152,7 @@ export class PostgresRepository implements Repository {
         options.to ?? null,
         options.now,
         options.limit + 1,
+        options.search?.trim() || null,
       ],
     );
     const hasMore = result.rows.length > options.limit;
@@ -6456,6 +6460,7 @@ export class PostgresRepository implements Repository {
                AND followups.closed_at IS NULL AND followups.closes_at > $9
                AND followups.opens_at <= $9)
          )
+         AND ($11::text IS NULL OR strpos(lower(followups.title), lower($11)) > 0)
        GROUP BY followups.id, quiz_versions.quiz_id
        ORDER BY followups.created_at DESC, followups.id DESC
        LIMIT $10`,
@@ -6470,6 +6475,7 @@ export class PostgresRepository implements Repository {
         options.status ?? null,
         options.now,
         options.limit + 1,
+        options.search?.trim() || null,
       ],
     );
     const hasMore = result.rows.length > options.limit;

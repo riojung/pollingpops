@@ -1,0 +1,99 @@
+.surveyLink {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0 8px 2px;
+}
+
+.clearFilters {
+  min-height: 38px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.collection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  gap: 18px;
+}
+
+.card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px;
+  background: var(--ui-surface-raised);
+}
+
+.topline {
+  align-items: start;
+}
+
+.topline > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.topline h2 {
+  font-size: 20px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.topline p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.topline > span {
+  flex-shrink: 0;
+}
+
+.metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metrics > div {
+  min-width: 0;
+  align-content: start;
+}
+
+.metrics strong {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  margin-top: auto;
+}
+
+.collection[data-view="list"] {
+  grid-template-columns: 1fr;
+}
+
+.collection[data-view="list"] .card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(230px, 1fr);
+  align-items: center;
+}
+
+.collection[data-view="list"] .actions,
+.collection[data-view="list"] .concepts {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+@media (max-width: 620px) {
+  .card {
+    padding: 18px;
+  }
+  .topline {
+    flex-wrap: wrap;
+  }
+  .collection[data-view="list"] .card {
+    display: flex;
+    align-items: stretch;
+  }
+}

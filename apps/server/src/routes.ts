@@ -234,11 +234,13 @@ const SessionHistoryQuerySchema = z.object({
 });
 const ReportHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
+  search: SessionHistorySearchSchema.optional(),
   status: z.enum(["pending", "ready", "failed"]).optional(),
   quizId: z.string().uuid().optional(),
 });
 const FollowupHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
+  search: SessionHistorySearchSchema.optional(),
   purpose: FollowupPurposeSchema.optional(),
   status: z.enum(["scheduled", "open", "closed", "expired"]).optional(),
   quizId: z.string().uuid().optional(),
@@ -2719,6 +2721,7 @@ export async function registerRoutes(
     const query = ReportHistoryQuerySchema.parse(request.query);
     const page = await repository.listReportHistory(creator.workspaceId, {
       limit: query.limit,
+      ...(query.search ? { search: query.search } : {}),
       ...(query.cursor
         ? {
             cursor: {
@@ -3018,6 +3021,7 @@ export async function registerRoutes(
     const query = FollowupHistoryQuerySchema.parse(request.query);
     const page = await repository.listFollowupHistory(creator.workspaceId, {
       limit: query.limit,
+      ...(query.search ? { search: query.search } : {}),
       ...(query.cursor
         ? {
             cursor: {

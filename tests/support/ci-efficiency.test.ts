@@ -98,7 +98,9 @@ describe("CI efficiency without coverage bypasses", () => {
   it("scans JS/TS directly rather than repeating the application build in CodeQL", async () => {
     const steps = (await workflow("security")).jobs.codeql.steps;
     const init = steps.find((step) => step.uses?.startsWith("github/codeql-action/init@"));
+    const analyze = steps.find((step) => step.uses?.startsWith("github/codeql-action/analyze@"));
     expect(init?.with).toMatchObject({ languages: "javascript-typescript", "build-mode": "none" });
+    expect(analyze?.uses?.split("@")[1]).toBe(init?.uses?.split("@")[1]);
     expect(steps.some((step) => step.run || step.uses?.startsWith("pnpm/"))).toBe(false);
     expect(steps.some((step) => step.uses?.startsWith("github/codeql-action/analyze@"))).toBe(true);
   });

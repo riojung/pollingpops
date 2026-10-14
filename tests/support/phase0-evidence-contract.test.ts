@@ -191,7 +191,7 @@ describe("Phase 0 evidence contract", () => {
     for (const workflow of [readinessWorkflow, imageWorkflow]) {
       const mainCandidateSteps = workflowJobs(workflow)["main-candidate"]?.steps ?? [];
       const setupNodeIndex = mainCandidateSteps.findIndex(({ uses }) =>
-        uses?.startsWith("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"),
+        uses?.startsWith("actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1"),
       );
       const firstInlineNodeIndex = mainCandidateSteps.findIndex(({ run }) =>
         run?.split("\n").some((line) => /^\s*node(?:\s|$)/.test(line)),

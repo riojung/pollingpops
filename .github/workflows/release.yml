@@ -176,7 +176,7 @@ jobs:
             > artifacts/release/preflight.json
       - name: Upload release preflight evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-preflight-${{ github.ref_name }}
           path: artifacts/release/preflight.json
@@ -354,7 +354,7 @@ jobs:
           done
       - name: Upload server release evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-evidence-server-${{ github.ref_name }}
           path: artifacts/release/server/
@@ -362,7 +362,7 @@ jobs:
           retention-days: 90
       - name: Upload web release evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-evidence-web-${{ github.ref_name }}
           path: artifacts/release/web/
@@ -370,7 +370,7 @@ jobs:
           retention-days: 90
       - name: Upload deployment manifest
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-deployment-manifest-${{ github.ref_name }}
           path: artifacts/deploy/production/build-manifest.json
@@ -379,7 +379,7 @@ jobs:
 
       - name: Upload control release evidence
         if: always() && steps.manifest.outputs.control_ref != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-evidence-control-${{ github.ref_name }}
           path: artifacts/release/control/
@@ -669,7 +669,7 @@ jobs:
           NODE
       - name: Upload verified draft release binding
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-publication-${{ github.ref_name }}
           path: artifacts/release-verification/

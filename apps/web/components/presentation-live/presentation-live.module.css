@@ -241,6 +241,12 @@
   padding: 22px;
 }
 
+.reportNickname {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .reportGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

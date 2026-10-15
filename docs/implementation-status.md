@@ -8,6 +8,54 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### IDEA 005 Shareable session summaries October 14 2026
+
+Implemented locally on `codex/idea-005-session-summaries` for completed Rounds, finished
+Presentations with ready reports, and closed Surveys. See the
+[implementation plan](idea-005-session-summaries-plan.md) for behavior and rollout details.
+
+- Ready reports offer a localized aggregate preview, creator-authored next steps, PDF, PNG and
+  native XLSX downloads. PDF/XLSX contain the complete summary; PNG is a labelled overview or
+  selected checkpoint with an HTML text alternative.
+- Owners/editors with report-export access can create expiring, revocable accountless links and
+  choose guest download permission. Secrets are shown once, stored as hashes, and sent to the API
+  in authorization headers without creator cookies. Accepted retries return safe metadata.
+- Immutable aggregate snapshots exclude participant identities, submitted text, word-cloud terms,
+  transcripts and private feedback. Five-respondent suppression, scored denominators, unscored
+  opinions and separate paired recovery evidence apply across HTML and every export format.
+- Additive migration 070 supplies forced tenant RLS, source-bound immutable snapshots, lifecycle
+  cascades and capability metadata. Public access rechecks source retention and publisher role;
+  downloads also recheck permission and revocation after rendering.
+- Bounded, cancellable worker rendering packages licensed CJK/emoji fonts, tagged selectable PDF,
+  fixed-size PNG and literal-text, formula-free XLSX. All ten locales include the new workflow.
+- New snapshots/links require the off-by-default `FEATURE_SESSION_SUMMARIES` flag and workspace
+  allowlist. Accepted reads, authorized downloads and revocation survive a writer pause.
+
+Verification: `CI=true pnpm check` passes formatting, dependency-context checks, lint, strict types,
+package/support tests and production builds, including 901 web, 730 server, 367 contract and
+197 DB unit tests. The separate restricted PostgreSQL integration suite and focused summary
+regressions cover migrations, tenant isolation, immutable storage, deletion/role races, stable
+Survey close timestamps and active-link listing after many revocations. An independent code/privacy
+review's active-link listing finding is fixed and rechecked.
+
+All three production-browser journeys pass on desktop Chromium, mobile Chromium and mobile WebKit.
+Each exercises a real Round, Presentation and closed Survey through publication, guest downloads
+and revocation, with keyboard focus/Escape, 320px dark layouts, automated axe checks and omission
+of creator credentials from capability requests.
+
+The Linux arm64/Node 22 container renders all three native formats under its memory limit. Rendered
+PDF/PNG/XLSX inspection, exact CJK/emoji extraction, numeric spreadsheet cells and a 157-page fixture
+at the maximum checkpoint count pass. Native Excel, manual assistive-tech, native-speaker copy,
+physical-device, Firefox and external production acceptance remain separate checks. This change
+does not enable production sharing; Google Sheets delivery remains deferred.
+
+PR #125 review follow-up: the availability probe requires the current source kind and ID. During
+a writer pause, only that source's retained snapshot enables **Share summary**; another snapshot
+in the workspace cannot enable an unrelated report. Navigation immediately hides the previous
+source's trigger and ignores late aborted responses. Regressions cover all three source types,
+paused gates, tenancy, expiry, deletion, strict query validation and source changes. The full
+repository check passes, including 907 web and 737 server tests.
+
 ### IDEA 004 Live Round response formats October 13 2026
 
 Implemented locally on `codex/idea-004-response-formats`. The first increment covers Live Rounds;
@@ -37,7 +85,7 @@ Chromium and mobile WebKit, with automated axe checks, body-free saved refresh, 
 pagination, approval/removal, disconnect/401 cache clearing, earlier-question moderation, Unicode
 cloud grouping and Report V7. All ten supported locale catalogs include the new workflow copy.
 Physical-device, manual assistive-tech, native-speaker copy review, Firefox and external production
-acceptance remain separate gates. Other backlog ideas remain deferred.
+acceptance remain separate gates. Other unselected backlog ideas remain deferred.
 
 Review follow-up: Event-credit participant limits survive setup and recipe changes, and classic
 reports show the new opinion distributions without requiring UX beta. Ten report page regressions

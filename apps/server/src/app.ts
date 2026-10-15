@@ -12,6 +12,7 @@ import {
   createAudienceScopeRepository,
   createScopedQnaRepository,
   createSurveyRepository,
+  createSessionSummaryRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
   createRecoveryPackRepository,
@@ -61,6 +62,8 @@ import { registerHomeRoutes } from "./home-routes.js";
 import { registerLibraryRoutes } from "./library-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
+import { registerSessionSummaryRoutes } from "./session-summary-routes.js";
+import { createSessionSummaryExportService } from "./session-summary-export.js";
 import { registerFeedbackRoutes } from "./feedback-routes.js";
 import { registerQuestionHealthRoutes } from "./question-health-routes.js";
 import { registerRecoveryPackRoutes } from "./recovery-pack-routes.js";
@@ -86,6 +89,7 @@ export async function buildApp(
     authoringAssistant?: AuthoringAssistant | null;
     oidcProvider?: OidcProvider | null;
     ltiJwtAdapter?: LtiJwtAdapter | null;
+    summaryExports?: ReturnType<typeof createSessionSummaryExportService>;
   } = {},
 ) {
   const app = Fastify({
@@ -468,6 +472,17 @@ export async function buildApp(
     surveys: createSurveyRepository(repository),
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
+  const summaryExports = overrides.summaryExports ?? createSessionSummaryExportService();
+  await registerSessionSummaryRoutes(app, {
+    repository,
+    auth,
+    config,
+    summaries: createSessionSummaryRepository(repository),
+    surveys: createSurveyRepository(repository),
+    presentationSessions,
+    exports: summaryExports,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
   await registerFeedbackRoutes(app, {
     repository,
     auth,
@@ -528,6 +543,7 @@ export async function buildApp(
 
   app.addHook("onClose", async () => {
     sessions.close();
+    await summaryExports.close();
     await productEvents.close();
     await cache.close();
     await repository.close();

@@ -85,6 +85,20 @@ export class MemoryPresentationSessionRepository
     this.liveRooms.assertWorkspaceLiveSessionCreationAllowed?.(workspaceId);
   }
 
+  getSessionSummarySource(workspaceId: string, kind: "presentation" | "survey", sourceId: string) {
+    if (kind !== "presentation") return null;
+    const session = this.sessions.get(sourceId);
+    if (!session || session.workspaceId !== workspaceId) return null;
+    return {
+      ready:
+        session.status === "finished" &&
+        [...this.reports.values()].some(
+          (report) => report.sessionId === sourceId && report.status === "ready",
+        ),
+      expiresAt: new Date(session.retentionExpiresAt),
+    };
+  }
+
   isLibraryArtifactReferenced(
     workspaceId: string,
     artifactType: "round" | "presentation",
@@ -166,6 +180,8 @@ export class MemoryPresentationSessionRepository
     // Remove every record synchronously before releasing the code so no suspended mutation or
     // report worker can republish retained room data while deletion is in progress.
     const session = this.sessions.get(sessionId);
+    if (session && this.liveRooms instanceof MemoryRepository)
+      this.liveRooms.deleteSessionSummarySource(session.workspaceId, "presentation", sessionId);
     if (session) this.liveRooms.deletePresentationSessionMetadata?.(session.workspaceId, sessionId);
     this.sessions.delete(sessionId);
     const participantIds = new Set<string>();

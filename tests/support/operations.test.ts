@@ -2069,6 +2069,7 @@ describe("deployment configuration and manifest validation", () => {
       "recoveryPackLiveCards",
       "presentationCompanion",
       "roundClientProtocol",
+      "sessionSummaries",
     ]) {
       for (const value of [false, true]) {
         const summary = {
@@ -2129,7 +2130,7 @@ describe("deployment configuration and manifest validation", () => {
     const legacyBytes = JSON.stringify(legacy);
     expect(() =>
       validateEnvFileKeys(
-        `${singleVmRuntimeEnvironment()}\nFEATURE_AUDIENCE_SCOPES=false\nFEATURE_ROUND_CLIENT_PROTOCOL=false\nFEATURE_FEEDBACK_ROOMS=false\nFEATURE_SURVEYS=false\nFEATURE_FEEDBACK_EXPORTS=false\nCORE_PARITY_WORKSPACE_ALLOWLIST=\n`,
+        `${singleVmRuntimeEnvironment()}\nFEATURE_AUDIENCE_SCOPES=false\nFEATURE_ROUND_CLIENT_PROTOCOL=false\nFEATURE_FEEDBACK_ROOMS=false\nFEATURE_SURVEYS=false\nFEATURE_FEEDBACK_EXPORTS=false\nFEATURE_SESSION_SUMMARIES=false\nCORE_PARITY_WORKSPACE_ALLOWLIST=\n`,
         "single-vm-runtime",
       ),
     ).not.toThrow();
@@ -2193,7 +2194,7 @@ describe("deployment configuration and manifest validation", () => {
       },
     };
     expect(() => assertConfigCheckSummary(fly, flyConfig, buildId)).not.toThrow();
-    for (const flag of Object.keys(flags)) {
+    for (const flag of [...Object.keys(flags), "sessionSummaries"]) {
       expect(() =>
         assertConfigCheckSummary(
           { ...fly, featureFlags: { ...fly.featureFlags, [flag]: true } },

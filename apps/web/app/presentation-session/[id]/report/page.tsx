@@ -17,6 +17,7 @@ import {
 } from "../../../../components/workspace/workspace-provider";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
+import { SessionSummaryButton } from "../../../../components/session-summary/summary-dialog";
 
 function PresentationReportContent() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +28,7 @@ function PresentationReportContent() {
   const [timeMode, setTimeMode] = useState<PresentationTimeMode | null>(null);
   const [reportFailed, setReportFailed] = useState(false);
   const [error, setError] = useState("");
+  const [summaryReady, setSummaryReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +38,7 @@ function PresentationReportContent() {
     setTimeMode(null);
     setReportFailed(false);
     setError("");
+    setSummaryReady(false);
     const load = async () => {
       try {
         const result = await apiFetch<PresentationReportWithSessionContextEnvelope>(
@@ -43,6 +46,7 @@ function PresentationReportContent() {
         );
         if (cancelled) return;
         setError("");
+        setSummaryReady(result.reportStatus === "ready");
         retryAttempts = 0;
         // An older API binary ignores the opt-in query during a rolling web/API upgrade.
         setTimeMode(result.sessionContext?.timeMode ?? "timed");
@@ -84,6 +88,9 @@ function PresentationReportContent() {
       <header className={styles.topbar}>
         <CreatorBrand productFeatures={productFeatures} />
         <div className="button-row">
+          {summaryReady && report ? (
+            <SessionSummaryButton source={{ kind: "presentation", id }} />
+          ) : null}
           <Link href="/results">{t("live.presentationReport.allResults")}</Link>
           <Link href={`/presentation-session/${id}/host`}>
             {t("live.presentationReport.hostView")}
@@ -203,7 +210,9 @@ function PresentationReportContent() {
                   {report.leaderboard.map((participant) => (
                     <li key={participant.id}>
                       <span lang={locale}>{participant.rank.toLocaleString(locale)}.</span>{" "}
-                      <span lang="">{participant.nickname}</span>
+                      <span className={styles.reportNickname} lang="">
+                        {participant.nickname}
+                      </span>
                       <strong>
                         {t("live.common.points", {
                           count: participant.score.toLocaleString(locale),

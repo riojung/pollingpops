@@ -69,6 +69,8 @@ export interface SurveyRoom {
   closesAt: string;
   expiresAt: string;
   closed: boolean;
+  /** Stable completion instant; legacy closures use the first capture or earlier deadline. */
+  closedAt?: string;
   participantLimit: number;
   identityPolicy: "organizer_blind";
 }
@@ -534,6 +536,14 @@ export class SurveyRepository {
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
       if (new Date(room.expiresAt) <= now)
         throw new SurveyError("NOT_FOUND", "This survey has expired");
+      if ((room.closed || new Date(room.closesAt) <= now) && (!room.closed || !room.closedAt)) {
+        // Final publication fences queued submissions carrying older request timestamps.
+        room.closed = true;
+        room.closedAt ??= new Date(
+          Math.min(Date.parse(room.closesAt), now.getTime()),
+        ).toISOString();
+        await tx.put("survey_feedback_rooms", room);
+      }
       return surveyAggregate(
         room.content,
         (await tx.list("survey_guests", id)).filter((g) => g.finalized).map((g) => g.responses),
@@ -544,6 +554,10 @@ export class SurveyRepository {
   close(workspaceId: string, id: string) {
     return this.run(workspaceId, async (tx) => {
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
+      const now = new Date();
+      room.closedAt ??= room.closed
+        ? new Date(Math.min(Date.parse(room.closesAt), now.getTime())).toISOString()
+        : now.toISOString();
       room.closed = true;
       await tx.put("survey_feedback_rooms", room);
     });
@@ -563,6 +577,26 @@ class MemorySurveyStore {
   readonly survey_guests = new Map<string, Guest>();
   private receipts = new Map<string, Receipt>();
   private queue: Promise<unknown> = Promise.resolve();
+
+  getSessionSummarySource(
+    workspaceId: string,
+    kind: "presentation" | "survey",
+    sourceId: string,
+    now: Date,
+    freeze = false,
+  ) {
+    if (kind !== "survey") return null;
+    const room = this.survey_feedback_rooms.get(sourceId);
+    if (!room || room.workspaceId !== workspaceId) return null;
+    if (freeze && (room.closed || new Date(room.closesAt) <= now)) {
+      room.closed = true;
+      room.closedAt ??= new Date(Math.min(Date.parse(room.closesAt), now.getTime())).toISOString();
+    }
+    return {
+      ready: room.closed || new Date(room.closesAt) <= now,
+      expiresAt: new Date(room.expiresAt),
+    };
+  }
   constructor(private readonly parent: MemoryRepository) {}
   run: Run = (workspaceId, work, _publication = false, admissionRoomId) => {
     const execute = async () => {
@@ -638,8 +672,9 @@ class MemorySurveyStore {
           (this[table] as Map<string, Documents[Table]>).set(row.id, structuredClone(row));
         },
         remove: async (table, id) => {
+          const row = this[table].get(id);
           this[table].delete(id);
-          if (table === "survey_feedback_rooms") this.deleteRoomData(id);
+          if (table === "survey_feedback_rooms" && row) this.deleteRoomData(id, row.workspaceId);
         },
         countPublished: async (ws) =>
           [...this.parent.quizzes.values()].filter(
@@ -708,7 +743,8 @@ class MemorySurveyStore {
       if (survey.workspaceId === workspaceId && survey.folderId === folderId)
         survey.folderId = null;
   }
-  private deleteRoomData(id: string) {
+  private deleteRoomData(id: string, workspaceId: string) {
+    this.parent.deleteSessionSummarySource(workspaceId, "survey", id);
     for (const guest of this.survey_guests.values())
       if (guest.roomId === id) this.survey_guests.delete(guest.id);
     for (const [key, receipt] of this.receipts)
@@ -732,7 +768,7 @@ class MemorySurveyStore {
     for (const room of this.survey_feedback_rooms.values())
       if (ownedWorkspaceIds.has(room.workspaceId)) {
         this.survey_feedback_rooms.delete(room.id);
-        this.deleteRoomData(room.id);
+        this.deleteRoomData(room.id, room.workspaceId);
       }
     for (const table of [this.surveys, this.survey_versions])
       for (const row of table.values())
@@ -746,7 +782,7 @@ class MemorySurveyStore {
       if (new Date(room.expiresAt) <= now) {
         ids.push(room.id);
         this.survey_feedback_rooms.delete(room.id);
-        this.deleteRoomData(room.id);
+        this.deleteRoomData(room.id, room.workspaceId);
       }
     return ids;
   }

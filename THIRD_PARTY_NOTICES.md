@@ -181,7 +181,8 @@ This file is not legal advice.
 | @napi-rs/canvas-platform-binary       | 1.0.10              | [Project page](https://github.com/Brooooooklyn/canvas#readme)                                       |
 | @next/env                             | 16.4.1              | [Project page](https://github.com/vercel/next.js#readme)                                            |
 | @next/swc-platform-binary             | 16.4.1              | [Project page](https://github.com/vercel/next.js#readme)                                            |
-| @noble/hashes                         | 2.4.0               | [Project page](https://paulmillr.com/noble/)                                                        |
+| @noble/ciphers                        | 1.3.0               | [Project page](https://paulmillr.com/noble/)                                                        |
+| @noble/hashes                         | 1.8.0, 2.4.0        | [Project page](https://paulmillr.com/noble/)                                                        |
 | @nodable/entities                     | 3.1.0               | [Project page](https://github.com/nodable/val-parsers#readme)                                       |
 | @pinojs/redact                        | 0.4.0               | [Project page](https://github.com/pinojs/redact#readme)                                             |
 | @socket.io/component-emitter          | 3.1.2               | [Project page](https://github.com/socketio/emitter#readme)                                          |
@@ -199,13 +200,16 @@ This file is not legal advice.
 | atomic-sleep                          | 1.0.0               | [Project page](https://github.com/davidmarkclements/atomic-sleep#readme)                            |
 | avvio                                 | 9.3.0               | [Project page](https://github.com/fastify/avvio#readme)                                             |
 | balanced-match                        | 4.0.4               | [Project page](https://github.com/juliangruber/balanced-match#readme)                               |
+| base64-js                             | 0.0.8, 1.5.1        | [Project page](https://github.com/beatgammit/base64-js)                                             |
 | bintrees                              | 1.0.2               | [Project page](https://github.com/vadimg/js_bintrees#readme)                                        |
 | bowser                                | 2.14.1              | [Project page](https://github.com/bowser-js/bowser)                                                 |
 | brace-expansion                       | 5.0.12              | [Project page](https://github.com/juliangruber/brace-expansion#readme)                              |
+| brotli                                | 1.3.3               | [Project page](https://github.com/devongovett/brotli.js)                                            |
 | buffer-crc32                          | 1.0.0               | [Project page](https://github.com/brianloveswords/buffer-crc32)                                     |
 | bytes                                 | 3.1.2               | [Project page](https://github.com/visionmedia/bytes.js#readme)                                      |
 | cjs-module-lexer                      | 2.3.0               | [Project page](https://github.com/nodejs/cjs-module-lexer#readme)                                   |
 | client-only                           | 0.0.1               | [Project page](https://reactjs.org/)                                                                |
+| clone                                 | 2.1.2               | [Project page](https://github.com/pvorb/node-clone#readme)                                          |
 | color-convert                         | 2.0.1               | [Project page](https://github.com/Qix-/color-convert#readme)                                        |
 | color-name                            | 1.1.4               | [Project page](https://github.com/colorjs/color-name)                                               |
 | cookie                                | 0.7.2, 1.1.1, 2.0.1 | [Project page](https://github.com/jshttp/cookie#readme)                                             |
@@ -215,6 +219,7 @@ This file is not legal advice.
 | deepmerge                             | 4.3.1               | [Project page](https://github.com/TehShrike/deepmerge)                                              |
 | depd                                  | 2.0.0               | [Project page](https://github.com/dougwilson/nodejs-depd#readme)                                    |
 | dequal                                | 2.0.3               | [Project page](https://github.com/lukeed/dequal#readme)                                             |
+| dfa                                   | 1.2.0               | [Project page](https://github.com/devongovett/dfa#readme)                                           |
 | dom-serializer                        | 3.1.1               | [Project page](https://github.com/cheeriojs/dom-serializer#readme)                                  |
 | emoji-regex                           | 8.0.0               | [Project page](https://mths.be/emoji-regex)                                                         |
 | engine.io                             | 6.6.11              | [Project page](https://github.com/socketio/socket.io/tree/main/packages/engine.io#readme)           |
@@ -232,7 +237,9 @@ This file is not legal advice.
 | fastify                               | 5.12.5              | [Project page](https://fastify.dev/)                                                                |
 | fastify-plugin                        | 6.0.1               | [Project page](https://github.com/fastify/fastify-plugin#readme)                                    |
 | fastify-raw-body                      | 6.0.2               | [Project page](https://github.com/Eomm/fastify-raw-body#readme)                                     |
+| fflate                                | 0.8.3               | [Project page](https://101arrowz.github.io/fflate)                                                  |
 | find-my-way                           | 9.9.0               | [Project page](https://github.com/delvedor/find-my-way#readme)                                      |
+| fontkit                               | 2.0.4               | [Project page](https://github.com/foliojs/fontkit#readme)                                           |
 | forwarded-parse                       | 2.1.2               | [Project page](https://github.com/lpinca/forwarded-parse)                                           |
 | helmet                                | 8.3.0               | [Project page](https://helmet.js.org/)                                                              |
 | htmlparser2                           | 12.0.0              | [Project page](https://github.com/fb55/htmlparser2#readme)                                          |
@@ -248,6 +255,7 @@ This file is not legal advice.
 | json-schema-ref-resolver              | 3.0.0               | [Project page](https://github.com/fastify/json-schema-ref-resolver#readme)                          |
 | json-schema-traverse                  | 1.0.0               | [Project page](https://github.com/epoberezkin/json-schema-traverse#readme)                          |
 | launder                               | 1.7.2               | [Project page](https://github.com/apostrophecms/apostrophe/tree/main/packages/launder#readme)       |
+| linebreak                             | 1.1.0               | [Project page](https://github.com/devongovett/linebreaker)                                          |
 | lodash.camelcase                      | 4.3.0               | [Project page](https://lodash.com/)                                                                 |
 | mime-db                               | 1.52.0              | [Project page](https://github.com/jshttp/mime-db#readme)                                            |
 | mime-types                            | 2.1.35              | [Project page](https://github.com/jshttp/mime-types#readme)                                         |
@@ -260,8 +268,10 @@ This file is not legal advice.
 | object-assign                         | 4.1.1               | [Project page](https://github.com/sindresorhus/object-assign#readme)                                |
 | on-exit-leak-free                     | 2.1.2               | [Project page](https://github.com/mcollina/on-exit-or-gc#readme)                                    |
 | openid-client                         | 6.8.8               | [Project page](https://github.com/panva/openid-client)                                              |
+| pako                                  | 0.2.9               | [Project page](https://github.com/nodeca/pako)                                                      |
 | parse-srcset                          | 1.0.2               | [Project page](https://github.com/albell/parse-srcset#readme)                                       |
 | path-expression-matcher               | 1.6.2               | [Project page](https://github.com/NaturalIntelligence/path-expression-matcher#readme)               |
+| pdfkit                                | 0.20.2              | [Project page](http://pdfkit.org/)                                                                  |
 | pend                                  | 1.2.0               | [Project page](https://github.com/andrewrk/node-pend#readme)                                        |
 | pg                                    | 8.23.1              | [Project page](https://github.com/brianc/node-postgres)                                             |
 | pg-cloudflare                         | 1.4.1               | [Project page](https://github.com/brianc/node-postgres#readme)                                      |
@@ -273,6 +283,7 @@ This file is not legal advice.
 | pino                                  | 10.4.0              | [Project page](https://getpino.io)                                                                  |
 | pino-abstract-transport               | 3.0.0               | [Project page](https://github.com/pinojs/pino-abstract-transport#readme)                            |
 | pino-std-serializers                  | 7.1.0               | [Project page](https://github.com/pinojs/pino-std-serializers#readme)                               |
+| png-js                                | 2.0.0               | [Project page](https://github.com/devongovett/png.js#readme)                                        |
 | postcss                               | 8.5.23, 8.5.28      | [Project page](https://postcss.org/)                                                                |
 | postgres-array                        | 2.0.0               | [Project page](https://github.com/bendrucker/postgres-array#readme)                                 |
 | postgres-bytea                        | 1.0.1               | [Project page](https://github.com/bendrucker/postgres-bytea#readme)                                 |
@@ -288,6 +299,7 @@ This file is not legal advice.
 | require-directory                     | 2.1.1               | [Project page](https://github.com/troygoode/node-require-directory/)                                |
 | require-from-string                   | 2.0.2               | [Project page](https://github.com/floatdrop/require-from-string#readme)                             |
 | require-in-the-middle                 | 8.0.1               | [Project page](https://github.com/nodejs/require-in-the-middle#readme)                              |
+| restructure                           | 3.0.2               | [Project page](https://github.com/devongovett/restructure)                                          |
 | ret                                   | 0.5.0               | [Project page](https://github.com/fent/ret.js#readme)                                               |
 | reusify                               | 1.1.0               | [Project page](https://github.com/mcollina/reusify#readme)                                          |
 | rfdc                                  | 1.4.1               | [Project page](https://github.com/davidmarkclements/rfdc#readme)                                    |
@@ -312,9 +324,12 @@ This file is not legal advice.
 | styled-jsx                            | 5.1.6               | [Project page](https://github.com/vercel/styled-jsx#readme)                                         |
 | tdigest                               | 0.1.3               | [Project page](https://github.com/welch/tdigest)                                                    |
 | thread-stream                         | 4.2.0               | [Project page](https://github.com/mcollina/thread-stream#readme)                                    |
+| tiny-inflate                          | 1.0.3               | [Project page](https://github.com/devongovett/tiny-inflate)                                         |
 | toad-cache                            | 3.7.4               | [Project page](https://github.com/kibertoad/toad-cache)                                             |
 | toidentifier                          | 1.0.1               | [Project page](https://github.com/component/toidentifier#readme)                                    |
 | undici-types                          | 8.9.0               | [Project page](https://undici.nodejs.org)                                                           |
+| unicode-properties                    | 1.4.1               | [Project page](https://github.com/devongovett/unicode-properties)                                   |
+| unicode-trie                          | 2.0.0               | [Project page](https://github.com/devongovett/unicode-trie)                                         |
 | unpipe                                | 1.0.0               | [Project page](https://github.com/stream-utils/unpipe#readme)                                       |
 | vary                                  | 1.1.2               | [Project page](https://github.com/jshttp/vary#readme)                                               |
 | wrap-ansi                             | 7.0.0               | [Project page](https://github.com/chalk/wrap-ansi#readme)                                           |

@@ -12,6 +12,7 @@ import { JoinAccess } from "../../../../components/join-access";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { surveyMutationKey } from "../../../../lib/survey-client";
 import styles from "../../../../components/workspace/workspace-content.module.css";
+import { SessionSummaryButton } from "../../../../components/session-summary/summary-dialog";
 
 function Room() {
   const id = useParams<{ id: string }>().id;
@@ -134,6 +135,9 @@ function Room() {
       )}
       <section className={styles.panel}>
         <h2>Aggregate results</h2>
+        {room && results && results.resultsStatus !== "collecting" ? (
+          <SessionSummaryButton source={{ kind: "survey", id }} />
+        ) : null}
         <button className="button-quiet" type="button" onClick={() => void load()}>
           Refresh results
         </button>

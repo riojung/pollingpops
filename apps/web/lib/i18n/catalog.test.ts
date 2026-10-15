@@ -15,6 +15,10 @@ import {
 import { loadWorkspacePageMessages, workspacePageEnglishMessages } from "./domains/workspace-pages";
 import { loadReportRoundMessages, reportRoundEnglishMessages } from "./domains/report-round";
 import { liveDeliveryEnglishMessages, loadLiveDeliveryMessages } from "./domains/live-delivery";
+import {
+  sessionSummaryEnglishMessages,
+  loadSessionSummaryMessages,
+} from "./domains/session-summary";
 import germanMessages from "./messages/de-DE";
 import { englishMessages as coreEnglishMessages } from "./messages/en-CA";
 import spanishMessages from "./messages/es-ES";
@@ -66,7 +70,10 @@ describe("localized message catalogs", () => {
 
   it("loads only the domains required by the active route", async () => {
     expect(localeDomainsForPath("/account")).toEqual(["account"]);
-    expect(localeDomainsForPath("/surveys/rooms/example")).toEqual(["live-delivery"]);
+    expect(localeDomainsForPath("/surveys/rooms/example")).toEqual([
+      "live-delivery",
+      "session-summary",
+    ]);
     expect(localeDomainsForPath("/surveys/example")).toEqual([]);
     expect(localeDomainsForPath("/home")).toEqual(["workspace-pages"]);
     expect(localeDomainsForPath("/sessions?type=surveys")).toEqual(["workspace-pages"]);
@@ -101,9 +108,17 @@ describe("localized message catalogs", () => {
       "report-round",
     ]);
     expect(localeDomainsForPath("/join")).toEqual(["delivery-authoring", "live-delivery"]);
-    expect(localeDomainsForPath("/report/example")).toEqual(["report-round", "live-delivery"]);
+    expect(localeDomainsForPath("/report/example")).toEqual([
+      "report-round",
+      "live-delivery",
+      "session-summary",
+    ]);
     expect(localeDomainsForPath("/host/example")).toEqual(["live-delivery"]);
-    expect(localeDomainsForPath("/presentation-session/example/report")).toEqual(["live-delivery"]);
+    expect(localeDomainsForPath("/presentation-session/example/report")).toEqual([
+      "live-delivery",
+      "session-summary",
+    ]);
+    expect(localeDomainsForPath("/summary/example")).toEqual(["session-summary"]);
     expect(localeDomainsForPath("/presentation-session/example/host")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/presentation-session/example/play")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/presentation/example")).toEqual(["delivery-authoring"]);
@@ -173,6 +188,7 @@ describe("localized message catalogs", () => {
       [deliveryAuthoringEnglishMessages, loadDeliveryAuthoringMessages],
       [reportRoundEnglishMessages, loadReportRoundMessages],
       [liveDeliveryEnglishMessages, loadLiveDeliveryMessages],
+      [sessionSummaryEnglishMessages, loadSessionSummaryMessages],
     ] as const;
 
     for (const [source, loader] of domains) {

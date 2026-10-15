@@ -186,6 +186,7 @@ const optionalConfigCheckFeatureKeys = Object.freeze([
   "liveFlexMode",
   "recoveryPackLiveCards",
   "presentationCompanion",
+  "sessionSummaries",
 ]);
 const coreParityConfigCheckFeatureKeys = Object.freeze([
   "audienceScopes",
@@ -1078,6 +1079,7 @@ export function assertConfigCheckSummary(summary, config, buildId) {
     "recoveryPackLiveCards",
     "presentationCompanion",
     ...coreParityConfigCheckFeatureKeys,
+    "sessionSummaries",
   ]) {
     if (Object.hasOwn(summary.featureFlags, key) && summary.featureFlags[key] !== false) {
       throw new Error(`The exact server image config-check left feature flag ${key} enabled`);

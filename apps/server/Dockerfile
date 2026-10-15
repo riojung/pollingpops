@@ -22,6 +22,7 @@ RUN addgroup -S openround && adduser -S openround -G openround
 WORKDIR /app
 COPY --from=build /prod/server/node_modules ./node_modules
 COPY --from=build /app/apps/server/dist ./dist
+COPY --from=build /app/apps/server/assets/summary-fonts ./assets/summary-fonts
 COPY --from=build /app/packages/db/migrations ./migrations
 COPY --from=build /app/BUILD_ID ./BUILD_ID
 COPY --from=build /prod/server/package.json ./package.json

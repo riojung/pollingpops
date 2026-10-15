@@ -753,6 +753,34 @@ moderation, kick/ban, retention, export, and deletion are enforced server-side.
 
 ## Reports and self-paced practice APIs
 
+Aggregate summary schema version 1 has a separate strict boundary from private Report V1–V7:
+
+- `GET /v1/session-summaries/features?kind={kind}&id={id}` — creator-authenticated availability
+  probe for one source. During a writer pause, only that source's retained snapshot enables it;
+  snapshots from other sources in the workspace do not.
+- `GET /v1/session-summaries/{kind}/{id}` — aggregate preview, source retention, role/export capabilities.
+- `GET /v1/session-summaries/{kind}/{id}/shares` — safe link metadata, no secrets.
+- `POST /v1/session-summaries/{kind}/{id}/shares` — owner/editor publication with UUID `idempotencyKey`,
+  `expiresInDays` (1–30, default 7), `allowDownloads` (default true), and plain-text `nextSteps` (max 2,000).
+  Returns 201 with one-time fragment URL; accepted retries return 200 with `url: null`, `replayed: true`.
+  Changed intent with an accepted key conflicts. Link expiry is capped by source retention.
+- `DELETE /v1/session-summaries/{kind}/{id}/shares/{shareId}` — owner/editor revocation, 204.
+- `POST /v1/session-summaries/{kind}/{id}/export` — authorized binary PDF/PNG/XLSX with `format`,
+  supported `locale` (default `en-CA`), optional PNG `questionIndex`, and optional `nextSteps`.
+- `GET /v1/shared-session-summaries/{id}` — aggregate capability read with `Authorization: Bearer`
+  containing the secret extracted from the fragment. Send no creator cookies.
+- `POST /v1/shared-session-summaries/{id}/export` — public binary export when permitted; same format
+  fields, but public next steps cannot be overridden.
+
+`kind` is `round`, `presentation`, or `survey`; `id` is respectively a Round session, Presentation
+session, or Survey room UUID. Only completed retained evidence is accepted. New snapshots/links
+require `FEATURE_SESSION_SUMMARIES` and the core-parity workspace allowlist. Existing summaries and
+revocation survive pausing writers. Publishing/downloads retain the existing report-export access
+gate, including Event-funded coverage. Public reads recheck publisher role, expiry, revocation,
+and source deletion. Responses use no-store/noindex and generic unavailable errors. Rendering is
+rate/queue/deadline/size bounded and rechecks access before releasing bytes. See the
+[implementation plan](idea-005-session-summaries-plan.md) for privacy and lifecycle details.
+
 - `GET /v1/sessions/{id}/report`
 - `GET /v1/reports` — tenant-scoped recovery-oriented result summaries; filters are
   `status=pending|ready|failed`, `quizId`, `from`, `to`, and optional title `search`.

@@ -65,6 +65,9 @@ vi.mock("../../../../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
   apiFetch: fixtures.apiFetch,
 }));
+vi.mock("../../../../components/session-summary/summary-dialog", () => ({
+  SessionSummaryButton: () => <button>Share summary</button>,
+}));
 
 beforeEach(() => {
   fixtures.hooks = null;
@@ -135,6 +138,20 @@ async function settle() {
 }
 
 describe("Presentation Quick Check report compatibility", () => {
+  it("offers sharing only when report generation is ready, even if a pending envelope contains evidence", async () => {
+    vi.useFakeTimers();
+    try {
+      fixtures.apiFetch.mockResolvedValue({ reportStatus: "pending", report: reportFixture(1) });
+      const harness = reportHarness();
+      await settle();
+      expect(renderToStaticMarkup(harness.render())).not.toContain("Share summary");
+      fixtures.apiFetch.mockResolvedValue({ reportStatus: "ready", report: reportFixture(1) });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(renderToStaticMarkup(harness.render())).toContain("Share summary");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it.each([1, 2, 3] as const)(
     "opts into Quick Checks and renders V%s evidence with attribution only when marked",
     async (schemaVersion) => {

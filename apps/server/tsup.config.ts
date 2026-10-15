@@ -9,6 +9,8 @@ export default defineConfig({
     "src/staging-capacity-provision.ts",
     "src/source-extraction.ts",
     "src/source-extraction-worker.ts",
+    "src/session-summary-renderer.ts",
+    "src/session-summary-export-worker.ts",
   ],
   format: ["esm"],
   platform: "node",

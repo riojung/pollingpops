@@ -24,6 +24,7 @@ import { API_URL, apiFetch, humanError } from "../../../lib/api";
 import { deriveRecoverySummary } from "../../../lib/report-summary";
 import { RankingDistribution } from "../../../components/ranking-distribution";
 import { TextResultsView } from "../../../components/text-results-view";
+import { SessionSummaryButton } from "../../../components/session-summary/summary-dialog";
 
 interface ReportContext {
   quizId: string;
@@ -1016,20 +1017,25 @@ export default function ReportPage() {
               </p>
             ) : null}
           </div>
-          {!uxBeta && report?.status === "ready" && entitlements?.csvExport ? (
-            <div className="button-row">
-              <a className="button" href={`${API_URL}/v1/reports/${id}.csv`}>
-                Download CSV
-              </a>
-              <a className="button-quiet" href={`${API_URL}/v1/reports/${id}.json`}>
-                Download JSON
-              </a>
-            </div>
-          ) : !uxBeta && report && entitlements ? (
-            <Link className="button-quiet" href="/pricing">
-              CSV was not included for this room
-            </Link>
-          ) : null}
+          <div className="button-row">
+            {report?.status === "ready" ? (
+              <SessionSummaryButton source={{ kind: "round", id: report.sessionId }} />
+            ) : null}
+            {!uxBeta && report?.status === "ready" && entitlements?.csvExport ? (
+              <div className="button-row">
+                <a className="button" href={`${API_URL}/v1/reports/${id}.csv`}>
+                  Download CSV
+                </a>
+                <a className="button-quiet" href={`${API_URL}/v1/reports/${id}.json`}>
+                  Download JSON
+                </a>
+              </div>
+            ) : !uxBeta && report && entitlements ? (
+              <Link className="button-quiet" href="/pricing">
+                CSV was not included for this room
+              </Link>
+            ) : null}
+          </div>
         </div>
         {error ? (
           <p className="error" role="alert">

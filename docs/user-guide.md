@@ -618,6 +618,19 @@ can use **Delete session and report** to permanently remove the session tree. Ho
 to 30-day report retention, Hosted Pro to 365 days, and community operators configure their own
 default.
 
+Where **Share summary** is enabled, ready Round/Presentation reports and closed Survey runs offer
+an aggregate preview plus PDF, image, and spreadsheet downloads. Images show a labelled overview
+excerpt or a selected checkpoint; PDF/spreadsheet files contain the complete summary. Participant
+names, submitted text, word-cloud terms, and transcripts are excluded. Results with fewer than
+five respondents stay hidden, opinions remain unscored, and recovery keeps its paired sample.
+
+Owners and editors with report-export access can add next steps and explicitly create an expiring
+link, with an optional guest download permission. Next steps are shared with everyone holding the
+link. Copy the complete link when it is first shown; a lost link cannot be recovered. Manage
+existing links in the same dialog to revoke them. Deletion, retention expiry, or loss of the
+publisher's sharing permission stops the link. Revocation cannot remove files already downloaded.
+Availability is controlled by the operator's workspace rollout.
+
 The standard report stays aggregate-first and does not embed raw chat or participant-level signal
 history. An authorized owner, editor, or viewer can open the interaction transcript; only an
 owner/editor audit view can reveal a removed body. Transcript CSV follows the existing export

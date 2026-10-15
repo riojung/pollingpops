@@ -2061,6 +2061,7 @@ export class MemoryRepository implements Repository {
         structuredClone({
           ...input,
           trustMode: input.trustMode ?? input.state.settings.trustMode ?? "learning",
+          joinPasswordHash: input.joinPasswordHash ?? null,
         }),
       );
       this.interactionSettings.set(input.id, {
@@ -2310,7 +2311,11 @@ export class MemoryRepository implements Repository {
         },
       });
     }
-    const storedSession = structuredClone({ ...input, updatedAt: new Date() });
+    const storedSession = structuredClone({
+      ...input,
+      joinPasswordHash: current.joinPasswordHash ?? null,
+      updatedAt: new Date(),
+    });
     const storedReport = report ? structuredClone(report) : undefined;
     this.sessions.set(input.id, storedSession);
     if (eventsToPersist.length > 0) {
@@ -3939,7 +3944,14 @@ export class MemoryRepository implements Repository {
     }
     for (const [key, answer] of staged) this.answers.set(key, answer);
     if (staged.size > 0) {
-      this.sessions.set(session.id, structuredClone({ ...session, updatedAt: new Date() }));
+      this.sessions.set(
+        session.id,
+        structuredClone({
+          ...session,
+          joinPasswordHash: current.joinPasswordHash ?? null,
+          updatedAt: new Date(),
+        }),
+      );
     }
     return persisted;
   }
@@ -5143,10 +5155,12 @@ export class MemoryRepository implements Repository {
             ownedWorkspaceIdList.map((workspaceId) => this.listMediaReferences(workspaceId)),
           )
         ).flat(),
-        sessions: sessions.map(({ hostTokenHash: _hostTokenHash, ...session }) => ({
-          ...session,
-          state: exportedSessionStates.get(session.id)!,
-        })),
+        sessions: sessions.map(
+          ({ hostTokenHash: _hostTokenHash, joinPasswordHash: _joinPasswordHash, ...session }) => ({
+            ...session,
+            state: exportedSessionStates.get(session.id)!,
+          }),
+        ),
         participants: participants.map(({ tokenHash: _tokenHash, ...participant }) => participant),
         answers: [...this.answers.entries()]
           .filter(([key, answer]) => {

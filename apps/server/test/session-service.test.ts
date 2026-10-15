@@ -20,6 +20,7 @@ import { MetricsService } from "../src/metrics.js";
 import { ProductEventDispatcher } from "../src/product-events.js";
 import { hashToken } from "../src/security.js";
 import { SessionService } from "../src/session-service.js";
+import * as roomPasswords from "../src/room-password.js";
 
 // Process collectors keep sampling intervals alive across fake/real clock transitions. Their
 // hrtime catch-up loop can block the worker; these ordering tests need only service metrics.
@@ -191,6 +192,247 @@ afterEach(() => {
 });
 
 describe("session service ordering", () => {
+  it("gates protected creation and keeps password admission frozen across downgrade and resume", async () => {
+    const { repository, service, creator, quizId } = await hostedRoundFixture();
+    const settings = {
+      audienceLimit: 20,
+      scoringMode: "accuracy" as const,
+      resultVisibility: "private" as const,
+      allowLateJoin: true,
+      nicknamePolicy: "custom" as const,
+    };
+    const password = " Exact room password ";
+    const create = vi.spyOn(repository, "createSession");
+    await expect(
+      service.createSession(creator, quizId, settings, { joinPassword: password }),
+    ).rejects.toMatchObject({ code: "ENTITLEMENT_LIMIT" });
+    expect(create).not.toHaveBeenCalled();
+    const open = await service.createSession(creator, quizId, settings);
+    await expect(service.join({ code: open.code, nickname: "Open" })).resolves.toHaveProperty(
+      "participantId",
+    );
+    expect(await service.preflightJoin({ code: open.code })).toMatchObject({
+      passwordRequired: false,
+    });
+    await repository.setPlan(creator.workspaceId, "pro");
+    const hosted = await service.createSession(creator, quizId, settings, {
+      joinPassword: password,
+    });
+    const stored = await repository.getSessionById(hosted.sessionId);
+    expect(stored?.joinPasswordHash).toBeTruthy();
+    expect(stored?.joinPasswordHash).not.toBe(password);
+    const preflight = await service.preflightJoin({ code: hosted.code });
+    expect(preflight).toEqual({ nicknamePolicy: "custom", passwordRequired: true });
+    for (const [supplied, code] of [
+      [undefined, "PASSWORD_REQUIRED"],
+      [password.trim(), "INVALID_PASSWORD"],
+      [password.toLowerCase(), "INVALID_PASSWORD"],
+    ] as const) {
+      await expect(
+        service.join({
+          code: hosted.code,
+          nickname: "New",
+          ...(supplied === undefined ? {} : { password: supplied }),
+        }),
+      ).rejects.toMatchObject({ code });
+    }
+    expect(
+      Object.keys((await repository.getSessionById(hosted.sessionId))!.state.participants),
+    ).toHaveLength(0);
+    const joined = await service.join({ code: hosted.code, nickname: "River", password });
+    for (const value of [hosted, joined, preflight]) {
+      expect(JSON.stringify(value)).not.toContain(password);
+      expect(JSON.stringify(value)).not.toContain(stored!.joinPasswordHash!);
+      expect(JSON.stringify(value)).not.toContain("joinPasswordHash");
+    }
+    await repository.setPlan(creator.workspaceId, "free");
+    await expect(service.join({ code: hosted.code, nickname: "Next" })).rejects.toMatchObject({
+      code: "PASSWORD_REQUIRED",
+    });
+    const resumed = await service.join({ code: hosted.code, resumeToken: joined.participantToken });
+    expect(resumed.participantId).toBe(joined.participantId);
+    await expect(
+      service.join({ code: hosted.code, nickname: "Next", password }),
+    ).resolves.toHaveProperty("participantId");
+    service.close();
+  });
+
+  it("allows Community rooms to use their effective paid protection", async () => {
+    const {
+      repository,
+      cache,
+      service: previousService,
+      creator,
+      quizId,
+    } = await hostedRoundFixture();
+    const communityConfig = { ...config, COMMUNITY_MODE: true };
+    const service = new SessionService(repository, cache, communityConfig, new MetricsService());
+    const hosted = await service.createSession(
+      creator,
+      quizId,
+      {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+      { joinPassword: "Community password" },
+    );
+    expect(await repository.getPlan(creator.workspaceId)).toBe("free");
+    await expect(
+      service.join({ code: hosted.code, nickname: "River", password: "Community password" }),
+    ).resolves.toHaveProperty("participantId");
+    service.close();
+    previousService.close();
+  });
+
+  it("admits a maximum protected burst with one shared password verification per batch", async () => {
+    const {
+      repository,
+      cache,
+      service: defaultService,
+      creator,
+      quizId,
+    } = await hostedRoundFixture();
+    defaultService.close();
+    const service = new SessionService(
+      repository,
+      cache,
+      { ...config, MAX_SESSION_PARTICIPANTS: 250 },
+      new MetricsService(),
+    );
+    await repository.setPlan(creator.workspaceId, "team");
+    const password = " Exact synchronized room ";
+    const hosted = await service.createSession(
+      creator,
+      quizId,
+      {
+        audienceLimit: 250,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+      { joinPassword: password },
+    );
+    const verify = vi.spyOn(roomPasswords, "verifyRoomPassword");
+    const joined = await Promise.all(
+      Array.from({ length: 250 }, (_, index) =>
+        service.join({
+          code: hosted.code,
+          nickname: `Learner ${index + 1}`,
+          password,
+        }),
+      ),
+    );
+    expect(joined).toHaveLength(250);
+    expect(new Set(joined.map((participant) => participant.participantId)).size).toBe(250);
+    expect(verify).toHaveBeenCalledExactlyOnceWith(password, expect.any(String));
+    expect(await repository.getParticipants(hosted.sessionId)).toHaveLength(250);
+    await expect(
+      service.join({ code: hosted.code, nickname: "Late learner", password }),
+    ).rejects.toMatchObject({ code: "SESSION_FULL" });
+    expect(verify).toHaveBeenCalledTimes(2);
+    service.close();
+  });
+
+  it("starts distinct batch password checks together and keeps failed guests outside the room", async () => {
+    const { repository, service, creator, quizId } = await hostedRoundFixture();
+    await repository.setPlan(creator.workspaceId, "pro");
+    const password = " Exact concurrent room ";
+    const hosted = await service.createSession(
+      creator,
+      quizId,
+      {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+      { joinPassword: password },
+    );
+    let releaseVerification!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      releaseVerification = resolve;
+    });
+    const realVerify = roomPasswords.verifyRoomPassword;
+    const verify = vi
+      .spyOn(roomPasswords, "verifyRoomPassword")
+      .mockImplementation(async (...input) => {
+        await blocked;
+        return realVerify(...input);
+      });
+    const inputs = [password, password.trim(), password, password.toLowerCase(), undefined, ""];
+    const pending = Promise.allSettled(
+      inputs.map((supplied, index) =>
+        service.join({
+          code: hosted.code,
+          nickname: `Learner ${index + 1}`,
+          ...(supplied === undefined ? {} : { password: supplied }),
+        }),
+      ),
+    );
+    try {
+      await vi.waitFor(() => expect(verify).toHaveBeenCalledTimes(3));
+      expect(await repository.getParticipants(hosted.sessionId)).toHaveLength(0);
+      // Host mutation remains available while the independent verification work is pending.
+      await service.hostCommand({
+        sessionId: hosted.sessionId,
+        hostToken: hosted.hostToken,
+        commandId: randomUUID(),
+        expectedVersion: hosted.snapshot.version,
+        action: "lock_lobby",
+      });
+    } finally {
+      releaseVerification();
+    }
+    const settled = await pending;
+    expect(
+      settled.map((result) => (result.status === "rejected" ? result.reason.code : "admitted")),
+    ).toEqual([
+      "SESSION_LOCKED",
+      "INVALID_PASSWORD",
+      "SESSION_LOCKED",
+      "INVALID_PASSWORD",
+      "PASSWORD_REQUIRED",
+      "PASSWORD_REQUIRED",
+    ]);
+    expect(await repository.getParticipants(hosted.sessionId)).toHaveLength(0);
+    expect(verify.mock.calls.map(([supplied]) => supplied)).toEqual([
+      password,
+      password.trim(),
+      password.toLowerCase(),
+    ]);
+    service.close();
+  });
+
+  it("uses the shared admission budget before verifying protected join attempts", async () => {
+    const { repository, cache, service, creator, quizId } = await hostedRoundFixture();
+    await repository.setPlan(creator.workspaceId, "pro");
+    const hosted = await service.createSession(
+      creator,
+      quizId,
+      {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+      { joinPassword: "Room password" },
+    );
+    vi.spyOn(cache, "consumeRateLimit").mockResolvedValue(false);
+    await expect(service.join({ code: hosted.code, nickname: "River" })).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+    });
+    expect(
+      Object.keys((await repository.getSessionById(hosted.sessionId))!.state.participants),
+    ).toHaveLength(0);
+    service.close();
+  });
+
   it("gates new flex rooms while keeping existing rooms readable after the flag is disabled", async () => {
     const { repository, cache, service, creator, quizId } = await hostedRoundFixture();
     const settings = {

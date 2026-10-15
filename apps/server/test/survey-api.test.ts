@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { ApiErrorSchema } from "@openround/contracts";
 import { MemoryRepository, SurveyRepository, createPlatformRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
@@ -55,6 +56,162 @@ async function signIn(app: FastifyInstance) {
   return { cookie };
 }
 describe("Survey creator and participant APIs", () => {
+  it("gates protected rooms, admits exact passwords through codes and direct links, and preserves bearer resume", async () => {
+    const { app, headers, repository, workspaceId } = await fixture();
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/surveys",
+      headers,
+      payload: { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+    });
+    const id = created.json().survey.id;
+    await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/publish`,
+      headers,
+      payload: { idempotencyKey: randomUUID(), expectedRevision: 0 },
+    });
+    const password = " Exact Survey room ";
+    const body = { idempotencyKey: randomUUID(), expectedRevision: 0, joinPassword: password };
+    const blocked = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: body,
+    });
+    expect(blocked.statusCode, blocked.body).toBe(402);
+    expect(blocked.json().error.code).toBe("ENTITLEMENT_LIMIT");
+    const noRooms = await app.inject({ method: "GET", url: "/v1/survey-rooms", headers });
+    expect(noRooms.json().rooms).toHaveLength(0);
+    await repository.setPlan(workspaceId, "pro");
+    const shared = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: body,
+    });
+    expect(shared.statusCode, shared.body).toBe(201);
+    const room = shared.json().room;
+    expect(room.passwordRequired).toBe(true);
+    const retried = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: body,
+    });
+    expect(retried.json()).toEqual(shared.json());
+    const changed = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: { ...body, joinPassword: "A different password" },
+    });
+    expect(changed.json().error.code).toBe("IDEMPOTENCY_CONFLICT");
+    const preflight = await app.inject({
+      method: "GET",
+      url: `/v1/live-rooms/join/preflight?code=${room.code}`,
+    });
+    expect(preflight.json()).toMatchObject({
+      passwordRequired: true,
+      artifactType: "feedback_room",
+    });
+    const metadata = await app.inject({ method: "GET", url: `/v1/survey-rooms/${room.id}/public` });
+    expect(metadata.json().room).toMatchObject({ id: room.id, passwordRequired: true });
+    expect(metadata.body).not.toContain("content");
+    const guestHeaders = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+    const unauthorized = await app.inject({
+      method: "GET",
+      url: `/v1/survey-rooms/${room.id}/attempt`,
+      headers: guestHeaders,
+    });
+    expect(unauthorized.statusCode).toBe(401);
+    for (const [supplied, code] of [
+      [undefined, "PASSWORD_REQUIRED"],
+      [password.trim(), "INVALID_PASSWORD"],
+      [password.toLowerCase(), "INVALID_PASSWORD"],
+    ] as const) {
+      const failed = await app.inject({
+        method: "POST",
+        url: "/v1/survey-rooms/join",
+        headers: guestHeaders,
+        payload: { code: room.code, ...(supplied === undefined ? {} : { password: supplied }) },
+      });
+      expect(failed.statusCode, failed.body).toBe(401);
+      expect(ApiErrorSchema.parse(failed.json()).error.code).toBe(code);
+    }
+    const stillUnauthorized = await app.inject({
+      method: "GET",
+      url: `/v1/survey-rooms/${room.id}/attempt`,
+      headers: guestHeaders,
+    });
+    expect(stillUnauthorized.statusCode).toBe(401);
+    const joined = await app.inject({
+      method: "POST",
+      url: "/v1/survey-rooms/join",
+      headers: guestHeaders,
+      payload: { code: room.code, password },
+    });
+    expect(joined.statusCode, joined.body).toBe(200);
+    await repository.setPlan(workspaceId, "free");
+    const downgradedRetry = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: body,
+    });
+    expect(downgradedRetry.json()).toEqual(shared.json());
+    const changedAfterDowngrade = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: { ...body, joinPassword: "A different password" },
+    });
+    expect(changedAfterDowngrade.json().error.code).toBe("IDEMPOTENCY_CONFLICT");
+    const newAfterDowngrade = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/rooms`,
+      headers,
+      payload: { ...body, idempotencyKey: randomUUID() },
+    });
+    expect(newAfterDowngrade.json().error.code).toBe("ENTITLEMENT_LIMIT");
+    const resumed = await app.inject({
+      method: "POST",
+      url: `/v1/survey-rooms/${room.id}/join`,
+      headers: guestHeaders,
+      payload: {},
+    });
+    expect(resumed.json()).toEqual(joined.json());
+    const directHeaders = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+    const directMissing = await app.inject({
+      method: "POST",
+      url: `/v1/survey-rooms/${room.id}/join`,
+      headers: directHeaders,
+      payload: {},
+    });
+    expect(ApiErrorSchema.parse(directMissing.json()).error.code).toBe("PASSWORD_REQUIRED");
+    const direct = await app.inject({
+      method: "POST",
+      url: `/v1/survey-rooms/${room.id}/join`,
+      headers: directHeaders,
+      payload: { password },
+    });
+    expect(direct.statusCode, direct.body).toBe(200);
+    for (const response of [
+      shared,
+      retried,
+      preflight,
+      metadata,
+      unauthorized,
+      joined,
+      resumed,
+      direct,
+    ]) {
+      expect(response.body).not.toContain(password);
+      expect(response.body).not.toContain("joinPasswordHash");
+      expect(response.body).not.toContain("scrypt$");
+    }
+  });
+
   it.each([true, false])(
     "blocks new Survey admissions and preserves existing guests when business writers are enabled=%s",
     async (businessEnabled) => {

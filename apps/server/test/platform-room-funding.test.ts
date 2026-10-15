@@ -115,6 +115,22 @@ async function fixture(credits = 1) {
 }
 
 describe("live event credit integration", () => {
+  it("rejects password protection before reserving event credits unless credit funding is chosen", async () => {
+    const f = await fixture();
+    await expect(
+      f.service.createSession(
+        f.creator,
+        f.quizId,
+        { ...settings, audienceLimit: 20 },
+        { joinPassword: "Protected event" },
+      ),
+    ).rejects.toMatchObject({ code: "ENTITLEMENT_LIMIT" });
+    expect(await f.platform.getCreditBalance(f.organization.id)).toMatchObject({
+      balance: 1,
+      reserved: 0,
+      available: 1,
+    });
+  });
   it("keeps an unconsumed reservation and no audience when durable admission fails", async () => {
     const f = await fixture();
     const room = await f.service.createSession(f.creator, f.quizId, settings, {
@@ -272,17 +288,37 @@ describe("live event credit integration", () => {
       config: f.config,
       storage: new StorageService(f.config, null),
     });
-    const room = await service.createSession({
+    const password = "Protected Presentation";
+    const createInput = {
       workspaceId: f.creator.workspaceId,
       userId: f.creator.userId,
       presentationId: id,
       useEventCredit: true,
+      joinPassword: password,
       requestId: randomUUID(),
       idempotencyKey: randomUUID(),
+    };
+    const room = await service.createSession(createInput);
+    const replay = await service.createSession(createInput);
+    expect(replay.snapshot.sessionId).toBe(room.snapshot.sessionId);
+    await f.platform.updateOrganizationStatus(f.organization.id, "suspended");
+    const pausedReplay = await service.createSession(createInput);
+    expect(pausedReplay.snapshot.sessionId).toBe(room.snapshot.sessionId);
+    await f.platform.updateOrganizationStatus(f.organization.id, "active");
+    await expect(
+      service.createSession({ ...createInput, joinPassword: "Another Presentation password" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(service.join(room.snapshot.code, "Missing password")).rejects.toMatchObject({
+      code: "PASSWORD_REQUIRED",
     });
+    await expect(
+      service.join(room.snapshot.code, "Wrong password", "Wrong password"),
+    ).rejects.toMatchObject({ code: "INVALID_PASSWORD" });
     const roomId = room.snapshot.sessionId;
     expect(await f.platform.getCreditBalance(f.organization.id)).toMatchObject({ reserved: 1 });
-    await Promise.all(["First", "Second"].map((name) => service.join(room.snapshot.code, name)));
+    await Promise.all(
+      ["First", "Second"].map((name) => service.join(room.snapshot.code, name, password)),
+    );
     expect(await f.platform.getCreditBalance(f.organization.id)).toMatchObject({
       balance: 0,
       reserved: 0,
@@ -326,25 +362,55 @@ describe("live event credit integration", () => {
   it("charges a joined batch once, supports retries, and freezes report retention", async () => {
     const f = await fixture();
     const key = randomUUID();
+    const password = "Protected Round";
     const room = await f.service.createSession(f.creator, f.quizId, settings, {
       useEventCredit: true,
+      joinPassword: password,
       idempotencyKey: key,
     });
     const replay = await f.service.createSession(f.creator, f.quizId, settings, {
       useEventCredit: true,
+      joinPassword: password,
       idempotencyKey: key,
     });
     expect(replay.sessionId).toBe(room.sessionId);
+    await f.platform.updateOrganizationStatus(f.organization.id, "suspended");
+    const pausedReplay = await f.service.createSession(f.creator, f.quizId, settings, {
+      useEventCredit: true,
+      joinPassword: password,
+      idempotencyKey: key,
+    });
+    expect(pausedReplay.sessionId).toBe(room.sessionId);
+    await f.platform.updateOrganizationStatus(f.organization.id, "active");
     await expect(
       f.service.createSession(
         f.creator,
         f.quizId,
         { ...settings, audienceLimit: 99 },
-        { useEventCredit: true, idempotencyKey: key },
+        { useEventCredit: true, joinPassword: password, idempotencyKey: key },
       ),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(
+      f.service.createSession(f.creator, f.quizId, settings, {
+        useEventCredit: true,
+        joinPassword: "Different password",
+        idempotencyKey: key,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(f.service.join({ code: room.code, nickname: "Missing" })).rejects.toMatchObject({
+      code: "PASSWORD_REQUIRED",
+    });
+    await expect(
+      f.service.join({ code: room.code, nickname: "Wrong", password: "wrong password" }),
+    ).rejects.toMatchObject({ code: "INVALID_PASSWORD" });
+    expect(await f.platform.getCreditBalance(f.organization.id)).toMatchObject({
+      balance: 1,
+      reserved: 1,
+    });
     const joined = await Promise.all(
-      ["First", "Second"].map((nickname) => f.service.join({ code: room.code, nickname })),
+      ["First", "Second"].map((nickname) =>
+        f.service.join({ code: room.code, nickname, password }),
+      ),
     );
     expect(await f.platform.getCreditBalance(f.organization.id)).toMatchObject({
       balance: 0,

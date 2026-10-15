@@ -130,7 +130,9 @@ export class MemoryPresentationSessionRepository
     );
     const sessionIds = new Set(sessions.map((session) => session.id));
     return {
-      presentationSessions: sessions.map(clone),
+      presentationSessions: sessions.map(({ joinPasswordHash: _joinPasswordHash, ...session }) =>
+        clone(session),
+      ),
       presentationSessionParticipants: [...this.participants.values()]
         .filter((participant) => sessionIds.has(participant.sessionId))
         .map(({ tokenHash: _tokenHash, ...participant }) => clone(participant)),

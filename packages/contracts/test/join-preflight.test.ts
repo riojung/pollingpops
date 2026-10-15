@@ -15,6 +15,7 @@ describe("join preflight contracts", () => {
       nicknamePolicy: "friendly_only",
       artifactType: "round",
       destination: "/join",
+      passwordRequired: false,
     });
     expect(
       JoinPreflightResponseSchema.parse({

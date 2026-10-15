@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { JoinPreflightRequestSchema, JoinPreflightResponseSchema } from "@openround/contracts";
 import type { PresentationSessionRepository, Repository, SurveyRepository } from "@openround/db";
 import type { AppConfig } from "./config.js";
-import { entitlementsFor } from "./entitlements.js";
+import { roomEntitlements } from "./room-entitlements.js";
 import { SessionError, type SessionService } from "./session-service.js";
 
 const unavailableRoom = () =>
@@ -90,6 +90,7 @@ export async function registerLiveRoomRoutes(
         return JoinPreflightResponseSchema.parse({
           nicknamePolicy: "friendly_only",
           artifactType: "feedback_room",
+          passwordRequired: Boolean(survey.joinPasswordHash),
           destination: `/survey/${survey.id}`,
         });
       }
@@ -103,12 +104,18 @@ export async function registerLiveRoomRoutes(
         throw unavailableRoom();
       }
 
-      const [institutionPolicy, plan, participants] = await Promise.all([
+      const [institutionPolicy, entitlements, participants] = await Promise.all([
         dependencies.repository.getInstitutionPolicy(presentation.workspaceId),
-        dependencies.repository.getPlan(presentation.workspaceId),
+        roomEntitlements(
+          dependencies.repository,
+          dependencies.config,
+          "presentation",
+          presentation.id,
+          presentation.workspaceId,
+        ),
         dependencies.presentationSessions.listParticipants(presentation.id),
       ]);
-      const participantLimit = entitlementsFor(plan, dependencies.config).maxParticipants;
+      const participantLimit = entitlements.maxParticipants;
       if (
         institutionPolicy.identityRequirement === "institution" ||
         participants.length >= participantLimit
@@ -119,6 +126,7 @@ export async function registerLiveRoomRoutes(
       return JoinPreflightResponseSchema.parse({
         nicknamePolicy: "custom",
         artifactType: "presentation",
+        passwordRequired: Boolean(presentation.joinPasswordHash),
         destination: "/join",
       });
     },

@@ -334,6 +334,8 @@ for (const mobile of [false, true]) {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
+    // Client-side filter navigation can finish before streamed root metadata in WebKit.
+    await expect(page).toHaveTitle(/Polling Pops/);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: `test-results-beta/sessions-${test.info().project.name}.png`,

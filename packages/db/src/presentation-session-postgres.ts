@@ -219,9 +219,9 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
          join_code, status, phase, current_block_index, revision, settings, trust_mode,
          event_seq, question_opened_at, question_closes_at, created_by,
          created_at, updated_at, finished_at, live_expires_at, retention_expires_at,
-         recovery_pack_cards_enabled, recovery_pack_intervention)
+         recovery_pack_cards_enabled, recovery_pack_intervention, join_password_hash)
        SELECT $1, eligible_workspace.id, $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-              $17,$18,$19,$20,$21,$22,$23,$24
+              $17,$18,$19,$20,$21,$22,$23,$24,$25
        FROM eligible_workspace
        RETURNING *`,
       [
@@ -251,6 +251,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         normalized.recoveryPackIntervention
           ? JSON.stringify(normalized.recoveryPackIntervention)
           : null,
+        normalized.joinPasswordHash,
       ],
     );
     if (!result.rows[0]) {

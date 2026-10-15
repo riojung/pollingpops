@@ -80,6 +80,7 @@ export async function expectPresentationSessionRepositoryConformance(
     title: input.content.title,
     content: input.content,
     code: String(randomInt(1_000_000, 10_000_000)),
+    joinPasswordHash: "salted-presentation-verifier",
     status: "active",
     phase: "lobby",
     currentBlockIndex: -1,
@@ -102,7 +103,12 @@ export async function expectPresentationSessionRepositoryConformance(
     eventSeq: 0,
     recoveryPackCardsEnabled: false,
     recoveryPackIntervention: null,
+    joinPasswordHash: "salted-presentation-verifier",
   });
+  expect((await input.repository.getSessionByCode(session.code))?.joinPasswordHash).toBe(
+    "salted-presentation-verifier",
+  );
+  expect(session.settings).not.toHaveProperty("joinPasswordHash");
 
   const openCommand = {
     workspaceId: input.workspaceId,

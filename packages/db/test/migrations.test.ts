@@ -27,6 +27,19 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds nullable password verifiers without changing existing room content or access", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 71)!;
+    expect(migration.name).toBe("room_passwords");
+    for (const table of ["game_sessions", "presentation_live_sessions", "survey_feedback_rooms"])
+      expect(migration.sql).toContain(
+        `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS join_password_hash text`,
+      );
+    expect(migration.sql).not.toMatch(
+      /NOT NULL|DEFAULT|UPDATE |DELETE |DISABLE ROW LEVEL SECURITY/i,
+    );
+  });
   it("adds nested content-scoped folders with serialized ancestry checks and preserved artifact assignments", async () => {
     const migration = (
       await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))

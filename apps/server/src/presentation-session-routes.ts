@@ -295,6 +295,7 @@ export async function registerPresentationSessionRoutes(
         timeMode: input.timeMode,
         requestId: request.id,
         useEventCredit: input.useEventCredit,
+        joinPassword: input.joinPassword,
         idempotencyKey:
           typeof request.headers["x-idempotency-key"] === "string"
             ? request.headers["x-idempotency-key"]
@@ -543,7 +544,7 @@ export async function registerPresentationSessionRoutes(
         );
       try {
         const input = JoinPresentationSessionSchema.parse(request.body);
-        const joined = await service.join(input.code, input.nickname);
+        const joined = await service.join(input.code, input.nickname, input.password);
         recordAdmission("accepted");
         const response = PresentationRestV1JoinSessionResponseSchema.parse({
           participantToken: joined.participantToken,

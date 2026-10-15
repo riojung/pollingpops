@@ -47,6 +47,8 @@ const SAFE_PRESENTATION_ERROR_CODES = new Set([
   "PARTICIPANT_LIMIT",
   "INSTITUTION_AUTH_REQUIRED",
   "UNAUTHORIZED",
+  "PASSWORD_REQUIRED",
+  "INVALID_PASSWORD",
   "VALIDATION_ERROR",
   "STALE_SESSION",
   "ALREADY_RESPONDED",
@@ -60,6 +62,7 @@ export interface PresentationRealtimeService {
   join(
     code: string,
     nickname: string,
+    password?: string,
   ): Promise<{
     workspaceId: string;
     participantToken: string;
@@ -697,7 +700,7 @@ export function registerPresentationRealtime(io: Server, options: PresentationRe
           acknowledge({ error: { code: "RATE_LIMITED", message: "Too many join attempts" } });
           return;
         }
-        const joined = await options.service.join(input.code, input.nickname);
+        const joined = await options.service.join(input.code, input.nickname, input.password);
         const snapshot = PresentationParticipantSnapshotSchema.parse(joined.snapshot);
         await bindPresentationIdentity(
           socket,

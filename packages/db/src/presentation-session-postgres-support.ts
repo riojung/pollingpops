@@ -40,6 +40,7 @@ export function mapSession(row: QueryResultRow): PresentationSessionRecord {
       row.content_snapshot?.schemaVersion,
     ),
     code: String(row.join_code),
+    joinPasswordHash: row.join_password_hash ?? null,
     status: row.status,
     phase: row.phase,
     currentBlockIndex: Number(row.current_block_index),

@@ -541,6 +541,7 @@ function mapSession(row: QueryResultRow): StoredSession {
     quizVersionId: row.quiz_version_id,
     hostId: row.host_id,
     hostTokenHash: row.host_token_hash,
+    joinPasswordHash: row.join_password_hash ?? null,
     trustMode: TrustModeSchema.parse(row.trust_mode ?? state.settings.trustMode ?? "learning"),
     decisionReplayEnabled: row.decision_replay_enabled === true,
     state,
@@ -3380,9 +3381,10 @@ export class PostgresRepository implements Repository {
            INSERT INTO game_sessions
              (id, workspace_id, quiz_version_id, host_id, code, state, version, seq, deadline,
               settings, state_snapshot, state_schema_version, host_token_hash, trust_mode,
-              decision_replay_enabled, expires_at, retention_expires_at, created_at, updated_at)
+              decision_replay_enabled, expires_at, retention_expires_at, created_at, updated_at,
+              join_password_hash)
            SELECT $1, eligible_workspace.id, $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                  $16,$17,$18,$19
+                  $16,$17,$18,$19,$20
            FROM eligible_workspace
            RETURNING id, workspace_id
          )
@@ -3409,6 +3411,7 @@ export class PostgresRepository implements Repository {
               input.retentionExpiresAt,
               input.createdAt,
               input.updatedAt,
+              input.joinPasswordHash ?? null,
             ],
           );
           if (result.rowCount !== 1) {

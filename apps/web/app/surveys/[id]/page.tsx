@@ -14,6 +14,9 @@ import {
   NavigationGuardProvider,
   useNavigationBlocker,
 } from "../../../components/navigation-guard";
+import { useLocale } from "../../../components/locale-provider";
+import { RoomPasswordOption } from "../../../components/room-password";
+import { canProtectRoom, roomPasswordFields, validRoomPassword } from "../../../lib/room-password";
 import { apiFetch, humanError, ApiClientError } from "../../../lib/api";
 import {
   surveyMutationKey,
@@ -26,7 +29,14 @@ import styles from "../../../components/workspace/workspace-content.module.css";
 type Action = "publish" | "duplicate" | "archive" | "share";
 function Editor({ id }: { id: string }) {
   const router = useRouter();
-  const { canEdit, productFeatures } = useWorkspace();
+  const { canEdit, productFeatures, entitlements } = useWorkspace();
+  const { locale, t } = useLocale();
+  const [protectRoom, setProtectRoom] = useState(false);
+  const [joinPassword, setJoinPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<
+    "live.protection.validation" | "live.protection.upgrade" | null
+  >(null);
+  const passwordAvailable = canProtectRoom(entitlements);
   const [model, setModel] = useState<SurveyAutosaveSnapshot | null>(null);
   const autosave = useRef<SurveyAutosave | null>(null);
   const editPermission = useRef(canEdit);
@@ -121,9 +131,23 @@ function Editor({ id }: { id: string }) {
   }
   async function write(action: Action) {
     if (!canEdit || working.current || !autosave.current) return;
+    if (action === "share" && protectRoom && !passwordAvailable) {
+      setPasswordError("live.protection.upgrade");
+      return;
+    }
+    if (
+      action === "share" &&
+      passwordAvailable &&
+      protectRoom &&
+      !validRoomPassword(joinPassword)
+    ) {
+      setPasswordError("live.protection.validation");
+      return;
+    }
     const controller = autosave.current;
     working.current = true;
     setBusy(true);
+    setPasswordError(null);
     setError("");
     setNotice("");
     try {
@@ -149,7 +173,11 @@ function Editor({ id }: { id: string }) {
           action === "duplicate"
             ? { sourceId: id }
             : action === "share"
-              ? { expectedRevision: saved.revision, windowDays: days }
+              ? {
+                  expectedRevision: saved.revision,
+                  windowDays: days,
+                  ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
+                }
               : { expectedRevision: saved.revision };
         operation = {
           path:
@@ -443,6 +471,19 @@ function Editor({ id }: { id: string }) {
                 onChange={(event) => setDays(Number(event.target.value))}
               />
             </label>
+            <RoomPasswordOption
+              available={passwordAvailable}
+              enabled={protectRoom}
+              password={joinPassword}
+              disabled={blocked || Boolean(pending.current)}
+              onEnabledChange={setProtectRoom}
+              onPasswordChange={setJoinPassword}
+            />
+            {passwordError ? (
+              <p className="error" lang={locale} role="alert">
+                {t(passwordError)}
+              </p>
+            ) : null}
             <button
               className="button"
               type="button"

@@ -886,6 +886,36 @@ Stable errors include `INVALID_CODE`, `SESSION_FULL`, `SESSION_LOCKED`, `NICKNAM
   reviewed; explicitly permitted private-network HTTP community deployments also allow HTTP and
   WebSocket resources so multi-device LAN operation remains functional.
 
+### Optional room passwords
+
+Round, Presentation and Survey creation accepts an optional `joinPassword`, independently of
+published content and audience-visible settings. The server checks the effective room creation
+entitlements before accepting a protected run; Free creation remains open, while paid plans,
+licensed launches, Community mode and explicitly funded Event Credit launches can opt in.
+The requirement is frozen with each room, so later plan changes cannot open it.
+
+Migration 071 adds nullable private `join_password_hash` columns to all three room tables.
+Creation stores the verifier atomically with the room, including its existing creation receipt
+and commercial coverage transaction. Legacy rows without a verifier remain open. Survey JSON
+content, session state, public metadata, host/participant snapshots and reports never include it.
+Only the `passwordRequired` flag is public.
+
+The implementation uses asynchronous Node.js scrypt (`N=16384`, `r=8`, `p=5`, 16-byte salt,
+64-byte key), one of the configurations in the
+[OWASP password storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt).
+Unique workspace/artifact/idempotency contexts derive stable salts for exact creation retries;
+other creations use random salts. Idempotency fingerprints bind the expensive verifier instead
+of a fast digest of the plaintext password. Verification accepts only the supported encoding,
+compares keys with `timingSafeEqual`, and fails closed on malformed verifiers. Structured logs
+redact password inputs and verifiers.
+
+REST and realtime admission enforce the same service checks before inserting participants.
+Shared admission budgets run before password verification. Public preflight and direct Survey
+metadata remain read-only; they expose no Survey questions. A new Survey guest supplies the
+password to an admission POST before receiving content. Existing bearer-bound participants
+resume through their existing scoped credentials. Passwords are kept in transient form state,
+never in joining URLs, QR codes, browser storage or analytics events.
+
 ### PostgreSQL row-level security
 
 Tenant tables use forced PostgreSQL row-level security. Request repositories open a transaction

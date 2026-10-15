@@ -65,6 +65,8 @@ import { presentationCanInsertRecoveryPack } from "./presentation-live-recovery-
 import { presentationCanInsertQuickCheck } from "./presentation-live-quick-checks.js";
 import { presentationCanInsertPublishedQuestion } from "./presentation-live-published-questions.js";
 
+import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
+
 const PRESENTATION_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const PRESENTATION_COMPANION_PASS_LIFETIME_MS = 60 * 60 * 1_000;
 
@@ -249,14 +251,56 @@ export class PresentationSessionService {
     timeMode?: PresentationTimeMode;
     requestId: string;
     useEventCredit?: boolean;
+    joinPassword?: string;
     idempotencyKey?: string;
   }) {
+    const previousIdentity =
+      this.dependencies.config.BUSINESS_PLATFORM_ENABLED && !this.dependencies.config.COMMUNITY_MODE
+        ? roomCreationIdentity(input.workspaceId, "presentation", input.idempotencyKey, {})
+        : null;
+    const previousRoom = previousIdentity
+      ? await this.sessions.getSessionForWorkspace(input.workspaceId, previousIdentity.roomId)
+      : null;
+    const policy = previousRoom
+      ? {
+          entitlements: await roomEntitlements(
+            this.dependencies.repository,
+            this.dependencies.config,
+            "presentation",
+            previousRoom.id,
+            input.workspaceId,
+          ),
+          funding: null,
+        }
+      : await roomCreationPolicy(
+          this.dependencies.repository,
+          this.dependencies.config,
+          input.workspaceId,
+          input.useEventCredit,
+        );
+    if (input.joinPassword !== undefined && policy.entitlements.plan === "free") {
+      throw new PresentationSessionServiceError(
+        402,
+        "ENTITLEMENT_LIMIT",
+        "Password-protected rooms require a paid plan",
+      );
+    }
+    const joinPasswordHash =
+      input.joinPassword === undefined
+        ? undefined
+        : await hashRoomPassword(
+            input.joinPassword,
+            input.idempotencyKey
+              ? `${input.workspaceId}:presentation:${input.idempotencyKey}`
+              : undefined,
+          );
     const creation =
       this.dependencies.config.BUSINESS_PLATFORM_ENABLED && !this.dependencies.config.COMMUNITY_MODE
         ? roomCreationIdentity(input.workspaceId, "presentation", input.idempotencyKey, {
             presentationId: input.presentationId,
             timeMode: input.timeMode ?? "timed",
             useEventCredit: input.useEventCredit ?? false,
+            joinPasswordHash,
           })
         : null;
     const replay = async (existing: PresentationSessionRecord) => {
@@ -282,6 +326,9 @@ export class PresentationSessionService {
         controlCredentialId: pass.credentialId,
       };
     };
+    // A retained entitlement snapshot only authorizes replay of this accepted room. Never
+    // carry it into a replacement creation if the room is deleted while hashing the request.
+    if (previousRoom) return replay(previousRoom);
     if (creation) {
       const existing = await this.sessions.getSessionForWorkspace(
         input.workspaceId,
@@ -325,12 +372,6 @@ export class PresentationSessionService {
       );
     }
     const now = new Date();
-    const policy = await roomCreationPolicy(
-      this.dependencies.repository,
-      this.dependencies.config,
-      input.workspaceId,
-      input.useEventCredit,
-    );
     let session: PresentationSessionRecord | null = null;
     let controlToken: string | null = null;
     let controlCredentialId: string | null = null;
@@ -343,6 +384,7 @@ export class PresentationSessionService {
           {
             id: candidateSessionId,
             workspaceId: input.workspaceId,
+            joinPasswordHash,
             commercialCoverage: coverageRequest(policy, {
               artifactType: "presentation",
               roomId: candidateSessionId,
@@ -678,7 +720,7 @@ export class PresentationSessionService {
     return snapshot;
   }
 
-  async join(code: string, nickname: string) {
+  async join(code: string, nickname: string, password?: string) {
     const session = await this.sessions.getSessionByCode(code);
     if (!session || session.status === "finished" || presentationLiveSessionExpired(session)) {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Active Presentation not found");
@@ -691,6 +733,20 @@ export class PresentationSessionService {
         403,
         "INSTITUTION_AUTH_REQUIRED",
         "This workspace requires institution identity; anonymous code entry is disabled",
+      );
+    }
+    if (session.joinPasswordHash && !password) {
+      throw new PresentationSessionServiceError(
+        401,
+        "PASSWORD_REQUIRED",
+        "Enter the room password to join",
+      );
+    }
+    if (!(await verifyRoomPassword(password, session.joinPasswordHash))) {
+      throw new PresentationSessionServiceError(
+        401,
+        "INVALID_PASSWORD",
+        "The room password is incorrect",
       );
     }
     const participantToken = `${randomUUID()}.${randomBytes(24).toString("base64url")}`;

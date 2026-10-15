@@ -16,6 +16,8 @@ export interface PresentationSessionRecord {
   title: string;
   content: PresentationContent;
   code: string;
+  /** Server-private salted verifier; never part of settings or audience state. */
+  joinPasswordHash?: string | null;
   status: "active" | "finished";
   phase: PresentationSessionPhase;
   currentBlockIndex: number;

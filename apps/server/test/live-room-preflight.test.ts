@@ -192,6 +192,7 @@ describe("unified live-room join preflight", () => {
       nicknamePolicy: "friendly_only",
       artifactType: "round",
       destination: "/join",
+      passwordRequired: false,
     });
 
     const presentationResult = await preflight(built.app, presentation.code);
@@ -200,6 +201,7 @@ describe("unified live-room join preflight", () => {
       nicknamePolicy: "custom",
       artifactType: "presentation",
       destination: "/join",
+      passwordRequired: false,
     });
   });
 

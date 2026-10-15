@@ -21,6 +21,8 @@ import type { AuthService } from "./auth.js";
 import { coreParityCreationEnabled } from "./core-parity-rollout.js";
 import { entitlementsFor } from "./entitlements.js";
 import { hashToken } from "./security.js";
+import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
+import { roomCreationPolicy } from "./room-entitlements.js";
 import { instantiateStarter, starterSummaries } from "./starters.js";
 
 const Id = z.object({ id: z.string().uuid() }).strict();
@@ -42,7 +44,9 @@ const Page = z
     limit: z.coerce.number().int().min(1).max(50).default(50),
   })
   .strict();
-const Join = z.object({ code: z.string().regex(/^\d{7}$/) }).strict();
+const Password = z.string().max(128).optional();
+const Join = z.object({ code: z.string().regex(/^\d{7}$/), password: Password }).strict();
+const DirectJoin = z.object({ password: Password }).strict();
 function publicRoom(room: {
   id: string;
   surveyId: string;
@@ -51,6 +55,7 @@ function publicRoom(room: {
   closesAt: string;
   expiresAt: string;
   closed: boolean;
+  joinPasswordHash?: string | null;
 }) {
   return {
     id: room.id,
@@ -60,6 +65,7 @@ function publicRoom(room: {
     closesAt: room.closesAt,
     expiresAt: room.expiresAt,
     closed: room.closed,
+    passwordRequired: Boolean(room.joinPasswordHash),
     identityPolicy: "organizer_blind",
     delivery: "self_paced",
   };
@@ -83,15 +89,19 @@ export async function registerSurveyRoutes(
           .code(
             code === "NOT_FOUND"
               ? 404
-              : code === "UNAUTHORIZED"
+              : code === "UNAUTHORIZED" ||
+                  code === "PASSWORD_REQUIRED" ||
+                  code === "INVALID_PASSWORD"
                 ? 401
-                : code === "ADMISSION_RESTRICTED"
-                  ? 403
-                  : code === "RATE_LIMITED"
-                    ? 429
-                    : code === "VALIDATION_ERROR"
-                      ? 422
-                      : 409,
+                : code === "ENTITLEMENT_LIMIT"
+                  ? 402
+                  : code === "ADMISSION_RESTRICTED"
+                    ? 403
+                    : code === "RATE_LIMITED"
+                      ? 429
+                      : code === "VALIDATION_ERROR"
+                        ? 422
+                        : 409,
           )
           .send({
             error: {
@@ -291,11 +301,30 @@ export async function registerSurveyRoutes(
       if (!actor) return;
       const input = SurveyRoomCreateSchema.parse(request.body);
       const id = Id.parse(request.params).id;
-      const limits = entitlementsFor(await deps.repository.getPlan(actor.workspaceId), deps.config);
+      const previous = await deps.surveys.getRoomCreation(
+        actor.workspaceId,
+        id,
+        input.idempotencyKey,
+      );
+      // Accepted creation receipts retain their password requirement after a plan change. The
+      // repository still checks the exact request fingerprint before replaying any receipt.
+      const limits = previous
+        ? entitlementsFor("free", deps.config)
+        : (await roomCreationPolicy(deps.repository, deps.config, actor.workspaceId)).entitlements;
+      if (!previous && input.joinPassword !== undefined && limits.plan === "free") {
+        throw new SurveyError("ENTITLEMENT_LIMIT", "Password-protected rooms require a paid plan");
+      }
+      const joinPasswordHash =
+        input.joinPassword === undefined
+          ? undefined
+          : await hashRoomPassword(
+              input.joinPassword,
+              `${actor.workspaceId}:feedback_room:${id}:${input.idempotencyKey}`,
+            );
       const features = await deps.repository.getOperationalFeatures();
-      if (!features.sessionCreation)
+      if (!previous && !features.sessionCreation)
         throw new SurveyError("ROOM_CLOSED", "New room creation is temporarily paused");
-      if (deps.config.BUSINESS_PLATFORM_ENABLED && !deps.config.COMMUNITY_MODE) {
+      if (!previous && deps.config.BUSINESS_PLATFORM_ENABLED && !deps.config.COMMUNITY_MODE) {
         const platform = createPlatformRepository(deps.repository);
         const organization = await platform.getOrganizationForWorkspace(actor.workspaceId);
         const workspace = organization
@@ -325,6 +354,8 @@ export async function registerSurveyRoutes(
               expiresAt: expiresAt.toISOString(),
               participantLimit: limits.maxParticipants,
               windowDays: input.windowDays,
+              joinPasswordHash,
+              replayOnly: Boolean(previous),
             },
           );
           return reply.code(201).send({ room: publicRoom(room) });
@@ -347,19 +378,55 @@ export async function registerSurveyRoutes(
         nextCursor: rooms.length > input.limit ? page.at(-1)!.id : null,
       };
     });
-    scoped.post("/v1/survey-rooms/join", async (request) => {
+    const admit = async (
+      request: Parameters<AuthService["requireCreator"]>[0],
+      roomId: string,
+      password?: string,
+    ) => {
       const tokenHash = await guestHash(request);
-      const { code } = Join.parse(request.body);
       if (!(await deps.consumeAdmission(`survey-admission:${request.ip}`, 30, 60000)))
         throw new SurveyError("RATE_LIMITED", "Too many admissions. Wait a minute and retry");
+      const room = await deps.surveys.getRoom(roomId);
+      if (!room) throw new SurveyError("NOT_FOUND", "Survey room not found or expired");
+      // A bearer credential that has already been admitted keeps its access on reconnect.
+      try {
+        const existing = await deps.surveys.attempt(roomId, tokenHash, new Date());
+        return { attempt: existing };
+      } catch (error) {
+        if (!(error instanceof SurveyError) || error.code !== "UNAUTHORIZED") throw error;
+      }
+      if (room.joinPasswordHash && !password)
+        throw new SurveyError("PASSWORD_REQUIRED", "Enter the room password to join");
+      if (!(await verifyRoomPassword(password, room.joinPasswordHash)))
+        throw new SurveyError("INVALID_PASSWORD", "The room password is incorrect");
+      return { attempt: await deps.surveys.admit(roomId, tokenHash, () => new Date()) };
+    };
+    scoped.post("/v1/survey-rooms/join", async (request) => {
+      const { code, password } = Join.parse(request.body);
       const claim = await deps.repository.getLiveRoomCode(code, new Date());
       if (!claim || claim.artifactType !== "feedback_room")
         throw new SurveyError(
           "NOT_FOUND",
           "This survey code is unavailable. Check it with the facilitator",
         );
-      const attempt = await deps.surveys.admit(claim.artifactId, tokenHash, () => new Date());
-      return { attempt };
+      return admit(request, claim.artifactId, password);
+    });
+    scoped.get("/v1/survey-rooms/:id/public", async (request) => {
+      if (!(await deps.consumeAdmission(`survey-public:${request.ip}`, 60, 60000)))
+        throw new SurveyError("RATE_LIMITED", "Too many requests. Wait a minute and retry");
+      const room = await deps.surveys.getRoom(Id.parse(request.params).id);
+      if (
+        !room ||
+        room.closed ||
+        new Date(room.closesAt) <= new Date() ||
+        new Date(room.expiresAt) <= new Date()
+      )
+        throw new SurveyError("NOT_FOUND", "Survey room not found or expired");
+      return { room: publicRoom(room) };
+    });
+    scoped.post("/v1/survey-rooms/:id/join", async (request) => {
+      const { password } = DirectJoin.parse(request.body ?? {});
+      return admit(request, Id.parse(request.params).id, password);
     });
     scoped.get("/v1/survey-rooms/:id/attempt", async (request) => ({
       attempt: await deps.surveys.attempt(

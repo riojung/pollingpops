@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CreatorBrand } from "../../../../components/brand";
+import type { Entitlements } from "@openround/contracts";
+import { RoomPasswordOption } from "../../../../components/room-password";
+import {
+  canProtectRoom,
+  roomPasswordFields,
+  validRoomPassword,
+} from "../../../../lib/room-password";
 import { EventCreditChoice } from "../../../../components/event-credit-choice";
 import { useLocale } from "../../../../components/locale-provider";
 import {
@@ -29,6 +36,7 @@ interface PresentationSessionCreationControlsProps {
   busy: boolean;
   currentVersionId: string | null | undefined;
   error: string;
+  errorIsRaw?: boolean;
   liveCreationAvailable: boolean;
   onStart: () => void;
 }
@@ -37,6 +45,7 @@ export function PresentationSessionCreationControls({
   busy,
   currentVersionId,
   error,
+  errorIsRaw = true,
   liveCreationAvailable,
   onStart,
 }: PresentationSessionCreationControlsProps) {
@@ -50,7 +59,7 @@ export function PresentationSessionCreationControls({
         </p>
       ) : null}
       {error ? (
-        <p className="error" lang="en-CA" role="alert">
+        <p className="error" lang={errorIsRaw ? "en-CA" : undefined} role="alert">
           {error}
         </p>
       ) : null}
@@ -73,14 +82,19 @@ export function PresentationSessionCreationControls({
 
 function PresentationHostSetupContent() {
   const { locale, t } = useLocale();
-  const { productFeatures } = useWorkspace();
+  const { productFeatures, entitlements } = useWorkspace();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [presentation, setPresentation] = useState<PresentationRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [errorIsRaw, setErrorIsRaw] = useState(true);
   const [timeMode, setTimeMode] = useState<"timed" | "flex">("timed");
   const [useEventCredit, setUseEventCredit] = useState(false);
+  const [eventEntitlements, setEventEntitlements] = useState<Entitlements | null>(null);
+  const [protectRoom, setProtectRoom] = useState(false);
+  const [joinPassword, setJoinPassword] = useState("");
+  const passwordAvailable = canProtectRoom(useEventCredit ? eventEntitlements : entitlements);
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const liveCreationAvailable = productFeatures?.presentationRealtime === true;
 
@@ -95,12 +109,23 @@ function PresentationHostSetupContent() {
 
   async function startSession() {
     if (busy) return;
+    if (protectRoom && !passwordAvailable) {
+      setErrorIsRaw(false);
+      setError(t("live.protection.upgrade"));
+      return;
+    }
+    if (passwordAvailable && protectRoom && !validRoomPassword(joinPassword)) {
+      setErrorIsRaw(false);
+      setError(t("live.protection.validation"));
+      return;
+    }
     setBusy(true);
     setError("");
     const body = JSON.stringify({
       presentationId: id,
       ...(productFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
       useEventCredit,
+      ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
     });
     if (creationIntent.current?.body !== body)
       creationIntent.current = { body, key: crypto.randomUUID() };
@@ -121,6 +146,7 @@ function PresentationHostSetupContent() {
       recordAuthoringEvent("presentation_host_started", "presentation");
       router.push(`/presentation-session/${sessionId}/host`);
     } catch (caught) {
+      setErrorIsRaw(true);
       setError(humanError(caught));
       setBusy(false);
     }
@@ -136,7 +162,10 @@ function PresentationHostSetupContent() {
         <EventCreditChoice
           checked={useEventCredit}
           disabled={busy}
-          onChange={(checked) => setUseEventCredit(checked)}
+          onChange={(checked, benefits) => {
+            setUseEventCredit(checked);
+            setEventEntitlements(benefits);
+          }}
         />
         <span className={styles.statusPill}>{t("live.presentationHost.live")}</span>
         {presentation ? <h1 lang="">{presentation.title}</h1> : <h1>{t("common.loading")}</h1>}
@@ -182,10 +211,19 @@ function PresentationHostSetupContent() {
             <small className="muted">{t("live.common.flexSetupHelp")}</small>
           </label>
         ) : null}
+        <RoomPasswordOption
+          available={passwordAvailable}
+          enabled={protectRoom}
+          password={joinPassword}
+          disabled={busy || !liveCreationAvailable}
+          onEnabledChange={setProtectRoom}
+          onPasswordChange={setJoinPassword}
+        />
         <PresentationSessionCreationControls
           busy={busy}
           currentVersionId={presentation?.currentVersionId}
           error={error}
+          errorIsRaw={errorIsRaw}
           liveCreationAvailable={liveCreationAvailable}
           onStart={() => void startSession()}
         />

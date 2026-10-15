@@ -9,6 +9,7 @@ import {
 import {
   expectSurveyConformance,
   expectSurveyCreationUpgradeConformance,
+  expectSurveyPasswordConformance,
   surveyFixture,
 } from "./support/survey-conformance.js";
 
@@ -28,6 +29,13 @@ async function fixture() {
   return { repository, creator, surveys: createSurveyRepository(repository) };
 }
 describe("self-paced Survey storage", () => {
+  it("persists room passwords and replays matching protected and legacy open creations", async () => {
+    const { repository, creator } = await fixture();
+    await expectSurveyPasswordConformance(repository, creator.workspaceId);
+    const exported = JSON.stringify(await repository.exportAccount(creator.userId));
+    expect(exported).not.toContain("stable-salted-verifier");
+    expect(exported).not.toContain("joinPasswordHash");
+  });
   it("orders private feedback newest-first with stable tied-time pagination and deleted anchors", async () => {
     const { repository, creator } = await fixture();
     await expectFeedbackPaginationConformance(repository, creator);

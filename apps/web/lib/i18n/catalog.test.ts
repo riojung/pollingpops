@@ -74,7 +74,7 @@ describe("localized message catalogs", () => {
       "live-delivery",
       "session-summary",
     ]);
-    expect(localeDomainsForPath("/surveys/example")).toEqual([]);
+    expect(localeDomainsForPath("/surveys/example")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/results/surveys/example")).toEqual([
       "workspace-pages",
       "session-summary",
@@ -116,6 +116,8 @@ describe("localized message catalogs", () => {
       "report-round",
     ]);
     expect(localeDomainsForPath("/join")).toEqual(["delivery-authoring", "live-delivery"]);
+    expect(localeDomainsForPath("/survey/room-a")).toEqual(["live-delivery"]);
+    expect(localeDomainsForPath("/surveys/survey-a")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/report/example")).toEqual([
       "report-round",
       "live-delivery",

@@ -18,6 +18,12 @@ import {
 import { CreatorBrand } from "../../../../components/brand";
 import { EventCreditChoice } from "../../../../components/event-credit-choice";
 import { ExperiencePicker } from "../../../../components/experience-picker";
+import { RoomPasswordOption } from "../../../../components/room-password";
+import {
+  canProtectRoom,
+  roomPasswordFields,
+  validRoomPassword,
+} from "../../../../lib/room-password";
 import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
 import {
@@ -88,6 +94,8 @@ export default function HostSetupPage() {
   const [publishedContent, setPublishedContent] = useState<QuizDraft | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [useEventCredit, setUseEventCredit] = useState(false);
+  const [protectRoom, setProtectRoom] = useState(false);
+  const [joinPassword, setJoinPassword] = useState("");
   const [eventEntitlements, setEventEntitlements] = useState<Entitlements | null>(null);
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const [settings, setSettings] = useState<SessionSettings | null>(null);
@@ -109,6 +117,7 @@ export default function HostSetupPage() {
     useEventCredit && eventEntitlements
       ? eventEntitlements.maxParticipants
       : entitlements?.maxParticipants;
+  const passwordAvailable = canProtectRoom(useEventCredit ? eventEntitlements : entitlements);
   const maximumParticipants =
     fundingParticipantLimit === undefined
       ? undefined
@@ -280,6 +289,16 @@ export default function HostSetupPage() {
   async function createSession(event: FormEvent) {
     event.preventDefault();
     if (!quiz || !publishedContent || !settings || !entitlements || busy) return;
+    if (protectRoom && !passwordAvailable) {
+      setErrorIsRaw(false);
+      setError(t("live.protection.upgrade"));
+      return;
+    }
+    if (passwordAvailable && protectRoom && !validRoomPassword(joinPassword)) {
+      setErrorIsRaw(false);
+      setError(t("live.protection.validation"));
+      return;
+    }
     setBusy(true);
     setError("");
     setErrorIsRaw(false);
@@ -293,6 +312,7 @@ export default function HostSetupPage() {
         : {}),
       presenterSoundEnabled: roundExperiencesAvailable && presenterSoundEnabled,
       useEventCredit,
+      ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
     });
     if (creationIntent.current?.body !== body)
       creationIntent.current = { body, key: crypto.randomUUID() };
@@ -418,6 +438,14 @@ export default function HostSetupPage() {
                       audienceLimit: Math.min(settings.audienceLimit, entitlements.maxParticipants),
                     });
                 }}
+              />
+              <RoomPasswordOption
+                available={passwordAvailable}
+                enabled={protectRoom}
+                password={joinPassword}
+                disabled={busy}
+                onEnabledChange={setProtectRoom}
+                onPasswordChange={setJoinPassword}
               />
               <div className="settings-grid">
                 <section className="panel">

@@ -46,6 +46,7 @@ export function normalizeSession(input: PresentationSessionCreateInput): Present
   }
   return {
     ...input,
+    joinPasswordHash: input.joinPasswordHash ?? null,
     content,
     settings,
     trustMode: input.trustMode ?? "learning",

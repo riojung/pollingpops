@@ -8,9 +8,32 @@ import {
   nicknameForJoin,
   resolveJoinPreflightForSubmission,
   shouldCollectJoinNickname,
+  shouldCollectJoinPassword,
 } from "./join-preflight";
 
 describe("join preflight state", () => {
+  it("requests passwords only for the current protected room and clears stale results", () => {
+    const ready = completeJoinPreflight(beginJoinPreflight("1234567", 1), 1, {
+      nicknamePolicy: "custom",
+      passwordRequired: true,
+    });
+    expect(shouldCollectJoinPassword(ready, "1234567")).toBe(true);
+    expect(shouldCollectJoinPassword(ready, "7654321")).toBe(false);
+    expect(shouldCollectJoinPassword(beginJoinPreflight("7654321", 2), "7654321")).toBe(false);
+    expect(
+      shouldCollectJoinPassword(
+        failJoinPreflight(beginJoinPreflight("1234567", 2), 2, "failed"),
+        "1234567",
+      ),
+    ).toBe(false);
+  });
+
+  it("defaults older preflight responses to open rooms", () => {
+    const ready = completeJoinPreflight(beginJoinPreflight("1234567", 1), 1, {
+      nicknamePolicy: "custom",
+    });
+    expect(shouldCollectJoinPassword(ready, "1234567")).toBe(false);
+  });
   it("uses only the latest request result", () => {
     const first = beginJoinPreflight("1234567", 1);
     const latest = beginJoinPreflight("7654321", 2);

@@ -5,6 +5,18 @@ import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
   ...textPollLiveEnglishMessages,
+  "live.protection.title": "房間密碼",
+  "live.protection.toggle": "本次活動需要密碼",
+  "live.protection.help":
+    "選填。請使用8至128個字元，且至少包含一個非空白字元。請另外向參與者分享密碼。",
+  "live.protection.upgrade": "Pro、Team或活動點數支援密碼保護。免費房間保持開放。",
+  "live.protection.upgradeLink": "查看升級選項",
+  "live.protection.label": "房間密碼",
+  "live.protection.validation": "請使用8至128個字元，且至少包含一個非空白字元。空格會保留。",
+  "live.protection.required": "請輸入主持人提供的房間密碼。",
+  "live.protection.invalid": "密碼不正確。請向主持人確認後重試。",
+  "live.protection.join": "加入房間",
+  "live.protection.joining": "正在加入…",
   ...textPollTranslations["zh-TW"].live,
   "live.ranking.yourRanking": "你的排序",
   "live.ranking.instructions": "為 {total} 個選項中的 {count} 個排序。第一項優先級最高。",

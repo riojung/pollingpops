@@ -52,6 +52,93 @@ export function surveyFixture() {
     ],
   });
 }
+export async function expectSurveyPasswordConformance(repository: Repository, workspaceId: string) {
+  const surveys = createSurveyRepository(repository);
+  const id = randomUUID();
+  const now = new Date();
+  const creationKey = randomUUID();
+  await surveys.create(workspaceId, id, surveyFixture(), creationKey);
+  expect(await surveys.getRoomCreation(workspaceId, id, creationKey)).toBeNull();
+  await surveys.publish(workspaceId, id, 0, randomUUID(), 5);
+  const settings = {
+    code: String(randomInt(1000000, 10000000)),
+    closesAt: new Date(now.getTime() + 86400000).toISOString(),
+    expiresAt: new Date(now.getTime() + 30 * 86400000).toISOString(),
+    participantLimit: 20,
+    windowDays: 1,
+  };
+  const protectedKey = randomUUID();
+  const protectedSettings = { ...settings, joinPasswordHash: "stable-salted-verifier" };
+  const protectedRoom = await surveys.createRoom(
+    workspaceId,
+    id,
+    0,
+    protectedKey,
+    protectedSettings,
+  );
+  expect(await surveys.getRoomCreation(workspaceId, id, protectedKey)).toEqual(protectedRoom);
+  expect(await surveys.getRoomCreation(randomUUID(), id, protectedKey)).toBeNull();
+  expect(await surveys.getRoomCreation(workspaceId, randomUUID(), protectedKey)).toBeNull();
+  expect(await surveys.getRoomCreation(workspaceId, id, randomUUID())).toBeNull();
+  expect(await surveys.getRoom(protectedRoom.id)).toMatchObject({
+    joinPasswordHash: protectedSettings.joinPasswordHash,
+  });
+  expect(
+    (await surveys.listRooms(workspaceId)).find((room) => room.id === protectedRoom.id),
+  ).toMatchObject({ joinPasswordHash: protectedSettings.joinPasswordHash });
+  expect(protectedRoom.content).not.toHaveProperty("joinPasswordHash");
+  expect(
+    await surveys.createRoom(workspaceId, id, 0, protectedKey, {
+      ...protectedSettings,
+      code: String(randomInt(1000000, 10000000)),
+      replayOnly: true,
+    }),
+  ).toEqual(protectedRoom);
+  for (const joinPasswordHash of [null, undefined, "different-salted-verifier"])
+    await expect(
+      surveys.createRoom(workspaceId, id, 0, protectedKey, { ...settings, joinPasswordHash }),
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  await surveys.close(workspaceId, protectedRoom.id);
+  expect(await surveys.getRoom(protectedRoom.id)).toMatchObject({
+    closed: true,
+    joinPasswordHash: protectedSettings.joinPasswordHash,
+  });
+  expect(await surveys.getRoomCreation(workspaceId, id, protectedKey)).toMatchObject({
+    id: protectedRoom.id,
+    closed: true,
+    joinPasswordHash: protectedSettings.joinPasswordHash,
+  });
+
+  const openKey = randomUUID();
+  const openRoom = await surveys.createRoom(workspaceId, id, 0, openKey, {
+    ...settings,
+    code: String(randomInt(1000000, 10000000)),
+  });
+  expect(openRoom.joinPasswordHash ?? null).toBeNull();
+  expect(await surveys.getRoomCreation(workspaceId, id, openKey)).toEqual(openRoom);
+  // Null defaults must retain the exact legacy request fingerprint.
+  expect(
+    await surveys.createRoom(workspaceId, id, 0, openKey, { ...settings, joinPasswordHash: null }),
+  ).toEqual(openRoom);
+  await expect(
+    surveys.createRoom(workspaceId, id, 0, openKey, protectedSettings),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  const deletedKey = randomUUID();
+  const deletedSettings = {
+    ...protectedSettings,
+    code: String(randomInt(1000000, 10000000)),
+  };
+  const deletedRoom = await surveys.createRoom(workspaceId, id, 0, deletedKey, deletedSettings);
+  await surveys.deleteRoom(workspaceId, deletedRoom.id);
+  expect(await surveys.getRoomCreation(workspaceId, id, deletedKey)).toBeNull();
+  await expect(
+    surveys.createRoom(workspaceId, id, 0, deletedKey, { ...deletedSettings, replayOnly: true }),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  expect(await surveys.getRoomCreation(workspaceId, id, deletedKey)).toBeNull();
+  expect(await repository.getLiveRoomCode(deletedSettings.code)).toBeNull();
+  return { protectedRoom, openRoom };
+}
+
 export async function expectSurveyCreationUpgradeConformance(
   repository: Repository,
   workspaceId: string,

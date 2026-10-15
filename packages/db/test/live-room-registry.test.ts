@@ -79,6 +79,58 @@ function presentationSession(
 }
 
 describe("memory live-room registry", () => {
+  it("persists private passwords outside Round state and keeps them across legacy saves", async () => {
+    const repository = new MemoryRepository();
+    const tokenHash = randomUUID();
+    await repository.createMagicToken({
+      id: randomUUID(),
+      email: `password-export-${randomUUID()}@example.com`,
+      segment: "workplace",
+      tokenHash,
+      policyVersion: "test",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+    });
+    const owner = (await repository.consumeMagicToken(tokenHash, new Date()))!;
+    const protectedRound = {
+      ...roundSession("2345678"),
+      workspaceId: owner.workspaceId,
+      hostId: owner.userId,
+      joinPasswordHash: "salted-verifier",
+    };
+    await repository.createSession(protectedRound);
+    expect(await repository.getSessionByCode(protectedRound.state.code)).toMatchObject({
+      joinPasswordHash: "salted-verifier",
+    });
+    expect(protectedRound.state).not.toHaveProperty("joinPasswordHash");
+    expect(protectedRound.state.settings).not.toHaveProperty("joinPasswordHash");
+    const legacySave = { ...protectedRound, joinPasswordHash: undefined };
+    await repository.saveSession(legacySave, protectedRound.state.version);
+    expect(await repository.getSessionById(protectedRound.id)).toMatchObject({
+      joinPasswordHash: "salted-verifier",
+    });
+    const exported = JSON.stringify(await repository.exportAccount(owner.userId));
+    expect(exported).not.toContain("salted-verifier");
+    expect(exported).not.toContain("joinPasswordHash");
+    const openRound = roundSession("2345679");
+    await repository.createSession(openRound);
+    expect(await repository.getSessionById(openRound.id)).toMatchObject({ joinPasswordHash: null });
+  });
+
+  it("persists protected Presentation sessions while legacy creations stay open", async () => {
+    const presentations = createPresentationSessionRepository(new MemoryRepository());
+    const protectedSession = await presentations.createSession(
+      presentationSession("3456781", new Date(), { joinPasswordHash: "salted-verifier" }),
+    );
+    expect(await presentations.getSessionByCode(protectedSession.code)).toMatchObject({
+      joinPasswordHash: "salted-verifier",
+    });
+    expect(protectedSession.settings).not.toHaveProperty("joinPasswordHash");
+    expect(await presentations.createSession(presentationSession("3456782"))).toMatchObject({
+      joinPasswordHash: null,
+    });
+  });
+
   it("rejects Presentation-after-Round and Round-after-Presentation collisions", async () => {
     const firstRepository = new MemoryRepository();
     const firstPresentations = createPresentationSessionRepository(firstRepository);

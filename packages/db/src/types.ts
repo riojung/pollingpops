@@ -367,6 +367,8 @@ export interface StoredSession {
   quizVersionId: string;
   hostId: string;
   hostTokenHash: string;
+  /** Server-private salted verifier; never part of settings or audience state. */
+  joinPasswordHash?: string | null;
   /** Creation-only commercial request; durable coverage is stored separately. */
   commercialCoverage?: PlatformRoomCoverageInput;
   /** Frozen identity/privacy promise for this session. */

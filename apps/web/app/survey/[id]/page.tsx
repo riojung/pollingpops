@@ -1,15 +1,26 @@
 "use client";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { SurveyResponses } from "@openround/contracts/surveys";
 import { SurveyResponseControl } from "../../../components/survey-controls";
 import { Brand } from "../../../components/brand";
+import { useLocale } from "../../../components/locale-provider";
+import { RoomPasswordInput } from "../../../components/room-password";
+import { roomPasswordErrorKey } from "../../../lib/room-password";
 import { apiFetch, humanError, ApiClientError } from "../../../lib/api";
-import { surveyMutationKey, type SurveyAttempt } from "../../../lib/survey-client";
+import {
+  surveyAccessToken,
+  surveyMutationKey,
+  type SurveyAttempt,
+} from "../../../lib/survey-client";
 
 export default function SurveyPlayer() {
   const id = useParams<{ id: string }>().id;
+  const { locale, t } = useLocale();
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [password, setPassword] = useState("");
+  const [errorKey, setErrorKey] = useState<ReturnType<typeof roomPasswordErrorKey>>(null);
   const [attempt, setAttempt] = useState<SurveyAttempt | null>(null);
   const [responses, setResponses] = useState<SurveyResponses>({});
   const [error, setError] = useState("");
@@ -18,26 +29,100 @@ export default function SurveyPlayer() {
   const [now, setNow] = useState(Date.now());
   const pending = useRef<{ final: boolean; body: string } | null>(null);
   const token = useRef("");
-  async function load() {
+  const activeRoom = useRef(id);
+  activeRoom.current = id;
+  const joinRequest = useRef(0);
+  function acceptAttempt(value: SurveyAttempt) {
+    setAttempt(value);
+    setResponses(value.responses);
+    setPassword("");
+    setPasswordRequired(false);
+    setErrorKey(null);
+  }
+  async function join(event?: FormEvent, submittedPassword = password) {
+    event?.preventDefault();
+    const submittedRoomId = id;
+    const requestId = ++joinRequest.current;
+    const isCurrent = () =>
+      activeRoom.current === submittedRoomId && joinRequest.current === requestId;
+    setBusy(true);
     setError("");
+    setErrorKey(null);
+    try {
+      const storageKey = `pollingpops:survey:${submittedRoomId}`;
+      const joiningToken = window.localStorage.getItem(storageKey) || surveyAccessToken();
+      token.current = joiningToken;
+      // Save the room credential before admission so interrupted acknowledgements resume safely.
+      window.localStorage.setItem(storageKey, joiningToken);
+      const result = await apiFetch<{ attempt: SurveyAttempt }>(
+        `/v1/survey-rooms/${submittedRoomId}/join`,
+        {
+          method: "POST",
+          credentials: "omit",
+          headers: { authorization: `Bearer ${joiningToken}` },
+          body: JSON.stringify(submittedPassword ? { password: submittedPassword } : {}),
+        },
+      );
+      if (isCurrent()) acceptAttempt(result.attempt);
+    } catch (caught) {
+      if (!isCurrent()) return;
+      const key = roomPasswordErrorKey(caught);
+      setErrorKey(key);
+      if (key) setPasswordRequired(true);
+      else setError(humanError(caught));
+    } finally {
+      if (isCurrent()) setBusy(false);
+    }
+  }
+  async function load(isActive: () => boolean = () => true) {
+    setError("");
+    setErrorKey(null);
     try {
       token.current = window.localStorage.getItem(`pollingpops:survey:${id}`) ?? "";
-      if (!token.current)
-        throw new Error("Join this Survey using the shared link or seven-digit code first.");
-      const result = await apiFetch<{ attempt: SurveyAttempt }>(`/v1/survey-rooms/${id}/attempt`, {
-        credentials: "omit",
-        headers: { authorization: `Bearer ${token.current}` },
-      });
-      setAttempt(result.attempt);
-      setResponses(result.attempt.responses);
+      if (token.current) {
+        try {
+          const result = await apiFetch<{ attempt: SurveyAttempt }>(
+            `/v1/survey-rooms/${id}/attempt`,
+            {
+              credentials: "omit",
+              headers: { authorization: `Bearer ${token.current}` },
+            },
+          );
+          if (isActive()) acceptAttempt(result.attempt);
+          return;
+        } catch (caught) {
+          if (!(caught instanceof ApiClientError) || caught.code !== "UNAUTHORIZED") throw caught;
+        }
+      }
+      const result = await apiFetch<{ room: { passwordRequired: boolean } }>(
+        `/v1/survey-rooms/${id}/public`,
+        { credentials: "omit" },
+      );
+      if (!isActive()) return;
+      if (result.room.passwordRequired) setPasswordRequired(true);
+      else await join(undefined, "");
     } catch (caught) {
-      setError(humanError(caught));
+      if (isActive()) setError(humanError(caught));
     }
   }
   useEffect(() => {
-    void load();
+    let active = true;
+    ++joinRequest.current;
+    setBusy(false);
+    setAttempt(null);
+    setResponses({});
+    setPassword("");
+    setPasswordRequired(false);
+    setErrorKey(null);
+    setNotice("");
+    pending.current = null;
+    void load(() => active);
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    return () => {
+      active = false;
+      ++joinRequest.current;
+      window.clearInterval(timer);
+    };
   }, [id]);
   const dirty = Boolean(attempt && JSON.stringify(attempt.responses) !== JSON.stringify(responses));
   useEffect(() => {
@@ -99,6 +184,19 @@ export default function SurveyPlayer() {
         question-level totals only after the run closes, with at least five responses per question.
         Your browser stores a room-only credential for resume; clear site data to remove it.
       </p>
+      {passwordRequired && !attempt ? (
+        <form onSubmit={(event) => void join(event)} lang={locale}>
+          <RoomPasswordInput value={password} onChange={setPassword} disabled={busy} />
+          <button className="button" type="submit" disabled={busy || !password}>
+            {t(busy ? "live.protection.joining" : "live.protection.join")}
+          </button>
+        </form>
+      ) : null}
+      {errorKey ? (
+        <p className="error" lang={locale} role="alert">
+          {t(errorKey)}
+        </p>
+      ) : null}
       {error ? (
         <p className="error" role="alert">
           {error}{" "}

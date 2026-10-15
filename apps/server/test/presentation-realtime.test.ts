@@ -28,6 +28,7 @@ import type { PresentationRealtimeService } from "../src/presentation-realtime.j
 import {
   PresentationBroadcastConsistencyError,
   PresentationSessionService,
+  PresentationSessionServiceError,
   presentationParticipantTokenHash,
 } from "../src/presentation-session-service.js";
 import { attachRealtime } from "../src/realtime.js";
@@ -333,6 +334,50 @@ describe("Presentation realtime transport", () => {
     });
     return client;
   }
+
+  it("forwards exact room passwords and returns actionable admission errors", async () => {
+    const participant = await connect();
+    const join = vi
+      .spyOn(service, "join")
+      .mockRejectedValueOnce(
+        new PresentationSessionServiceError(
+          401,
+          "PASSWORD_REQUIRED",
+          "Enter the room password to join",
+        ),
+      )
+      .mockRejectedValueOnce(
+        new PresentationSessionServiceError(
+          401,
+          "INVALID_PASSWORD",
+          "The room password is incorrect",
+        ),
+      );
+    const missing = await emitAck<{ error: { code: string } }>(participant, "presentation.join", {
+      code: "1234567",
+      nickname: "Learner",
+    });
+    expect(missing.error.code).toBe("PASSWORD_REQUIRED");
+    const incorrect = await emitAck<{ error: { code: string } }>(participant, "presentation.join", {
+      code: "1234567",
+      nickname: "Learner",
+      password: "Incorrect password",
+    });
+    expect(incorrect.error.code).toBe("INVALID_PASSWORD");
+    const password = " Exact Presentation password ";
+    const admitted = await emitAck<{ data: { participantToken: string } }>(
+      participant,
+      "presentation.join",
+      { code: "1234567", nickname: "Learner", password },
+    );
+    expect(admitted.data.participantToken).toBe(participantToken);
+    expect(join).toHaveBeenLastCalledWith("1234567", "Learner", password);
+    const socketData = JSON.stringify(
+      (await realtime.io.fetchSockets()).map((socket) => socket.data),
+    );
+    expect(socketData).not.toContain(password);
+    expect(socketData).not.toContain("password");
+  });
 
   it("joins and synchronizes with authoritative role projections", async () => {
     expect(

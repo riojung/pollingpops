@@ -68,6 +68,8 @@ export const errorCodes = [
   "SESSION_FULL",
   "SESSION_LOCKED",
   "NICKNAME_REJECTED",
+  "PASSWORD_REQUIRED",
+  "INVALID_PASSWORD",
   "STALE_VERSION",
   "ANSWER_LATE",
   "ANSWER_INVALID",
@@ -2159,17 +2161,26 @@ export const JoinPreflightRequestSchema = z
   .strict();
 export type JoinPreflightRequest = z.infer<typeof JoinPreflightRequestSchema>;
 
+/** Exact room credential; spaces are meaningful and are never normalized. */
+export const RoomPasswordSchema = z
+  .string()
+  .min(8)
+  .max(128)
+  .refine((value) => value.trim().length > 0, "Enter a password that is not only whitespace");
+
 export const JoinPreflightResponseSchema = z
   .object({
     nicknamePolicy: z.enum(["custom", "friendly_only"]),
     artifactType: z.enum(["round", "presentation", "feedback_room"]).default("round"),
     destination: z.string().startsWith("/").default("/join"),
+    passwordRequired: z.boolean().default(false),
   })
   .strict();
 export type JoinPreflightResponse = z.input<typeof JoinPreflightResponseSchema>;
 export type ResolvedJoinPreflightResponse = z.output<typeof JoinPreflightResponseSchema>;
 
 export const JoinRequestSchema = z.object({
+  password: z.string().max(128).optional(),
   clientCapabilities: RoundClientCapabilitiesSchema.optional(),
   code: z
     .string()
@@ -3300,6 +3311,7 @@ export const ProductEventBatchSchema = z
 export type ProductEventBatch = z.infer<typeof ProductEventBatchSchema>;
 
 export const CreateSessionSchema = z.object({
+  joinPassword: RoomPasswordSchema.optional(),
   useEventCredit: z.boolean().default(false),
   clientCapabilities: RoundClientCapabilitiesSchema.optional(),
   quizId: z.string().uuid(),
@@ -5714,6 +5726,7 @@ export const PresentationControlCommandSchema = z.union([
 export type PresentationControlCommand = z.infer<typeof PresentationControlCommandSchema>;
 
 export const CreatePresentationSessionSchema = z.object({
+  joinPassword: RoomPasswordSchema.optional(),
   useEventCredit: z.boolean().default(false),
   presentationId: z.string().uuid(),
   timeMode: PresentationTimeModeSchema.default("timed"),
@@ -5724,6 +5737,7 @@ export const AdvancePresentationSessionSchema = z.object({
 });
 
 export const JoinPresentationSessionSchema = z.object({
+  password: z.string().max(128).optional(),
   code: z.string().regex(/^\d{7}$/, "Enter a seven-digit presentation code"),
   nickname: z.string().trim().min(1).max(32),
 });

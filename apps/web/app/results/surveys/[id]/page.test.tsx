@@ -14,6 +14,7 @@ const fixtures = vi.hoisted(() => ({
   id: "survey-a",
   workspaceId: "workspace-a",
   role: "viewer" as "owner" | "editor" | "viewer",
+  locale: "en-CA" as "en-CA" | "fr-FR",
   hooks: null as ReportHooks | null,
   tree: null as ReactNode,
   apiFetch: vi.fn(),
@@ -71,23 +72,27 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: fixtures.id }) }));
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ id: fixtures.id }),
+  usePathname: () => `/results/surveys/${fixtures.id}`,
+  useRouter: () => ({ replace: vi.fn() }),
+}));
 vi.mock("../../../../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
   apiFetch: fixtures.apiFetch,
 }));
 vi.mock("../../../../components/locale-provider", async () => {
-  const { translate } = await import("../../../../lib/i18n/catalog");
-  const { workspacePageEnglishMessages } =
-    await import("../../../../lib/i18n/domains/workspace-pages");
-  const { sessionSummaryEnglishMessages } =
-    await import("../../../../lib/i18n/domains/session-summary");
-  const messages = { ...workspacePageEnglishMessages, ...sessionSummaryEnglishMessages };
+  const { loadMessages, translate } = await import("../../../../lib/i18n/catalog");
+  const domains = ["workspace-pages", "session-summary"] as const;
+  const messages = {
+    "en-CA": await loadMessages("en-CA", domains),
+    "fr-FR": await loadMessages("fr-FR", domains),
+  };
   return {
     useLocale: () => ({
-      locale: "en-CA",
+      locale: fixtures.locale,
       t: (key: Parameters<typeof translate>[1], values?: Record<string, string | number>) =>
-        translate(messages, key, values),
+        translate(messages[fixtures.locale], key, values),
     }),
   };
 });
@@ -98,28 +103,8 @@ vi.mock("../../../../components/workspace/workspace-provider", () => ({
       ? { workspaceId: fixtures.workspaceId, role: fixtures.role }
       : null,
     canEdit: fixtures.role !== "viewer",
-    productFeatures: { surveys: false },
+    productFeatures: { surveys: false, workspaceShell: true, uxBeta: true },
   }),
-}));
-vi.mock("../../../../components/workspace/workspace-shell", () => ({
-  WorkspaceShell: ({
-    title,
-    description,
-    actions,
-    children,
-  }: {
-    title: string;
-    description: string;
-    actions?: ReactNode;
-    children: ReactNode;
-  }) => (
-    <main>
-      <h1>{title}</h1>
-      <p>{description}</p>
-      {actions}
-      {children}
-    </main>
-  ),
 }));
 vi.mock("../../../../components/session-summary/summary-dialog", () => ({
   SessionSummaryButton: ({ source }: { source: { kind: string; id: string } }) => (
@@ -225,6 +210,7 @@ beforeEach(() => {
   fixtures.id = "survey-a";
   fixtures.workspaceId = "workspace-a";
   fixtures.role = "viewer";
+  fixtures.locale = "en-CA";
   fixtures.hooks = null;
   fixtures.tree = null;
   fixtures.apiFetch.mockReset();
@@ -232,6 +218,17 @@ beforeEach(() => {
 });
 
 describe("Survey results detail", () => {
+  it("labels the translated report and its back action with the active language", async () => {
+    fixtures.locale = "fr-FR";
+    const markup = await reportHarness().settle();
+    expect(markup).toMatch(/<main\b[^>]*\blang="fr-FR">/);
+    expect(markup).toContain("Actualiser les résultats");
+    expect(markup).toContain("Résultats agrégés");
+    expect(markup).toMatch(
+      /<div\b[^>]*\blang="fr-FR"><a\b[^>]*href="\/results\?view=surveys"[^>]*>Retour aux résultats de sondage<\/a><\/div>/,
+    );
+  });
+
   it("shows finalized aggregate evidence to viewers when new Surveys are disabled", async () => {
     const markup = await reportHarness().settle();
     expect(markup).toContain("Team feedback");

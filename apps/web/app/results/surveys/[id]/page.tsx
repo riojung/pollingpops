@@ -75,6 +75,7 @@ function SurveyResults() {
 
   return (
     <WorkspaceShell
+      translationLevel="full"
       title={current?.room.title || t("pages.results.surveyTitle")}
       description={t("pages.results.surveyDescription")}
       actions={

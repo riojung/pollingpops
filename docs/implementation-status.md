@@ -23,11 +23,12 @@ written atomically with each room through additive migration 071; old rooms rema
 
 Existing protected rooms keep their requirement after a downgrade. Exact accepted creation
 retries recover the original run, and deleted receipts cannot authorize replacement paid rooms.
-Shared admission limits protect password verification before participant writes. Regression
+Caller limits and a shared room budget protect password verification before participant writes.
+Duplicate nicknames remain valid and are disambiguated without sharing a nickname-based throttle. Regression
 coverage includes free/paid enforcement, wrong and missing passwords, exact spaces/case,
 reconnects, direct Survey links, commercial coverage, stale requests and idempotency races.
 
-Validation: `CI=true pnpm check` passes, including 951 web tests, 753 server tests, lint, strict
+Validation: `CI=true pnpm check` passes, including 951 web tests, 757 server tests, lint, strict
 types and production builds. An isolated PostgreSQL 17 run passes 337 database tests with one
 optional case skipped. Nine browser journeys pass across desktop Chromium, mobile Chromium and
 mobile WebKit, covering all three paid launch/join flows, direct Survey access, resume, Free

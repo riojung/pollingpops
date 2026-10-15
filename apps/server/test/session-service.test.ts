@@ -408,6 +408,129 @@ describe("session service ordering", () => {
     service.close();
   });
 
+  it.each([undefined, " Exact duplicate-nickname room "])(
+    "admits and disambiguates eleven legitimate duplicate nicknames with password %j",
+    async (password) => {
+      const { repository, service, creator, quizId } = await hostedRoundFixture();
+      try {
+        await repository.setPlan(creator.workspaceId, "pro");
+        const hosted = await service.createSession(
+          creator,
+          quizId,
+          {
+            audienceLimit: 20,
+            scoringMode: "accuracy",
+            resultVisibility: "private",
+            allowLateJoin: true,
+            nicknamePolicy: "custom",
+          },
+          password === undefined ? {} : { joinPassword: password },
+        );
+        const joined = await Promise.all(
+          Array.from({ length: 11 }, () =>
+            service.join({
+              code: hosted.code,
+              nickname: "River",
+              ...(password === undefined ? {} : { password }),
+            }),
+          ),
+        );
+        expect(new Set(joined.map((participant) => participant.participantId)).size).toBe(11);
+        const participants = await repository.getParticipants(hosted.sessionId);
+        expect(participants).toHaveLength(11);
+        expect(new Set(participants.map((participant) => participant.nickname))).toEqual(
+          new Set(["River", ...Array.from({ length: 10 }, (_, index) => `River ${index + 2}`)]),
+        );
+      } finally {
+        service.close();
+      }
+    },
+  );
+
+  it("keeps a nickname available to a legitimate joiner after ten incorrect password attempts", async () => {
+    const { repository, service, creator, quizId } = await hostedRoundFixture();
+    try {
+      await repository.setPlan(creator.workspaceId, "pro");
+      const password = " Exact legitimate room ";
+      const hosted = await service.createSession(
+        creator,
+        quizId,
+        {
+          audienceLimit: 20,
+          scoringMode: "accuracy",
+          resultVisibility: "private",
+          allowLateJoin: true,
+          nicknamePolicy: "custom",
+        },
+        { joinPassword: password },
+      );
+      const failed = await Promise.allSettled(
+        Array.from({ length: 10 }, () =>
+          service.join({
+            code: hosted.code,
+            nickname: "River",
+            password: "Incorrect room password",
+          }),
+        ),
+      );
+      expect(
+        failed.map((result) => (result.status === "rejected" ? result.reason.code : "admitted")),
+      ).toEqual(Array.from({ length: 10 }, () => "INVALID_PASSWORD"));
+      expect(await repository.getParticipants(hosted.sessionId)).toHaveLength(0);
+      const joined = await service.join({ code: hosted.code, nickname: "River", password });
+      expect(await repository.getParticipants(hosted.sessionId)).toMatchObject([
+        { id: joined.participantId, nickname: "River" },
+      ]);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("shares the six-hundred-attempt room budget between service instances before password verification", async () => {
+    const { repository, cache, service, creator, quizId } = await hostedRoundFixture();
+    const otherService = new SessionService(repository, cache, config, new MetricsService());
+    try {
+      await repository.setPlan(creator.workspaceId, "pro");
+      const password = " Exact shared-budget room ";
+      const hosted = await service.createSession(
+        creator,
+        quizId,
+        {
+          audienceLimit: 20,
+          scoringMode: "accuracy",
+          resultVisibility: "private",
+          allowLateJoin: true,
+          nicknamePolicy: "custom",
+        },
+        { joinPassword: password },
+      );
+      const verify = vi.spyOn(roomPasswords, "verifyRoomPassword");
+      const failed = await Promise.allSettled(
+        Array.from({ length: 600 }, (_, index) =>
+          (index % 2 === 0 ? service : otherService).join({
+            code: hosted.code,
+            nickname: "River",
+            password: "Incorrect room password",
+          }),
+        ),
+      );
+      expect(
+        failed.map((result) => (result.status === "rejected" ? result.reason.code : "admitted")),
+      ).toEqual(Array.from({ length: 600 }, () => "INVALID_PASSWORD"));
+      const verificationCalls = verify.mock.calls.length;
+      for (const instance of [service, otherService]) {
+        await expect(
+          instance.join({ code: hosted.code, nickname: "River", password }),
+        ).rejects.toMatchObject({ code: "RATE_LIMITED" });
+      }
+      expect(verify).toHaveBeenCalledTimes(verificationCalls);
+      expect(await repository.getParticipants(hosted.sessionId)).toHaveLength(0);
+    } finally {
+      service.close();
+      otherService.close();
+    }
+  });
+
   it("uses the shared admission budget before verifying protected join attempts", async () => {
     const { repository, cache, service, creator, quizId } = await hostedRoundFixture();
     await repository.setPlan(creator.workspaceId, "pro");

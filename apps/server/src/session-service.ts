@@ -1122,21 +1122,13 @@ export class SessionService {
   }
 
   async join(input: JoinRequest): Promise<JoinResponse> {
-    // Shared cache budgets apply before password verification for both REST and sockets.
-    if (!input.resumeToken) {
-      const alias = hashToken((input.nickname ?? "").trim().toLocaleLowerCase());
-      const buckets: Array<[string, number]> = [
-        ...(input.nickname
-          ? [[`round:join:alias:${input.code}:${alias}`, 10] as [string, number]]
-          : []),
-        [`round:join:room:${input.code}`, 600],
-      ];
-      for (const [key, maximum] of buckets) {
-        if (!(await this.cache.consumeRateLimit(key, maximum, 60_000))) {
-          throw new SessionError("RATE_LIMITED", "Too many join attempts. Wait a minute and retry");
-        }
-      }
-    }
+    // Nicknames are shared display labels, not caller identities. Keep the shared room budget
+    // before password verification alongside the existing REST and socket caller limits.
+    if (
+      !input.resumeToken &&
+      !(await this.cache.consumeRateLimit(`round:join:room:${input.code}`, 600, 60_000))
+    )
+      throw new SessionError("RATE_LIMITED", "Too many join attempts. Wait a minute and retry");
     const kind = input.resumeToken ? "resume" : "new";
     return this.traceOperation(
       "openround.session.join",

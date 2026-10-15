@@ -1,0 +1,106 @@
+.fieldset {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.fieldset legend {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.editorField {
+  min-inline-size: 0;
+}
+
+.editorField > input,
+.editorField > select,
+.editorField > textarea {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.editorField > textarea {
+  min-block-size: 72px;
+  field-sizing: content;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.editorField > textarea[rows="3"] {
+  min-block-size: 104px;
+}
+
+.options {
+  display: grid;
+  gap: 1rem;
+}
+
+.optionRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.optionRow .editorField {
+  margin: 0;
+}
+
+.optionRow .removeOption {
+  min-inline-size: 44px;
+  inline-size: 44px;
+  min-block-size: 44px;
+  block-size: 44px;
+  padding: 0;
+  border-color: var(--ui-danger-border);
+  background: var(--ui-danger-bg);
+  color: var(--ui-danger-text);
+}
+
+.fieldset .addOption {
+  min-block-size: 44px;
+  margin-block-start: 1rem;
+}
+
+.responseOption {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  min-block-size: 44px;
+  padding-block: 0.65rem;
+  line-height: 1.5;
+}
+
+.responseOption > input {
+  inline-size: 20px;
+  block-size: 20px;
+  margin: 0.1rem 0 0;
+}
+
+.responseOption > span {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.questionActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+
+.questionActions > button {
+  flex: 0 1 auto;
+  min-block-size: 44px;
+  max-inline-size: 100%;
+  padding: 0.5rem 0.75rem;
+}
+
+.questionActions .removeQuestion {
+  margin-inline-start: auto;
+  border-color: var(--ui-danger-border);
+  background: var(--ui-danger-bg);
+  color: var(--ui-danger-text);
+}

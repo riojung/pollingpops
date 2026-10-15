@@ -60,9 +60,8 @@ for (const suffix of ["desktop", "@mobile"]) {
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
       .toBe(true);
     await page
-      .locator(".choice-row")
-      .nth(2)
-      .getByRole("button", { name: "Delete", exact: true })
+      .getByRole("group", { name: "Answer 3", exact: true })
+      .getByRole("button", { name: "Delete Answer 3", exact: true })
       .click();
     await expect(page.getByRole("combobox", { name: "Choices to rank", exact: true })).toHaveValue(
       "2",
@@ -74,7 +73,7 @@ for (const suffix of ["desktop", "@mobile"]) {
         new URL(response.url()).pathname === `/v1/quizzes/${quizId}/draft` &&
         response.request().postDataJSON().draft.questions[0].choices[2]?.label === "Discussion",
     );
-    await page.getByLabel("Answer 3", { exact: true }).fill("Discussion");
+    await page.getByRole("textbox", { name: "Answer 3", exact: true }).fill("Discussion");
     const saved = await save;
     expect(saved.ok()).toBeTruthy();
     expect(saved.request().postDataJSON().schemaVersion).toBe(3);

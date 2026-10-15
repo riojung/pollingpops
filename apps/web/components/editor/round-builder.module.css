@@ -491,23 +491,6 @@
   text-transform: uppercase;
 }
 
-.canvasBody :global(.choice-row) {
-  margin-bottom: 10px;
-  border: 1px solid var(--ui-border);
-  border-left: 5px solid #2c7fb8;
-  border-radius: 12px;
-  background: var(--ui-surface-soft);
-  padding: 9px 10px;
-}
-
-.canvasBody :global(.choice-row:nth-child(3n + 2)) {
-  border-left-color: #087375;
-}
-
-.canvasBody :global(.choice-row:nth-child(3n)) {
-  border-left-color: #a15c00;
-}
-
 .canvasBody :global(.media-editor) {
   border-style: dashed;
   background: var(--ui-surface-soft);

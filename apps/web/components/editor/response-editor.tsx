@@ -12,6 +12,7 @@ import {
 import { useLocale } from "../locale-provider";
 import { textResponseCharacterLimit } from "@openround/contracts";
 import { isTextQuestion } from "../../lib/text-response";
+import styles from "./response-editor.module.css";
 
 function ChoiceResponseEditor({
   question,
@@ -90,53 +91,61 @@ function ChoiceResponseEditor({
           </p>
         </>
       ) : null}
-      <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+      <fieldset className={styles.choiceList}>
         <legend className="field-label" style={{ marginBottom: 10 }}>
           {question.type === "poll" || question.type === "ranking"
             ? t(`questionType.${question.type}.label`)
             : t("delivery.builder.choicesAndCorrect")}
         </legend>
         {question.choices.map((choice, index) => (
-          <div className="choice-row" key={choice.id}>
+          <div
+            aria-labelledby={`answer-label-${choice.id}`}
+            className={styles.choiceRow}
+            key={choice.id}
+            role="group"
+          >
             {question.type !== "poll" && question.type !== "ranking" ? (
-              <input
-                aria-label={`Mark choice ${index + 1} correct`}
-                checked={choice.isCorrect}
-                className="choice-correct"
-                name={
-                  question.type === "multi_select"
-                    ? `correct-choice-${choice.id}`
-                    : "correct-choice"
-                }
-                onChange={() =>
-                  onUpdateChoiceQuestion((item) => ({
-                    ...item,
-                    choices: item.choices.map((candidate) => ({
-                      ...candidate,
-                      isCorrect:
-                        item.type === "multi_select"
-                          ? candidate.id === choice.id
-                            ? !candidate.isCorrect
-                            : candidate.isCorrect
-                          : candidate.id === choice.id,
-                    })),
-                  }))
-                }
-                lang="en-CA"
-                type={question.type === "multi_select" ? "checkbox" : "radio"}
-              />
+              <label className={styles.correctControl}>
+                <input
+                  aria-label={`Mark choice ${index + 1} correct`}
+                  checked={choice.isCorrect}
+                  className="choice-correct"
+                  name={
+                    question.type === "multi_select"
+                      ? `correct-choice-${choice.id}`
+                      : "correct-choice"
+                  }
+                  onChange={() =>
+                    onUpdateChoiceQuestion((item) => ({
+                      ...item,
+                      choices: item.choices.map((candidate) => ({
+                        ...candidate,
+                        isCorrect:
+                          item.type === "multi_select"
+                            ? candidate.id === choice.id
+                              ? !candidate.isCorrect
+                              : candidate.isCorrect
+                            : candidate.id === choice.id,
+                      })),
+                    }))
+                  }
+                  lang="en-CA"
+                  type={question.type === "multi_select" ? "checkbox" : "radio"}
+                />
+              </label>
             ) : null}
-            <div style={{ flex: 1 }}>
+            <div className={styles.choiceContent}>
               <span className="sr-only" id={`answer-label-${choice.id}`} lang={locale}>
                 {t("delivery.builder.answer", { number: index + 1 })}
               </span>
-              <input
+              <textarea
                 aria-labelledby={`answer-label-${choice.id}`}
                 aria-invalid={!choice.label.trim()}
-                className="input"
+                className={`input ${styles.choiceInput}`}
                 disabled={question.type === "true_false"}
                 lang=""
                 maxLength={180}
+                rows={2}
                 onChange={(event) =>
                   onUpdateChoiceQuestion((item) => ({
                     ...item,
@@ -213,13 +222,27 @@ function ChoiceResponseEditor({
             </div>
             {question.type !== "true_false" && question.choices.length > 2 ? (
               <button
-                className="danger-link"
+                aria-labelledby={`delete-label-${choice.id} answer-label-${choice.id}`}
+                className={styles.removeButton}
+                lang={locale}
                 onClick={() =>
                   onStructuralChange(removeQuestionChoice(question, choice.id), "Choice removed.")
                 }
+                title={`${t("delivery.common.delete")}: ${t("delivery.builder.answer", { number: index + 1 })}`}
                 type="button"
               >
-                {t("delivery.common.delete")}
+                <span className="sr-only" id={`delete-label-${choice.id}`}>
+                  {t("delivery.common.delete")}
+                </span>
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" width="20" height="20">
+                  <path
+                    d="M3 6h18M9 6V4h6v2M5 6l1 15h12l1-15M10 10v7m4-7v7"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                  />
+                </svg>
               </button>
             ) : null}
           </div>

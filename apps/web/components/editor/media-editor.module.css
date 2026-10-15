@@ -1,0 +1,45 @@
+.container {
+  container: media-editor / inline-size;
+  min-width: 0;
+}
+
+.container > .editor {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fields {
+  min-width: 0;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.upload {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+}
+
+.upload::file-selector-button {
+  min-height: 44px;
+}
+
+.preview {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 10px;
+}
+
+.preview > .image {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+
+@container media-editor (min-width: 640px) {
+  .container > .editor[data-has-preview="true"] {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 280px);
+  }
+}

@@ -94,6 +94,14 @@ non-production `CONTROL_ALLOW_LOCAL_HTTP=true` setting and loopback origins.
 
 ## Operator areas
 
+**Overview** opens the service activity dashboard, **Features** manages product availability and
+Free/Pro/Team assignments, and **Staff** contains operator access management. In Features, choose
+Enabled or Disabled and included plans, then review the change with a reason. Persisted settings
+take effect without restarting the product. Inherit deployment restores that feature's environment
+and workspace rollout defaults. Feature prerequisites and configured providers still apply.
+Changes are revision checked, permission checked and audited; retained room coverage is preserved.
+See [feature policy behavior](../../docs/business-management.md#feature-availability-and-plans).
+
 Product sign-in and workspace navigation discover this console through `CONTROL_PUBLIC_ORIGIN` on
 the product API. Set optional `CONTROL_PRODUCT_ORIGIN` to the exact trusted product origin to enable
 the read-only `/api/navigation` probe. It authenticates and rechecks the operator session, returning

@@ -8,7 +8,8 @@ import {
   type PlatformRoomCoverageInput,
 } from "@openround/db";
 import type { AppConfig } from "./config.js";
-import { entitlementsFor } from "./entitlements.js";
+import { entitlementsFor, workspaceEntitlements } from "./entitlements.js";
+import { grantRoomFeatures } from "./feature-policy.js";
 
 export type RoomEntitlementConfig = Parameters<typeof entitlementsFor>[1] &
   Partial<Pick<AppConfig, "BUSINESS_PLATFORM_ENABLED" | "BUSINESS_EVENT_CREDITS_ENABLED">>;
@@ -27,7 +28,12 @@ export async function roomCreationPolicy(
       ? null
       : await createPlatformRepository(repository).getOrganizationForWorkspace(workspaceId);
     return {
-      entitlements: entitlementsFor(plan, config),
+      entitlements: await grantRoomFeatures(
+        repository,
+        config,
+        workspaceId,
+        entitlementsFor(plan, config),
+      ),
       funding: organization ? ("legacy" as const) : null,
     };
   }
@@ -47,14 +53,19 @@ export async function roomCreationPolicy(
       offer?.entitlements ?? entitlementsFor(plan === "free" ? "pro" : plan, config);
     return {
       entitlements: {
-        ...entitlements,
+        ...(await grantRoomFeatures(repository, config, workspaceId, entitlements)),
         maxParticipants: Math.min(entitlements.maxParticipants, config.MAX_SESSION_PARTICIPANTS),
       },
       funding: "subscription" as const,
     };
   }
   return {
-    entitlements: entitlementsFor(useEventCredit ? "pro" : "free", config),
+    entitlements: await grantRoomFeatures(
+      repository,
+      config,
+      workspaceId,
+      entitlementsFor(useEventCredit ? "pro" : "free", config),
+    ),
     funding: useEventCredit ? ("credit" as const) : ("free" as const),
   };
 }
@@ -79,9 +90,11 @@ export async function roomEntitlements(
   const coverage = await createPlatformRepository(repository).getRoomCoverage(artifactType, roomId);
   if (coverage && !(config.COMMUNITY_MODE && coverage.funding === "legacy"))
     return coverage.snapshot;
-  return entitlementsFor(
-    config.COMMUNITY_MODE ? "team" : await repository.getPlan(workspaceId),
+  return workspaceEntitlements(
+    repository,
     config,
+    workspaceId,
+    config.COMMUNITY_MODE ? "team" : await repository.getPlan(workspaceId),
   );
 }
 

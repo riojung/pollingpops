@@ -1,3 +1,5 @@
+import { workspaceFeatureEnabled } from "./feature-policy.js";
+import { requiresExtendedRoundResponses } from "@openround/contracts";
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
@@ -16,10 +18,7 @@ import {
 } from "@openround/db";
 import { ROUND_PACK_INSERTION_DRAFT_LIMIT } from "./draft-limits.js";
 import type { AppConfig } from "./config.js";
-import {
-  extendedRoundResponseWriteAllowed,
-  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
-} from "./round-response-rollout.js";
+import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
 
 /** Pack changes are proposals for one Round draft, never mutations of published content. */
 export function registerRecoveryPackUpdateRoutes(
@@ -147,7 +146,15 @@ export function registerRecoveryPackUpdateRoutes(
             requestId: request.id,
           },
         });
-      if (!extendedRoundResponseWriteAllowed(config, creator.workspaceId, draft))
+      if (
+        requiresExtendedRoundResponses(draft) &&
+        !(await workspaceFeatureEnabled(
+          repository,
+          config,
+          creator.workspaceId,
+          "roundClientProtocol",
+        ))
+      )
         return error(reply, 404, EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE, request.id);
       const updated = await save(draft);
       if (!updated)

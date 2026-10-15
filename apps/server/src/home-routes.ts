@@ -40,9 +40,9 @@ export async function registerHomeRoutes(
     presentationSessions: PresentationSessionRepository;
     groups: CollaborationGroupRepository;
     auth: AuthService;
-    workspaceEnabled: (workspaceId: string) => boolean;
-    presentationsEnabled: (workspaceId: string) => boolean;
-    groupsEnabled: (workspaceId: string) => boolean;
+    workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
+    presentationsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
+    groupsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
   },
 ) {
   const {
@@ -59,11 +59,11 @@ export async function registerHomeRoutes(
   app.get("/v1/home/summary", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (!workspaceEnabled(creator.workspaceId)) {
+    if (!(await workspaceEnabled(creator.workspaceId))) {
       return professionalFeatureUnavailable(reply, request.id, "Workspace summary not found");
     }
-    const workspacePresentationsEnabled = presentationsEnabled(creator.workspaceId);
-    const workspaceGroupsEnabled = groupsEnabled(creator.workspaceId);
+    const workspacePresentationsEnabled = await presentationsEnabled(creator.workspaceId);
+    const workspaceGroupsEnabled = await groupsEnabled(creator.workspaceId);
 
     const now = new Date();
     const [

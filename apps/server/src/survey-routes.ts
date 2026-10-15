@@ -1,3 +1,4 @@
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -18,8 +19,11 @@ import {
 } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { AuthService } from "./auth.js";
-import { coreParityCreationEnabled } from "./core-parity-rollout.js";
-import { entitlementsFor } from "./entitlements.js";
+import {
+  entitlementsFor,
+  workspaceEntitlements,
+  passwordProtectionAllowed,
+} from "./entitlements.js";
 import { hashToken } from "./security.js";
 import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 import { roomCreationPolicy } from "./room-entitlements.js";
@@ -136,7 +140,10 @@ export async function registerSurveyRoutes(
         });
         return null;
       }
-      if (create && !coreParityCreationEnabled(deps.config, actor.workspaceId, "surveys")) {
+      if (
+        create &&
+        !(await workspaceFeatureEnabled(deps.repository, deps.config, actor.workspaceId, "surveys"))
+      ) {
         reply.code(404).send({
           error: {
             code: "NOT_FOUND",
@@ -250,7 +257,12 @@ export async function registerSurveyRoutes(
       const actor = await creator(request, reply, true, true);
       if (!actor) return;
       const input = Key.parse(request.body);
-      const limits = entitlementsFor(await deps.repository.getPlan(actor.workspaceId), deps.config);
+      const limits = await workspaceEntitlements(
+        deps.repository,
+        deps.config,
+        actor.workspaceId,
+        actor.plan,
+      );
       return {
         survey: await deps.surveys.publish(
           actor.workspaceId,
@@ -311,8 +323,11 @@ export async function registerSurveyRoutes(
       const limits = previous
         ? entitlementsFor("free", deps.config)
         : (await roomCreationPolicy(deps.repository, deps.config, actor.workspaceId)).entitlements;
-      if (!previous && input.joinPassword !== undefined && limits.plan === "free") {
-        throw new SurveyError("ENTITLEMENT_LIMIT", "Password-protected rooms require a paid plan");
+      if (!previous && input.joinPassword !== undefined && !passwordProtectionAllowed(limits)) {
+        throw new SurveyError(
+          "ENTITLEMENT_LIMIT",
+          "Password protection is not enabled for this workspace",
+        );
       }
       const joinPasswordHash =
         input.joinPassword === undefined

@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { buildApp } from "../src/app.js";
+import { workspaceFeatureEnabled, roomFeatureEnabled } from "../src/feature-policy.js";
+import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as PrometheusClient from "@prometheus-io/client";
 import {
@@ -6,9 +8,21 @@ import {
   createPlatformRepository,
   createPresentationRepository,
   createPresentationSessionRepository,
+  createRecoveryPackRepository,
 } from "@openround/db";
-import { PresentationDraftSchema, PresentationContentSchema } from "@openround/contracts";
-import type { QuizDraft, SessionSettings } from "@openround/contracts";
+import {
+  PresentationDraftSchema,
+  PresentationContentSchema,
+  WorkspaceProductFeaturesSchema,
+  RecoveryPackContentSchema,
+  recoveryPackContentHash,
+} from "@openround/contracts";
+import type {
+  PresentationCompanionCommand,
+  ProductFeatureRules,
+  QuizDraft,
+  SessionSettings,
+} from "@openround/contracts";
 import { ConfigSchema } from "../src/config.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { MetricsService } from "../src/metrics.js";
@@ -93,7 +107,7 @@ async function fixture(credits = 1) {
     quizId,
     version: 1,
     content: quiz,
-    contentHash: randomUUID(),
+    contentHash: createHash("sha256").update(JSON.stringify(quiz)).digest("hex"),
     publishedAt: now,
   });
   const config = ConfigSchema.parse({
@@ -115,6 +129,256 @@ async function fixture(credits = 1) {
 }
 
 describe("live event credit integration", () => {
+  it("previews the funded plan's product features without upgrading the workspace", async () => {
+    const f = await fixture();
+    const features: ProductFeatureRules = {
+      uxBeta: { enabled: true, plans: ["free", "pro", "team"] },
+      presentations: { enabled: true, plans: ["free", "pro", "team"] },
+      presentationRealtime: { enabled: true, plans: ["pro", "team"] },
+      liveFlexMode: { enabled: true, plans: ["pro", "team"] },
+      roundExperiences: { enabled: true, plans: ["pro", "team"] },
+      audiencePulse: { enabled: true, plans: ["free"] },
+    };
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features,
+    });
+    const built = await buildApp(f.config, {
+      repository: f.repository,
+      cache: new MemorySessionCache(),
+    });
+    try {
+      const magic = await built.app.inject({
+        method: "POST",
+        url: "/v1/auth/magic-link",
+        payload: { email: f.creator.email, segment: "workplace", acceptPolicies: true },
+      });
+      const token = new URL(magic.json().debugUrl).searchParams.get("token");
+      const verified = await built.app.inject({
+        method: "GET",
+        url: `/v1/auth/verify?token=${token}`,
+      });
+      const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
+      const account = await built.app.inject({
+        method: "GET",
+        url: "/v1/auth/me",
+        headers: { cookie },
+      });
+      expect(account.json()).toMatchObject({
+        entitlements: { plan: "free" },
+        productFeatures: {
+          presentations: true,
+          presentationRealtime: false,
+          liveFlexMode: false,
+          roundExperiences: false,
+          audiencePulse: true,
+        },
+      });
+      const preview = () =>
+        built.app.inject({
+          method: "GET",
+          url: "/v1/workspaces/current/room-funding",
+          headers: { cookie },
+        });
+      const funded = await preview();
+      expect(funded.statusCode).toBe(200);
+      expect(funded.headers["cache-control"]).toBe("private, no-store");
+      expect(funded.json()).toMatchObject({
+        enabled: true,
+        availableCredits: 1,
+        eventEntitlements: { plan: "pro" },
+        eventProductFeatures: {
+          presentationRealtime: true,
+          liveFlexMode: true,
+          roundExperiences: true,
+          audiencePulse: false,
+        },
+      });
+      expect(
+        WorkspaceProductFeaturesSchema.safeParse(funded.json().eventProductFeatures).success,
+      ).toBe(true);
+      expect(await f.repository.getPlan(f.creator.workspaceId)).toBe("free");
+      await f.repository.updateOperationalFeatures({ roundExperiences: false }, randomUUID());
+      expect((await preview()).json().eventProductFeatures).toMatchObject({
+        roundExperiences: false,
+        presentationRealtime: true,
+      });
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 1,
+        features: {
+          ...features,
+          presentationRealtime: { enabled: false, plans: [] },
+        },
+      });
+      expect((await preview()).json().eventProductFeatures.presentationRealtime).toBe(false);
+    } finally {
+      await built.app.close();
+    }
+  });
+
+  it("preserves legacy rollout access for older commercial coverage without feature grants", async () => {
+    const f = await fixture();
+    f.config.FEATURE_AUDIENCE_PULSE = true;
+    f.config.FEATURE_ROOM_CHAT = true;
+    f.config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST = [f.creator.workspaceId];
+    const room = await f.service.createSession(f.creator, f.quizId, settings, {
+      useEventCredit: true,
+    });
+    const coverage = (await f.platform.getRoomCoverage("round", room.sessionId))!;
+    const legacyEntitlements = { ...coverage.snapshot };
+    delete legacyEntitlements.featureGrants;
+    vi.spyOn(f.platform, "getRoomCoverage").mockResolvedValue({
+      ...coverage,
+      snapshot: legacyEntitlements,
+    });
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: {
+        audiencePulse: { enabled: false, plans: [] },
+        roomChat: { enabled: true, plans: ["team"] },
+      },
+    });
+    expect(
+      await roomFeatureEnabled(
+        f.repository,
+        f.config,
+        "round",
+        room.sessionId,
+        f.creator.workspaceId,
+        "audiencePulse",
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      await roomFeatureEnabled(
+        f.repository,
+        f.config,
+        "round",
+        room.sessionId,
+        f.creator.workspaceId,
+        "roomChat",
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      await roomFeatureEnabled(
+        f.repository,
+        f.config,
+        "round",
+        room.sessionId,
+        f.creator.workspaceId,
+        "audiencePulse",
+      ),
+    ).toBe(false);
+    expect(
+      await roomFeatureEnabled(
+        f.repository,
+        f.config,
+        "round",
+        room.sessionId,
+        f.creator.workspaceId,
+        "roomChat",
+      ),
+    ).toBe(false);
+  });
+  it("keeps funded feature grants and exact API retries when product access is paused", async () => {
+    const f = await fixture();
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: {
+        roundExperiences: { enabled: true, plans: ["pro"] },
+        audiencePulse: { enabled: true, plans: ["pro"] },
+        roomChat: { enabled: true, plans: ["pro"] },
+        sessionSummaries: { enabled: true, plans: ["pro"] },
+      },
+    });
+    const built = await buildApp(f.config, {
+      repository: f.repository,
+      cache: new MemorySessionCache(),
+    });
+    try {
+      const magic = await built.app.inject({
+        method: "POST",
+        url: "/v1/auth/magic-link",
+        payload: { email: f.creator.email, segment: "workplace", acceptPolicies: true },
+      });
+      const token = new URL(magic.json().debugUrl).searchParams.get("token");
+      const verified = await built.app.inject({
+        method: "GET",
+        url: `/v1/auth/verify?token=${token}`,
+      });
+      const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
+      const key = randomUUID();
+      const create = () =>
+        built.app.inject({
+          method: "POST",
+          url: "/v1/sessions",
+          headers: { cookie, "x-idempotency-key": key },
+          payload: {
+            quizId: f.quizId,
+            settings,
+            useEventCredit: true,
+            experiencePresetOverride: "campus",
+            presenterSoundEnabled: true,
+          },
+        });
+      const response = await create();
+      expect(response.statusCode).toBe(201);
+      const room = response.json();
+      expect(room.snapshot.experienceTheme).toMatchObject({
+        preset: { id: "campus" },
+        soundEnabled: true,
+      });
+      expect(await f.repository.getPlan(f.creator.workspaceId)).toBe("free");
+      expect(await built.interactions.getSettings(room.sessionId, room.hostToken)).toMatchObject({
+        capabilities: { audiencePulse: true, roomChat: true },
+      });
+      const probe = () =>
+        built.app.inject({
+          method: "GET",
+          url: `/v1/session-summaries/features?kind=round&id=${room.sessionId}`,
+          headers: { cookie },
+        });
+      expect((await probe()).json()).toEqual({ enabled: true });
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 1,
+        features: {
+          roundExperiences: { enabled: false, plans: [] },
+          audiencePulse: { enabled: false, plans: [] },
+          roomChat: { enabled: false, plans: [] },
+          sessionSummaries: { enabled: false, plans: [] },
+        },
+      });
+      expect((await create()).json()).toMatchObject({
+        sessionId: room.sessionId,
+        snapshot: { experienceTheme: { preset: { id: "campus" }, soundEnabled: true } },
+      });
+      expect(await built.interactions.getSettings(room.sessionId, room.hostToken)).toMatchObject({
+        capabilities: { audiencePulse: true, roomChat: true },
+      });
+      expect((await probe()).json()).toEqual({ enabled: false });
+      await f.repository.updateOperationalFeatures(
+        { audiencePulse: false, roomChat: false },
+        randomUUID(),
+      );
+      expect(await built.interactions.getSettings(room.sessionId, room.hostToken)).toMatchObject({
+        capabilities: { audiencePulse: false, roomChat: false },
+      });
+      vi.spyOn(f.platform, "getFeaturePolicy").mockRejectedValue(
+        new Error("Telemetry policy read failed"),
+      );
+      const finished = await built.sessions.hostCommand({
+        sessionId: room.sessionId,
+        hostToken: room.hostToken,
+        commandId: randomUUID(),
+        expectedVersion: room.snapshot.version,
+        action: "end",
+      });
+      expect(finished.phase).toBe("finished");
+    } finally {
+      await built.app.close();
+    }
+  });
   it("rejects password protection before reserving event credits unless credit funding is chosen", async () => {
     const f = await fixture();
     await expect(
@@ -281,11 +545,28 @@ describe("live event credit integration", () => {
       },
       0,
     );
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: {
+        uxBeta: { enabled: true, plans: ["pro"] },
+        presentations: { enabled: true, plans: ["pro"] },
+        presentationRealtime: { enabled: true, plans: ["pro"] },
+        presentationCompanion: { enabled: true, plans: ["pro"] },
+      },
+    });
     const service = new PresentationSessionService({
       repository: f.repository,
       presentations,
       sessions,
       config: f.config,
+      workspaceEnabled: (workspaceId, planOverride) =>
+        workspaceFeatureEnabled(
+          f.repository,
+          f.config,
+          workspaceId,
+          "presentationRealtime",
+          planOverride,
+        ),
       storage: new StorageService(f.config, null),
     });
     const password = "Protected Presentation";
@@ -299,6 +580,20 @@ describe("live event credit integration", () => {
       idempotencyKey: randomUUID(),
     };
     const room = await service.createSession(createInput);
+    expect(
+      await roomFeatureEnabled(
+        f.repository,
+        f.config,
+        "presentation",
+        room.snapshot.sessionId,
+        f.creator.workspaceId,
+        "presentationCompanion",
+      ),
+    ).toBe(true);
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: { presentationRealtime: { enabled: false, plans: [] } },
+    });
     const replay = await service.createSession(createInput);
     expect(replay.snapshot.sessionId).toBe(room.snapshot.sessionId);
     await f.platform.updateOrganizationStatus(f.organization.id, "suspended");
@@ -343,6 +638,324 @@ describe("live event credit integration", () => {
       (await sessions.getSessionById(roomId))!.retentionExpiresAt.getTime() - Date.now(),
     ).toBeGreaterThan(364 * 86_400_000);
   });
+  it.each([
+    { funding: "credit", change: "disabled" },
+    { funding: "subscription", change: "reassigned" },
+  ] as const)(
+    "retains launched $funding Presentation capabilities when managed features are $change",
+    async ({ funding, change }) => {
+      const f = await fixture(2);
+      if (funding === "subscription") {
+        await f.platform.applySubscriptionSnapshot({
+          organizationId: f.organization.id,
+          customerId: "cus_presentation",
+          subscriptionId: "sub_presentation",
+          status: "active",
+          licenseQuantity: 1,
+          offerId: null,
+          paidThrough: new Date(Date.now() + 86_400_000),
+          graceUntil: null,
+          legacyPlan: "pro",
+        });
+        await f.platform.assignWorkspaceLicense(
+          f.organization.id,
+          f.creator.userId,
+          f.creator.workspaceId,
+          true,
+        );
+      }
+      const features: ProductFeatureRules = {
+        uxBeta: { enabled: true, plans: ["pro"] },
+        presentations: { enabled: true, plans: ["pro"] },
+        presentationRealtime: { enabled: true, plans: ["pro"] },
+        presentationCompanion: { enabled: true, plans: ["pro"] },
+        recoveryPacks: { enabled: true, plans: ["pro"] },
+        recoveryPackLiveCards: { enabled: true, plans: ["pro"] },
+      };
+      await f.platform.saveFeaturePolicy({ expectedRevision: 0, features });
+      const presentations = createPresentationRepository(f.repository);
+      const packs = createRecoveryPackRepository(f.repository);
+      const now = new Date();
+      const sourceQuiz = (await f.repository.getQuiz(f.creator.workspaceId, f.quizId))!;
+      const source = (await f.repository.getQuizVersion(
+        f.creator.workspaceId,
+        sourceQuiz.currentVersionId!,
+      ))!;
+      const question = source.content.questions[0]!;
+      const draft = PresentationDraftSchema.parse({
+        title: "Retained funded Presentation",
+        description: "",
+        schemaVersion: 2,
+        blocks: [
+          {
+            id: randomUUID(),
+            kind: "content",
+            layout: "title_body",
+            textElements: [
+              { id: "title", role: "title", text: "Continue", region: "top_center", order: 0 },
+            ],
+            mediaId: null,
+            mediaAlt: null,
+            speakerNotes: "",
+          },
+          { id: randomUUID(), kind: "question", question },
+        ],
+      });
+      const presentation = await presentations.createPresentation({
+        id: randomUUID(),
+        workspaceId: f.creator.workspaceId,
+        title: draft.title,
+        description: "",
+        status: "draft",
+        draft,
+        draftRevision: 0,
+        draftSchemaVersion: 2,
+        currentVersionId: null,
+        folderId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: f.creator.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const content = PresentationContentSchema.parse(draft);
+      await presentations.publishPresentation(
+        {
+          id: randomUUID(),
+          workspaceId: f.creator.workspaceId,
+          presentationId: presentation.id,
+          version: 1,
+          content,
+          contentSchemaVersion: 2,
+          contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
+          sourceDraftRevision: 0,
+          publishedAt: now,
+        },
+        0,
+      );
+      const packQuestion = {
+        ...question,
+        purpose: "diagnostic",
+        delivery: "main",
+        conceptKeys: ["retained.funding"],
+        linkedRecheckQuestionId: null,
+      };
+      const recheck = {
+        ...packQuestion,
+        id: randomUUID(),
+        prompt: "Check the rule in another setting.",
+        delivery: "recheck",
+      };
+      const packContent = RecoveryPackContentSchema.parse({
+        title: "Retained published Pack",
+        description: "",
+        diagnostic: { ...packQuestion, id: randomUUID(), linkedRecheckQuestionId: recheck.id },
+        recheck,
+        delayedProbe: { ...packQuestion, id: randomUUID(), prompt: "Check the rule again later." },
+        interventions: [{ id: randomUUID(), title: "Review", body: "Try again", citations: [] }],
+        conceptKeys: ["retained.funding"],
+        misconceptionKeys: [],
+        citations: [],
+      });
+      const pack = await packs.createRecoveryPack({
+        id: randomUUID(),
+        workspaceId: f.creator.workspaceId,
+        title: packContent.title,
+        description: "",
+        draft: packContent,
+        draftRevision: 0,
+        draftSchemaVersion: 1,
+        currentVersionId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: f.creator.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const packVersion = await packs.publishRecoveryPack(
+        {
+          id: randomUUID(),
+          workspaceId: f.creator.workspaceId,
+          packId: pack.id,
+          version: 1,
+          content: packContent,
+          contentHash: recoveryPackContentHash(packContent),
+          sourceDraftRevision: 0,
+          publishedAt: now,
+        },
+        0,
+      );
+      const built = await buildApp(f.config, {
+        repository: f.repository,
+        cache: new MemorySessionCache(),
+      });
+      try {
+        const magic = await built.app.inject({
+          method: "POST",
+          url: "/v1/auth/magic-link",
+          payload: { email: f.creator.email, segment: "workplace", acceptPolicies: true },
+        });
+        const token = new URL(magic.json().debugUrl).searchParams.get("token");
+        const verified = await built.app.inject({
+          method: "GET",
+          url: `/v1/auth/verify?token=${token}`,
+        });
+        const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
+        const service = built.presentationService;
+        const create = () =>
+          service.createSession({
+            workspaceId: f.creator.workspaceId,
+            userId: f.creator.userId,
+            presentationId: presentation.id,
+            useEventCredit: funding === "credit",
+            requestId: randomUUID(),
+          });
+        const issuePass = (sessionId: string) =>
+          built.app.inject({
+            method: "POST",
+            url: `/v1/presentation-sessions/${sessionId}/companion-pass`,
+            headers: { cookie },
+          });
+        const room = await create();
+        const sessionId = room.snapshot.sessionId;
+        await service.join(room.snapshot.code, "Presentation learner");
+        expect(await f.platform.getRoomCoverage("presentation", sessionId)).toMatchObject({
+          funding,
+          snapshot: {
+            plan: "pro",
+            featureGrants: { presentationCompanion: true, recoveryPackLiveCards: true },
+          },
+        });
+        const unavailable: NonNullable<ProductFeatureRules["presentationCompanion"]> =
+          change === "disabled"
+            ? { enabled: false, plans: [] }
+            : { enabled: true, plans: ["team"] };
+        await f.platform.saveFeaturePolicy({
+          expectedRevision: 1,
+          features: {
+            ...features,
+            presentationCompanion: unavailable,
+            recoveryPackLiveCards: unavailable,
+          },
+        });
+        const issued = await issuePass(sessionId);
+        expect(issued.statusCode).toBe(201);
+        const companionToken = issued.json<{ companionToken: string }>().companionToken;
+        expect(await service.getCompanionSnapshot(sessionId, companionToken)).toMatchObject({
+          canInsertQuickCheck: true,
+          canInsertPublishedQuestion: true,
+          canInsertRecoveryPack: true,
+        });
+        expect(await service.getCompanionRecoveryPacks(sessionId, companionToken)).toMatchObject({
+          packs: [expect.objectContaining({ packVersionId: packVersion.id })],
+        });
+        expect(
+          await service.getCompanionPublishedQuestions(sessionId, companionToken),
+        ).toMatchObject({
+          questions: [expect.objectContaining({ sourceQuizVersionId: source.id })],
+        });
+        const insertionCommands = (
+          id: string,
+          credential: string,
+        ): PresentationCompanionCommand[] => {
+          const common = {
+            sessionId: id,
+            companionToken: credential,
+            commandId: randomUUID(),
+            expectedRevision: 0,
+          };
+          return [
+            {
+              ...common,
+              action: "insert_quick_check",
+              quickCheck: { prompt: "Ready?", choices: ["Yes", "More time"], timeLimitSeconds: 20 },
+            },
+            {
+              ...common,
+              commandId: randomUUID(),
+              action: "insert_published_question",
+              publishedQuestion: {
+                sourceQuizVersionId: source.id,
+                sourceQuestionId: question.id,
+                contentHash: source.contentHash,
+              },
+            },
+            {
+              ...common,
+              commandId: randomUUID(),
+              action: "insert_recovery_pack",
+              packVersionId: packVersion.id,
+            },
+          ];
+        };
+        for (const command of insertionCommands(sessionId, companionToken)) {
+          const before = (await built.presentationSessions.getSessionById(sessionId))!;
+          expect(
+            await service.companionCommand({ ...command, expectedRevision: before.revision }),
+          ).toMatchObject({ phase: "question_open", revision: before.revision + 1 });
+          expect(
+            (await built.presentationSessions.getSessionById(sessionId))!.content.blocks,
+          ).toHaveLength(
+            before.content.blocks.length + (command.action === "insert_recovery_pack" ? 2 : 1),
+          );
+          if (command.action !== "insert_recovery_pack") {
+            const current = (await built.presentationSessions.getSessionById(sessionId))!;
+            await service.command({
+              sessionId,
+              controlToken: room.controlToken,
+              commandId: randomUUID(),
+              expectedRevision: current.revision,
+              action: "advance",
+            });
+          }
+        }
+
+        const newRoom = await create();
+        const newSessionId = newRoom.snapshot.sessionId;
+        expect(await f.platform.getRoomCoverage("presentation", newSessionId)).toMatchObject({
+          snapshot: {
+            featureGrants: { presentationCompanion: false, recoveryPackLiveCards: false },
+          },
+        });
+        expect((await issuePass(newSessionId)).statusCode).toBe(404);
+        // A valid credential cannot add capabilities absent from this room's launch grant.
+        const newPass = await service.createCompanionPass({
+          workspaceId: f.creator.workspaceId,
+          userId: f.creator.userId,
+          sessionId: newSessionId,
+          requestId: randomUUID(),
+        });
+        for (const reenabled of [false, true]) {
+          if (reenabled) await f.platform.saveFeaturePolicy({ expectedRevision: 2, features });
+          expect((await issuePass(newSessionId)).statusCode).toBe(404);
+          expect(
+            await service.getCompanionSnapshot(newSessionId, newPass.companionToken),
+          ).toMatchObject({
+            canInsertQuickCheck: false,
+            canInsertPublishedQuestion: false,
+            canInsertRecoveryPack: false,
+          });
+          await expect(
+            service.getCompanionPublishedQuestions(newSessionId, newPass.companionToken),
+          ).rejects.toMatchObject({ code: "NOT_FOUND" });
+          await expect(
+            service.getCompanionRecoveryPacks(newSessionId, newPass.companionToken),
+          ).rejects.toMatchObject({ code: "NOT_FOUND" });
+          const before = await built.presentationSessions.getSessionById(newSessionId);
+          for (const command of insertionCommands(newSessionId, newPass.companionToken)) {
+            await expect(service.companionCommand(command)).rejects.toMatchObject({
+              code: "NOT_FOUND",
+            });
+          }
+          expect(await built.presentationSessions.getSessionById(newSessionId)).toEqual(before);
+          expect(await built.presentationSessions.listTimeline(newSessionId)).toEqual([]);
+        }
+        expect(await f.repository.getPlan(f.creator.workspaceId)).toBe(
+          funding === "credit" ? "free" : "pro",
+        );
+      } finally {
+        await built.app.close();
+      }
+    },
+  );
   it("reserves one credit across competing rooms without upgrading the workspace", async () => {
     const f = await fixture();
     const rooms = await Promise.allSettled(

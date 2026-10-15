@@ -1,5 +1,6 @@
 import type { Entitlements } from "@openround/contracts";
-import type { Plan } from "@openround/db";
+import type { Plan, Repository } from "@openround/db";
+import { applyFeatureEntitlements } from "./feature-policy.js";
 import type { AppConfig } from "./config.js";
 
 const millisecondsPerDay = 24 * 60 * 60 * 1_000;
@@ -24,6 +25,7 @@ export function entitlementsFor(
       brandTheme: true,
       followups: true,
       cohosting: true,
+
       maxPracticePersonalLinks: config.MAX_PRACTICE_PERSONAL_LINKS,
       recoveryTrails: true,
       maxRecoveryStages: 4,
@@ -43,6 +45,7 @@ export function entitlementsFor(
       brandTheme: false,
       followups: false,
       cohosting: false,
+
       maxPracticePersonalLinks: 0,
       recoveryTrails: false,
       maxRecoveryStages: 0,
@@ -64,6 +67,7 @@ export function entitlementsFor(
     brandTheme: true,
     followups: true,
     cohosting: true,
+
     maxPracticePersonalLinks:
       plan === "pro"
         ? Math.min(100, config.MAX_PRACTICE_PERSONAL_LINKS)
@@ -78,4 +82,17 @@ export function entitlementsFor(
 
 export function retentionExpiry(now: Date, entitlements: Entitlements) {
   return new Date(now.getTime() + entitlements.reportRetentionDays * millisecondsPerDay);
+}
+
+export async function workspaceEntitlements(
+  repository: Repository,
+  config: Parameters<typeof entitlementsFor>[1],
+  workspaceId: string,
+  plan: Plan,
+) {
+  return applyFeatureEntitlements(repository, config, workspaceId, entitlementsFor(plan, config));
+}
+
+export function passwordProtectionAllowed(entitlements: Entitlements) {
+  return entitlements.passwordProtection ?? entitlements.plan !== "free";
 }

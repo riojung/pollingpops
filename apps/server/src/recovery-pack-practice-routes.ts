@@ -1,16 +1,13 @@
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { CreateRecoveryPackPracticeAssignmentSchema } from "@openround/contracts";
 import type { RecoveryPackRepository, Repository } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
-import { entitlementsFor } from "./entitlements.js";
+import { workspaceEntitlements } from "./entitlements.js";
 import type { ProductEventDispatcher } from "./product-events.js";
 import { RecoveryPackPracticeService } from "./recovery-pack-practice-service.js";
-import {
-  evidenceWorkspaceFeatureEnabled,
-  professionalWorkspaceEligible,
-} from "./workspace-rollout.js";
 
 const IdParams = z.object({ id: z.string().uuid() });
 
@@ -46,9 +43,18 @@ export async function registerRecoveryPackPracticeRoutes(
       await practice.replay(creator, id, input);
     if (!created) {
       if (
-        !evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "recoveryPacks") ||
-        !professionalWorkspaceEligible(config, creator.workspaceId) ||
-        !config.FEATURE_PRACTICE_ASSIGNMENTS
+        !(await workspaceFeatureEnabled(
+          repository,
+          config,
+          creator.workspaceId,
+          "recoveryPacks",
+        )) ||
+        !(await workspaceFeatureEnabled(
+          repository,
+          config,
+          creator.workspaceId,
+          "practiceAssignments",
+        ))
       ) {
         return reply.code(404).send({
           error: {
@@ -58,7 +64,12 @@ export async function registerRecoveryPackPracticeRoutes(
           },
         });
       }
-      const entitlements = entitlementsFor(creator.plan, config);
+      const entitlements = await workspaceEntitlements(
+        repository,
+        config,
+        creator.workspaceId,
+        creator.plan,
+      );
       if (!entitlements.followups) {
         return reply.code(402).send({
           error: {

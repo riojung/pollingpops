@@ -1,3 +1,4 @@
+import { roomFeatureEnabled } from "./feature-policy.js";
 import {
   AudienceScopeSnapshotSchema,
   PresentationAudienceAvailabilitySchema,
@@ -19,7 +20,6 @@ import {
   type PresentationAudienceActor,
 } from "./audience-access.js";
 import type { AppConfig } from "./config.js";
-import { coreParityCreationEnabled } from "./core-parity-rollout.js";
 import type { InteractionService } from "./interaction-service.js";
 import type { QnaService } from "./qna-service.js";
 import { cleanPlainText, hashToken } from "./security.js";
@@ -49,11 +49,14 @@ export class AudienceScopeService {
     const activated = !!scope && scope.expiresAt > new Date();
     const creationEnabled =
       actor.session.status === "active" &&
-      coreParityCreationEnabled(
+      (await roomFeatureEnabled(
+        this.dependencies.repository,
         this.dependencies.config,
+        "presentation",
+        actor.session.id,
         actor.session.workspaceId,
         "audienceScopes",
-      );
+      ));
     return PresentationAudienceAvailabilitySchema.parse({
       schemaVersion: 1,
       available: activated || creationEnabled,
@@ -75,11 +78,14 @@ export class AudienceScopeService {
     const existing = await this.dependencies.scopes.get(actor.session.workspaceId, sessionId);
     if (
       !existing &&
-      !coreParityCreationEnabled(
+      !(await roomFeatureEnabled(
+        this.dependencies.repository,
         this.dependencies.config,
+        "presentation",
+        actor.session.id,
         actor.session.workspaceId,
         "audienceScopes",
-      )
+      ))
     ) {
       throw new AudienceAccessError(
         "NOT_FOUND",

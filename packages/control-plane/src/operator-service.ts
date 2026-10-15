@@ -1,12 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { ProductFeatureRulesSchema, productFeatureCatalog } from "@openround/contracts";
 import type { PlatformOperator, PlatformRepository } from "@openround/db";
 import { OperatorError, requireFreshOperator, tokenHash, type OperatorContext } from "./auth.js";
 import { encryptIntegrationSecret } from "./integrations.js";
 import { AccountingMappingSchema } from "./accounting.js";
 
 export type OperatorView =
-  "organizations" | "billing" | "credits" | "operations" | "support" | "integrations" | "audit";
+  | "organizations"
+  | "billing"
+  | "credits"
+  | "operations"
+  | "support"
+  | "integrations"
+  | "audit"
+  | "features";
 const roleCapabilities: Record<string, readonly string[]> = {
   founder: [
     "organizations.read",
@@ -23,6 +31,8 @@ const roleCapabilities: Record<string, readonly string[]> = {
     "support.write",
     "integrations.write",
     "operators.write",
+    "features.read",
+    "features.write",
   ],
   support: ["organizations.read", "support.read", "support.write"],
   billing: [
@@ -42,8 +52,10 @@ const roleCapabilities: Record<string, readonly string[]> = {
     "organizations.write",
     "support.read",
     "audit.read",
+    "features.read",
+    "features.write",
   ],
-  readonly: ["organizations.read", "operations.read"],
+  readonly: ["organizations.read", "operations.read", "features.read"],
 };
 export function operatorCapabilities(operator: PlatformOperator): string[] {
   return [...new Set([...(roleCapabilities[operator.role] ?? []), ...operator.capabilities])];
@@ -58,6 +70,18 @@ export function requireOperatorCapability(context: OperatorContext, capability: 
 }
 const envelope = { idempotencyKey: z.string().uuid(), reason: z.string().trim().min(10).max(500) };
 export const OperatorCommandSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      ...envelope,
+      action: z.literal("features.update"),
+      expectedRevision: z
+        .number()
+        .int()
+        .min(0)
+        .max(Number.MAX_SAFE_INTEGER - 1),
+      features: ProductFeatureRulesSchema,
+    })
+    .strict(),
   z
     .object({
       ...envelope,
@@ -275,6 +299,15 @@ export class OperatorService {
   ) {}
   async view(context: OperatorContext, view: OperatorView, organizationId?: string) {
     requireOperatorCapability(context, `${view}.read`);
+    if (view === "features")
+      return {
+        policy: (await this.platform.getFeaturePolicy()) ?? {
+          revision: 0,
+          features: {},
+          updatedAt: null,
+        },
+        catalog: productFeatureCatalog,
+      };
     if (view === "organizations") {
       const organizations = await this.platform.listAllOrganizations(100);
       return {
@@ -357,7 +390,7 @@ export class OperatorService {
             paused: (await this.platform.getWorkerControl(id))?.paused ?? false,
           })),
         ),
-        ...(context.operator.role === "founder"
+        ...(operatorCapabilities(context.operator).includes("operators.write")
           ? {
               operators: (await this.platform.listOperators()).map(
                 ({ id, name, role, active }) => ({ id, name, role, active }),
@@ -474,22 +507,25 @@ export class OperatorService {
   async command(context: OperatorContext, body: unknown, requestId: string) {
     const command = OperatorCommandSchema.parse(body);
     const capability =
-      command.action.startsWith("credits.") || command.action.startsWith("promotion.")
-        ? "credits.write"
-        : command.action.startsWith("billing.")
-          ? "billing.write"
-          : command.action === "worker.pause" || command.action.startsWith("product.job.")
-            ? "operations.write"
-            : command.action.startsWith("case.")
-              ? "support.write"
-              : command.action.startsWith("integration.")
-                ? "integrations.write"
-                : command.action.startsWith("operators.")
-                  ? "operators.write"
-                  : "organizations.write";
+      command.action === "features.update"
+        ? "features.write"
+        : command.action.startsWith("credits.") || command.action.startsWith("promotion.")
+          ? "credits.write"
+          : command.action.startsWith("billing.")
+            ? "billing.write"
+            : command.action === "worker.pause" || command.action.startsWith("product.job.")
+              ? "operations.write"
+              : command.action.startsWith("case.")
+                ? "support.write"
+                : command.action.startsWith("integration.")
+                  ? "integrations.write"
+                  : command.action.startsWith("operators.")
+                    ? "operators.write"
+                    : "organizations.write";
     requireOperatorCapability(context, capability);
     if (
       [
+        "features.update",
         "credits.grant",
         "billing.hold.resolve",
         "credits.reverse",
@@ -541,7 +577,17 @@ export class OperatorService {
       let before: unknown = null;
       let result: unknown;
       let targetId: string | null = organizationId;
-      if (command.action === "organization.status") {
+      if (command.action === "features.update") {
+        const existing = await repository.getFeaturePolicy();
+        if ((existing?.revision ?? 0) !== command.expectedRevision)
+          throw new OperatorError(409, "CONFLICT", "Feature policy changed; refresh before retry");
+        before = existing;
+        targetId = "global";
+        result = await repository.saveFeaturePolicy({
+          expectedRevision: command.expectedRevision,
+          features: command.features,
+        });
+      } else if (command.action === "organization.status") {
         const existing = (await repository.listAllOrganizations(1000)).find(
           (organization) => organization.id === command.organizationId,
         );

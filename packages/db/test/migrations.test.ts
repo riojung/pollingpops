@@ -27,6 +27,18 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("allows persisted feature policies without replacing existing platform data or isolation", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 72)!;
+    expect(migration.name).toBe("feature_policy");
+    expect(migration.sql).toContain("ADD CONSTRAINT platform_records_kind_check");
+    for (const kind of ["operator", "audit", "command", "stripe_transaction", "feature_policy"])
+      expect(migration.sql).toContain(`'${kind}'`);
+    expect(migration.sql).not.toMatch(
+      /INSERT INTO|UPDATE |DELETE |TRUNCATE |DISABLE ROW LEVEL SECURITY/i,
+    );
+  });
   it("adds nullable password verifiers without changing existing room content or access", async () => {
     const migration = (
       await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))

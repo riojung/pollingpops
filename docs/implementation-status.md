@@ -8,6 +8,36 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Admin feature management October 15 2026
+
+Implemented locally on `codex/admin-feature-management`. The separate operator console now has a
+sidebar dashboard with Overview, Features/Plans and Staff alongside the existing management areas.
+Thirty implemented product capabilities support explicit availability and Free/Pro/Team
+assignments. Each unconfigured feature retains its deployment and workspace rollout defaults;
+managed settings take precedence and are read fresh by the product without a restart.
+
+Migration 072 persists revisioned policy. Authorized changes require review, a reason and recent
+operator authentication, with policy, audit and idempotent receipt committed atomically. Conflicts
+require reloading the current policy. Customer navigation accepts the new administrative areas,
+while ordinary customers still have no operator access. The plan matrix supports keyboard scrolling
+and narrow screens; local-auth banners and operational metrics reflect the available data.
+
+Runtime enforcement covers feature projections and creation gates, including summaries, Surveys,
+Presentation delivery, richer Round responses, exports, branding, follow-ups, co-hosting and
+password protection. Dependencies, effective community/funded plans, exact creation retries,
+retained report access and commercial room grants remain enforced. Technical provider/service
+configuration remains separate. Password availability copy now reflects configured access.
+Event-credit launch controls use the funded plan's feature flags and revert to workspace access
+when deselected. Post-publication telemetry failures preserve successful publication and audits.
+
+Validation: `CI=true pnpm check` passes, including 984 web, 768 server, 121 control-plane and 35
+console tests, lint, strict types and production builds. An isolated PostgreSQL 17 run passed
+192 tests with one intentional skip and verified migration 072 with a restricted runtime role.
+Five local-admin and four managed-OIDC browser journeys pass, including live policy/plan effects,
+customer/operator access separation, revocation, desktop/mobile layouts and automated axe checks.
+Eight additional desktop/mobile browser checks cover funded feature access, restrictive funded
+plans, launch payloads and participant limits.
+
 ### Round and Survey answer editing October 15 2026
 
 Implemented locally on `codex/answer-editor-layout`. All Round choice formats use flexible

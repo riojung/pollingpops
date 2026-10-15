@@ -2,8 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { createPlatformRepository, type Repository } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { AuthService } from "./auth.js";
-import { entitlementsFor } from "./entitlements.js";
+import { workspaceEntitlements } from "./entitlements.js";
 import { roomEntitlements } from "./room-entitlements.js";
+import { workspaceProductFeatures } from "./feature-policy.js";
 import { z } from "zod";
 
 export async function registerRoomFundingRoutes(
@@ -50,7 +51,18 @@ export async function registerRoomFundingRoutes(
       enabled: true,
       coveredBySubscription: await platform.workspaceHasLicense(creator.workspaceId),
       availableCredits: balance.available,
-      eventEntitlements: entitlementsFor("pro", dependencies.config),
+      eventEntitlements: await workspaceEntitlements(
+        dependencies.repository,
+        dependencies.config,
+        creator.workspaceId,
+        "pro",
+      ),
+      eventProductFeatures: await workspaceProductFeatures(
+        dependencies.repository,
+        dependencies.config,
+        creator.workspaceId,
+        "pro",
+      ),
     };
   });
 }

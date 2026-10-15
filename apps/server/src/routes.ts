@@ -9,7 +9,7 @@ import {
   RoundClientCapabilitiesQuerySchema,
   RoundResponseModerationPageSchema,
   RoundTextResponseResultsSchema,
-  type requiresExtendedRoundResponses,
+  requiresExtendedRoundResponses,
   AcceptWorkspaceInvitationSchema,
   ApplyAuthoringJobSchema,
   BrandThemeSchema,
@@ -103,7 +103,6 @@ import {
 } from "@openround/db";
 import { experiencePresets } from "@openround/experience";
 import type { AppConfig } from "./config.js";
-import { coreParityCreationEnabled } from "./core-parity-rollout.js";
 import type { AuthService } from "./auth.js";
 import { cleanPlainText, hashToken } from "./security.js";
 import type { SessionService } from "./session-service.js";
@@ -112,7 +111,12 @@ import type { RetentionService } from "./retention.js";
 import type { MetricsService } from "./metrics.js";
 import { reportCsv } from "./reporting.js";
 import type { StorageService } from "./storage.js";
-import { entitlementsFor } from "./entitlements.js";
+import { workspaceEntitlements } from "./entitlements.js";
+import {
+  publicProductFeatureEnabled,
+  workspaceProductFeatures as resolveWorkspaceProductFeatures,
+  workspaceFeatureEnabled,
+} from "./feature-policy.js";
 import { validationIssueMessage } from "./validation.js";
 import type { QnaService } from "./qna-service.js";
 import { QnaError } from "./qna-service.js";
@@ -127,17 +131,7 @@ import { instantiateStarter, starterSummaries } from "./starters.js";
 import type { ProductEventDispatcher } from "./product-events.js";
 import { ROUND_DRAFT_BODY_LIMIT } from "./draft-limits.js";
 import { TextResponseReadError } from "./response-moderation.js";
-import {
-  extendedRoundResponseWriteAllowed,
-  multiSelectPollsEnabled,
-  richerRoundResponsesEnabled,
-  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
-} from "./round-response-rollout.js";
-import {
-  evidenceWorkspaceFeatureEnabled,
-  professionalWorkspaceEligible,
-  professionalWorkspaceFeatureEnabled,
-} from "./workspace-rollout.js";
+import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const RoundHistoryParamsSchema = z.object({
@@ -471,9 +465,9 @@ export async function registerRoutes(
       signups: config.FEATURE_SIGNUPS,
       sessionCreation: config.FEATURE_SESSION_CREATION,
       mediaUploads: storage.mediaUploadsEnabled,
-      roundExperiences: config.FEATURE_ROUND_EXPERIENCES,
-      audiencePulse: config.FEATURE_AUDIENCE_PULSE,
-      roomChat: config.FEATURE_ROOM_CHAT,
+      roundExperiences: await publicProductFeatureEnabled(repository, config, "roundExperiences"),
+      audiencePulse: await publicProductFeatureEnabled(repository, config, "audiencePulse"),
+      roomChat: await publicProductFeatureEnabled(repository, config, "roomChat"),
     };
     return OperationalFeaturesViewSchema.parse({
       configured,
@@ -497,43 +491,11 @@ export async function registerRoutes(
     });
   };
   const uxBetaWorkspaceEnabled = (workspaceId: string) =>
-    professionalWorkspaceEligible(config, workspaceId);
+    workspaceFeatureEnabled(repository, config, workspaceId, "uxBeta");
   const practiceAssignmentsWorkspaceEnabled = (workspaceId: string) =>
-    uxBetaWorkspaceEnabled(workspaceId) && config.FEATURE_PRACTICE_ASSIGNMENTS;
-  const workspaceProductFeatures = async (workspaceId: string) => {
-    const { effective } = await operationalFeatures();
-    const allowlist = config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST;
-    const workspaceAllowed = allowlist.length === 0 || allowlist.includes(workspaceId);
-    const uxAllowlist = config.UX_BETA_WORKSPACE_ALLOWLIST;
-    const uxAllowed = uxAllowlist.includes(workspaceId);
-    return {
-      roundExperiences: workspaceAllowed && effective.roundExperiences,
-      audiencePulse: workspaceAllowed && effective.audiencePulse,
-      roomChat: workspaceAllowed && effective.roomChat,
-      uxBeta: uxBetaWorkspaceEnabled(workspaceId),
-      recoveryRehearsal: uxAllowed && config.FEATURE_UX_BETA && config.FEATURE_RECOVERY_REHEARSAL,
-      practiceAssignments: practiceAssignmentsWorkspaceEnabled(workspaceId),
-      workspaceShell: professionalWorkspaceFeatureEnabled(config, workspaceId, "workspaceShell"),
-      builderV2: professionalWorkspaceFeatureEnabled(config, workspaceId, "builderV2"),
-      presentations: professionalWorkspaceFeatureEnabled(config, workspaceId, "presentations"),
-      presentationRealtime:
-        professionalWorkspaceFeatureEnabled(config, workspaceId, "presentations") &&
-        evidenceWorkspaceFeatureEnabled(config, workspaceId, "presentationRealtime"),
-      presentationCompanion:
-        professionalWorkspaceFeatureEnabled(config, workspaceId, "presentations") &&
-        evidenceWorkspaceFeatureEnabled(config, workspaceId, "presentationCompanion"),
-      liveFlexMode: evidenceWorkspaceFeatureEnabled(config, workspaceId, "liveFlexMode"),
-      questionHealth: evidenceWorkspaceFeatureEnabled(config, workspaceId, "questionHealth"),
-      surveys: coreParityCreationEnabled(config, workspaceId, "surveys"),
-      multiSelectPolls: multiSelectPollsEnabled(config, workspaceId),
-      rankingPolls: richerRoundResponsesEnabled(config, workspaceId),
-      openTextPolls: richerRoundResponsesEnabled(config, workspaceId),
-      wordCloudPolls: richerRoundResponsesEnabled(config, workspaceId),
-      recoveryPacks: evidenceWorkspaceFeatureEnabled(config, workspaceId, "recoveryPacks"),
-      groups: professionalWorkspaceFeatureEnabled(config, workspaceId, "groups"),
-      discover: professionalWorkspaceFeatureEnabled(config, workspaceId, "discover"),
-    };
-  };
+    workspaceFeatureEnabled(repository, config, workspaceId, "practiceAssignments");
+  const workspaceProductFeatures = (workspaceId: string) =>
+    resolveWorkspaceProductFeatures(repository, config, workspaceId);
   const requireWorkspaceRole = (
     creator: CreatorContext,
     allowed: CreatorContext["role"][],
@@ -550,13 +512,16 @@ export async function registerRoutes(
           requestId,
         );
 
-  const requireRoundResponseWrite = (
+  const requireRoundResponseWrite = async (
     workspaceId: string,
     content: Parameters<typeof requiresExtendedRoundResponses>[0],
     reply: FastifyReply,
     requestId: string,
   ) => {
-    if (!extendedRoundResponseWriteAllowed(config, workspaceId, content))
+    if (
+      requiresExtendedRoundResponses(content) &&
+      !(await workspaceFeatureEnabled(repository, config, workspaceId, "roundClientProtocol"))
+    )
       return apiError(
         reply,
         404,
@@ -819,10 +784,14 @@ export async function registerRoutes(
       roundExperiences: effective.roundExperiences,
       audiencePulse: effective.audiencePulse,
       roomChat: effective.roomChat,
-      uxBeta: config.FEATURE_UX_BETA,
-      recoveryRehearsal: config.FEATURE_UX_BETA && config.FEATURE_RECOVERY_REHEARSAL,
-      practiceAssignments: config.FEATURE_UX_BETA && config.FEATURE_PRACTICE_ASSIGNMENTS,
-      presentations: config.FEATURE_PRESENTATIONS,
+      uxBeta: await publicProductFeatureEnabled(repository, config, "uxBeta"),
+      recoveryRehearsal: await publicProductFeatureEnabled(repository, config, "recoveryRehearsal"),
+      practiceAssignments: await publicProductFeatureEnabled(
+        repository,
+        config,
+        "practiceAssignments",
+      ),
+      presentations: await publicProductFeatureEnabled(repository, config, "presentations"),
     });
   });
 
@@ -918,7 +887,12 @@ export async function registerRoutes(
   app.get("/v1/auth/me", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     return {
       creator,
       businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
@@ -948,7 +922,7 @@ export async function registerRoutes(
       const creator = await auth.requireCreator(request, reply);
       if (!creator) return;
       const input = ProductEventBatchSchema.parse(request.body);
-      if (!uxBetaWorkspaceEnabled(creator.workspaceId)) {
+      if (!(await uxBetaWorkspaceEnabled(creator.workspaceId))) {
         return reply.code(202).send({ accepted: 0 });
       }
       const accepted = productEvents.enqueue({
@@ -1390,7 +1364,12 @@ export async function registerRoutes(
   app.get("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     return {
       theme: await repository.getBrandTheme(creator.workspaceId),
       enabled: entitlements.brandTheme,
@@ -1401,7 +1380,12 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     if (!entitlements.brandTheme) {
       return apiError(
         reply,
@@ -1499,7 +1483,12 @@ export async function registerRoutes(
   app.get("/v1/authoring/status", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     return {
       status: await authoring.status(creator.workspaceId, entitlements.authoringJobsPerMonth),
     };
@@ -1522,7 +1511,12 @@ export async function registerRoutes(
       if (!creator) return;
       if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
       const input = CreateAuthoringJobSchema.parse(request.body);
-      const entitlements = entitlementsFor(creator.plan, config);
+      const entitlements = await workspaceEntitlements(
+        repository,
+        config,
+        creator.workspaceId,
+        creator.plan,
+      );
       const job = await authoring.create(
         creator,
         input,
@@ -1680,7 +1674,8 @@ export async function registerRoutes(
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id } = StarterParamsSchema.parse(request.params);
     const draft = instantiateStarter(id);
-    if (requireRoundResponseWrite(creator.workspaceId, draft, reply, request.id) !== true) return;
+    if ((await requireRoundResponseWrite(creator.workspaceId, draft, reply, request.id)) !== true)
+      return;
     const now = new Date();
     const quiz = await repository.createQuiz({
       id: randomUUID(),
@@ -1751,7 +1746,10 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    if (
+      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -1775,7 +1773,10 @@ export async function registerRoutes(
         validation: result.validation,
       });
     }
-    if (requireRoundResponseWrite(creator.workspaceId, result.draft, reply, request.id) !== true)
+    if (
+      (await requireRoundResponseWrite(creator.workspaceId, result.draft, reply, request.id)) !==
+      true
+    )
       return;
     // A Pack baseline is immutable evidence, unlike portable destination question media. Never
     // strip its media IDs under an unchanged hash or grant access to another workspace's media.
@@ -1865,7 +1866,10 @@ export async function registerRoutes(
     const { id } = IdParamsSchema.parse(request.params);
     const quiz = await repository.getQuiz(creator.workspaceId, id);
     if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    if (
+      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -1889,7 +1893,10 @@ export async function registerRoutes(
     const { id } = IdParamsSchema.parse(request.params);
     const quiz = await repository.getQuiz(creator.workspaceId, id);
     if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    if (
+      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -1910,7 +1917,10 @@ export async function registerRoutes(
     const { id } = IdParamsSchema.parse(request.params);
     const quiz = await repository.getQuiz(creator.workspaceId, id);
     if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
-    if (!entitlementsFor(creator.plan, config).csvExport) {
+    if (
+      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
+        .csvExport
+    ) {
       return apiError(
         reply,
         402,
@@ -1953,7 +1963,10 @@ export async function registerRoutes(
     const input = revisioned
       ? UpdateQuizRequestSchema.parse(request.body)
       : { draft: UpdateQuizSchema.parse(request.body), expectedDraftRevision: undefined };
-    if (requireRoundResponseWrite(creator.workspaceId, input.draft, reply, request.id) !== true)
+    if (
+      (await requireRoundResponseWrite(creator.workspaceId, input.draft, reply, request.id)) !==
+      true
+    )
       return;
     const quiz = await repository.updateQuiz(
       creator.workspaceId,
@@ -1976,7 +1989,10 @@ export async function registerRoutes(
       if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
       const { id } = IdParamsSchema.parse(request.params);
       const input = RoundDraftMutationSchema.parse(request.body);
-      if (requireRoundResponseWrite(creator.workspaceId, input.draft, reply, request.id) !== true)
+      if (
+        (await requireRoundResponseWrite(creator.workspaceId, input.draft, reply, request.id)) !==
+        true
+      )
         return;
       const quiz = await repository.updateQuizDraft({
         workspaceId: creator.workspaceId,
@@ -2021,7 +2037,8 @@ export async function registerRoutes(
     const history = await repository.getQuizDraftHistory(creator.workspaceId, id, revision);
     if (
       history &&
-      requireRoundResponseWrite(creator.workspaceId, history.draft, reply, request.id) !== true
+      (await requireRoundResponseWrite(creator.workspaceId, history.draft, reply, request.id)) !==
+        true
     )
       return;
     const quiz = await repository.restoreQuizDraftHistory({
@@ -2092,7 +2109,9 @@ export async function registerRoutes(
     const input = revisioned ? PublishQuizRequestSchema.parse(request.body) : null;
     const quiz = await repository.getQuiz(creator.workspaceId, id);
     if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
-    if (requireRoundResponseWrite(creator.workspaceId, quiz.draft, reply, request.id) !== true)
+    if (
+      (await requireRoundResponseWrite(creator.workspaceId, quiz.draft, reply, request.id)) !== true
+    )
       return;
     const expectedDraftRevision = input?.expectedDraftRevision ?? quiz.draftRevision ?? 0;
     if (expectedDraftRevision !== (quiz.draftRevision ?? 0)) {
@@ -2141,7 +2160,12 @@ export async function registerRoutes(
     if (!parsedContent.success || validationIssues.length > 0) {
       return roundPublishValidationError(reply, request.id, validationIssues);
     }
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     const current = quiz.currentVersionId
       ? await repository.getQuizVersion(creator.workspaceId, quiz.currentVersionId)
       : null;
@@ -2171,12 +2195,16 @@ export async function registerRoutes(
       requestId: request.id,
       metadata: { version: version.version, contentHash, draftRevision: expectedDraftRevision },
     });
-    if (uxBetaWorkspaceEnabled(creator.workspaceId)) {
-      productEvents.enqueue({
-        workspaceId: creator.workspaceId,
-        segment: creator.segment,
-        events: [{ name: "round_published", dimensions: { artifactType: "round" } }],
-      });
+    try {
+      if (await uxBetaWorkspaceEnabled(creator.workspaceId)) {
+        productEvents.enqueue({
+          workspaceId: creator.workspaceId,
+          segment: creator.segment,
+          events: [{ name: "round_published", dimensions: { artifactType: "round" } }],
+        });
+      }
+    } catch {
+      // Telemetry must not reject an already published Round.
     }
     reply.header("etag", draftEtag(expectedDraftRevision));
     return { version };
@@ -2189,7 +2217,10 @@ export async function registerRoutes(
     const { id } = IdParamsSchema.parse(request.params);
     const source = await repository.getQuiz(creator.workspaceId, id);
     if (!source) return apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
-    if (requireRoundResponseWrite(creator.workspaceId, source.draft, reply, request.id) !== true)
+    if (
+      (await requireRoundResponseWrite(creator.workspaceId, source.draft, reply, request.id)) !==
+      true
+    )
       return;
     const now = new Date();
     const title = `${source.title} copy`.slice(0, 160);
@@ -2220,7 +2251,8 @@ export async function registerRoutes(
       creator.workspaceId,
       id,
       archived,
-      entitlementsFor(creator.plan, config).maxPublishedQuizzes,
+      (await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
+        .maxPublishedQuizzes,
     );
     return quiz ? { quiz } : apiError(reply, 404, "NOT_FOUND", "Quiz not found", request.id);
   });
@@ -2231,7 +2263,8 @@ export async function registerRoutes(
     if (!creator) return;
     return SessionCountsResponseSchema.parse({
       counts: await repository.getSessionCounts(creator.workspaceId, {
-        includePresentations: professionalWorkspaceFeatureEnabled(
+        includePresentations: await workspaceFeatureEnabled(
+          repository,
           config,
           creator.workspaceId,
           "presentations",
@@ -2288,12 +2321,9 @@ export async function registerRoutes(
       );
     }
     const input = CreateSessionSchema.parse(request.body);
-    const { roundExperiences: experiencesAvailable } = await workspaceProductFeatures(
-      creator.workspaceId,
-    );
     const session = await sessions.createSession(creator, input.quizId, input.settings, {
-      experiencePresetOverride: experiencesAvailable ? input.experiencePresetOverride : "focus",
-      presenterSoundEnabled: experiencesAvailable && input.presenterSoundEnabled,
+      experiencePresetOverride: input.experiencePresetOverride,
+      presenterSoundEnabled: input.presenterSoundEnabled,
       clientCapabilities: input.clientCapabilities,
       useEventCredit: input.useEventCredit,
       joinPassword: input.joinPassword,
@@ -2713,7 +2743,12 @@ export async function registerRoutes(
       ? {
           report,
           context: await reportContext(report),
-          entitlements: entitlementsFor(creator.plan, config),
+          entitlements: await workspaceEntitlements(
+            repository,
+            config,
+            creator.workspaceId,
+            creator.plan,
+          ),
         }
       : apiError(reply, 404, "NOT_FOUND", "Report not found", request.id);
   });
@@ -2758,7 +2793,7 @@ export async function registerRoutes(
     const { id } = IdParamsSchema.parse(request.params);
     const report = await repository.getReport(creator.workspaceId, id);
     if (!report) return apiError(reply, 404, "NOT_FOUND", "Report not found", request.id);
-    if (report.status === "ready" && uxBetaWorkspaceEnabled(creator.workspaceId)) {
+    if (report.status === "ready" && (await uxBetaWorkspaceEnabled(creator.workspaceId))) {
       productEvents.enqueue({
         workspaceId: creator.workspaceId,
         segment: creator.segment,
@@ -2776,8 +2811,12 @@ export async function registerRoutes(
           report.sessionId,
           creator.workspaceId,
         )),
-        followups: entitlementsFor(creator.plan, config).followups,
-        maxPracticePersonalLinks: entitlementsFor(creator.plan, config).maxPracticePersonalLinks,
+        followups: (
+          await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan)
+        ).followups,
+        maxPracticePersonalLinks: (
+          await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan)
+        ).maxPracticePersonalLinks,
       },
       followup: await followups.getForReport(creator.workspaceId, id),
     };
@@ -2909,7 +2948,7 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
-    if (!practiceAssignmentsWorkspaceEnabled(creator.workspaceId)) {
+    if (!(await practiceAssignmentsWorkspaceEnabled(creator.workspaceId))) {
       return apiError(
         reply,
         404,
@@ -2918,7 +2957,12 @@ export async function registerRoutes(
         request.id,
       );
     }
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     if (!entitlements.followups) {
       return apiError(
         reply,
@@ -2976,7 +3020,10 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
-    if (!entitlementsFor(creator.plan, config).followups) {
+    if (
+      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
+        .followups
+    ) {
       return apiError(
         reply,
         402,
@@ -3069,7 +3116,7 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
-    if (!practiceAssignmentsWorkspaceEnabled(creator.workspaceId)) {
+    if (!(await practiceAssignmentsWorkspaceEnabled(creator.workspaceId))) {
       return apiError(
         reply,
         404,
@@ -3078,7 +3125,12 @@ export async function registerRoutes(
         request.id,
       );
     }
-    const entitlements = entitlementsFor(creator.plan, config);
+    const entitlements = await workspaceEntitlements(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+    );
     if (!entitlements.followups) {
       return apiError(
         reply,
@@ -3092,7 +3144,7 @@ export async function registerRoutes(
     const source = await repository.getFollowup(creator.workspaceId, id);
     if (
       source?.recoveryPackSource &&
-      !evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "recoveryPacks")
+      !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "recoveryPacks"))
     ) {
       return apiError(
         reply,

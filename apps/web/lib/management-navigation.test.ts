@@ -93,6 +93,30 @@ describe("customer management navigation", () => {
 });
 
 describe("independent operator navigation", () => {
+  it("accepts every current operator area without hiding administration links", async () => {
+    const ids = [
+      "overview",
+      "organizations",
+      "features",
+      "operations",
+      "billing",
+      "staff",
+      "credits",
+      "support",
+      "integrations",
+      "audit",
+    ];
+    const navigation = {
+      operator: { name: "Synthetic admin", role: "founder" },
+      links: ids.map((id) => ({ id, label: id, href: `${origin}/?view=${id}` })),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(navigation)),
+    );
+    expect(await fetchOperatorManagementNavigation(origin)).toEqual(navigation);
+  });
+
   it("loads trusted capability-filtered links using only the console session", async () => {
     const navigation = {
       operator: { name: "Billing staff", role: "billing" },

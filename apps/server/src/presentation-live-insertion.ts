@@ -1,3 +1,5 @@
+import type { Repository } from "@openround/db";
+import { roomFeatureEnabled, workspaceFeatureEnabled } from "./feature-policy.js";
 import type { PresentationContent } from "@openround/contracts";
 import type { PresentationSessionRecord } from "@openround/db";
 import type { AppConfig } from "./config.js";
@@ -8,7 +10,24 @@ import {
   professionalWorkspaceFeatureEnabled,
 } from "./workspace-rollout.js";
 
-export function presentationLiveInsertionEnabled(config: AppConfig, workspaceId: string) {
+export function presentationLiveInsertionEnabled(
+  config: AppConfig,
+  workspaceId: string,
+  repository?: Repository,
+  sessionId?: string,
+) {
+  if (repository)
+    return sessionId
+      ? roomFeatureEnabled(
+          repository,
+          config,
+          "presentation",
+          sessionId,
+          workspaceId,
+          "presentationCompanion",
+          true,
+        )
+      : workspaceFeatureEnabled(repository, config, workspaceId, "presentationCompanion");
   return (
     professionalWorkspaceFeatureEnabled(config, workspaceId, "presentations") &&
     evidenceWorkspaceFeatureEnabled(config, workspaceId, "presentationCompanion")

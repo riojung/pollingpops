@@ -35,8 +35,8 @@ export class PresentationReportWorker {
       });
       this.metrics?.reportGenerated();
       try {
-        if (this.productEvents?.workspaceEnabled(job.workspaceId)) {
-          this.productEvents.dispatcher.enqueue({
+        if (await this.productEvents?.workspaceEnabled(job.workspaceId)) {
+          this.productEvents!.dispatcher.enqueue({
             workspaceId: job.workspaceId,
             now,
             events: [

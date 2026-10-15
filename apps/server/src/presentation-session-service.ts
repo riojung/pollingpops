@@ -1,3 +1,5 @@
+import type { Plan } from "@openround/contracts";
+import { passwordProtectionAllowed } from "./entitlements.js";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import {
   PresentationCompanionSnapshotSchema,
@@ -135,11 +137,31 @@ export class PresentationSessionService {
       config: RoomEntitlementConfig;
       storage: StorageService;
       productEvents?: ProductEventDispatcher;
-      productEventsEnabled?: (workspaceId: string) => boolean;
-      recoveryPackCardsEnabled?: (workspaceId: string) => boolean;
-      recoveryPackLiveInsertionEnabled?: (workspaceId: string) => boolean;
-      quickCheckLiveInsertionEnabled?: (workspaceId: string) => boolean;
-      publishedQuestionLiveInsertionEnabled?: (workspaceId: string) => boolean;
+      workspaceEnabled?: (workspaceId: string, planOverride?: Plan) => boolean | Promise<boolean>;
+      liveFlexModeEnabled?: (
+        workspaceId: string,
+        planOverride?: Plan,
+      ) => boolean | Promise<boolean>;
+      productEventsEnabled?: (
+        workspaceId: string,
+        sessionId?: string,
+      ) => boolean | Promise<boolean>;
+      recoveryPackCardsEnabled?: (
+        workspaceId: string,
+        planOverride?: Plan,
+      ) => boolean | Promise<boolean>;
+      recoveryPackLiveInsertionEnabled?: (
+        workspaceId: string,
+        sessionId?: string,
+      ) => boolean | Promise<boolean>;
+      quickCheckLiveInsertionEnabled?: (
+        workspaceId: string,
+        sessionId?: string,
+      ) => boolean | Promise<boolean>;
+      publishedQuestionLiveInsertionEnabled?: (
+        workspaceId: string,
+        sessionId?: string,
+      ) => boolean | Promise<boolean>;
     },
   ) {
     this.liveMutations = new PresentationLiveMutationService({
@@ -175,15 +197,19 @@ export class PresentationSessionService {
     return this.dependencies.sessions;
   }
 
-  private recordProductEvents(workspaceId: string, events: ProductEventInput[]) {
-    if (
-      events.length === 0 ||
-      !this.dependencies.productEvents ||
-      !this.dependencies.productEventsEnabled?.(workspaceId)
-    ) {
-      return;
+  private async recordProductEvents(workspaceId: string, events: ProductEventInput[]) {
+    try {
+      if (
+        events.length === 0 ||
+        !this.dependencies.productEvents ||
+        !(await this.dependencies.productEventsEnabled?.(workspaceId))
+      ) {
+        return;
+      }
+      this.dependencies.productEvents.enqueue({ workspaceId, events });
+    } catch {
+      // Telemetry must not reject an already accepted product operation.
     }
-    this.dependencies.productEvents.enqueue({ workspaceId, events });
   }
 
   /**
@@ -278,11 +304,11 @@ export class PresentationSessionService {
           input.workspaceId,
           input.useEventCredit,
         );
-    if (input.joinPassword !== undefined && policy.entitlements.plan === "free") {
+    if (input.joinPassword !== undefined && !passwordProtectionAllowed(policy.entitlements)) {
       throw new PresentationSessionServiceError(
         402,
         "ENTITLEMENT_LIMIT",
-        "Password-protected rooms require a paid plan",
+        "Password protection is not enabled for this workspace",
       );
     }
     const joinPasswordHash =
@@ -335,6 +361,19 @@ export class PresentationSessionService {
         creation.roomId,
       );
       if (existing) return replay(existing);
+    }
+    if (
+      this.dependencies.workspaceEnabled &&
+      !(await this.dependencies.workspaceEnabled(input.workspaceId, policy.entitlements.plan))
+    ) {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Presentation session not found");
+    }
+    if (
+      input.timeMode === "flex" &&
+      this.dependencies.liveFlexModeEnabled &&
+      !(await this.dependencies.liveFlexModeEnabled(input.workspaceId, policy.entitlements.plan))
+    ) {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Flex session not found");
     }
     const institutionPolicy = await this.dependencies.repository.getInstitutionPolicy(
       input.workspaceId,
@@ -404,7 +443,10 @@ export class PresentationSessionService {
             revision: 0,
             settings: { timeMode: input.timeMode ?? "timed" },
             recoveryPackCardsEnabled:
-              this.dependencies.recoveryPackCardsEnabled?.(input.workspaceId) ?? false,
+              (await this.dependencies.recoveryPackCardsEnabled?.(
+                input.workspaceId,
+                policy.entitlements.plan,
+              )) ?? false,
             trustMode: "learning",
             eventSeq: 0,
             questionOpenedAt: null,
@@ -657,7 +699,7 @@ export class PresentationSessionService {
       !this.dependencies.packs ||
       session.status !== "active" ||
       !session.recoveryPackCardsEnabled ||
-      !this.dependencies.recoveryPackLiveInsertionEnabled?.(session.workspaceId)
+      !(await this.dependencies.recoveryPackLiveInsertionEnabled?.(session.workspaceId, session.id))
     ) {
       throw new PresentationSessionServiceError(
         404,
@@ -677,7 +719,10 @@ export class PresentationSessionService {
     const session = await this.authorizeCredential(sessionId, companionToken, "companion");
     if (
       session.status !== "active" ||
-      !this.dependencies.publishedQuestionLiveInsertionEnabled?.(session.workspaceId)
+      !(await this.dependencies.publishedQuestionLiveInsertionEnabled?.(
+        session.workspaceId,
+        session.id,
+      ))
     )
       throw new PresentationSessionServiceError(
         404,
@@ -1161,16 +1206,23 @@ export class PresentationSessionService {
       connectedParticipantIds,
       Boolean(
         this.dependencies.packs &&
-        this.dependencies.recoveryPackLiveInsertionEnabled?.(session.workspaceId) &&
+        (await this.dependencies.recoveryPackLiveInsertionEnabled?.(
+          session.workspaceId,
+          session.id,
+        )) &&
         presentationCanInsertRecoveryPack(session),
       ),
       Boolean(
-        this.dependencies.quickCheckLiveInsertionEnabled?.(session.workspaceId) &&
-        presentationCanInsertQuickCheck(session),
+        (await this.dependencies.quickCheckLiveInsertionEnabled?.(
+          session.workspaceId,
+          session.id,
+        )) && presentationCanInsertQuickCheck(session),
       ),
       Boolean(
-        this.dependencies.publishedQuestionLiveInsertionEnabled?.(session.workspaceId) &&
-        presentationCanInsertPublishedQuestion(session),
+        (await this.dependencies.publishedQuestionLiveInsertionEnabled?.(
+          session.workspaceId,
+          session.id,
+        )) && presentationCanInsertPublishedQuestion(session),
       ),
     );
   }

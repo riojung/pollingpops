@@ -1,3 +1,4 @@
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -36,10 +37,7 @@ import {
   PresentationSessionServiceError,
 } from "./presentation-session-service.js";
 import type { StorageService } from "./storage.js";
-import {
-  evidenceWorkspaceFeatureEnabled,
-  professionalFeatureUnavailable,
-} from "./workspace-rollout.js";
+import { professionalFeatureUnavailable } from "./workspace-rollout.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const SessionMediaParamsSchema = z.object({
@@ -212,7 +210,7 @@ export async function registerPresentationSessionRoutes(
     auth: AuthService;
     config: AppConfig;
     storage: StorageService;
-    workspaceEnabled: (workspaceId: string) => boolean;
+    workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
     metrics?: Pick<MetricsService, "recordPresentationAdmission" | "observePresentationResponse">;
     consumeAdmission?: (key: string, maximum: number, windowMs: number) => Promise<boolean>;
     service?: PresentationSessionService;
@@ -227,21 +225,57 @@ export async function registerPresentationSessionRoutes(
   const service =
     dependencies.service ??
     new PresentationSessionService({
+      workspaceEnabled: (workspaceId, planOverride) =>
+        workspaceFeatureEnabled(
+          dependencies.repository,
+          dependencies.config,
+          workspaceId,
+          "presentationRealtime",
+          planOverride,
+        ),
+      liveFlexModeEnabled: (workspaceId, planOverride) =>
+        workspaceFeatureEnabled(
+          dependencies.repository,
+          dependencies.config,
+          workspaceId,
+          "liveFlexMode",
+          planOverride,
+        ),
       repository: dependencies.repository,
       presentations: dependencies.presentations,
       sessions: dependencies.presentationSessions,
       packs: createRecoveryPackRepository(dependencies.repository),
       config: dependencies.config,
       storage: dependencies.storage,
-      recoveryPackCardsEnabled: (workspaceId) =>
-        evidenceWorkspaceFeatureEnabled(dependencies.config, workspaceId, "recoveryPacks") &&
-        evidenceWorkspaceFeatureEnabled(dependencies.config, workspaceId, "recoveryPackLiveCards"),
-      recoveryPackLiveInsertionEnabled: (workspaceId) =>
-        presentationRecoveryPackLiveInsertionEnabled(dependencies.config, workspaceId),
-      quickCheckLiveInsertionEnabled: (workspaceId) =>
-        presentationLiveInsertionEnabled(dependencies.config, workspaceId),
-      publishedQuestionLiveInsertionEnabled: (workspaceId) =>
-        presentationLiveInsertionEnabled(dependencies.config, workspaceId),
+      recoveryPackCardsEnabled: (workspaceId, planOverride) =>
+        workspaceFeatureEnabled(
+          dependencies.repository,
+          dependencies.config,
+          workspaceId,
+          "recoveryPackLiveCards",
+          planOverride,
+        ),
+      recoveryPackLiveInsertionEnabled: (workspaceId, sessionId) =>
+        presentationRecoveryPackLiveInsertionEnabled(
+          dependencies.config,
+          workspaceId,
+          dependencies.repository,
+          sessionId,
+        ),
+      quickCheckLiveInsertionEnabled: (workspaceId, sessionId) =>
+        presentationLiveInsertionEnabled(
+          dependencies.config,
+          workspaceId,
+          dependencies.repository,
+          sessionId,
+        ),
+      publishedQuestionLiveInsertionEnabled: (workspaceId, sessionId) =>
+        presentationLiveInsertionEnabled(
+          dependencies.config,
+          workspaceId,
+          dependencies.repository,
+          sessionId,
+        ),
     });
   const enforceSharedAdmission = async (
     request: FastifyRequest,
@@ -256,12 +290,12 @@ export async function registerPresentationSessionRoutes(
     apiError(reply, 429, "RATE_LIMITED", "Too many requests", request.id);
     return false;
   };
-  const requirePresentationWorkspace = (
+  const requirePresentationWorkspace = async (
     workspaceId: string,
     reply: FastifyReply,
     requestId: string,
   ) =>
-    workspaceEnabled(workspaceId)
+    (await workspaceEnabled(workspaceId))
       ? true
       : professionalFeatureUnavailable(reply, requestId, "Presentation session not found");
 
@@ -278,15 +312,8 @@ export async function registerPresentationSessionRoutes(
   app.post("/v1/presentation-sessions", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator.workspaceId, reply, request.id) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const input = CreatePresentationSessionSchema.parse(request.body);
-    if (
-      input.timeMode === "flex" &&
-      !evidenceWorkspaceFeatureEnabled(dependencies.config, creator.workspaceId, "liveFlexMode")
-    ) {
-      return professionalFeatureUnavailable(reply, request.id, "Flex session not found");
-    }
     try {
       const created = await service.createSession({
         workspaceId: creator.workspaceId,
@@ -332,7 +359,8 @@ export async function registerPresentationSessionRoutes(
   app.delete("/v1/presentation-sessions/:id", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator.workspaceId, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator.workspaceId, reply, request.id)) !== true)
+      return;
     if (creator.role !== "owner") {
       return apiError(
         reply,
@@ -424,6 +452,7 @@ export async function registerPresentationSessionRoutes(
   );
 
   registerPresentationCompanionRoutes(app, {
+    repository: dependencies.repository,
     auth,
     config: dependencies.config,
     service,

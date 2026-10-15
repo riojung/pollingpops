@@ -10,8 +10,8 @@ const messages = {
   "live.protection.help":
     "Opcional. Usa entre 8 y 128 caracteres, con al menos uno que no sea un espacio. Compártela por separado con los participantes.",
   "live.protection.upgrade":
-    "La protección con contraseña está disponible con Pro, Team o un crédito de evento. Las salas gratuitas permanecen abiertas.",
-  "live.protection.upgradeLink": "Ver opciones de mejora",
+    "La protección con contraseña no está habilitada para esta sesión. Su disponibilidad depende de tu plan y de la configuración del espacio de trabajo.",
+  "live.protection.upgradeLink": "Ver opciones de cuenta",
   "live.protection.label": "Contraseña de la sala",
   "live.protection.validation":
     "Usa entre 8 y 128 caracteres, con al menos uno que no sea un espacio. Los espacios se conservan.",

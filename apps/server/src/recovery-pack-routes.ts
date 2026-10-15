@@ -1,3 +1,5 @@
+import { requiresExtendedRoundResponses } from "@openround/contracts";
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -27,14 +29,10 @@ import {
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
-import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 import { RECOVERY_PACK_BODY_LIMIT, ROUND_PACK_INSERTION_DRAFT_LIMIT } from "./draft-limits.js";
 import { registerRecoveryPackUpdateRoutes } from "./recovery-pack-update-routes.js";
 import { recoveryPackQuestions } from "./recovery-pack-copies.js";
-import {
-  extendedRoundResponseWriteAllowed,
-  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
-} from "./round-response-rollout.js";
+import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
 export { recoveryPackQuestions } from "./recovery-pack-copies.js";
 
 const IdParams = z.object({ id: z.string().uuid() });
@@ -83,7 +81,10 @@ export async function registerRecoveryPackRoutes(
       );
       return null;
     }
-    if (write && !evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "recoveryPacks")) {
+    if (
+      write &&
+      !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "recoveryPacks"))
+    ) {
       apiError(
         reply,
         404,
@@ -456,7 +457,15 @@ export async function registerRecoveryPackRoutes(
           "This Pack would make the Round too large to safely edit. Use a smaller Pack or another Round.",
           request.id,
         );
-      if (!extendedRoundResponseWriteAllowed(config, creator.workspaceId, draft))
+      if (
+        requiresExtendedRoundResponses(draft) &&
+        !(await workspaceFeatureEnabled(
+          repository,
+          config,
+          creator.workspaceId,
+          "roundClientProtocol",
+        ))
+      )
         return apiError(
           reply,
           404,

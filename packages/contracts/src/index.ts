@@ -1,4 +1,6 @@
+import { ProductFeatureKeySchema } from "./feature-policy";
 import { z } from "zod";
+export * from "./feature-policy";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
@@ -243,6 +245,8 @@ export const EntitlementsSchema = z.object({
   brandTheme: z.boolean(),
   followups: z.boolean(),
   cohosting: z.boolean().default(false),
+  passwordProtection: z.boolean().optional(),
+  featureGrants: z.partialRecord(ProductFeatureKeySchema, z.boolean()).optional(),
   authoringJobsPerMonth: z.number().int().nonnegative().nullable(),
   maxPracticePersonalLinks: z.number().int().nonnegative().default(0),
   recoveryTrails: z.boolean().default(false),

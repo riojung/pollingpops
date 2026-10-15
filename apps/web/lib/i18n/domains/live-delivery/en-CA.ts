@@ -8,8 +8,8 @@ const liveDeliveryEnglishMessages = {
   "live.protection.help":
     "Optional. Use 8–128 characters, including at least one non-space character. Share it separately with participants.",
   "live.protection.upgrade":
-    "Password protection is available with Pro, Team, or an event credit. Free rooms remain open.",
-  "live.protection.upgradeLink": "View upgrade options",
+    "Password protection is not enabled for this run. Availability depends on your plan and workspace settings.",
+  "live.protection.upgradeLink": "View account options",
   "live.protection.label": "Room password",
   "live.protection.validation":
     "Use 8–128 characters, including at least one non-space character. Spaces are preserved.",

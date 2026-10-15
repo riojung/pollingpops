@@ -102,6 +102,93 @@ for (const backend of ["memory", "postgres"] as const) {
         await repository?.close();
       });
 
+      it("persists global feature policies with revision conflicts and concurrent writer protection", async () => {
+        expect(await platform.getFeaturePolicy()).toBeNull();
+        const features = { sessionSummaries: { enabled: true, plans: ["pro" as const] } };
+        const saved = await platform.saveFeaturePolicy({ expectedRevision: 0, features });
+        expect(saved).toMatchObject({ revision: 1, features });
+        expect(saved.updatedAt).toBeInstanceOf(Date);
+        features.sessionSummaries.enabled = false;
+        const reader = createPlatformRepository(repository);
+        expect(await reader.getFeaturePolicy()).toEqual(saved);
+        await expect(
+          platform.saveFeaturePolicy({ expectedRevision: 0, features: {} }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+
+        const writes = await Promise.allSettled([
+          platform.saveFeaturePolicy({
+            expectedRevision: 1,
+            features: { sessionSummaries: { enabled: false, plans: [] } },
+          }),
+          reader.saveFeaturePolicy({
+            expectedRevision: 1,
+            features: { sessionSummaries: { enabled: true, plans: ["free", "pro", "team"] } },
+          }),
+        ]);
+        expect(writes.filter((write) => write.status === "fulfilled")).toHaveLength(1);
+        expect(writes.filter((write) => write.status === "rejected")).toEqual([
+          expect.objectContaining({ reason: expect.objectContaining({ code: "CONFLICT" }) }),
+        ]);
+        expect(await reader.getFeaturePolicy()).toMatchObject({ revision: 2 });
+      });
+      it("validates feature policy input before changing stored assignments", async () => {
+        const before = await platform.getFeaturePolicy();
+        const expectedRevision = before?.revision ?? 0;
+        for (const features of [
+          { unknownFeature: { enabled: true, plans: ["pro"] } },
+          { sessionSummaries: { enabled: true, plans: ["pro", "pro"] } },
+          { sessionSummaries: { enabled: true, plans: ["enterprise"] } },
+        ])
+          await expect(
+            platform.saveFeaturePolicy({ expectedRevision, features: features as never }),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        for (const revision of [-1, 0.5, Number.MAX_SAFE_INTEGER, NaN])
+          await expect(
+            platform.saveFeaturePolicy({ expectedRevision: revision, features: {} }),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(await platform.getFeaturePolicy()).toEqual(before);
+      });
+      it("rolls feature policy changes back with the operator audit and receipt", async () => {
+        const before = await platform.getFeaturePolicy();
+        const key = randomUUID();
+        await expect(
+          platform.withOperatorTransaction(async (scoped) => {
+            const { receipt } = await scoped.beginCommand({
+              actorId: "feature-operator",
+              idempotencyKey: key,
+              requestHash: "feature-policy-digest",
+            });
+            const after = await scoped.saveFeaturePolicy({
+              expectedRevision: before?.revision ?? 0,
+              features: { sessionSummaries: { enabled: true, plans: ["team"] } },
+            });
+            await scoped.appendAuditEvent({
+              actorId: "feature-operator",
+              organizationId: null,
+              action: "features.update",
+              targetId: "global",
+              reason: "Approved feature policy adjustment",
+              requestId: key,
+              before,
+              after,
+            });
+            await scoped.completeCommand(receipt.id, after);
+            throw new Error("Injected feature policy commit failure");
+          }),
+        ).rejects.toThrow("Injected feature policy commit failure");
+        expect(await platform.getFeaturePolicy()).toEqual(before);
+        expect((await platform.listAuditEvents()).some((event) => event.requestId === key)).toBe(
+          false,
+        );
+        expect(
+          await platform.beginCommand({
+            actorId: "feature-operator",
+            idempotencyKey: key,
+            requestHash: "feature-policy-digest",
+          }),
+        ).toMatchObject({ created: true });
+      });
+
       it("keeps organization commercial roles separate from workspace content access", async () => {
         const billing = await creator(repository);
         await platform.setOrganizationMember({

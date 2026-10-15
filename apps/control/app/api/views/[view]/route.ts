@@ -8,6 +8,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ vie
     const view = z
       .enum([
         "organizations",
+        "features",
         "billing",
         "credits",
         "operations",

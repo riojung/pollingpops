@@ -15,6 +15,12 @@ describe("room passwords", () => {
     expect(canProtectRoom({ plan: "team" })).toBe(true);
   });
 
+  it("honors explicit plan assignments while retaining legacy room eligibility", () => {
+    expect(canProtectRoom({ plan: "free", passwordProtection: true })).toBe(true);
+    expect(canProtectRoom({ plan: "pro", passwordProtection: false })).toBe(false);
+    expect(canProtectRoom({ plan: "team", passwordProtection: false })).toBe(false);
+  });
+
   it("leaves every run open by default and preserves exact selected protection", () => {
     expect(roomPasswordFields(true, false, "password")).toEqual({});
     expect(roomPasswordFields(true, true, "  exact password  ")).toEqual({
@@ -25,7 +31,7 @@ describe("room passwords", () => {
   it("refuses to downgrade selected protection after paid funding is removed until explicitly unchecked", () => {
     expect(roomPasswordFields(true, true, "password")).toEqual({ joinPassword: "password" });
     expect(() => roomPasswordFields(false, true, "password")).toThrow(
-      "Password protection requires paid room entitlements",
+      "Password protection is not available for this run",
     );
     expect(roomPasswordFields(false, false, "")).toEqual({});
   });

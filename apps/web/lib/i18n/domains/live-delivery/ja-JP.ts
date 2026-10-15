@@ -10,8 +10,8 @@ const messages = {
   "live.protection.help":
     "任意です。空白以外を1文字以上含む8〜128文字で設定してください。参加者には別途共有してください。",
   "live.protection.upgrade":
-    "パスワード保護はPro、Team、またはイベントクレジットで利用できます。無料ルームはパスワードなしで参加できます。",
-  "live.protection.upgradeLink": "アップグレードの選択肢を見る",
+    "この実行ではパスワード保護が有効になっていません。利用可否はプランとワークスペースの設定によって異なります。",
+  "live.protection.upgradeLink": "アカウントのオプションを見る",
   "live.protection.label": "ルームのパスワード",
   "live.protection.validation":
     "空白以外を1文字以上含む8〜128文字にしてください。空白もそのまま保持されます。",

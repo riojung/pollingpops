@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { Entitlements } from "@openround/contracts";
+import type { Entitlements, WorkspaceProductFeatures } from "@openround/contracts";
 import { apiFetch } from "../lib/api";
 
 interface FundingStatus {
@@ -10,6 +10,7 @@ interface FundingStatus {
   coveredBySubscription: boolean;
   availableCredits: number;
   eventEntitlements?: Entitlements;
+  eventProductFeatures?: WorkspaceProductFeatures;
 }
 
 export function EventCreditChoice({
@@ -19,7 +20,11 @@ export function EventCreditChoice({
 }: {
   checked: boolean;
   disabled?: boolean;
-  onChange(checked: boolean, entitlements: Entitlements): void;
+  onChange(
+    checked: boolean,
+    entitlements: Entitlements,
+    productFeatures?: WorkspaceProductFeatures,
+  ): void;
 }) {
   const [status, setStatus] = useState<FundingStatus | null>(null);
   useEffect(() => {
@@ -46,7 +51,9 @@ export function EventCreditChoice({
           type="checkbox"
           checked={checked}
           disabled={disabled || status.availableCredits < 1}
-          onChange={(event) => onChange(event.target.checked, entitlements)}
+          onChange={(event) =>
+            onChange(event.target.checked, entitlements, status.eventProductFeatures)
+          }
         />
         Use one credit for this room, with up to {entitlements.maxParticipants} participants and Pro
         live and report features.

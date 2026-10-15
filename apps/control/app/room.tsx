@@ -1,24 +1,26 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  allowedViews,
+  apiView,
+  consoleViews,
+  initialView,
+  viewDetails,
+  type ConsoleView,
+} from "./console-views";
+import FeaturesPanel, { type FeaturePolicyData } from "./features-panel";
+import OverviewPanel, { ServiceControls } from "./overview-panel";
 
-type View =
-  "organizations" | "billing" | "credits" | "operations" | "support" | "integrations" | "audit";
+type View = ConsoleView;
 type Row = Record<string, unknown>;
 type Identity = { id: string; name: string; role: string; capabilities: string[] };
-const views: View[] = [
-  "organizations",
-  "billing",
-  "credits",
-  "operations",
-  "support",
-  "integrations",
-  "audit",
-];
+const views = consoleViews;
 const returnViewKey = "pollingpops-operator-return-view";
 const knownView = (value: string | null): View | undefined => views.find((item) => item === value);
 function updateViewUrl(selected: View, replace = false) {
   const url = new URL(window.location.href);
   url.searchParams.set("view", selected);
+  if (selected !== "features") url.searchParams.delete("tab");
   window.history[replace ? "replaceState" : "pushState"](null, "", url);
 }
 function rememberLoginView() {
@@ -43,6 +45,70 @@ const text = (value: unknown) =>
     : typeof value === "object"
       ? JSON.stringify(value)
       : String(value);
+function Icon({ name }: { name: View | "refresh" | "logout" | "shield" }) {
+  const paths = {
+    overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
+    organizations: "M4 21V5h10v16 M14 10h6v11 M8 9h2 M8 13h2 M8 17h2 M17 14h1 M17 18h1 M2 21h20",
+    features: "m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3z M4 7.5l8 4.5 8-4.5 M12 12v9",
+    operations: "M3 12h4l3-8 4 16 3-8h4",
+    billing: "M3 6h18v13H3z M3 10h18 M7 15h4",
+    staff:
+      "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M17 4a4 4 0 0 1 0 8 M22 21v-2a4 4 0 0 0-3-3.87",
+    credits: "M19 8H5a3 3 0 0 1 0-6h14v6z M3 5v14a3 3 0 0 0 3 3h15V8 M16 13h5v5h-5z",
+    support:
+      "M4 14v-3a8 8 0 0 1 16 0v3 M4 11H2v7h4v-7H4 M20 11h2v7h-4v-7h2 M18 18a4 4 0 0 1-4 4h-2",
+    integrations: "M8 3v4 M16 3v4 M6 7h12v3a6 6 0 0 1-12 0V7z M12 16v5",
+    audit: "M6 3h12v18H6z M9 7h6 M9 11h6 M9 15h4",
+    refresh: "M20 7v5h-5 M4 17v-5h5 M6.1 7a7 7 0 0 1 11.6-2L20 8 M4 16l2.3 3A7 7 0 0 0 18 17",
+    logout: "M9 21H4V3h5 M13 8l5 4-5 4 M8 12h12",
+    shield: "m12 3 8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6l8-3z M9 12l2 2 4-4",
+  };
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={paths[name]} />
+    </svg>
+  );
+}
+function AdminBrand() {
+  return (
+    <div className="brand">
+      <span className="brand-symbol" aria-hidden="true">
+        <svg viewBox="0 0 64 80" fill="none">
+          <path d="m32 47 7 27" stroke="#39243C" strokeLinecap="round" strokeWidth="10" />
+          <path d="m32 47 7 27" stroke="#FFF8E9" strokeLinecap="round" strokeWidth="5" />
+          <circle cx="30" cy="29" fill="#F9688A" r="25" stroke="#39243C" strokeWidth="3" />
+          <path d="M9 32C14 12 42 7 51 23" stroke="#FFF8E9" strokeLinecap="round" strokeWidth="6" />
+          <path
+            d="M10 40c12 12 32 12 42-4"
+            stroke="#FFC857"
+            strokeLinecap="round"
+            strokeWidth="4"
+          />
+          <path
+            d="M20 35v5m10-12v12m10-18v18"
+            stroke="#FFF8E9"
+            strokeLinecap="round"
+            strokeWidth="5"
+          />
+          <path d="m57 7 2-4m-2 12 4 1" stroke="#20806A" strokeLinecap="round" strokeWidth="3" />
+        </svg>
+      </span>
+      <div>
+        <strong>Polling Pops</strong>
+        <span className="brand-caption">Admin console</span>
+      </div>
+    </div>
+  );
+}
 function Table({ items, columns }: { items: Row[]; columns: string[] }) {
   if (!items.length) return <p className="empty">No records yet.</p>;
   return (
@@ -77,7 +143,7 @@ export default function ControlRoom({
 }) {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [csrf, setCsrf] = useState("");
-  const [view, setView] = useState<View>("organizations");
+  const [view, setView] = useState<View>("overview");
   const [data, setData] = useState<Row>({});
   const [organizations, setOrganizations] = useState<Row[]>([]);
   const [message, setMessage] = useState("");
@@ -86,6 +152,7 @@ export default function ControlRoom({
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [contacts, setContacts] = useState<Row[]>([]);
+  const [policyConflict, setPolicyConflict] = useState(false);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
   const loadSequence = useRef(0);
   const can = (capability: string) => Boolean(identity?.capabilities.includes(capability));
@@ -97,6 +164,7 @@ export default function ControlRoom({
     setOrganizations([]);
     setContacts([]);
     setPending(null);
+    setPolicyConflict(false);
     setLoading(false);
     exactCommand.current = null;
   }, []);
@@ -107,7 +175,7 @@ export default function ControlRoom({
       setData({});
       try {
         const responses = await Promise.all([
-          fetch(`/api/views/${selected}`, { cache: "no-store" }),
+          fetch(`/api/views/${apiView(selected)}`, { cache: "no-store" }),
           ...(primeOrganizations ? [fetch("/api/views/organizations", { cache: "no-store" })] : []),
         ]);
         const bodies = await Promise.all(
@@ -147,7 +215,7 @@ export default function ControlRoom({
         if (!current) return;
         setIdentity(body.operator);
         setCsrf(body.csrfToken ?? "");
-        const allowed = views.filter((item) => body.operator.capabilities.includes(`${item}.read`));
+        const allowed = allowedViews(body.operator.capabilities);
         let requested = knownView(new URL(window.location.href).searchParams.get("view"));
         try {
           requested ??= knownView(window.sessionStorage.getItem(returnViewKey));
@@ -155,7 +223,7 @@ export default function ControlRoom({
         } catch {
           // URL links and ordinary login do not depend on browser storage.
         }
-        const selected = requested && allowed.includes(requested) ? requested : allowed[0];
+        const selected = initialView(body.operator.capabilities, requested);
         if (!selected) {
           clearAccess();
           setMessage("This operator has no permitted console areas");
@@ -178,9 +246,8 @@ export default function ControlRoom({
   useEffect(() => {
     if (!identity) return;
     const handleHistory = () => {
-      const allowed = views.filter((item) => identity.capabilities.includes(`${item}.read`));
       const requested = knownView(new URL(window.location.href).searchParams.get("view"));
-      const selected = requested && allowed.includes(requested) ? requested : allowed[0];
+      const selected = initialView(identity.capabilities, requested);
       if (!selected) return;
       if (selected !== requested) updateViewUrl(selected, true);
       setView(selected);
@@ -194,6 +261,7 @@ export default function ControlRoom({
   async function command(payload: Row, reason: string) {
     setBusy(true);
     setMessage("");
+    setPolicyConflict(false);
     const body = JSON.stringify({ ...payload, reason });
     if (!exactCommand.current || exactCommand.current.body !== body)
       exactCommand.current = { body, key: crypto.randomUUID() };
@@ -206,6 +274,10 @@ export default function ControlRoom({
       const body = record(await response.json());
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) clearAccess();
+        if (payload.action === "features.update" && response.status === 409) {
+          setPolicyConflict(true);
+          setPending(null);
+        }
         throw new Error(text(record(body.error).message));
       }
       exactCommand.current = null;
@@ -348,14 +420,21 @@ export default function ControlRoom({
       />
     </label>
   );
+  function navigate(selected: View) {
+    setView(selected);
+    updateViewUrl(selected);
+    setData({});
+    setMessage("");
+    setPending(null);
+    setPolicyConflict(false);
+    void refresh(selected);
+  }
   if (!identity)
     return (
       <main className="signin">
-        <div className="brand">
-          Polling Pops <span>CONTROL</span>
-        </div>
+        <AdminBrand />
         <h1>Business operations</h1>
-        <p>Manage organizations, billing, credits, support, and operational controls.</p>
+        <p>Manage organizations, features, plans, billing, support, and operational controls.</p>
         {enabled && localAdmin ? (
           <>
             <a className="button" href="/auth/start" onClick={rememberLoginView}>
@@ -383,48 +462,73 @@ export default function ControlRoom({
   return (
     <div className="shell">
       <aside>
-        <div className="brand">
-          Polling Pops <span>CONTROL</span>
+        <AdminBrand />
+        <div className="environment">
+          <span />
+          <strong>{localAdmin ? "Local development" : "Operator console"}</strong>
         </div>
+        <p className="nav-caption">Platform</p>
         <nav aria-label="Operator areas">
           {views
-            .filter((item) => can(`${item}.read`))
+            .filter((item) => allowedViews(identity.capabilities).includes(item))
             .map((item) => (
               <button
                 key={item}
                 className={item === view ? "active" : ""}
                 aria-current={item === view ? "page" : undefined}
-                onClick={() => {
-                  setView(item);
-                  updateViewUrl(item);
-                  setData({});
-                  setMessage("");
-                  setPending(null);
-                  void refresh(item);
-                }}
+                onClick={() => navigate(item)}
               >
-                {label(item)}
+                <Icon name={item} />
+                {viewDetails[item].title}
               </button>
             ))}
         </nav>
         <div className="identity">
-          <strong>{identity.name}</strong>
-          <small>{identity.role === "founder" ? "Super admin" : label(identity.role)}</small>
+          <div className="identity-profile">
+            <span className="avatar" aria-hidden="true">
+              {identity.name
+                .trim()
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part[0])
+                .join("")}
+            </span>
+            <div>
+              <strong>{identity.name}</strong>
+              <small>{identity.role === "founder" ? "Super admin" : label(identity.role)}</small>
+            </div>
+          </div>
           <button disabled={signingOut} onClick={() => void signOut()}>
-            Sign out
+            <Icon name="logout" />
+            {signingOut ? "Signing out…" : "Sign out"}
           </button>
         </div>
       </aside>
       <main>
         <header>
           <div>
-            <p className="eyebrow">Polling Pops business platform</p>
-            <h1>{label(view)}</h1>
+            <p className="eyebrow">Platform administration</p>
+            <h1>{viewDetails[view].title}</h1>
+            <p className="page-description">{viewDetails[view].description}</p>
           </div>
-          <button disabled={loading} onClick={() => void refresh(view)}>
+          <button className="refresh-button" disabled={loading} onClick={() => void refresh(view)}>
+            <Icon name="refresh" />
             Refresh
           </button>
         </header>
+        {localAdmin && (
+          <div className="local-banner">
+            <Icon name="shield" />
+            <div>
+              <strong>Local development session</strong>
+              <p>
+                You’re signed in with the configured development admin account. Changes apply to
+                this environment.
+              </p>
+            </div>
+            <span className="badge">Local auth</span>
+          </div>
+        )}
         {message && (
           <p role="status" className="notice">
             {message}{" "}
@@ -433,12 +537,41 @@ export default function ControlRoom({
                 {localAdmin ? "Sign in to Polling Pops again" : "Verify identity again"}
               </a>
             )}
+            {policyConflict && (
+              <button
+                className="inline-action"
+                onClick={() => {
+                  setPending(null);
+                  setPolicyConflict(false);
+                  setMessage("");
+                  void refresh("features");
+                }}
+              >
+                Reload latest policy
+              </button>
+            )}
           </p>
         )}
         {loading ? (
           <p role="status">Loading current records…</p>
         ) : (
           <>
+            {view === "overview" && (
+              <OverviewPanel
+                data={data}
+                writable={can("operations.write")}
+                onReview={setPending}
+                onOperations={() => navigate("operations")}
+              />
+            )}
+            {view === "features" && data.policy && Array.isArray(data.catalog) ? (
+              <FeaturesPanel
+                data={data as unknown as FeaturePolicyData}
+                writable={can("features.write")}
+                busy={busy}
+                onReview={setPending}
+              />
+            ) : null}
             {view === "organizations" && (
               <>
                 <p className="intro">
@@ -820,28 +953,11 @@ export default function ControlRoom({
                     columns={["id", "status", "updatedAt", "details"]}
                   />
                 </section>
-                <section>
-                  <h2>Queue controls</h2>
-                  {rows(data.workerControls).map((worker) => (
-                    <div className="workspace" key={text(worker.id)}>
-                      <strong>{label(text(worker.id))}</strong>
-                      <span>{worker.paused ? "Paused" : "Running"}</span>
-                      {can("operations.write") && (
-                        <button
-                          onClick={() =>
-                            setPending({
-                              action: "worker.pause",
-                              workerId: worker.id,
-                              paused: !worker.paused,
-                            })
-                          }
-                        >
-                          {worker.paused ? "Resume" : "Pause"}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </section>
+                <ServiceControls
+                  controls={rows(data.workerControls)}
+                  writable={can("operations.write")}
+                  onReview={setPending}
+                />
                 <section>
                   <h2>Integration queue</h2>
                   <Table
@@ -849,6 +965,10 @@ export default function ControlRoom({
                     columns={["integration", "eventType", "state", "attempts", "lastError"]}
                   />
                 </section>
+              </>
+            )}
+            {view === "staff" && (
+              <>
                 {rows(data.operators).length > 0 && (
                   <section>
                     <h2>Operator access</h2>
@@ -899,6 +1019,12 @@ export default function ControlRoom({
                         </select>
                       </div>
                     ))}
+                  </section>
+                )}
+                {!rows(data.operators).length && (
+                  <section>
+                    <h2>Operator access</h2>
+                    <p className="empty">No operator records are available in this snapshot.</p>
                   </section>
                 )}
               </>

@@ -10,8 +10,8 @@ const messages = {
   "live.protection.help":
     "선택 사항입니다. 공백이 아닌 문자를 하나 이상 포함하여 8~128자로 설정하세요. 참가자에게 별도로 공유하세요.",
   "live.protection.upgrade":
-    "비밀번호 보호는 Pro, Team 또는 이벤트 크레딧으로 이용할 수 있습니다. 무료 방은 비밀번호 없이 참여할 수 있습니다.",
-  "live.protection.upgradeLink": "업그레이드 옵션 보기",
+    "이 실행에는 비밀번호 보호가 활성화되어 있지 않습니다. 사용 가능 여부는 요금제 및 워크스페이스 설정에 따라 달라집니다.",
+  "live.protection.upgradeLink": "계정 옵션 보기",
   "live.protection.label": "방 비밀번호",
   "live.protection.validation":
     "공백이 아닌 문자를 하나 이상 포함하여 8~128자로 입력하세요. 공백은 그대로 유지됩니다.",

@@ -1,3 +1,4 @@
+import { roomFeatureEnabled } from "./feature-policy.js";
 import { randomUUID } from "node:crypto";
 import type {
   AudienceSignal,
@@ -175,14 +176,31 @@ export class InteractionService {
     };
   }
 
-  private async availability(workspaceId: string) {
-    const runtime = await this.repository.getOperationalFeatures();
-    const allowlist = this.config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST;
-    const workspaceAllowed = allowlist.length === 0 || allowlist.includes(workspaceId);
+  private async availability(workspaceId: string, sessionId: string) {
+    const [runtime, audiencePulse, roomChat] = await Promise.all([
+      this.repository.getOperationalFeatures(),
+      roomFeatureEnabled(
+        this.repository,
+        this.config,
+        "round",
+        sessionId,
+        workspaceId,
+        "audiencePulse",
+        true,
+      ),
+      roomFeatureEnabled(
+        this.repository,
+        this.config,
+        "round",
+        sessionId,
+        workspaceId,
+        "roomChat",
+        true,
+      ),
+    ]);
     return {
-      audiencePulse:
-        workspaceAllowed && this.config.FEATURE_AUDIENCE_PULSE && runtime.audiencePulse,
-      roomChat: workspaceAllowed && this.config.FEATURE_ROOM_CHAT && runtime.roomChat,
+      audiencePulse: audiencePulse && runtime.audiencePulse,
+      roomChat: roomChat && runtime.roomChat,
     };
   }
 
@@ -295,7 +313,7 @@ export class InteractionService {
   /** Keep the cursor and projected settings tied to the same accepted bootstrap/read. */
   async getSettingsSnapshot(sessionId: string, token: string) {
     const actor = await this.authenticate(sessionId, token);
-    const availability = await this.availability(actor.session.workspaceId);
+    const availability = await this.availability(actor.session.workspaceId, actor.session.id);
     const record = await this.settingsFor(actor.session);
     return {
       record,
@@ -315,7 +333,7 @@ export class InteractionService {
     if (!this.canModerate(actor)) {
       throw new InteractionError("UNAUTHORIZED", "Only hosts and cohosts can change interactions");
     }
-    const availability = await this.availability(actor.session.workspaceId);
+    const availability = await this.availability(actor.session.workspaceId, actor.session.id);
     if (update.signalsEnabled && !availability.audiencePulse) {
       throw new InteractionError("INTERACTIONS_DISABLED", "Audience Pulse is not available");
     }
@@ -362,7 +380,7 @@ export class InteractionService {
       throw new InteractionError("UNAUTHORIZED", "Only participants can send a pulse signal");
     }
     await this.ensureParticipantAllowed(actor);
-    if (!(await this.availability(actor.session.workspaceId)).audiencePulse) {
+    if (!(await this.availability(actor.session.workspaceId, actor.session.id)).audiencePulse) {
       throw new InteractionError("INTERACTIONS_DISABLED", "Audience Pulse is not available");
     }
     const settings = await this.settingsFor(actor.session);
@@ -475,7 +493,7 @@ export class InteractionService {
   ): Promise<ChatPage> {
     const actor = await this.authenticate(sessionId, token);
     const settings = await this.settingsFor(actor.session);
-    const availability = await this.availability(actor.session.workspaceId);
+    const availability = await this.availability(actor.session.workspaceId, actor.session.id);
     const presenter = actor.kind === "staff" && actor.credential?.role === "presenter";
     const feedDisabled = presenter && settings.presenterFeedMode === "off";
     const cursor = options.cursor ? decodeCursor(options.cursor) : undefined;
@@ -560,7 +578,7 @@ export class InteractionService {
       throw new InteractionError("UNAUTHORIZED", "Presenter credentials are read-only");
     }
     if (actor.kind === "participant") await this.ensureParticipantAllowed(actor);
-    if (!(await this.availability(actor.session.workspaceId)).roomChat) {
+    if (!(await this.availability(actor.session.workspaceId, actor.session.id)).roomChat) {
       throw new InteractionError("CHAT_DISABLED", "Room chat is not available");
     }
     const settings = await this.settingsFor(actor.session);
@@ -675,7 +693,7 @@ export class InteractionService {
       throw new InteractionError("UNAUTHORIZED", "Only participants can react to chat messages");
     }
     await this.ensureParticipantAllowed(actor);
-    if (!(await this.availability(actor.session.workspaceId)).roomChat) {
+    if (!(await this.availability(actor.session.workspaceId, actor.session.id)).roomChat) {
       throw new InteractionError("CHAT_DISABLED", "Room chat is not available");
     }
     const settings = await this.settingsFor(actor.session);
@@ -713,7 +731,7 @@ export class InteractionService {
       throw new InteractionError("UNAUTHORIZED", "Only participants can report chat messages");
     }
     await this.ensureParticipantAllowed(actor);
-    if (!(await this.availability(actor.session.workspaceId)).roomChat) {
+    if (!(await this.availability(actor.session.workspaceId, actor.session.id)).roomChat) {
       throw new InteractionError("CHAT_DISABLED", "Room chat is not available");
     }
     try {
@@ -836,7 +854,7 @@ export class InteractionService {
       restrictions,
     ] = await Promise.all([
       this.settingsFor(session),
-      this.availability(session.workspaceId),
+      this.availability(session.workspaceId, session.id),
       this.repository.listParticipantSignals(session.workspaceId, session.id, contextKey),
       this.repository.countRecentSignalEvents(session.workspaceId, session.id, since),
       this.repository.getChatActivitySummary(session.workspaceId, session.id, since),
@@ -954,7 +972,7 @@ export class InteractionService {
     if (!session) throw new InteractionError("NOT_FOUND", "Live round not found");
     const [settings, availability] = await Promise.all([
       this.settingsFor(session),
-      this.availability(session.workspaceId),
+      this.availability(session.workspaceId, session.id),
     ]);
     return this.settingsView(settings, availability);
   }
@@ -976,7 +994,7 @@ export class InteractionService {
         this.summary(sessionId, token),
         this.listChat(sessionId, token, { limit }),
       ]);
-      const capabilities = await this.availability(actor.session.workspaceId);
+      const capabilities = await this.availability(actor.session.workspaceId, actor.session.id);
       this.metrics?.recordAudienceSync("success");
       return { settings: chat.settings, capabilities, summary, chat };
     } catch (error) {

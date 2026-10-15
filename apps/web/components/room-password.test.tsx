@@ -13,11 +13,11 @@ const option = {
 };
 
 describe("room password controls", () => {
-  it("explains the paid option to Free creators without a usable toggle or password field", () => {
+  it("explains unavailable protection without promising a particular plan", () => {
     const markup = renderToStaticMarkup(
       withEnglishLocale(<RoomPasswordOption {...option} available={false} />),
     );
-    expect(markup).toContain("Free rooms remain open.");
+    expect(markup).toContain("Availability depends on your plan and workspace settings.");
     expect(markup).toContain('href="/account"');
     expect(markup).not.toContain("<input");
   });
@@ -42,9 +42,7 @@ describe("room password controls", () => {
     expect(markup).toContain('checked=""');
     expect(markup).not.toContain('disabled=""');
     expect(markup).toContain("Require a password for this run");
-    expect(markup).toContain(
-      "Password protection is available with Pro, Team, or an event credit.",
-    );
+    expect(markup).toContain("Password protection is not enabled for this run.");
     expect(markup).not.toContain('type="password"');
   });
 

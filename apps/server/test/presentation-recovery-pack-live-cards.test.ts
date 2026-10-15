@@ -12,6 +12,7 @@ import {
   RecoveryPackInsertionSchema,
   recoveryPackContentHash,
   type PresentationCommand,
+  type Plan,
   type Question,
   type RecoveryPackContent,
   type RecoveryPackInsertion,
@@ -273,7 +274,7 @@ async function material(accepted = true) {
 
 async function fixture(accepted = true, enabled = true) {
   const m = await material(accepted);
-  const eligibility = vi.fn((_workspaceId: string) => enabled);
+  const eligibility = vi.fn((_workspaceId: string, _plan?: Plan) => enabled);
   function newService(callback = eligibility) {
     return new PresentationSessionService({
       repository: m.repository,
@@ -761,7 +762,7 @@ describe("Presentation Recovery Pack live playback", () => {
 
   it("freezes eligibility at creation across callback changes and service restart", async () => {
     const f = await fixture();
-    expect(f.eligibility).toHaveBeenCalledExactlyOnceWith(f.workspaceId);
+    expect(f.eligibility).toHaveBeenCalledExactlyOnceWith(f.workspaceId, "free");
     f.eligibility.mockReturnValue(false);
     const restarted = f.newService();
     expect((await f.reveal(restarted)).recoveryPackCards).toHaveLength(2);

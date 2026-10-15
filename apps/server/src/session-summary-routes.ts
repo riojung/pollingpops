@@ -1,3 +1,4 @@
+import { roomFeatureEnabled, workspaceFeatureEnabled } from "./feature-policy.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -29,7 +30,7 @@ import {
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
-import { entitlementsFor } from "./entitlements.js";
+import { workspaceEntitlements } from "./entitlements.js";
 import { roomEntitlements } from "./room-entitlements.js";
 import { hashToken, opaqueToken } from "./security.js";
 import {
@@ -77,9 +78,17 @@ export async function registerSessionSummaryRoutes(
     consumeAdmission: (key: string, maximum: number, windowMs: number) => Promise<boolean>;
   },
 ) {
-  const creationEnabled = (workspaceId: string) =>
-    deps.config.FEATURE_SESSION_SUMMARIES &&
-    deps.config.CORE_PARITY_WORKSPACE_ALLOWLIST.includes(workspaceId);
+  const creationEnabled = (workspaceId: string, source: SummarySource) =>
+    source.kind === "survey"
+      ? workspaceFeatureEnabled(deps.repository, deps.config, workspaceId, "sessionSummaries")
+      : roomFeatureEnabled(
+          deps.repository,
+          deps.config,
+          source.kind,
+          source.id,
+          workspaceId,
+          "sessionSummaries",
+        );
   const unavailable = (reply: FastifyReply) =>
     failure(reply, 404, "SUMMARY_UNAVAILABLE", "This summary is unavailable or has expired");
   const readyRequired = (reply: FastifyReply) =>
@@ -92,9 +101,11 @@ export async function registerSessionSummaryRoutes(
   const allowedExports = async (workspaceId: string, source: SummarySource) => {
     const entitlements =
       source.kind === "survey"
-        ? entitlementsFor(
-            deps.config.COMMUNITY_MODE ? "team" : await deps.repository.getPlan(workspaceId),
+        ? await workspaceEntitlements(
+            deps.repository,
             deps.config,
+            workspaceId,
+            deps.config.COMMUNITY_MODE ? "team" : await deps.repository.getPlan(workspaceId),
           )
         : await roomEntitlements(deps.repository, deps.config, source.kind, source.id, workspaceId);
     return entitlements.csvExport;
@@ -103,7 +114,7 @@ export async function registerSessionSummaryRoutes(
     actor: CreatorContext,
     source: SummarySource,
   ): Promise<SummaryCapabilities> => {
-    const enabled = creationEnabled(actor.workspaceId);
+    const enabled = await creationEnabled(actor.workspaceId, source);
     const writer = actor.role !== "viewer";
     const downloads = await allowedExports(actor.workspaceId, source);
     return {
@@ -176,7 +187,7 @@ export async function registerSessionSummaryRoutes(
     const existing = await deps.summaries.getSnapshot(actor.workspaceId, source);
     if (existing)
       return { summary: existing.summary, expiresAt: existing.expiresAt, snapshot: existing };
-    if (!creationEnabled(actor.workspaceId)) {
+    if (!(await creationEnabled(actor.workspaceId, source))) {
       unavailable(reply);
       return null;
     }
@@ -293,7 +304,7 @@ export async function registerSessionSummaryRoutes(
       const source = SummarySourceSchema.parse(request.query);
       return {
         enabled:
-          creationEnabled(actor.workspaceId) ||
+          (await creationEnabled(actor.workspaceId, source)) ||
           Boolean(await deps.summaries.getSnapshot(actor.workspaceId, source)),
       };
     });

@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  ProductFeatureRulesSchema,
+  type ProductFeaturePolicy,
+  type ProductFeatureRules,
+} from "@openround/contracts";
 import type * as P from "./platform-types.js";
 import { PlatformError } from "./platform-types.js";
 
@@ -124,6 +129,31 @@ export class PlatformService implements P.PlatformRepository {
   }
   async withTransaction<T>(work: (repository: P.PlatformRepository) => Promise<T>): Promise<T> {
     return this.withOperatorTransaction(work);
+  }
+  async getFeaturePolicy() {
+    return this.store.get<ProductFeaturePolicy>("feature_policy", "global");
+  }
+  async saveFeaturePolicy(input: { expectedRevision: number; features: ProductFeatureRules }) {
+    const features = ProductFeatureRulesSchema.safeParse(input.features);
+    if (
+      !Number.isSafeInteger(input.expectedRevision) ||
+      input.expectedRevision < 0 ||
+      input.expectedRevision >= Number.MAX_SAFE_INTEGER ||
+      !features.success
+    )
+      throw new PlatformError("VALIDATION_ERROR", "Invalid product feature policy");
+    return this.run("operator", async (store) => {
+      const previous = await store.get<ProductFeaturePolicy>("feature_policy", "global");
+      if ((previous?.revision ?? 0) !== input.expectedRevision)
+        throw new PlatformError("CONFLICT", "Feature policy changed; refresh before retry");
+      const policy: ProductFeaturePolicy = {
+        revision: input.expectedRevision + 1,
+        features: features.data,
+        updatedAt: new Date(),
+      };
+      await store.put("feature_policy", "global", null, policy);
+      return policy;
+    });
   }
   async withOrganizationBillingLock<T>(
     org: string,

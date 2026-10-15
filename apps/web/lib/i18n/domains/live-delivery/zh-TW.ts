@@ -9,8 +9,8 @@ const messages = {
   "live.protection.toggle": "本次活動需要密碼",
   "live.protection.help":
     "選填。請使用8至128個字元，且至少包含一個非空白字元。請另外向參與者分享密碼。",
-  "live.protection.upgrade": "Pro、Team或活動點數支援密碼保護。免費房間保持開放。",
-  "live.protection.upgradeLink": "查看升級選項",
+  "live.protection.upgrade": "此場次未啟用密碼保護。可用性取決於你的方案和工作區設定。",
+  "live.protection.upgradeLink": "查看帳戶選項",
   "live.protection.label": "房間密碼",
   "live.protection.validation": "請使用8至128個字元，且至少包含一個非空白字元。空格會保留。",
   "live.protection.required": "請輸入主持人提供的房間密碼。",

@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@openround/contracts": "workspace:*",
     "@openround/control-plane": "workspace:*",
     "@openround/db": "workspace:*",
     "next": "16.4.1",

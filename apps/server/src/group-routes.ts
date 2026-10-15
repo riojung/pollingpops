@@ -99,15 +99,19 @@ export async function registerGroupRoutes(
     presentations: PresentationRepository;
     groups: CollaborationGroupRepository;
     auth: AuthService;
-    workspaceEnabled: (workspaceId: string) => boolean;
-    presentationsEnabled: (workspaceId: string) => boolean;
+    workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
+    presentationsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
   },
 ) {
   const { repository, presentations, groups, auth, workspaceEnabled, presentationsEnabled } =
     dependencies;
 
-  function requireGroupsWorkspace(creator: CreatorContext, reply: FastifyReply, requestId: string) {
-    return workspaceEnabled(creator.workspaceId)
+  async function requireGroupsWorkspace(
+    creator: CreatorContext,
+    reply: FastifyReply,
+    requestId: string,
+  ) {
+    return (await workspaceEnabled(creator.workspaceId))
       ? true
       : professionalFeatureUnavailable(reply, requestId, "Group not found");
   }
@@ -138,7 +142,10 @@ export async function registerGroupRoutes(
     reply: FastifyReply,
     requestId: string,
   ) {
-    if (input.artifactType === "presentation" && !presentationsEnabled(creator.workspaceId)) {
+    if (
+      input.artifactType === "presentation" &&
+      !(await presentationsEnabled(creator.workspaceId))
+    ) {
       apiError(reply, 404, "NOT_FOUND", "Artifact not found", requestId);
       return null;
     }
@@ -156,8 +163,8 @@ export async function registerGroupRoutes(
   app.get("/v1/groups", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
-    const workspacePresentationsEnabled = presentationsEnabled(creator.workspaceId);
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
+    const workspacePresentationsEnabled = await presentationsEnabled(creator.workspaceId);
     const records = await groups.listGroups(creator.workspaceId, creator.userId);
     const groupViews = await Promise.all(
       records.map(async (group) => {
@@ -188,7 +195,7 @@ export async function registerGroupRoutes(
   app.post("/v1/groups", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     if (!canEdit(creator)) {
       return apiError(
         reply,
@@ -234,8 +241,8 @@ export async function registerGroupRoutes(
   app.get("/v1/groups/:id", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
-    const workspacePresentationsEnabled = presentationsEnabled(creator.workspaceId);
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
+    const workspacePresentationsEnabled = await presentationsEnabled(creator.workspaceId);
     const { id } = GroupParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;
@@ -298,7 +305,7 @@ export async function registerGroupRoutes(
   app.post("/v1/groups/:id/members", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const { id } = GroupParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;
@@ -332,7 +339,7 @@ export async function registerGroupRoutes(
   app.post("/v1/groups/:id/artifacts", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const { id } = GroupParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;
@@ -365,7 +372,7 @@ export async function registerGroupRoutes(
   app.delete("/v1/groups/:id/artifacts/:artifactRecordId", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const { id, artifactRecordId } = GroupArtifactParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;
@@ -391,7 +398,7 @@ export async function registerGroupRoutes(
   app.post("/v1/groups/:id/messages", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const { id } = GroupParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;
@@ -410,7 +417,7 @@ export async function registerGroupRoutes(
   app.post("/v1/groups/:id/schedule", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireGroupsWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const { id } = GroupParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;

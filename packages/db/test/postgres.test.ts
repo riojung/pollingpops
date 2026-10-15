@@ -1,4 +1,13 @@
 import { expectFolderConformance } from "./support/folder-conformance.js";
+import {
+  expectSessionSummaryConformance,
+  expectSessionSummaryAccountLifecycle,
+  expectSessionSummaryRetention,
+  summarySourceFixtures,
+  summaryFixture,
+  expectSurveySummaryCompletionFence,
+  expectSessionSummaryShareManagement,
+} from "./support/session-summary-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
@@ -1234,6 +1243,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 67, name: "live_poll_multiselection" },
       { version: 68, name: "ranking_opinion_responses" },
       { version: 69, name: "text_opinion_moderation" },
+      { version: 70, name: "session_summaries" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1291,6 +1301,256 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     const actor = await creator("survey-library-feedback");
     await expectSurveyLibraryConformance(repository, actor);
     await expectFeedbackConformance(repository, actor);
+  });
+  it("isolates immutable summaries for all sources and rechecks capability permissions", async () => {
+    await expectSessionSummaryConformance(
+      repository,
+      await creator("summary-owner"),
+      await creator("summary-member"),
+      await creator("summary-outsider"),
+    );
+  });
+  it("keeps older active summary links manageable ahead of revoked and expired history", async () => {
+    await expectSessionSummaryShareManagement(
+      repository,
+      await creator("summary-management-owner"),
+    );
+  });
+  it("removes summary capabilities on collaborator or workspace account deletion", async () => {
+    await expectSessionSummaryAccountLifecycle(
+      repository,
+      await creator("summary-lifecycle-owner"),
+      await creator("summary-lifecycle-member"),
+    );
+  });
+  it("denies summary expiry before purge and cascades retained source cleanup", async () => {
+    await expectSessionSummaryRetention(repository, await creator("summary-retention-owner"));
+  });
+  it("stabilizes Survey summary completion and fences stale finalized submissions", async () => {
+    await expectSurveySummaryCompletionFence(repository, await creator("summary-survey-fence"));
+  });
+  it("forces summary tenant keys and protects immutable evidence and capability settings", async () => {
+    const owner = await creator("summary-constraints-owner");
+    const outsider = await creator("summary-constraints-outsider");
+    const { sources, now, expiresAt, summaries } = await summarySourceFixtures(repository, owner);
+    const source = sources[0]!;
+    const snapshot = (await summaries.getOrCreateSnapshot({
+      workspaceId: owner.workspaceId,
+      source,
+      actorId: owner.userId,
+      summary: summaryFixture("round", now),
+      expiresAt,
+      now,
+    }))!;
+    const share = (
+      await summaries.createShare({
+        workspaceId: owner.workspaceId,
+        snapshotId: snapshot.id,
+        actorId: owner.userId,
+        idempotencyKey: randomUUID(),
+        intentHash: "1".repeat(64),
+        tokenHash: "2".repeat(64),
+        expiresInDays: 30,
+        allowDownloads: true,
+        nextSteps: "",
+        now,
+      })
+    ).share;
+    const client = await runtimePool.connect();
+    const admin = new Pool({ connectionString: adminUrl });
+    try {
+      const isolation = await client.query(
+        "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname IN ('session_summary_snapshots', 'session_summary_shares') ORDER BY relname",
+      );
+      expect(isolation.rows).toHaveLength(2);
+      expect(isolation.rows.every((row) => row.relrowsecurity && row.relforcerowsecurity)).toBe(
+        true,
+      );
+      expect((await client.query("SELECT id FROM session_summary_snapshots")).rows).toEqual([]);
+      expect((await client.query("SELECT id FROM session_summary_shares")).rows).toEqual([]);
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [outsider.workspaceId]);
+      expect(
+        (
+          await client.query("SELECT id FROM session_summary_snapshots WHERE id = $1", [
+            snapshot.id,
+          ])
+        ).rows,
+      ).toEqual([]);
+      await expect(
+        client.query(
+          "INSERT INTO session_summary_snapshots (id, workspace_id, source_kind, round_session_id, created_by, summary, created_at, expires_at) VALUES ($1,$2,'round',$3,$4,$5,$6,$7)",
+          [
+            randomUUID(),
+            outsider.workspaceId,
+            source.id,
+            outsider.userId,
+            snapshot.summary,
+            now,
+            expiresAt,
+          ],
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
+      await client.query("ROLLBACK");
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [outsider.workspaceId]);
+      await expect(
+        client.query(
+          "INSERT INTO session_summary_shares (id, workspace_id, snapshot_id, actor_id, idempotency_key, intent_hash, token_hash, allow_downloads, next_steps, created_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,true,'',$8,$9)",
+          [
+            randomUUID(),
+            outsider.workspaceId,
+            snapshot.id,
+            outsider.userId,
+            randomUUID(),
+            "3".repeat(64),
+            "4".repeat(64),
+            now,
+            expiresAt,
+          ],
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
+      await client.query("ROLLBACK");
+      await expect(
+        client.query("UPDATE session_summary_snapshots SET summary = summary WHERE id = $1", [
+          snapshot.id,
+        ]),
+      ).rejects.toMatchObject({ code: "42501" });
+      await expect(
+        client.query("UPDATE session_summary_shares SET next_steps = 'changed' WHERE id = $1", [
+          share.id,
+        ]),
+      ).rejects.toMatchObject({ code: "42501" });
+      await expect(
+        admin.query("UPDATE session_summary_snapshots SET summary = summary WHERE id = $1", [
+          snapshot.id,
+        ]),
+      ).rejects.toMatchObject({ code: "P0001" });
+      await expect(
+        admin.query("UPDATE session_summary_shares SET allow_downloads = false WHERE id = $1", [
+          share.id,
+        ]),
+      ).rejects.toMatchObject({ code: "P0001" });
+      await summaries.revokeShare(owner.workspaceId, source, share.id, owner.userId, now);
+      await expect(
+        admin.query("UPDATE session_summary_shares SET revoked_at = NULL WHERE id = $1", [
+          share.id,
+        ]),
+      ).rejects.toMatchObject({ code: "P0001" });
+
+      const liveShare = (
+        await summaries.createShare({
+          workspaceId: owner.workspaceId,
+          snapshotId: snapshot.id,
+          actorId: owner.userId,
+          idempotencyKey: randomUUID(),
+          intentHash: "a".repeat(64),
+          tokenHash: "b".repeat(64),
+          expiresInDays: 30,
+          allowDownloads: false,
+          nextSteps: "",
+          now,
+        })
+      ).share;
+      expect(await summaries.getPublicShare(liveShare.id, liveShare.tokenHash, now)).not.toBeNull();
+
+      const current = new Date();
+      await admin.query("UPDATE game_sessions SET retention_expires_at = $2 WHERE id = $1", [
+        source.id,
+        current,
+      ]);
+      expect(await summaries.getSnapshot(owner.workspaceId, source)).toBeNull();
+      expect(await summaries.getPublicShare(liveShare.id, liveShare.tokenHash, current)).toBeNull();
+      expect(
+        await summaries
+          .createShare({
+            workspaceId: owner.workspaceId,
+            snapshotId: snapshot.id,
+            actorId: owner.userId,
+            idempotencyKey: randomUUID(),
+            intentHash: "5".repeat(64),
+            tokenHash: "6".repeat(64),
+            expiresInDays: 1,
+            allowDownloads: false,
+            nextSteps: "",
+            now: current,
+          })
+          .catch((error: unknown) => error),
+      ).toMatchObject({ code: "UNAVAILABLE" });
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+      await admin.end();
+      await repository.deleteAccount(owner.userId);
+      await repository.deleteAccount(outsider.userId);
+    }
+  });
+  it("fences public summaries and new capabilities behind concurrent parent deletion", async () => {
+    const owner = await creator("summary-delete-fence-owner");
+    const { sources, now, expiresAt, summaries } = await summarySourceFixtures(repository, owner);
+    const source = sources[0]!;
+    const snapshot = (await summaries.getOrCreateSnapshot({
+      workspaceId: owner.workspaceId,
+      source,
+      actorId: owner.userId,
+      summary: summaryFixture("round", now),
+      expiresAt,
+      now,
+    }))!;
+    const create = {
+      workspaceId: owner.workspaceId,
+      snapshotId: snapshot.id,
+      actorId: owner.userId,
+      idempotencyKey: randomUUID(),
+      intentHash: "7".repeat(64),
+      tokenHash: "8".repeat(64),
+      expiresInDays: 1,
+      allowDownloads: false,
+      nextSteps: "",
+      now,
+    };
+    const share = (await summaries.createShare(create)).share;
+    const blocker = await runtimePool.connect();
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT set_config('app.workspace_id', $1, true)", [owner.workspaceId]);
+      await blocker.query("SELECT id FROM game_sessions WHERE id = $1 FOR UPDATE", [source.id]);
+      const publicRead = summaries.getPublicShare(share.id, share.tokenHash, now);
+      const newShare = summaries
+        .createShare({ ...create, idempotencyKey: randomUUID(), tokenHash: "9".repeat(64) })
+        .catch((error: unknown) => error);
+      const freeze = summaries.getOrCreateSnapshot({
+        workspaceId: owner.workspaceId,
+        source,
+        actorId: owner.userId,
+        summary: snapshot.summary,
+        expiresAt,
+        now,
+      });
+      const deadline = Date.now() + 3_000;
+      let fenced = false;
+      while (Date.now() < deadline) {
+        const waiting = await runtimePool.query(
+          "SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%FROM game_sessions parent%'",
+        );
+        if (waiting.rows[0]!.count > 0) {
+          fenced = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(fenced).toBe(true);
+      await blocker.query("DELETE FROM game_sessions WHERE id = $1", [source.id]);
+      await blocker.query("COMMIT");
+      expect(await publicRead).toBeNull();
+      expect(await newShare).toMatchObject({ code: "UNAVAILABLE" });
+      expect(await freeze).toBeNull();
+      expect(await summaries.listShares(owner.workspaceId, source)).toEqual([]);
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await repository.deleteAccount(owner.userId);
+    }
   });
 
   it("counts retained session kinds and searches frozen Round history under restricted PostgreSQL permissions", async () => {

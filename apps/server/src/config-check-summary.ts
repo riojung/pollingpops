@@ -57,6 +57,7 @@ export function createConfigCheckSummary(config: AppConfig) {
       feedbackRooms: config.FEATURE_FEEDBACK_ROOMS,
       surveys: config.FEATURE_SURVEYS,
       feedbackExports: config.FEATURE_FEEDBACK_EXPORTS,
+      sessionSummaries: config.FEATURE_SESSION_SUMMARIES,
     },
     themedInteractionsWorkspaceAllowlistSize: config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST.length,
     uxBetaWorkspaceAllowlistSize: config.UX_BETA_WORKSPACE_ALLOWLIST.length,

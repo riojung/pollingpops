@@ -698,6 +698,16 @@ retains the full session tree for 30 days; hosted Pro/Team retains it for 365 da
 operators configure their own duration. A later downgrade does not shorten an existing deadline.
 Versioned JSON and formula-safe UTF-8 CSV are server-enforced for the entitled edition.
 
+Completed Round and Presentation reports and closed Surveys can freeze a separate immutable
+`AggregateSessionSummary` V1. Migration 070 stores that strict allowlist plus expiring/revocable
+capability metadata under forced tenant RLS and composite source FKs. Every public lookup validates
+the live source and publishing actor; hashes and actor/source IDs never enter public documents.
+Publisher-authored next steps are immutable per link. A single bounded worker renders tagged PDF,
+fixed-pixel PNG, or formula-free OOXML from the same snapshot without URL fetching. Access is checked
+again after rendering, and source/account/retention deletion cascades into summaries and links.
+Writer rollout can pause while retained reads and revocation continue. See
+[IDEA-005](idea-005-session-summaries-plan.md) for the endpoint, privacy and resource boundaries.
+
 A Pro/community facilitator may select unresolved concepts and create one immutable self-paced
 recovery follow-up. An allowlisted facilitator may also create a standalone practice assignment
 from the Round's current published version. Both kinds retain that immutable source-version ID;

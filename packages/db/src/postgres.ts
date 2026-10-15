@@ -7387,6 +7387,22 @@ export class PostgresRepository implements Repository {
         const surveyRooms = await queryWorkspaceData(
           "SELECT data FROM survey_feedback_rooms WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
         );
+        const sessionSummarySnapshots = await queryWorkspaceData(
+          `SELECT id, workspace_id AS "workspaceId", created_by AS "createdBy",
+                  jsonb_build_object('kind', source_kind, 'id',
+                    coalesce(round_session_id, presentation_session_id, survey_room_id)) AS source,
+                  summary, created_at AS "createdAt", expires_at AS "expiresAt"
+           FROM session_summary_snapshots WHERE workspace_id = ANY($1::uuid[])
+           ORDER BY created_at, id`,
+        );
+        const sessionSummaryShares = await queryWorkspaceData(
+          `SELECT id, workspace_id AS "workspaceId", snapshot_id AS "snapshotId",
+                  actor_id AS "actorId", idempotency_key AS "idempotencyKey",
+                  allow_downloads AS "allowDownloads", next_steps AS "nextSteps",
+                  created_at AS "createdAt", expires_at AS "expiresAt", revoked_at AS "revokedAt"
+           FROM session_summary_shares WHERE workspace_id = ANY($1::uuid[])
+           ORDER BY created_at, id`,
+        );
         const quizDraftHistory = await queryWorkspaceData(
           `SELECT id, workspace_id, quiz_id, revision, draft, draft_schema_version,
                   saved_by, mutation_id, created_at
@@ -7743,6 +7759,8 @@ export class PostgresRepository implements Repository {
           surveys: surveys.rows.map((row) => row.data),
           surveyVersions: surveyVersions.rows.map((row) => row.data),
           surveyRooms: surveyRooms.rows.map((row) => row.data),
+          sessionSummarySnapshots: sessionSummarySnapshots.rows,
+          sessionSummaryShares: sessionSummaryShares.rows,
           quizzes: quizzes.rows.map((row) => ({
             ...row,
             draft: upcastRoundDraft(
@@ -7924,6 +7942,7 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM external_identities WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM library_favorites WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id=$1", [userId]);
+        await client.query("DELETE FROM session_summary_shares WHERE actor_id=$1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id=$1", [userId]);
         await client.query(
           "UPDATE session_staff_credentials SET revoked_at=now() WHERE created_by=$1 AND revoked_at IS NULL",
@@ -7968,6 +7987,7 @@ export class PostgresRepository implements Repository {
         await this.deleteCollaborationGroupMemberships(client, userId);
         await client.query("DELETE FROM library_favorites WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
+        await client.query("DELETE FROM session_summary_shares WHERE actor_id = $1", [userId]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM workspace_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id = $1", [userId]);
@@ -8032,6 +8052,7 @@ export class PostgresRepository implements Repository {
           "DELETE FROM survey_feedback_rooms WHERE retention_expires_at <= $1 RETURNING id",
           [now],
         );
+        await client.query("DELETE FROM session_summary_snapshots WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM creator_sessions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM authoring_jobs WHERE expires_at <= $1", [now]);

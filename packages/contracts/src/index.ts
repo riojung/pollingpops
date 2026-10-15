@@ -6,6 +6,7 @@ export { PRODUCT_BRAND } from "./product-brand";
 export * from "./audience-scopes";
 export * from "./qna-policy";
 export * from "./text-opinions";
+export * from "./session-summaries";
 import {
   hasTextOpinionQuestions,
   isTextOpinionQuestion,

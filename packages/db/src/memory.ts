@@ -236,6 +236,18 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  getSessionSummarySource?(
+    workspaceId: string,
+    kind: "presentation" | "survey",
+    sourceId: string,
+    now: Date,
+    freeze?: boolean,
+  ): { ready: boolean; expiresAt: Date } | null;
+  deleteSessionSummarySource?(
+    workspaceId: string,
+    kind: "round" | "presentation" | "survey",
+    sourceId: string,
+  ): void;
   retainedSessionCounts?(
     workspaceId: string,
   ): Partial<Pick<SessionCounts, "presentations" | "surveys">>;
@@ -378,6 +390,40 @@ export class MemoryRepository implements Repository {
     for (const { lifecycle } of this.lifecycleExtensions.values()) {
       lifecycle.deletePresentationSessionMetadata?.(workspaceId, sessionId);
     }
+  }
+  deleteSessionSummarySource(
+    workspaceId: string,
+    kind: "round" | "presentation" | "survey",
+    sourceId: string,
+  ) {
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.deleteSessionSummarySource?.(workspaceId, kind, sourceId);
+  }
+
+  getSessionSummarySource(
+    workspaceId: string,
+    kind: "round" | "presentation" | "survey",
+    sourceId: string,
+    now: Date,
+    freeze = false,
+  ): { ready: boolean; expiresAt: Date } | null {
+    if (kind === "round") {
+      const session = this.sessions.get(sourceId);
+      if (!session || session.workspaceId !== workspaceId) return null;
+      return {
+        ready:
+          session.state.phase === "finished" &&
+          [...this.reports.values()].some(
+            (report) => report.sessionId === sourceId && report.status === "ready",
+          ),
+        expiresAt: new Date(session.retentionExpiresAt),
+      };
+    }
+    for (const { lifecycle } of this.lifecycleExtensions.values()) {
+      const result = lifecycle.getSessionSummarySource?.(workspaceId, kind, sourceId, now, freeze);
+      if (result) return result;
+    }
+    return null;
   }
   private readonly deletedLibraryArtifacts = new Set<string>();
   private readonly deletedQuizVersions = new Set<string>();
@@ -2315,6 +2361,9 @@ export class MemoryRepository implements Repository {
   }
 
   private deleteSessionTree(sessionId: string) {
+    const summarySource = this.sessions.get(sessionId);
+    if (summarySource)
+      this.deleteSessionSummarySource(summarySource.workspaceId, "round", sessionId);
     releaseRoomCoverageInMemory(this, "round", sessionId);
     for (const [code, claim] of this.liveRoomCodes) {
       if (claim.artifactType === "round" && claim.artifactId === sessionId) {

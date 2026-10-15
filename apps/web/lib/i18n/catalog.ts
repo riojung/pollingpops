@@ -8,6 +8,7 @@ import type { DeliveryAuthoringMessageKey } from "./domains/delivery-authoring/e
 import type { LiveDeliveryMessageKey } from "./domains/live-delivery/en-CA";
 import type { ReportRoundMessageKey } from "./domains/report-round/en-CA";
 import type { WorkspacePageMessageKey } from "./domains/workspace-pages";
+import type { SessionSummaryMessageKey } from "./domains/session-summary";
 
 export const localeDomains = [
   "account",
@@ -15,6 +16,7 @@ export const localeDomains = [
   "delivery-authoring",
   "report-round",
   "live-delivery",
+  "session-summary",
 ] as const;
 
 export type LocaleDomain = (typeof localeDomains)[number];
@@ -24,7 +26,8 @@ export type MessageKey =
   | WorkspacePageMessageKey
   | DeliveryAuthoringMessageKey
   | ReportRoundMessageKey
-  | LiveDeliveryMessageKey;
+  | LiveDeliveryMessageKey
+  | SessionSummaryMessageKey;
 export type Messages = Partial<Record<MessageKey, string>>;
 export type MessageCatalog = Messages;
 
@@ -81,6 +84,13 @@ const domainLoaders: Record<LocaleDomain, (locale: SupportedLocale) => Promise<M
       ...(await catalog.loadLiveDeliveryMessages(locale)),
     };
   },
+  "session-summary": async (locale) => {
+    const catalog = await import("./domains/session-summary");
+    return {
+      ...catalog.sessionSummaryEnglishMessages,
+      ...(await catalog.loadSessionSummaryMessages(locale)),
+    };
+  },
 };
 
 function uniqueDomains(domains: readonly LocaleDomain[]) {
@@ -113,8 +123,11 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   const path = pathname.split("?", 1)[0] || "/";
 
   if (path === "/account" || path.startsWith("/account/")) return ["account"];
+  if (/^\/summary\/[^/]+\/?$/.test(path)) return ["session-summary"];
+  if (/^\/presentation-session\/[^/]+\/report\/?$/.test(path))
+    return ["live-delivery", "session-summary"];
   // Survey sharing reuses the QR/address controls from live delivery.
-  if (/^\/surveys\/rooms\/[^/]+\/?$/.test(path)) return ["live-delivery"];
+  if (/^\/surveys\/rooms\/[^/]+\/?$/.test(path)) return ["live-delivery", "session-summary"];
   if (
     [
       "/home",
@@ -136,7 +149,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
     return ["workspace-pages", "delivery-authoring", "report-round"];
   }
   if (path === "/report" || path.startsWith("/report/")) {
-    return ["report-round", "live-delivery"];
+    return ["report-round", "live-delivery", "session-summary"];
   }
   if (
     ["/practice", "/followup"].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))

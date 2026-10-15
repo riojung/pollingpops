@@ -771,9 +771,10 @@ describe("Sessions workspace", () => {
     fixtures.role = "viewer";
     fixtures.query = "type=surveys";
     const markup = await sessionsHarness().settle();
-    expect(markup).toContain('href="/surveys/rooms/survey-open"');
-    expect(markup).toContain('href="/surveys/rooms/survey-closed"');
-    expect(markup).not.toContain('href="/surveys/rooms/survey-expired"');
+    expect(markup).toContain('href="/results/surveys/survey-open"');
+    expect(markup).toContain('href="/results/surveys/survey-closed"');
+    expect(markup).not.toContain('href="/results/surveys/survey-expired"');
+    expect(markup).not.toContain('href="/surveys/rooms/');
     expect(markup).not.toContain("Manage sharing");
     expect(markup).not.toContain("Delete Survey run");
     expect(markup).not.toContain("Participants");
@@ -786,6 +787,8 @@ describe("Sessions workspace", () => {
     const harness = sessionsHarness();
     let markup = await harness.settle();
     expect(markup.match(/>Manage sharing<\/a>/g)).toHaveLength(1);
+    expect(markup).toContain('href="/surveys/rooms/survey-open"');
+    expect(markup).toContain('href="/results/surveys/survey-closed"');
     expect(markup).not.toContain("Delete Survey run");
     fixtures.role = "owner";
     markup = harness.render();

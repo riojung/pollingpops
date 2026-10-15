@@ -291,7 +291,9 @@ for (const mobile of [false, true]) {
     await expect(
       surveyCard.getByRole("link", { name: "Manage sharing", exact: true }),
     ).toHaveAttribute("href", `/surveys/rooms/${fixture.surveyRoom.id}`);
-    await expect(surveyCard.getByRole("link", { name: "View Results", exact: true })).toBeVisible();
+    await expect(
+      surveyCard.getByRole("link", { name: "View Results", exact: true }),
+    ).toHaveAttribute("href", `/results/surveys/${fixture.surveyRoom.id}`);
     await expect(
       surveyCard.getByRole("button", { name: "Delete Survey run", exact: true }),
     ).toHaveCount(0);
@@ -351,7 +353,9 @@ for (const mobile of [false, true]) {
     );
     await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("finished");
     await expect(surveyCard).toBeVisible();
-    await expect(surveyCard.getByRole("link", { name: "View Results", exact: true })).toBeVisible();
+    await expect(
+      surveyCard.getByRole("link", { name: "View Results", exact: true }),
+    ).toHaveAttribute("href", `/results/surveys/${fixture.surveyRoom.id}`);
     let releaseDelete!: () => void;
     let deleteStarted!: () => void;
     const deletionGate = new Promise<void>((resolve) => {

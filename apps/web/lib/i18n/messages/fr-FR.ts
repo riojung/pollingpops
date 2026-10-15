@@ -236,7 +236,7 @@ const messages = {
   "page.results.eyebrow": "Données probantes",
   "page.results.title": "Résultats",
   "page.results.description":
-    "Analysez les données de récupération et suivez les exercices attribués ou issus de rapports.",
+    "Consultez les résultats des Rounds, des présentations et des sondages, et suivez les exercices.",
   "page.discover.eyebrow": "Sélection Polling Pops",
   "page.discover.title": "Découvrir",
   "page.discover.description":

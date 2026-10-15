@@ -436,6 +436,46 @@ const messages = {
   "pages.library.unpublishedChanges": "Modifiche non pubblicate",
   "pages.library.view": "Visualizza",
   "pages.library.workspaceOwned": "Di proprietà dell'area di lavoro",
+  "pages.results.searchSurveys": "Cerca risultati dei sondaggi",
+  "pages.results.loadingSurveys": "Caricamento dei risultati dei sondaggi…",
+  "pages.results.surveyResults": "Risultati dei sondaggi",
+  "pages.results.emptySurveysTitle": "Ancora nessun risultato dei sondaggi",
+  "pages.results.emptySurveysDescription":
+    "Le sessioni di sondaggio concluse compaiono qui finché i loro risultati vengono conservati.",
+  "pages.results.surveyRunCode": "Codice della sessione: {code}",
+  "pages.results.surveyCollectionDeadline": "Scadenza della raccolta: {date}",
+  "pages.results.manageSurveyRuns": "Gestisci sessioni di sondaggio",
+  "pages.results.surveyDeadlineFrom": "Scadenza della raccolta dal",
+  "pages.results.surveyDeadlineTo": "Scadenza della raccolta al",
+  "pages.results.surveyLoadError": "Impossibile caricare i risultati del sondaggio. Riprova.",
+  "pages.results.surveyTitle": "Risultati del sondaggio",
+  "pages.results.surveyDescription":
+    "Esamina gli invii completati e la distribuzione anonima delle risposte per domanda.",
+  "pages.results.surveyBack": "Torna ai risultati dei sondaggi",
+  "pages.results.surveyManage": "Gestisci sessione di sondaggio",
+  "pages.results.surveyClosed": "Sondaggio chiuso",
+  "pages.results.surveyCollecting": "Raccolta delle risposte in corso",
+  "pages.results.surveyDeadline": "Gli invii si chiudono il {date}.",
+  "pages.results.surveyRetention":
+    "I risultati e le risposte scadono il {date}. La chiusura anticipata non modifica questa scadenza.",
+  "pages.results.surveyAggregate": "Risultati aggregati",
+  "pages.results.surveyRefresh": "Aggiorna risultati",
+  "pages.results.surveySubmissions":
+    "{count} invii completati. Vengono conteggiate solo le risposte completate.",
+  "pages.results.surveyCollectingNotice":
+    "Le distribuzioni restano nascoste mentre questo sondaggio è aperto. Chiudi gli accessi e gli invii, oppure attendi la scadenza, per rendere disponibili i risultati definitivi. Ogni domanda richiede almeno cinque risposte.",
+  "pages.results.surveySuppressed":
+    "Le distribuzioni sono nascoste perché meno di cinque persone hanno inviato le risposte.",
+  "pages.results.surveyQuestionSuppressed":
+    "Le distribuzioni sono nascoste perché questa domanda ha meno di cinque risposte.",
+  "pages.results.surveyResponses": "{count} risposte",
+  "pages.results.surveyMultipleSelections":
+    "Sono consentite più selezioni. I conteggi indicano quante persone hanno selezionato ciascuna opzione; i totali possono superare il numero di risposte.",
+  "pages.results.surveyResponseCounts": "Conteggi delle risposte",
+  "pages.results.surveyResponse": "Risposta",
+  "pages.results.surveyCount": "Conteggio",
+  "pages.results.surveyPrivacy":
+    "Non vengono raccolti alias né identità degli account. Gli organizzatori non possono consultare le risposte collegate di una stessa persona.",
   "pages.results.searchRounds": "Cerca risultati di Round",
   "pages.results.searchPresentations": "Cerca risultati di presentazione",
   "pages.results.searchPractice": "Cerca esercizi",

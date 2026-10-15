@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
 import { buildHistoryQuery, type HistoryQueryFilters } from "../../lib/history-query";
+import type { SurveySessionSummary } from "../../lib/session-controls";
 import { formatPercent } from "../../components/workspace/workspace-model";
 import { formatDateTime, pluralCategory } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
@@ -178,6 +179,9 @@ function HistoryFilters({
   practice,
   sourceLabel,
   allSourcesLabel,
+  hideStatus = false,
+  fromLabel,
+  toLabel,
 }: {
   status: string;
   statusLabel: string;
@@ -198,6 +202,9 @@ function HistoryFilters({
   practice?: boolean;
   sourceLabel?: string;
   allSourcesLabel?: string;
+  hideStatus?: boolean;
+  fromLabel?: string;
+  toLabel?: string;
 }) {
   const { t } = useLocale();
   const hasFilters =
@@ -208,16 +215,18 @@ function HistoryFilters({
     Boolean(listControls.search);
   return (
     <section aria-label={t("pages.results.historyFilters")} className={controls.filterBar}>
-      <label className={controls.filterField}>
-        <span>{statusLabel}</span>
-        <select onChange={(event) => onStatusChange(event.target.value)} value={status}>
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {hideStatus ? null : (
+        <label className={controls.filterField}>
+          <span>{statusLabel}</span>
+          <select onChange={(event) => onStatusChange(event.target.value)} value={status}>
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className={controls.filterField}>
         <span>{sourceLabel ?? t("pages.common.round")}</span>
         <select onChange={(event) => onQuizChange(event.target.value)} value={quizId}>
@@ -230,7 +239,7 @@ function HistoryFilters({
         </select>
       </label>
       <label className={controls.filterField}>
-        <span>{t("pages.common.from")}</span>
+        <span>{fromLabel ?? t("pages.common.from")}</span>
         <input
           onChange={(event) => onFromDateChange(event.target.value)}
           type="date"
@@ -238,7 +247,7 @@ function HistoryFilters({
         />
       </label>
       <label className={controls.filterField}>
-        <span>{t("pages.common.to")}</span>
+        <span>{toLabel ?? t("pages.common.to")}</span>
         <input
           min={fromDate || undefined}
           onChange={(event) => onToDateChange(event.target.value)}
@@ -779,6 +788,205 @@ function PresentationResultList(listControls: ListControls) {
   );
 }
 
+function SurveyResultList(listControls: ListControls) {
+  const { locale, t } = useLocale();
+  const { creator } = useWorkspace();
+  const workspaceId = creator?.workspaceId ?? "";
+  const activeWorkspace = useRef(workspaceId);
+  activeWorkspace.current = workspaceId;
+  const [snapshot, setSnapshot] = useState<{
+    workspaceId: string;
+    rooms: SurveySessionSummary[];
+    error: string;
+  }>({ workspaceId: "", rooms: [], error: "" });
+  const [sourceId, setSourceId] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [displayPage, setDisplayPage] = useState({ key: "", limit: 25 });
+  const [now, setNow] = useState(() => Date.now());
+  const loadingError = t("pages.results.surveyLoadError");
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const controller = new AbortController();
+    const isCurrent = () => !controller.signal.aborted && activeWorkspace.current === workspaceId;
+    async function load() {
+      const rooms = new Map<string, SurveySessionSummary>();
+      const seenCursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        if (cursor) {
+          if (seenCursors.has(cursor)) throw new Error(loadingError);
+          seenCursors.add(cursor);
+        }
+        const params = new URLSearchParams({ limit: "50" });
+        if (cursor) params.set("cursor", cursor);
+        const page = await apiFetch<{
+          rooms: SurveySessionSummary[];
+          nextCursor: string | null;
+        }>(`/v1/survey-rooms?${params}`, { signal: controller.signal });
+        if (!isCurrent()) return;
+        for (const room of page.rooms) rooms.set(room.id, room);
+        cursor = page.nextCursor;
+      } while (cursor);
+      if (isCurrent()) setSnapshot({ workspaceId, rooms: [...rooms.values()], error: "" });
+    }
+    void load().catch((caught) => {
+      if (isCurrent()) setSnapshot({ workspaceId, rooms: [], error: humanError(caught) });
+    });
+    return () => controller.abort();
+  }, [loadingError, workspaceId]);
+
+  const loading = !workspaceId || snapshot.workspaceId !== workspaceId;
+  const error = loading ? "" : snapshot.error;
+  const retained = (loading ? [] : snapshot.rooms)
+    .filter(
+      (room) =>
+        (room.closed || new Date(room.closesAt).getTime() <= now) &&
+        new Date(room.expiresAt).getTime() > now,
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.closesAt).getTime() - new Date(left.closesAt).getTime() ||
+        left.id.localeCompare(right.id),
+    );
+  const sources = Array.from(
+    new Map(
+      retained.map((room) => [room.surveyId, { id: room.surveyId, title: room.title }]),
+    ).values(),
+  ).sort((left, right) => left.title.localeCompare(right.title));
+  const search = listControls.search.trim().toLocaleLowerCase();
+  const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
+  const to = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
+  const filtered = retained.filter((room) => {
+    const deadline = new Date(room.closesAt).getTime();
+    return (
+      (!search ||
+        room.title.toLocaleLowerCase().includes(search) ||
+        room.code.toLocaleLowerCase().includes(search)) &&
+      (sourceId === "all" || room.surveyId === sourceId) &&
+      deadline >= from &&
+      deadline <= to
+    );
+  });
+  const filterKey = JSON.stringify([workspaceId, search, sourceId, fromDate, toDate]);
+  const displayLimit = displayPage.key === filterKey ? displayPage.limit : 25;
+  const visible = filtered.slice(0, displayLimit);
+  const hasMore = filtered.length > displayLimit;
+  const hasFilters = Boolean(search || sourceId !== "all" || fromDate || toDate);
+
+  function clearFilters() {
+    setSourceId("all");
+    setFromDate("");
+    setToDate("");
+    listControls.onSearchClear();
+  }
+
+  return (
+    <>
+      <HistoryFilters
+        listControls={listControls}
+        count={visible.length}
+        loading={loading}
+        hasMore={hasMore}
+        hideStatus
+        status="all"
+        statusLabel=""
+        statusOptions={[]}
+        onStatusChange={() => undefined}
+        quizId={sourceId}
+        rounds={sources}
+        sourceLabel={t("pages.common.survey")}
+        allSourcesLabel={t("pages.sessions.allSurveys")}
+        fromDate={fromDate}
+        toDate={toDate}
+        fromLabel={t("pages.results.surveyDeadlineFrom")}
+        toLabel={t("pages.results.surveyDeadlineTo")}
+        onQuizChange={setSourceId}
+        onFromDateChange={setFromDate}
+        onToDateChange={setToDate}
+        onClear={clearFilters}
+      />
+      {loading ? (
+        <p className={styles.muted} role="status">
+          {t("pages.results.loadingSurveys")}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="error" lang="en-CA" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {!loading && !error && !visible.length ? (
+        <div className={styles.emptyState}>
+          <h2>{t("pages.results.emptySurveysTitle")}</h2>
+          <p>
+            {t(hasFilters ? "pages.results.noMatches" : "pages.results.emptySurveysDescription")}
+          </p>
+          <Link className="button" href="/sessions?type=surveys">
+            {t("pages.results.manageSurveyRuns")}
+          </Link>
+        </div>
+      ) : null}
+      <section
+        className={resultStyles.collection}
+        data-view={listControls.layout}
+        aria-label={t("pages.results.surveyResults")}
+      >
+        {visible.map((room) => (
+          <article
+            className={`${styles.listCard} ${resultStyles.card} ${resultStyles.surveyCard}`}
+            key={room.id}
+          >
+            <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
+              <div>
+                <h2 lang="">{room.title}</h2>
+                <p className={styles.summaryLine}>
+                  {t("pages.results.surveyRunCode", { code: room.code })}
+                </p>
+                <p className={styles.summaryLine}>
+                  {t("pages.results.surveyCollectionDeadline", {
+                    date: formatDateTime(locale, room.closesAt),
+                  })}
+                </p>
+                <p className={styles.summaryLine}>
+                  {t("pages.results.retainedUntil", {
+                    date: formatDateTime(locale, room.expiresAt),
+                  })}
+                </p>
+              </div>
+              <span className={styles.status} data-tone="closed">
+                {t("pages.common.status.closed")}
+              </span>
+            </div>
+            <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
+              <Link className="button small-button" href={`/results/surveys/${room.id}`}>
+                {t("pages.common.viewResults")}
+              </Link>
+            </div>
+          </article>
+        ))}
+      </section>
+      {hasMore ? (
+        <div className={styles.loadMore}>
+          <button
+            className="button-quiet"
+            onClick={() => setDisplayPage({ key: filterKey, limit: displayLimit + 25 })}
+            type="button"
+          >
+            {t("pages.results.loadMore")}
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function ResultsContent() {
   const { t } = useLocale();
   const router = useRouter();
@@ -792,7 +1000,9 @@ function ResultsContent() {
       ? "practice"
       : requestedView === "presentations" && presentationsEnabled
         ? "presentations"
-        : "results";
+        : requestedView === "surveys"
+          ? "surveys"
+          : "results";
   const search = (params.get("q") ?? "").slice(0, 160);
   const [sources, setSources] = useState<{ workspaceId: string; rounds: RoundFilterOption[] }>({
     workspaceId: "",
@@ -857,7 +1067,9 @@ function ResultsContent() {
       ? "pages.results.searchPractice"
       : view === "presentations"
         ? "pages.results.searchPresentations"
-        : "pages.results.searchRounds",
+        : view === "surveys"
+          ? "pages.results.searchSurveys"
+          : "pages.results.searchRounds",
   );
 
   return (
@@ -886,6 +1098,13 @@ function ResultsContent() {
             </Link>
           ) : null}
           <Link
+            aria-current={view === "surveys" ? "page" : undefined}
+            className={view === "surveys" ? controls.tabActive : controls.tab}
+            href="/results?view=surveys"
+          >
+            {t("pages.common.surveys")}
+          </Link>
+          <Link
             aria-current={view === "practice" ? "page" : undefined}
             className={view === "practice" ? controls.tabActive : controls.tab}
             href="/results?view=practice"
@@ -905,17 +1124,17 @@ function ResultsContent() {
         </label>
         <Link
           className={controls.libraryLink}
-          href={`/library?type=${view === "presentations" ? "presentations" : "rounds"}`}
+          href={`/library?type=${view === "presentations" ? "presentations" : view === "surveys" ? "surveys" : "rounds"}`}
         >
           {t("pages.sessions.backToLibrary", {
-            type: t(view === "presentations" ? "pages.common.presentation" : "pages.common.round"),
+            type: t(
+              view === "presentations"
+                ? "pages.common.presentation"
+                : view === "surveys"
+                  ? "pages.common.survey"
+                  : "pages.common.round",
+            ),
           })}
-        </Link>
-        <Link
-          className={`${controls.libraryLink} ${resultStyles.surveyLink}`}
-          href="/sessions?type=surveys"
-        >
-          {t("pages.library.surveyRuns")}
         </Link>
       </div>
       <div key={`${workspaceId}\u0000${view}`}>
@@ -923,6 +1142,8 @@ function ResultsContent() {
           <PracticeList {...listControls} rounds={rounds} />
         ) : view === "presentations" ? (
           <PresentationResultList {...listControls} />
+        ) : view === "surveys" ? (
+          <SurveyResultList {...listControls} />
         ) : (
           <ReportList {...listControls} rounds={rounds} />
         )}

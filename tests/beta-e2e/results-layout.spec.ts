@@ -185,9 +185,13 @@ for (const mobile of [false, true]) {
     );
     await expect(views.getByRole("link", { name: "Presentations", exact: true })).toBeVisible();
     await expect(views.getByRole("link", { name: "Practice", exact: true })).toBeVisible();
+    await expect(views.getByRole("link", { name: "Surveys", exact: true })).toHaveAttribute(
+      "href",
+      "/results?view=surveys",
+    );
     await expect(
       page.getByRole("link", { name: "Survey runs and results", exact: true }),
-    ).toHaveAttribute("href", "/sessions?type=surveys");
+    ).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: "Back to Round library", exact: true }),
     ).toHaveAttribute("href", "/library?type=rounds");
@@ -421,9 +425,10 @@ for (const mobile of [false, true]) {
       page.getByRole("searchbox", { name: "Search Round results", exact: true }),
     ).toBeVisible();
     await expect(views.getByRole("link", { name: "Practice", exact: true })).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Survey runs and results", exact: true }),
-    ).toBeVisible();
+    await expect(views.getByRole("link", { name: "Surveys", exact: true })).toHaveAttribute(
+      "href",
+      "/results?view=surveys",
+    );
     expect(
       pageErrors.filter(({ message, at }) => {
         const match = message.match(/^\/([^\s]+) due to access control checks\.$/);

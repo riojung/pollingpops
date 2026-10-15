@@ -438,6 +438,47 @@ const messages = {
   "pages.library.unpublishedChanges": "Unveröffentlichte Änderungen",
   "pages.library.view": "Ansicht",
   "pages.library.workspaceOwned": "Im Besitz des Arbeitsbereichs",
+  "pages.results.searchSurveys": "Umfrageergebnisse suchen",
+  "pages.results.loadingSurveys": "Umfrageergebnisse werden geladen…",
+  "pages.results.surveyResults": "Umfrageergebnisse",
+  "pages.results.emptySurveysTitle": "Noch keine Umfrageergebnisse",
+  "pages.results.emptySurveysDescription":
+    "Abgeschlossene Umfragedurchläufe werden hier angezeigt, solange ihre Ergebnisse aufbewahrt werden.",
+  "pages.results.surveyRunCode": "Durchlaufcode: {code}",
+  "pages.results.surveyCollectionDeadline": "Erfassungsfrist: {date}",
+  "pages.results.manageSurveyRuns": "Umfragedurchläufe verwalten",
+  "pages.results.surveyDeadlineFrom": "Erfassungsfrist ab",
+  "pages.results.surveyDeadlineTo": "Erfassungsfrist bis",
+  "pages.results.surveyLoadError":
+    "Umfrageergebnisse konnten nicht geladen werden. Versuchen Sie es erneut.",
+  "pages.results.surveyTitle": "Umfrageergebnisse",
+  "pages.results.surveyDescription":
+    "Prüfen Sie abgeschlossene Einreichungen und anonyme Antwortverteilungen je Frage.",
+  "pages.results.surveyBack": "Zurück zu den Umfrageergebnissen",
+  "pages.results.surveyManage": "Umfragedurchlauf verwalten",
+  "pages.results.surveyClosed": "Umfrage geschlossen",
+  "pages.results.surveyCollecting": "Antworten werden erfasst",
+  "pages.results.surveyDeadline": "Einreichungen sind bis {date} möglich.",
+  "pages.results.surveyRetention":
+    "Ergebnisse und Antworten verfallen am {date}. Ein vorzeitiges Schließen ändert diese Frist nicht.",
+  "pages.results.surveyAggregate": "Zusammengefasste Ergebnisse",
+  "pages.results.surveyRefresh": "Ergebnisse aktualisieren",
+  "pages.results.surveySubmissions":
+    "{count} abgeschlossene Einreichungen. Es werden nur abgeschlossene Antworten gezählt.",
+  "pages.results.surveyCollectingNotice":
+    "Die Verteilungen bleiben verborgen, solange diese Umfrage offen ist. Schließen Sie den Zugang und die Einreichung von Antworten oder warten Sie bis zum Fristende, um die endgültigen Ergebnisse freizugeben. Jede Frage benötigt mindestens fünf Antworten.",
+  "pages.results.surveySuppressed":
+    "Die Verteilungen sind verborgen, weil weniger als fünf Personen Antworten eingereicht haben.",
+  "pages.results.surveyQuestionSuppressed":
+    "Die Verteilungen sind verborgen, weil diese Frage weniger als fünf Antworten erhalten hat.",
+  "pages.results.surveyResponses": "{count} Antworten",
+  "pages.results.surveyMultipleSelections":
+    "Mehrfachauswahl ist erlaubt. Die Zahlen zeigen, wie viele Personen die jeweilige Option gewählt haben; die Summe kann die Anzahl der Antworten übersteigen.",
+  "pages.results.surveyResponseCounts": "Antwortanzahlen",
+  "pages.results.surveyResponse": "Antwort",
+  "pages.results.surveyCount": "Anzahl",
+  "pages.results.surveyPrivacy":
+    "Es werden keine Pseudonyme oder Kontoidentitäten erfasst. Organisatoren können keine miteinander verknüpften Antworten einzelner Personen einsehen.",
   "pages.results.searchRounds": "Round-Ergebnisse suchen",
   "pages.results.searchPresentations": "Präsentationsergebnisse suchen",
   "pages.results.searchPractice": "Übungen suchen",

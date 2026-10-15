@@ -232,7 +232,7 @@ const messages = {
   "page.results.eyebrow": "Evidenze",
   "page.results.title": "Risultati",
   "page.results.description":
-    "Esamina le evidenze di recupero e monitora le esercitazioni assegnate o basate sui report.",
+    "Esamina i risultati di Round, presentazioni e sondaggi e monitora le esercitazioni.",
   "page.discover.eyebrow": "Selezionato da Polling Pops",
   "page.discover.title": "Scopri",
   "page.discover.description":

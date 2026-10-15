@@ -211,7 +211,7 @@ const messages = {
   "page.assignments.description": "管理根据已发布互动测验创建的独立练习，参与者无需账号。",
   "page.results.eyebrow": "学习证据",
   "page.results.title": "结果",
-  "page.results.description": "查看补救学习证据，并跟踪已布置或基于报告的练习。",
+  "page.results.description": "查看互动测验、演示文稿和调查的结果，并跟踪练习。",
   "page.discover.eyebrow": "Polling Pops 精选",
   "page.discover.title": "发现",
   "page.discover.description": "从可信的 Polling Pops 模板入手，并根据参与者进行调整。",

@@ -1,9 +1,3 @@
-.surveyLink {
-  grid-column: 1 / -1;
-  justify-self: start;
-  padding: 0 8px 2px;
-}
-
 .clearFilters {
   min-height: 38px;
   padding: 7px 10px;
@@ -83,6 +77,14 @@
 .collection[data-view="list"] .concepts {
   grid-column: 1 / -1;
   margin-top: 0;
+}
+
+.collection[data-view="list"] .surveyCard {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.collection[data-view="list"] .surveyCard .actions {
+  grid-column: auto;
 }
 
 @media (max-width: 620px) {

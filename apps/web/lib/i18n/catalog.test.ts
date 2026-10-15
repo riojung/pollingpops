@@ -75,6 +75,14 @@ describe("localized message catalogs", () => {
       "session-summary",
     ]);
     expect(localeDomainsForPath("/surveys/example")).toEqual([]);
+    expect(localeDomainsForPath("/results/surveys/example")).toEqual([
+      "workspace-pages",
+      "session-summary",
+    ]);
+    expect(localeDomainsForPath("/results/surveys/example/?from=results")).toEqual([
+      "workspace-pages",
+      "session-summary",
+    ]);
     expect(localeDomainsForPath("/home")).toEqual(["workspace-pages"]);
     expect(localeDomainsForPath("/sessions?type=surveys")).toEqual(["workspace-pages"]);
     expect(localeDomainsForPath("/quiz/example")).toEqual([
@@ -144,6 +152,14 @@ describe("localized message catalogs", () => {
     expect(accountMessages["account.workspace.title"]).toBe("Active workspace");
     expect(accountMessages["live.audience.chat"]).toBeUndefined();
     expect(accountMessages["reportRound.assign.title"]).toBeUndefined();
+
+    const surveyResultsMessages = await loadMessages(
+      "en-CA",
+      localeDomainsForPath("/results/surveys/example"),
+    );
+    expect(surveyResultsMessages["pages.results.surveyTitle"]).toBe("Survey results");
+    expect(surveyResultsMessages["summary.open"]).toBe("Share summary");
+    expect(surveyResultsMessages["live.audience.chat"]).toBeUndefined();
   });
 
   it("keeps shared site chrome in core while loading exact Round-route domains", async () => {

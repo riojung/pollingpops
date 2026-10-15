@@ -36,8 +36,9 @@ archive them. Owners/editors may organize existing Surveys even when new creatio
 Archiving preserves published versions and existing run evidence. Survey restore/permanent artifact
 deletion are not offered yet; duplicate an archived Survey when creation is enabled.
 
-**Survey runs and results** opens the separate delivery history. Old `/surveys` bookmarks now
-open the Library Surveys tab; survey editor and room links remain unchanged.
+**Survey runs and results** opens delivery history in **Sessions → Surveys**. To review completed
+outcomes directly, choose **Results → Surveys**. Old `/surveys` bookmarks open the Library Surveys
+tab; survey editor and management-room links remain available.
 
 Your operator must enable the flags/allowlist in the quick start. Owners/editors create, edit,
 publish and share; viewers can read content/results.
@@ -92,8 +93,8 @@ Submitting feedback does not mean public beta or production launch has been appr
    their own pace, **Save progress** before leaving, then **Submit Survey**. Required items must be
    answered. Refresh resumes saved answers on the same browser. One completion per credential is
    enforced, not verified one-person identity; another browser/device is a new credential.
-6. Return through **Library → Surveys** (`/library?type=surveys`) for content; choose
-   **Survey runs and results** for sharing links and results.
+6. Return through **Library → Surveys** (`/library?type=surveys`) for content. Use **Sessions → Surveys**
+   for sharing and closing runs, and **Results → Surveys** (`/results?view=surveys`) for completed outcomes.
    Refresh results to count finalized submissions. **Close admissions and submissions**, or wait for
    the deadline, to release final distributions. Each question needs at least five finalized answers;
    optional unanswered items do not count toward that minimum. Open runs never show changing
@@ -428,6 +429,20 @@ Active Rounds and Presentations offer host access to owners and editors. Survey 
 **Manage sharing** while open and **View results** while their results remain retained. Survey
 history stays available when new Survey creation is paused. Survey cards do not expose
 respondent identities or individual answers. Existing `/surveys/runs` links open the Surveys tab.
+
+### Review Survey outcomes
+
+Open **Results → Surveys** to browse closed runs whose results remain retained. Runs appear after
+explicit closure or their collection deadline; open and expired runs stay out of this results list.
+Search by the recorded Survey title or run code, select a source Survey, filter by collection
+deadline, and choose **Grid** or **List**. Results keeps its own workspace layout preference.
+
+**View Results** opens the aggregate report directly at `/results/surveys/{runId}`, without passing
+through Sessions. It shows finalized submissions and question-level distributions, with no scores
+or respondent identities. Distributions remain hidden below five responses per question. The report
+provides refresh and, where enabled, **Share summary** and summary downloads. **Back to Survey results**
+returns to the Surveys tab; owners/editors can choose **Manage Survey run** for sharing and closure.
+Existing results remain readable when new Survey creation is paused.
 
 ### Delete archived content and session history
 

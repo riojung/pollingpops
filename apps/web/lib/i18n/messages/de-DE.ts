@@ -237,7 +237,7 @@ const messages = {
   "page.results.eyebrow": "Erkenntnisse",
   "page.results.title": "Ergebnisse",
   "page.results.description":
-    "Prüfen Sie Erkenntnisse zur Lernentwicklung und verfolgen Sie zugewiesene oder berichtsbasierte Übungen.",
+    "Prüfen Sie Ergebnisse aus Rounds, Präsentationen und Umfragen und verfolgen Sie Übungen.",
   "page.discover.eyebrow": "Von Polling Pops ausgewählt",
   "page.discover.title": "Entdecken",
   "page.discover.description":

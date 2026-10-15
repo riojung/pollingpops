@@ -434,6 +434,47 @@ const messages = {
   "pages.library.unpublishedChanges": "Cambios no publicados",
   "pages.library.view": "Ver",
   "pages.library.workspaceOwned": "Propiedad del espacio de trabajo",
+  "pages.results.searchSurveys": "Buscar resultados de encuestas",
+  "pages.results.loadingSurveys": "Cargando resultados de encuestas…",
+  "pages.results.surveyResults": "Resultados de encuestas",
+  "pages.results.emptySurveysTitle": "Aún no hay resultados de encuestas",
+  "pages.results.emptySurveysDescription":
+    "Las sesiones de encuesta finalizadas aparecen aquí mientras se conservan sus resultados.",
+  "pages.results.surveyRunCode": "Código de sesión: {code}",
+  "pages.results.surveyCollectionDeadline": "Fecha límite de recogida: {date}",
+  "pages.results.manageSurveyRuns": "Gestionar sesiones de encuesta",
+  "pages.results.surveyDeadlineFrom": "Fecha límite de recogida desde",
+  "pages.results.surveyDeadlineTo": "Fecha límite de recogida hasta",
+  "pages.results.surveyLoadError":
+    "No se pudieron cargar los resultados de la encuesta. Inténtalo de nuevo.",
+  "pages.results.surveyTitle": "Resultados de la encuesta",
+  "pages.results.surveyDescription":
+    "Revisa los envíos finalizados y la distribución anónima de respuestas por pregunta.",
+  "pages.results.surveyBack": "Volver a los resultados de encuestas",
+  "pages.results.surveyManage": "Gestionar sesión de encuesta",
+  "pages.results.surveyClosed": "Encuesta cerrada",
+  "pages.results.surveyCollecting": "Recogiendo respuestas",
+  "pages.results.surveyDeadline": "Los envíos se cierran el {date}.",
+  "pages.results.surveyRetention":
+    "Los resultados y las respuestas caducan el {date}. Cerrar antes no cambia esta fecha límite.",
+  "pages.results.surveyAggregate": "Resultados agregados",
+  "pages.results.surveyRefresh": "Actualizar resultados",
+  "pages.results.surveySubmissions":
+    "{count} envíos finalizados. Solo se contabilizan las respuestas finalizadas.",
+  "pages.results.surveyCollectingNotice":
+    "Las distribuciones permanecen ocultas mientras esta encuesta esté abierta. Cierra el acceso y los envíos, o espera a la fecha límite, para publicar los resultados definitivos. Cada pregunta necesita al menos cinco respuestas.",
+  "pages.results.surveySuppressed":
+    "Las distribuciones están ocultas porque han enviado respuestas menos de cinco personas.",
+  "pages.results.surveyQuestionSuppressed":
+    "Las distribuciones están ocultas porque esta pregunta tiene menos de cinco respuestas.",
+  "pages.results.surveyResponses": "{count} respuestas",
+  "pages.results.surveyMultipleSelections":
+    "Se permiten varias selecciones. Los recuentos indican cuántas personas han seleccionado cada opción; los totales pueden superar el número de respuestas.",
+  "pages.results.surveyResponseCounts": "Recuentos de respuestas",
+  "pages.results.surveyResponse": "Respuesta",
+  "pages.results.surveyCount": "Recuento",
+  "pages.results.surveyPrivacy":
+    "No se recopilan alias ni identidades de cuentas. Los organizadores no pueden consultar las respuestas vinculadas de una misma persona.",
   "pages.results.searchRounds": "Buscar resultados de Round",
   "pages.results.searchPresentations": "Buscar resultados de presentación",
   "pages.results.searchPractice": "Buscar ejercicios",

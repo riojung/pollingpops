@@ -227,7 +227,7 @@ const messages = {
   "page.results.eyebrow": "学習成果",
   "page.results.title": "結果",
   "page.results.description":
-    "リカバリーの成果を確認し、割り当て済みまたはレポートに基づく練習を追跡します。",
+    "ラウンド、プレゼンテーション、アンケートの結果を確認し、練習の状況を追跡します。",
   "page.discover.eyebrow": "Polling Pops 厳選",
   "page.discover.title": "探す",
   "page.discover.description":

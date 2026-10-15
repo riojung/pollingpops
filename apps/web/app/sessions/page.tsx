@@ -957,7 +957,7 @@ function SessionsContent() {
                     {actions.canViewSurveyResults ? (
                       <Link
                         className="button-quiet small-button"
-                        href={`/surveys/rooms/${session.id}`}
+                        href={`/results/surveys/${session.id}`}
                       >
                         {t("pages.common.viewResults")}
                       </Link>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SurveyContentSchema, type SurveyDraft } from "@openround/contracts/surveys";
 import {
   newSurveyQuestion,
+  SurveyQuestionActions,
   SurveyQuestionEditor,
   SurveyResponseControl,
 } from "../../../components/survey-controls";
@@ -351,48 +352,25 @@ function Editor({ id }: { id: string }) {
                     />
                     Required response
                   </label>
-                  <div className={styles.surveyActions}>
-                    {(
-                      [
-                        [-1, "Move up"],
-                        [1, "Move down"],
-                      ] as const
-                    ).map(([direction, label]) => (
-                      <button
-                        className="button-quiet small-button"
-                        key={direction}
-                        type="button"
-                        disabled={
-                          blocked ||
-                          index + direction < 0 ||
-                          index + direction >= draft.items.length
-                        }
-                        onClick={() => {
-                          const items = [...draft.items];
-                          [items[index], items[index + direction]] = [
-                            items[index + direction]!,
-                            items[index]!,
-                          ];
-                          setDraft({ ...draft, items });
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                    <button
-                      className="button-quiet small-button"
-                      type="button"
-                      disabled={blocked}
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          items: draft.items.filter((_, offset) => offset !== index),
-                        })
-                      }
-                    >
-                      Remove question {index + 1}
-                    </button>
-                  </div>
+                  <SurveyQuestionActions
+                    index={index}
+                    count={draft.items.length}
+                    disabled={blocked}
+                    onMove={(direction) => {
+                      const items = [...draft.items];
+                      [items[index], items[index + direction]] = [
+                        items[index + direction]!,
+                        items[index]!,
+                      ];
+                      setDraft({ ...draft, items });
+                    }}
+                    onRemove={() =>
+                      setDraft({
+                        ...draft,
+                        items: draft.items.filter((_, offset) => offset !== index),
+                      })
+                    }
+                  />
                 </>
               )}
             </section>

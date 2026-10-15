@@ -8,6 +8,25 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Round and Survey answer editing October 15 2026
+
+Implemented locally on `codex/answer-editor-layout`. All Round choice formats use flexible
+multiline answer fields and separate 44px trash controls. Polls and ranking questions reclaim the
+space used by correctness controls in scored questions. Removing controls at the two-answer minimum
+also returns space to the text field. Both Round editors and Presentation question editing share
+the repair; report rows keep their existing layout.
+
+Survey prompts and options use multiline fields, option removal has a distinct 44px target, and
+question movement/removal controls wrap separately from editing. Long poll/rating response labels
+wrap in previews and participant views without shrinking the native selection controls. Media
+editing uses the full available width without a preview and stacks in narrow containers.
+
+Validation: `CI=true pnpm check` passes, including 982 web tests, lint, strict types and production
+builds. Browser journeys pass on desktop Chromium, mobile Chromium and mobile WebKit, including
+320px Round editors and Survey participant views. They exercise editing at the text field's far
+edge, removal limits, autosave/reload, publication and preview. Separate live multiple-selection
+and ranking journeys also pass on all three browsers.
+
 ### Password-protected rooms October 15 2026
 
 Implemented on `codex/password-protected-sessions`. Paid workspaces can optionally require an

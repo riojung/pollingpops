@@ -2,6 +2,7 @@
 
 import type { SurveyQuestionDraft, SurveyResponse } from "@openround/contracts/surveys";
 import { surveyMutationKey } from "../lib/survey-client";
+import styles from "./survey-controls.module.css";
 
 export function newSurveyQuestion(type: "poll" | "rating"): SurveyQuestionDraft {
   const common = {
@@ -62,7 +63,7 @@ export function SurveyResponseControl({
           }))
         : [];
   return (
-    <fieldset disabled={disabled}>
+    <fieldset className={styles.fieldset} disabled={disabled}>
       <legend>
         {question.prompt || "Untitled question"} {required ? "(required)" : "(optional)"}
       </legend>
@@ -72,11 +73,7 @@ export function SurveyResponseControl({
         </p>
       ) : null}
       {options.map((option) => (
-        <label
-          className="field"
-          key={option.value}
-          style={{ padding: "0.5rem 0", display: "flex", gap: 12 }}
-        >
+        <label className={styles.responseOption} key={option.value}>
           <input
             type={multiple ? "checkbox" : "radio"}
             name={question.id}
@@ -96,7 +93,7 @@ export function SurveyResponseControl({
               onChange?.(choiceIds.length ? { kind: "poll", choiceIds } : undefined);
             }}
           />
-          {option.label}
+          <span>{option.label}</span>
         </label>
       ))}
       {!required && response && onChange ? (
@@ -118,20 +115,21 @@ export function SurveyQuestionEditor({
   disabled: boolean;
 }) {
   return (
-    <fieldset disabled={disabled}>
+    <fieldset className={styles.fieldset} disabled={disabled}>
       <legend>{question.type === "poll" ? "Poll question" : "Rating question"}</legend>
-      <label className="field">
+      <label className={`field ${styles.editorField}`}>
         Question
-        <input
+        <textarea
           className="input"
           maxLength={500}
+          rows={3}
           value={question.prompt}
           onChange={(event) => onChange({ ...question, prompt: event.target.value })}
         />
       </label>
       {question.type === "poll" ? (
         <>
-          <label className="field">
+          <label className={`field ${styles.editorField}`}>
             Maximum selections
             <select
               className="input"
@@ -148,45 +146,62 @@ export function SurveyQuestionEditor({
             </select>
           </label>
           <p>Participants may select up to this limit. Polls have no correct answer or score.</p>
-          {question.choices.map((choice, index) => (
-            <div key={choice.id}>
-              <label className="field">
-                Option {index + 1}
-                <input
-                  className="input"
-                  maxLength={180}
-                  value={choice.label}
-                  onChange={(event) =>
+          <div className={styles.options}>
+            {question.choices.map((choice, index) => (
+              <div className={styles.optionRow} key={choice.id}>
+                <label className={`field ${styles.editorField}`}>
+                  Option {index + 1}
+                  <textarea
+                    className="input"
+                    maxLength={180}
+                    rows={2}
+                    value={choice.label}
+                    onChange={(event) =>
+                      onChange({
+                        ...question,
+                        choices: question.choices.map((c) =>
+                          c.id === choice.id ? { ...c, label: event.target.value } : c,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <button
+                  aria-label={`Remove option ${index + 1}`}
+                  className={`button-quiet ${styles.removeOption}`}
+                  disabled={question.choices.length <= 2}
+                  title={`Remove option ${index + 1}`}
+                  type="button"
+                  onClick={() =>
                     onChange({
                       ...question,
-                      choices: question.choices.map((c) =>
-                        c.id === choice.id ? { ...c, label: event.target.value } : c,
+                      choices: question.choices.filter((c) => c.id !== choice.id),
+                      maxSelections: Math.min(
+                        question.maxSelections ?? 1,
+                        question.choices.length - 1,
                       ),
                     })
                   }
-                />
-              </label>
-              <button
-                className="button-quiet small-button"
-                disabled={question.choices.length <= 2}
-                type="button"
-                onClick={() =>
-                  onChange({
-                    ...question,
-                    choices: question.choices.filter((c) => c.id !== choice.id),
-                    maxSelections: Math.min(
-                      question.maxSelections ?? 1,
-                      question.choices.length - 1,
-                    ),
-                  })
-                }
-              >
-                Remove option {index + 1}
-              </button>
-            </div>
-          ))}
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
           <button
-            className="button-quiet small-button"
+            className={`button-quiet ${styles.addOption}`}
             disabled={question.choices.length >= 6}
             type="button"
             onClick={() =>
@@ -204,7 +219,7 @@ export function SurveyQuestionEditor({
         </>
       ) : question.type === "rating" ? (
         <>
-          <label className="field">
+          <label className={`field ${styles.editorField}`}>
             Scale maximum
             <select
               className="input"
@@ -216,7 +231,7 @@ export function SurveyQuestionEditor({
               ))}
             </select>
           </label>
-          <label className="field">
+          <label className={`field ${styles.editorField}`}>
             Low endpoint label
             <input
               className="input"
@@ -225,7 +240,7 @@ export function SurveyQuestionEditor({
               onChange={(event) => onChange({ ...question, minLabel: event.target.value })}
             />
           </label>
-          <label className="field">
+          <label className={`field ${styles.editorField}`}>
             High endpoint label
             <input
               className="input"
@@ -237,5 +252,52 @@ export function SurveyQuestionEditor({
         </>
       ) : null}
     </fieldset>
+  );
+}
+
+export function SurveyQuestionActions({
+  index,
+  count,
+  disabled,
+  onMove,
+  onRemove,
+}: {
+  index: number;
+  count: number;
+  disabled: boolean;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className={styles.questionActions}
+      role="group"
+      aria-label={`Question ${index + 1} actions`}
+    >
+      {(
+        [
+          [-1, "Move up"],
+          [1, "Move down"],
+        ] as const
+      ).map(([direction, label]) => (
+        <button
+          className="button-quiet"
+          key={direction}
+          type="button"
+          disabled={disabled || index + direction < 0 || index + direction >= count}
+          onClick={() => onMove(direction)}
+        >
+          {label}
+        </button>
+      ))}
+      <button
+        className={`button-quiet ${styles.removeQuestion}`}
+        type="button"
+        disabled={disabled}
+        onClick={onRemove}
+      >
+        Remove question {index + 1}
+      </button>
+    </div>
   );
 }

@@ -1,0 +1,76 @@
+.choiceList {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.choiceRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+  border: 1px solid var(--ui-border);
+  border-left: 5px solid #2c7fb8;
+  border-radius: 12px;
+  background: var(--ui-surface-soft);
+  padding: 9px 10px;
+}
+
+.choiceRow:nth-child(3n + 2) {
+  border-left-color: #087375;
+}
+
+.choiceRow:nth-child(3n) {
+  border-left-color: #a15c00;
+}
+
+.correctControl {
+  display: flex;
+  flex: 0 0 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.choiceContent {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.choiceInput {
+  display: block;
+  min-width: 0;
+  min-height: 72px;
+  field-sizing: content;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.removeButton {
+  display: inline-flex;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface-raised);
+  color: var(--ui-danger-text);
+  padding: 0;
+}
+
+.removeButton:hover {
+  border-color: var(--ui-danger-text);
+  background: var(--ui-danger-bg);
+}
+
+.removeButton:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}

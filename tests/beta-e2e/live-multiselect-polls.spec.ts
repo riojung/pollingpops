@@ -61,15 +61,14 @@ for (const suffix of ["desktop", "@mobile"]) {
     await page.goto(`/quiz/${quizId}`);
     await page.getByRole("combobox", { name: "Maximum selections", exact: true }).selectOption("3");
     await page
-      .locator(".choice-row")
-      .nth(2)
-      .getByRole("button", { name: "Delete", exact: true })
+      .getByRole("group", { name: "Answer 3", exact: true })
+      .getByRole("button", { name: "Delete Answer 3", exact: true })
       .click();
     await expect(
       page.getByRole("combobox", { name: "Maximum selections", exact: true }),
     ).toHaveValue("2");
     await page.getByRole("button", { name: "Add answer", exact: true }).click();
-    await page.getByLabel("Answer 3", { exact: true }).fill("Discussion");
+    await page.getByRole("textbox", { name: "Answer 3", exact: true }).fill("Discussion");
     await expect(page.getByText("Saved", { exact: true }).first()).toBeAttached();
     await page.reload();
     await expect(

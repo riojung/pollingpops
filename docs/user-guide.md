@@ -67,6 +67,8 @@ Submitting feedback does not mean public beta or production launch has been appr
    more uses checkboxes. The limit cannot exceed the number of options (two to six). Participants
    may deselect choices, but cannot select more than the limit. Removing an option reduces the
    limit if necessary. These opinion polls have no correct answers, confidence or scores.
+   Option text uses multiline fields. The trash button beside each option removes only that option;
+   at least two options must remain. Long labels wrap in previews and participant views.
    Open text, word clouds and ranking are available in enabled Live Rounds; Surveys currently
    support polls and ratings.
 3. Draft edits autosave after a short pause. Watch **Waiting to save…**, **Saving…**, then **Saved.**
@@ -211,6 +213,10 @@ invite editors or viewers from **Account**. An invitation is single-use and expi
 belongs to multiple workspaces can switch the active workspace there.
 
 ## Create and organize Rounds
+
+Choice answers use multiline fields with a separate trash button for each removable answer.
+Click inside the text field to edit; use the correctness control beside it for scored questions.
+Polls and ranking questions give that space to the answer text. At least two answers must remain.
 
 In the professional workspace, select **Create**, then **Round**, and choose a starter, trusted
 source, structured import, or blank Round. In the classic view, enter a title under **Your

@@ -32,6 +32,7 @@ export function presentationRecoveryPackLiveInsertionEnabled(
         sessionId,
         workspaceId,
         "presentationCompanion",
+        true,
       ),
       roomFeatureEnabled(
         repository,
@@ -40,6 +41,7 @@ export function presentationRecoveryPackLiveInsertionEnabled(
         sessionId,
         workspaceId,
         "recoveryPackLiveCards",
+        true,
       ),
     ]).then((values) => values.every(Boolean));
   if (repository)

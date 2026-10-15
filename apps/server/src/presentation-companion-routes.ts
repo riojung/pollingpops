@@ -136,6 +136,7 @@ export function registerPresentationCompanionRoutes(
         IdParamsSchema.parse(request.params).id,
         creator.workspaceId,
         "presentationCompanion",
+        true,
       ))
     ) {
       return professionalFeatureUnavailable(reply, request.id, "Presentation companion not found");

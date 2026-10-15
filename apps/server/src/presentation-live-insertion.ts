@@ -25,6 +25,7 @@ export function presentationLiveInsertionEnabled(
           sessionId,
           workspaceId,
           "presentationCompanion",
+          true,
         )
       : workspaceFeatureEnabled(repository, config, workspaceId, "presentationCompanion");
   return (

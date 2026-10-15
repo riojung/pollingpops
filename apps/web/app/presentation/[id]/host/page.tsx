@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CreatorBrand } from "../../../../components/brand";
-import type { Entitlements } from "@openround/contracts";
+import type { Entitlements, WorkspaceProductFeatures } from "@openround/contracts";
 import { RoomPasswordOption } from "../../../../components/room-password";
 import {
   canProtectRoom,
@@ -92,11 +92,17 @@ function PresentationHostSetupContent() {
   const [timeMode, setTimeMode] = useState<"timed" | "flex">("timed");
   const [useEventCredit, setUseEventCredit] = useState(false);
   const [eventEntitlements, setEventEntitlements] = useState<Entitlements | null>(null);
+  const [eventProductFeatures, setEventProductFeatures] = useState<WorkspaceProductFeatures | null>(
+    null,
+  );
   const [protectRoom, setProtectRoom] = useState(false);
   const [joinPassword, setJoinPassword] = useState("");
   const passwordAvailable = canProtectRoom(useEventCredit ? eventEntitlements : entitlements);
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
-  const liveCreationAvailable = productFeatures?.presentationRealtime === true;
+  const launchFeatures = useEventCredit
+    ? (eventProductFeatures ?? productFeatures)
+    : productFeatures;
+  const liveCreationAvailable = launchFeatures?.presentationRealtime === true;
 
   useEffect(() => {
     void apiFetch<{ presentation: PresentationRecord }>(`/v1/presentations/${id}`)
@@ -123,7 +129,7 @@ function PresentationHostSetupContent() {
     setError("");
     const body = JSON.stringify({
       presentationId: id,
-      ...(productFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
+      ...(launchFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
       useEventCredit,
       ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
     });
@@ -162,9 +168,12 @@ function PresentationHostSetupContent() {
         <EventCreditChoice
           checked={useEventCredit}
           disabled={busy}
-          onChange={(checked, benefits) => {
+          onChange={(checked, benefits, features) => {
             setUseEventCredit(checked);
             setEventEntitlements(benefits);
+            setEventProductFeatures(features ?? null);
+            if (!(checked ? (features ?? productFeatures) : productFeatures)?.liveFlexMode)
+              setTimeMode("timed");
           }}
         />
         <span className={styles.statusPill}>{t("live.presentationHost.live")}</span>
@@ -195,7 +204,7 @@ function PresentationHostSetupContent() {
             {t("live.presentationHost.publishFirst")}
           </p>
         ) : null}
-        {productFeatures?.liveFlexMode ? (
+        {launchFeatures?.liveFlexMode ? (
           <label className="field" htmlFor="presentation-time-mode">
             <span>{t("live.common.timeMode")}</span>
             <select

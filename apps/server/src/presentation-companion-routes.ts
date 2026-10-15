@@ -1,3 +1,4 @@
+import { roomFeatureEnabled } from "./feature-policy.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -9,14 +10,11 @@ import {
   PresentationCompanionPublishedQuestionCatalogSchema,
   type PresentationCompanionSnapshot,
 } from "@openround/contracts";
-import type { CreatorContext } from "@openround/db";
+import type { CreatorContext, Repository } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
 import type { PresentationSessionService } from "./presentation-session-service.js";
-import {
-  evidenceWorkspaceFeatureEnabled,
-  professionalFeatureUnavailable,
-} from "./workspace-rollout.js";
+import { professionalFeatureUnavailable } from "./workspace-rollout.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const CompanionPassParamsSchema = z.object({
@@ -48,6 +46,7 @@ function restCompanionSnapshot(
 interface PresentationCompanionRouteDependencies {
   auth: Pick<AuthService, "requireCreator">;
   config: AppConfig;
+  repository: Repository;
   service: Pick<
     PresentationSessionService,
     | "createCompanionPass"
@@ -61,7 +60,7 @@ interface PresentationCompanionRouteDependencies {
     workspaceId: string,
     reply: FastifyReply,
     requestId: string,
-  ): boolean | FastifyReply;
+  ): boolean | FastifyReply | Promise<boolean | FastifyReply>;
   enforceSharedAdmission(
     request: FastifyRequest,
     reply: FastifyReply,
@@ -72,7 +71,7 @@ interface PresentationCompanionRouteDependencies {
     creator: CreatorContext,
     reply: FastifyReply,
     requestId: string,
-  ): boolean | FastifyReply;
+  ): boolean | FastifyReply | Promise<boolean | FastifyReply>;
   noStore(reply: FastifyReply): FastifyReply;
   bearerToken(request: FastifyRequest): string | null;
   apiError(
@@ -110,8 +109,8 @@ export function registerPresentationCompanionRoutes(
   const {
     auth,
     config,
+    repository,
     service,
-    requirePresentationWorkspace,
     enforceSharedAdmission,
     requireEditor,
     noStore,
@@ -128,9 +127,17 @@ export function registerPresentationCompanionRoutes(
     noStore(reply);
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator.workspaceId, reply, request.id) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
-    if (!evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "presentationCompanion")) {
+    if (
+      !(await roomFeatureEnabled(
+        repository,
+        config,
+        "presentation",
+        IdParamsSchema.parse(request.params).id,
+        creator.workspaceId,
+        "presentationCompanion",
+      ))
+    ) {
       return professionalFeatureUnavailable(reply, request.id, "Presentation companion not found");
     }
     const { id } = IdParamsSchema.parse(request.params);

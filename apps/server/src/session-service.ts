@@ -1,3 +1,6 @@
+import { requiresExtendedRoundResponses } from "@openround/contracts";
+import { resolveWorkspaceFeatures, workspaceFeatureEnabled } from "./feature-policy.js";
+import { passwordProtectionAllowed } from "./entitlements.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { SpanStatusCode, trace, type Attributes } from "@opentelemetry/api";
@@ -77,7 +80,6 @@ import {
   roomCreationIdentity,
 } from "./room-entitlements.js";
 import { ProductEventDispatcher, type ProductEventInput } from "./product-events.js";
-import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 import { decisionEventsForTransition } from "./session-decision-replay.js";
 import {
   approvedTextAnswerIds,
@@ -87,11 +89,7 @@ import {
   type TextModerationPageQuery,
   type TextResponsePageQuery,
 } from "./response-moderation.js";
-import {
-  extendedRoundResponseWriteAllowed,
-  richerRoundResponsesEnabled,
-  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
-} from "./round-response-rollout.js";
+import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
 
 export interface SessionMutation {
   state: GameState;
@@ -229,22 +227,24 @@ export class SessionService {
   }
 
   private uxBetaEnabled(workspaceId: string) {
-    return (
-      this.config.FEATURE_UX_BETA && this.config.UX_BETA_WORKSPACE_ALLOWLIST.includes(workspaceId)
-    );
+    return workspaceFeatureEnabled(this.repository, this.config, workspaceId, "uxBeta");
   }
 
-  private recordSessionProductEvents(
+  private async recordSessionProductEvents(
     workspaceId: string,
     events: ProductEventInput[],
     segment?: CreatorContext["segment"],
   ) {
-    if (!this.uxBetaEnabled(workspaceId) || events.length === 0) return;
-    this.productEvents.enqueue({
-      workspaceId,
-      events,
-      ...(segment ? { segment } : {}),
-    });
+    try {
+      if (!(await this.uxBetaEnabled(workspaceId)) || events.length === 0) return;
+      this.productEvents.enqueue({
+        workspaceId,
+        events,
+        ...(segment ? { segment } : {}),
+      });
+    } catch {
+      // Telemetry must not reject an already accepted product operation.
+    }
   }
 
   private lifecycleProductEvents(events: EngineEvent[], occurredAt = new Date()) {
@@ -444,7 +444,7 @@ export class SessionService {
     if (cached && cached.version >= persisted.state.version) {
       persisted.state = upgradeGameState(cached);
     }
-    persisted.state.uxBeta = this.uxBetaEnabled(persisted.workspaceId);
+
     this.active.set(sessionId, persisted);
     this.metrics.setActiveSessions(this.active.size);
     this.scheduleDeadline(persisted);
@@ -469,11 +469,10 @@ export class SessionService {
       const cached = await this.cache.get(sessionId);
       if (cached && cached.version >= active.state.version) {
         active.state = upgradeGameState(cached);
-        active.state.uxBeta = this.uxBetaEnabled(active.workspaceId);
+
         this.scheduleDeadline(active);
         return active;
       }
-      active.state.uxBeta = this.uxBetaEnabled(active.workspaceId);
     }
     return this.loadSession(sessionId);
   }
@@ -866,8 +865,11 @@ export class SessionService {
           creator.workspaceId,
           experience.useEventCredit,
         );
-    if (experience.joinPassword !== undefined && policy.entitlements.plan === "free") {
-      throw new SessionError("ENTITLEMENT_LIMIT", "Password-protected rooms require a paid plan");
+    if (experience.joinPassword !== undefined && !passwordProtectionAllowed(policy.entitlements)) {
+      throw new SessionError(
+        "ENTITLEMENT_LIMIT",
+        "Password protection is not enabled for this workspace",
+      );
     }
     const joinPasswordHash =
       experience.joinPassword === undefined
@@ -916,10 +918,13 @@ export class SessionService {
       const existing = await this.repository.getSessionById(creation.roomId);
       if (existing) return replay(existing);
     }
-    if (
-      settings.timeMode === "flex" &&
-      !evidenceWorkspaceFeatureEnabled(this.config, creator.workspaceId, "liveFlexMode")
-    ) {
+    const features = await resolveWorkspaceFeatures(
+      this.repository,
+      this.config,
+      creator.workspaceId,
+      policy.entitlements.plan,
+    );
+    if (settings.timeMode === "flex" && !features.enabled("liveFlexMode")) {
       throw new SessionError("NOT_FOUND", "Flex sessions are not available in this workspace");
     }
     if (settings.trustMode === "verified") {
@@ -943,7 +948,10 @@ export class SessionService {
       quiz.currentVersionId,
     );
     if (!version) throw new SessionError("NOT_FOUND", "Published quiz version not found");
-    if (!extendedRoundResponseWriteAllowed(this.config, creator.workspaceId, version.content)) {
+    if (
+      requiresExtendedRoundResponses(version.content) &&
+      !features.enabled("roundClientProtocol")
+    ) {
       throw new SessionError("NOT_FOUND", EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE);
     }
     const roundProtocol = deriveRoundProtocol(version.content);
@@ -968,10 +976,15 @@ export class SessionService {
       ? await this.repository.getBrandTheme(creator.workspaceId)
       : null;
     const category = version.content.category ?? "general";
+    const experiencesAvailable =
+      features.enabled("roundExperiences") &&
+      (await this.repository.getOperationalFeatures()).roundExperiences;
     const experienceTheme = resolveExperienceTheme({
       category,
-      presetId: experience.experiencePresetOverride ?? version.content.experiencePreset?.id,
-      soundEnabled: experience.presenterSoundEnabled,
+      presetId: experiencesAvailable
+        ? (experience.experiencePresetOverride ?? version.content.experiencePreset?.id)
+        : "focus",
+      soundEnabled: experiencesAvailable && experience.presenterSoundEnabled,
       brandTheme,
     });
 
@@ -1011,11 +1024,7 @@ export class SessionService {
             creationKey: creation?.creationKey,
           }),
           trustMode: settings.trustMode ?? "learning",
-          decisionReplayEnabled: evidenceWorkspaceFeatureEnabled(
-            this.config,
-            creator.workspaceId,
-            "decisionReplay",
-          ),
+          decisionReplayEnabled: features.enabled("decisionReplay"),
           state: createGameState({
             sessionId,
             code,
@@ -1023,17 +1032,11 @@ export class SessionService {
             settings,
             brandTheme,
             experienceTheme,
-            ...(richerRoundResponsesEnabled(this.config, creator.workspaceId)
-              ? { roundProtocol }
-              : {}),
-            uxBeta: this.uxBetaEnabled(creator.workspaceId),
+            ...(features.enabled("roundClientProtocol") ? { roundProtocol } : {}),
+            uxBeta: features.enabled("uxBeta"),
             // Freeze live Pack use with the room. Disabling rollout must not strand an
             // already-created room or require mutable source Pack access during playback.
-            recoveryPackCardsEnabled: evidenceWorkspaceFeatureEnabled(
-              this.config,
-              creator.workspaceId,
-              "recoveryPackLiveCards",
-            ),
+            recoveryPackCardsEnabled: features.enabled("recoveryPackLiveCards"),
           }),
           expiresAt: new Date(now.getTime() + ttlMs),
           retentionExpiresAt: retentionExpiry(now, entitlements),
@@ -1735,7 +1738,7 @@ export class SessionService {
       }
 
       if (newAnswers.length > 0) {
-        const previouslyAnsweredParticipantIds = this.uxBetaEnabled(session.workspaceId)
+        const previouslyAnsweredParticipantIds = session.state.uxBeta
           ? await this.repository
               .findParticipantIdsWithAnswers(session.workspaceId, session.id, [
                 ...new Set(newAnswers.map((answer) => answer.participantId)),

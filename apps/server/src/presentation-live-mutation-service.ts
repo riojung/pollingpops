@@ -119,9 +119,18 @@ interface PresentationLiveMutationDependencies {
   repository: PresentationMutationRepository;
   config: PresentationEntitlementConfig;
   packs?: Pick<RecoveryPackRepository, "getRecoveryPackVersion">;
-  recoveryPackLiveInsertionEnabled?: (workspaceId: string) => boolean;
-  quickCheckLiveInsertionEnabled?: (workspaceId: string) => boolean;
-  publishedQuestionLiveInsertionEnabled?: (workspaceId: string) => boolean;
+  recoveryPackLiveInsertionEnabled?: (
+    workspaceId: string,
+    sessionId?: string,
+  ) => boolean | Promise<boolean>;
+  quickCheckLiveInsertionEnabled?: (
+    workspaceId: string,
+    sessionId?: string,
+  ) => boolean | Promise<boolean>;
+  publishedQuestionLiveInsertionEnabled?: (
+    workspaceId: string,
+    sessionId?: string,
+  ) => boolean | Promise<boolean>;
   participantTokenHash(token: string): string;
   sessionExpired(session: PresentationSessionRecord, now?: Date): boolean;
   authorizeHostCredential(sessionId: string, token: string): Promise<PresentationSessionRecord>;
@@ -405,7 +414,7 @@ export class PresentationLiveMutationService {
           : input.action === "start_recovery_card"
             ? recoveryCardTransition(session, input)
             : input.action === "insert_quick_check"
-              ? this.quickCheckInsertionTransition(session, input)
+              ? await this.quickCheckInsertionTransition(session, input)
               : input.action === "insert_published_question"
                 ? await this.publishedQuestionInsertionTransition(session, input)
                 : await this.recoveryPackInsertionTransition(session, input);
@@ -545,7 +554,12 @@ export class PresentationLiveMutationService {
     session: PresentationSessionRecord,
     input: Extract<PresentationCompanionCommand, { action: "insert_published_question" }>,
   ) {
-    if (!this.dependencies.publishedQuestionLiveInsertionEnabled?.(session.workspaceId))
+    if (
+      !(await this.dependencies.publishedQuestionLiveInsertionEnabled?.(
+        session.workspaceId,
+        session.id,
+      ))
+    )
       throw new PresentationSessionServiceError(
         404,
         "NOT_FOUND",
@@ -573,11 +587,13 @@ export class PresentationLiveMutationService {
     return presentationPublishedQuestionInsertionTransition(session, version, input);
   }
 
-  private quickCheckInsertionTransition(
+  private async quickCheckInsertionTransition(
     session: PresentationSessionRecord,
     input: Extract<PresentationCompanionCommand, { action: "insert_quick_check" }>,
   ) {
-    if (!this.dependencies.quickCheckLiveInsertionEnabled?.(session.workspaceId))
+    if (
+      !(await this.dependencies.quickCheckLiveInsertionEnabled?.(session.workspaceId, session.id))
+    )
       throw new PresentationSessionServiceError(
         404,
         "NOT_FOUND",
@@ -598,7 +614,7 @@ export class PresentationLiveMutationService {
   ) {
     if (
       !this.dependencies.packs ||
-      !this.dependencies.recoveryPackLiveInsertionEnabled?.(session.workspaceId)
+      !(await this.dependencies.recoveryPackLiveInsertionEnabled?.(session.workspaceId, session.id))
     ) {
       throw new PresentationSessionServiceError(
         404,

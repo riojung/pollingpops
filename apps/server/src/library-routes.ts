@@ -87,8 +87,8 @@ export async function registerLibraryRoutes(
     libraryMetadata: LibraryMetadataRepository;
     surveys: SurveyRepository;
     auth: AuthService;
-    workspaceEnabled: (workspaceId: string) => boolean;
-    presentationsEnabled: (workspaceId: string) => boolean;
+    workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
+    presentationsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
   },
 ) {
   const {
@@ -100,12 +100,12 @@ export async function registerLibraryRoutes(
     presentationsEnabled,
   } = dependencies;
 
-  function requireLibraryWorkspace(
+  async function requireLibraryWorkspace(
     creator: CreatorContext,
     reply: FastifyReply,
     requestId: string,
   ) {
-    return workspaceEnabled(creator.workspaceId)
+    return (await workspaceEnabled(creator.workspaceId))
       ? true
       : professionalFeatureUnavailable(reply, requestId, "Library metadata not found");
   }
@@ -114,8 +114,8 @@ export async function registerLibraryRoutes(
     reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireLibraryWorkspace(creator, reply, request.id) !== true) return;
-    const workspacePresentationsEnabled = presentationsEnabled(creator.workspaceId);
+    if ((await requireLibraryWorkspace(creator, reply, request.id)) !== true) return;
+    const workspacePresentationsEnabled = await presentationsEnabled(creator.workspaceId);
     const favorites = (
       await libraryMetadata.listFavorites(creator.workspaceId, creator.userId)
     ).filter(
@@ -127,9 +127,9 @@ export async function registerLibraryRoutes(
   app.put("/v1/library/favorites/:artifactType/:artifactId", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireLibraryWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireLibraryWorkspace(creator, reply, request.id)) !== true) return;
     const { artifactType, artifactId } = FavoriteParamsSchema.parse(request.params);
-    if (artifactType === "presentation" && !presentationsEnabled(creator.workspaceId)) {
+    if (artifactType === "presentation" && !(await presentationsEnabled(creator.workspaceId))) {
       return apiError(reply, 404, "NOT_FOUND", "Library item not found", request.id);
     }
     const { favorite } = FavoriteMutationSchema.parse(request.body);
@@ -169,7 +169,7 @@ export async function registerLibraryRoutes(
   app.delete("/v1/quizzes/:id", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireLibraryWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requireLibraryWorkspace(creator, reply, request.id)) !== true) return;
     if (requireOwner(creator, reply, request.id) !== true) return;
     const { id } = PresentationParamsSchema.parse(request.params);
     const result = await repository.deleteQuiz(creator.workspaceId, id);
@@ -188,8 +188,8 @@ export async function registerLibraryRoutes(
   app.delete("/v1/presentations/:id", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireLibraryWorkspace(creator, reply, request.id) !== true) return;
-    if (!presentationsEnabled(creator.workspaceId)) {
+    if ((await requireLibraryWorkspace(creator, reply, request.id)) !== true) return;
+    if (!(await presentationsEnabled(creator.workspaceId))) {
       return professionalFeatureUnavailable(reply, request.id, "Presentation not found");
     }
     if (requireOwner(creator, reply, request.id) !== true) return;
@@ -210,8 +210,8 @@ export async function registerLibraryRoutes(
   app.patch("/v1/presentations/:id/organization", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireLibraryWorkspace(creator, reply, request.id) !== true) return;
-    if (!presentationsEnabled(creator.workspaceId)) {
+    if ((await requireLibraryWorkspace(creator, reply, request.id)) !== true) return;
+    if (!(await presentationsEnabled(creator.workspaceId))) {
       return professionalFeatureUnavailable(reply, request.id, "Presentation not found");
     }
     if (requireEditor(creator, reply, request.id) !== true) return;
@@ -246,8 +246,8 @@ export async function registerLibraryRoutes(
   app.post("/v1/presentations/:id/archive", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireLibraryWorkspace(creator, reply, request.id) !== true) return;
-    if (!presentationsEnabled(creator.workspaceId)) {
+    if ((await requireLibraryWorkspace(creator, reply, request.id)) !== true) return;
+    if (!(await presentationsEnabled(creator.workspaceId))) {
       return professionalFeatureUnavailable(reply, request.id, "Presentation not found");
     }
     if (requireEditor(creator, reply, request.id) !== true) return;

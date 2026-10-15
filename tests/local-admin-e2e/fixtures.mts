@@ -10,6 +10,7 @@ export const cookieNames = {
 };
 export const businessAreas = {
   organizations: "Tenant management",
+  features: "Features and plans",
   billing: "Billing",
   credits: "Credits and promotions",
   operations: "Operations",

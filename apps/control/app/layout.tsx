@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./styles.css";
 export const metadata: Metadata = {
-  title: "Polling Pops Control",
+  title: "Polling Pops Admin",
   robots: { index: false, follow: false },
 };
 export default function Layout({ children }: { children: React.ReactNode }) {

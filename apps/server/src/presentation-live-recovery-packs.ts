@@ -1,3 +1,5 @@
+import type { Repository } from "@openround/db";
+import { roomFeatureEnabled, resolveWorkspaceFeatures } from "./feature-policy.js";
 import { PresentationContentSchema, type PresentationCompanionCommand } from "@openround/contracts";
 import {
   recoveryPackTextOnlyLiveEligible,
@@ -18,7 +20,33 @@ import {
 export function presentationRecoveryPackLiveInsertionEnabled(
   config: AppConfig,
   workspaceId: string,
+  repository?: Repository,
+  sessionId?: string,
 ) {
+  if (repository && sessionId)
+    return Promise.all([
+      roomFeatureEnabled(
+        repository,
+        config,
+        "presentation",
+        sessionId,
+        workspaceId,
+        "presentationCompanion",
+      ),
+      roomFeatureEnabled(
+        repository,
+        config,
+        "presentation",
+        sessionId,
+        workspaceId,
+        "recoveryPackLiveCards",
+      ),
+    ]).then((values) => values.every(Boolean));
+  if (repository)
+    return resolveWorkspaceFeatures(repository, config, workspaceId).then(
+      (features) =>
+        features.enabled("presentationCompanion") && features.enabled("recoveryPackLiveCards"),
+    );
   return (
     presentationLiveInsertionEnabled(config, workspaceId) &&
     evidenceWorkspaceFeatureEnabled(config, workspaceId, "recoveryPacks") &&

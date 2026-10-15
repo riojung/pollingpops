@@ -73,8 +73,10 @@ and download completion revalidates revocation, role, and deletion after renderi
 
 ## Rollout and verification
 
-New snapshots and links require `FEATURE_SESSION_SUMMARIES=true` and membership of
-`CORE_PARITY_WORKSPACE_ALLOWLIST`. The default is disabled. This gate is independent of new Survey
+Operators can configure **Session summaries** in **Features → Features/Plans**. An explicit
+availability and plan assignment overrides the legacy environment flag and workspace allowlist.
+Unconfigured summaries still require `FEATURE_SESSION_SUMMARIES=true` and membership of
+`CORE_PARITY_WORKSPACE_ALLOWLIST`; that deployment default is disabled. This gate is independent of new Survey
 creation. Accepted summaries remain readable, downloadable under current export entitlements,
 and revocable while new writers are paused. Event-funded Round/Presentation export coverage is
 preserved. Production/global enablement still requires the independent privacy review specified

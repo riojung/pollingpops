@@ -18,6 +18,7 @@ test("anonymous and ordinary customer sign-in never expose business administrati
   context,
 }, testInfo) => {
   const fixture = await localAdminHarness(context);
+  const existingOperator = (await fixture.state()).operator;
   await page.goto(productOrigin);
   await expectNoBusinessAccess(page);
   await page.screenshot({ path: testInfo.outputPath("anonymous-homepage.png"), fullPage: true });
@@ -30,7 +31,7 @@ test("anonymous and ordinary customer sign-in never expose business administrati
   });
   expect(denied.status()).toBeGreaterThanOrEqual(400);
   expect(await fixture.cookie(cookieNames.session)).toBeUndefined();
-  expect((await fixture.state()).operator).toBeNull();
+  expect((await fixture.state()).operator).toEqual(existingOperator);
   await signIn(page, testEmail("ordinary-customer", testInfo));
   await expectNoBusinessAccess(page);
   const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();

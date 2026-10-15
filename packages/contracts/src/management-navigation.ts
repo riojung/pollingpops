@@ -24,10 +24,13 @@ export const BusinessOperatorNavigationSchema = z.object({
     .array(
       z.object({
         id: z.enum([
+          "overview",
           "organizations",
+          "features",
           "billing",
           "credits",
           "operations",
+          "staff",
           "support",
           "integrations",
           "audit",
@@ -36,6 +39,6 @@ export const BusinessOperatorNavigationSchema = z.object({
         href: z.string().url(),
       }),
     )
-    .max(7),
+    .max(10),
 });
 export type BusinessOperatorNavigation = z.infer<typeof BusinessOperatorNavigationSchema>;

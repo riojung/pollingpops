@@ -1,3 +1,5 @@
+import { requiresExtendedRoundResponses } from "@openround/contracts";
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
@@ -22,11 +24,7 @@ import { proposeQuestionHealthRevision } from "./question-health-revisions.js";
 import { buildQuestionHealthPostUseResult } from "./question-health-post-use.js";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
-import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
-import {
-  extendedRoundResponseWriteAllowed,
-  EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE,
-} from "./round-response-rollout.js";
+import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const VersionParamsSchema = IdParamsSchema.extend({ versionId: z.string().uuid() });
@@ -125,7 +123,12 @@ export async function registerQuestionHealthRoutes(
     reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    const enabled = evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth");
+    const enabled = await workspaceFeatureEnabled(
+      repository,
+      config,
+      creator.workspaceId,
+      "questionHealth",
+    );
 
     const { id } = IdParamsSchema.parse(request.params);
     const stored = await repository.listQuestionHealthDismissals(creator.workspaceId, id);
@@ -188,7 +191,9 @@ export async function registerQuestionHealthRoutes(
     reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (!evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth")) {
+    if (
+      !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "questionHealth"))
+    ) {
       return apiError(reply, 404, "NOT_FOUND", "Question Health is not available", request.id);
     }
 
@@ -224,7 +229,9 @@ export async function registerQuestionHealthRoutes(
       reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
       const creator = await auth.requireCreator(request, reply);
       if (!creator) return;
-      if (!evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth")) {
+      if (
+        !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "questionHealth"))
+      ) {
         return apiError(reply, 404, "NOT_FOUND", "Question Health is not available", request.id);
       }
 
@@ -263,7 +270,9 @@ export async function registerQuestionHealthRoutes(
     if (creator.role === "viewer") {
       return apiError(reply, 403, "FORBIDDEN", "An editor role is required", request.id);
     }
-    if (!evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth")) {
+    if (
+      !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "questionHealth"))
+    ) {
       return apiError(reply, 404, "NOT_FOUND", "Question Health is not available", request.id);
     }
 
@@ -340,7 +349,12 @@ export async function registerQuestionHealthRoutes(
     if (creator.role === "viewer") {
       return apiError(reply, 403, "FORBIDDEN", "An editor role is required", request.id);
     }
-    const enabled = evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth");
+    const enabled = await workspaceFeatureEnabled(
+      repository,
+      config,
+      creator.workspaceId,
+      "questionHealth",
+    );
 
     const { id, findingId } = DismissalParamsSchema.parse(request.params);
     const input = DismissalRemovalBodySchema.parse(request.body);
@@ -481,7 +495,9 @@ export async function registerQuestionHealthRoutes(
       if (creator.role === "viewer") {
         return apiError(reply, 403, "FORBIDDEN", "An editor role is required", request.id);
       }
-      if (!evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth")) {
+      if (
+        !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "questionHealth"))
+      ) {
         return apiError(reply, 404, "NOT_FOUND", "Question Health is not available", request.id);
       }
       const { id, findingId } = DismissalParamsSchema.parse(request.params);
@@ -535,12 +551,22 @@ export async function registerQuestionHealthRoutes(
         changes: prior.changes,
       });
     }
-    if (!evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "questionHealth")) {
+    if (
+      !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "questionHealth"))
+    ) {
       return apiError(reply, 404, "NOT_FOUND", "Question Health is not available", request.id);
     }
     const proposal = await proposedRevision(creator.workspaceId, id, findingId, input);
     if (proposal.status !== "ok") return proposalError(reply, proposal.status, request.id);
-    if (!extendedRoundResponseWriteAllowed(config, creator.workspaceId, proposal.proposal.draft)) {
+    if (
+      requiresExtendedRoundResponses(proposal.proposal.draft) &&
+      !(await workspaceFeatureEnabled(
+        repository,
+        config,
+        creator.workspaceId,
+        "roundClientProtocol",
+      ))
+    ) {
       return apiError(
         reply,
         404,

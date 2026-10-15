@@ -2,8 +2,10 @@ import type { Entitlements } from "@openround/contracts";
 import { ApiClientError } from "./api";
 
 /** Use the entitlement of the funding explicitly selected for this run. */
-export function canProtectRoom(entitlements: Pick<Entitlements, "plan"> | null | undefined) {
-  return Boolean(entitlements && entitlements.plan !== "free");
+export function canProtectRoom(
+  entitlements: Pick<Entitlements, "plan" | "passwordProtection"> | null | undefined,
+) {
+  return Boolean(entitlements && (entitlements.passwordProtection ?? entitlements.plan !== "free"));
 }
 
 export function validRoomPassword(password: string) {
@@ -11,7 +13,7 @@ export function validRoomPassword(password: string) {
 }
 
 export function roomPasswordFields(available: boolean, enabled: boolean, password: string) {
-  if (enabled && !available) throw new Error("Password protection requires paid room entitlements");
+  if (enabled && !available) throw new Error("Password protection is not available for this run");
   return enabled ? { joinPassword: password } : {};
 }
 

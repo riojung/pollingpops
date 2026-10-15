@@ -1,3 +1,4 @@
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -22,7 +23,6 @@ import {
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
 import { RECOVERY_PACK_BODY_LIMIT } from "./draft-limits.js";
-import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 import {
   RecoveryPackSourceProposalError,
   sourceRecoveryPackProposal,
@@ -60,8 +60,9 @@ export async function registerRecoveryPackSourceRoutes(
     }
     return creator;
   };
-  const enabled = (creator: CreatorContext, request: FastifyRequest, reply: FastifyReply) => {
-    if (evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "recoveryPacks")) return true;
+  const enabled = async (creator: CreatorContext, request: FastifyRequest, reply: FastifyReply) => {
+    if (await workspaceFeatureEnabled(repository, config, creator.workspaceId, "recoveryPacks"))
+      return true;
     apiError(
       reply,
       404,
@@ -149,7 +150,7 @@ export async function registerRecoveryPackSourceRoutes(
           requestHash,
         );
         if (existing) return reply.code(201).send({ pack: existing });
-        if (!enabled(creator, request, reply)) return;
+        if (!(await enabled(creator, request, reply))) return;
         const result = await source(creator, id, request, reply);
         if (!result) return;
         if (
@@ -202,7 +203,7 @@ export async function registerRecoveryPackSourceRoutes(
     { bodyLimit: RECOVERY_PACK_BODY_LIMIT },
     async (request, reply) => {
       const creator = await authorize(request, reply, true);
-      if (!creator || !enabled(creator, request, reply)) return;
+      if (!creator || !(await enabled(creator, request, reply))) return;
       const { id } = Params.parse(request.params);
       const input = ApproveRecoveryPackSourceSchema.parse(request.body);
       try {

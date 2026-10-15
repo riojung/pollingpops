@@ -671,7 +671,8 @@ link, with an optional guest download permission. Next steps are shared with eve
 link. Copy the complete link when it is first shown; a lost link cannot be recovered. Manage
 existing links in the same dialog to revoke them. Deletion, retention expiry, or loss of the
 publisher's sharing permission stops the link. Revocation cannot remove files already downloaded.
-Availability is controlled by the operator's workspace rollout.
+Operators manage availability and plan assignments through the admin console's **Features** page.
+Unconfigured features retain the operator's workspace rollout defaults.
 
 The standard report stays aggregate-first and does not embed raw chat or participant-level signal
 history. An authorized owner, editor, or viewer can open the interaction transcript; only an

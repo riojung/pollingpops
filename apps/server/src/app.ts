@@ -1,3 +1,5 @@
+import type { Plan } from "@openround/contracts";
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import Fastify from "fastify";
 import { trace } from "@opentelemetry/api";
 import cookie from "@fastify/cookie";
@@ -72,11 +74,6 @@ import { registerRecoveryPackSourceRoutes } from "./recovery-pack-source-routes.
 import { registerRecoveryPackPracticeRoutes } from "./recovery-pack-practice-routes.js";
 import { registerRecoveryPackPresentationRoutes } from "./recovery-pack-presentation-routes.js";
 import { registerRecoveryPackPresentationUpdateRoutes } from "./recovery-pack-presentation-update-routes.js";
-import {
-  evidenceWorkspaceFeatureEnabled,
-  professionalWorkspaceEligible,
-  professionalWorkspaceFeatureEnabled,
-} from "./workspace-rollout.js";
 
 export async function buildApp(
   config: AppConfig,
@@ -175,16 +172,15 @@ export async function buildApp(
   const groups = createCollaborationGroupRepository(repository);
   const libraryMetadata = createLibraryMetadataRepository(repository);
   const productEventsEnabled = (workspaceId: string) =>
-    professionalWorkspaceEligible(config, workspaceId);
+    workspaceFeatureEnabled(repository, config, workspaceId, "uxBeta");
   const workspaceShellEnabled = (workspaceId: string) =>
-    professionalWorkspaceFeatureEnabled(config, workspaceId, "workspaceShell");
+    workspaceFeatureEnabled(repository, config, workspaceId, "workspaceShell");
   const presentationsEnabled = (workspaceId: string) =>
-    professionalWorkspaceFeatureEnabled(config, workspaceId, "presentations");
-  const presentationRealtimeCreationEnabled = (workspaceId: string) =>
-    presentationsEnabled(workspaceId) &&
-    evidenceWorkspaceFeatureEnabled(config, workspaceId, "presentationRealtime");
+    workspaceFeatureEnabled(repository, config, workspaceId, "presentations");
+  const presentationRealtimeCreationEnabled = (workspaceId: string, planOverride?: Plan) =>
+    workspaceFeatureEnabled(repository, config, workspaceId, "presentationRealtime", planOverride);
   const groupsEnabled = (workspaceId: string) =>
-    professionalWorkspaceFeatureEnabled(config, workspaceId, "groups");
+    workspaceFeatureEnabled(repository, config, workspaceId, "groups");
   if (repository instanceof PostgresRepository) metrics.bindPostgres(repository.pool);
   if (repository instanceof PostgresRepository && config.RUN_MIGRATIONS) {
     if (config.DATABASE_MIGRATION_URL && config.DATABASE_MIGRATION_URL !== config.DATABASE_URL) {
@@ -344,6 +340,9 @@ export async function buildApp(
   );
   const storage = new StorageService(config, scanner);
   const presentationService = new PresentationSessionService({
+    workspaceEnabled: presentationRealtimeCreationEnabled,
+    liveFlexModeEnabled: (workspaceId, planOverride) =>
+      workspaceFeatureEnabled(repository, config, workspaceId, "liveFlexMode", planOverride),
     repository,
     presentations,
     sessions: presentationSessions,
@@ -352,15 +351,20 @@ export async function buildApp(
     storage,
     productEvents,
     productEventsEnabled,
-    recoveryPackCardsEnabled: (workspaceId) =>
-      evidenceWorkspaceFeatureEnabled(config, workspaceId, "recoveryPacks") &&
-      evidenceWorkspaceFeatureEnabled(config, workspaceId, "recoveryPackLiveCards"),
-    recoveryPackLiveInsertionEnabled: (workspaceId) =>
-      presentationRecoveryPackLiveInsertionEnabled(config, workspaceId),
-    quickCheckLiveInsertionEnabled: (workspaceId) =>
-      presentationLiveInsertionEnabled(config, workspaceId),
-    publishedQuestionLiveInsertionEnabled: (workspaceId) =>
-      presentationLiveInsertionEnabled(config, workspaceId),
+    recoveryPackCardsEnabled: (workspaceId, planOverride) =>
+      workspaceFeatureEnabled(
+        repository,
+        config,
+        workspaceId,
+        "recoveryPackLiveCards",
+        planOverride,
+      ),
+    recoveryPackLiveInsertionEnabled: (workspaceId, sessionId) =>
+      presentationRecoveryPackLiveInsertionEnabled(config, workspaceId, repository, sessionId),
+    quickCheckLiveInsertionEnabled: (workspaceId, sessionId) =>
+      presentationLiveInsertionEnabled(config, workspaceId, repository, sessionId),
+    publishedQuestionLiveInsertionEnabled: (workspaceId, sessionId) =>
+      presentationLiveInsertionEnabled(config, workspaceId, repository, sessionId),
   });
   const readiness =
     overrides.readiness ??
@@ -517,7 +521,7 @@ export async function buildApp(
     consumeAdmission: cache.consumeRateLimit.bind(cache),
     service: presentationService,
   });
-  if (config.FEATURE_GROUPS) {
+  {
     await registerGroupRoutes(app, {
       repository,
       presentations,

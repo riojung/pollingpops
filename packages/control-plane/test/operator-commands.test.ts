@@ -87,6 +87,183 @@ async function failedIntegrationJob(
   return job;
 }
 describe("atomic operator commands", () => {
+  it("returns staff records only to operators with access-management capability", async () => {
+    const authorized = await fixture("operations", ["operators.write"]);
+    expect(await authorized.service.view(authorized.context, "operations")).toHaveProperty(
+      "operators",
+    );
+    const ordinary = await fixture("operations");
+    expect(await ordinary.service.view(ordinary.context, "operations")).not.toHaveProperty(
+      "operators",
+    );
+  });
+
+  it.each(["founder", "operations", "readonly"] as const)(
+    "allows %s operators to inspect the feature catalog and current revision",
+    async (role) => {
+      const { context, service } = await fixture(role);
+      const view = await service.view(context, "features");
+      expect(view).toMatchObject({
+        policy: { revision: 0, features: {}, updatedAt: null },
+        catalog: expect.arrayContaining([
+          expect.objectContaining({ key: "sessionSummaries", defaultPlans: expect.any(Array) }),
+        ]),
+      });
+    },
+  );
+  it.each(["support", "billing"] as const)(
+    "does not grant feature policy access to %s operators",
+    async (role) => {
+      const { context, service, platform } = await fixture(role);
+      await expect(service.view(context, "features")).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      await expect(
+        service.command(
+          context,
+          {
+            action: "features.update",
+            expectedRevision: 0,
+            features: {},
+            reason: "Unauthorized plan assignment change",
+            idempotencyKey: randomUUID(),
+          },
+          "denied",
+        ),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(await platform.getFeaturePolicy()).toBeNull();
+    },
+  );
+  it.each(["founder", "operations"] as const)(
+    "lets %s operators update feature plans with exact retries and an atomic audit",
+    async (role) => {
+      const { context, service, platform } = await fixture(role);
+      const features = {
+        sessionSummaries: { enabled: true, plans: ["free", "pro", "team"] },
+        csvExport: { enabled: true, plans: ["pro", "team"] },
+      };
+      const command = {
+        action: "features.update",
+        expectedRevision: 0,
+        features,
+        reason: "Approve summary launch and export plan assignments",
+        idempotencyKey: randomUUID(),
+      };
+      const [first, retry] = await Promise.all([
+        service.command(context, command, "feature-first"),
+        service.command(context, command, "feature-retry"),
+      ]);
+      expect(first).toEqual(retry);
+      expect(first).toMatchObject({ revision: 1, features });
+      expect(await platform.getFeaturePolicy()).toEqual(first);
+      expect(await platform.listAuditEvents()).toEqual([
+        expect.objectContaining({
+          actorId: context.operator.id,
+          organizationId: null,
+          action: "features.update",
+          targetId: "global",
+          before: null,
+          after: first,
+          reason: command.reason,
+        }),
+      ]);
+      expect(await service.view(context, "features")).toMatchObject({ policy: first });
+      await expect(
+        service.command(context, { ...command, features: {} }, "conflicting-key"),
+      ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    },
+  );
+  it("rejects stale feature revisions and allows refreshing the uncommitted command", async () => {
+    const { context, service, platform } = await fixture();
+    await platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { sessionSummaries: { enabled: true, plans: ["pro", "team"] } },
+    });
+    const command = {
+      action: "features.update",
+      expectedRevision: 0,
+      features: { sessionSummaries: { enabled: false, plans: [] } },
+      reason: "Pause summaries while investigating an incident",
+      idempotencyKey: randomUUID(),
+    };
+    await expect(service.command(context, command, "stale-feature-update")).rejects.toMatchObject({
+      status: 409,
+      code: "CONFLICT",
+    });
+    expect(await platform.listAuditEvents()).toHaveLength(0);
+    expect(
+      await service.command(context, { ...command, expectedRevision: 1 }, "refreshed-update"),
+    ).toMatchObject({ revision: 2, features: command.features });
+  });
+  it("requires feature write capability and fresh authentication before changing assignments", async () => {
+    const { context, service, platform } = await fixture("readonly");
+    const command = {
+      action: "features.update",
+      expectedRevision: 0,
+      features: {},
+      reason: "Approve feature entitlement changes",
+      idempotencyKey: randomUUID(),
+    };
+    await expect(service.command(context, command, "readonly-update")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    const founder = await fixture();
+    const staleContext = {
+      ...founder.context,
+      session: {
+        ...founder.context.session,
+        authenticatedAt: new Date(Date.now() - 6 * 60_000),
+      },
+    };
+    await expect(
+      founder.service.command(staleContext, command, "old-feature-auth"),
+    ).rejects.toMatchObject({ code: "REAUTHENTICATION_REQUIRED" });
+    expect(await platform.getFeaturePolicy()).toBeNull();
+    expect(await founder.platform.getFeaturePolicy()).toBeNull();
+  });
+  it("rejects invalid feature policy keys and plans without saving or auditing", async () => {
+    const { context, service, platform } = await fixture();
+    for (const features of [
+      { unknownFeature: { enabled: true, plans: ["pro"] } },
+      { sessionSummaries: { enabled: true, plans: ["pro", "pro"] } },
+      { sessionSummaries: { enabled: true, plans: ["enterprise"] } },
+    ])
+      await expect(
+        service.command(
+          context,
+          {
+            action: "features.update",
+            expectedRevision: 0,
+            features,
+            reason: "Invalid feature policy must be rejected",
+            idempotencyKey: randomUUID(),
+          },
+          "invalid-feature-policy",
+        ),
+      ).rejects.toMatchObject({ name: "ZodError" });
+    expect(await platform.getFeaturePolicy()).toBeNull();
+    expect(await platform.listAuditEvents()).toHaveLength(0);
+  });
+  it("rolls feature policy changes and receipts back when audit creation fails", async () => {
+    const { context, service, platform } = await fixture();
+    const command = {
+      action: "features.update",
+      expectedRevision: 0,
+      features: { sessionSummaries: { enabled: true, plans: [] } },
+      reason: "Approve the first persisted feature configuration",
+      idempotencyKey: randomUUID(),
+    };
+    await expect(service.command(context, command, "")).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+    expect(await platform.getFeaturePolicy()).toBeNull();
+    expect(await platform.listAuditEvents()).toHaveLength(0);
+    expect(await service.command(context, command, "feature-audit-retry")).toMatchObject({
+      revision: 1,
+      features: command.features,
+    });
+    expect(await platform.listAuditEvents()).toHaveLength(1);
+  });
   it("requires separate operation/finance permissions for bounded retries", async () => {
     const { context, service } = await fixture();
     const support = {

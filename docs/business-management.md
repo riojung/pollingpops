@@ -76,6 +76,36 @@ registrations, determine tax obligations, or update existing subscriptions and o
 Sessions; review those separately in Stripe before launch. Customer tax IDs and billing
 addresses remain in Stripe rather than the webhook inbox or PollingPops audit records.
 
+## Feature availability and plans
+
+Open **Features** in the operator console to manage implemented product capabilities. **Features**
+shows availability and plan assignments; **Plans** shows the same policy as a Free/Pro/Team matrix.
+Choose **Enabled** or **Disabled** for a feature and select its included plans. **Inherit deployment**
+returns that feature to its existing environment and workspace rollout configuration. Each feature
+can be migrated independently; saving one setting does not change inherited settings elsewhere.
+
+Explicit policy is authoritative for that feature's product flag and workspace allowlist. It takes
+effect on subsequent server requests without an application restart. Prerequisite features must
+also be available to the selected plan. For example, Surveys requires Feedback rooms and Audience
+scopes. Session summaries can be enabled independently; creating links and downloading files also
+requires **Report exports** for the effective plan.
+
+Founder and operations staff can change policy; read-only staff can inspect it. Changes use the
+existing review dialog, require a reason and recent authentication, and atomically save the policy,
+audit event and retry receipt. Revision checks reject concurrent edits rather than overwrite a
+newer policy. Reload the latest policy after a conflict and review the intended changes again.
+
+Migration 072 stores the global policy in PostgreSQL. Community mode uses the Team assignment.
+Event-funded new Round/Presentation rooms use Pro; retained room coverage keeps its recorded
+benefits. Existing summaries, published records and active rooms keep their existing read/resume
+paths when new creation is paused. Assignments change feature access, while numeric capacity,
+retention, billing prices, provider credentials, storage/scanning setup and operational service
+controls keep their existing configuration boundaries.
+
+The redesigned console opens to **Overview**, with service activity cards and worker controls.
+**Staff** has operator access management. Existing Organizations, Billing, Credits, Operations,
+Support, Integrations and Audit areas retain their permission checks.
+
 ## Processes and operator access
 
 Public product pages and ordinary customer accounts do not advertise business administration.

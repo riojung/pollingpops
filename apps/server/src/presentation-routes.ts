@@ -380,19 +380,19 @@ export async function registerPresentationRoutes(
     repository: Repository;
     presentations: PresentationRepository;
     auth: AuthService;
-    workspaceEnabled: (workspaceId: string) => boolean;
+    workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
     productEvents?: ProductEventDispatcher;
-    productEventsEnabled?: (workspaceId: string) => boolean;
+    productEventsEnabled?: (workspaceId: string) => boolean | Promise<boolean>;
   },
 ) {
   const { repository, presentations, auth, workspaceEnabled, productEvents, productEventsEnabled } =
     dependencies;
-  const requirePresentationWorkspace = (
+  const requirePresentationWorkspace = async (
     creator: CreatorContext,
     reply: FastifyReply,
     requestId: string,
   ) =>
-    workspaceEnabled(creator.workspaceId)
+    (await workspaceEnabled(creator.workspaceId))
       ? true
       : professionalFeatureUnavailable(reply, requestId, "Presentation not found");
 
@@ -411,7 +411,7 @@ export async function registerPresentationRoutes(
   app.post("/v1/presentations", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const input = CreatePresentationSchema.parse(request.body);
     const now = new Date();
@@ -476,7 +476,7 @@ export async function registerPresentationRoutes(
   app.put("/v1/presentations/:id/draft", { bodyLimit: 4_000_000 }, async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const { id } = IdParamsSchema.parse(request.params);
     const input = PresentationDraftMutationSchema.parse(request.body);
@@ -509,7 +509,7 @@ export async function registerPresentationRoutes(
   app.post("/v1/presentations/:id/publish", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const { id } = IdParamsSchema.parse(request.params);
     const input = PublishPresentationSchema.parse(request.body);
@@ -618,22 +618,26 @@ export async function registerPresentationRoutes(
         },
         input.expectedDraftRevision,
       );
-      if (
-        version.id === candidateVersionId &&
-        productEvents &&
-        productEventsEnabled?.(creator.workspaceId)
-      ) {
-        productEvents.enqueue({
-          workspaceId: creator.workspaceId,
-          segment: creator.segment,
-          events: [
-            {
-              name: "round_published",
-              occurredAt: publishedAt.toISOString(),
-              dimensions: { artifactType: "presentation" },
-            },
-          ],
-        });
+      try {
+        if (
+          version.id === candidateVersionId &&
+          productEvents &&
+          (await productEventsEnabled?.(creator.workspaceId))
+        ) {
+          productEvents.enqueue({
+            workspaceId: creator.workspaceId,
+            segment: creator.segment,
+            events: [
+              {
+                name: "round_published",
+                occurredAt: publishedAt.toISOString(),
+                dimensions: { artifactType: "presentation" },
+              },
+            ],
+          });
+        }
+      } catch {
+        // Telemetry must not reject an already published Presentation or skip its audit.
       }
       const updated = await presentations.getPresentation(creator.workspaceId, id);
       await repository.recordAudit({
@@ -661,7 +665,7 @@ export async function registerPresentationRoutes(
   app.post("/v1/presentations/:id/blocks/import", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const { id } = IdParamsSchema.parse(request.params);
     const input = CopyRoundQuestionsToPresentationSchema.parse(request.body);
@@ -806,7 +810,7 @@ export async function registerPresentationRoutes(
   app.post("/v1/presentations/:id/blocks/source-proposals", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const { id } = IdParamsSchema.parse(request.params);
     const input = InsertAuthoringProposalsIntoPresentationSchema.parse(request.body);
@@ -980,7 +984,7 @@ export async function registerPresentationRoutes(
   app.post("/v1/authoring/jobs/:jobId/apply-presentation", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requirePresentationWorkspace(creator, reply, request.id) !== true) return;
+    if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
     const { jobId } = ApplySourceJobParamsSchema.parse(request.params);
     const input = ApplyPresentationAuthoringJobSchema.parse(request.body ?? {});

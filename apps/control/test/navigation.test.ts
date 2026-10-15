@@ -94,10 +94,13 @@ describe("read-only operator navigation discovery", () => {
     expect(Object.keys(body)).toEqual(["operator", "links"]);
     expect(body.operator).toEqual({ name: "Business administrator", role: "founder" });
     expect(body.links.map((link: { id: string }) => link.id)).toEqual([
+      "overview",
       "organizations",
-      "billing",
-      "credits",
+      "features",
       "operations",
+      "billing",
+      "staff",
+      "credits",
       "support",
       "integrations",
       "audit",
@@ -118,7 +121,16 @@ describe("read-only operator navigation discovery", () => {
     current.operator.capabilities = ["credits.read"];
     expect(
       (await (await GET(request())).json()).links.map((link: { id: string }) => link.id),
-    ).toEqual(["organizations", "credits", "operations", "support", "integrations", "audit"]);
+    ).toEqual([
+      "overview",
+      "organizations",
+      "features",
+      "operations",
+      "credits",
+      "support",
+      "integrations",
+      "audit",
+    ]);
     expect(touch).toHaveBeenCalledTimes(2);
   });
   it("fails closed immediately after revocation without returning navigation", async () => {

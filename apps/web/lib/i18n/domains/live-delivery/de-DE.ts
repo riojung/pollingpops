@@ -10,8 +10,8 @@ const messages = {
   "live.protection.help":
     "Optional. Verwende 8–128 Zeichen mit mindestens einem Zeichen, das kein Leerzeichen ist. Teile das Passwort separat mit den Teilnehmenden.",
   "live.protection.upgrade":
-    "Passwortschutz ist mit Pro, Team oder einem Event-Guthaben verfügbar. Kostenlose Räume bleiben offen.",
-  "live.protection.upgradeLink": "Upgrade-Optionen ansehen",
+    "Der Passwortschutz ist für diesen Durchlauf nicht aktiviert. Die Verfügbarkeit hängt von deinem Tarif und den Workspace-Einstellungen ab.",
+  "live.protection.upgradeLink": "Kontooptionen ansehen",
   "live.protection.label": "Raumpasswort",
   "live.protection.validation":
     "Verwende 8–128 Zeichen mit mindestens einem Nicht-Leerzeichen. Leerzeichen bleiben erhalten.",

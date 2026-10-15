@@ -7,7 +7,7 @@ export type ReportWorkerResult = "idle" | "completed" | "retry_scheduled" | "fai
 
 export interface ReportWorkerProductEvents {
   dispatcher: ProductEventDispatcher;
-  workspaceEnabled: (workspaceId: string) => boolean;
+  workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
 }
 
 export class ReportWorker {
@@ -36,8 +36,8 @@ export class ReportWorker {
       await this.repository.completeReportJob(job, report);
       this.metrics?.reportGenerated();
       try {
-        if (this.productEvents?.workspaceEnabled(job.workspaceId)) {
-          this.productEvents.dispatcher.enqueue({
+        if (await this.productEvents?.workspaceEnabled(job.workspaceId)) {
+          this.productEvents!.dispatcher.enqueue({
             workspaceId: job.workspaceId,
             now,
             events: [

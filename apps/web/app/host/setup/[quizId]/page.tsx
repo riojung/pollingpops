@@ -14,6 +14,7 @@ import {
   type QuizDraft,
   type SessionSettings,
   type SessionSnapshot,
+  type WorkspaceProductFeatures,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../../components/brand";
 import { EventCreditChoice } from "../../../../components/event-credit-choice";
@@ -97,15 +98,13 @@ export default function HostSetupPage() {
   const [protectRoom, setProtectRoom] = useState(false);
   const [joinPassword, setJoinPassword] = useState("");
   const [eventEntitlements, setEventEntitlements] = useState<Entitlements | null>(null);
+  const [eventProductFeatures, setEventProductFeatures] = useState<WorkspaceProductFeatures | null>(
+    null,
+  );
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const [settings, setSettings] = useState<SessionSettings | null>(null);
   const [experiencePreset, setExperiencePreset] = useState<ExperiencePresetId>("focus");
   const [presenterSoundEnabled, setPresenterSoundEnabled] = useState(false);
-  const [roundExperiencesAvailable, setRoundExperiencesAvailable] = useState(false);
-  const [audienceTools, setAudienceTools] = useState({
-    audiencePulseAvailable: false,
-    roomChatAvailable: false,
-  });
   const [uxBeta, setUxBeta] = useState(false);
   const [productFeatures, setProductFeatures] = useState<ProductFeatures | null>(null);
   const [creator, setCreator] = useState<Creator | null>(null);
@@ -113,6 +112,14 @@ export default function HostSetupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errorIsRaw, setErrorIsRaw] = useState(false);
+  const launchFeatures = useEventCredit
+    ? (eventProductFeatures ?? productFeatures)
+    : productFeatures;
+  const roundExperiencesAvailable = launchFeatures?.roundExperiences === true;
+  const audienceTools = {
+    audiencePulseAvailable: launchFeatures?.audiencePulse === true,
+    roomChatAvailable: launchFeatures?.roomChat === true,
+  };
   const fundingParticipantLimit =
     useEventCredit && eventEntitlements
       ? eventEntitlements.maxParticipants
@@ -151,11 +158,6 @@ export default function HostSetupPage() {
         setPublishedContent(quizResponse.currentVersion.content);
         setEntitlements(account.entitlements);
         setCreator(account.creator);
-        setRoundExperiencesAvailable(account.productFeatures.roundExperiences);
-        setAudienceTools({
-          audiencePulseAvailable: account.productFeatures.audiencePulse,
-          roomChatAvailable: account.productFeatures.roomChat,
-        });
         setUxBeta(account.productFeatures.uxBeta);
         const maximumParticipants = Math.min(
           account.entitlements.maxParticipants,
@@ -304,7 +306,10 @@ export default function HostSetupPage() {
     setErrorIsRaw(false);
     const body = JSON.stringify({
       quizId: quiz.id,
-      settings,
+      settings: {
+        ...settings,
+        ...(!launchFeatures?.liveFlexMode ? { timeMode: "timed" } : {}),
+      },
       clientCapabilities: currentRoundClientCapabilities(),
       ...(roundExperiencesAvailable &&
       experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
@@ -429,14 +434,19 @@ export default function HostSetupPage() {
               <EventCreditChoice
                 checked={useEventCredit}
                 disabled={busy}
-                onChange={(checked, benefits) => {
+                onChange={(checked, benefits, features) => {
                   setUseEventCredit(checked);
                   setEventEntitlements(benefits);
-                  if (!checked)
-                    setSettings({
-                      ...settings,
-                      audienceLimit: Math.min(settings.audienceLimit, entitlements.maxParticipants),
-                    });
+                  setEventProductFeatures(features ?? null);
+                  const nextFeatures = checked ? (features ?? productFeatures) : productFeatures;
+                  setSettings({
+                    ...settings,
+                    ...(!nextFeatures?.liveFlexMode ? { timeMode: "timed" } : {}),
+                    audienceLimit: Math.min(
+                      settings.audienceLimit,
+                      checked ? benefits.maxParticipants : entitlements.maxParticipants,
+                    ),
+                  });
                 }}
               />
               <RoomPasswordOption
@@ -492,7 +502,7 @@ export default function HostSetupPage() {
                       ),
                     })}
                   </label>
-                  {productFeatures?.liveFlexMode ? (
+                  {launchFeatures?.liveFlexMode ? (
                     <label className="field" htmlFor="time-mode">
                       <span>{t("live.common.timeMode")}</span>
                       <select

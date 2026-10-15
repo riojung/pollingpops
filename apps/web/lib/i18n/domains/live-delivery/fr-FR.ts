@@ -10,8 +10,8 @@ const messages = {
   "live.protection.help":
     "Facultatif. Utilisez de 8 à 128 caractères, dont au moins un caractère autre qu’une espace. Partagez-le séparément avec les participants.",
   "live.protection.upgrade":
-    "La protection par mot de passe est disponible avec Pro, Team ou un crédit événement. Les salles gratuites restent ouvertes.",
-  "live.protection.upgradeLink": "Voir les options de mise à niveau",
+    "La protection par mot de passe n’est pas activée pour cette session. Sa disponibilité dépend de votre offre et des paramètres de l’espace de travail.",
+  "live.protection.upgradeLink": "Voir les options du compte",
   "live.protection.label": "Mot de passe de la salle",
   "live.protection.validation":
     "Utilisez de 8 à 128 caractères, dont au moins un autre qu’une espace. Les espaces sont conservées.",

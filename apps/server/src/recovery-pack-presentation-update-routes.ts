@@ -1,3 +1,4 @@
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -21,7 +22,6 @@ import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
 import { PRESENTATION_PACK_INSERTION_DRAFT_LIMIT } from "./draft-limits.js";
 import { recoveryPackHash } from "./recovery-pack-copies.js";
-import { evidenceWorkspaceFeatureEnabled } from "./workspace-rollout.js";
 
 const IdParams = z.object({ id: z.string().uuid() });
 
@@ -34,7 +34,7 @@ export async function registerRecoveryPackPresentationUpdateRoutes(
     presentations: PresentationRepository;
     packs: RecoveryPackRepository;
     auth: AuthService;
-    workspaceEnabled: (workspaceId: string) => boolean;
+    workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
   },
 ) {
   const { config, repository, presentations, packs, auth, workspaceEnabled } = dependencies;
@@ -181,8 +181,8 @@ export async function registerRecoveryPackPresentationUpdateRoutes(
         return response(replayed);
       }
       if (
-        !workspaceEnabled(creator.workspaceId) ||
-        !evidenceWorkspaceFeatureEnabled(config, creator.workspaceId, "recoveryPacks")
+        !(await workspaceEnabled(creator.workspaceId)) ||
+        !(await workspaceFeatureEnabled(repository, config, creator.workspaceId, "recoveryPacks"))
       )
         return error(
           reply,

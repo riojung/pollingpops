@@ -1,4 +1,4 @@
-import type { Entitlements } from "@openround/contracts";
+import type { Entitlements, ProductFeaturePolicy, ProductFeatureRules } from "@openround/contracts";
 import type { PoolClient } from "pg";
 import type { Segment, LiveRoomArtifactType } from "./types.js";
 
@@ -334,6 +334,11 @@ export class PlatformError extends Error {
 export interface PlatformRepository {
   withOperatorTransaction<T>(work: (repository: PlatformRepository) => Promise<T>): Promise<T>;
   withTransaction<T>(work: (repository: PlatformRepository) => Promise<T>): Promise<T>;
+  getFeaturePolicy(): Promise<ProductFeaturePolicy | null>;
+  saveFeaturePolicy(input: {
+    expectedRevision: number;
+    features: ProductFeatureRules;
+  }): Promise<ProductFeaturePolicy>;
   listAllOrganizations(limit?: number): Promise<OrganizationRecord[]>;
   listOrganizationWorkspacesForOperator(
     organizationId: string,

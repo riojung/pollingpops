@@ -211,7 +211,7 @@ const messages = {
   "page.assignments.description": "管理由已發佈互動測驗建立的獨立練習，參與者不需帳戶。",
   "page.results.eyebrow": "學習證據",
   "page.results.title": "結果",
-  "page.results.description": "檢視補救學習證據，並追蹤已指派或依據報告建立的練習。",
+  "page.results.description": "檢視互動測驗、簡報和問卷的結果，並追蹤練習。",
   "page.discover.eyebrow": "Polling Pops 精選",
   "page.discover.title": "探索",
   "page.discover.description": "從可信賴的 Polling Pops 範本開始，並依參與者需求調整。",

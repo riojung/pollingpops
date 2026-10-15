@@ -433,6 +433,46 @@ export const workspacePageEnglishMessages = {
   "pages.library.unpublishedChanges": "Unpublished changes",
   "pages.library.view": "View",
   "pages.library.workspaceOwned": "Workspace-owned",
+  "pages.results.searchSurveys": "Search Survey results",
+  "pages.results.loadingSurveys": "Loading Survey results…",
+  "pages.results.surveyResults": "Survey results",
+  "pages.results.emptySurveysTitle": "No Survey results yet",
+  "pages.results.emptySurveysDescription":
+    "Completed Survey runs appear here while their results are retained.",
+  "pages.results.surveyRunCode": "Run code: {code}",
+  "pages.results.surveyCollectionDeadline": "Collection deadline: {date}",
+  "pages.results.manageSurveyRuns": "Manage Survey runs",
+  "pages.results.surveyDeadlineFrom": "Collection deadline from",
+  "pages.results.surveyDeadlineTo": "Collection deadline to",
+  "pages.results.surveyLoadError": "Survey results could not be loaded. Try again.",
+  "pages.results.surveyTitle": "Survey results",
+  "pages.results.surveyDescription":
+    "Review finalized submissions and anonymous question distributions.",
+  "pages.results.surveyBack": "Back to Survey results",
+  "pages.results.surveyManage": "Manage Survey run",
+  "pages.results.surveyClosed": "Survey closed",
+  "pages.results.surveyCollecting": "Collecting responses",
+  "pages.results.surveyDeadline": "Submissions close {date}.",
+  "pages.results.surveyRetention":
+    "Results and responses expire {date}. Closing early does not change this deadline.",
+  "pages.results.surveyAggregate": "Aggregate results",
+  "pages.results.surveyRefresh": "Refresh results",
+  "pages.results.surveySubmissions":
+    "{count} finalized submissions. Only finalized responses are counted.",
+  "pages.results.surveyCollectingNotice":
+    "Distributions stay hidden while this Survey is open. Close admissions and submissions, or wait for the deadline, to release final results. Each question needs at least five responses.",
+  "pages.results.surveySuppressed":
+    "Distributions are hidden because fewer than five respondents submitted.",
+  "pages.results.surveyQuestionSuppressed":
+    "Distributions are hidden because this question has fewer than five responses.",
+  "pages.results.surveyResponses": "{count} responses",
+  "pages.results.surveyMultipleSelections":
+    "Multiple selections allowed. Counts show respondents selecting each option; totals can exceed the number of responses.",
+  "pages.results.surveyResponseCounts": "Response counts",
+  "pages.results.surveyResponse": "Response",
+  "pages.results.surveyCount": "Count",
+  "pages.results.surveyPrivacy":
+    "No aliases or account identities are collected. Organizers cannot inspect linked respondent answers.",
   "pages.results.searchRounds": "Search Round results",
   "pages.results.searchPresentations": "Search Presentation results",
   "pages.results.searchPractice": "Search practice",

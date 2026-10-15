@@ -234,7 +234,7 @@ const messages = {
   "page.results.eyebrow": "Evidencias",
   "page.results.title": "Resultados",
   "page.results.description":
-    "Revisa las evidencias de recuperación y sigue las prácticas asignadas o basadas en informes.",
+    "Revisa los resultados de Rounds, presentaciones y encuestas, y sigue los ejercicios.",
   "page.discover.eyebrow": "Selección de Polling Pops",
   "page.discover.title": "Descubrir",
   "page.discover.description":

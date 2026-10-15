@@ -437,6 +437,46 @@ const messages = {
   "pages.library.unpublishedChanges": "Modifications non publiées",
   "pages.library.view": "Voir",
   "pages.library.workspaceOwned": "Propriété de l'espace de travail",
+  "pages.results.searchSurveys": "Rechercher des résultats de sondage",
+  "pages.results.loadingSurveys": "Chargement des résultats de sondage…",
+  "pages.results.surveyResults": "Résultats de sondage",
+  "pages.results.emptySurveysTitle": "Aucun résultat de sondage pour le moment",
+  "pages.results.emptySurveysDescription":
+    "Les sessions de sondage terminées apparaissent ici tant que leurs résultats sont conservés.",
+  "pages.results.surveyRunCode": "Code de session : {code}",
+  "pages.results.surveyCollectionDeadline": "Date limite de collecte : {date}",
+  "pages.results.manageSurveyRuns": "Gérer les sessions de sondage",
+  "pages.results.surveyDeadlineFrom": "Date limite de collecte à partir du",
+  "pages.results.surveyDeadlineTo": "Date limite de collecte jusqu’au",
+  "pages.results.surveyLoadError": "Les résultats du sondage n’ont pas pu être chargés. Réessayez.",
+  "pages.results.surveyTitle": "Résultats du sondage",
+  "pages.results.surveyDescription":
+    "Consultez les réponses finalisées et leur répartition anonyme par question.",
+  "pages.results.surveyBack": "Retour aux résultats de sondage",
+  "pages.results.surveyManage": "Gérer la session de sondage",
+  "pages.results.surveyClosed": "Sondage fermé",
+  "pages.results.surveyCollecting": "Collecte des réponses en cours",
+  "pages.results.surveyDeadline": "Les réponses peuvent être envoyées jusqu’au {date}.",
+  "pages.results.surveyRetention":
+    "Les résultats et les réponses expirent le {date}. Une fermeture anticipée ne modifie pas cette date limite.",
+  "pages.results.surveyAggregate": "Résultats agrégés",
+  "pages.results.surveyRefresh": "Actualiser les résultats",
+  "pages.results.surveySubmissions":
+    "{count} envois finalisés. Seules les réponses finalisées sont comptabilisées.",
+  "pages.results.surveyCollectingNotice":
+    "Les répartitions restent masquées tant que ce sondage est ouvert. Fermez les accès et les envois, ou attendez la date limite, pour publier les résultats définitifs. Chaque question nécessite au moins cinq réponses.",
+  "pages.results.surveySuppressed":
+    "Les répartitions sont masquées, car moins de cinq personnes ont envoyé leurs réponses.",
+  "pages.results.surveyQuestionSuppressed":
+    "Les répartitions sont masquées, car cette question a reçu moins de cinq réponses.",
+  "pages.results.surveyResponses": "{count} réponses",
+  "pages.results.surveyMultipleSelections":
+    "Plusieurs choix sont autorisés. Les nombres indiquent les personnes ayant sélectionné chaque option ; les totaux peuvent dépasser le nombre de réponses.",
+  "pages.results.surveyResponseCounts": "Nombre de réponses",
+  "pages.results.surveyResponse": "Réponse",
+  "pages.results.surveyCount": "Nombre",
+  "pages.results.surveyPrivacy":
+    "Aucun pseudonyme ni aucune identité de compte ne sont recueillis. Les organisateurs ne peuvent pas consulter les réponses reliées à une même personne.",
   "pages.results.searchRounds": "Rechercher des résultats de Round",
   "pages.results.searchPresentations": "Rechercher des résultats de présentation",
   "pages.results.searchPractice": "Rechercher des exercices",

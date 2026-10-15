@@ -249,7 +249,7 @@ export const englishMessages = {
   "page.results.eyebrow": "Evidence",
   "page.results.title": "Results",
   "page.results.description":
-    "Review Recovery evidence and track assigned or report-based practice.",
+    "Review Round, Presentation, and Survey outcomes, and track practice.",
   "page.discover.eyebrow": "Curated by Polling Pops",
   "page.discover.title": "Discover",
   "page.discover.description":

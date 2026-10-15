@@ -433,6 +433,47 @@ const messages = {
   "pages.library.unpublishedChanges": "Alterações não publicadas",
   "pages.library.view": "Ver",
   "pages.library.workspaceOwned": "Propriedade do espaço de trabalho",
+  "pages.results.searchSurveys": "Pesquisar resultados de inquéritos",
+  "pages.results.loadingSurveys": "A carregar resultados de inquéritos…",
+  "pages.results.surveyResults": "Resultados de inquéritos",
+  "pages.results.emptySurveysTitle": "Ainda não há resultados de inquéritos",
+  "pages.results.emptySurveysDescription":
+    "As sessões de inquérito concluídas aparecem aqui enquanto os seus resultados forem conservados.",
+  "pages.results.surveyRunCode": "Código da sessão: {code}",
+  "pages.results.surveyCollectionDeadline": "Prazo de recolha: {date}",
+  "pages.results.manageSurveyRuns": "Gerir sessões de inquérito",
+  "pages.results.surveyDeadlineFrom": "Prazo de recolha desde",
+  "pages.results.surveyDeadlineTo": "Prazo de recolha até",
+  "pages.results.surveyLoadError":
+    "Não foi possível carregar os resultados do inquérito. Tente novamente.",
+  "pages.results.surveyTitle": "Resultados do inquérito",
+  "pages.results.surveyDescription":
+    "Reveja as submissões concluídas e a distribuição anónima das respostas por pergunta.",
+  "pages.results.surveyBack": "Voltar aos resultados de inquéritos",
+  "pages.results.surveyManage": "Gerir sessão de inquérito",
+  "pages.results.surveyClosed": "Inquérito fechado",
+  "pages.results.surveyCollecting": "Recolha de respostas em curso",
+  "pages.results.surveyDeadline": "As submissões encerram a {date}.",
+  "pages.results.surveyRetention":
+    "Os resultados e as respostas expiram a {date}. Encerrar mais cedo não altera este prazo.",
+  "pages.results.surveyAggregate": "Resultados agregados",
+  "pages.results.surveyRefresh": "Atualizar resultados",
+  "pages.results.surveySubmissions":
+    "{count} submissões concluídas. Apenas são contabilizadas as respostas concluídas.",
+  "pages.results.surveyCollectingNotice":
+    "As distribuições permanecem ocultas enquanto este inquérito estiver aberto. Feche o acesso e as submissões, ou aguarde o prazo, para disponibilizar os resultados finais. Cada pergunta precisa de pelo menos cinco respostas.",
+  "pages.results.surveySuppressed":
+    "As distribuições estão ocultas porque menos de cinco pessoas submeteram respostas.",
+  "pages.results.surveyQuestionSuppressed":
+    "As distribuições estão ocultas porque esta pergunta tem menos de cinco respostas.",
+  "pages.results.surveyResponses": "{count} respostas",
+  "pages.results.surveyMultipleSelections":
+    "É permitida a seleção de várias opções. As contagens indicam quantas pessoas selecionaram cada opção; os totais podem exceder o número de respostas.",
+  "pages.results.surveyResponseCounts": "Contagens de respostas",
+  "pages.results.surveyResponse": "Resposta",
+  "pages.results.surveyCount": "Contagem",
+  "pages.results.surveyPrivacy":
+    "Não são recolhidos pseudónimos nem identidades de contas. Os organizadores não podem consultar as respostas ligadas de uma mesma pessoa.",
   "pages.results.searchRounds": "Pesquisar resultados de Round",
   "pages.results.searchPresentations": "Pesquisar resultados de apresentação",
   "pages.results.searchPractice": "Pesquisar exercícios",

@@ -8,6 +8,30 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Direct Survey results navigation October 14 2026
+
+Implemented on `codex/survey-results-navigation`. **Results → Surveys** lists completed retained
+runs with title/code search, source and collection-deadline filters, and the Results grid/list
+preference. Active and expired runs stay out of the results list. Metadata pagination is complete,
+with no per-run aggregate requests while browsing.
+
+**View Results** opens `/results/surveys/{runId}` directly from Results or Sessions. The focused report
+shows finalized aggregate feedback, preserves closure and five-response suppression, and offers
+refresh and enabled summary exports. Owners/editors can explicitly return to run management;
+sharing, closure and deletion controls remain on the management screen. Existing Survey room/run
+links remain usable. Results stay available to viewers and when new Survey creation is paused.
+
+New copy is present in all ten locales. Workspace/source fences hide stale data and abort outdated
+requests. Scoped table wrapping supports long authored choices on small screens. Focused Results
+and report tests cover pagination, filtering, suppression, errors and stale requests.
+
+Validation: `CI=true pnpm check` passes, including 927 web tests, lint, strict types and production
+builds. Nine production-browser journeys pass across desktop Chromium, mobile Chromium and mobile
+WebKit for Results, Sessions and direct Survey reports. They cover real finalized submissions,
+small-sample suppression, summary-dialog availability, distinct regions for repeated prompts,
+320px dark layouts and automated axe checks. Manual assistive-technology and native-speaker review
+are not claimed.
+
 ### IDEA 005 Shareable session summaries October 14 2026
 
 Implemented locally on `codex/idea-005-session-summaries` for completed Rounds, finished

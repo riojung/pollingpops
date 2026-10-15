@@ -227,7 +227,7 @@ const messages = {
   "page.results.eyebrow": "학습 근거",
   "page.results.title": "결과",
   "page.results.description":
-    "회복 학습 근거를 검토하고 배정된 연습이나 보고서 기반 연습을 추적하세요.",
+    "라운드, 프레젠테이션, 설문조사의 결과를 검토하고 연습 현황을 추적하세요.",
   "page.discover.eyebrow": "Polling Pops 추천",
   "page.discover.title": "둘러보기",
   "page.discover.description":

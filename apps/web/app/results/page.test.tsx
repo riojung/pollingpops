@@ -21,6 +21,7 @@ interface EffectSlot {
 const fixtures = vi.hoisted(() => ({
   workspaceId: "workspace-a",
   presentationsEnabled: true,
+  surveysEnabled: true,
   query: "",
   replace: vi.fn(),
   apiFetch: vi.fn(),
@@ -114,7 +115,10 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
   WorkspaceProvider: ({ children }: { children: ReactNode }) => children,
   useWorkspace: () => ({
     creator: { workspaceId: fixtures.workspaceId },
-    productFeatures: { presentations: fixtures.presentationsEnabled },
+    productFeatures: {
+      presentations: fixtures.presentationsEnabled,
+      surveys: fixtures.surveysEnabled,
+    },
   }),
 }));
 vi.mock("../../components/workspace/workspace-shell", () => ({
@@ -190,6 +194,17 @@ const presentation = {
   blockCount: 2,
   createdAt: "2026-10-10T12:00:00Z",
 };
+function survey(id = "survey-first", title = "First Survey result") {
+  return {
+    id,
+    surveyId: "survey-source",
+    title,
+    code: "654321",
+    closed: true,
+    closesAt: "2026-10-10T12:00:00Z",
+    expiresAt: "2099-10-10T12:00:00Z",
+  };
+}
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
     return { quizzes: [{ id: "round-source", title: "Source Round" }] };
@@ -202,12 +217,15 @@ function response(path: string) {
       ? { items: [practice("practice-later", "Later practice")], nextCursor: null }
       : { items: [practice()], nextCursor: "practice-next" };
   if (path === "/v1/presentation-sessions") return { sessions: [presentation] };
+  if (path.startsWith("/v1/survey-rooms?")) return { rooms: [survey()], nextCursor: null };
   throw new Error(`Unexpected request: ${path}`);
 }
 
 beforeEach(() => {
+  vi.spyOn(Date, "now").mockReturnValue(new Date("2026-10-14T12:00:00Z").getTime());
   fixtures.workspaceId = "workspace-a";
   fixtures.presentationsEnabled = true;
+  fixtures.surveysEnabled = true;
   fixtures.query = "";
   fixtures.hooks = null;
   fixtures.pendingEffects = [];
@@ -216,10 +234,15 @@ beforeEach(() => {
   fixtures.replace.mockReset().mockImplementation((href: string) => {
     fixtures.query = href.split("?")[1] ?? "";
   });
-  vi.stubGlobal("window", { localStorage: { getItem: vi.fn(() => null), setItem: vi.fn() } });
+  vi.stubGlobal("window", {
+    localStorage: { getItem: vi.fn(() => null), setItem: vi.fn() },
+    setInterval: vi.fn(() => 1),
+    clearInterval: vi.fn(),
+  });
 });
 afterEach(() => {
   fixtures.hooks = null;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -246,24 +269,38 @@ describe("Results workspace", () => {
       search: "Search Presentation results",
       library: "presentations",
     },
+    {
+      view: "surveys",
+      path: "/v1/survey-rooms",
+      title: "First Survey result",
+      search: "Search Survey results",
+      library: "surveys",
+    },
   ])(
     "preserves the $view deep link and loads only its evidence collection",
     async ({ view, path, title, search, library }) => {
       fixtures.query = `view=${view}`;
       const markup = await resultsHarness().settle();
       const paths = fixtures.apiFetch.mock.calls.map(([url]) => String(url));
-      for (const other of ["/v1/reports", "/v1/followups", "/v1/presentation-sessions"])
+      for (const other of [
+        "/v1/reports",
+        "/v1/followups",
+        "/v1/presentation-sessions",
+        "/v1/survey-rooms",
+      ])
         expect(paths.some((url) => url.startsWith(other))).toBe(other === path);
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`placeholder="${search}"`);
       expect(markup).toContain(`href="/library?type=${library}"`);
-      expect(markup).toContain('href="/sessions?type=surveys"');
+      expect(markup).toContain('href="/results?view=surveys"');
+      expect(markup).not.toContain('href="/sessions?type=surveys"');
       expect(markup).toContain('aria-label="Results layout"');
       if (view === "practice") {
         expect(markup).toContain('href="/practice/practice-first"');
         expect(markup).toContain('href="/report/report-first"');
       } else if (view === "presentations")
         expect(markup).toContain('href="/presentation-session/presentation-first/report"');
+      else if (view === "surveys") expect(markup).toContain('href="/results/surveys/survey-first"');
       else expect(markup).toContain('href="/report/report-first"');
     },
   );
@@ -281,6 +318,271 @@ describe("Results workspace", () => {
       new URLSearchParams(historyCalls("/v1/reports")[0]![0].split("?")[1]).get("search"),
     ).toBe("needle");
   });
+
+  it("loads every Survey metadata page and links retained completed runs directly when creation is disabled", async () => {
+    fixtures.query = "view=surveys";
+    fixtures.surveysEnabled = false;
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith("/v1/survey-rooms?"))
+        return path.includes("cursor=")
+          ? {
+              rooms: [
+                {
+                  ...survey("closed-later", "Closed early"),
+                  closesAt: "2099-01-01T12:00:00Z",
+                },
+                { ...survey("elapsed", "Deadline reached"), closed: false },
+                {
+                  ...survey("boundary", "Deadline reached now"),
+                  closed: false,
+                  closesAt: "2026-10-14T12:00:00Z",
+                },
+              ],
+              nextCursor: null,
+            }
+          : {
+              rooms: [
+                {
+                  ...survey("closed-later", "Closed early"),
+                  closesAt: "2099-01-01T12:00:00Z",
+                },
+                {
+                  ...survey("active", "Active Survey"),
+                  closed: false,
+                  closesAt: "2099-01-01T12:00:00Z",
+                },
+                {
+                  ...survey("expired", "Expired Survey"),
+                  expiresAt: "2026-10-14T12:00:00Z",
+                },
+              ],
+              nextCursor: "survey-next+ /",
+            };
+      return response(path);
+    });
+    const markup = await resultsHarness().settle();
+    expect(headings()).toEqual(["Closed early", "Deadline reached now", "Deadline reached"]);
+    expect(markup).toContain('href="/results/surveys/closed-later"');
+    expect(markup).toContain('href="/results/surveys/elapsed"');
+    expect(markup).toContain('href="/library?type=surveys"');
+    expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain("Collection deadline:");
+    expect(markup).toContain("Retained until");
+    expect(markup).toContain("Run code: 654321");
+    expect(markup).toContain("3 results shown");
+    expect(markup).not.toContain("Active Survey");
+    expect(markup).not.toContain("Expired Survey");
+    expect(markup).not.toContain('href="/surveys/rooms/');
+    expect(markup).not.toContain("Survey runs and results");
+    expect(
+      elements(fixtures.tree)
+        .filter((element) => element.type === "select")
+        .map((element) => element.props.value),
+    ).toEqual(["all"]);
+    const calls = historyCalls("/v1/survey-rooms");
+    expect(
+      calls.map(([url]) => Object.fromEntries(new URLSearchParams(url.split("?")[1]))),
+    ).toEqual([{ limit: "50" }, { limit: "50", cursor: "survey-next+ /" }]);
+    expect(
+      fixtures.apiFetch.mock.calls.some(([path]) => /^\/v1\/survey-rooms\//.test(String(path))),
+    ).toBe(false);
+  });
+
+  it("filters Survey metadata by title, code, source, and inclusive collection deadlines without refetching", async () => {
+    fixtures.query = "view=surveys";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/v1/survey-rooms?")
+        ? {
+            rooms: [
+              { ...survey(), code: "AbC123" },
+              {
+                ...survey("start", "First Survey at start"),
+                closesAt: new Date("2026-10-10T00:00:00").toISOString(),
+              },
+              {
+                ...survey("end", "First Survey at end"),
+                closesAt: new Date("2026-10-10T23:59:59.999").toISOString(),
+              },
+              { ...survey("other", "First Survey other source"), surveyId: "other-source" },
+              {
+                ...survey("old", "First Survey before range"),
+                closesAt: new Date("2026-10-09T23:59:59.999").toISOString(),
+              },
+              {
+                ...survey("next", "First Survey after range"),
+                closesAt: new Date("2026-10-11T00:00:00").toISOString(),
+              },
+            ],
+            nextCursor: null,
+          }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    await harness.settle();
+    changeSearch("  FIRST SURVEY  ");
+    changeField("Survey", "survey-source");
+    changeField("Collection deadline from", "2026-10-10");
+    changeField("Collection deadline to", "2026-10-10");
+    let markup = await harness.settle();
+    expect(headings()).toEqual([
+      "First Survey at end",
+      "First Survey result",
+      "First Survey at start",
+    ]);
+    expect(markup).toContain("3 results shown");
+    changeSearch("  abc123  ");
+    await harness.settle();
+    expect(headings()).toEqual(["First Survey result"]);
+    changeSearch("missing");
+    markup = await harness.settle();
+    expect(markup).toContain("No results match these filters.");
+    expect(markup).toContain('href="/sessions?type=surveys"');
+    expect(fixtures.replace).not.toHaveBeenCalledWith("/sessions?type=surveys", expect.anything());
+    clickButton("Clear filters");
+    await harness.settle();
+    expect(headings()).toHaveLength(6);
+    expect(new URLSearchParams(fixtures.query).get("view")).toBe("surveys");
+    expect(new URLSearchParams(fixtures.query).has("q")).toBe(false);
+    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
+  });
+
+  it("paginates Survey cards locally and resets the display limit when source filters change", async () => {
+    fixtures.query = "view=surveys";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/v1/survey-rooms?")
+        ? {
+            rooms: Array.from({ length: 27 }, (_, index) => ({
+              ...survey(`survey-${String(index).padStart(2, "0")}`, `Survey ${index}`),
+              surveyId: index === 26 ? "other-source" : "survey-source",
+            })),
+            nextCursor: null,
+          }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    let markup = await harness.settle();
+    expect(headings()).toHaveLength(25);
+    expect(markup).toContain("25 results shown · More available");
+    clickButton("Load More");
+    markup = await harness.settle();
+    expect(headings()).toHaveLength(27);
+    expect(markup).toContain("27 results shown");
+    changeField("Survey", "other-source");
+    await harness.settle();
+    expect(headings()).toEqual(["Survey 26"]);
+    changeField("Survey", "survey-source");
+    await harness.settle();
+    expect(headings()).toHaveLength(25);
+    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
+  });
+
+  it("updates Survey eligibility when collection deadlines and retention dates pass", async () => {
+    fixtures.query = "view=surveys";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/v1/survey-rooms?")
+        ? {
+            rooms: [
+              {
+                ...survey("expiring", "Retained briefly"),
+                expiresAt: "2026-10-14T12:00:30Z",
+              },
+              {
+                ...survey("closing", "Newly completed"),
+                closed: false,
+                closesAt: "2026-10-14T12:00:30Z",
+              },
+            ],
+            nextCursor: null,
+          }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    await harness.settle();
+    expect(headings()).toEqual(["Retained briefly"]);
+    vi.mocked(Date.now).mockReturnValue(new Date("2026-10-14T12:00:30Z").getTime());
+    const refresh = vi.mocked(window.setInterval).mock.calls[0]![0];
+    if (typeof refresh !== "function") throw new Error("Missing Survey eligibility refresh");
+    refresh();
+    await harness.settle();
+    expect(headings()).toEqual(["Newly completed"]);
+    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
+    harness.dispose();
+    expect(window.clearInterval).toHaveBeenCalledWith(1);
+  });
+
+  it("rejects repeated Survey metadata cursors without looping or showing partial results", async () => {
+    fixtures.query = "view=surveys";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/v1/survey-rooms?")
+        ? { rooms: [survey()], nextCursor: "repeated" }
+        : response(path),
+    );
+    const markup = await resultsHarness().settle();
+    expect(historyCalls("/v1/survey-rooms")).toHaveLength(2);
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Survey results could not be loaded. Try again.");
+    expect(headings()).toEqual([]);
+    expect(markup).not.toContain("No Survey results yet");
+  });
+
+  it("uses current Survey source filters when a pending metadata page completes", async () => {
+    fixtures.query = "view=surveys";
+    const pending = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path.startsWith("/v1/survey-rooms?") ? pending.promise : Promise.resolve(response(path)),
+    );
+    const harness = resultsHarness();
+    await harness.settle();
+    changeField("Survey", "other-source");
+    changeSearch("wanted");
+    await harness.settle();
+    pending.resolve({
+      rooms: [
+        survey("wrong", "Wanted wrong source"),
+        { ...survey("wanted", "Wanted current source"), surveyId: "other-source" },
+      ],
+      nextCursor: null,
+    });
+    await harness.settle();
+    expect(headings()).toEqual(["Wanted current source"]);
+    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
+  });
+
+  it.each(["first", "later"] as const)(
+    "aborts stale Survey %s metadata pages after a workspace change",
+    async (stage) => {
+      fixtures.query = "view=surveys";
+      const stale = deferred<unknown>();
+      let reads = 0;
+      fixtures.apiFetch.mockImplementation((path: string) => {
+        if (path.startsWith("/v1/survey-rooms?")) {
+          reads++;
+          if (reads === (stage === "first" ? 1 : 2)) return stale.promise;
+          if (stage === "later" && reads === 1)
+            return Promise.resolve({ rooms: [survey()], nextCursor: "next" });
+          return Promise.resolve({
+            rooms: [survey("fresh", "Fresh Survey history")],
+            nextCursor: null,
+          });
+        }
+        return Promise.resolve(response(path));
+      });
+      const harness = resultsHarness();
+      await harness.settle();
+      const request = historyCalls("/v1/survey-rooms").at(-1)!;
+      fixtures.workspaceId = "workspace-b";
+      expect(harness.render()).not.toContain("First Survey result");
+      await harness.settle();
+      expect(request[1].signal?.aborted).toBe(true);
+      stale.resolve({ rooms: [survey("stale", "Stale Survey history")], nextCursor: "stale-next" });
+      expect(await harness.settle()).not.toContain("Stale Survey history");
+      expect(headings()).toEqual(["Fresh Survey history"]);
+      expect(historyCalls("/v1/survey-rooms").some(([path]) => path.includes("stale-next"))).toBe(
+        false,
+      );
+      harness.dispose();
+    },
+  );
 
   it.each([
     {

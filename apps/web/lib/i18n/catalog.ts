@@ -128,6 +128,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
     return ["live-delivery", "session-summary"];
   // Survey sharing reuses the QR/address controls from live delivery.
   if (/^\/surveys\/rooms\/[^/]+\/?$/.test(path)) return ["live-delivery", "session-summary"];
+  if (/^\/results\/surveys\/[^/]+\/?$/.test(path)) return ["workspace-pages", "session-summary"];
   if (
     [
       "/home",

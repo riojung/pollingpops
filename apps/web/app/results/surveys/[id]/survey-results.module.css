@@ -1,0 +1,44 @@
+.panel,
+.question {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tableContainer {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tableContainer:focus-visible {
+  outline: 2px solid var(--ui-accent-ink);
+  outline-offset: 3px;
+}
+
+.distribution {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.distribution caption {
+  padding-block: 0.75rem;
+  text-align: left;
+}
+
+.distribution th,
+.distribution td {
+  border-bottom: 1px solid var(--ui-border);
+  padding: 0.65rem 0.5rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: left;
+  vertical-align: top;
+}
+
+.distribution th:last-child,
+.distribution td:last-child {
+  width: 5rem;
+  text-align: right;
+}

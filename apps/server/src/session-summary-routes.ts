@@ -290,10 +290,11 @@ export async function registerSessionSummaryRoutes(
     scoped.get("/v1/session-summaries/features", async (request, reply) => {
       const actor = await deps.auth.requireCreator(request, reply);
       if (!actor) return;
+      const source = SummarySourceSchema.parse(request.query);
       return {
         enabled:
           creationEnabled(actor.workspaceId) ||
-          (await deps.summaries.hasSnapshots(actor.workspaceId)),
+          Boolean(await deps.summaries.getSnapshot(actor.workspaceId, source)),
       };
     });
     scoped.get("/v1/session-summaries/:kind/:id", async (request, reply) => {

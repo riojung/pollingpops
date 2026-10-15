@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSummaryShare,
   fetchSharedSummary,
+  fetchSummaryAvailability,
   fetchSummaryExport,
   fetchSummaryPreview,
   sessionSummaryPath,
@@ -32,6 +33,35 @@ const created = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("session summary client privacy and write intent", () => {
+  it.each(["round", "presentation", "survey"] as const)(
+    "queries availability for the validated %s source without caching it",
+    async (kind) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ enabled: false })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ enabled: true })));
+      vi.stubGlobal("fetch", fetchMock);
+      const source = { kind, id: summarySource.id };
+      const controller = new AbortController();
+      await expect(fetchSummaryAvailability(source, controller.signal)).resolves.toBe(false);
+      await expect(fetchSummaryAvailability(source, controller.signal)).resolves.toBe(true);
+      for (const [url, init] of fetchMock.mock.calls) {
+        expect(url).toBe(`/v1/session-summaries/features?kind=${kind}&id=${source.id}`);
+        expect(init).toMatchObject({ cache: "no-store", signal: controller.signal });
+      }
+    },
+  );
+  it("rejects malformed availability sources before making a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      fetchSummaryAvailability(
+        { ...summarySource, id: "../other?kind=survey" },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("validates sources and binds the preview to the requested session", async () => {
     expect(sessionSummaryPath(summarySource)).toBe(
       `/v1/session-summaries/round/${summarySource.id}`,

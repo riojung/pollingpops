@@ -755,8 +755,9 @@ moderation, kick/ban, retention, export, and deletion are enforced server-side.
 
 Aggregate summary schema version 1 has a separate strict boundary from private Report V1–V7:
 
-- `GET /v1/session-summaries/features` — creator-authenticated availability probe, including accepted
-  summaries retained during a writer pause.
+- `GET /v1/session-summaries/features?kind={kind}&id={id}` — creator-authenticated availability
+  probe for one source. During a writer pause, only that source's retained snapshot enables it;
+  snapshots from other sources in the workspace do not.
 - `GET /v1/session-summaries/{kind}/{id}` — aggregate preview, source retention, role/export capabilities.
 - `GET /v1/session-summaries/{kind}/{id}/shares` — safe link metadata, no secrets.
 - `POST /v1/session-summaries/{kind}/{id}/shares` — owner/editor publication with UUID `idempotencyKey`,

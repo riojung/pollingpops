@@ -49,6 +49,13 @@ at the maximum checkpoint count pass. Native Excel, manual assistive-tech, nativ
 physical-device, Firefox and external production acceptance remain separate checks. This change
 does not enable production sharing; Google Sheets delivery remains deferred.
 
+PR #125 review follow-up: the availability probe requires the current source kind and ID. During
+a writer pause, only that source's retained snapshot enables **Share summary**; another snapshot
+in the workspace cannot enable an unrelated report. Navigation immediately hides the previous
+source's trigger and ignores late aborted responses. Regressions cover all three source types,
+paused gates, tenancy, expiry, deletion, strict query validation and source changes. The full
+repository check passes, including 907 web and 737 server tests.
+
 ### IDEA 004 Live Round response formats October 13 2026
 
 Implemented locally on `codex/idea-004-response-formats`. The first increment covers Live Rounds;

@@ -51,9 +51,11 @@ Account exports include aggregate snapshots and safe share metadata, never capab
 hashes. At most 20 active links per source and 100 listed links bound metadata requests.
 
 Creator endpoints are under `/v1/session-summaries/:kind/:id` (preview, `/shares`, and `/export`).
-The feature probe is `/v1/session-summaries/features`. Public capability reads and downloads are
-under `/v1/shared-session-summaries/:id`. Requests validate intent, source binding, supported formats
-and locales. Responses are no-store/noindex, public pages use generic metadata and no-referrer,
+The feature probe is `/v1/session-summaries/features?kind={kind}&id={id}`. During a writer pause,
+availability requires a retained snapshot for that exact source in the current workspace.
+Public capability reads and downloads are under `/v1/shared-session-summaries/:id`. Requests validate
+intent, source binding, supported formats and locales. Responses are no-store/noindex, public pages
+use generic metadata and no-referrer,
 and download completion revalidates revocation, role, and deletion after rendering.
 
 ## Export implementation

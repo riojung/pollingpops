@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PresentationContentSchema, type SummarySourceKind } from "@openround/contracts";
-import { MemoryRepository, createPresentationSessionRepository } from "@openround/db";
+import {
+  MemoryRepository,
+  createPresentationSessionRepository,
+  createSessionSummaryRepository,
+  createSurveyRepository,
+} from "@openround/db";
 import { createGameState } from "@openround/game-engine";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
@@ -222,6 +227,8 @@ async function source(f: Awaited<ReturnType<typeof fixture>>, kind: SummarySourc
 }
 
 const path = (s: { kind: string; id: string }) => `/v1/session-summaries/${s.kind}/${s.id}`;
+const featuresPath = (s: { kind: string; id: string }) =>
+  `/v1/session-summaries/features?${new URLSearchParams(s)}`;
 async function publish(
   f: Awaited<ReturnType<typeof fixture>>,
   s: { kind: string; id: string },
@@ -374,9 +381,9 @@ describe("session summary APIs", () => {
     const s = await source(f, "round");
     const link = await publish(f, s);
     f.config.FEATURE_SESSION_SUMMARIES = false;
-    expect(
-      (await f.app.inject({ url: "/v1/session-summaries/features", headers: f.headers })).json(),
-    ).toEqual({ enabled: true });
+    expect((await f.app.inject({ url: featuresPath(s), headers: f.headers })).json()).toEqual({
+      enabled: true,
+    });
     expect(
       (await f.app.inject({ url: path(s), headers: f.headers })).json().capabilities.canCreateShare,
     ).toBe(false);
@@ -410,6 +417,108 @@ describe("session summary APIs", () => {
         })
       ).statusCode,
     ).toBe(204);
+  });
+
+  it.each(["round", "presentation", "survey"] as const)(
+    "keeps paused feature probes scoped to the retained %s source",
+    async (kind) => {
+      const f = await fixture();
+      const retained = await source(f, kind);
+      const unrelated = await source(f, kind);
+      await publish(f, retained);
+      for (const gate of ["flag", "allowlist"] as const) {
+        f.config.FEATURE_SESSION_SUMMARIES = gate !== "flag";
+        f.config.CORE_PARITY_WORKSPACE_ALLOWLIST = gate === "allowlist" ? [] : [f.workspaceId];
+        for (const [s, enabled] of [
+          [retained, true],
+          [unrelated, false],
+          [{ kind, id: randomUUID() }, false],
+        ] as const) {
+          const response = await f.app.inject({ url: featuresPath(s), headers: f.headers });
+          expect(response.statusCode, response.body).toBe(200);
+          expect(response.json()).toEqual({ enabled });
+        }
+      }
+      f.config.FEATURE_SESSION_SUMMARIES = false;
+      const magic = await f.app.inject({
+        method: "POST",
+        url: "/v1/auth/magic-link",
+        payload: {
+          email: "summary-outsider@example.test",
+          segment: "workplace",
+          acceptPolicies: true,
+        },
+      });
+      const token = new URL(magic.json().debugUrl).searchParams.get("token");
+      const verified = await f.app.inject({ url: `/v1/auth/verify?token=${token}` });
+      const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
+      expect(
+        (await f.app.inject({ url: featuresPath(retained), headers: { cookie } })).json(),
+      ).toEqual({ enabled: false });
+      if (kind === "round") await f.repository.deleteSession(f.workspaceId, retained.id);
+      else if (kind === "presentation")
+        await f.presentationSessions.deleteSession(f.workspaceId, retained.id);
+      else await createSurveyRepository(f.repository).deleteRoom(f.workspaceId, retained.id);
+      expect(
+        (await f.app.inject({ url: featuresPath(retained), headers: f.headers })).json(),
+      ).toEqual({ enabled: false });
+    },
+  );
+
+  it.each(["round", "presentation", "survey"] as const)(
+    "does not enable paused features for an expired %s snapshot",
+    async (kind) => {
+      const f = await fixture();
+      const s = await source(f, kind);
+      const preview = await f.app.inject({ url: path(s), headers: f.headers });
+      expect(preview.statusCode, preview.body).toBe(200);
+      const now = new Date();
+      await createSessionSummaryRepository(f.repository).getOrCreateSnapshot({
+        workspaceId: f.workspaceId,
+        source: s,
+        actorId: f.creator.userId,
+        summary: preview.json().summary,
+        expiresAt: new Date(now.getTime() + 60_000),
+        now,
+      });
+      f.config.FEATURE_SESSION_SUMMARIES = false;
+      expect((await f.app.inject({ url: featuresPath(s), headers: f.headers })).json()).toEqual({
+        enabled: true,
+      });
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now.getTime() + 60_000);
+      try {
+        const response = await f.app.inject({ url: featuresPath(s), headers: f.headers });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toEqual({ enabled: false });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("validates strict source query parameters before enabling feature controls", async () => {
+    const f = await fixture();
+    const id = randomUUID();
+    for (const query of [
+      "",
+      "?kind=round",
+      `?id=${id}`,
+      `?kind=unknown&id=${id}`,
+      "?kind=round&id=invalid",
+      `?kind=round&id=${id}&extra=true`,
+      `?kind=round&kind=survey&id=${id}`,
+    ]) {
+      const response = await f.app.inject({
+        url: `/v1/session-summaries/features${query}`,
+        headers: f.headers,
+      });
+      expect(response.statusCode, response.body).toBe(422);
+      expect(response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+    }
+    expect(
+      (await f.app.inject({ url: featuresPath({ kind: "round", id }), headers: f.headers })).json(),
+    ).toEqual({ enabled: true });
   });
 
   it("rejects viewers, mismatched retries, missing/wrong capabilities and public note changes", async () => {

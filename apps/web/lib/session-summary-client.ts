@@ -18,6 +18,16 @@ export function sessionSummaryPath(source: SummarySource) {
   return `/v1/session-summaries/${parsed.kind}/${parsed.id}`;
 }
 
+export async function fetchSummaryAvailability(source: SummarySource, signal: AbortSignal) {
+  const parsed = SummarySourceSchema.parse(source);
+  const query = new URLSearchParams({ kind: parsed.kind, id: parsed.id });
+  const result = await apiFetch<{ enabled: boolean }>(`/v1/session-summaries/features?${query}`, {
+    cache: "no-store",
+    signal,
+  });
+  return result.enabled === true;
+}
+
 export async function fetchSummaryPreview(source: SummarySource, signal: AbortSignal) {
   const result = SessionSummaryPreviewSchema.parse(
     await apiFetch<unknown>(sessionSummaryPath(source), { cache: "no-store", signal }),

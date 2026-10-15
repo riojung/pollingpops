@@ -7,10 +7,10 @@ import type {
   SummaryShareMetadata,
   SummarySource,
 } from "@openround/contracts";
-import { apiFetch } from "../../lib/api";
 import { formatDateTime } from "../../lib/i18n/format";
 import {
   createSummaryShare,
+  fetchSummaryAvailability,
   fetchSummaryPreview,
   fetchSummaryShares,
   revokeSummaryShare,
@@ -25,23 +25,21 @@ import styles from "./summary.module.css";
 
 export function SessionSummaryButton({ source }: { source: SummarySource }) {
   const { t } = useLocale();
-  const [enabled, setEnabled] = useState(false);
+  const [availableSource, setAvailableSource] = useState<SummarySource | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    setEnabled(false);
+    const requestedSource = { kind: source.kind, id: source.id };
+    setAvailableSource(null);
     setOpen(false);
-    void apiFetch<{ enabled: boolean }>("/v1/session-summaries/features", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then((result) => {
-        if (!controller.signal.aborted) setEnabled(result.enabled === true);
+    void fetchSummaryAvailability(requestedSource, controller.signal)
+      .then((enabled) => {
+        if (!controller.signal.aborted) setAvailableSource(enabled ? requestedSource : null);
       })
       .catch(() => undefined);
     return () => controller.abort();
   }, [source.kind, source.id]);
-  if (!enabled) return null;
+  if (availableSource?.kind !== source.kind || availableSource?.id !== source.id) return null;
   return (
     <>
       <button

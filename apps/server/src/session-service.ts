@@ -67,6 +67,7 @@ import {
   safeHashEqual,
 } from "./security.js";
 import { createPendingReport } from "./reporting.js";
+import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 import type { MetricsService } from "./metrics.js";
 import { retentionExpiry } from "./entitlements.js";
 import {
@@ -171,6 +172,9 @@ export class SessionError extends Error {
       | "SESSION_FULL"
       | "SESSION_LOCKED"
       | "NICKNAME_REJECTED"
+      | "PASSWORD_REQUIRED"
+      | "INVALID_PASSWORD"
+      | "RATE_LIMITED"
       | "STALE_VERSION"
       | "ANSWER_LATE"
       | "ANSWER_INVALID"
@@ -831,12 +835,49 @@ export class SessionService {
       presenterSoundEnabled?: boolean;
       clientCapabilities?: RoundClientCapabilities;
       useEventCredit?: boolean;
+      joinPassword?: string;
       idempotencyKey?: string;
     } = {},
   ): Promise<{ sessionId: string; code: string; hostToken: string; snapshot: SessionSnapshot }> {
     if (creator.role === "viewer") {
       throw new SessionError("UNAUTHORIZED", "Viewers cannot host live rounds");
     }
+    const previousIdentity =
+      this.config.BUSINESS_PLATFORM_ENABLED && !this.config.COMMUNITY_MODE
+        ? roomCreationIdentity(creator.workspaceId, "round", experience.idempotencyKey, {})
+        : null;
+    const previousRoom = previousIdentity
+      ? await this.repository.getSessionById(previousIdentity.roomId)
+      : null;
+    const policy = previousRoom
+      ? {
+          entitlements: await roomEntitlements(
+            this.repository,
+            this.config,
+            "round",
+            previousRoom.id,
+            creator.workspaceId,
+          ),
+          funding: null,
+        }
+      : await roomCreationPolicy(
+          this.repository,
+          this.config,
+          creator.workspaceId,
+          experience.useEventCredit,
+        );
+    if (experience.joinPassword !== undefined && policy.entitlements.plan === "free") {
+      throw new SessionError("ENTITLEMENT_LIMIT", "Password-protected rooms require a paid plan");
+    }
+    const joinPasswordHash =
+      experience.joinPassword === undefined
+        ? undefined
+        : await hashRoomPassword(
+            experience.joinPassword,
+            experience.idempotencyKey
+              ? `${creator.workspaceId}:round:${experience.idempotencyKey}`
+              : undefined,
+          );
     const creation =
       this.config.BUSINESS_PLATFORM_ENABLED && !this.config.COMMUNITY_MODE
         ? roomCreationIdentity(creator.workspaceId, "round", experience.idempotencyKey, {
@@ -845,6 +886,7 @@ export class SessionService {
             experiencePresetOverride: experience.experiencePresetOverride,
             presenterSoundEnabled: experience.presenterSoundEnabled ?? false,
             useEventCredit: experience.useEventCredit ?? false,
+            joinPasswordHash,
           })
         : null;
     const replay = async (existing: StoredSession) => {
@@ -867,6 +909,9 @@ export class SessionService {
         snapshot: snapshotForRole(existing.state, { role: "host" }),
       };
     };
+    // A retained entitlement snapshot only authorizes replay of this accepted room. Never
+    // carry it into a replacement creation if the room is deleted while hashing the request.
+    if (previousRoom) return replay(previousRoom);
     if (creation) {
       const existing = await this.repository.getSessionById(creation.roomId);
       if (existing) return replay(existing);
@@ -912,12 +957,6 @@ export class SessionService {
         "Text sessions support up to 10 text checkpoints and 250 participants",
       );
     }
-    const policy = await roomCreationPolicy(
-      this.repository,
-      this.config,
-      creator.workspaceId,
-      experience.useEventCredit,
-    );
     const entitlements = policy.entitlements;
     if (settings.audienceLimit > entitlements.maxParticipants) {
       throw new SessionError(
@@ -962,6 +1001,7 @@ export class SessionService {
           quizVersionId: version.id,
           hostId: creator.userId,
           hostTokenHash: hashToken(hostToken),
+          joinPasswordHash,
           commercialCoverage: coverageRequest(policy, {
             artifactType: "round",
             roomId: sessionId,
@@ -1075,10 +1115,20 @@ export class SessionService {
       throw unavailable();
     }
 
-    return { nicknamePolicy: state.settings.nicknamePolicy };
+    return {
+      nicknamePolicy: state.settings.nicknamePolicy,
+      passwordRequired: Boolean(stored.joinPasswordHash),
+    };
   }
 
   async join(input: JoinRequest): Promise<JoinResponse> {
+    // Nicknames are shared display labels, not caller identities. Keep the shared room budget
+    // before password verification alongside the existing REST and socket caller limits.
+    if (
+      !input.resumeToken &&
+      !(await this.cache.consumeRateLimit(`round:join:room:${input.code}`, 600, 60_000))
+    )
+      throw new SessionError("RATE_LIMITED", "Too many join attempts. Wait a minute and retry");
     const kind = input.resumeToken ? "resume" : "new";
     return this.traceOperation(
       "openround.session.join",
@@ -1159,6 +1209,33 @@ export class SessionService {
       );
     }
 
+    // Protection is immutable for the run. Verify before acquiring the room mutation queue so
+    // incorrect passwords cannot stall host commands or answer commits behind expensive hashes.
+    // Synchronized guests normally share one password. Keep exact-value verification promises
+    // only for this bounded batch, and start distinct checks together through Node's worker pool.
+    const verifications = new Map<string | undefined, Promise<boolean>>();
+    const decisions = await Promise.all(
+      items.map(async (item) => {
+        const password = item.input.password;
+        if (stored.joinPasswordHash && !password) {
+          item.reject(new SessionError("PASSWORD_REQUIRED", "Enter the room password to join"));
+          return null;
+        }
+        let verification = verifications.get(password);
+        if (!verification) {
+          verification = verifyRoomPassword(password, stored.joinPasswordHash);
+          verifications.set(password, verification);
+        }
+        if (!(await verification)) {
+          item.reject(new SessionError("INVALID_PASSWORD", "The room password is incorrect"));
+          return null;
+        }
+        return item;
+      }),
+    );
+    const admitted = decisions.filter((item) => item !== null);
+    if (admitted.length === 0) return;
+
     await this.mutate(stored.id, "join", async () => {
       const session = await this.loadSessionForMutation(stored.id);
       if (!session) throw new SessionError("INVALID_CODE", "Session is no longer available");
@@ -1189,7 +1266,7 @@ export class SessionService {
       const events: EngineEvent[] = [];
       const eventVersions = new Map<number, number>();
 
-      for (const item of items) {
+      for (const item of admitted) {
         try {
           requireRoundClient(priorState, item.input.clientCapabilities);
           if (participantCount >= priorState.settings.audienceLimit) {

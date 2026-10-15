@@ -5,6 +5,20 @@ import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
   ...textPollLiveEnglishMessages,
+  "live.protection.title": "ルームのパスワード",
+  "live.protection.toggle": "この開催にパスワードを設定する",
+  "live.protection.help":
+    "任意です。空白以外を1文字以上含む8〜128文字で設定してください。参加者には別途共有してください。",
+  "live.protection.upgrade":
+    "パスワード保護はPro、Team、またはイベントクレジットで利用できます。無料ルームはパスワードなしで参加できます。",
+  "live.protection.upgradeLink": "アップグレードの選択肢を見る",
+  "live.protection.label": "ルームのパスワード",
+  "live.protection.validation":
+    "空白以外を1文字以上含む8〜128文字にしてください。空白もそのまま保持されます。",
+  "live.protection.required": "主催者から共有されたルームのパスワードを入力してください。",
+  "live.protection.invalid": "パスワードが違います。主催者に確認して、もう一度お試しください。",
+  "live.protection.join": "ルームに参加",
+  "live.protection.joining": "参加中…",
   ...textPollTranslations["ja-JP"].live,
   "live.ranking.yourRanking": "あなたの順位",
   "live.ranking.instructions": "{total}個のうち{count}個に順位を付けてください。1位が最優先です。",

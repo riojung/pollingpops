@@ -346,7 +346,9 @@ function roundPublishValidationError(
 }
 
 function sessionStatus(code: SessionError["code"]) {
-  if (code === "UNAUTHORIZED") return 401;
+  if (code === "UNAUTHORIZED" || code === "PASSWORD_REQUIRED" || code === "INVALID_PASSWORD")
+    return 401;
+  if (code === "RATE_LIMITED") return 429;
   if (code === "INSTITUTION_AUTH_REQUIRED") return 403;
   if (code === "CLIENT_UPDATE_REQUIRED") return 409;
   if (code === "NOT_FOUND" || code === "INVALID_CODE") return 404;
@@ -2294,6 +2296,7 @@ export async function registerRoutes(
       presenterSoundEnabled: experiencesAvailable && input.presenterSoundEnabled,
       clientCapabilities: input.clientCapabilities,
       useEventCredit: input.useEventCredit,
+      joinPassword: input.joinPassword,
       idempotencyKey:
         typeof request.headers["x-idempotency-key"] === "string"
           ? request.headers["x-idempotency-key"]

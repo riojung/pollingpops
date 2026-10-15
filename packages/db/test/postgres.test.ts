@@ -71,6 +71,7 @@ import {
 import {
   expectSurveyConformance,
   expectSurveyCreationUpgradeConformance,
+  expectSurveyPasswordConformance,
   surveyFixture,
 } from "./support/survey-conformance.js";
 import { createLibraryDeletionFixture } from "./support/library-deletion-fixtures.js";
@@ -1244,6 +1245,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 68, name: "ranking_opinion_responses" },
       { version: 69, name: "text_opinion_moderation" },
       { version: 70, name: "session_summaries" },
+      { version: 71, name: "room_passwords" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -1722,6 +1724,31 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     await expectSurveyConformance(repository, actor.workspaceId);
     await expectSurveyConformance(repository, actor.workspaceId, 2);
     expect((await runtimePool.query("SELECT * FROM survey_guests")).rows).toHaveLength(0);
+  });
+
+  it("persists protected Survey rooms separately from content and preserves safe creation retries", async () => {
+    const actor = await creator("survey-passwords");
+    const { protectedRoom, openRoom } = await expectSurveyPasswordConformance(
+      repository,
+      actor.workspaceId,
+    );
+    expect(JSON.stringify(await repository.exportAccount(actor.userId))).not.toContain(
+      "joinPasswordHash",
+    );
+    const administrator = new Pool({ connectionString: adminUrl! });
+    try {
+      const rows = await administrator.query(
+        "SELECT id, join_password_hash, data FROM survey_feedback_rooms WHERE id = ANY($1::uuid[])",
+        [[protectedRoom.id, openRoom.id]],
+      );
+      expect(rows.rows.find((room) => room.id === protectedRoom.id)?.join_password_hash).toBe(
+        "stable-salted-verifier",
+      );
+      expect(rows.rows.find((room) => room.id === openRoom.id)?.join_password_hash).toBeNull();
+      for (const room of rows.rows) expect(room.data).not.toHaveProperty("joinPasswordHash");
+    } finally {
+      await administrator.end();
+    }
   });
 
   it("replays legacy Survey creation receipts through the restricted PostgreSQL runtime", async () => {
@@ -2878,6 +2905,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     decisionReplayEnabled = false,
     recoveryPackCardsEnabled = false,
     roundProtocol?: RoundProtocol,
+    joinPasswordHash?: string | null,
   ) {
     const now = new Date();
     const id = randomUUID();
@@ -2904,6 +2932,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       hostTokenHash: randomUUID(),
       trustMode,
       decisionReplayEnabled,
+      joinPasswordHash,
       state,
       expiresAt: new Date(now.getTime() + 60_000),
       retentionExpiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60_000),
@@ -2912,6 +2941,41 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     });
     return { id, state };
   }
+
+  it("persists Round passwords privately and retains them during legacy state saves", async () => {
+    const owner = await creator("round-passwords");
+    const fixture = await createPublishedRoundFixture(owner, "Protected Round");
+    const protectedRound = await createRoundSessionFixture(
+      owner,
+      fixture,
+      String(randomInt(1_000_000, 10_000_000)),
+      "learning",
+      false,
+      false,
+      undefined,
+      "salted-round-verifier",
+    );
+    const stored = (await repository.getSessionById(protectedRound.id))!;
+    expect(stored.joinPasswordHash).toBe("salted-round-verifier");
+    expect((await repository.getSessionByCode(stored.state.code))?.joinPasswordHash).toBe(
+      "salted-round-verifier",
+    );
+    expect(stored.state).not.toHaveProperty("joinPasswordHash");
+    expect(stored.state.settings).not.toHaveProperty("joinPasswordHash");
+    const exported = JSON.stringify(await repository.exportAccount(owner.userId));
+    expect(exported).not.toContain("salted-round-verifier");
+    expect(exported).not.toContain("joinPasswordHash");
+    await repository.saveSession({ ...stored, joinPasswordHash: undefined }, stored.state.version);
+    expect((await repository.getSessionById(stored.id))?.joinPasswordHash).toBe(
+      "salted-round-verifier",
+    );
+    const openRound = await createRoundSessionFixture(
+      owner,
+      fixture,
+      String(randomInt(1_000_000, 10_000_000)),
+    );
+    expect((await repository.getSessionById(openRound.id))?.joinPasswordHash).toBeNull();
+  });
 
   it("restores protocol-v7 rooms and durable responses through the restricted runtime", async () => {
     const owner = await creator("round-protocol-owner");

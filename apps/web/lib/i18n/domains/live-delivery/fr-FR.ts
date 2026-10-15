@@ -5,6 +5,21 @@ import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
   ...textPollLiveEnglishMessages,
+  "live.protection.title": "Mot de passe de la salle",
+  "live.protection.toggle": "Exiger un mot de passe pour cette session",
+  "live.protection.help":
+    "Facultatif. Utilisez de 8 à 128 caractères, dont au moins un caractère autre qu’une espace. Partagez-le séparément avec les participants.",
+  "live.protection.upgrade":
+    "La protection par mot de passe est disponible avec Pro, Team ou un crédit événement. Les salles gratuites restent ouvertes.",
+  "live.protection.upgradeLink": "Voir les options de mise à niveau",
+  "live.protection.label": "Mot de passe de la salle",
+  "live.protection.validation":
+    "Utilisez de 8 à 128 caractères, dont au moins un autre qu’une espace. Les espaces sont conservées.",
+  "live.protection.required": "Saisissez le mot de passe fourni par votre animateur.",
+  "live.protection.invalid":
+    "Ce mot de passe est incorrect. Vérifiez auprès de votre animateur et réessayez.",
+  "live.protection.join": "Rejoindre la salle",
+  "live.protection.joining": "Connexion…",
   ...textPollTranslations["fr-FR"].live,
   "live.ranking.yourRanking": "Votre classement",
   "live.ranking.instructions":

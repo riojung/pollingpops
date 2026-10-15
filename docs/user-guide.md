@@ -110,6 +110,27 @@ admissions/submissions; saved receipts remain readable until retention. Deleting
 attempts/receipts, including its sharing-link creation receipt. Survey opinions are separate from
 learning accuracy and Recovery evidence.
 
+## Password-protected sessions
+
+Paid workspaces can optionally require a password when launching a Round, starting a live
+Presentation, or creating a Survey sharing link. Choose **Require a password for this run** and
+enter a **Room password** of 8–128 characters before creating it. On Round setup, expand
+**Review settings** to find the option. Passwords are case-sensitive;
+spaces are preserved. The option starts off. Free workspaces can create normal sessions and see
+an explanation that password protection requires a paid plan. A paid Event Credit launch can use
+the option where Event Credits are enabled.
+
+Share the room code, joining link or QR, and send the password separately. Joining links and QR
+codes do not contain the password. Participants enter it on the Join page or the direct Survey
+page before admission. Incorrect passwords leave them on that page to retry. No participant
+account is required. An admitted participant can resume with the same browser credential without
+entering the password again.
+
+Protection belongs to that specific session or Survey run. Reusing published content creates a
+new run with its own choice of protection. Existing protected runs keep their password requirement
+after the workspace changes plan. The original password cannot be recovered from the server;
+keep it available to share with your intended audience.
+
 For video guidance, open **Help** (`/help`). The quick start follows sign-in, authoring,
 preview, publishing, hosting, QR/link joining, answering, and results. The longer user guide
 covers themes, confidence, linked rechecks, Presentations, Audience Pulse, chat/Q&A,

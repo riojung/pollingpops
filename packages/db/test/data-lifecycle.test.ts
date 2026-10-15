@@ -132,6 +132,7 @@ describe("new artifact data lifecycle", () => {
       title: draft.title,
       content: draft,
       code: "1234567",
+      joinPasswordHash: "private-presentation-verifier",
       status: "active",
       phase: "lobby",
       currentBlockIndex: -1,
@@ -212,6 +213,8 @@ describe("new artifact data lifecycle", () => {
     });
 
     const exported = await repository.exportAccount(owner.userId);
+    expect(JSON.stringify(exported)).not.toContain("private-presentation-verifier");
+    expect(JSON.stringify(exported)).not.toContain("joinPasswordHash");
     expect(exported).toMatchObject({
       presentations: [{ id: presentationId }],
       presentationVersions: [{ id: versionId }],

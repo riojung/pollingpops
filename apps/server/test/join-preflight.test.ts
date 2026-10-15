@@ -111,7 +111,7 @@ afterEach(async () => {
 });
 
 describe("guest join preflight", () => {
-  it("returns only nickname policy and does not mutate valid or unavailable rooms", async () => {
+  it("returns only safe admission metadata and does not mutate valid or unavailable rooms", async () => {
     const { app: target, repository } = await build();
     const cookie = await signIn(target);
     const quizId = await publishedStarter(target, cookie);
@@ -130,6 +130,7 @@ describe("guest join preflight", () => {
       artifactType: "round",
       destination: "/join",
       nicknamePolicy: "friendly_only",
+      passwordRequired: false,
     });
     expect(repository.sessions.get(friendly.sessionId)!.state.version).toBe(friendlyVersion);
     expect(repository.sessions.get(friendly.sessionId)!.updatedAt.toISOString()).toBe(
@@ -143,6 +144,7 @@ describe("guest join preflight", () => {
       artifactType: "round",
       destination: "/join",
       nicknamePolicy: "custom",
+      passwordRequired: false,
     });
 
     const locked = await target.inject({

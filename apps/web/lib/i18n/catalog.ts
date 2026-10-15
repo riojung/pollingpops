@@ -126,6 +126,8 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   if (/^\/summary\/[^/]+\/?$/.test(path)) return ["session-summary"];
   if (/^\/presentation-session\/[^/]+\/report\/?$/.test(path))
     return ["live-delivery", "session-summary"];
+  if (/^\/surveys\/[^/]+\/?$/.test(path) || /^\/survey\/[^/]+\/?$/.test(path))
+    return ["live-delivery"];
   // Survey sharing reuses the QR/address controls from live delivery.
   if (/^\/surveys\/rooms\/[^/]+\/?$/.test(path)) return ["live-delivery", "session-summary"];
   if (/^\/results\/surveys\/[^/]+\/?$/.test(path)) return ["workspace-pages", "session-summary"];

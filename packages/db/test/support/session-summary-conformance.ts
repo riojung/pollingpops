@@ -360,12 +360,14 @@ export async function expectSessionSummaryConformance(
   };
   await expect(summaries.createShare(create)).rejects.toMatchObject({ code: "UNAVAILABLE" });
   await repository.updateWorkspaceMemberRole(owner.workspaceId, member.userId, "editor");
+  const alternateTokenHash = hash(randomUUID());
   const created = await Promise.all([
     summaries.createShare(create),
-    summaries.createShare({ ...create, tokenHash: hash(randomUUID()) }),
+    summaries.createShare({ ...create, tokenHash: alternateTokenHash }),
   ]);
   expect(created.map(({ replayed }) => replayed).sort()).toEqual([false, true]);
   expect(created[0]!.share).toEqual(created[1]!.share);
+  const winningTokenHash = created[0]!.replayed ? alternateTokenHash : create.tokenHash;
   const share = created[0]!.share;
   expect(share.expiresAt).toEqual(expiresAt);
   expect(
@@ -388,28 +390,28 @@ export async function expectSessionSummaryConformance(
       idempotencyKey: randomUUID(),
     }),
   ).rejects.toMatchObject({ code: "UNAVAILABLE" });
-  expect((await summaries.getPublicShare(share.id, create.tokenHash, now))?.share.nextSteps).toBe(
+  expect((await summaries.getPublicShare(share.id, winningTokenHash, now))?.share.nextSteps).toBe(
     create.nextSteps,
   );
   expect(
-    (await summaries.getPublicShare(share.id, create.tokenHash, now))?.snapshot.summary.nextSteps,
+    (await summaries.getPublicShare(share.id, winningTokenHash, now))?.snapshot.summary.nextSteps,
   ).toBe("");
   expect(await summaries.getPublicShare(share.id, hash("wrong capability"), now)).toBeNull();
-  expect(await summaries.getPublicShare(share.id, create.tokenHash, expiresAt)).toBeNull();
+  expect(await summaries.getPublicShare(share.id, winningTokenHash, expiresAt)).toBeNull();
   await repository.updateWorkspaceMemberRole(owner.workspaceId, member.userId, "viewer");
-  expect(await summaries.getPublicShare(share.id, create.tokenHash, now)).toBeNull();
+  expect(await summaries.getPublicShare(share.id, winningTokenHash, now)).toBeNull();
   await expect(
     summaries.revokeShare(owner.workspaceId, sources[0]!, share.id, member.userId, now),
   ).rejects.toMatchObject({ code: "UNAVAILABLE" });
   await repository.updateWorkspaceMemberRole(owner.workspaceId, member.userId, "editor");
-  expect(await summaries.getPublicShare(share.id, create.tokenHash, now)).not.toBeNull();
+  expect(await summaries.getPublicShare(share.id, winningTokenHash, now)).not.toBeNull();
   expect(
     await summaries.revokeShare(owner.workspaceId, sources[1]!, share.id, owner.userId, now),
   ).toBe(false);
   expect(
     await summaries.revokeShare(owner.workspaceId, sources[0]!, share.id, owner.userId, now),
   ).toBe(true);
-  expect(await summaries.getPublicShare(share.id, create.tokenHash, now)).toBeNull();
+  expect(await summaries.getPublicShare(share.id, winningTokenHash, now)).toBeNull();
   expect(await summaries.createShare(create)).toMatchObject({
     replayed: true,
     share: { revokedAt: now },
@@ -438,7 +440,7 @@ export async function expectSessionSummaryConformance(
   expect(exported.sessionSummarySnapshots).toHaveLength(3);
   expect(exported.sessionSummaryShares).toHaveLength(21);
   const text = JSON.stringify(exported.sessionSummaryShares);
-  expect(text).not.toContain(create.tokenHash);
+  expect(text).not.toContain(winningTokenHash);
   expect(text).not.toContain(create.intentHash);
   expect(text).not.toContain("tokenHash");
   expect(text).not.toContain("intentHash");

@@ -132,12 +132,18 @@ describe("realtime authorization", () => {
     });
     expect(invalid).toHaveProperty("error");
     expect(sessions.join).not.toHaveBeenCalled();
-    const joined = await client
-      .timeout(2_000)
-      .emitWithAck("session.join", { code: state.code, clientCapabilities });
+    const joined = await client.timeout(2_000).emitWithAck("session.join", {
+      code: state.code,
+      clientCapabilities,
+      password: " Exact Round password ",
+    });
     expect(joined).toHaveProperty("data");
     expect(sessions.join).toHaveBeenCalledWith(
-      expect.objectContaining(clientCapabilities ? { clientCapabilities } : { code: state.code }),
+      expect.objectContaining({
+        code: state.code,
+        password: " Exact Round password ",
+        ...(clientCapabilities ? { clientCapabilities } : {}),
+      }),
     );
     const received = vi.fn();
     client.on("lobby.updated", received);

@@ -62,6 +62,7 @@ describe("legacy Presentation session snapshots", () => {
     } as never);
 
     expect(session.content.schemaVersion).toBe(2);
+    expect(session.joinPasswordHash).toBeNull();
     expect(session.content.blocks[0]).toMatchObject({
       id: legacySlideId,
       textElements: [

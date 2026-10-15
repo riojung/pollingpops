@@ -7,6 +7,7 @@ export interface JoinPreflightState {
   nicknamePolicy: JoinPreflightResponse["nicknamePolicy"] | null;
   artifactType: "round" | "presentation" | "feedback_room" | null;
   destination: string | null;
+  passwordRequired: boolean;
   message: string;
 }
 
@@ -17,6 +18,7 @@ export const idleJoinPreflightState: JoinPreflightState = {
   nicknamePolicy: null,
   artifactType: null,
   destination: null,
+  passwordRequired: false,
   message: "",
 };
 
@@ -28,6 +30,7 @@ export function beginJoinPreflight(code: string, requestId: number): JoinPreflig
     nicknamePolicy: null,
     artifactType: null,
     destination: null,
+    passwordRequired: false,
     message: "",
   };
 }
@@ -44,6 +47,7 @@ export function completeJoinPreflight(
     nicknamePolicy: response.nicknamePolicy,
     artifactType: response.artifactType ?? "round",
     destination: response.destination ?? "/join",
+    passwordRequired: response.passwordRequired ?? false,
     message: "",
   };
 }
@@ -60,8 +64,13 @@ export function failJoinPreflight(
     nicknamePolicy: null,
     artifactType: null,
     destination: null,
+    passwordRequired: false,
     message,
   };
+}
+
+export function shouldCollectJoinPassword(state: JoinPreflightState, code: string) {
+  return state.code === code && state.status === "ready" && state.passwordRequired;
 }
 
 export function joinArtifactFor(state: JoinPreflightState, code: string) {

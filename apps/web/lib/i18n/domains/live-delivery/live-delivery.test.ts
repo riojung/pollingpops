@@ -16,6 +16,9 @@ const definitelyLocalizedKeys = [
   "live.qna.status.pending",
   "live.roundPlay.complete",
   "live.roundSetup.description",
+  "live.protection.toggle",
+  "live.protection.required",
+  "live.protection.invalid",
 ] as const;
 
 const canonicalPresetNames = [
@@ -29,6 +32,16 @@ const canonicalPresetNames = [
 ] as const;
 
 describe("live delivery localization catalog", () => {
+  it("provides translated password controls and errors in all ten locales", async () => {
+    const keys = Object.keys(liveDeliveryEnglishMessages).filter((key) =>
+      key.startsWith("live.protection."),
+    );
+    expect(keys).toHaveLength(11);
+    for (const locale of supportedLocales) {
+      const messages = await loadLiveDeliveryMessages(locale);
+      for (const key of keys) expect(messages[key as keyof typeof messages].trim()).not.toBe("");
+    }
+  });
   it("keeps Companion foundation copy in the existing English fallback with exact placeholders", async () => {
     const keys = Object.keys(liveDeliveryEnglishMessages).filter(
       (key) =>

@@ -221,6 +221,56 @@ function expectNoAuthoringSecrets(snapshot: unknown) {
 }
 
 describe("PresentationSessionService realtime integration", () => {
+  it("requires paid protection and checks passwords only for new Presentation admissions", async () => {
+    const { repository, sessions, service, ids, hosted: open, joined: openJoin } = await fixture();
+    const input = {
+      workspaceId: ids.workspaceId,
+      userId: ids.userId,
+      presentationId: ids.presentationId,
+      requestId: randomUUID(),
+    };
+    const password = " Case-sensitive room ";
+    const create = vi.spyOn(sessions, "createSessionWithCredential");
+    await expect(service.createSession({ ...input, joinPassword: password })).rejects.toMatchObject(
+      { code: "ENTITLEMENT_LIMIT", status: 402 },
+    );
+    expect(create).not.toHaveBeenCalled();
+    await repository.setPlan(ids.workspaceId, "pro");
+    const hosted = await service.createSession({ ...input, joinPassword: password });
+    const stored = await sessions.getSessionById(hosted.snapshot.sessionId);
+    expect(stored?.joinPasswordHash).toBeTruthy();
+    await expect(service.join(hosted.snapshot.code, "River")).rejects.toMatchObject({
+      code: "PASSWORD_REQUIRED",
+    });
+    await expect(
+      service.join(hosted.snapshot.code, "River", password.trim()),
+    ).rejects.toMatchObject({ code: "INVALID_PASSWORD" });
+    await expect(
+      service.join(hosted.snapshot.code, "River", password.toLowerCase()),
+    ).rejects.toMatchObject({ code: "INVALID_PASSWORD" });
+    expect(await sessions.listParticipants(hosted.snapshot.sessionId)).toHaveLength(0);
+    const joined = await service.join(hosted.snapshot.code, "River", password);
+    await repository.setPlan(ids.workspaceId, "free");
+    await expect(service.join(hosted.snapshot.code, "Next")).rejects.toMatchObject({
+      code: "PASSWORD_REQUIRED",
+    });
+    const recovered = await service.sync({
+      sessionId: hosted.snapshot.sessionId,
+      projection: "participant",
+      participantToken: joined.participantToken,
+    });
+    expect(recovered.snapshot.projection).toBe("participant");
+    const openRecovered = await service.getParticipantSnapshot(
+      open.snapshot.sessionId,
+      openJoin.participantToken,
+    );
+    for (const value of [hosted, joined, recovered, openRecovered]) {
+      expect(JSON.stringify(value)).not.toContain(password);
+      expect(JSON.stringify(value)).not.toContain(stored!.joinPasswordHash!);
+      expect(JSON.stringify(value)).not.toContain("joinPasswordHash");
+    }
+  });
+
   it("returns a usable rotated companion pass when its audit fails without revoking the host", async () => {
     const { repository, service, hosted, ids } = await fixture();
     const sessionId = hosted.snapshot.sessionId;

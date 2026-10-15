@@ -5,6 +5,7 @@ import {
   QuizContentSchema,
   RoundCategorySchema,
   ExperiencePresetRefSchema,
+  RoomPasswordSchema,
 } from "./index";
 
 /** Surveys are separate, unscored artifacts. They never enter the learning engine. */
@@ -131,6 +132,7 @@ export const SurveyMutationSchema = z
   .strict();
 export const SurveyRoomCreateSchema = z
   .object({
+    joinPassword: RoomPasswordSchema.optional(),
     idempotencyKey: z.string().uuid(),
     expectedRevision: z.number().int().nonnegative(),
     windowDays: z.number().int().min(1).max(30).default(7),

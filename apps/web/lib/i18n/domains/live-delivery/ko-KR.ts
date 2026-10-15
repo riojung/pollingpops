@@ -5,6 +5,20 @@ import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
   ...textPollLiveEnglishMessages,
+  "live.protection.title": "방 비밀번호",
+  "live.protection.toggle": "이번 실행에 비밀번호 설정",
+  "live.protection.help":
+    "선택 사항입니다. 공백이 아닌 문자를 하나 이상 포함하여 8~128자로 설정하세요. 참가자에게 별도로 공유하세요.",
+  "live.protection.upgrade":
+    "비밀번호 보호는 Pro, Team 또는 이벤트 크레딧으로 이용할 수 있습니다. 무료 방은 비밀번호 없이 참여할 수 있습니다.",
+  "live.protection.upgradeLink": "업그레이드 옵션 보기",
+  "live.protection.label": "방 비밀번호",
+  "live.protection.validation":
+    "공백이 아닌 문자를 하나 이상 포함하여 8~128자로 입력하세요. 공백은 그대로 유지됩니다.",
+  "live.protection.required": "진행자가 공유한 방 비밀번호를 입력하세요.",
+  "live.protection.invalid": "비밀번호가 올바르지 않습니다. 진행자에게 확인한 후 다시 시도하세요.",
+  "live.protection.join": "방 참여",
+  "live.protection.joining": "참여 중…",
   ...textPollTranslations["ko-KR"].live,
   "live.ranking.yourRanking": "나의 순위",
   "live.ranking.instructions":

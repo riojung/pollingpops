@@ -32,7 +32,10 @@ export class SurveyError extends Error {
       | "VALIDATION_ERROR"
       | "PARTICIPANT_LIMIT"
       | "ADMISSION_RESTRICTED"
-      | "RATE_LIMITED",
+      | "RATE_LIMITED"
+      | "PASSWORD_REQUIRED"
+      | "INVALID_PASSWORD"
+      | "ENTITLEMENT_LIMIT",
     message: string,
   ) {
     super(message);
@@ -66,6 +69,8 @@ export interface SurveyRoom {
   versionId: string;
   content: SurveyDraft;
   code: string;
+  /** Server-private salted verifier; never part of audience responses or content. */
+  joinPasswordHash?: string | null;
   closesAt: string;
   expiresAt: string;
   closed: boolean;
@@ -140,6 +145,11 @@ type Run = <T>(
   admissionRoomId?: string,
 ) => Promise<T>;
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function roomDocument(room: SurveyRoom) {
+  const data = { ...room };
+  delete data.joinPasswordHash;
+  return data;
+}
 function requireRecord<T>(row: T | null): T {
   if (!row) throw new SurveyError("NOT_FOUND", "Survey or room not found");
   return row;
@@ -354,6 +364,33 @@ export class SurveyRepository {
       true,
     );
   }
+  /**
+   * Read an already accepted room creation without opening a new room. Call createRoom with the
+   * full retry input afterward: only its request fingerprint can authorize a successful replay.
+   */
+  getRoomCreation(workspaceId: string, surveyId: string, key: string): Promise<SurveyRoom | null> {
+    return this.run(workspaceId, async (tx) => {
+      const previous = await tx.receipt(surveyId, key);
+      if (
+        !previous ||
+        previous.workspaceId !== workspaceId ||
+        previous.surveyId !== surveyId ||
+        !previous.roomId ||
+        !previous.receipt ||
+        typeof previous.receipt !== "object"
+      )
+        return null;
+      const accepted = previous.receipt as Partial<SurveyRoom>;
+      if (
+        accepted.id !== previous.roomId ||
+        accepted.workspaceId !== workspaceId ||
+        accepted.surveyId !== surveyId
+      )
+        return null;
+      const room = await tx.get("survey_feedback_rooms", previous.roomId);
+      return room?.workspaceId === workspaceId && room.surveyId === surveyId ? room : null;
+    });
+  }
   createRoom(
     workspaceId: string,
     id: string,
@@ -365,6 +402,10 @@ export class SurveyRepository {
       expiresAt: string;
       participantLimit: number;
       windowDays: number;
+      /** Stable for retries of this creation request; never a plaintext password. */
+      joinPasswordHash?: string | null;
+      /** A previously accepted retry must never create a replacement after deletion. */
+      replayOnly?: boolean;
     },
   ) {
     return this.run(workspaceId, async (tx) => {
@@ -378,8 +419,11 @@ export class SurveyRepository {
           action: "room.create",
           expected,
           windowDays: settings.windowDays,
+          ...(settings.joinPasswordHash ? { joinPasswordHash: settings.joinPasswordHash } : {}),
         },
         async () => {
+          if (settings.replayOnly)
+            throw new SurveyError("NOT_FOUND", "The accepted Survey room is no longer available");
           revision(survey.revision, expected);
           if (
             survey.status !== "published" ||
@@ -406,6 +450,7 @@ export class SurveyRepository {
             versionId: version.id,
             content: version.content,
             code: settings.code,
+            joinPasswordHash: settings.joinPasswordHash ?? null,
             closesAt: settings.closesAt,
             expiresAt: settings.expiresAt,
             participantLimit: settings.participantLimit,
@@ -759,9 +804,9 @@ class MemorySurveyStore {
       surveyVersions: [...this.survey_versions.values()].filter((r) =>
         ownedWorkspaceIds.has(r.workspaceId),
       ),
-      surveyRooms: [...this.survey_feedback_rooms.values()].filter((r) =>
-        ownedWorkspaceIds.has(r.workspaceId),
-      ),
+      surveyRooms: [...this.survey_feedback_rooms.values()]
+        .filter((r) => ownedWorkspaceIds.has(r.workspaceId))
+        .map(roomDocument),
     };
   }
   deleteAccount({ ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
@@ -837,7 +882,9 @@ function postgresRun(repository: PostgresRepository): Run {
                       folderId: row.folder_id,
                       updatedAt: row.updated_at.toISOString(),
                     }
-                  : row.data,
+                  : table === "survey_feedback_rooms"
+                    ? { ...row.data, joinPasswordHash: row.join_password_hash ?? null }
+                    : row.data,
               )
             : null;
         },
@@ -856,7 +903,9 @@ function postgresRun(repository: PostgresRepository): Run {
                     folderId: r.folder_id,
                     updatedAt: r.updated_at.toISOString(),
                   }
-                : r.data,
+                : table === "survey_feedback_rooms"
+                  ? { ...r.data, joinPasswordHash: r.join_password_hash ?? null }
+                  : r.data,
             ),
           ),
         put: async (table, row, insert) => {
@@ -872,7 +921,12 @@ function postgresRun(repository: PostgresRepository): Run {
                   (row as SurveyRecord).updatedAt,
                 ],
               );
-            else await client.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [row.id, row]);
+            else if (table === "survey_feedback_rooms") {
+              await client.query("UPDATE survey_feedback_rooms SET data = $2 WHERE id = $1", [
+                row.id,
+                roomDocument(row as SurveyRoom),
+              ]);
+            } else await client.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [row.id, row]);
             return;
           }
           if (table === "surveys")
@@ -904,7 +958,7 @@ function postgresRun(repository: PostgresRepository): Run {
             if (deletion.rowCount)
               throw new SurveyError("ROOM_CLOSED", "This workspace is being deleted");
             await client.query(
-              "INSERT INTO survey_feedback_rooms (id, workspace_id, survey_id, version_id, code, closes_at, retention_expires_at, data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+              "INSERT INTO survey_feedback_rooms (id, workspace_id, survey_id, version_id, code, closes_at, retention_expires_at, data, join_password_hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
               [
                 room.id,
                 room.workspaceId,
@@ -913,7 +967,8 @@ function postgresRun(repository: PostgresRepository): Run {
                 room.code,
                 room.closesAt,
                 room.expiresAt,
-                row,
+                roomDocument(room),
+                room.joinPasswordHash ?? null,
               ],
             );
           } else {

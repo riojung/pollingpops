@@ -7,6 +7,8 @@ import type { AvatarId, JoinPreflightResponse, JoinResponse } from "@openround/c
 import { currentRoundClientCapabilities } from "@openround/contracts";
 import { Brand } from "../../components/brand";
 import { AvatarPicker } from "../../components/participant-avatar";
+import { RoomPasswordInput } from "../../components/room-password";
+import { roomPasswordErrorKey } from "../../lib/room-password";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
 import { surveyAccessToken, type SurveyAttempt } from "../../lib/survey-client";
@@ -19,9 +21,10 @@ import {
   nicknameForJoin,
   resolveJoinPreflightForSubmission,
   shouldCollectJoinNickname,
+  shouldCollectJoinPassword,
 } from "../../lib/join-preflight";
 
-function JoinForm() {
+export function JoinForm() {
   const { t } = useLocale();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -29,6 +32,9 @@ function JoinForm() {
     (searchParams.get("code") ?? "").replace(/\D/g, "").slice(0, 7),
   );
   const [nickname, setNickname] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordRequested, setPasswordRequested] = useState(false);
+  const [errorKey, setErrorKey] = useState<ReturnType<typeof roomPasswordErrorKey>>(null);
   const [avatarId, setAvatarId] = useState<AvatarId>("comet");
   const [preflight, setPreflight] = useState(idleJoinPreflightState);
   const preflightRequestId = useRef(0);
@@ -36,6 +42,7 @@ function JoinForm() {
   const [error, setError] = useState("");
   const artifactType = joinArtifactFor(preflight, code);
   const collectNickname = shouldCollectJoinNickname(preflight, code);
+  const collectPassword = passwordRequested || shouldCollectJoinPassword(preflight, code);
 
   useEffect(() => {
     const requestId = ++preflightRequestId.current;
@@ -81,6 +88,7 @@ function JoinForm() {
     const submittedCode = code;
     setBusy(true);
     setError("");
+    setErrorKey(null);
     try {
       let resolvedPreflight = preflight;
       if (joinArtifactFor(resolvedPreflight, submittedCode) === null) {
@@ -112,6 +120,16 @@ function JoinForm() {
         }
       }
 
+      if (
+        (passwordRequested || shouldCollectJoinPassword(resolvedPreflight, submittedCode)) &&
+        !password
+      ) {
+        setPasswordRequested(true);
+        setErrorKey("live.protection.required");
+        setBusy(false);
+        return;
+      }
+      const passwordBody = password ? { password } : {};
       const resolvedArtifactType = joinArtifactFor(resolvedPreflight, submittedCode);
       if (resolvedArtifactType === "feedback_room") {
         const roomId = resolvedPreflight.destination?.match(/^\/survey\/([a-f0-9-]{36})$/)?.[1];
@@ -124,7 +142,7 @@ function JoinForm() {
           method: "POST",
           credentials: "omit",
           headers: { authorization: `Bearer ${token}` },
-          body: JSON.stringify({ code: submittedCode }),
+          body: JSON.stringify({ code: submittedCode, ...passwordBody }),
         });
         router.push(`/survey/${joined.attempt.roomId}`);
         return;
@@ -135,7 +153,7 @@ function JoinForm() {
           snapshot: { id: string };
         }>("/v1/presentation-sessions/join", {
           method: "POST",
-          body: JSON.stringify({ code: submittedCode, nickname: nickname.trim() }),
+          body: JSON.stringify({ code: submittedCode, nickname: nickname.trim(), ...passwordBody }),
         });
         sessionStorage.setItem(
           `openround:presentation-participant:${joined.snapshot.id}`,
@@ -153,6 +171,7 @@ function JoinForm() {
         method: "POST",
         body: JSON.stringify({
           code: submittedCode,
+          ...passwordBody,
           avatarId,
           clientCapabilities: currentRoundClientCapabilities(),
           ...(requestedNickname ? { nickname: requestedNickname } : {}),
@@ -165,7 +184,10 @@ function JoinForm() {
       sessionStorage.setItem("openround:last-code", submittedCode);
       router.push(`/play/${joined.snapshot.sessionId}`);
     } catch (caught) {
-      setError(humanError(caught));
+      const key = roomPasswordErrorKey(caught);
+      setErrorKey(key);
+      if (key) setPasswordRequested(true);
+      else setError(humanError(caught));
       setBusy(false);
     }
   }
@@ -196,13 +218,22 @@ function JoinForm() {
             id="join-code"
             inputMode="numeric"
             maxLength={7}
-            onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 7))}
+            onChange={(event) => {
+              setCode(event.target.value.replace(/\D/g, "").slice(0, 7));
+              setPassword("");
+              setPasswordRequested(false);
+              setError("");
+              setErrorKey(null);
+            }}
             placeholder="0000000"
             required
             disabled={busy}
             value={code}
           />
         </div>
+        {collectPassword ? (
+          <RoomPasswordInput value={password} onChange={setPassword} disabled={busy} />
+        ) : null}
         {collectNickname ? (
           <div className="field">
             <label htmlFor="nickname">{t("delivery.join.nickname")}</label>
@@ -238,9 +269,9 @@ function JoinForm() {
             {preflight.message}
           </p>
         ) : null}
-        {error ? (
-          <p className="error" lang="en-CA" role="alert">
-            {error}
+        {error || errorKey ? (
+          <p className="error" lang={errorKey ? undefined : "en-CA"} role="alert">
+            {errorKey ? t(errorKey) : error}
           </p>
         ) : null}
         <button

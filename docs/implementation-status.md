@@ -8,6 +8,34 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Password-protected rooms October 15 2026
+
+Implemented on `codex/password-protected-sessions`. Paid workspaces can optionally require an
+8–128 character password for a launched Round, live Presentation or Survey run. Free creation
+remains open; the server enforces effective paid entitlements, including explicitly funded Event
+Credit launches. Selected protection cannot silently disappear when the funding selection changes.
+
+The three creation screens default to open access. Unified Join and direct Survey links collect
+the exact password before new admission, while scoped participant credentials still resume.
+Copy is present in all ten locales. Passwords stay out of links, QR codes, browser storage,
+analytics, audience/host snapshots, reports and account exports. Private scrypt verifiers are
+written atomically with each room through additive migration 071; old rooms remain open.
+
+Existing protected rooms keep their requirement after a downgrade. Exact accepted creation
+retries recover the original run, and deleted receipts cannot authorize replacement paid rooms.
+Caller limits and a shared room budget protect password verification before participant writes.
+Duplicate nicknames remain valid and are disambiguated without sharing a nickname-based throttle. Regression
+coverage includes free/paid enforcement, wrong and missing passwords, exact spaces/case,
+reconnects, direct Survey links, commercial coverage, stale requests and idempotency races.
+
+Validation: `CI=true pnpm check` passes, including 951 web tests, 757 server tests, lint, strict
+types and production builds. An isolated PostgreSQL 17 run passes 337 database tests with one
+optional case skipped. Nine browser journeys pass across desktop Chromium, mobile Chromium and
+mobile WebKit, covering all three paid launch/join flows, direct Survey access, resume, Free
+restrictions and existing Sessions behavior. The join form passes automated axe and 320px dark
+layout checks. A 250-guest protected Round burst regression performs one password verification
+per exact password in the batch; later batches recheck rather than retain a secret cache.
+
 ### Direct Survey results navigation October 14 2026
 
 Implemented on `codex/survey-results-navigation`. **Results → Surveys** lists completed retained

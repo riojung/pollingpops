@@ -3,6 +3,20 @@ import { companionEnglishMessages } from "./companion-en-CA";
 
 const liveDeliveryEnglishMessages = {
   ...textPollLiveEnglishMessages,
+  "live.protection.title": "Room password",
+  "live.protection.toggle": "Require a password for this run",
+  "live.protection.help":
+    "Optional. Use 8–128 characters, including at least one non-space character. Share it separately with participants.",
+  "live.protection.upgrade":
+    "Password protection is available with Pro, Team, or an event credit. Free rooms remain open.",
+  "live.protection.upgradeLink": "View upgrade options",
+  "live.protection.label": "Room password",
+  "live.protection.validation":
+    "Use 8–128 characters, including at least one non-space character. Spaces are preserved.",
+  "live.protection.required": "Enter the room password from your host.",
+  "live.protection.invalid": "That password is incorrect. Check with your host and try again.",
+  "live.protection.join": "Join room",
+  "live.protection.joining": "Joining…",
   "live.ranking.yourRanking": "Your ranking",
   "live.ranking.instructions": "Rank {count} of {total} choices. First is the highest priority.",
   "live.ranking.selected": "{selected} of {count} choices ranked.",

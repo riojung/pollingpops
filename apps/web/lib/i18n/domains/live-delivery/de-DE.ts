@@ -5,6 +5,21 @@ import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
   ...textPollLiveEnglishMessages,
+  "live.protection.title": "Raumpasswort",
+  "live.protection.toggle": "Für diesen Durchlauf ein Passwort verlangen",
+  "live.protection.help":
+    "Optional. Verwende 8–128 Zeichen mit mindestens einem Zeichen, das kein Leerzeichen ist. Teile das Passwort separat mit den Teilnehmenden.",
+  "live.protection.upgrade":
+    "Passwortschutz ist mit Pro, Team oder einem Event-Guthaben verfügbar. Kostenlose Räume bleiben offen.",
+  "live.protection.upgradeLink": "Upgrade-Optionen ansehen",
+  "live.protection.label": "Raumpasswort",
+  "live.protection.validation":
+    "Verwende 8–128 Zeichen mit mindestens einem Nicht-Leerzeichen. Leerzeichen bleiben erhalten.",
+  "live.protection.required": "Gib das Raumpasswort deiner Moderation ein.",
+  "live.protection.invalid":
+    "Dieses Passwort ist falsch. Frage deine Moderation und versuche es erneut.",
+  "live.protection.join": "Raum beitreten",
+  "live.protection.joining": "Beitritt…",
   ...textPollTranslations["de-DE"].live,
   "live.ranking.yourRanking": "Deine Rangfolge",
   "live.ranking.instructions":

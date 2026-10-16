@@ -90,6 +90,12 @@ also be available to the selected plan. For example, Surveys requires Feedback r
 scopes. Session summaries can be enabled independently; creating links and downloading files also
 requires **Report exports** for the effective plan.
 
+**Brainstorming boards** is independent of Surveys and live Presentation availability. It adds
+the **Idea boards** workspace entry and direct guest links. Its inherited deployment default uses
+`FEATURE_IDEA_BOARDS` and the core-parity workspace allowlist; explicit availability and plan
+assignments override both. Existing boards can still be read, closed and deleted when creation
+is paused. Boards freeze the participant limit (capped at 250) and retention at creation.
+
 Founder and operations staff can change policy; read-only staff can inspect it. Changes use the
 existing review dialog, require a reason and recent authentication, and atomically save the policy,
 audit event and retry receipt. Revision checks reject concurrent edits rather than overwrite a

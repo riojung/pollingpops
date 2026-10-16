@@ -258,3 +258,21 @@ default, configurable from 30 to 3,650 days); an institution must approve that v
 
 Creator OIDC and instructor LTI do not change participant anonymity. Identified learner launch,
 NRPS, AGS, managed SAML/SCIM, and K–12 remain disabled or unimplemented in this release.
+
+Standalone brainstorming boards use a separate random browser credential per board. The server
+retains its hash and an internal guest identifier only to resume contributions, enforce limits,
+and accept one final ballot. Anonymous boards collect no nickname; alias boards collect an
+explicit board-only nickname that appears beside approved ideas. Creator login is never used to
+identify a guest. Public and staff projections exclude guest IDs, credential hashes, and other
+people's ballots. Pending ideas are moderator-only except for their submitter's own receipt;
+approved collaborative text is intentionally visible to admitted guests once revealed. This is
+not a Survey-style aggregate-only surface. Vote counts stay hidden until closure. Removal clears
+idea text and alias; grouping and moderation freeze when voting starts.
+
+Board lifetime is one to thirty days; the retained record then expires using the plan's report
+retention frozen at creation. Board deletion, owning-workspace account deletion, and the scheduled
+retention sweep remove the entire bounded aggregate, including guests, receipts and ballots.
+Account export supplies safe board content and aggregate outcomes, never raw ballots or access
+hashes. Clearing browser storage loses access to the prior guest identity; this workflow does
+not claim verified one-person voting. Board content and aliases must not be sent to authoring AI
+or logged in normal request logs.

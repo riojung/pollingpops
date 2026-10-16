@@ -37,6 +37,7 @@ const fixtures = vi.hoisted(() => ({
       questionHealth: false,
       groups: true,
       discover: true,
+      ideaBoards: false,
     },
     loading: false,
     error: "",
@@ -69,6 +70,7 @@ describe("professional workspace shell", () => {
     fixtures.workspace.productFeatures.presentationRealtime = true;
     fixtures.workspace.productFeatures.groups = true;
     fixtures.workspace.productFeatures.discover = true;
+    fixtures.workspace.productFeatures.ideaBoards = false;
     fixtures.push.mockClear();
     fixtures.replace.mockClear();
   });
@@ -96,6 +98,29 @@ describe("professional workspace shell", () => {
     expect(markup).toMatch(/aria-current="page"[^>]*href="\/library"/);
     expect(markup.match(/class="brand" href="\/home"/g)).toHaveLength(2);
     expect(markup).toContain("Workspace content");
+  });
+
+  it("shows independently enabled boards in desktop and mobile navigation and hides new entry when paused", () => {
+    fixtures.pathname = "/boards/example";
+    fixtures.workspace.productFeatures.ideaBoards = true;
+    fixtures.workspace.productFeatures.uxBeta = false;
+    fixtures.workspace.productFeatures.workspaceShell = false;
+    const enabled = renderToStaticMarkup(
+      <WorkspaceShell requireBeta={false} title="Idea boards">
+        <p>Existing boards</p>
+      </WorkspaceShell>,
+    );
+    expect(enabled.match(/href="\/boards"/g)).toHaveLength(2);
+    expect(enabled).toMatch(/aria-current="page"[^>]*href="\/boards"/);
+    expect(enabled).toContain("Idea boards");
+    fixtures.workspace.productFeatures.ideaBoards = false;
+    const paused = renderToStaticMarkup(
+      <WorkspaceShell requireBeta={false} title="Idea boards">
+        <p>Existing boards remain readable</p>
+      </WorkspaceShell>,
+    );
+    expect(paused).not.toContain('href="/boards"');
+    expect(paused).toContain("Existing boards remain readable");
   });
 
   it("keeps search, activity, help, account, and both Create destinations global", () => {

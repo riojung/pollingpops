@@ -2071,6 +2071,7 @@ describe("deployment configuration and manifest validation", () => {
       "presentationCompanion",
       "roundClientProtocol",
       "sessionSummaries",
+      "ideaBoards",
     ]) {
       for (const value of [false, true]) {
         const summary = {
@@ -2115,6 +2116,7 @@ describe("deployment configuration and manifest validation", () => {
       FEATURE_RECOVERY_PACK_LIVE_CARDS: "true",
       FEATURE_PRESENTATION_COMPANION: "true",
       FEATURE_ROUND_CLIENT_PROTOCOL: "true",
+      FEATURE_IDEA_BOARDS: "true",
     });
     const summary = createConfigCheckSummary({ ...serverConfig, NODE_ENV: "production" });
 
@@ -2122,6 +2124,7 @@ describe("deployment configuration and manifest validation", () => {
     expect(summary.featureFlags.recoveryPackLiveCards).toBe(true);
     expect(summary.featureFlags.presentationCompanion).toBe(true);
     expect(summary.featureFlags.roundClientProtocol).toBe(true);
+    expect(summary.featureFlags.ideaBoards).toBe(true);
     expect(validateReceiptConfigCheckSummary(summary, config, buildId)).toBe(summary);
   });
 
@@ -2195,7 +2198,7 @@ describe("deployment configuration and manifest validation", () => {
       },
     };
     expect(() => assertConfigCheckSummary(fly, flyConfig, buildId)).not.toThrow();
-    for (const flag of [...Object.keys(flags), "sessionSummaries"]) {
+    for (const flag of [...Object.keys(flags), "sessionSummaries", "ideaBoards"]) {
       expect(() =>
         assertConfigCheckSummary(
           { ...fly, featureFlags: { ...fly.featureFlags, [flag]: true } },

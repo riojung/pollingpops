@@ -1,11 +1,16 @@
 # IDEA 005 shareable session summaries
 
-Updated: 2026-10-14
+Updated: 2026-10-16
 
 Implementation covers completed Rounds, finished Presentations with ready durable reports, and
 closed Surveys. Each source has one immutable aggregate snapshot. Existing private CSV/JSON
 exports retain their behavior. This increment supplies native XLSX files; Google Sheets delivery
 and OAuth consent remain future work.
+
+The selected implementation and review fixes are merged into `main` (PR #125). A 2026-10-16
+completion audit confirmed all three session types, UI entrypoints, revocation, privacy filters,
+operator plan controls and PDF/PNG/XLSX paths. Google Sheets delivery and external release
+acceptance remain separate; code completion does not enable production sharing.
 
 ## Customer behavior
 

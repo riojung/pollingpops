@@ -47,6 +47,7 @@ const messages = {
   "workspace.nav.results": "Risultati",
   "workspace.nav.discover": "Scopri",
   "workspace.nav.groups": "Gruppi",
+  "workspace.nav.boards": "Bacheche delle idee",
   "workspace.nav.workspace": "Area di lavoro",
   "workspace.switcher.label": "Area di lavoro",
   "workspace.switcher.current": "Area di lavoro attuale",

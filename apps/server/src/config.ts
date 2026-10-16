@@ -241,6 +241,7 @@ export const ConfigSchema = z
     FEATURE_SURVEYS: booleanString,
     FEATURE_FEEDBACK_EXPORTS: booleanString,
     FEATURE_SESSION_SUMMARIES: booleanString,
+    FEATURE_IDEA_BOARDS: booleanString,
     CORE_PARITY_WORKSPACE_ALLOWLIST: uuidAllowlist,
     THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST: uuidAllowlist,
     UX_BETA_WORKSPACE_ALLOWLIST: uuidAllowlist,

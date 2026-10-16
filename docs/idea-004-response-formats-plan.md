@@ -1,12 +1,16 @@
 # IDEA 004 richer response formats implementation plan
 
-Updated: 2026-10-14
+Updated: 2026-10-16
 
 IDEA-004 adds live multiple-selection opinion polls, ranking, moderated open text, and word clouds.
 Implementation was requested on 2026-10-13. Existing research supplies the initial behavior;
 implementation needs complete response journeys, compatible storage, and focused verification.
 The initial surface is Live Rounds. Other surfaces must explicitly reject formats they cannot
 deliver, while their existing supported formats continue to work.
+
+The selected Live Round scope and its review fixes are merged into `main` (PRs #113 and #124).
+A 2026-10-16 completion audit found no missing selected implementation deliverable. Presentation
+and Survey expansion remains explicitly deferred; external release acceptance is separate.
 
 ## Customer behavior
 
@@ -131,8 +135,10 @@ available. All 59 focused API tests pass, including 16 new regression cases, and
 check passes. No database or browser behavior changed in this server-only correction.
 
 To enable the initial increment, apply migrations 067–069 and deploy matching server, worker and
-web readers, then set `FEATURE_ROUND_CLIENT_PROTOCOL=true` and include the workspace UUID in
-`CORE_PARITY_WORKSPACE_ALLOWLIST`. Existing deployment configuration was not changed by this work.
+web readers. Administrators can then enable **Extended live responses** and select included plans
+in the admin console's **Features** page. An explicit policy overrides legacy deployment defaults.
+With **Inherit deployment**, set `FEATURE_ROUND_CLIENT_PROTOCOL=true` and include the workspace UUID
+in `CORE_PARITY_WORKSPACE_ALLOWLIST`. Implementation completion does not itself enable production.
 See the [upgrade runbook](runbooks/upgrade.md#live-response-format-compatibility) before rollback.
 
 - Contracts: malformed/duplicate/unknown choices, authored bounds, legacy/future versions, ordered

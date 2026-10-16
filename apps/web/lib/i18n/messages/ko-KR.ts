@@ -47,6 +47,7 @@ const messages = {
   "workspace.nav.results": "결과",
   "workspace.nav.discover": "둘러보기",
   "workspace.nav.groups": "그룹",
+  "workspace.nav.boards": "아이디어 보드",
   "workspace.nav.workspace": "워크스페이스",
   "workspace.switcher.label": "워크스페이스",
   "workspace.switcher.current": "현재 워크스페이스",

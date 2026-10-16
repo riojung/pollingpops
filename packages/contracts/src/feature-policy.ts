@@ -28,6 +28,7 @@ export const productFeatureKeys = [
   "feedbackRooms",
   "surveys",
   "sessionSummaries",
+  "ideaBoards",
   "csvExport",
   "brandTheme",
   "followups",
@@ -211,6 +212,12 @@ export const productFeatureCatalog: readonly ProductFeatureDefinition[] = [
     "Session summaries",
     "Preview and share completed session summaries. Links and downloads also require report export access.",
     "Reports",
+  ),
+  define(
+    "ideaBoards",
+    "Brainstorming boards",
+    "Collect moderated ideas, group them manually and invite private priority voting.",
+    "Feedback",
   ),
   define(
     "csvExport",

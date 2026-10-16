@@ -14,6 +14,7 @@ import {
   createAudienceScopeRepository,
   createScopedQnaRepository,
   createSurveyRepository,
+  createIdeaBoardRepository,
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
@@ -64,6 +65,7 @@ import { registerHomeRoutes } from "./home-routes.js";
 import { registerLibraryRoutes } from "./library-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
+import { registerIdeaBoardRoutes } from "./idea-board-routes.js";
 import { registerSessionSummaryRoutes } from "./session-summary-routes.js";
 import { createSessionSummaryExportService } from "./session-summary-export.js";
 import { registerFeedbackRoutes } from "./feedback-routes.js";
@@ -480,6 +482,13 @@ export async function buildApp(
     auth,
     config,
     surveys: createSurveyRepository(repository),
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
+  await registerIdeaBoardRoutes(app, {
+    repository,
+    auth,
+    config,
+    boards: createIdeaBoardRepository(repository),
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
   const summaryExports = overrides.summaryExports ?? createSessionSummaryExportService();

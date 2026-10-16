@@ -9,6 +9,7 @@ import type { LiveDeliveryMessageKey } from "./domains/live-delivery/en-CA";
 import type { ReportRoundMessageKey } from "./domains/report-round/en-CA";
 import type { WorkspacePageMessageKey } from "./domains/workspace-pages";
 import type { SessionSummaryMessageKey } from "./domains/session-summary";
+import type { IdeaBoardMessageKey } from "./domains/idea-boards";
 
 export const localeDomains = [
   "account",
@@ -17,6 +18,7 @@ export const localeDomains = [
   "report-round",
   "live-delivery",
   "session-summary",
+  "idea-boards",
 ] as const;
 
 export type LocaleDomain = (typeof localeDomains)[number];
@@ -27,7 +29,8 @@ export type MessageKey =
   | DeliveryAuthoringMessageKey
   | ReportRoundMessageKey
   | LiveDeliveryMessageKey
-  | SessionSummaryMessageKey;
+  | SessionSummaryMessageKey
+  | IdeaBoardMessageKey;
 export type Messages = Partial<Record<MessageKey, string>>;
 export type MessageCatalog = Messages;
 
@@ -49,6 +52,13 @@ const coreLoaders: Record<SupportedLocale, () => Promise<{ default: Record<strin
 };
 
 const domainLoaders: Record<LocaleDomain, (locale: SupportedLocale) => Promise<MessageCatalog>> = {
+  "idea-boards": async (locale) => {
+    const catalog = await import("./domains/idea-boards");
+    return {
+      ...catalog.ideaBoardEnglishMessages,
+      ...(await catalog.loadIdeaBoardMessages(locale)),
+    };
+  },
   account: async (locale) => {
     const catalog = await import("./domains/account");
     return {
@@ -121,6 +131,9 @@ function quizRouteDomains(path: string): LocaleDomain[] | null {
 
 export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   const path = pathname.split("?", 1)[0] || "/";
+
+  if (path === "/boards" || path.startsWith("/boards/")) return ["idea-boards"];
+  if (/^\/board\/[^/]+\/?$/.test(path)) return ["idea-boards"];
 
   if (path === "/account" || path.startsWith("/account/")) return ["account"];
   if (/^\/summary\/[^/]+\/?$/.test(path)) return ["session-summary"];

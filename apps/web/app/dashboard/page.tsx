@@ -14,6 +14,7 @@ import { RoundLibraryViewToggle } from "../../components/workspace/round-library
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { ManagementNavigationLinks } from "../../components/management-navigation";
+import { useLocale } from "../../components/locale-provider";
 import {
   DEFAULT_ROUND_LIBRARY_VIEW,
   readRoundLibraryView,
@@ -46,7 +47,8 @@ interface QuizRecord {
 
 function LegacyDashboardPage() {
   const router = useRouter();
-  const { management } = useWorkspace();
+  const { management, productFeatures: workspaceFeatures } = useWorkspace();
+  const { t } = useLocale();
   const [creator, setCreator] = useState<Creator | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
@@ -247,6 +249,11 @@ function LegacyDashboardPage() {
     <>
       <header className="shell topbar">
         <CreatorBrand productFeatures={productFeatures} />
+        {workspaceFeatures?.ideaBoards ? (
+          <Link className="button-quiet" href="/boards">
+            {t("workspace.nav.boards")}
+          </Link>
+        ) : null}
         <nav className="button-row" aria-label="Account navigation">
           <Link href="/account">Account</Link>
           <ManagementNavigationLinks navigation={management} />

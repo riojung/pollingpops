@@ -67,6 +67,7 @@ export const englishMessages = {
   "workspace.nav.results": "Results",
   "workspace.nav.discover": "Discover",
   "workspace.nav.groups": "Groups",
+  "workspace.nav.boards": "Idea boards",
   "workspace.nav.workspace": "Workspace",
   "workspace.switcher.label": "Workspace",
   "workspace.switcher.current": "Current workspace",

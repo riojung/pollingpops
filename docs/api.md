@@ -1093,3 +1093,41 @@ Institution errors add `INSTITUTION_NOT_ENABLED`, `INSTITUTION_AUTH_REQUIRED`,
 `LTI_DISABLED`, `LTI_REGISTRATION_NOT_FOUND`, and `LTI_LAUNCH_INVALID`. See the
 [institution integration guide](institution-integrations.md) for callback URLs, registration
 fields, and pilot gates.
+
+## Standalone idea boards
+
+Boards use independent version 1 contracts and a `draft → collecting → voting → closed` lifecycle.
+See the [IDEA-006 plan](idea-006-brainstorming-boards-plan.md) for privacy, limits and rollout.
+
+Creator-cookie routes:
+
+- `GET /v1/idea-boards?cursor={uuid}&limit={1..50}` lists safe board summaries.
+- `POST /v1/idea-boards` creates with `idempotencyKey`, `title`, optional `description`,
+  `identityMode` (`anonymous` or `alias`), `moderationEnabled`, `ideasVisible`, `voteBudget` (1–10),
+  and `windowDays` (1–30). Creation checks operator policy, plan and operational admission.
+  The response contains a server-generated board ID independent of the workspace-scoped retry key.
+  Accepted retries return the retained board; reusing a key after deletion or purging creates a
+  new ID and cannot restore or replace the old participant link.
+- `GET /v1/idea-boards/{id}` returns the moderator projection to owners/editors and only the
+  approved projection to viewers. Neither projection includes guest identities or ballots.
+- `POST /v1/idea-boards/{id}/commands` requires `idempotencyKey`, `expectedRevision`, and `command`.
+  Commands include `collect`, `start_voting`, `close`, `visibility`, `moderate`, `group.create`,
+  `group.rename`, `group.delete`, and `idea.group`. Owner/editor access is rechecked for retries.
+- `DELETE /v1/idea-boards/{id}` is owner-only and deletes all board operational data.
+
+Audience routes omit creator cookies. `GET /v1/idea-boards/{id}/public` returns only admission
+metadata. For other guest calls, send a browser-generated 32-byte hex credential as
+`Authorization: Bearer {credential}`; the server stores a hash, and credentials never appear in
+the participant link:
+
+- `POST /v1/idea-boards/{id}/join` admits or restores the same guest; alias boards require a
+  chosen board nickname, while anonymous boards reject aliases.
+- `GET /v1/idea-boards/{id}/guest` returns visible approved ideas, own submissions and own ballot.
+- `POST /v1/idea-boards/{id}/ideas` accepts `body` and `idempotencyKey` during collection.
+- `PUT /v1/idea-boards/{id}/votes` accepts distinct `ideaIds`, guest `expectedRevision`, and
+  `idempotencyKey` during voting. One accepted ballot is final; exact retries return its receipt.
+
+Responses are private/no-store. Vote totals are null before closure. Fixed deadlines and workspace
+restrictions are checked transactionally; expired boards are unavailable. Staff commands use the
+board revision, while ballots use the guest revision so other guests' activity cannot create a
+false ballot conflict.

@@ -58,6 +58,7 @@ export function createConfigCheckSummary(config: AppConfig) {
       surveys: config.FEATURE_SURVEYS,
       feedbackExports: config.FEATURE_FEEDBACK_EXPORTS,
       sessionSummaries: config.FEATURE_SESSION_SUMMARIES,
+      ideaBoards: config.FEATURE_IDEA_BOARDS,
     },
     themedInteractionsWorkspaceAllowlistSize: config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST.length,
     uxBetaWorkspaceAllowlistSize: config.UX_BETA_WORKSPACE_ALLOWLIST.length,

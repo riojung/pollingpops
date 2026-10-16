@@ -336,3 +336,22 @@ installed, so its subsequent writes continue advancing the stored fence.
 
 Do not enable the switch merely because the migration completed. Record the serving image set,
 configuration change, rollback rehearsal, and 50/250-client results as one release evidence set.
+
+## Standalone brainstorming boards
+
+Migration 074 adds the independent version 1 board aggregate, workspace isolation, immutable
+identity/deadlines/limits and retention index. Apply it with migration credentials before starting
+the matching server and jobs images. Deploy the matching web and admin console before assigning
+**Brainstorming boards** to plans. The inherited `FEATURE_IDEA_BOARDS` default is false and also
+requires the core-parity workspace allowlist; an explicit admin feature rule overrides both.
+
+Pausing new board creation in the current release preserves admitted guest reads, exact accepted
+retries, closure and deletion. Board grouping and moderation stop at voting, ballots are final,
+and closed totals remain readable only within their frozen retention window.
+
+Before rolling back to an image without boards, return **Brainstorming boards** to **Inherit
+deployment** and leave `FEATURE_IDEA_BOARDS=false`. This removes its explicit policy entry; older
+admin builds cannot manage the new key. Keep migration 074 and board data in place rather than
+editing an applied migration or dropping the table. Older releases have no board routes: existing
+links need the matching board readers restored to become available again. Rollback therefore
+differs from a writer pause; verify this boundary before enabling customer boards.

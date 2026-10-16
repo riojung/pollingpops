@@ -21,6 +21,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 | Review the competitive position and post-P0 roadmap          | [Competitive strategy and roadmap](competitive-strategy-and-roadmap.md)                      |
 | Capture or revisit future customer feature ideas             | [Future product ideas backlog](future-product-ideas.md)                                      |
 | Follow IDEA 004 richer response format delivery              | [Response formats implementation plan](idea-004-response-formats-plan.md)                    |
+| Follow IDEA 005 summaries and sharing                        | [Session summaries implementation plan](idea-005-session-summaries-plan.md)                  |
+| Follow IDEA 006 brainstorming and prioritization             | [Brainstorming boards implementation plan](idea-006-brainstorming-boards-plan.md)            |
 | Understand services, state, storage, and trust boundaries    | [Architecture and protocol](architecture.md)                                                 |
 | Integrate with REST or realtime interfaces                   | [API and realtime reference](api.md)                                                         |
 | Configure a gated institution pilot                          | [Institution integration guide](institution-integrations.md)                                 |

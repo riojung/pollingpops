@@ -13,6 +13,7 @@ import {
   applyFeatureEntitlements,
   resolveWorkspaceFeatures,
   workspaceFeatureEnabled,
+  workspaceProductFeatures,
 } from "../src/feature-policy.js";
 
 function fixture(community = false) {
@@ -27,6 +28,45 @@ function fixture(community = false) {
 }
 
 describe("operator product feature policy", () => {
+  it("keeps standalone boards independent of Survey dependencies and enforces assigned plans", async () => {
+    const f = fixture();
+    expect(await workspaceFeatureEnabled(f.repository, f.config, f.workspaceId, "ideaBoards")).toBe(
+      false,
+    );
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { ideaBoards: { enabled: true, plans: ["pro"] } },
+    });
+    expect(await workspaceFeatureEnabled(f.repository, f.config, f.workspaceId, "ideaBoards")).toBe(
+      false,
+    );
+    expect(
+      (await workspaceProductFeatures(f.repository, f.config, f.workspaceId, "pro")).ideaBoards,
+    ).toBe(true);
+    expect(
+      await workspaceFeatureEnabled(f.repository, f.config, f.workspaceId, "surveys", "pro"),
+    ).toBe(false);
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: { ideaBoards: { enabled: false, plans: ["free", "pro", "team"] } },
+    });
+    expect(
+      await workspaceFeatureEnabled(f.repository, f.config, f.workspaceId, "ideaBoards", "pro"),
+    ).toBe(false);
+  });
+
+  it("uses the board flag and workspace allowlist only when no operator policy is saved", async () => {
+    const f = fixture();
+    f.config.FEATURE_IDEA_BOARDS = true;
+    expect(await workspaceFeatureEnabled(f.repository, f.config, f.workspaceId, "ideaBoards")).toBe(
+      false,
+    );
+    f.config.CORE_PARITY_WORKSPACE_ALLOWLIST = [f.workspaceId];
+    expect((await workspaceProductFeatures(f.repository, f.config, f.workspaceId)).ideaBoards).toBe(
+      true,
+    );
+  });
+
   it("keeps missing entries subject to their legacy flags and workspace rollout", async () => {
     const f = fixture();
     f.config.FEATURE_DECISION_REPLAY = true;

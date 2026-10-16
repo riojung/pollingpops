@@ -23,6 +23,8 @@ as complete for their selected, merged scope. See the
 - Anonymous boards collect no nickname; alias boards use explicit board-only names. Host, guest
   and account projections omit internal guest IDs, access hashes and other guests' ballots.
   Pending text is moderator-only except for the submitter's own view.
+- Server-generated board IDs are independent of workspace retry keys. Deleted or purged links
+  cannot be repointed by reusing their UUID as a creation key, even from another workspace.
 - Migration 074 adds a bounded versioned aggregate with forced tenant RLS, immutable policy and
   deadlines, serialized writes, deletion and retention. Reads and writes evaluate fresh clocks
   after database/admission waits to enforce closure and expiry. Account exports recheck expiry
@@ -37,7 +39,7 @@ Verification complete for the selected local increment: the full repository chec
 `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, including formatting, dependency
 closure, lint, strict types, package/support tests and production builds. The worker limit avoids
 an observed local Vitest fork-worker temporary-file failure without changing test assertions.
-Suites include 382 contract, 259 DB unit, 779 server, 1,003 web and 248 support tests.
+Suites include 382 contract, 259 DB unit, 784 server, 1,003 web and 248 support tests.
 
 The isolated restricted PostgreSQL suite passes 195 tests with one existing skip, including tenant
 RLS, concurrent final ballots, restart, deadline/lock races, deletion and expiry. Deterministic

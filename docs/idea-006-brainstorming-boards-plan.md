@@ -43,6 +43,9 @@ this is a different privacy boundary from aggregate-only Survey reports.
 - Guest access uses a random board-scoped bearer, hashed on the server. Credentials stay out of
   links and query strings. Audience requests omit creator cookies. A chosen alias is not verified
   identity, and audience membership is not inferred from creator login.
+- Participant links use server-generated board IDs independent of caller-selected retry keys.
+  Reusing a creation key after deletion or retention purging creates a new link, so old links
+  cannot be replaced by another workspace's board.
 - Server transactions enforce workspace isolation, admission limits, phase/deadline checks,
   revision fencing, retry fingerprints, and vote budgets. Approved ideas cannot acquire duplicate
   votes from one credential. Clearing browser storage creates a new guest identity; this is not

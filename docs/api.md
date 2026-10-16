@@ -1105,6 +1105,9 @@ Creator-cookie routes:
 - `POST /v1/idea-boards` creates with `idempotencyKey`, `title`, optional `description`,
   `identityMode` (`anonymous` or `alias`), `moderationEnabled`, `ideasVisible`, `voteBudget` (1–10),
   and `windowDays` (1–30). Creation checks operator policy, plan and operational admission.
+  The response contains a server-generated board ID independent of the workspace-scoped retry key.
+  Accepted retries return the retained board; reusing a key after deletion or purging creates a
+  new ID and cannot restore or replace the old participant link.
 - `GET /v1/idea-boards/{id}` returns the moderator projection to owners/editors and only the
   approved projection to viewers. Neither projection includes guest identities or ballots.
 - `POST /v1/idea-boards/{id}/commands` requires `idempotencyKey`, `expectedRevision`, and `command`.

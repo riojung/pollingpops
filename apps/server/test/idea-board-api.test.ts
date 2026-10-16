@@ -114,6 +114,93 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
 }
 
 describe("independent idea board APIs", () => {
+  it("allocates a server board ID and replays exact and concurrent creation retries", async () => {
+    const { app, headers } = await fixture();
+    const payload = { title: "Concurrent priorities", idempotencyKey: randomUUID() };
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        app.inject({ method: "POST", url: "/v1/idea-boards", headers, payload }),
+      ),
+    );
+    for (const response of responses) expect(response.statusCode, response.body).toBe(201);
+    const board = IdeaBoardViewSchema.parse(responses[0]!.json().board);
+    expect(board.id).not.toBe(payload.idempotencyKey);
+    for (const response of responses) expect(response.json().board).toEqual(board);
+    const retry = await app.inject({ method: "POST", url: "/v1/idea-boards", headers, payload });
+    expect(retry.statusCode, retry.body).toBe(201);
+    expect(retry.json().board).toEqual(board);
+    const listed = await app.inject({ method: "GET", url: "/v1/idea-boards", headers });
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(listed.json().boards.map((entry: { id: string }) => entry.id)).toEqual([board.id]);
+  });
+
+  describe.each(["delete", "retention purge"] as const)("after %s", (removal) => {
+    it.each(["same workspace", "another workspace"] as const)(
+      "keeps an old guest link unavailable when its UUID is reused as a creation key in %s",
+      async (scope) => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const { app, headers, repository, config, workspaceId } = await fixture();
+        const { board } = await createBoard(app, headers, { title: "Original board" });
+        await host(app, board.id, headers, { type: "collect" });
+        const originalGuest = guestHeaders();
+        await join(app, board.id, originalGuest);
+        if (removal === "delete") {
+          const deleted = await app.inject({
+            method: "DELETE",
+            url: `/v1/idea-boards/${board.id}`,
+            headers,
+          });
+          expect(deleted.statusCode, deleted.body).toBe(204);
+        } else {
+          vi.setSystemTime(new Date(board.expiresAt));
+          expect(await repository.purgeExpired(new Date())).toContain(board.id);
+        }
+        const replacementEmail =
+          scope === "same workspace" ? "board-owner@example.com" : "replacement-owner@example.com";
+        const replacementHeaders = await signIn(app, replacementEmail);
+        const replacementOwner = [...repository.users.values()].find(
+          (user) => user.email === replacementEmail,
+        )!;
+        if (scope === "another workspace") {
+          expect(replacementOwner.workspaceId).not.toBe(workspaceId);
+          config.CORE_PARITY_WORKSPACE_ALLOWLIST.push(replacementOwner.workspaceId);
+        } else expect(replacementOwner.workspaceId).toBe(workspaceId);
+        const { board: replacement } = await createBoard(app, replacementHeaders, {
+          title: "Replacement board",
+          idempotencyKey: board.id,
+        });
+        expect(replacement.id).not.toBe(board.id);
+        await host(app, replacement.id, replacementHeaders, { type: "collect" });
+        await join(app, replacement.id, guestHeaders());
+        const publicReplacement = await app.inject({
+          method: "GET",
+          url: `/v1/idea-boards/${replacement.id}/public`,
+        });
+        expect(publicReplacement.statusCode, publicReplacement.body).toBe(200);
+        expect(publicReplacement.json().board.title).toBe("Replacement board");
+        for (const request of [
+          { method: "GET" as const, url: `/v1/idea-boards/${board.id}/public` },
+          {
+            method: "GET" as const,
+            url: `/v1/idea-boards/${board.id}/guest`,
+            headers: originalGuest,
+          },
+          {
+            method: "POST" as const,
+            url: `/v1/idea-boards/${board.id}/join`,
+            headers: guestHeaders(),
+            payload: {},
+          },
+        ]) {
+          const response = await app.inject(request);
+          expect(response.statusCode, response.body).toBe(404);
+          expect(response.json().error.code).toBe("NOT_FOUND");
+          expect(response.body).not.toContain("Replacement board");
+        }
+      },
+    );
+  });
+
   it("preserves accepted creation and collect retries when rollout and launches pause", async () => {
     const { app, headers, config, repository } = await fixture(false);
     const blocked = await app.inject({

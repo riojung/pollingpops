@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import {
@@ -195,9 +196,11 @@ export async function registerIdeaBoardRoutes(
         const expiresAt =
           previous?.expiresAt ??
           new Date(Date.parse(closesAt) + limits!.reportRetentionDays * 86_400_000).toISOString();
+        // Caller-selected retry keys must never choose a participant link, including
+        // after deletion or retention purging removes the original creation receipt.
         const board = await deps.boards.create(
           actor.workspaceId,
-          idempotencyKey,
+          previous?.id ?? randomUUID(),
           input,
           idempotencyKey,
           {

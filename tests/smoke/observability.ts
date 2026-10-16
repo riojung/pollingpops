@@ -88,6 +88,19 @@ async function main() {
     response.json(),
   );
   assert.equal((grafanaHealth as { database: string }).database, "ok");
+  const datasource = await waitForJson<{
+    uid: string;
+    name: string;
+    type: string;
+    url: string;
+  }>(
+    `${grafanaUrl}/api/datasources/uid/openround-prometheus`,
+    ({ uid }) => uid === "openround-prometheus",
+    { headers: { authorization } },
+  );
+  assert.equal(datasource.name, "Polling Pops Prometheus");
+  assert.equal(datasource.type, "prometheus");
+  assert.equal(datasource.url, "http://prometheus:9090");
   const dashboards = await waitForJson<Array<{ uid: string }>>(
     `${grafanaUrl}/api/search?query=Polling Pops`,
     (results) => results.some(({ uid }) => uid === "openround-operations"),
@@ -131,6 +144,7 @@ async function main() {
         prometheusTarget: openRoundTarget.health,
         alertRules: alerts.length,
         grafanaDatabase: "ok",
+        grafanaDatasource: datasource.uid,
         dashboard: "openround-operations",
         dashboardQueries: dashboardQueries.length,
       },

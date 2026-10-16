@@ -9,6 +9,7 @@ import {
   useManagementNavigation,
 } from "../../components/management-navigation";
 import { API_URL, ApiClientError, apiFetch, humanError } from "../../lib/api";
+import { clientUuid } from "../../lib/uuid";
 import {
   FundingGuide,
   OrganizationAccessGuide,
@@ -273,7 +274,7 @@ function OrganizationManagementPage() {
   async function mutate(action: string, path: string, body: unknown, method = "POST") {
     if (!canManage) return;
     const intent = JSON.stringify({ userId: navigation.user?.userId, action, path, body });
-    const key = requestKeys.current.get(intent) ?? crypto.randomUUID();
+    const key = requestKeys.current.get(intent) ?? clientUuid();
     requestKeys.current.set(intent, key);
     setBusy(action);
     setError("");

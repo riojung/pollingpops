@@ -10,6 +10,7 @@ import { SurveyLibraryCards } from "../../components/workspace/survey-library-ca
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../lib/api";
+import { clientUuid } from "../../lib/uuid";
 import { clearBuilderRecovery } from "../../lib/builder-recovery";
 import { folderPathLabel, getFolderOptions, type FolderRecord } from "../../lib/folders";
 import { pluralCategory } from "../../lib/i18n/format";
@@ -494,9 +495,9 @@ function LibraryContent() {
               method: "POST",
               body: JSON.stringify(
                 action === "duplicate"
-                  ? { idempotencyKey: crypto.randomUUID(), sourceId: id }
+                  ? { idempotencyKey: clientUuid(), sourceId: id }
                   : {
-                      idempotencyKey: crypto.randomUUID(),
+                      idempotencyKey: clientUuid(),
                       expectedRevision: surveys.find((survey) => survey.id === id)!.revision,
                     },
               ),
@@ -596,7 +597,7 @@ function LibraryContent() {
                 body: JSON.stringify({
                   folderId: nextFolderId,
                   expectedRevision: surveys.find((survey) => survey.id === id)!.revision,
-                  idempotencyKey: crypto.randomUUID(),
+                  idempotencyKey: clientUuid(),
                 }),
               })
             : apiFetch(`/v1/presentations/${id}/organization`, {

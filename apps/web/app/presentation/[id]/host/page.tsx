@@ -21,6 +21,7 @@ import { WorkspaceFeatureGate } from "../../../../components/workspace/workspace
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
 import { recordAuthoringEvent } from "../../../../components/workspace/product-events";
 import { apiFetch, humanError } from "../../../../lib/api";
+import { clientUuid } from "../../../../lib/uuid";
 import { formatNumber } from "../../../../lib/i18n/format";
 
 interface PresentationRecord {
@@ -127,15 +128,15 @@ function PresentationHostSetupContent() {
     }
     setBusy(true);
     setError("");
-    const body = JSON.stringify({
-      presentationId: id,
-      ...(launchFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
-      useEventCredit,
-      ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
-    });
-    if (creationIntent.current?.body !== body)
-      creationIntent.current = { body, key: crypto.randomUUID() };
     try {
+      const body = JSON.stringify({
+        presentationId: id,
+        ...(launchFeatures?.liveFlexMode && timeMode === "flex" ? { timeMode: "flex" } : {}),
+        useEventCredit,
+        ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
+      });
+      if (creationIntent.current?.body !== body)
+        creationIntent.current = { body, key: clientUuid() };
       const { snapshot, controlToken } = await apiFetch<{
         snapshot: { sessionId?: string; id?: string };
         controlToken?: string;

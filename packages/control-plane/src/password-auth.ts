@@ -295,7 +295,10 @@ export async function provisionPasswordOperator(
       },
       previousCredential?.revision ?? null,
     );
-    if (input.reset) await repository.revokeOperatorSessions(operator.id);
+    if (input.reset) {
+      await repository.revokeOperatorSessions(operator.id);
+      await repository.clearOperatorPasswordAttempts(tokenHash(`operator-login:${username}`));
+    }
     await repository.appendAuditEvent({
       actorId: operator.id,
       organizationId: null,
@@ -358,7 +361,12 @@ export async function passwordOperatorLogin(
       return false;
     return repository.recordOperatorPasswordAttempt(rateKey, now);
   });
-  if (!allowed) throw invalidLogin();
+  if (!allowed)
+    throw new OperatorError(
+      429,
+      "LOGIN_RATE_LIMITED",
+      "Too many administrator sign-in attempts. Wait up to 15 minutes before trying again.",
+    );
   const credential = username ? await platform.getOperatorPasswordCredential(username) : null;
   const boundedPassword =
     typeof input.password === "string" && Buffer.byteLength(input.password, "utf8") <= 1024;
@@ -384,6 +392,9 @@ export async function passwordOperatorLogin(
       !(await repository.consumeOperatorTotp(username, credential.revision, acceptedCounter, now))
     )
       throw invalidLogin();
+    // Clear this username's reserved attempts only after both factors are accepted. The
+    // global budget remains intact, and a failed session/audit write rolls this back too.
+    await repository.clearOperatorPasswordAttempts(rateKey);
     const token = randomBytes(32).toString("base64url");
     const csrfToken = randomBytes(32).toString("base64url");
     const session: PlatformOperatorSession = {

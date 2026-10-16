@@ -88,6 +88,22 @@ describe("dedicated password and authenticator HTTP sign-in", () => {
     );
   });
 
+  it("preserves rate-limit responses so the form can explain when to retry", async () => {
+    const { passwordLogin } = fixture();
+    passwordLogin.mockRejectedValue(
+      new OperatorError(429, "LOGIN_RATE_LIMITED", "Too many administrator sign-in attempts"),
+    );
+    const response = await POST(request());
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "LOGIN_RATE_LIMITED",
+        message: "Too many administrator sign-in attempts",
+      },
+    });
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
   it("keeps passwords unmodified while allowing the backend to normalize a username", async () => {
     const { passwordLogin } = fixture();
     const exactInput = {

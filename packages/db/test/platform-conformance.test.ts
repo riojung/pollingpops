@@ -1483,6 +1483,51 @@ for (const backend of ["memory", "postgres"] as const) {
           reader.recordOperatorPasswordAttempt("invalid-key", now),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
       });
+      it("clears only the selected operator attempt budget and serializes concurrent reservations", async () => {
+        const key = randomUUID().replaceAll("-", "").repeat(2);
+        const otherKey = randomUUID().replaceAll("-", "").repeat(2);
+        const globalKey = randomUUID().replaceAll("-", "").repeat(2);
+        const now = new Date();
+        const reader = createPlatformRepository(repository);
+        for (const bucket of [key, otherKey, globalKey])
+          for (let index = 0; index < 5; index++)
+            expect(await platform.recordOperatorPasswordAttempt(bucket, now)).toBe(true);
+
+        await expect(reader.clearOperatorPasswordAttempts("invalid-key")).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
+        await reader.clearOperatorPasswordAttempts(key);
+        // Clearing a missing bucket is safe and does not affect any other username/global key.
+        await reader.clearOperatorPasswordAttempts(key);
+        const reservations = await Promise.all(
+          Array.from({ length: 9 }, (_, index) =>
+            (index % 2 ? platform : reader).recordOperatorPasswordAttempt(key, now),
+          ),
+        );
+        expect(reservations.filter(Boolean)).toHaveLength(5);
+        for (const bucket of [key, otherKey, globalKey])
+          expect(await reader.recordOperatorPasswordAttempt(bucket, now)).toBe(false);
+      });
+      it("rolls an operator attempt budget clear back with its enclosing transaction", async () => {
+        const key = randomUUID().replaceAll("-", "").repeat(2);
+        const now = new Date();
+        const reader = createPlatformRepository(repository);
+        for (let index = 0; index < 5; index++)
+          expect(await platform.recordOperatorPasswordAttempt(key, now)).toBe(true);
+        await expect(
+          platform.withOperatorTransaction(async (scoped) => {
+            await scoped.clearOperatorPasswordAttempts(key);
+            expect(await scoped.recordOperatorPasswordAttempt(key, now)).toBe(true);
+            throw new Error("operator audit failed");
+          }),
+        ).rejects.toThrow("operator audit failed");
+        expect(await reader.recordOperatorPasswordAttempt(key, now)).toBe(false);
+
+        await platform.withOperatorTransaction(async (scoped) => {
+          await scoped.clearOperatorPasswordAttempts(key);
+        });
+        expect(await reader.recordOperatorPasswordAttempt(key, now)).toBe(true);
+      });
       it("binds and consumes OIDC state once and revokes sessions when operator privileges change", async () => {
         const identity = await platform.provisionOperator({
           issuer: "https://identity.example.test",

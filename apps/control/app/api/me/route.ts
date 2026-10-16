@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { operatorCapabilities } from "@openround/control-plane";
+import { operatorCapabilities, PASSWORD_OPERATOR_ISSUER } from "@openround/control-plane";
 import { authenticatedRequest, jsonResponse, safeError } from "../../../lib/http";
 export const runtime = "nodejs";
 export async function GET(request: NextRequest) {
@@ -11,6 +11,9 @@ export async function GET(request: NextRequest) {
         name: context.operator.name,
         role: context.operator.role,
         capabilities: operatorCapabilities(context.operator),
+        ...(context.operator.issuer === PASSWORD_OPERATOR_ISSUER
+          ? { username: context.operator.subject }
+          : {}),
       },
       csrfToken: request.cookies.get(cookieNames.csrf)?.value ?? null,
     });

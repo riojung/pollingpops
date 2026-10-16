@@ -1815,6 +1815,13 @@ export class PlatformService implements P.PlatformRepository {
       return true;
     });
   }
+  async clearOperatorPasswordAttempts(key: string): Promise<void> {
+    if (!/^[a-f0-9]{64}$/.test(key))
+      throw new PlatformError("VALIDATION_ERROR", "Invalid operator login throttle key");
+    await this.run("operator", async (store) => {
+      await store.remove("operator_login_throttle", key);
+    });
+  }
   async getOperatorByIdentity(issuer: string, subject: string) {
     return (
       (await this.store.list<P.PlatformOperator>("operator")).find(

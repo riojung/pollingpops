@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { productFeatureCatalog } from "@openround/contracts";
 import { allowedViews, apiView, initialView } from "../app/console-views";
 import FeaturesPanel from "../app/features-panel";
 import OverviewPanel from "../app/overview-panel";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("operator area access", () => {
   it("maps the overview and staff aliases to their retained operations endpoint", () => {
@@ -41,27 +43,71 @@ describe("operator area access", () => {
 });
 
 describe("feature policy presentation", () => {
-  it("shows inherited defaults and plan assignments without creating an explicit policy", () => {
+  it.each(["features", "plans"])(
+    "shows inherited %s rows as deployment controlled without checked plan assignments",
+    (tab) => {
+      vi.stubGlobal("window", {
+        location: { href: `https://control.example.test/?tab=${tab}` },
+      });
+      const markup = renderToStaticMarkup(
+        <FeaturesPanel
+          data={{
+            policy: { revision: 0, features: {}, updatedAt: null },
+            catalog: productFeatureCatalog,
+          }}
+          writable
+          busy={false}
+          onReview={vi.fn()}
+        />,
+      );
+      expect(markup).toContain("Inherit deployment");
+      expect(markup).toContain("Implemented features");
+      expect(markup).toContain("Deployment controlled");
+      expect(markup).toContain("Choose Enabled to assign plans.");
+      expect(markup).toContain("No feature overrides have been saved.");
+      expect(markup).toContain("it does not mean a feature is available");
+      expect(markup).not.toContain('type="checkbox"');
+      expect(markup).not.toContain("Free plan includes Session summaries");
+      if (tab === "plans") expect(markup).toContain('colSpan="3"');
+      expect(markup).toContain("Policy is up to date");
+      expect(markup).toContain("Review changes");
+      expect(markup).toContain('role="region"');
+      expect(markup).toContain('aria-label="Feature availability and plan assignments"');
+      expect(markup).toContain('tabindex="0"');
+      expect(markup).toContain("Scroll horizontally to see availability and plans");
+      expect(markup).toContain("Dependencies and required provider configuration still apply");
+    },
+  );
+
+  it("shows only the chosen plans checked for an explicitly enabled policy", () => {
     const markup = renderToStaticMarkup(
       <FeaturesPanel
         data={{
-          policy: { revision: 0, features: {}, updatedAt: null },
-          catalog: productFeatureCatalog,
+          policy: {
+            revision: 1,
+            features: { sessionSummaries: { enabled: true, plans: ["pro", "team"] } },
+            updatedAt: null,
+          },
+          catalog: productFeatureCatalog.filter((feature) => feature.key === "sessionSummaries"),
         }}
         writable
         busy={false}
         onReview={vi.fn()}
       />,
     );
-    expect(markup).toContain("Inherit deployment");
-    expect(markup).toContain("Free plan includes Session summaries");
-    expect(markup).toContain("Policy is up to date");
-    expect(markup).toContain("Review changes");
-    expect(markup).toContain('role="region"');
-    expect(markup).toContain('aria-label="Feature availability and plan assignments"');
-    expect(markup).toContain('tabindex="0"');
-    expect(markup).toContain("Scroll horizontally to see availability and plans");
-    expect(markup).toContain("Dependencies and required provider configuration still apply");
+    const inputs = markup.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
+    expect(inputs).toHaveLength(3);
+    expect(
+      inputs.find((input) => input.includes("Free plan includes Session summaries")),
+    ).not.toContain("checked");
+    for (const plan of ["Pro", "Team"])
+      expect(
+        inputs.find((input) => input.includes(`${plan} plan includes Session summaries`)),
+      ).toContain('checked=""');
+    for (const input of inputs) expect(input).not.toContain("disabled");
+    expect(markup).not.toContain("Deployment controlled");
+    expect(markup).not.toContain("No feature overrides have been saved.");
+    expect(markup).not.toContain("Explicitly enabled in draft");
   });
 
   it("keeps read-only policy visible and flags explicitly excluded dependency plans", () => {

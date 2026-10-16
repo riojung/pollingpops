@@ -27,6 +27,7 @@ interface FixtureState {
   ledgerEntries: number;
   restriction: { blocked: boolean } | null;
   auditActions: string[];
+  auditEvents: { action: string; actorId: string; reason: string }[];
   issuerConfigured: boolean;
   mfaConfigured: boolean;
 }
@@ -35,7 +36,11 @@ export async function localAdminHarness(context: BrowserContext) {
   // This request context has no browser cookie jar. Forward only cookies that
   // the browser actually sent; a missing product bridge cannot be repaired here.
   const transport = await request.newContext({ baseURL: apiOrigin });
-  context.on("close", () => void transport.dispose());
+  context.on("close", () => {
+    // Playwright can already have closed the request context during teardown.
+    // Consume that disposal rejection instead of leaking it into the next test.
+    void transport.dispose().catch(() => {});
+  });
   const cookie = async (name: string) =>
     (await context.cookies(controlOrigin)).find((entry) => entry.name === name)?.value;
   const cookieHeader = async () =>
@@ -86,12 +91,19 @@ export async function localAdminHarness(context: BrowserContext) {
     });
     if (!response.ok()) throw new Error(`Local admin revocation failed (${response.status()})`);
   };
+  const ageSession = async () => {
+    const response = await transport.post("/__test/local-admin/age-session", {
+      headers: { cookie: await cookieHeader() },
+      data: {},
+    });
+    if (!response.ok()) throw new Error(`Local admin session aging failed (${response.status()})`);
+  };
   const provision = async (): Promise<AdminCredentials> => {
     const response = await transport.post("/__test/local-admin/provision", { data: {} });
     expect(response.ok()).toBe(true);
     return response.json();
   };
-  return { cookie, state, revoke, provision };
+  return { cookie, state, revoke, ageSession, provision };
 }
 
 export interface AdminCredentials {

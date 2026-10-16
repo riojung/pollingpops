@@ -1410,12 +1410,14 @@ describe("operations environment contract", () => {
       "BUSINESS_BILLING_WORKER_LEASE_MS",
       "BUSINESS_BILLING_RECONCILE_INTERVAL_MS",
       "CONTROL_ENABLED",
+      "CONTROL_AUTH_MODE",
       "CONTROL_PUBLIC_ORIGIN",
       "CONTROL_PRODUCT_ORIGIN",
       "CONTROL_DATABASE_URL",
       "CONTROL_DOMAIN",
       "CONTROL_ALLOWED_CIDRS",
       "OPERATOR_OIDC_ISSUER",
+      "OPERATOR_CREDENTIAL_KEY",
       "OPERATOR_OIDC_CLIENT_ID",
       "OPERATOR_OIDC_CLIENT_SECRET",
       "OPERATOR_OIDC_MFA_POLICY_ENFORCED",
@@ -1443,7 +1445,6 @@ describe("operations environment contract", () => {
       "OPERATOR_OIDC_JWKS_URI",
       "QUICKBOOKS_API_URL",
       "CONTROL_ALLOW_LOCAL_HTTP",
-      "CONTROL_AUTH_MODE",
       "CONTROL_LOCAL_DEVELOPMENT",
     ]) {
       expect(

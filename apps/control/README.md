@@ -1,74 +1,113 @@
 # Polling Pops operator console
 
-This is a separate Next.js application for provisioned operators. It shares platform repositories
-with Polling Pops and does not construct the API/realtime application. Customer sessions and the
-legacy `ADMIN_TOKEN` cannot authorize console requests.
+This separate Next.js application serves provisioned platform administrators at its own address.
+Open the console directly and sign in with a username, password and six-digit authenticator code.
+A Polling Pops customer account is not required. Customer sessions, organization roles and the
+legacy `ADMIN_TOKEN` cannot authorize console requests. Customer sign-in and sign-out do not
+create, replace or revoke administrator sessions.
 
-The normal local service bundles start this console on port 3002 with a built-in **Local admin**
-account. Run `pnpm local:start` or `pnpm service development start --profile core`, open the product
-at `http://localhost:8080`, and sign in through the normal product form using
-`admin@pollingpops.local`. Open the captured magic-link email in Mailpit. The product then shows
-**Business · Super admin** and all permitted management areas. Public headers and sign-in pages do
-not advertise the console. Local sign-in does not use SSO, MFA, or a shared password; verified
-product sign-in creates the usual durable, revocable operator session.
-
-The default configuration outside that local profile remains disabled.
-`pnpm --filter @openround/control dev` serves it on port 3002. The
-production build uses the supported Webpack option because shared Node packages use `.js` ESM
-specifiers for TypeScript source. The deployment container uses Next's standalone output.
-
-## Local development authentication
-
-`compose.local-control.yaml` enables `CONTROL_AUTH_MODE=local` and
-`CONTROL_LOCAL_DEVELOPMENT=true`, with the deployment environment set to development. The console
-and trusted product origins must be loopback HTTP origins. The profile works with the production
-Node build used by local Docker, while staging/production deployment markers reject local auth.
-The hosted overlay fixes managed OIDC mode and disables the local-development flag.
-
-`LOCAL_ADMIN_EMAIL` selects the exact verified development identity; normal local bundles default
-to `admin@pollingpops.local`. The API and console use the same loopback hostname so their host-only
-cookies can be shared across ports. Admin magic links and success redirects use that loopback host
-even when participant URLs use a LAN address. Other emails keep their ordinary customer access.
-
-The local account is provisioned once with founder permissions. Login never reactivates a disabled
-account. Product logout and signing in with an ordinary account revoke local operator access.
-Mutations retain capability checks, CSRF verification, and attributable audits. Local sessions
-cannot authorize managed-mode requests. Database runtime principal checks remain enabled for
-production-built containers.
-
-For host-native development, configure the product and console to use the same PostgreSQL database
-and export the local settings before `pnpm dev`:
+The normal local service bundles start the console at <http://localhost:3002>. There is no default
+password or automatically created administrator. Provision the first account explicitly after
+starting the services:
 
 ```bash
-export CONTROL_ENABLED=true CONTROL_AUTH_MODE=local CONTROL_LOCAL_DEVELOPMENT=true
-export OPENROUND_DEPLOYMENT_ENVIRONMENT=development
-export CONTROL_PUBLIC_ORIGIN=http://localhost:3002 CONTROL_PRODUCT_ORIGIN=http://localhost:3000
-export LOCAL_ADMIN_EMAIL=admin@pollingpops.local
-export CONTROL_DATABASE_URL="$DATABASE_URL"
-pnpm exec turbo run dev --parallel --env-mode=loose
+pnpm local:start
+pnpm admin:setup --username admin --name "Platform admin" --role founder
 ```
 
-The product's in-memory native recipe cannot supply durable tenant data to the separate console;
-use a PostgreSQL-backed native environment for management workflows.
+Open <http://localhost:3002> after enrollment. The customer application continues at
+<http://localhost:8080> with its own email-link sign-in and organization navigation.
 
-Native `dev` and `start` bind to `127.0.0.1:3002`. The Docker standalone server listens inside its
-container, with local access restricted by the loopback-only published port.
+The default configuration outside the local profile remains disabled.
+`pnpm --filter @openround/control dev` serves the native console on port 3002. The production build
+uses the supported Webpack option because shared Node packages use `.js` ESM specifiers for
+TypeScript source. The deployment container uses Next's standalone output.
+
+## Standalone password authentication
+
+`compose.local-control.yaml` selects `CONTROL_AUTH_MODE=password`,
+`CONTROL_LOCAL_DEVELOPMENT=true` and the development environment marker. HTTP is accepted only at
+an explicitly configured loopback development origin. Other deployments require HTTPS. The product
+server's control integration stays disabled, with no trusted product origin or admin email binding.
+
+`pnpm admin:setup` executes the provisioning CLI inside the running control container. It requires
+an interactive terminal, prompts for a hidden password and confirmation, then displays a TOTP
+secret and `otpauth://` enrollment URI. Add that material manually to an authenticator app or a
+vault that supports TOTP. Sign in with the chosen username, password and the current six-digit
+code. Enrollment material is shown only by this offline command; it is not available through the
+public application. Store it securely and avoid terminal recordings or shared logs during setup.
+
+The username uses 3–64 letters, numbers, periods, underscores or hyphens and is normalized to
+lowercase. Choose a unique password; setup accepts 12–1024 UTF-8 bytes. Select an explicit role:
+`founder`, `operations`, `support`, `billing` or `readonly`. The setup command also accepts
+`--docker-context NAME` and `--profile core|media|observability` for the running local bundle.
+
+Local service start/restart creates or reuses the ignored `data/admin/credential.key`. The directory
+is private (mode `0700`) and the key file is private (mode `0600`). An explicit
+`OPERATOR_CREDENTIAL_KEY` in the process environment takes precedence, followed by its nonblank
+value in `.env`, then the saved local file. The key is a base64-encoded 32-byte value, passed only
+to control. Keep the same key across restarts and back it up securely with the database: it encrypts
+authenticator secrets, and a database backup alone cannot recover them.
+
+To replace a lost password or authenticator enrollment, run an explicit reset:
+
+```bash
+pnpm admin:setup --username admin --name "Platform admin" --role founder --reset
+```
+
+Reset replaces the password and authenticator secret and revokes that administrator's sessions.
+Enroll the newly displayed secret. Reset preserves a disabled account's disabled state; it does
+not reactivate access. Existing customer and legacy email-bound administrator accounts are not
+converted automatically.
+The last active founder for an authentication issuer cannot be disabled or demoted. A replacement
+password founder must have enrolled credentials; an administrator record alone does not qualify.
+
+Password verifiers use salted scrypt with the
+[OWASP scrypt storage profile](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt).
+Authenticator secrets use authenticated encryption. Codes follow
+[RFC 6238](https://www.rfc-editor.org/rfc/rfc6238), with replay protection and durable login throttling.
+Migration 073 adds credential and throttle records under the existing database isolation policy.
+Apply migrations through the maintenance workflow before setup; the CLI does not run migrations.
+
+For host-native development, use a migrated PostgreSQL database and a persistent credential key.
+The following example reuses the key created by local service startup and scopes password settings
+to control. Start the customer app separately with its own configuration:
+
+```bash
+CONTROL_ENABLED=true CONTROL_AUTH_MODE=password CONTROL_LOCAL_DEVELOPMENT=true \
+OPENROUND_DEPLOYMENT_ENVIRONMENT=development \
+CONTROL_PUBLIC_ORIGIN=http://localhost:3002 CONTROL_PRODUCT_ORIGIN= \
+CONTROL_DATABASE_URL="$DATABASE_URL" \
+OPERATOR_CREDENTIAL_KEY="$(cat data/admin/credential.key)" \
+pnpm exec turbo run dev --parallel --env-mode=loose --filter=@openround/control
+```
+
+Use the same control-only environment for native offline provisioning with
+`pnpm exec tsx packages/control-plane/src/admin-cli.ts setup --username admin --name "Platform admin" --role founder`.
+The product's in-memory native recipe cannot provide durable tenant data to this separate process.
+Native `dev` and `start` bind to `127.0.0.1:3002`; Docker publishes its console port only on loopback.
 
 ## Identity and deployment configuration
 
-Set `CONTROL_ENABLED=true`, `CONTROL_PUBLIC_ORIGIN` to the dedicated HTTPS origin, and
-`CONTROL_DATABASE_URL` to the separately configured runtime connection. Production startup rejects
-an owner/superuser, RLS bypass, or otherwise privileged runtime principal. Migrations run through
-the existing separate maintenance process, never through this app.
+Set `CONTROL_ENABLED=true`, a dedicated HTTPS `CONTROL_PUBLIC_ORIGIN`, and a restricted
+`CONTROL_DATABASE_URL` on control. Production startup rejects an owner/superuser, RLS bypass, or
+otherwise privileged runtime principal. Migrations run through the separate maintenance process.
+Leave `CONTROL_PRODUCT_ORIGIN` blank; customer navigation never probes administrator sessions.
 
-Configure a dedicated `OPERATOR_OIDC_ISSUER`, `OPERATOR_OIDC_CLIENT_ID`, and
-`OPERATOR_OIDC_CLIENT_SECRET`. Register exactly `<CONTROL_PUBLIC_ORIGIN>/auth/callback`. Set
+For hosted password authentication, select `CONTROL_AUTH_MODE=password` and supply a persistent
+`OPERATOR_CREDENTIAL_KEY` through secret management, then use the offline provisioning CLI with the
+same control configuration. The local `pnpm admin:setup` wrapper targets development Compose
+profiles; hosted administration uses the CLI in the reviewed control deployment.
+
+The hosted single-VM overlay defaults to the alternative `CONTROL_AUTH_MODE=oidc`. Configure a
+dedicated `OPERATOR_OIDC_ISSUER`, `OPERATOR_OIDC_CLIENT_ID` and `OPERATOR_OIDC_CLIENT_SECRET`.
+Register exactly `<CONTROL_PUBLIC_ORIGIN>/auth/callback`. Set
 `OPERATOR_OIDC_MFA_POLICY_ENFORCED=true` only after the provider application policy enforces MFA.
-Configure exact provider claim values through `OPERATOR_OIDC_REQUIRED_AMR` and/or
-`OPERATOR_OIDC_ALLOWED_ACR`. Both configured conditions must match; missing assurance claims fail
-closed. A signed customer identity token does not substitute for operator assurance.
+Configure exact claim values through `OPERATOR_OIDC_REQUIRED_AMR` and/or `OPERATOR_OIDC_ALLOWED_ACR`.
+Both configured conditions must match; missing assurance claims fail closed. A signed customer
+identity token does not substitute for operator assurance.
 
-`OPERATOR_BOOTSTRAP_IDENTITIES` is a JSON array of preprovisioned identities:
+For OIDC, `OPERATOR_BOOTSTRAP_IDENTITIES` is a JSON array of explicitly provisioned identities:
 
 ```json
 [
@@ -82,15 +121,15 @@ closed. A signed customer identity token does not substitute for operator assura
 ```
 
 Bootstrap checks and inserts happen under one transaction. Existing identities retain their current
-role and disabled state across process restarts. The issuer must exactly match the configured
-operator provider. Emails never auto-create or link operators.
+role and disabled state across restarts. The issuer must exactly match the configured operator
+provider. Emails never auto-create or link administrators.
 
-Sessions are opaque, stored as hashes, revocable, and checked against current operator access on
-every authenticated request. They expire after eight hours or thirty idle minutes. Financial,
-credential, access, and admission-restriction commands require authentication within five minutes.
-OAuth login uses browser-bound one-use state, nonce, and PKCE. Mutation handlers require exact
-same-origin requests and a session-bound CSRF token. Local HTTP is possible only with the explicit
-non-production `CONTROL_ALLOW_LOCAL_HTTP=true` setting and loopback origins.
+Sessions are opaque, stored as hashes, revocable and checked against current access on every
+request. They expire after eight hours or thirty idle minutes. Financial, credential, access and
+admission-restriction commands require authentication within five minutes. Password mode requires
+a new password and authenticator sign-in for recent authentication; OIDC uses browser-bound
+one-use state, nonce and PKCE. Mutation handlers require exact same-origin requests and a
+session-bound CSRF token.
 
 ## Operator areas
 
@@ -102,20 +141,10 @@ and workspace rollout defaults. Feature prerequisites and configured providers s
 Changes are revision checked, permission checked and audited; retained room coverage is preserved.
 See [feature policy behavior](../../docs/business-management.md#feature-availability-and-plans).
 
-Product sign-in and workspace navigation discover this console through `CONTROL_PUBLIC_ORIGIN` on
-the product API. Set optional `CONTROL_PRODUCT_ORIGIN` to the exact trusted product origin to enable
-the read-only `/api/navigation` probe. It authenticates and rechecks the operator session, returning
-only name, role and permitted area links. All other APIs retain their existing origin and credential
-boundaries. Use product/console origins on the same site for the existing SameSite session cookie.
-The product remains usable when discovery is unavailable. Staff can use the private console directly;
-public product pages do not advertise its sign-in address. Console links accept permitted `?view=`
-areas and preserve the selected area through sign-in.
-
-The normal local bundles add `compose.local-control.yaml` to enable loopback discovery and the
-verified development email binding. Using `compose.business.yaml` alone retains managed HTTPS
-policy. The hosted `compose.single-vm.business.yaml` overlay defaults discovery to
-`https://<OPENROUND_APP_DOMAIN>`, matching its product ingress, and retains production origin
-validation.
+All management areas live in the console. Its sidebar and permitted `?view=` links preserve the
+selected area through sign-in. Customer headers, workspace menus and sign-in pages contain customer
+organization controls only. The product never discovers administrator identities or links through
+the console, and a console outage does not block customer navigation or gameplay.
 
 Organization/workspace pause, billing projections, credits/promotions, worker heartbeats and pause,
 support cases and the fifty newest private product-feedback records, integration attempts, and

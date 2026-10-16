@@ -1,4 +1,5 @@
 import { request, expect, type BrowserContext, type Page } from "@playwright/test";
+import { operatorTotpCode } from "../../packages/control-plane/src/index.js";
 
 export const controlOrigin = "http://127.0.0.1:3302";
 export const productOrigin = "http://127.0.0.1:3300";
@@ -39,7 +40,7 @@ export async function localAdminHarness(context: BrowserContext) {
     (await context.cookies(controlOrigin)).find((entry) => entry.name === name)?.value;
   const cookieHeader = async () =>
     (await context.cookies(controlOrigin)).map(({ name, value }) => `${name}=${value}`).join("; ");
-  await context.route(`${controlOrigin}/api/**`, async (route) => {
+  const forward: Parameters<BrowserContext["route"]>[1] = async (route) => {
     const browserRequest = route.request();
     const url = new URL(browserRequest.url());
     const headers = await browserRequest.allHeaders();
@@ -54,10 +55,15 @@ export async function localAdminHarness(context: BrowserContext) {
           ? { organizationId: url.searchParams.get("organizationId") }
           : {}),
         ...(url.pathname === "/api/commands" ? { command: browserRequest.postDataJSON() } : {}),
+        ...(url.pathname === "/auth/password"
+          ? { credentials: browserRequest.postDataJSON() }
+          : {}),
       },
     });
     await route.fulfill({ response });
-  });
+  };
+  await context.route(`${controlOrigin}/api/**`, forward);
+  await context.route(`${controlOrigin}/auth/password`, forward);
   const state = async (
     input: { organizationId?: string; workspaceId?: string } = {},
     previousSessionToken?: string,
@@ -80,7 +86,29 @@ export async function localAdminHarness(context: BrowserContext) {
     });
     if (!response.ok()) throw new Error(`Local admin revocation failed (${response.status()})`);
   };
-  return { cookie, state, revoke };
+  const provision = async (): Promise<AdminCredentials> => {
+    const response = await transport.post("/__test/local-admin/provision", { data: {} });
+    expect(response.ok()).toBe(true);
+    return response.json();
+  };
+  return { cookie, state, revoke, provision };
+}
+
+export interface AdminCredentials {
+  username: string;
+  password: string;
+  totpSecret: string;
+}
+
+export async function signInAdmin(page: Page, credentials: AdminCredentials) {
+  await page.goto(controlOrigin);
+  await page.getByLabel("Username", { exact: true }).fill(credentials.username);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
+  await page
+    .getByLabel("Authenticator code", { exact: true })
+    .fill(operatorTotpCode(credentials.totpSecret));
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
 }
 
 export async function signIn(page: Page, email: string) {

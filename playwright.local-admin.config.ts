@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { randomBytes } from "node:crypto";
+
+const credentialKey = randomBytes(32).toString("base64");
 
 export default defineConfig({
   testDir: "./tests/local-admin-e2e",
@@ -16,8 +19,7 @@ export default defineConfig({
   projects: [{ name: "chromium-local-admin", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command:
-        "NODE_ENV=test PORT=4300 WEB_ORIGIN=http://127.0.0.1:3300 PUBLIC_API_URL=http://127.0.0.1:4300 CONTROL_ENABLED=true CONTROL_AUTH_MODE=local CONTROL_LOCAL_DEVELOPMENT=true OPENROUND_DEPLOYMENT_ENVIRONMENT=development CONTROL_PRODUCT_ORIGIN=http://127.0.0.1:3300 CONTROL_PUBLIC_ORIGIN=http://127.0.0.1:3302 LOCAL_ADMIN_EMAIL=admin@pollingpops.local pnpm exec tsx apps/server/test/fixtures/business-browser-server.ts",
+      command: `NODE_ENV=test PORT=4300 WEB_ORIGIN=http://127.0.0.1:3300 PUBLIC_API_URL=http://127.0.0.1:4300 CONTROL_AUTH_MODE=password OPERATOR_CREDENTIAL_KEY=${credentialKey} CONTROL_PUBLIC_ORIGIN=http://127.0.0.1:3302 pnpm exec tsx apps/server/test/fixtures/business-browser-server.ts`,
       port: 4300,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -30,8 +32,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command:
-        "PLAYWRIGHT_CONTROL=true CONTROL_ENABLED=true CONTROL_AUTH_MODE=local CONTROL_LOCAL_DEVELOPMENT=true OPENROUND_DEPLOYMENT_ENVIRONMENT=development CONTROL_PUBLIC_ORIGIN=http://127.0.0.1:3302 CONTROL_PRODUCT_ORIGIN=http://127.0.0.1:3300 CONTROL_DATABASE_URL=postgresql://synthetic@127.0.0.1:1/unused pnpm --filter @openround/control exec next dev --webpack --hostname 127.0.0.1 -p 3302",
+      command: `PLAYWRIGHT_CONTROL=true CONTROL_ENABLED=true CONTROL_AUTH_MODE=password OPERATOR_CREDENTIAL_KEY=${credentialKey} CONTROL_LOCAL_DEVELOPMENT=true OPENROUND_DEPLOYMENT_ENVIRONMENT=development CONTROL_PUBLIC_ORIGIN=http://127.0.0.1:3302 CONTROL_DATABASE_URL=postgresql://synthetic@127.0.0.1:1/unused pnpm --filter @openround/control exec next dev --webpack --hostname 127.0.0.1 -p 3302`,
       port: 3302,
       reuseExistingServer: false,
       timeout: 120_000,

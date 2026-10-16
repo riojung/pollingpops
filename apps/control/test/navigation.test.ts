@@ -27,7 +27,7 @@ const environment = {
   OPERATOR_OIDC_MFA_POLICY_ENFORCED: "true",
   OPERATOR_OIDC_REQUIRED_AMR: "mfa",
 };
-function request(origin: string | null = productOrigin, signedIn = true) {
+function request(origin: string | null = controlOrigin, signedIn = true) {
   return new NextRequest(`${controlOrigin}/api/navigation`, {
     headers: {
       ...(origin ? { origin } : {}),
@@ -43,7 +43,7 @@ function authenticateAs(
   const current = {
     operator: {
       id: "operator-private-id",
-      issuer: "private-issuer",
+      issuer: environment.OPERATOR_OIDC_ISSUER,
       subject: "private-subject",
       name: "Business administrator",
       role,
@@ -75,7 +75,7 @@ function authenticateAs(
   return { current, touch };
 }
 
-describe("read-only operator navigation discovery", () => {
+describe("same-origin operator navigation discovery", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
@@ -86,9 +86,9 @@ describe("read-only operator navigation discovery", () => {
     authenticateAs("founder");
     const response = await GET(request());
     expect(response.status).toBe(200);
-    expect(response.headers.get("access-control-allow-origin")).toBe(productOrigin);
-    expect(response.headers.get("access-control-allow-credentials")).toBe("true");
-    expect(response.headers.get("vary")).toBe("Origin");
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+    expect(response.headers.get("vary")).toBeNull();
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     const body = await response.json();
     expect(Object.keys(body)).toEqual(["operator", "links"]);
@@ -139,29 +139,32 @@ describe("read-only operator navigation discovery", () => {
     current.operator.active = false;
     const response = await GET(request());
     expect(response.status).toBe(401);
-    expect(response.headers.get("access-control-allow-origin")).toBe(productOrigin);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
     expect(await response.json()).not.toHaveProperty("links");
   });
   it("does not accept customer sessions as operator authentication", async () => {
     const { touch } = authenticateAs();
     const response = await GET(
       new NextRequest(`${controlOrigin}/api/navigation`, {
-        headers: { origin: productOrigin, cookie: "pollingpops-customer=session" },
+        headers: { origin: controlOrigin, cookie: "pollingpops-customer=session" },
       }),
     );
     expect(response.status).toBe(401);
     expect(touch).not.toHaveBeenCalled();
   });
-  it.each(["https://evil.example", `${productOrigin}/`, "null", `${productOrigin}.evil.example`])(
-    "rejects foreign Origin %s before touching the operator runtime",
-    async (origin) => {
-      authenticateAs();
-      const response = await GET(request(origin));
-      expect(response.status).toBe(403);
-      expect(response.headers.get("access-control-allow-origin")).toBeNull();
-      expect(controlRuntime).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    productOrigin,
+    "https://evil.example",
+    `${controlOrigin}/`,
+    "null",
+    `${controlOrigin}.evil.example`,
+  ])("rejects foreign Origin %s before touching the operator runtime", async (origin) => {
+    authenticateAs();
+    const response = await GET(request(origin));
+    expect(response.status).toBe(403);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(controlRuntime).not.toHaveBeenCalled();
+  });
   it("allows same-console reads without enabling cross-origin writes", async () => {
     authenticateAs();
     const response = await GET(request(null));
@@ -170,16 +173,23 @@ describe("read-only operator navigation discovery", () => {
     expect(response.headers.get("access-control-allow-methods")).toBeNull();
     expect(response.headers.get("access-control-allow-headers")).toBeNull();
   });
-  it("disables product discovery when no trusted product origin is configured", async () => {
-    vi.stubEnv("CONTROL_PRODUCT_ORIGIN", "");
-    authenticateAs();
-    expect((await GET(request())).status).toBe(403);
-  });
+  it.each(["same-site", "cross-site"])(
+    "rejects browser %s requests even without an Origin header",
+    async (site) => {
+      authenticateAs();
+      const response = await GET(
+        new NextRequest(`${controlOrigin}/api/navigation`, { headers: { "sec-fetch-site": site } }),
+      );
+      expect(response.status).toBe(403);
+      expect(controlRuntime).not.toHaveBeenCalled();
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    },
+  );
   it("returns a sanitized, readable unavailable result without credentials", async () => {
     vi.mocked(controlRuntime).mockRejectedValue(new Error("PRIVATE_DATABASE_SECRET"));
     const response = await GET(request());
     expect(response.status).toBe(503);
-    expect(response.headers.get("access-control-allow-origin")).toBe(productOrigin);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
     expect(await response.text()).not.toContain("PRIVATE_DATABASE_SECRET");
   });
 });

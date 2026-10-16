@@ -68,8 +68,7 @@
   padding-top: 12px;
 }
 
-.heading,
-.operatorIdentity {
+.heading {
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 700;

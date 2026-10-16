@@ -24,9 +24,6 @@ const fixtures = vi.hoisted(() => ({
     organizationManagementEnabled: true,
     organizations: [],
     operatorConsoleOrigin: null,
-    operator: null,
-    operatorLinks: [],
-    operatorLoading: false,
     refresh: vi.fn(),
   },
 }));

@@ -67,7 +67,7 @@ describe("authenticated management discovery", () => {
     },
   );
 
-  it("discovers operator sign-in while signed out without contacting the console", async () => {
+  it("keeps console discovery absent while signed out even with an operator origin configured", async () => {
     const { app } = await fixture({ CONTROL_PUBLIC_ORIGIN: "https://control.example.test/" });
     const providerRequest = vi.spyOn(globalThis, "fetch");
     const response = await app.inject({ method: "GET", url: "/v1/auth/navigation" });
@@ -76,7 +76,7 @@ describe("authenticated management discovery", () => {
       user: null,
       organizationManagementEnabled: true,
       organizations: [],
-      operatorConsoleOrigin: "https://control.example.test",
+      operatorConsoleOrigin: null,
     });
     expect(providerRequest).not.toHaveBeenCalled();
   });
@@ -101,6 +101,7 @@ describe("authenticated management discovery", () => {
     );
     expect(response.json()).not.toHaveProperty("operator");
     expect(response.json()).not.toHaveProperty("capabilities");
+    expect(data.operatorConsoleOrigin).toBeNull();
   });
 
   it("supports billing-only identities and rechecks membership changes and session revocation", async () => {
@@ -133,6 +134,7 @@ describe("authenticated management discovery", () => {
       name: organization.name,
       role: "billing",
     });
+    expect((await read()).operatorConsoleOrigin).toBeNull();
     await platform.setOrganizationMember({
       organizationId: organization.id,
       actorId: owner.creator.userId,

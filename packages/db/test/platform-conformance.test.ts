@@ -1283,6 +1283,206 @@ for (const backend of ["memory", "postgres"] as const) {
           }),
         ).rejects.toMatchObject({ code: "INVALID_PROMOTION" });
       });
+      it("persists private credentials and atomically consumes authenticator replay counters with sessions and audit", async () => {
+        const username = `admin-${randomUUID()}`;
+        const operator = await platform.provisionOperator({
+          issuer: "urn:pollingpops:password-totp",
+          subject: username,
+          name: "Conformance administrator",
+          role: "support",
+          capabilities: [],
+          active: true,
+        });
+        const now = new Date();
+        const credential = await platform.saveOperatorPasswordCredential(
+          {
+            username,
+            operatorId: operator.id,
+            passwordVerifier: {
+              algorithm: "scrypt",
+              salt: "synthetic-salt",
+              hash: "synthetic-verifier",
+              cost: 32768,
+              blockSize: 8,
+              parallelization: 3,
+            },
+            totpCiphertext: "synthetic-encrypted-credential",
+            lastUsedCounter: null,
+            updatedAt: now,
+          },
+          null,
+        );
+        const reader = createPlatformRepository(repository);
+        expect(await reader.getOperatorPasswordCredential(username)).toEqual(credential);
+        expect(await reader.getOperator(operator.id)).not.toHaveProperty("passwordVerifier");
+        await expect(reader.saveOperatorPasswordCredential(credential, null)).rejects.toMatchObject(
+          { code: "CONFLICT" },
+        );
+        const tokens = [randomUUID(), randomUUID()];
+        const attempts = await Promise.allSettled(
+          tokens.map((token, index) =>
+            (index ? reader : platform).withOperatorTransaction(async (scoped) => {
+              if (!(await scoped.consumeOperatorTotp(username, credential.revision, 321, now)))
+                throw new Error("replayed authenticator");
+              await scoped.createOperatorSession({
+                id: randomUUID(),
+                operatorId: operator.id,
+                tokenHash: token,
+                csrfHash: "synthetic-csrf-hash",
+                authenticatedAt: now,
+                lastSeenAt: now,
+                createdAt: now,
+                expiresAt: new Date(now.getTime() + 60_000),
+                revokedAt: null,
+              });
+              await scoped.appendAuditEvent({
+                actorId: operator.id,
+                organizationId: null,
+                action: "operator.login",
+                targetId: operator.id,
+                reason: "Conformance two-factor authentication",
+                requestId: token,
+                before: null,
+                after: { authMode: "password" },
+              });
+            }),
+          ),
+        );
+        expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+        expect(
+          (await Promise.all(tokens.map((token) => reader.getOperatorSession(token, now)))).filter(
+            Boolean,
+          ),
+        ).toHaveLength(1);
+        expect(
+          (await reader.listAuditEvents()).filter((event) => event.targetId === operator.id),
+        ).toHaveLength(1);
+        expect((await reader.getOperatorPasswordCredential(username))?.lastUsedCounter).toBe(321);
+        expect(await reader.consumeOperatorTotp(username, credential.revision, 320, now)).toBe(
+          false,
+        );
+        await expect(
+          platform.withOperatorTransaction(async (scoped) => {
+            expect(await scoped.consumeOperatorTotp(username, credential.revision, 322, now)).toBe(
+              true,
+            );
+            throw new Error("audit persistence failed");
+          }),
+        ).rejects.toThrow("audit persistence failed");
+        expect(await reader.consumeOperatorTotp(username, credential.revision, 322, now)).toBe(
+          true,
+        );
+        const replacement = await reader.saveOperatorPasswordCredential(
+          { ...credential, lastUsedCounter: null },
+          credential.revision,
+        );
+        expect(replacement.revision).toBe(credential.revision + 1);
+        expect(await reader.consumeOperatorTotp(username, credential.revision, 323, now)).toBe(
+          false,
+        );
+        if (backend === "postgres") {
+          const client = await (repository as PostgresRepository).pool.connect();
+          try {
+            const exposed = await client.query(
+              "SELECT data FROM platform_records WHERE kind='operator_credential' AND id=$1",
+              [username],
+            );
+            expect(exposed.rows).toHaveLength(0);
+          } finally {
+            client.release();
+          }
+        }
+      });
+      it("preserves the final active founder independently for every authentication issuer", async () => {
+        const suffix = randomUUID();
+        const create = (issuer: string, subject: string) =>
+          platform.provisionOperator({
+            issuer,
+            subject,
+            name: "Founder isolation conformance",
+            role: "founder",
+            capabilities: [],
+            active: true,
+          });
+        await create("urn:pollingpops:local-development", `legacy-${suffix}`);
+        const passwordFounder = await create("urn:pollingpops:password-totp", `admin-${suffix}`);
+        await expect(
+          platform.provisionOperator({ ...passwordFounder, role: "readonly" }),
+        ).rejects.toMatchObject({ code: "LAST_FOUNDER" });
+        await expect(
+          platform.provisionOperator({ ...passwordFounder, active: false }),
+        ).rejects.toMatchObject({ code: "LAST_FOUNDER" });
+        const replacement = await create(passwordFounder.issuer, `other-${suffix}`);
+        await expect(
+          platform.provisionOperator({ ...passwordFounder, role: "readonly" }),
+        ).rejects.toMatchObject({ code: "LAST_FOUNDER" });
+        await platform.saveOperatorPasswordCredential(
+          {
+            username: replacement.subject,
+            operatorId: replacement.id,
+            passwordVerifier: {
+              algorithm: "scrypt",
+              salt: "synthetic-salt",
+              hash: "synthetic-verifier",
+              cost: 32768,
+              blockSize: 8,
+              parallelization: 3,
+            },
+            totpCiphertext: "synthetic-encrypted-credential",
+            lastUsedCounter: null,
+            updatedAt: new Date(),
+          },
+          null,
+        );
+        expect(
+          await platform.provisionOperator({ ...passwordFounder, role: "readonly" }),
+        ).toMatchObject({ role: "readonly" });
+        await platform.provisionOperator(passwordFounder);
+        const writes = await Promise.allSettled(
+          [passwordFounder, replacement].map((operator) =>
+            platform.provisionOperator({ ...operator, active: false }),
+          ),
+        );
+        expect(writes.filter((write) => write.status === "fulfilled")).toHaveLength(1);
+        expect(writes.filter((write) => write.status === "rejected")).toEqual([
+          expect.objectContaining({ reason: expect.objectContaining({ code: "LAST_FOUNDER" }) }),
+        ]);
+        const oidc = await create(`https://identity-${suffix}.example.test`, "old-founder");
+        await create(`https://new-identity-${suffix}.example.test`, "new-founder");
+        await expect(platform.provisionOperator({ ...oidc, active: false })).rejects.toMatchObject({
+          code: "LAST_FOUNDER",
+        });
+        await create(oidc.issuer, "same-issuer-replacement");
+        expect(await platform.provisionOperator({ ...oidc, active: false })).toMatchObject({
+          active: false,
+        });
+      });
+      it("serializes durable operator attempt budgets across repository instances and releases expired lockouts", async () => {
+        const key = randomUUID().replaceAll("-", "").repeat(2);
+        const now = new Date();
+        const reader = createPlatformRepository(repository);
+        const results = await Promise.all(
+          Array.from({ length: 9 }, (_, index) =>
+            (index % 2 ? platform : reader).recordOperatorPasswordAttempt(key, now),
+          ),
+        );
+        expect(results.filter(Boolean)).toHaveLength(5);
+        expect(
+          await reader.recordOperatorPasswordAttempt(
+            key,
+            new Date(now.getTime() + 15 * 60_000 - 1),
+          ),
+        ).toBe(false);
+        expect(
+          await reader.recordOperatorPasswordAttempt(
+            key,
+            new Date(now.getTime() + 15 * 60_000 + 1),
+          ),
+        ).toBe(true);
+        await expect(
+          reader.recordOperatorPasswordAttempt("invalid-key", now),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      });
       it("binds and consumes OIDC state once and revokes sessions when operator privileges change", async () => {
         const identity = await platform.provisionOperator({
           issuer: "https://identity.example.test",

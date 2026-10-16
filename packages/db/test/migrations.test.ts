@@ -27,6 +27,24 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds private operator credential and durable login throttle record kinds without changing isolation", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 73)!;
+    expect(migration.name).toBe("operator_password_credentials");
+    for (const kind of [
+      "operator_credential",
+      "operator_login_throttle",
+      "operator",
+      "feature_policy",
+      "audit",
+    ])
+      expect(migration.sql).toContain(`'${kind}'`);
+    expect(migration.sql).toContain("platform_operator_credential_operator_uq");
+    expect(migration.sql).not.toMatch(
+      /INSERT INTO|UPDATE |DELETE |TRUNCATE |DISABLE ROW LEVEL SECURITY/i,
+    );
+  });
   it("allows persisted feature policies without replacing existing platform data or isolation", async () => {
     const migration = (
       await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))

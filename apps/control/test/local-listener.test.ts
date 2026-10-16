@@ -21,9 +21,9 @@ describe("local admin listener isolation", () => {
 
   it("documents native startup through the package's loopback development command", async () => {
     const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-    const localRecipe = readme.split("## Local development authentication")[1]!.split("## ")[0]!;
+    const localRecipe = readme.split("## Standalone password authentication")[1]!.split("## ")[0]!;
     expect(readme).toContain("pnpm --filter @openround/control dev");
-    expect(localRecipe).toContain("CONTROL_AUTH_MODE=local");
+    expect(localRecipe).toContain("CONTROL_AUTH_MODE=password");
     expect(localRecipe).toContain("CONTROL_PUBLIC_ORIGIN=http://localhost:3002");
     expect(localRecipe).toContain("pnpm exec turbo run dev --parallel --env-mode=loose");
     const scripts = await packageScripts();
@@ -39,7 +39,7 @@ describe("local admin listener isolation", () => {
       .split("\n")
       .find((line) => line.includes("pnpm --filter @openround/control exec next dev"));
     expect(command).toBeDefined();
-    expect(command).toContain("CONTROL_AUTH_MODE=local");
+    expect(command).toContain("CONTROL_AUTH_MODE=password");
     expect(command).toMatch(/next dev .*--hostname 127\.0\.0\.1(?:\s|$)/);
     expect(command).toContain("-p 3302");
   });

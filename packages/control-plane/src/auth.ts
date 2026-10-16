@@ -1,7 +1,16 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import * as oidc from "openid-client";
 import type { PlatformOperator, PlatformOperatorSession, PlatformRepository } from "@openround/db";
-import { isLocalControlDevelopment, type ControlConfig } from "./config.js";
+import {
+  isLocalControlDevelopment,
+  isPasswordControlEnabled,
+  type ControlConfig,
+} from "./config.js";
+import {
+  PASSWORD_OPERATOR_ISSUER,
+  passwordOperatorLogin,
+  type PasswordOperatorLoginInput,
+} from "./password-auth.js";
 
 export const OPERATOR_SESSION_COOKIE = "__Host-pollingpops-operator";
 export const OPERATOR_BINDING_COOKIE = "__Host-pollingpops-operator-login";
@@ -186,6 +195,9 @@ export class OperatorAuthService {
       });
     }
   }
+  async passwordLogin(input: PasswordOperatorLoginInput, now = new Date()) {
+    return passwordOperatorLogin(this.platform, this.config, input, now);
+  }
   async localLogin(requestId: string, now = new Date()) {
     if (!isLocalControlDevelopment(this.config))
       throw new OperatorError(404, "LOCAL_AUTH_DISABLED", "Local operator sign-in is unavailable");
@@ -322,7 +334,8 @@ export class OperatorAuthService {
       !this.config.CONTROL_ENABLED ||
       !token ||
       token.length > 256 ||
-      (this.config.CONTROL_AUTH_MODE === "local" && !local)
+      (this.config.CONTROL_AUTH_MODE === "local" && !local) ||
+      (this.config.CONTROL_AUTH_MODE === "password" && !isPasswordControlEnabled(this.config))
     )
       throw new OperatorError(401, "UNAUTHORIZED", "Operator sign-in required");
     const hash = tokenHash(token);
@@ -340,7 +353,11 @@ export class OperatorAuthService {
       (local
         ? context.operator.issuer !== LOCAL_OPERATOR_ISSUER ||
           context.operator.subject !== LOCAL_OPERATOR_SUBJECT
-        : context.operator.issuer === LOCAL_OPERATOR_ISSUER)
+        : this.config.CONTROL_AUTH_MODE === "password"
+          ? context.operator.issuer !== PASSWORD_OPERATOR_ISSUER
+          : context.operator.issuer !== this.config.OPERATOR_OIDC_ISSUER ||
+            context.operator.issuer === LOCAL_OPERATOR_ISSUER ||
+            context.operator.issuer === PASSWORD_OPERATOR_ISSUER)
     )
       throw new OperatorError(401, "UNAUTHORIZED", "Operator sign-in required");
     return { ...context, tokenHash: hash };

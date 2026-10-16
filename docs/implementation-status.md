@@ -8,6 +8,33 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Standalone administrator authentication October 15 2026
+
+Implemented locally on `codex/standalone-admin-console`. Administrators open the separate console
+directly and authenticate with a provisioned username, password and TOTP code. Customer accounts
+and verified admin email are unnecessary; there is no automatic account or default password. Customer sign-in and
+sign-out manage only customer sessions; customer navigation retains organization/billing controls
+and no longer discovers administrator sessions or renders business management menus.
+
+Migration 073 adds private password credentials and durable login throttling. Password verifiers
+use salted scrypt; authenticator secrets are authenticated-encrypted with a control-only key.
+Explicit offline setup prompts for a hidden password and confirmation and displays manual
+authenticator enrollment material. Reset replaces credentials and revokes existing sessions while
+preserving disabled state. Local start/restart creates or reuses the ignored private key file;
+configured environment or `.env` keys take precedence. Restore requires both the database and key.
+
+Local Compose selects password authentication at the loopback console on port 3002. Hosted
+configuration retains OIDC as an alternative with its existing assurance checks and defaults to
+OIDC; password mode requires HTTPS outside explicit loopback development. Capability checks,
+same-origin mutation/CSRF checks, recent authentication and attributable command audits remain.
+
+Validation: `CI=true pnpm check` passes, including customer/operator separation regressions,
+password/TOTP verification, replay races, throttling, credential resets and per-issuer protection
+for the last active founder. Nine browser journeys pass across direct password and managed OIDC
+sign-in, including mobile layout and automated accessibility checks. An isolated PostgreSQL 17
+run passed 199 migration/conformance tests with one intentional skip. The standalone provisioning
+CLI build, hidden password input and sanitized failure handling were verified.
+
 ### Admin feature management October 15 2026
 
 Implemented locally on `codex/admin-feature-management`. The separate operator console now has a

@@ -9,6 +9,7 @@ artifacts/
 .turbo/
 coverage/
 dist/
+admin-dist/
 node_modules/
 playwright-report/
 playwright-report-beta/

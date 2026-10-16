@@ -6,7 +6,8 @@ import {
   type ProductFeatureRules,
 } from "@openround/contracts";
 import type * as P from "./platform-types.js";
-import { PlatformError } from "./platform-types.js";
+import { PASSWORD_OPERATOR_ISSUER, PlatformError } from "./platform-types.js";
+import { hasUsableFounderReplacement } from "./operator-founder.js";
 
 export interface PlatformStore {
   transaction<T>(scope: string, work: (store: PlatformStore) => Promise<T>): Promise<T>;
@@ -1674,9 +1675,14 @@ export class PlatformService implements P.PlatformRepository {
         previous?.active &&
         previous.role === "founder" &&
         (!input.active || input.role !== "founder") &&
-        !operators.some((o) => o.id !== previous.id && o.active && o.role === "founder")
+        !(await hasUsableFounderReplacement(previous, operators, (username) =>
+          store.get<P.PlatformOperatorPasswordCredential>("operator_credential", username),
+        ))
       )
-        throw new PlatformError("LAST_FOUNDER", "A provisioned founder must remain active");
+        throw new PlatformError(
+          "LAST_FOUNDER",
+          "An active founder must remain for this authentication issuer",
+        );
       const now = new Date();
       const operator: P.PlatformOperator = {
         ...input,
@@ -1702,6 +1708,111 @@ export class PlatformService implements P.PlatformRepository {
         }
       }
       return operator;
+    });
+  }
+  async getOperatorPasswordCredential(username: string) {
+    return this.store.get<P.PlatformOperatorPasswordCredential>("operator_credential", username);
+  }
+  async saveOperatorPasswordCredential(
+    input: Omit<P.PlatformOperatorPasswordCredential, "revision">,
+    expectedRevision: number | null,
+  ) {
+    return this.run("operator", async (store) => {
+      const prior = await store.get<P.PlatformOperatorPasswordCredential>(
+        "operator_credential",
+        input.username,
+      );
+      if ((prior?.revision ?? null) !== expectedRevision)
+        throw new PlatformError("CONFLICT", "Operator credentials changed; retry the operation");
+      const operator = await store.get<P.PlatformOperator>("operator", input.operatorId);
+      if (
+        !operator ||
+        operator.issuer !== PASSWORD_OPERATOR_ISSUER ||
+        operator.subject !== input.username ||
+        !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(input.username) ||
+        (prior && prior.operatorId !== input.operatorId)
+      )
+        throw new PlatformError("VALIDATION_ERROR", "Invalid operator credential identity");
+      const credential: P.PlatformOperatorPasswordCredential = {
+        ...input,
+        revision: (prior?.revision ?? 0) + 1,
+      };
+      await store.put("operator_credential", input.username, null, credential);
+      return credential;
+    });
+  }
+  async consumeOperatorTotp(username: string, revision: number, counter: number, now: Date) {
+    return this.run("operator", async (store) => {
+      const prior = await store.get<P.PlatformOperatorPasswordCredential>(
+        "operator_credential",
+        username,
+      );
+      if (
+        !prior ||
+        prior.revision !== revision ||
+        !Number.isSafeInteger(counter) ||
+        counter < 0 ||
+        (prior.lastUsedCounter !== null && counter <= prior.lastUsedCounter)
+      )
+        return false;
+      await store.put("operator_credential", username, null, {
+        ...prior,
+        lastUsedCounter: counter,
+        updatedAt: now,
+      });
+      return true;
+    });
+  }
+  async recordOperatorPasswordAttempt(
+    key: string,
+    now: Date,
+    limit = { maxAttempts: 5, windowMs: 15 * 60_000 },
+  ) {
+    if (
+      !/^[a-f0-9]{64}$/.test(key) ||
+      !Number.isSafeInteger(limit.maxAttempts) ||
+      limit.maxAttempts < 1 ||
+      limit.maxAttempts > 1000 ||
+      !Number.isSafeInteger(limit.windowMs) ||
+      limit.windowMs < 1000 ||
+      limit.windowMs > 24 * 60 * 60_000
+    )
+      throw new PlatformError("VALIDATION_ERROR", "Invalid operator login throttle key");
+    return this.run("operator", async (store) => {
+      const prior = await store.get<P.PlatformOperatorLoginThrottle>(
+        "operator_login_throttle",
+        key,
+      );
+      if (prior?.lockedUntil && prior.lockedUntil > now) return false;
+      const duration = limit.windowMs;
+      const fresh = !prior || now.getTime() - prior.windowStartedAt.getTime() >= duration;
+      const attempts = (fresh ? 0 : prior.attempts) + 1;
+      if (attempts > limit.maxAttempts) return false;
+      if (!prior) {
+        // A fixed upper bound prevents arbitrary usernames growing the private record store.
+        const buckets =
+          await store.list<P.PlatformOperatorLoginThrottle>("operator_login_throttle");
+        if (buckets.length >= 4096) {
+          let remaining = buckets.length;
+          for (const bucket of buckets) {
+            if (
+              now.getTime() - bucket.windowStartedAt.getTime() >= 15 * 60_000 &&
+              (!bucket.lockedUntil || bucket.lockedUntil <= now)
+            ) {
+              await store.remove("operator_login_throttle", bucket.key);
+              remaining--;
+            }
+          }
+          if (remaining >= 4096) return false;
+        }
+      }
+      await store.put("operator_login_throttle", key, null, {
+        key,
+        attempts,
+        windowStartedAt: fresh ? now : prior.windowStartedAt,
+        lockedUntil: attempts >= limit.maxAttempts ? new Date(now.getTime() + duration) : null,
+      } satisfies P.PlatformOperatorLoginThrottle);
+      return true;
     });
   }
   async getOperatorByIdentity(issuer: string, subject: string) {

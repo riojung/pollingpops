@@ -2,7 +2,7 @@
 services:
   server:
     environment:
-      CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-}
+      CONTROL_PUBLIC_ORIGIN: ""
       COMMUNITY_MODE: ${COMMUNITY_MODE:-true}
       BACKGROUND_JOBS_MODE: separate
       BUSINESS_PLATFORM_ENABLED: ${BUSINESS_PLATFORM_ENABLED:-false}
@@ -55,12 +55,11 @@ services:
     environment:
       NODE_ENV: production
       CONTROL_ENABLED: ${CONTROL_ENABLED:-false}
-      CONTROL_AUTH_MODE: oidc
+      CONTROL_AUTH_MODE: ${CONTROL_AUTH_MODE:-oidc}
       CONTROL_LOCAL_DEVELOPMENT: "false"
       CONTROL_PUBLIC_ORIGIN: ${CONTROL_PUBLIC_ORIGIN:-}
-      # Production control accepts only an explicitly trusted HTTPS product origin.
-      # Leave unset for an HTTP local product; direct operator sign-in still works.
-      CONTROL_PRODUCT_ORIGIN: ${CONTROL_PRODUCT_ORIGIN:-}
+      CONTROL_PRODUCT_ORIGIN: ""
+      OPERATOR_CREDENTIAL_KEY: ${OPERATOR_CREDENTIAL_KEY:-}
       CONTROL_DATABASE_URL: ${CONTROL_DATABASE_URL:-}
       OPERATOR_OIDC_ISSUER: ${OPERATOR_OIDC_ISSUER:-}
       OPERATOR_OIDC_CLIENT_ID: ${OPERATOR_OIDC_CLIENT_ID:-}

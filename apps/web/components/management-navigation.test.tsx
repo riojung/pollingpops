@@ -1,25 +1,58 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LogoutWarningNotice,
   ManagementNavigationLinks,
+  useManagementNavigation,
   type ManagementNavigationState,
 } from "./management-navigation";
 import { emptyCustomerManagementNavigation } from "../lib/management-navigation";
-import { LOGOUT_REVOCATION_WARNING } from "../lib/api";
+import { apiFetch, LOGOUT_REVOCATION_WARNING } from "../lib/api";
+import type * as ApiModule from "../lib/api";
+
+vi.mock("../lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiModule>()),
+  apiFetch: vi.fn(),
+}));
 
 const origin = "https://control.example.com";
 const empty: ManagementNavigationState = {
   ...emptyCustomerManagementNavigation,
   loading: false,
   error: "",
-  operator: null,
-  operatorLinks: [],
-  operatorLoading: false,
   refresh: async () => undefined,
 };
 
 describe("role-aware management menus", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("refreshes customer navigation without querying an independently configured console", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ...emptyCustomerManagementNavigation,
+      user: { userId: "payer", email: "payer@example.com" },
+      organizationManagementEnabled: true,
+      organizations: [{ id: "paid", name: "Customer", role: "billing" }],
+      operatorConsoleOrigin: origin,
+    });
+    const consoleFetch = vi.fn();
+    vi.stubGlobal("fetch", consoleFetch);
+    let navigation: ManagementNavigationState | undefined;
+    function CaptureNavigation() {
+      navigation = useManagementNavigation();
+      return null;
+    }
+    renderToStaticMarkup(<CaptureNavigation />);
+    await navigation!.refresh();
+    expect(apiFetch).toHaveBeenCalledExactlyOnceWith(
+      "/v1/auth/navigation",
+      expect.objectContaining({ cache: "no-store", signal: expect.any(AbortSignal) }),
+    );
+    expect(consoleFetch).not.toHaveBeenCalled();
+  });
+
   it("only shows the bounded retained logout warning and provides dismissal without operator privileges", () => {
     expect(renderToStaticMarkup(<LogoutWarningNotice navigation={empty} />)).toBe("");
     expect(
@@ -61,8 +94,8 @@ describe("role-aware management menus", () => {
     expect(markup).not.toContain("Business");
   });
 
-  it("shows the trusted founder navigation as Super admin on desktop and mobile", () => {
-    const navigation: ManagementNavigationState = {
+  it("ignores legacy operator identity and links in both customer navigation layouts", () => {
+    const navigation = {
       ...empty,
       operator: { name: "Founder", role: "founder" },
       operatorConsoleOrigin: origin,
@@ -75,12 +108,25 @@ describe("role-aware management menus", () => {
       const markup = renderToStaticMarkup(
         <ManagementNavigationLinks navigation={navigation} variant={variant} />,
       );
-      expect(markup).toContain("Business · Super admin");
-      expect(markup).toContain(`href="${origin}/?view=organizations"`);
-      expect(markup).toContain("Tenants");
-      expect(markup).toContain("Operations");
-      expect(markup).not.toContain("Billing</a>");
-      expect(markup).not.toContain("Business admin sign in");
+      expect(markup).toBe("");
+
+      const customerMarkup = renderToStaticMarkup(
+        <ManagementNavigationLinks
+          navigation={{
+            ...navigation,
+            user: { userId: "payer", email: "payer@example.com" },
+            organizationManagementEnabled: true,
+            organizations: [{ id: "paid", name: "Customer", role: "billing" }],
+          }}
+          variant={variant}
+        />,
+      );
+      expect(customerMarkup).toContain("Event credits");
+      expect(customerMarkup).not.toContain("Business");
+      expect(customerMarkup).not.toContain("Super admin");
+      expect(customerMarkup).not.toContain(origin);
+      expect(customerMarkup).not.toContain("Tenants");
+      expect(customerMarkup).not.toContain("Operations");
     }
   });
 
@@ -88,18 +134,6 @@ describe("role-aware management menus", () => {
     expect(renderToStaticMarkup(<ManagementNavigationLinks navigation={empty} />)).toBe("");
     const configured = { ...empty, operatorConsoleOrigin: origin };
     expect(renderToStaticMarkup(<ManagementNavigationLinks navigation={configured} />)).toBe("");
-    expect(
-      renderToStaticMarkup(
-        <ManagementNavigationLinks
-          navigation={{
-            ...configured,
-            operatorLinks: [
-              { id: "organizations", label: "Tenants", href: `${origin}/?view=organizations` },
-            ],
-          }}
-        />,
-      ),
-    ).toBe("");
   });
 
   it("keeps billing-only organization navigation available without workspace claims", () => {

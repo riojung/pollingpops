@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ProductFeatureRulesSchema, productFeatureCatalog } from "@openround/contracts";
-import type { PlatformOperator, PlatformRepository } from "@openround/db";
+import {
+  hasUsableFounderReplacement,
+  type PlatformOperator,
+  type PlatformRepository,
+} from "@openround/db";
 import { OperatorError, requireFreshOperator, tokenHash, type OperatorContext } from "./auth.js";
 import { encryptIntegrationSecret } from "./integrations.js";
 import { AccountingMappingSchema } from "./accounting.js";
@@ -1073,14 +1077,16 @@ export class OperatorService {
           operator.active &&
           operator.role === "founder" &&
           (!command.active || command.role !== "founder") &&
-          (await repository.listOperators()).filter(
-            (entry) => entry.active && entry.role === "founder",
-          ).length <= 1
+          !(await hasUsableFounderReplacement(
+            operator,
+            await repository.listOperators(),
+            (username) => repository.getOperatorPasswordCredential(username),
+          ))
         )
           throw new OperatorError(
             409,
             "LAST_FOUNDER",
-            "The final active founder cannot be disabled or demoted",
+            "The final active founder for this authentication issuer cannot be disabled or demoted",
           );
         before = { role: operator.role, active: operator.active };
         targetId = operator.id;

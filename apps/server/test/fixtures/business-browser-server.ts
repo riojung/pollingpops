@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { createPlatformRepository, MemoryRepository } from "@openround/db";
+import {
+  createPlatformRepository,
+  MemoryPlatformRepository,
+  MemoryRepository,
+} from "@openround/db";
 import {
   PASSWORD_OPERATOR_ISSUER,
   provisionPasswordOperator,
@@ -188,6 +192,7 @@ if (process.env.CONTROL_AUTH_MODE === "password") {
           operator: {
             id: context.operator.id,
             name: context.operator.name,
+            username: context.operator.subject,
             role: context.operator.role,
             capabilities: operatorCapabilities(context.operator),
           },
@@ -219,6 +224,7 @@ if (process.env.CONTROL_AUTH_MODE === "password") {
     } catch (error) {
       return reply.code(error instanceof OperatorError ? error.status : 422).send({
         error: {
+          code: error instanceof OperatorError ? error.code : "INVALID_FIXTURE_REQUEST",
           message: error instanceof OperatorError ? error.message : "Invalid fixture request",
         },
       });
@@ -257,9 +263,24 @@ if (process.env.CONTROL_AUTH_MODE === "password") {
         ? await platform.getWorkspaceAdmissionRestriction(input.workspaceId)
         : null,
       auditActions: (await platform.listAuditEvents(undefined, 100)).map((event) => event.action),
+      auditEvents: (await platform.listAuditEvents(undefined, 100)).map((event) => ({
+        action: event.action,
+        actorId: event.actorId,
+        reason: event.reason,
+      })),
       issuerConfigured: Boolean(control.OPERATOR_OIDC_ISSUER),
       mfaConfigured: true,
     };
+  });
+  built.app.post("/__test/local-admin/age-session", async (request) => {
+    const context = await auth.authenticate(request.cookies[names.session]);
+    if (!(platform instanceof MemoryPlatformRepository))
+      throw new Error("Local browser session aging requires isolated memory storage");
+    await platform.memoryStore.put("operator_session", context.tokenHash, null, {
+      ...context.session,
+      authenticatedAt: new Date(Date.now() - 301_000),
+    });
+    return { aged: true };
   });
   built.app.post("/__test/local-admin/revoke", async (request) => {
     const context = await auth.authenticate(request.cookies[names.session]);

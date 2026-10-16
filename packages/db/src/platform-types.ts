@@ -609,6 +609,7 @@ export interface PlatformRepository {
     now: Date,
     limit?: { maxAttempts: number; windowMs: number },
   ): Promise<boolean>;
+  clearOperatorPasswordAttempts(key: string): Promise<void>;
   getOperatorByIdentity(issuer: string, subject: string): Promise<PlatformOperator | null>;
   getOperator(id: string): Promise<PlatformOperator | null>;
   listOperators(): Promise<PlatformOperator[]>;

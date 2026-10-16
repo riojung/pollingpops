@@ -120,9 +120,9 @@ export default function FeaturesPanel({
 
   const planControl = (feature: Feature, plan: Plan) => {
     const rule = draft[feature.key];
-    const checked = (rule?.plans ?? feature.defaultPlans).includes(plan);
+    const checked = rule?.plans.includes(plan) ?? false;
     return (
-      <label className={`plan-check ${!rule ? "inherited" : ""}`} key={plan}>
+      <label className="plan-check" key={plan}>
         <input
           type="checkbox"
           checked={checked}
@@ -139,19 +139,21 @@ export default function FeaturesPanel({
     <>
       <div className="stat-grid feature-stats">
         <div className="stat-card">
-          <span>Available features</span>
+          <span>Implemented features</span>
           <strong>{catalog.length}</strong>
           <small>Implemented product capabilities</small>
         </div>
         <div className="stat-card">
-          <span>Explicitly enabled</span>
+          <span>{dirty ? "Explicitly enabled in draft" : "Explicitly enabled"}</span>
           <strong>{enabledCount}</strong>
-          <small>Assigned through operator policy</small>
+          <small>{dirty ? "Unsaved plan assignments" : "Assigned through operator policy"}</small>
         </div>
         <div className="stat-card">
-          <span>Using deployment defaults</span>
+          <span>{dirty ? "Deployment defaults in draft" : "Using deployment defaults"}</span>
           <strong>{inheritedCount}</strong>
-          <small>Environment and workspace configuration</small>
+          <small>
+            {dirty ? "Unsaved availability choices" : "Environment and workspace configuration"}
+          </small>
         </div>
         <div className="stat-card">
           <span>Policy revision</span>
@@ -171,10 +173,17 @@ export default function FeaturesPanel({
           </div>
           <span className="badge">Revision {policy.revision}</span>
         </div>
+        {policy.revision === 0 && Object.keys(policy.features).length === 0 && (
+          <p className="notice">
+            No feature overrides have been saved. Features use deployment defaults, which may leave
+            them disabled.
+          </p>
+        )}
         <p className="note policy-explanation">
-          Inherit uses deployment defaults. An explicit enabled or disabled setting overrides that
-          feature’s deployment flag and workspace allowlist. Dependencies and required provider
-          configuration still apply.
+          Inherit uses deployment flags and workspace allowlists; it does not mean a feature is
+          available. Choose Enabled to assign plans. An explicit enabled or disabled setting
+          overrides that feature’s deployment flag and workspace allowlist. Dependencies and
+          required provider configuration still apply.
         </p>
         <p className="note policy-explanation">
           Community mode uses Team assignments. Event-credit rooms use Pro; retained funded rooms
@@ -205,8 +214,8 @@ export default function FeaturesPanel({
         </div>
         {tab === "plans" && (
           <p className="note">
-            Choose the plans that include each explicitly managed feature. Inherited rows show their
-            default plans; change availability to manage their assignments.
+            Choose the plans that include each explicitly managed feature. Inherited rows are
+            deployment controlled and have no plan assignments in this policy.
           </p>
         )}
         <p className="table-scroll-hint" id="feature-table-scroll-hint">
@@ -266,7 +275,16 @@ export default function FeaturesPanel({
                       <small className="field-hint">Deployment defaults</small>
                     )}
                   </td>
-                  {tab === "features" ? (
+                  {!draft[feature.key] ? (
+                    <td colSpan={tab === "plans" ? plans.length : 1}>
+                      <span>Deployment controlled</span>
+                      <small className="field-hint">
+                        {writable
+                          ? "Choose Enabled to assign plans."
+                          : "Plans follow deployment settings."}
+                      </small>
+                    </td>
+                  ) : tab === "features" ? (
                     <td>
                       <div className="plan-checks">
                         {plans.map((plan) => planControl(feature, plan))}

@@ -10,10 +10,18 @@ import {
 } from "./console-views";
 import FeaturesPanel, { type FeaturePolicyData } from "./features-panel";
 import OverviewPanel, { ServiceControls } from "./overview-panel";
+import PasswordSignInForm from "./password-sign-in-form";
+import { commandReviewDetails } from "./command-review";
 
 type View = ConsoleView;
 type Row = Record<string, unknown>;
-type Identity = { id: string; name: string; role: string; capabilities: string[] };
+type Identity = {
+  id: string;
+  name: string;
+  role: string;
+  capabilities: string[];
+  username?: string;
+};
 const views = consoleViews;
 const returnViewKey = "pollingpops-operator-return-view";
 const knownView = (value: string | null): View | undefined => views.find((item) => item === value);
@@ -149,9 +157,14 @@ export default function ControlRoom({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Row | null>(null);
+  const [pendingReason, setPendingReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState("");
+  const reviewApply = useRef<HTMLButtonElement>(null);
+  const wasVerifying = useRef(false);
   const [contacts, setContacts] = useState<Row[]>([]);
   const [policyConflict, setPolicyConflict] = useState(false);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
@@ -165,6 +178,8 @@ export default function ControlRoom({
     setOrganizations([]);
     setContacts([]);
     setPending(null);
+    setNeedsVerification(false);
+    setVerificationMessage("");
     setPolicyConflict(false);
     setLoading(false);
     exactCommand.current = null;
@@ -259,6 +274,17 @@ export default function ControlRoom({
     window.addEventListener("popstate", handleHistory);
     return () => window.removeEventListener("popstate", handleHistory);
   }, [identity, refresh]);
+  useEffect(() => {
+    if (wasVerifying.current && !needsVerification) reviewApply.current?.focus();
+    wasVerifying.current = needsVerification;
+  }, [needsVerification]);
+  useEffect(() => {
+    if (!pending) {
+      setPendingReason("");
+      setNeedsVerification(false);
+      setVerificationMessage("");
+    }
+  }, [pending]);
   async function command(payload: Row, reason: string) {
     setBusy(true);
     setMessage("");
@@ -274,6 +300,17 @@ export default function ControlRoom({
       });
       const body = record(await response.json());
       if (!response.ok) {
+        if (
+          response.status === 403 &&
+          record(body.error).code === "REAUTHENTICATION_REQUIRED" &&
+          authMode === "password"
+        ) {
+          setPending(payload);
+          setPendingReason(reason);
+          setVerificationMessage("");
+          setNeedsVerification(true);
+          return;
+        }
         if (response.status === 401 || response.status === 403) clearAccess();
         if (payload.action === "features.update" && response.status === 409) {
           setPolicyConflict(true);
@@ -314,12 +351,13 @@ export default function ControlRoom({
       setSigningOut(false);
     }
   }
-  async function signIn(event: FormEvent<HTMLFormElement>) {
+  async function signIn(event: FormEvent<HTMLFormElement>, verifying = false) {
     event.preventDefault();
     const form = event.currentTarget;
     const fields = new FormData(form);
     setSigningIn(true);
-    setMessage("");
+    const showError = verifying ? setVerificationMessage : setMessage;
+    showError("");
     try {
       const response = await fetch("/auth/password", {
         method: "POST",
@@ -332,19 +370,46 @@ export default function ControlRoom({
         }),
       });
       if (!response.ok) {
-        setMessage(
+        showError(
           response.status === 429
-            ? "Too many sign-in attempts. Wait before trying again."
+            ? "Too many sign-in attempts. Wait up to 15 minutes, then use a fresh authenticator code."
             : response.status >= 500
               ? "Operator sign-in is temporarily unavailable. Try again shortly."
-              : "Check your username, password, and authenticator code and try again.",
+              : response.status === 403
+                ? "Open the console at its configured address and try signing in again."
+                : "Check your username, password, and authenticator code and try again.",
         );
         return;
       }
       form.reset();
-      window.location.reload();
+      if (!verifying) {
+        window.location.reload();
+        return;
+      }
+      const refreshed = await fetch("/api/me", { cache: "no-store" });
+      if (!refreshed.ok) {
+        const failure =
+          "Unable to confirm verification. Try again with a fresh authenticator code.";
+        if (refreshed.status === 401 || refreshed.status === 403) {
+          clearAccess();
+          setMessage(failure);
+        } else showError(failure);
+        return;
+      }
+      const current = (await refreshed.json()) as { operator: Identity; csrfToken: string };
+      if (current.operator.id !== identity?.id) {
+        clearAccess();
+        setMessage(
+          "The administrator account changed. Reload the console to review changes again.",
+        );
+        return;
+      }
+      setIdentity(current.operator);
+      setCsrf(current.csrfToken);
+      setNeedsVerification(false);
+      setMessage("Identity verified. Review and apply your change.");
     } catch {
-      setMessage(
+      showError(
         "Operator sign-in is temporarily unavailable. Check your connection and try again.",
       );
     } finally {
@@ -468,6 +533,7 @@ export default function ControlRoom({
     setData({});
     setMessage("");
     setPending(null);
+    setNeedsVerification(false);
     setPolicyConflict(false);
     void refresh(selected);
   }
@@ -479,62 +545,11 @@ export default function ControlRoom({
         <h1>Sign in to the admin console</h1>
         <p>Manage organizations, features, billing, support, and operational controls.</p>
         {enabled && authMode === "password" ? (
-          <form
-            className="signin-form"
-            method="post"
-            action="/auth/password"
-            onSubmit={signIn}
-            aria-busy={signingIn}
-          >
-            <label htmlFor="operator-username">
-              Username
-              <input
-                id="operator-username"
-                name="username"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                maxLength={128}
-                required
-                disabled={signingIn}
-              />
-            </label>
-            <label htmlFor="operator-password">
-              Password
-              <input
-                id="operator-password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                maxLength={1024}
-                required
-                disabled={signingIn}
-              />
-            </label>
-            <label htmlFor="operator-code">
-              Authenticator code
-              <input
-                id="operator-code"
-                name="code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                minLength={6}
-                maxLength={6}
-                aria-describedby="operator-code-help"
-                required
-                disabled={signingIn}
-              />
-            </label>
-            <p className="note" id="operator-code-help">
-              Enter the six-digit code from your authenticator app.
-            </p>
-            <button className="primary" type="submit" disabled={signingIn || loading}>
-              {signingIn ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
+          <PasswordSignInForm
+            busy={signingIn}
+            disabled={loading}
+            onSubmit={(event) => void signIn(event)}
+          />
         ) : enabled && authMode === "oidc" ? (
           <>
             <a className="button" href="/auth/start" onClick={rememberLoginView}>
@@ -1514,8 +1529,14 @@ export default function ControlRoom({
         )}
       </main>
       {pending && (
-        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="command-title">
+        <div
+          className="modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={needsVerification ? "operator-verify-title" : "command-title"}
+        >
           <form
+            hidden={needsVerification}
             onSubmit={(event) => {
               event.preventDefault();
               const reason = String(new FormData(event.currentTarget).get("reason") ?? "");
@@ -1524,15 +1545,38 @@ export default function ControlRoom({
           >
             <h2 id="command-title">Review {text(pending.action)}</h2>
             <p>This operational change will be recorded with your operator identity.</p>
-            <pre>{JSON.stringify(pending, null, 2)}</pre>
-            {reasonField}
+            <pre>{JSON.stringify(commandReviewDetails(pending), null, 2)}</pre>
+            <label>
+              Reason
+              <input
+                name="reason"
+                minLength={10}
+                maxLength={500}
+                required
+                placeholder="Record why this action is needed"
+                value={pendingReason}
+                onChange={(event) => setPendingReason(event.target.value)}
+              />
+            </label>
             <div className="actions">
               <button type="button" onClick={() => setPending(null)}>
                 Cancel
               </button>
-              <button disabled={busy}>Apply command</button>
+              <button ref={reviewApply} disabled={busy}>
+                Apply command
+              </button>
             </div>
           </form>
+          {needsVerification && (
+            <PasswordSignInForm
+              busy={signingIn}
+              verifying
+              username={identity.username}
+              error={verificationMessage}
+              onSubmit={(event) => void signIn(event, true)}
+              onBack={() => setNeedsVerification(false)}
+            />
+          )}
         </div>
       )}
     </div>

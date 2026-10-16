@@ -131,6 +131,13 @@ a new password and authenticator sign-in for recent authentication; OIDC uses br
 one-use state, nonce and PKCE. Mutation handlers require exact same-origin requests and a
 session-bound CSRF token.
 
+In password mode, recent-authentication checks open verification inside the command review. The
+pending change and reason stay in place. After verification, review and apply the command explicitly;
+verification never submits it automatically. Use a fresh authenticator code because successful codes
+cannot be reused. Successful sign-in clears that username's attempt budget; failed attempts can
+temporarily lock sign-in for up to 15 minutes and return HTTP 429. Offline credential reset also
+clears that username's budget. The global login limit remains in effect.
+
 ## Operator areas
 
 **Overview** opens the service activity dashboard, **Features** manages product availability and

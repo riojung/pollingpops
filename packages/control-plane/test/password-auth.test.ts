@@ -62,6 +62,29 @@ async function provisionLegacyFounder(platform: PlatformRepository) {
   });
 }
 
+function withFailingAudit(platform: PlatformRepository): PlatformRepository {
+  return new Proxy(platform, {
+    get(target, property) {
+      if (property === "withOperatorTransaction")
+        return (work: (repository: PlatformRepository) => Promise<unknown>) =>
+          target.withOperatorTransaction(async (repository) =>
+            work(
+              new Proxy(repository, {
+                get(scoped, key) {
+                  if (key === "appendAuditEvent")
+                    return async () => {
+                      throw new Error("audit unavailable");
+                    };
+                  return Reflect.get(scoped, key);
+                },
+              }),
+            ),
+          );
+      return Reflect.get(target, property);
+    },
+  });
+}
+
 describe("standalone administrator password and authenticator authentication", () => {
   it("matches RFC 6238 SHA-1 vectors with six-digit truncation", () => {
     const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
@@ -212,10 +235,99 @@ describe("standalone administrator password and authenticator authentication", (
         },
         now,
       ),
-    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    ).rejects.toMatchObject({ status: 429, code: "LOGIN_RATE_LIMITED" });
     await expect(login({}, new Date(now.getTime() + 15 * 60_000 + 1))).resolves.toHaveProperty(
       "token",
     );
+  });
+  it("returns the same helpful rate-limit refusal for existing and nonexistent usernames", async () => {
+    const { login } = await fixture();
+    const errors: unknown[] = [];
+    for (const username of ["admin.test", "unknown.admin"]) {
+      for (let index = 0; index < 5; index++)
+        await expect(login({ username, password: "incorrect" })).rejects.toMatchObject({
+          status: 401,
+          code: "INVALID_CREDENTIALS",
+        });
+      errors.push(
+        await login({ username }).catch((error: OperatorError) => ({
+          status: error.status,
+          code: error.code,
+          message: error.message,
+        })),
+      );
+    }
+    expect(errors).toEqual([
+      {
+        status: 429,
+        code: "LOGIN_RATE_LIMITED",
+        message:
+          "Too many administrator sign-in attempts. Wait up to 15 minutes before trying again.",
+      },
+      errors[0],
+    ]);
+  });
+  it("allows more than five successful reauthentications inside one username throttle window", async () => {
+    const { login, auth, platform, now } = await fixture();
+    let previousToken: string | undefined;
+    for (let index = 0; index < 7; index++) {
+      const at = new Date(now.getTime() + index * 30_000);
+      const signedIn = await login({ previousToken }, at);
+      await expect(auth.authenticate(signedIn.token, at)).resolves.toHaveProperty("operator");
+      if (previousToken)
+        await expect(auth.authenticate(previousToken, at)).rejects.toMatchObject({
+          code: "UNAUTHORIZED",
+        });
+      previousToken = signedIn.token;
+    }
+    expect(
+      (await platform.listAuditEvents()).filter((event) => event.action === "operator.login"),
+    ).toHaveLength(7);
+  });
+  it("clears prior failed factors after success and still limits subsequent authenticator replays", async () => {
+    const { login } = await fixture();
+    for (const override of [
+      { password: "incorrect" },
+      { code: "00000x" },
+      { password: "incorrect" },
+      { code: "00000x" },
+    ])
+      await expect(login(override)).rejects.toMatchObject({
+        status: 401,
+        code: "INVALID_CREDENTIALS",
+      });
+    await expect(login()).resolves.toHaveProperty("token");
+    for (let index = 0; index < 5; index++)
+      await expect(login()).rejects.toMatchObject({ status: 401, code: "INVALID_CREDENTIALS" });
+    await expect(login()).rejects.toMatchObject({ status: 429, code: "LOGIN_RATE_LIMITED" });
+  });
+  it("preserves the global attempt budget after successful sign-in and offline credential reset", async () => {
+    const { platform, config, login, now } = await fixture();
+    const globalKey = tokenHash("operator-login-global");
+    for (let index = 0; index < 99; index++)
+      expect(
+        await platform.recordOperatorPasswordAttempt(globalKey, now, {
+          maxAttempts: 100,
+          windowMs: 60_000,
+        }),
+      ).toBe(true);
+    await expect(login()).resolves.toHaveProperty("token");
+    const next = new Date(now.getTime() + 30_000);
+    await expect(login({}, next)).rejects.toMatchObject({
+      status: 429,
+      code: "LOGIN_RATE_LIMITED",
+    });
+    await provisionPasswordOperator(platform, config, {
+      username: "ADMIN.test",
+      password,
+      name: "Reset administrator",
+      role: "founder",
+      reset: true,
+    });
+    await expect(login({}, next)).rejects.toMatchObject({
+      status: 429,
+      code: "LOGIN_RATE_LIMITED",
+    });
   });
   it("atomically replaces an old session after successful factors and preserves it after bad factors", async () => {
     const { login, auth, now } = await fixture();
@@ -260,6 +372,36 @@ describe("standalone administrator password and authenticator authentication", (
         requestId: "disabled",
       }),
     ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+  });
+  it("recovers a locked username immediately after an atomic offline credential reset", async () => {
+    const { login, auth, platform, config, now } = await fixture();
+    const signedIn = await login();
+    for (let index = 0; index < 5; index++)
+      await expect(login({ password: "incorrect" })).rejects.toMatchObject({
+        code: "INVALID_CREDENTIALS",
+      });
+    const before = await platform.getOperatorPasswordCredential("admin.test");
+    const input = {
+      username: " ADMIN.test ",
+      password: `${password}-reset`,
+      name: "Reset administrator",
+      role: "founder" as const,
+      reset: true,
+    };
+    await expect(
+      provisionPasswordOperator(withFailingAudit(platform), config, input, now),
+    ).rejects.toThrow("audit unavailable");
+    expect(await platform.getOperatorPasswordCredential("admin.test")).toEqual(before);
+    await expect(auth.authenticate(signedIn.token, now)).resolves.toHaveProperty("operator");
+    await expect(login()).rejects.toMatchObject({ status: 429, code: "LOGIN_RATE_LIMITED" });
+
+    const reset = await provisionPasswordOperator(platform, config, input, now);
+    await expect(auth.authenticate(signedIn.token, now)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      login({ password: input.password, code: operatorTotpCode(reset.totpSecret, now) }),
+    ).resolves.toHaveProperty("token");
   });
   it("rejects swapped seed ciphertext or a wrong encryption key", async () => {
     const { config, platform, provisioned, now, login } = await fixture();
@@ -322,30 +464,14 @@ describe("standalone administrator password and authenticator authentication", (
       (await platform.getOperatorPasswordCredential("admin.test"))?.lastUsedCounter,
     ).toBeNull();
   });
-  it("rolls back session and replay consumption when audit persistence fails", async () => {
+  it("rolls back the username budget clear, session and replay consumption when audit persistence fails", async () => {
     const { platform, config, provisioned, now, login } = await fixture();
-    const failing = new Proxy(platform, {
-      get(target, property) {
-        if (property === "withOperatorTransaction")
-          return (work: (repository: PlatformRepository) => Promise<unknown>) =>
-            target.withOperatorTransaction(async (repository) =>
-              work(
-                new Proxy(repository, {
-                  get(scoped, key) {
-                    if (key === "appendAuditEvent")
-                      return async () => {
-                        throw new Error("audit unavailable");
-                      };
-                    return Reflect.get(scoped, key);
-                  },
-                }),
-              ),
-            );
-        return Reflect.get(target, property);
-      },
-    });
+    for (let index = 0; index < 4; index++)
+      await expect(login({ password: "incorrect" })).rejects.toMatchObject({
+        code: "INVALID_CREDENTIALS",
+      });
     await expect(
-      new OperatorAuthService(failing, config, provider()).passwordLogin(
+      new OperatorAuthService(withFailingAudit(platform), config, provider()).passwordLogin(
         {
           username: "admin.test",
           password,
@@ -358,7 +484,10 @@ describe("standalone administrator password and authenticator authentication", (
     expect(
       (await platform.getOperatorPasswordCredential("admin.test"))?.lastUsedCounter,
     ).toBeNull();
-    await expect(login()).resolves.toHaveProperty("token");
+    await expect(login()).rejects.toMatchObject({ status: 429, code: "LOGIN_RATE_LIMITED" });
+    await expect(login({}, new Date(now.getTime() + 15 * 60_000 + 1))).resolves.toHaveProperty(
+      "token",
+    );
   });
   it("isolates password, legacy local and OIDC sessions on a shared database", async () => {
     const { platform, auth, login, now } = await fixture();

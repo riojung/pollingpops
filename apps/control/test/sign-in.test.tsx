@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import ControlRoom from "../app/room";
+import PasswordSignInForm from "../app/password-sign-in-form";
 
 describe("control sign-in presentation", () => {
   it("offers dedicated operator credentials and an authenticator code at the console root", () => {
@@ -29,6 +30,25 @@ describe("control sign-in presentation", () => {
     expect(markup).toContain("verified MFA");
     expect(markup).not.toContain('name="password"');
     expect(markup).not.toContain("Sign in to Polling Pops");
+  });
+
+  it("keeps verification tied to the current administrator and explains code replay", () => {
+    const markup = renderToStaticMarkup(
+      <PasswordSignInForm
+        busy={false}
+        verifying
+        username="synthetic-operator"
+        onSubmit={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+    expect(markup).toContain("Verify your identity");
+    expect(markup).toContain('readOnly=""');
+    expect(markup).toContain('value="synthetic-operator"');
+    expect(markup).toContain("Your change and reason are kept");
+    expect(markup).toContain("A code used to sign in cannot be");
+    expect(markup).toContain("Verify identity");
+    expect(markup).toContain("Back to review");
   });
 
   it("explains that legacy local mode needs standalone authentication without a customer sign-in link", () => {

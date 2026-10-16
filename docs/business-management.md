@@ -108,39 +108,41 @@ Support, Integrations and Audit areas retain their permission checks.
 
 ## Processes and operator access
 
-Public product pages and ordinary customer accounts do not advertise business administration.
-After authenticated admin sign-in, the product header and workspace menus
-show the permitted business areas: tenant management, billing, credits and promotions, operations,
-support, integrations and audit. Founder operators are presented as **Super admin**; other operators
-see their permitted administrative areas. Selecting an area opens the restricted console at that
-area, including after an authentication refresh.
+Platform administrators open the standalone console directly. In the normal local bundles, run
+`pnpm local:start`, then provision an account in an interactive terminal:
 
-Normal local development bundles include the console by default. Run `pnpm local:start`, open
-`http://localhost:8080`, and use the normal sign-in form with `admin@pollingpops.local`. Open the
-captured magic-link email in Mailpit. Only this configured, verified `LOCAL_ADMIN_EMAIL` binds to
-the built-in Local admin, which uses founder permissions and the existing durable sessions,
-command checks, and audit trail. Its explicitly enabled loopback development profile requires no
-SSO or MFA. Product logout and signing in with an ordinary account revoke local operator access.
-Customer Community behavior and disabled billing remain the local defaults.
+```bash
+pnpm admin:setup --username admin --name "Platform admin" --role founder
+```
 
-Customer organization navigation is also available from product headers, desktop/mobile workspace
-menus and account navigation. Members see their organization; owners/admins see workspace, membership
-and settings controls, while billing members see billing and event credits. Links select the
-organization that grants the required permission. A customer organization role never grants operator
-access. Direct visits to `/organization` ask signed-out users to sign in, and show an unavailable
-state when hosted management is disabled, including Community deployments.
+Enter and confirm a hidden password, add the displayed TOTP secret or enrollment URI manually to
+an authenticator app or compatible vault, then open <http://localhost:3002>. Sign in with the
+username, password and current six-digit code. There is no default password, automatic account,
+customer account prerequisite or email-based administrator provisioning. Use `--docker-context NAME`
+and `--profile core|media|observability` when the running local bundle requires them.
 
-Set `CONTROL_PRODUCT_ORIGIN` on the operator app to the exact product origin to allow credentialed,
-read-only navigation discovery. The hosted business overlay defaults to its HTTPS product domain.
-The normal local profile configures matching loopback HTTP product and console hostnames. The
-API and console validate explicit local development before enabling the email binding; hosted
-deployments retain managed operator authentication. Discovery returns only the current
-operator's name, role and permitted links; credentials, CSRF tokens and customer records remain
-private to the console. The product reads this endpoint independently with a bounded timeout, so a
-console outage does not block customer navigation or gameplay. Browser detection uses the existing
-SameSite operator cookie and works when product and
-console are on the same site (for example separate subdomains). For independent sites, staff use
-the private console directly; public product pages do not offer a staff sign-in link.
+Local startup reuses the ignored private `data/admin/credential.key` (file mode `0600`, directory
+mode `0700`); an explicit `OPERATOR_CREDENTIAL_KEY` in the environment or `.env` takes precedence.
+Only control receives the key. Back it up securely with the database because it encrypts the
+authenticator secrets. `pnpm admin:setup` with `--reset` explicitly replaces password and
+TOTP enrollment, revokes existing administrator sessions and preserves a disabled account's state.
+Migration 073 adds isolated credential and login-throttle records. See the
+[console setup guide](../apps/control/README.md#standalone-password-authentication) for native and
+hosted provisioning details.
+
+Customer headers, desktop/mobile workspace menus and account navigation retain organization
+controls. Members see their organization; owners/admins see workspace, membership and settings
+controls, while billing members see billing and event credits. Links select the organization that
+grants the required permission. Direct visits to `/organization` ask signed-out users to sign in
+and show an unavailable state when hosted management is disabled, including Community deployments.
+
+Customer email-link sign-in always issues customer sessions using the configured product URLs.
+It never creates, reuses, clears or revokes administrator credentials. Customer sign-out revokes
+only the supplied customer session. Customer navigation neither discovers the console nor probes
+its session; the compatible `operatorConsoleOrigin` response field is always `null`. Administrator
+sessions do not authorize customer requests. Product pages and workspace menus have no business
+administration entry. Staff use the console's own sidebar, and customer navigation/gameplay remains
+independent of console availability.
 
 - `apps/web` and the Fastify/realtime server continue serving customers.
 - `apps/control` serves the separate operator UI and same-origin API.
@@ -150,9 +152,11 @@ the private console directly; public product pages do not offer a staff sign-in 
   jobs process is running; the normal local service bundles include that process. The default
   `in_process` supports standalone product startup.
 
-Hosted control uses its own database URL and managed OIDC application. Configure exact MFA assurance
-claims, enforced provider policy, and explicitly provisioned issuer/subject identities.
-Bootstrap creates missing accounts and does not reactivate disabled operators. Customer cookies,
+Control uses its own database URL. Password mode requires a persistent credential encryption key,
+explicit offline provisioning and authenticator codes. Hosted control can alternatively use a
+dedicated managed OIDC application; the hosted overlay defaults to that mode. Configure exact MFA
+assurance claims, enforced provider policy and explicitly provisioned issuer/subject identities.
+OIDC bootstrap creates missing accounts and does not reactivate disabled operators. Customer cookies,
 customer institution OIDC roles and the legacy administrator bearer token do not authorize the
 console. Operator sessions are revocable, expire absolutely, and have an idle timeout. Sensitive
 commands require recent authentication. All commands include a reason and idempotency key;
@@ -187,8 +191,9 @@ idempotently, including delayed payments. Browser success redirects do not grant
 ## Rollout and launch rehearsal
 
 1. Deploy migration 065 and compatible readers with commercial writers disabled.
-2. Provision the dedicated operator identity application, reviewed network boundary and database
-   principal. Verify founder access, MFA, revocation and role restrictions.
+2. Provision standalone administrator credentials or the dedicated OIDC application, plus the
+   reviewed network boundary and database principal. Verify founder access, MFA, revocation and role
+   restrictions.
 3. Configure reviewed offers and Stripe test-mode prices, then enable `BUSINESS_PLATFORM_ENABLED`.
 4. Exercise workspace licenses, renewal failure/grace, cancellation, pack payment, discount,
    redemption, concurrent admission, empty expiry and compensating credits before enabling
@@ -200,7 +205,8 @@ idempotently, including delayed payments. Browser success redirects do not grant
 
 For local development, the normal service bundles merge `compose.business.yaml` and
 `compose.local-control.yaml` after `compose.yaml`. The operator container binds only to loopback;
-the local override explicitly enables development-only HTTP admin sign-in and product discovery.
+the local override selects standalone password/TOTP authentication with explicit development-only
+loopback HTTP. Product control origins stay blank and customer authentication stays independent.
 Using `compose.business.yaml` alone retains its optional, production-policy console configuration.
 For hosted single-VM operation, merge `compose.single-vm.business.yaml` after the existing base;
 it requires an immutable control image, dedicated hostname and reviewed operator-network CIDRs.

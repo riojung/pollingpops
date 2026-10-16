@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { test, expect, type BrowserContext } from "@playwright/test";
 import { MemoryRepository, createPlatformRepository } from "../../packages/db/src/index.js";
+import { allowedViews, viewDetails } from "../../apps/control/app/console-views.js";
 import {
   loadControlConfig,
   ManagedOperatorOidcProvider,
@@ -208,6 +209,7 @@ async function harness(context: BrowserContext) {
   const service = new OperatorService(platform);
   let loseGrantReceipt = true;
   const commandKeys: string[] = [];
+  const navigationOrigins: (string | undefined)[] = [];
   const cookie = async (name: string) =>
     (await context.cookies(origin)).find((entry) => entry.name === name)?.value;
   const setCookie = async (name: string, value: string) =>
@@ -245,17 +247,19 @@ async function harness(context: BrowserContext) {
   // capability checks, command transactions, and audit/ledger effects are real services.
   await context.route(`${origin}/api/**`, async (route) => {
     const navigationRequest = new URL(route.request().url()).pathname === "/api/navigation";
-    const corsHeaders: Record<string, string> =
-      navigationRequest && route.request().headers().origin === productOrigin
-        ? {
-            "access-control-allow-origin": productOrigin,
-            "access-control-allow-credentials": "true",
-            vary: "Origin",
-          }
-        : {};
     try {
       const request = route.request();
       const url = new URL(request.url());
+      if (navigationRequest) {
+        const requestOrigin = request.headers().origin;
+        const site = request.headers()["sec-fetch-site"];
+        navigationOrigins.push(requestOrigin);
+        if (
+          (requestOrigin && requestOrigin !== origin) ||
+          (site && !["same-origin", "none"].includes(site))
+        )
+          throw new OperatorError(403, "FORBIDDEN_ORIGIN", "Navigation origin denied");
+      }
       const identity = await auth.authenticate(await cookie(names.session));
       if (request.method() !== "GET")
         verifyMutationRequest(
@@ -276,22 +280,13 @@ async function harness(context: BrowserContext) {
           csrfToken: await cookie(names.csrf),
         };
       else if (navigationRequest) {
-        if (request.headers().origin && request.headers().origin !== productOrigin)
-          throw new OperatorError(403, "FORBIDDEN_ORIGIN", "Navigation origin denied");
-        const labels = {
-          organizations: "Tenant management",
-          billing: "Billing",
-          credits: "Credits and promotions",
-          operations: "Operations",
-          support: "Support",
-          integrations: "Integrations",
-          audit: "Audit",
-        };
         result = {
           operator: { name: identity.operator.name, role: identity.operator.role },
-          links: Object.entries(labels)
-            .filter(([view]) => operatorCapabilities(identity.operator).includes(`${view}.read`))
-            .map(([id, label]) => ({ id, label, href: `${origin}/?view=${id}` })),
+          links: allowedViews(operatorCapabilities(identity.operator)).map((id) => ({
+            id,
+            label: viewDetails[id].title,
+            href: `${origin}/?view=${id}`,
+          })),
         };
       } else if (url.pathname.startsWith("/api/views/"))
         result = await service.view(
@@ -317,11 +312,10 @@ async function harness(context: BrowserContext) {
       await route.fulfill({
         status: 200,
         json: result,
-        headers: { "cache-control": "no-store", ...corsHeaders },
+        headers: { "cache-control": "no-store" },
       });
     } catch (error) {
       await route.fulfill({
-        headers: corsHeaders,
         status:
           error instanceof OperatorError
             ? error.status
@@ -336,7 +330,15 @@ async function harness(context: BrowserContext) {
       });
     }
   });
-  return { platform, organization, creator, commandKeys, cookie, retryableAuthoringId };
+  return {
+    platform,
+    organization,
+    creator,
+    commandKeys,
+    cookie,
+    retryableAuthoringId,
+    navigationOrigins,
+  };
 }
 
 test("enabled founder signs in through OIDC, retries one audited credit grant, restricts admission, and session revocation takes effect", async ({
@@ -464,7 +466,7 @@ test("stale CSRF after another tab signs in preserves rejected logout access unt
   expect(await fixture.platform.getOperatorSession(tokenHash(currentToken!))).toBeNull();
 });
 
-test("managed operators sign in privately and see permitted product business menus", async ({
+test("managed operators sign in directly while product pages remain independent of operator sessions", async ({
   page,
   context,
 }, testInfo) => {
@@ -477,32 +479,50 @@ test("managed operators sign in privately and see permitted product business men
   await expect(
     page.getByRole("heading", { name: "Business administration", exact: true }),
   ).toHaveCount(0);
+  await page.waitForLoadState("networkidle");
+  expect(fixture.navigationOrigins).toEqual([]);
+
   await page.goto(origin);
   await page.getByRole("link", { name: "Sign in with operator identity" }).click();
   await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  const navigation = await page.evaluate(async () => {
+    const response = await fetch("/api/navigation");
+    return { status: response.status, body: await response.json() };
+  });
+  expect(navigation.status).toBe(200);
+  expect(navigation.body.links).toContainEqual({
+    id: "billing",
+    label: "Billing",
+    href: `${origin}/?view=billing`,
+  });
+
   await page.goto(productOrigin);
-  await page.locator("summary").filter({ hasText: "Business · Super admin" }).click();
-  for (const name of [
-    "Tenant management",
-    "Billing",
-    "Credits and promotions",
-    "Operations",
-    "Support",
-    "Integrations",
-    "Audit",
-  ])
-    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("product-super-admin-navigation.png") });
-  await page.getByRole("link", { name: "Billing", exact: true }).click();
-  await expect(page).toHaveURL(`${origin}/?view=billing`);
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator("summary").filter({ hasText: "Business" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Tenant management", exact: true })).toHaveCount(0);
+  await expect(page.locator(`a[href^="${origin}"]`)).toHaveCount(0);
+  expect(fixture.navigationOrigins).toHaveLength(1);
+  await page.screenshot({
+    path: testInfo.outputPath("product-with-independent-operator-session.png"),
+  });
+
+  // The actual HTTP route rejects product-origin discovery before loading the operator DB.
+  const crossOrigin = await context.request.get(`${origin}/api/navigation`, {
+    headers: { origin: productOrigin },
+  });
+  expect(crossOrigin.status()).toBe(403);
+  expect(crossOrigin.headers()["access-control-allow-origin"]).toBeUndefined();
+  expect(crossOrigin.headers()["access-control-allow-credentials"]).toBeUndefined();
+  expect(await crossOrigin.json()).not.toHaveProperty("links");
+
+  await page.goto(`${origin}/?view=billing`);
   await expect(page.getByRole("heading", { name: "Billing", exact: true })).toBeVisible();
   const operator = await fixture.platform.getOperatorByIdentity(issuer, "founder");
   await fixture.platform.revokeOperatorSessions(operator!.id);
   await page.goto(productOrigin);
-  await expect(page.locator("summary").filter({ hasText: "Business · Super admin" })).toHaveCount(
-    0,
-  );
-  await expect(page.getByRole("link", { name: "Tenant management", exact: true })).toHaveCount(0);
+  await expect(page.locator("summary").filter({ hasText: "Business" })).toHaveCount(0);
+  await page.goto(origin);
+  await expect(page.getByRole("link", { name: "Sign in with operator identity" })).toBeVisible();
 });
 
 test("readonly operator sees permitted views and server rejects a forged credit command", async ({

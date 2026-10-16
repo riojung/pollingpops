@@ -61,7 +61,9 @@ export async function authenticatedRequest(request: NextRequest, mutation = fals
 export async function boundedBody(request: NextRequest, maximum = 32_000): Promise<unknown> {
   if (Number(request.headers.get("content-length")) > maximum)
     throw new OperatorError(413, "BODY_TOO_LARGE", "Operator command exceeds the allowed size");
-  if (!request.headers.get("content-type")?.startsWith("application/json"))
+  if (
+    request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json"
+  )
     throw new OperatorError(415, "JSON_REQUIRED", "Operator commands require JSON");
   const reader = request.body?.getReader();
   if (!reader) throw new OperatorError(422, "BODY_REQUIRED", "Operator command required");

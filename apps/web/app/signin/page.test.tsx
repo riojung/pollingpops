@@ -108,7 +108,7 @@ describe("public product sign-in", () => {
     expect(markup).not.toContain("https://control.example.com");
   });
 
-  it("shows only returned business controls to an authenticated operator", () => {
+  it("ignores legacy operator sessions on the customer sign-in page", () => {
     fixtures.navigation.operator = { name: "Founder", role: "founder" };
     fixtures.navigation.operatorLinks = [
       {
@@ -118,9 +118,11 @@ describe("public product sign-in", () => {
       },
     ];
     const markup = renderToStaticMarkup(<SignInPage />);
-    expect(markup).toContain("Business administration");
-    expect(markup).toContain("Business · Super admin");
-    expect(markup).toContain('href="https://control.example.com/?view=organizations"');
+    expect(markup).toContain('id="signin-title"');
+    expect(markup).not.toContain("Business administration");
+    expect(markup).not.toContain("Super admin");
+    expect(markup).not.toContain("Tenants");
+    expect(markup).not.toContain("https://control.example.com");
     expect(markup).not.toContain("Business admin sign in");
     expect(markup).not.toContain("Billing</a>");
   });

@@ -669,12 +669,21 @@ textarea {
   font-size: 0.8rem;
 }
 .signin {
-  max-width: 600px;
-  margin: 10vh auto;
+  width: min(520px, calc(100% - 2rem));
+  margin: 8vh auto;
   padding: 2rem;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px #242d2906;
+}
+.signin .eyebrow {
+  margin-top: 2.5rem;
+  margin-bottom: 0.5rem;
 }
 .signin h1 {
-  margin-top: 2.5rem;
+  margin-top: 0;
+  font-size: clamp(1.4rem, 4vw, 1.8rem);
 }
 .signin p {
   line-height: 1.7;
@@ -685,6 +694,35 @@ textarea {
   background: var(--ui-primary);
   color: white;
   margin-top: 1rem;
+}
+.signin-form {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.2rem;
+  margin-top: 1.8rem;
+}
+.signin-form label {
+  color: var(--ui-text);
+  font-size: 0.85rem;
+}
+.signin-form input {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.signin-form .note {
+  margin: -0.65rem 0 0;
+  font-size: 0.8rem;
+}
+.signin-form button {
+  width: 100%;
+  min-height: 44px;
+  font-size: 0.9rem;
+}
+.signin .signin-error {
+  border-left: 3px solid #a03939;
+  padding: 0.75rem;
+  color: #8c2c2c;
+  background: #fff5f4;
+  font-size: 0.85rem;
 }
 .modal {
   position: fixed;

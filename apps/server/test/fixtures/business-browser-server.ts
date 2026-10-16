@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createPlatformRepository, MemoryRepository } from "@openround/db";
 import {
-  LOCAL_OPERATOR_ISSUER,
-  LOCAL_OPERATOR_SUBJECT,
+  PASSWORD_OPERATOR_ISSUER,
+  provisionPasswordOperator,
   loadControlConfig,
   OperatorAuthService,
   OperatorError,
@@ -15,7 +15,7 @@ import {
   verifyMutationRequest,
 } from "@openround/control-plane";
 import { buildApp } from "../../src/app.js";
-import { ConfigSchema, isLocalProductAdminDevelopment } from "../../src/config.js";
+import { ConfigSchema } from "../../src/config.js";
 import { ConsoleMailer } from "../../src/mailer.js";
 import { attachRealtime } from "../../src/realtime.js";
 
@@ -31,18 +31,11 @@ const config = ConfigSchema.parse({
   ALLOW_IN_MEMORY: "true",
   COMMUNITY_MODE: "false",
   BUSINESS_PLATFORM_ENABLED: "true",
-  CONTROL_ENABLED: process.env.CONTROL_ENABLED,
-  CONTROL_AUTH_MODE: process.env.CONTROL_AUTH_MODE,
-  CONTROL_LOCAL_DEVELOPMENT: process.env.CONTROL_LOCAL_DEVELOPMENT,
-  CONTROL_PUBLIC_ORIGIN: process.env.CONTROL_PUBLIC_ORIGIN,
-  CONTROL_PRODUCT_ORIGIN: process.env.CONTROL_PRODUCT_ORIGIN,
-  OPENROUND_DEPLOYMENT_ENVIRONMENT: process.env.OPENROUND_DEPLOYMENT_ENVIRONMENT,
-  LOCAL_ADMIN_EMAIL: process.env.LOCAL_ADMIN_EMAIL,
   BUSINESS_EVENT_CREDITS_ENABLED: "true",
   BILLING_MODE: "disabled",
   LOG_LEVEL: "silent",
 });
-if (isLocalProductAdminDevelopment(config)) {
+if (process.env.CONTROL_AUTH_MODE === "password") {
   // The test UI receives real development links from the HTTP response. Keep
   // synthetic email addresses and single-use credentials out of fixture logs.
   ConsoleMailer.prototype.sendMagicLink = async () => {};
@@ -92,20 +85,20 @@ built.app.post("/__test/business/seed", async (request) => {
   }
   return { seeded: true, receipt: randomUUID() };
 });
-if (isLocalProductAdminDevelopment(config)) {
+if (process.env.CONTROL_AUTH_MODE === "password") {
   const control = loadControlConfig({
     NODE_ENV: "test",
     CONTROL_ENABLED: "true",
-    CONTROL_AUTH_MODE: "local",
+    CONTROL_AUTH_MODE: "password",
     CONTROL_LOCAL_DEVELOPMENT: "true",
     OPENROUND_DEPLOYMENT_ENVIRONMENT: "development",
-    CONTROL_PUBLIC_ORIGIN: config.CONTROL_PUBLIC_ORIGIN,
-    CONTROL_PRODUCT_ORIGIN: config.CONTROL_PRODUCT_ORIGIN,
+    CONTROL_PUBLIC_ORIGIN: process.env.CONTROL_PUBLIC_ORIGIN,
+    OPERATOR_CREDENTIAL_KEY: process.env.OPERATOR_CREDENTIAL_KEY,
     CONTROL_DATABASE_URL: "unused",
   });
   const names = operatorCookieNames(control);
-  // Both services read the product server's actual repository. This adapter
-  // never issues a session; only the real product magic-link route can do that.
+  // The browser adapter uses real standalone password/TOTP services and shared memory storage.
+  // It is isolated to this test executable and loopback requests.
   const auth = new OperatorAuthService(platform, control, {
     async authorizationUrl() {
       throw new Error("Local browser fixture cannot contact an identity provider");
@@ -115,6 +108,7 @@ if (isLocalProductAdminDevelopment(config)) {
     },
   });
   const operators = new OperatorService(platform);
+  let username: string | null = null;
   const areas = [
     ["organizations", "Tenant management"],
     ["features", "Features and plans"],
@@ -132,11 +126,23 @@ if (isLocalProductAdminDevelopment(config)) {
     )
       return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
   });
+  built.app.post("/__test/local-admin/provision", async () => {
+    username = `admin-${randomUUID().slice(0, 12)}`;
+    const password = `${randomUUID()}!Aa9`;
+    const result = await provisionPasswordOperator(platform, control, {
+      username,
+      password,
+      name: "Development administrator",
+      role: "founder",
+    });
+    return { username, password, totpSecret: result.totpSecret };
+  });
   built.app.post("/__test/local-admin/control", async (request, reply) => {
     try {
       const input = z
         .object({
           path: z.enum([
+            "/auth/password",
             "/api/me",
             "/api/navigation",
             "/api/commands",
@@ -148,17 +154,30 @@ if (isLocalProductAdminDevelopment(config)) {
           csrf: z.string().nullable(),
           organizationId: z.string().uuid().optional(),
           command: z.unknown().optional(),
+          credentials: z
+            .object({ username: z.string(), password: z.string(), code: z.string() })
+            .strict()
+            .optional(),
         })
         .strict()
         .parse(request.body);
-      const mutation = input.path === "/api/commands" || input.path === "/api/logout";
+      const login = input.path === "/auth/password";
+      const mutation = login || input.path === "/api/commands" || input.path === "/api/logout";
       if (input.method !== (mutation ? "POST" : "GET")) return reply.code(405).send({});
       const navigation = input.path === "/api/navigation";
-      if (navigation && input.origin) {
-        if (input.origin !== control.CONTROL_PRODUCT_ORIGIN)
-          throw new OperatorError(403, "FORBIDDEN_ORIGIN", "Navigation origin denied");
-        reply.header("access-control-allow-origin", input.origin);
-        reply.header("access-control-allow-credentials", "true");
+      if (input.origin && input.origin !== control.CONTROL_PUBLIC_ORIGIN)
+        throw new OperatorError(403, "FORBIDDEN_ORIGIN", "Same-origin console access required");
+      if (login) {
+        if (input.origin !== control.CONTROL_PUBLIC_ORIGIN || !input.credentials)
+          throw new OperatorError(403, "ORIGIN_REJECTED", "Same-origin sign-in required");
+        const session = await auth.passwordLogin({
+          ...input.credentials,
+          requestId: request.id,
+          previousToken: request.cookies[names.session],
+        });
+        reply.setCookie(names.session, session.token, operatorSessionCookieOptions(control));
+        reply.setCookie(names.csrf, session.csrfToken, operatorSessionCookieOptions(control));
+        return { signedIn: true };
       }
       reply.header("cache-control", "private, no-store");
       reply.header("vary", "Origin");
@@ -213,10 +232,9 @@ if (isLocalProductAdminDevelopment(config)) {
       })
       .strict()
       .parse(request.body);
-    const operator = await platform.getOperatorByIdentity(
-      LOCAL_OPERATOR_ISSUER,
-      LOCAL_OPERATOR_SUBJECT,
-    );
+    const operator = username
+      ? await platform.getOperatorByIdentity(PASSWORD_OPERATOR_ISSUER, username)
+      : null;
     const token = request.cookies[names.session];
     let authenticated = false;
     try {
@@ -240,18 +258,16 @@ if (isLocalProductAdminDevelopment(config)) {
         : null,
       auditActions: (await platform.listAuditEvents(undefined, 100)).map((event) => event.action),
       issuerConfigured: Boolean(control.OPERATOR_OIDC_ISSUER),
-      mfaConfigured: control.OPERATOR_OIDC_MFA_POLICY_ENFORCED,
+      mfaConfigured: true,
     };
   });
   built.app.post("/__test/local-admin/revoke", async (request) => {
     const context = await auth.authenticate(request.cookies[names.session]);
-    await platform.provisionOperator({
-      issuer: LOCAL_OPERATOR_ISSUER,
-      subject: "synthetic-backup-founder",
+    await provisionPasswordOperator(platform, control, {
+      username: `backup-${randomUUID().slice(0, 12)}`,
+      password: `${randomUUID()}!Aa9`,
       name: "Synthetic backup founder",
       role: "founder",
-      capabilities: [],
-      active: true,
     });
     await platform.provisionOperator({
       issuer: context.operator.issuer,

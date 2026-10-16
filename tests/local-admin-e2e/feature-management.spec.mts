@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { adminEmail, apiOrigin, controlOrigin, localAdminHarness, signIn } from "./fixtures.mjs";
+import {
+  adminEmail,
+  apiOrigin,
+  controlOrigin,
+  localAdminHarness,
+  signIn,
+  signInAdmin,
+} from "./fixtures.mjs";
 
 async function reviewAndApply(page: Page) {
   await page.getByRole("button", { name: "Review changes", exact: true }).click();
@@ -22,6 +29,7 @@ test("admin manages feature availability and plans without deployment changes", 
   await page.setViewportSize({ width: 1600, height: 1000 });
   const fixture = await localAdminHarness(context);
   await signIn(page, adminEmail);
+  await signInAdmin(page, await fixture.provision());
   const sourceId = randomUUID();
   const summaryProbe = async () =>
     (

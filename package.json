@@ -20,8 +20,10 @@
     }
   },
   "scripts": {
+    "admin:setup": "node scripts/ops/admin-setup.mjs",
+    "admin:build": "tsup --config tsup.admin.config.ts && node apps/control/admin-dist/admin-cli.mjs --help",
     "brand:assets": "node scripts/generate-brand-assets.mjs",
-    "build": "turbo run build",
+    "build": "turbo run build && pnpm admin:build",
     "alerts:rehearse": "node scripts/rehearse-alerts.mjs",
     "check:docker-context": "node scripts/check-docker-workspace-deps.mjs",
     "dev": "turbo run dev --parallel",

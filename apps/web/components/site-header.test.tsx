@@ -52,7 +52,7 @@ describe("management discovery in the product header", () => {
     expect(markup).not.toContain("Super admin");
   });
 
-  it("offers trusted global admin controls in both navigation layouts without customer claims", () => {
+  it("ignores legacy operator sessions in both customer navigation layouts", () => {
     fixtures.navigation.operatorConsoleOrigin = "https://control.example.com";
     fixtures.navigation.operator = { name: "Staff", role: "founder" };
     fixtures.navigation.operatorLinks = [
@@ -63,9 +63,11 @@ describe("management discovery in the product header", () => {
       },
     ];
     const markup = renderToStaticMarkup(<SiteHeader />);
-    expect(markup.match(/Business · Super admin/g)).toHaveLength(2);
-    expect(markup.match(/>Tenants<\/a>/g)).toHaveLength(2);
-    expect(markup).toContain("Sign in to create");
+    expect(markup).not.toContain("Business");
+    expect(markup).not.toContain("Super admin");
+    expect(markup).not.toContain("Tenants");
+    expect(markup).not.toContain("https://control.example.com");
+    expect(markup.match(/>Sign in<\/a>/g)).toHaveLength(2);
     expect(markup).not.toContain("Organization settings");
     expect(markup).not.toContain("Business admin sign in");
   });

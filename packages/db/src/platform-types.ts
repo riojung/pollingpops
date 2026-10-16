@@ -146,6 +146,7 @@ export interface PlatformBillingEvent {
   createdAt: Date;
   completedAt: Date | null;
 }
+export const PASSWORD_OPERATOR_ISSUER = "urn:pollingpops:password-totp";
 export type OperatorRole = "founder" | "operations" | "support" | "billing" | "readonly";
 export interface PlatformOperator {
   id: string;
@@ -157,6 +158,29 @@ export interface PlatformOperator {
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+/** Private authentication data. Never include in operator projections or audit payloads. */
+export interface PlatformOperatorPasswordCredential {
+  username: string;
+  operatorId: string;
+  revision: number;
+  passwordVerifier: {
+    algorithm: "scrypt";
+    salt: string;
+    hash: string;
+    cost: number;
+    blockSize: number;
+    parallelization: number;
+  };
+  totpCiphertext: string;
+  lastUsedCounter: number | null;
+  updatedAt: Date;
+}
+export interface PlatformOperatorLoginThrottle {
+  key: string;
+  attempts: number;
+  windowStartedAt: Date;
+  lockedUntil: Date | null;
 }
 export interface PlatformOperatorSession {
   id: string;
@@ -567,6 +591,24 @@ export interface PlatformRepository {
   provisionOperator(
     input: Omit<PlatformOperator, "id" | "createdAt" | "updatedAt"> & { id?: string },
   ): Promise<PlatformOperator>;
+  getOperatorPasswordCredential(
+    username: string,
+  ): Promise<PlatformOperatorPasswordCredential | null>;
+  saveOperatorPasswordCredential(
+    input: Omit<PlatformOperatorPasswordCredential, "revision">,
+    expectedRevision: number | null,
+  ): Promise<PlatformOperatorPasswordCredential>;
+  consumeOperatorTotp(
+    username: string,
+    revision: number,
+    counter: number,
+    now: Date,
+  ): Promise<boolean>;
+  recordOperatorPasswordAttempt(
+    key: string,
+    now: Date,
+    limit?: { maxAttempts: number; windowMs: number },
+  ): Promise<boolean>;
   getOperatorByIdentity(issuer: string, subject: string): Promise<PlatformOperator | null>;
   getOperator(id: string): Promise<PlatformOperator | null>;
   listOperators(): Promise<PlatformOperator[]>;

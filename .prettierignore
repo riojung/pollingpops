@@ -2,5 +2,6 @@
 .playwright-mcp
 coverage
 dist
+admin-dist
 node_modules
 pnpm-lock.yaml

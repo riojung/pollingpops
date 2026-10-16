@@ -238,3 +238,69 @@ describe("explicit local operator development profile", () => {
     ).toBe(false);
   });
 });
+
+describe("standalone password and authenticator operator profile", () => {
+  const password = {
+    CONTROL_ENABLED: "true",
+    CONTROL_AUTH_MODE: "password",
+    CONTROL_PUBLIC_ORIGIN: "https://admin.example.test",
+    CONTROL_DATABASE_URL: "postgresql://runtime@db/control",
+    OPERATOR_CREDENTIAL_KEY: Buffer.alloc(32, 7).toString("base64"),
+  };
+  it("requires no product origin, product identity or OIDC provider", () => {
+    const config = loadControlConfig(password);
+    expect(config.CONTROL_AUTH_MODE).toBe("password");
+    expect(config.CONTROL_PRODUCT_ORIGIN).toBeUndefined();
+    expect(config.OPERATOR_OIDC_ISSUER).toBeUndefined();
+  });
+  it("requires a canonical base64 32-byte key for enabled password authentication", () => {
+    for (const key of [
+      undefined,
+      "",
+      "not-a-key",
+      Buffer.alloc(16).toString("base64"),
+      Buffer.alloc(32).toString("base64url"),
+      `${password.OPERATOR_CREDENTIAL_KEY}extra`,
+    ])
+      expect(() => loadControlConfig({ ...password, OPERATOR_CREDENTIAL_KEY: key })).toThrow();
+  });
+  it("accepts loopback HTTP only with explicit development flags regardless of NODE_ENV", () => {
+    const local = {
+      ...password,
+      NODE_ENV: "production",
+      CONTROL_PUBLIC_ORIGIN: "http://localhost:3002",
+      CONTROL_LOCAL_DEVELOPMENT: "true",
+      OPENROUND_DEPLOYMENT_ENVIRONMENT: "development",
+    };
+    expect(loadControlConfig(local).CONTROL_PUBLIC_ORIGIN).toBe("http://localhost:3002");
+    for (const override of [
+      { CONTROL_LOCAL_DEVELOPMENT: "false" },
+      { OPENROUND_DEPLOYMENT_ENVIRONMENT: "staging" },
+      { OPENROUND_DEPLOYMENT_ENVIRONMENT: undefined },
+      { CONTROL_PUBLIC_ORIGIN: "http://192.168.1.2:3002" },
+    ])
+      expect(() => loadControlConfig({ ...local, ...override })).toThrow();
+    expect(() =>
+      loadControlConfig({
+        ...password,
+        CONTROL_PUBLIC_ORIGIN: local.CONTROL_PUBLIC_ORIGIN,
+        CONTROL_ALLOW_LOCAL_HTTP: "true",
+      }),
+    ).toThrow();
+  });
+  it.each([
+    "http://admin.example.test",
+    "https://admin.example.test/path",
+    "https://user:secret@admin.example.test",
+    "https://admin.example.test?secret=value",
+    "https://admin.example.test#fragment",
+  ])("rejects insecure or non-origin console configuration %s", (origin) => {
+    expect(() => loadControlConfig({ ...password, CONTROL_PUBLIC_ORIGIN: origin })).toThrow();
+  });
+  it("leaves an unused disabled password profile without a required credential key", () => {
+    expect(
+      loadControlConfig({ CONTROL_AUTH_MODE: "password", CONTROL_ENABLED: "false" })
+        .OPERATOR_CREDENTIAL_KEY,
+    ).toBeUndefined();
+  });
+});

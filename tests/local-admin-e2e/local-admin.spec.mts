@@ -1,9 +1,9 @@
+import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
+import { operatorTotpCode } from "../../packages/control-plane/src/index.js";
 import { testEmail } from "../e2e/test-email.js";
 import {
-  adminEmail,
   apiOrigin,
-  businessAreas,
   controlOrigin,
   cookieNames,
   expectNoBusinessAccess,
@@ -11,81 +11,86 @@ import {
   operatorStatus,
   productOrigin,
   signIn,
+  signInAdmin,
 } from "./fixtures.mjs";
 
-test("anonymous and ordinary customer sign-in never expose business administration", async ({
+test("customer sign-in never provisions or discovers console access", async ({
   page,
   context,
 }, testInfo) => {
   const fixture = await localAdminHarness(context);
-  const existingOperator = (await fixture.state()).operator;
+  const before = (await fixture.state()).operator;
   await page.goto(productOrigin);
   await expectNoBusinessAccess(page);
-  await page.screenshot({ path: testInfo.outputPath("anonymous-homepage.png"), fullPage: true });
-  await page.goto(`${productOrigin}/signin`);
-  await expectNoBusinessAccess(page);
-  await page.screenshot({ path: testInfo.outputPath("anonymous-signin.png"), fullPage: true });
-  expect(await operatorStatus(page)).toBe(401);
+  expect(await operatorStatus(page)).toBe(403);
   const denied = await page.request.post(`${controlOrigin}/auth/local`, {
     headers: { origin: controlOrigin },
   });
   expect(denied.status()).toBeGreaterThanOrEqual(400);
-  expect(await fixture.cookie(cookieNames.session)).toBeUndefined();
-  expect((await fixture.state()).operator).toEqual(existingOperator);
-  await signIn(page, testEmail("ordinary-customer", testInfo));
+  await signIn(page, "admin@pollingpops.local");
   await expectNoBusinessAccess(page);
   const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();
   expect(navigation.organizations).toEqual(
     expect.arrayContaining([expect.objectContaining({ role: "owner" })]),
   );
   expect(navigation.operatorConsoleOrigin).toBeNull();
-  expect(await operatorStatus(page)).toBe(401);
+  expect(await operatorStatus(page)).toBe(403);
   expect(await fixture.cookie(cookieNames.session)).toBeUndefined();
+  expect((await fixture.state()).operator).toEqual(before);
+  await page.screenshot({
+    path: testInfo.outputPath("customer-without-admin-menu.png"),
+    fullPage: true,
+  });
 });
 
-test("configured admin uses normal magic-link sign-in, manages tenants, and product logout revokes access", async ({
+test("admin signs in directly with password and TOTP and remains independent of product logout", async ({
   page,
   context,
 }, testInfo) => {
   const fixture = await localAdminHarness(context);
-  await signIn(page, adminEmail);
-  const token = (await fixture.cookie(cookieNames.session))!;
-  expect(token).toBeTruthy();
+  const credentials = await fixture.provision();
+  expect((await page.request.get(`${apiOrigin}/v1/auth/me`)).status()).toBe(401);
+  await page.goto(controlOrigin);
+  await expect(
+    page.getByRole("heading", { name: "Sign in to the admin console", exact: true }),
+  ).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("admin-signin-mobile.png"), fullPage: true });
+  await page.getByLabel("Username", { exact: true }).fill(credentials.username);
+  await page.getByLabel("Password", { exact: true }).fill("Incorrect password attempt");
+  await page
+    .getByLabel("Authenticator code", { exact: true })
+    .fill(operatorTotpCode(credentials.totpSecret));
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: /sign-in failed|username|authenticator/i }),
+  ).toBeVisible();
+  expect(await fixture.cookie(cookieNames.session)).toBeUndefined();
+  await signInAdmin(page, credentials);
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   expect(await fixture.cookie(cookieNames.csrf)).toBeTruthy();
-  const initial = await fixture.state();
-  expect(initial.issuerConfigured).toBe(false);
-  expect(initial.mfaConfigured).toBe(false);
-  expect(initial.authenticated).toBe(true);
-  expect(initial.operator).toMatchObject({ name: "Local admin", role: "founder", active: true });
-  const creator = (await (await page.request.get(`${apiOrigin}/v1/auth/me`)).json()).creator as {
-    workspaceId: string;
-  };
-  const organization = (
-    (await (await page.request.get(`${apiOrigin}/v1/organizations`)).json())
-      .organizations as Array<{ id: string }>
-  )[0]!;
-  const before = await fixture.state({ organizationId: organization.id });
-  await page.locator("summary").filter({ hasText: "Business · Super admin" }).click();
-  for (const name of Object.values(businessAreas))
-    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("local-admin-product-navigation.png") });
-  await page.getByRole("link", { name: "Tenant management", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
-  await expect(page.locator(".identity")).toContainText("Local admin");
-  await expect(page.locator(".identity")).toContainText("Super admin");
-  for (const area of Object.keys(businessAreas))
-    await expect(
-      page.getByRole("navigation", { name: "Operator areas" }).getByRole("button", {
-        name: area[0]!.toUpperCase() + area.slice(1),
-        exact: true,
-      }),
-    ).toBeVisible();
+  expect((await fixture.state()).operator).toMatchObject({
+    name: "Development administrator",
+    role: "founder",
+    active: true,
+  });
+  expect((await page.request.get(`${apiOrigin}/v1/auth/me`)).status()).toBe(401);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.screenshot({ path: testInfo.outputPath("admin-console-desktop.png"), fullPage: true });
+
+  const product = await context.newPage();
+  await signIn(product, testEmail("separate-customer", testInfo));
+  await expectNoBusinessAccess(product);
+  const creator = (await (await product.request.get(`${apiOrigin}/v1/auth/me`)).json()).creator;
+  await page.getByRole("button", { name: "Organizations", exact: true }).click();
   const workspace = page.locator(".workspace").filter({ hasText: creator.workspaceId });
   await workspace.getByRole("button", { name: "Restrict new joins", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByLabel("Reason", { exact: true })
-    .fill("Synthetic local administration test restriction");
+    .fill("Synthetic independent administration verification");
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Apply command", exact: true })
@@ -96,79 +101,44 @@ test("configured admin uses normal magic-link sign-in, manages tenants, and prod
   expect((await fixture.state({ workspaceId: creator.workspaceId })).restriction).toMatchObject({
     blocked: true,
   });
-  await page.getByRole("button", { name: "Credits", exact: true }).click();
-  const grant = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Grant event credits", exact: true }),
-  });
-  await grant.getByRole("combobox", { name: /Organization/ }).selectOption(organization.id);
-  await grant.getByLabel("Credits", { exact: true }).fill("5");
-  await grant
-    .getByLabel("Reason", { exact: true })
-    .fill("Synthetic local administration credit grant");
-  await grant.getByRole("button", { name: "Grant credits", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Command completed");
-  const after = await fixture.state({ organizationId: organization.id });
-  expect(after.balance!.balance).toBe(before.balance!.balance + 5);
-  expect(after.ledgerEntries).toBe(before.ledgerEntries + 1);
-  await page.getByRole("button", { name: "Audit", exact: true }).click();
-  await expect(page.getByRole("cell", { name: "credits.grant", exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("local-admin-console.png"), fullPage: true });
-  await page.goto(`${productOrigin}/dashboard`);
+  await product.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(product).toHaveURL(`${productOrigin}/`);
+  expect(await operatorStatus(page)).toBe(200);
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  const token = (await fixture.cookie(cookieNames.session))!;
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page).toHaveURL(`${productOrigin}/`);
-  await expectNoBusinessAccess(page);
+  await expect(page.getByLabel("Username", { exact: true })).toBeVisible();
   expect(await fixture.cookie(cookieNames.session)).toBeUndefined();
-  expect(await fixture.cookie(cookieNames.csrf)).toBeUndefined();
-  const signedOut = await fixture.state({}, token);
-  expect(signedOut.authenticated).toBe(false);
-  expect(signedOut.sessionExists).toBe(false);
-  expect(signedOut.auditActions).toEqual(
-    expect.arrayContaining([
-      "operator.login",
-      "workspace.admission.restrict",
-      "credits.grant",
-      "operator.logout",
-    ]),
-  );
-  expect(await operatorStatus(page)).toBe(401);
+  expect((await fixture.state({}, token)).authenticated).toBe(false);
 });
 
-test("switching from admin to an ordinary email revokes the prior operator session", async ({
+test("switching customer accounts cannot replace or revoke an administrator session", async ({
   page,
   context,
 }, testInfo) => {
   const fixture = await localAdminHarness(context);
-  await signIn(page, adminEmail);
-  await expect(page.locator("summary").filter({ hasText: "Business · Super admin" })).toBeVisible();
-  const token = (await fixture.cookie(cookieNames.session))!;
-  await signIn(page, testEmail("switch-to-ordinary", testInfo));
-  await expectNoBusinessAccess(page);
-  expect(await fixture.cookie(cookieNames.session)).toBeUndefined();
-  expect(await fixture.cookie(cookieNames.csrf)).toBeUndefined();
-  const previous = await fixture.state({}, token);
-  expect(previous.authenticated).toBe(false);
-  expect(previous.sessionExists).toBe(false);
-  expect(await operatorStatus(page)).toBe(401);
-  const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();
-  expect(navigation.operatorConsoleOrigin).toBeNull();
+  await signInAdmin(page, await fixture.provision());
+  const token = await fixture.cookie(cookieNames.session);
+  const product = await context.newPage();
+  await signIn(product, testEmail("independent-customer-one", testInfo));
+  await signIn(product, testEmail("independent-customer-two", testInfo));
+  await expectNoBusinessAccess(product);
+  expect(await fixture.cookie(cookieNames.session)).toBe(token);
+  expect(await operatorStatus(page)).toBe(200);
 });
 
-test("durable local operator revocation immediately removes console and product access", async ({
+test("durable administrator revocation immediately denies the standalone console", async ({
   page,
   context,
 }) => {
   const fixture = await localAdminHarness(context);
-  await signIn(page, adminEmail);
-  await page.locator("summary").filter({ hasText: "Business · Super admin" }).click();
-  await page.getByRole("link", { name: "Tenant management", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
+  await signInAdmin(page, await fixture.provision());
   await fixture.revoke();
   expect((await fixture.state()).operator).toMatchObject({ active: false });
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByRole("navigation", { name: "Operator areas" })).toHaveCount(0);
+  expect(await operatorStatus(page)).toBe(401);
   await page.goto(productOrigin);
   await expectNoBusinessAccess(page);
-  expect(await operatorStatus(page)).toBe(401);
-  const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();
-  expect(navigation.operatorConsoleOrigin).toBeNull();
 });

@@ -1,4 +1,5 @@
 import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +112,7 @@ async function fakeDocker() {
     calls,
     env: {
       ...process.env,
+      OPERATOR_CREDENTIAL_KEY: randomBytes(32).toString("base64"),
       PATH: `${directory}:${process.env.PATH ?? ""}`,
       FAKE_DOCKER_CALLS: calls,
       FAKE_DOCKER_INFO_FAIL: "0",

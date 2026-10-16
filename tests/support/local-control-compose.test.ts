@@ -42,16 +42,17 @@ describe("default local management console", () => {
     },
   );
 
-  it("fixes local authentication and restricted database access without an identity provider", async () => {
+  it("uses standalone password authentication and restricted database access without a product identity", async () => {
     const local = await composeFile("compose.local-control.yaml");
     const env = local.services.control.environment;
     expect(env).toMatchObject({
       CONTROL_ENABLED: "true",
-      CONTROL_AUTH_MODE: "local",
+      CONTROL_AUTH_MODE: "password",
       CONTROL_LOCAL_DEVELOPMENT: "true",
       OPENROUND_DEPLOYMENT_ENVIRONMENT: "development",
       CONTROL_PUBLIC_ORIGIN: "${CONTROL_PUBLIC_ORIGIN:-http://localhost:3002}",
-      CONTROL_PRODUCT_ORIGIN: "${CONTROL_PRODUCT_ORIGIN:-http://localhost:8080}",
+      CONTROL_PRODUCT_ORIGIN: "",
+      OPERATOR_CREDENTIAL_KEY: "${OPERATOR_CREDENTIAL_KEY:-}",
       CONTROL_DATABASE_URL:
         "postgresql://openround_app:openround-app-local@postgres:5432/openround",
       OPERATOR_OIDC_MFA_POLICY_ENFORCED: "false",
@@ -76,16 +77,38 @@ describe("default local management console", () => {
     );
     expect(document.errors).toEqual([]);
     expect(document.warnings).toEqual([]);
-    expect(local.services.server.environment.CONTROL_PUBLIC_ORIGIN).toBe(env.CONTROL_PUBLIC_ORIGIN);
     expect(local.services.server.environment).toMatchObject({
-      CONTROL_ENABLED: "true",
-      CONTROL_AUTH_MODE: "local",
-      CONTROL_LOCAL_DEVELOPMENT: "true",
+      CONTROL_ENABLED: "false",
+      CONTROL_AUTH_MODE: "oidc",
+      CONTROL_LOCAL_DEVELOPMENT: "false",
       OPENROUND_DEPLOYMENT_ENVIRONMENT: "development",
-      CONTROL_PRODUCT_ORIGIN: env.CONTROL_PRODUCT_ORIGIN,
-      LOCAL_ADMIN_EMAIL: "${LOCAL_ADMIN_EMAIL:-admin@pollingpops.local}",
+      CONTROL_PUBLIC_ORIGIN: "",
+      CONTROL_PRODUCT_ORIGIN: "",
+      LOCAL_ADMIN_EMAIL: "",
     });
-    expect(env.CONTROL_PRODUCT_ORIGIN).not.toContain("OPENROUND_PUBLIC_URL");
+    expect(env).not.toHaveProperty("LOCAL_ADMIN_EMAIL");
+  });
+
+  it("supplies the authenticator encryption key only to the standalone control process", async () => {
+    const files = [
+      "compose.yaml",
+      "compose.business.yaml",
+      "compose.local-control.yaml",
+      "compose.single-vm.yaml",
+      "compose.single-vm.business.yaml",
+    ];
+    for (const file of files) {
+      const configuration = await composeFile(file);
+      for (const [name, service] of Object.entries(configuration.services)) {
+        const environment =
+          (service as { environment?: Record<string, unknown> }).environment ?? {};
+        if (name === "control") {
+          expect(environment.OPERATOR_CREDENTIAL_KEY, file).toBe("${OPERATOR_CREDENTIAL_KEY:-}");
+        } else {
+          expect(environment, `${file}: ${name}`).not.toHaveProperty("OPERATOR_CREDENTIAL_KEY");
+        }
+      }
+    }
   });
 
   it("preserves Community limits and disabled business billing defaults", async () => {
@@ -112,20 +135,27 @@ describe("default local management console", () => {
     expect(local.services.jobs.depends_on.server.condition).toBe("service_healthy");
   });
 
-  it("keeps hosted control on OIDC with a hosted environment marker and no development port", async () => {
+  it("defaults hosted control to OIDC while allowing standalone password mode without product coupling", async () => {
     const hosted = await composeFile("compose.single-vm.business.yaml");
     expect(hosted.services.control.environment).toMatchObject({
-      CONTROL_AUTH_MODE: "oidc",
+      CONTROL_AUTH_MODE: "${CONTROL_AUTH_MODE:-oidc}",
       CONTROL_LOCAL_DEVELOPMENT: "false",
       OPENROUND_DEPLOYMENT_ENVIRONMENT:
         "${OPENROUND_DEPLOYMENT_ENVIRONMENT:?Set OPENROUND_DEPLOYMENT_ENVIRONMENT}",
       OPERATOR_OIDC_MFA_POLICY_ENFORCED: "true",
+      CONTROL_PRODUCT_ORIGIN: "",
+      OPERATOR_CREDENTIAL_KEY: "${OPERATOR_CREDENTIAL_KEY:-}",
+      OPERATOR_OIDC_ISSUER: "${OPERATOR_OIDC_ISSUER:-}",
+      OPERATOR_OIDC_CLIENT_ID: "${OPERATOR_OIDC_CLIENT_ID:-}",
+      OPERATOR_OIDC_CLIENT_SECRET: "${OPERATOR_OIDC_CLIENT_SECRET:-}",
+      OPERATOR_BOOTSTRAP_IDENTITIES: "${OPERATOR_BOOTSTRAP_IDENTITIES:-[]}",
     });
     expect(hosted.services.control).not.toHaveProperty("ports");
     expect(hosted.services.server.environment).toMatchObject({
       CONTROL_AUTH_MODE: "oidc",
       CONTROL_LOCAL_DEVELOPMENT: "false",
       LOCAL_ADMIN_EMAIL: "",
+      CONTROL_PUBLIC_ORIGIN: "",
     });
   });
 

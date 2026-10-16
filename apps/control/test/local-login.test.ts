@@ -1,14 +1,9 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { MemoryRepository, createPlatformRepository } from "@openround/db";
-import { loadControlConfig, OperatorAuthService, tokenHash } from "@openround/control-plane";
 import { controlRuntime } from "../lib/runtime";
 import { POST } from "../app/auth/local/route";
 import { GET as start } from "../app/auth/start/route";
 import { GET as callback } from "../app/auth/callback/route";
-import { POST as logout } from "../app/api/logout/route";
-import { POST as command } from "../app/api/commands/route";
-import { operatorCookieNames } from "../lib/http";
 
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/runtime", () => ({ controlRuntime: vi.fn() }));
@@ -23,83 +18,84 @@ const environment = {
   CONTROL_PUBLIC_ORIGIN: origin,
   CONTROL_PRODUCT_ORIGIN: "http://127.0.0.1:8080",
   CONTROL_DATABASE_URL: "postgresql://runtime@127.0.0.1/control",
+  OPERATOR_CREDENTIAL_KEY: Buffer.alloc(32, 17).toString("base64"),
 };
-async function fixture() {
-  const config = loadControlConfig(environment);
-  const repository = new MemoryRepository();
-  const platform = createPlatformRepository(repository);
-  const auth = new OperatorAuthService(platform, config, {} as never);
-  vi.mocked(controlRuntime).mockResolvedValue({
-    config,
-    repository,
-    platform,
-    auth,
-  } as unknown as Awaited<ReturnType<typeof controlRuntime>>);
-  return { auth, platform, config, names: operatorCookieNames(config) };
-}
 
-describe("local admin HTTP sign-in", () => {
+describe("standalone operator sign-in boundaries", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it.each(["local", "oidc"])("denies direct local provisioning in %s mode", async (mode) => {
-    vi.stubEnv("CONTROL_AUTH_MODE", mode);
-    const response = await POST();
+  it.each(["local", "oidc", "password"])(
+    "denies direct local provisioning in %s mode",
+    async (mode) => {
+      vi.stubEnv("CONTROL_AUTH_MODE", mode);
+      const response = await POST();
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        error: { code: "STANDALONE_SIGN_IN_REQUIRED" },
+      });
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(controlRuntime).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects legacy local sign-in without redirecting to the customer product", async () => {
+    const response = await start();
     expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({
-      error: { code: "VERIFIED_SIGN_IN_REQUIRED" },
-    });
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("location")).toBeNull();
     expect(response.headers.get("set-cookie")).toBeNull();
-    expect(vi.mocked(controlRuntime)).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain(environment.CONTROL_PRODUCT_ORIGIN);
+    expect(controlRuntime).not.toHaveBeenCalled();
   });
 
-  it("redirects local console sign-in to normal product sign-in and denies an OIDC callback", async () => {
+  it("opens the dedicated console form in password mode without minting credentials on GET", async () => {
+    vi.stubEnv("CONTROL_AUTH_MODE", "password");
     const response = await start();
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${environment.CONTROL_PRODUCT_ORIGIN}/signin`);
+    expect(response.headers.get("location")).toBe(`${origin}/`);
     expect(response.headers.get("set-cookie")).toBeNull();
-    const rejected = await callback(new NextRequest(`${origin}/auth/callback?code=x&state=y`));
-    expect(rejected.status).toBe(403);
-    expect(rejected.headers.get("set-cookie")).toBeNull();
-    expect(vi.mocked(controlRuntime)).not.toHaveBeenCalled();
+    expect(controlRuntime).not.toHaveBeenCalled();
   });
 
-  it("keeps command and logout CSRF checks and durably revokes confirmed logout", async () => {
-    const { auth, platform, names } = await fixture();
-    const { token, csrfToken: csrf } = await auth.localLogin("verified-product-sign-in-fixture");
-    const cookie = `${names.session}=${token}; ${names.csrf}=${csrf}`;
-    const rejectedCommand = await command(
-      new NextRequest(`${origin}/api/commands`, {
-        method: "POST",
-        headers: { origin, cookie, "content-type": "application/json" },
-        body: JSON.stringify({ action: "credits.grant" }),
-      }),
-    );
-    expect(rejectedCommand.status).toBe(403);
-    const rejectedLogout = await logout(
-      new NextRequest(`${origin}/api/logout`, { method: "POST", headers: { origin, cookie } }),
-    );
-    expect(rejectedLogout.status).toBe(403);
-    expect(rejectedLogout.headers.get("set-cookie")).toBeNull();
-    await expect(auth.authenticate(token)).resolves.toBeTruthy();
-    const signedOut = await logout(
-      new NextRequest(`${origin}/api/logout`, {
-        method: "POST",
-        headers: { origin, cookie, "x-operator-csrf": csrf },
-      }),
-    );
-    expect(signedOut.status).toBe(200);
-    expect(signedOut.cookies.get(names.session)?.maxAge).toBe(0);
-    expect(signedOut.cookies.get(names.csrf)?.maxAge).toBe(0);
-    expect(await platform.getOperatorSession(tokenHash(token))).toBeNull();
-    await expect(auth.authenticate(token)).rejects.toMatchObject({ status: 401 });
-    expect((await platform.listAuditEvents()).map((event) => event.action)).toEqual([
-      "operator.logout",
-      "operator.login",
-    ]);
+  it.each(["local", "password"])("denies an OIDC callback in %s mode", async (mode) => {
+    vi.stubEnv("CONTROL_AUTH_MODE", mode);
+    const response = await callback(new NextRequest(`${origin}/auth/callback?code=x&state=y`));
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(controlRuntime).not.toHaveBeenCalled();
+  });
+
+  it("preserves managed OIDC redirects and browser binding cookies", async () => {
+    vi.stubEnv("CONTROL_AUTH_MODE", "oidc");
+    vi.stubEnv("CONTROL_PUBLIC_ORIGIN", "https://control.example.test");
+    vi.stubEnv("CONTROL_PRODUCT_ORIGIN", "https://product.example.test");
+    for (const [name, value] of Object.entries({
+      OPERATOR_OIDC_ISSUER: "https://identity.example.test",
+      OPERATOR_OIDC_CLIENT_ID: "synthetic-operator",
+      OPERATOR_OIDC_CLIENT_SECRET: "synthetic-secret",
+      OPERATOR_OIDC_MFA_POLICY_ENFORCED: "true",
+      OPERATOR_OIDC_REQUIRED_AMR: "mfa",
+    }))
+      vi.stubEnv(name, value);
+    const { loadControlConfig, operatorCookieNames } = await import("@openround/control-plane");
+    const config = loadControlConfig();
+    const names = operatorCookieNames(config);
+    const authStart = vi.fn().mockResolvedValue({
+      authorizationUrl: "https://identity.example.test/authorize",
+      binding: "synthetic-binding",
+    });
+    vi.mocked(controlRuntime).mockResolvedValue({
+      config,
+      auth: { start: authStart },
+    } as unknown as Awaited<ReturnType<typeof controlRuntime>>);
+    const response = await start();
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://identity.example.test/authorize");
+    expect(response.cookies.get(names.binding)?.value).toBe("synthetic-binding");
+    expect(response.cookies.get(names.session)).toBeUndefined();
   });
 });

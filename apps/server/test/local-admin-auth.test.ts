@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { createPlatformRepository, MemoryRepository } from "@openround/db";
@@ -101,78 +102,95 @@ async function verify(
   });
 }
 
-describe("normal product sign-in for the configured local administrator", () => {
-  it("binds only a verified normalized email to durable audited operator cookies, retaining native API port and loopback product redirect", async () => {
-    const { app, platform, config, names } = await fixture();
+async function legacyOperatorSession(
+  platform: ReturnType<typeof createPlatformRepository>,
+  names: ReturnType<typeof operatorCookieNames>,
+) {
+  const operator = await platform.provisionOperator({
+    issuer: LOCAL_OPERATOR_ISSUER,
+    subject: LOCAL_OPERATOR_SUBJECT,
+    name: "Local admin",
+    role: "founder",
+    capabilities: [],
+    active: true,
+  });
+  const token = randomUUID();
+  const csrf = randomUUID();
+  await platform.createOperatorSession({
+    id: randomUUID(),
+    operatorId: operator.id,
+    tokenHash: tokenHash(token),
+    csrfHash: tokenHash(csrf),
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 60 * 60_000),
+    revokedAt: null,
+  });
+  return {
+    token,
+    cookie: `${names.session}=${token}; ${names.csrf}=${csrf}; ${names.binding}=${randomUUID()}`,
+    context: await platform.getOperatorSession(tokenHash(token)),
+  };
+}
+
+describe("customer authentication stays separate from administrator authentication", () => {
+  it("treats the formerly configured admin email as an ordinary customer using public product URLs", async () => {
+    const { app, platform, config } = await fixture();
     const magic = await requestLink(app, "ADMIN@POLLINGPOPS.LOCAL");
-    expect(magic.json()).toMatchObject({ signInOrigin: "http://localhost:3000" });
+    expect(magic.statusCode).toBe(202);
+    expect(magic.json()).not.toHaveProperty("signInOrigin");
     const url = new URL(magic.json().debugUrl);
-    expect(url.origin).toBe("http://localhost:4000");
+    expect(url.origin).toBe(local.PUBLIC_API_URL);
     expect(url.searchParams.get("returnTo")).toBe("/account?via=signin#profile");
-    expect(await platform.listOperators()).toEqual([]);
-    expect(await platform.listAuditEvents()).toEqual([]);
+    expect(ConsoleMailer.prototype.sendMagicLink).toHaveBeenCalledWith(email, url.href);
     expect(cookies(magic)).toEqual([]);
     const signed = await app.inject({
       method: "GET",
       url: `${url.pathname}${url.search}`,
-      headers: { ...headers, "x-request-id": "verified-local-login" },
+      headers,
     });
     expect(signed.statusCode).toBe(302);
-    expect(signed.headers.location).toBe("http://localhost:3000/account?via=signin#profile");
-    const operatorToken = cookieToken(signed, names.session)!;
-    const csrfToken = cookieToken(signed, names.csrf)!;
-    const durable = await platform.getOperatorSession(tokenHash(operatorToken));
-    expect(durable?.operator).toMatchObject({
-      issuer: LOCAL_OPERATOR_ISSUER,
-      subject: LOCAL_OPERATOR_SUBJECT,
-      name: "Local admin",
-      role: "founder",
-      active: true,
+    expect(signed.headers.location).toBe(`${local.WEB_ORIGIN}/account?via=signin#profile`);
+    expect(cookies(signed).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
+    expect(cookies(signed)[0]).toContain("HttpOnly");
+    expect(cookies(signed)[0]).toContain("SameSite=Lax");
+    expect(cookies(signed)[0]).toContain("Max-Age=2592000");
+    const authenticatedHeaders = { ...headers, cookie: cookieHeader(signed) };
+    const me = await app.inject({
+      method: "GET",
+      url: "/v1/auth/me",
+      headers: authenticatedHeaders,
     });
-    expect(durable?.session.csrfHash).toBe(tokenHash(csrfToken));
-    expect(durable?.session.tokenHash).not.toBe(operatorToken);
-    for (const name of [names.session, names.csrf]) {
-      const value = cookies(signed).find((cookie) => cookie.startsWith(`${name}=`))!;
-      expect(value).toContain("Path=/");
-      expect(value).toContain("HttpOnly");
-      expect(value).toContain("SameSite=Lax");
-      expect(value).toContain("Max-Age=28800");
-      expect(value).not.toContain("Domain=");
-      expect(value).not.toContain("Secure");
-    }
-    expect(await platform.listAuditEvents()).toMatchObject([
-      {
-        actorId: durable!.operator.id,
-        action: "operator.login",
-        requestId: "verified-local-login",
-        after: { role: "founder", authMode: "local" },
-      },
-    ]);
+    expect(me.statusCode).toBe(200);
+    expect(me.json()).toMatchObject({
+      creator: { email, role: "owner", plan: "free" },
+      businessManagementEnabled: true,
+    });
+    const organization = (await platform.getOrganizationForWorkspace(
+      me.json().creator.workspaceId,
+    ))!;
     const navigation = await app.inject({
       method: "GET",
       url: "/v1/auth/navigation",
-      headers: { ...headers, cookie: cookieHeader(signed) },
+      headers: authenticatedHeaders,
     });
-    expect(navigation.json()).toMatchObject({
-      user: { email },
-      operatorConsoleOrigin: "http://localhost:3002",
+    expect(navigation.json()).toEqual({
+      user: { userId: me.json().creator.userId, email },
+      organizationManagementEnabled: true,
+      organizations: [{ id: organization.id, name: organization.name, role: "owner" }],
+      operatorConsoleOrigin: null,
     });
-    expect(navigation.json()).not.toHaveProperty("operator");
-    const features = await app.inject({ method: "GET", url: "/v1/features" });
-    expect(JSON.stringify(features.json())).not.toContain(config.LOCAL_ADMIN_EMAIL!);
-    expect(features.json().publicWebUrl).toBe(local.WEB_ORIGIN);
-    expect(
-      (await app.inject({ method: "GET", url: "/v1/auth/navigation", headers })).json()
-        .operatorConsoleOrigin,
-    ).toBeNull();
+    expect(await platform.listOperators()).toEqual([]);
+    expect(await platform.listAuditEvents()).toEqual([]);
     expect(
       (await app.inject({ method: "GET", url: `${url.pathname}${url.search}`, headers }))
         .statusCode,
     ).toBe(400);
-    expect(await platform.listOperators()).toHaveLength(1);
+    const features = await app.inject({ method: "GET", url: "/v1/features" });
+    expect(JSON.stringify(features.json())).not.toContain(config.LOCAL_ADMIN_EMAIL!);
+    expect(features.json().publicWebUrl).toBe(local.WEB_ORIGIN);
   });
 
-  it("preserves explicit locale and return path on the loopback admin redirect", async () => {
+  it("preserves explicit locale and return paths on the standard customer redirect", async () => {
     const { app, repository } = await fixture();
     const first = await verify(app);
     const me = await app.inject({
@@ -183,14 +201,14 @@ describe("normal product sign-in for the configured local administrator", () => 
     await repository.updateUserLocale(me.json().creator.userId, "ja-JP");
     const next = await verify(app, email, cookieHeader(first));
     const destination = new URL(next.headers.location!);
-    expect(destination.origin).toBe("http://localhost:3000");
+    expect(destination.origin).toBe(local.WEB_ORIGIN);
     expect(destination.pathname).toBe("/auth/locale");
     expect(destination.searchParams.get("locale")).toBe("ja-JP");
     expect(destination.searchParams.get("returnTo")).toBe("/account?via=signin#profile");
   });
 
-  it("keeps ordinary customer URLs and entitlements unchanged and never provisions from customer ownership or payload fields", async () => {
-    const { app, platform, names } = await fixture();
+  it("never provisions an operator from customer ownership or asserted payload fields", async () => {
+    const { app, platform, config } = await fixture();
     const magic = await app.inject({
       method: "POST",
       url: "/v1/auth/magic-link",
@@ -203,166 +221,119 @@ describe("normal product sign-in for the configured local administrator", () => 
         localAdmin: true,
       },
     });
+    expect(magic.statusCode).toBe(202);
     expect(magic.json()).not.toHaveProperty("signInOrigin");
-    expect(new URL(magic.json().debugUrl).origin).toBe("http://192.168.1.142:4000");
-    const signed = await verify(app, "owner@example.test");
-    expect(signed.headers.location).toBe("http://192.168.1.142:3000/account?via=signin#profile");
-    expect(cookieToken(signed, names.session)).toBeUndefined();
-    expect(await platform.listOperators()).toEqual([]);
-    const me = await app.inject({
+    const url = new URL(magic.json().debugUrl);
+    const signed = await app.inject({
       method: "GET",
-      url: "/v1/auth/me",
-      headers: { ...headers, cookie: cookieHeader(signed) },
+      url: `${url.pathname}${url.search}`,
+      headers,
     });
-    expect(me.json()).toMatchObject({
-      creator: { role: "owner", plan: "free" },
-      businessManagementEnabled: true,
-    });
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/auth/navigation",
-          headers: { ...headers, cookie: cookieHeader(signed) },
-        })
-      ).json().operatorConsoleOrigin,
-    ).toBeNull();
+    expect(signed.statusCode).toBe(302);
+    expect(cookies(signed).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
+    expect(await platform.listOperators()).toEqual([]);
   });
 
-  it.each([
-    { host: "192.168.1.142:4000", origin: "http://192.168.1.142:3000" },
-    { host: "localhost.evil.test:4000", origin: "http://localhost:3000" },
-    { host: "localhost:4999", origin: "http://localhost:3000" },
-    { host: "localhost:4000", origin: "http://192.168.1.142:3000" },
-    { ...headers, "x-forwarded-host": "192.168.1.142:4000" },
-    { ...headers, "x-forwarded-proto": "https" },
-  ])(
-    "does not grant on a nonloopback or conflicting verification request %j",
-    async (requestHeaders) => {
-      const { app, platform, names } = await fixture();
-      const signed = await verify(app, email, undefined, requestHeaders);
+  it.each([email, "ordinary@example.test"])(
+    "neither reuses nor revokes or clears legacy operator credentials when signing in as %s",
+    async (address) => {
+      const { app, platform, config, names } = await fixture();
+      const legacy = await legacyOperatorSession(platform, names);
+      const signed = await verify(app, address, legacy.cookie);
       expect(signed.statusCode).toBe(302);
-      expect(cookieToken(signed, names.session)).toBe("");
-      expect(await platform.listOperators()).toEqual([]);
+      expect(cookieToken(signed, config.COOKIE_NAME)).not.toBe(legacy.token);
+      expect(cookies(signed).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
+      expect(await platform.getOperatorSession(tokenHash(legacy.token))).toEqual(legacy.context);
+      expect(await platform.listOperators()).toHaveLength(1);
+      expect(await platform.listAuditEvents()).toEqual([]);
+      expect(signed.headers["x-local-operator-revocation"]).toBeUndefined();
     },
   );
 
-  it("revokes the durable operator session and clears shared credentials when switching to an ordinary account", async () => {
-    const { app, platform, names } = await fixture();
-    const admin = await verify(app);
-    const token = cookieToken(admin, names.session)!;
-    const ordinary = await verify(app, "ordinary@example.test", cookieHeader(admin));
-    expect(await platform.getOperatorSession(tokenHash(token))).toBeNull();
-    for (const name of [names.session, names.csrf, names.binding])
-      expect(cookieToken(ordinary, name)).toBe("");
-    expect((await platform.listAuditEvents()).map((event) => event.action).sort()).toEqual([
-      "operator.login",
-      "operator.logout",
-    ]);
-    const navigation = await app.inject({
-      method: "GET",
-      url: "/v1/auth/navigation",
-      headers: { ...headers, cookie: `${cookieHeader(ordinary)}; ${names.session}=${token}` },
-    });
-    expect(navigation.json()).toMatchObject({
-      user: { email: "ordinary@example.test" },
-      operatorConsoleOrigin: null,
-    });
-  });
+  it.each(["operator cookie", "customer cookie", "bearer header"])(
+    "does not accept an operator token as customer authorization through the %s",
+    async (placement) => {
+      const { app, platform, config, names } = await fixture();
+      const legacy = await legacyOperatorSession(platform, names);
+      const authorization =
+        placement === "bearer header"
+          ? { authorization: `Bearer ${legacy.token}` }
+          : {
+              cookie:
+                placement === "customer cookie"
+                  ? `${config.COOKIE_NAME}=${legacy.token}`
+                  : legacy.cookie,
+            };
+      const requestHeaders = { ...headers, ...authorization };
+      for (const url of ["/v1/auth/me", "/v1/auth/user"]) {
+        const response = await app.inject({ method: "GET", url, headers: requestHeaders });
+        expect(response.statusCode).toBe(401);
+        expect(cookies(response)).toEqual([]);
+      }
+      const navigation = await app.inject({
+        method: "GET",
+        url: "/v1/auth/navigation",
+        headers: requestHeaders,
+      });
+      expect(navigation.json()).toEqual({
+        user: null,
+        organizationManagementEnabled: true,
+        organizations: [],
+        operatorConsoleOrigin: null,
+      });
+      expect(await platform.getOperatorSession(tokenHash(legacy.token))).toEqual(legacy.context);
+    },
+  );
 
-  it("revokes active operator credentials and records a product logout audit", async () => {
+  it.each([true, false])(
+    "logout touches only the supplied customer session with customer cookie present=%s",
+    async (includeCustomerCookie) => {
+      const { app, platform, config, names } = await fixture();
+      const legacy = await legacyOperatorSession(platform, names);
+      const signed = await verify(app);
+      const logout = await app.inject({
+        method: "POST",
+        url: "/v1/auth/logout",
+        headers: {
+          ...headers,
+          cookie: `${includeCustomerCookie ? `${cookieHeader(signed)}; ` : ""}${legacy.cookie}`,
+        },
+        payload: {},
+      });
+      expect(logout.statusCode).toBe(200);
+      expect(logout.json()).toEqual({ ok: true });
+      expect(cookieToken(logout, config.COOKIE_NAME)).toBe("");
+      expect(cookies(logout).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
+      expect(await platform.getOperatorSession(tokenHash(legacy.token))).toEqual(legacy.context);
+      expect(await platform.listAuditEvents()).toEqual([]);
+      expect(logout.headers["x-local-operator-revocation"]).toBeUndefined();
+      const customer = await app.inject({
+        method: "GET",
+        url: "/v1/auth/me",
+        headers: { ...headers, cookie: cookieHeader(signed) },
+      });
+      expect(customer.statusCode).toBe(includeCustomerCookie ? 401 : 200);
+    },
+  );
+
+  it("does not contact the operator service during customer sign-in or logout", async () => {
     const { app, platform, names } = await fixture();
-    const signed = await verify(app);
-    const token = cookieToken(signed, names.session)!;
+    const legacy = await legacyOperatorSession(platform, names);
+    const operatorTransaction = vi
+      .spyOn(platform, "withOperatorTransaction")
+      .mockRejectedValue(new Error("operator service unavailable"));
+    const signed = await verify(app, email, legacy.cookie);
+    expect(signed.statusCode).toBe(302);
     const logout = await app.inject({
       method: "POST",
       url: "/v1/auth/logout",
-      headers: { ...headers, cookie: cookieHeader(signed) },
+      headers: { ...headers, cookie: `${cookieHeader(signed)}; ${legacy.cookie}` },
       payload: {},
     });
     expect(logout.statusCode).toBe(200);
-    expect(await platform.getOperatorSession(tokenHash(token))).toBeNull();
-    expect(cookieToken(logout, names.session)).toBe("");
-    expect(await platform.listAuditEvents()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ action: "operator.logout" })]),
-    );
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/auth/navigation",
-          headers: { ...headers, cookie: cookieHeader(signed) },
-        })
-      ).json().operatorConsoleOrigin,
-    ).toBeNull();
-  });
-
-  it("honors disabled and demoted durable identities and revokes logout sessions even while disabled", async () => {
-    const { app, platform, names } = await fixture();
-    const first = await verify(app);
-    const token = cookieToken(first, names.session)!;
-    const operator = (await platform.listOperators())[0]!;
-    await platform.provisionOperator({
-      issuer: "https://id.example.test",
-      subject: "other-founder",
-      name: "Other founder",
-      role: "founder",
-      capabilities: [],
-      active: true,
-    });
-    await platform.provisionOperator({ ...operator, role: "readonly" });
-    const demoted = await verify(app, email, cookieHeader(first));
-    expect(
-      (await platform.getOperatorSession(tokenHash(cookieToken(demoted, names.session)!)))?.operator
-        .role,
-    ).toBe("readonly");
-    const demotedToken = cookieToken(demoted, names.session)!;
-    await platform.provisionOperator({ ...operator, role: "readonly", active: false });
-    const blocked = await verify(app, email);
-    expect(blocked.statusCode).toBe(302);
-    expect(cookieToken(blocked, names.session)).toBe("");
-    const logout = await app.inject({
-      method: "POST",
-      url: "/v1/auth/logout",
-      headers: { ...headers, cookie: cookieHeader(demoted) },
-      payload: {},
-    });
-    expect(logout.statusCode).toBe(200);
-    for (const name of [names.session, names.csrf, names.binding])
-      expect(cookieToken(logout, name)).toBe("");
-    expect((await platform.getOperator(operator.id))?.active).toBe(false);
-    await platform.provisionOperator({ ...operator, role: "readonly", active: true });
-    expect(await platform.getOperatorSession(tokenHash(token))).toBeNull();
-    expect(await platform.getOperatorSession(tokenHash(demotedToken))).toBeNull();
-  });
-
-  it("keeps ordinary sign-in and logout usable during an operator service outage", async () => {
-    const { app, platform, names } = await fixture();
-    const admin = await verify(app);
-    const operatorToken = cookieToken(admin, names.session)!;
-    vi.spyOn(platform, "withOperatorTransaction").mockRejectedValue(
-      new Error("operator service unavailable"),
-    );
-    const ordinary = await verify(app, "unaffected@example.test", cookieHeader(admin));
-    expect(ordinary.statusCode).toBe(302);
-    expect(cookieToken(ordinary, names.session)).toBe("");
-    expect(ordinary.headers["x-local-operator-revocation"]).toBe("unavailable");
-    // The response explicitly distinguishes clearing browser credentials from a durable
-    // revocation that could not commit while the operator transaction service was down.
-    expect(await platform.getOperatorSession(tokenHash(operatorToken))).not.toBeNull();
-    const logout = await app.inject({
-      method: "POST",
-      url: "/v1/auth/logout",
-      headers: {
-        ...headers,
-        cookie: `${cookieHeader(ordinary)}; ${names.session}=${operatorToken}`,
-      },
-      payload: {},
-    });
-    expect(logout.statusCode).toBe(200);
-    expect(cookieToken(logout, names.session)).toBe("");
-    expect(logout.json()).toEqual({ ok: true, operatorSessionRevoked: false });
-    expect(logout.headers["x-local-operator-revocation"]).toBe("unavailable");
+    expect(logout.json()).toEqual({ ok: true });
+    expect(operatorTransaction).not.toHaveBeenCalled();
+    expect(await platform.getOperatorSession(tokenHash(legacy.token))).toEqual(legacy.context);
   });
 
   it.each(["false", "true"])(
@@ -392,7 +363,7 @@ describe("normal product sign-in for the configured local administrator", () => 
   );
 });
 
-describe("local administrator configuration isolation", () => {
+describe("deprecated local administrator configuration validation", () => {
   it.each([
     { CONTROL_LOCAL_DEVELOPMENT: "false" },
     { OPENROUND_DEPLOYMENT_ENVIRONMENT: undefined },

@@ -212,6 +212,12 @@ uses **My checkpoint sets**. Select **Sign out** to revoke the current browser s
 invite editors or viewers from **Account**. An invitation is single-use and expiring. A person who
 belongs to multiple workspaces can switch the active workspace there.
 
+Platform administrator access uses a separate console and account. Provisioned administrators
+open the console directly and enter their username, password and authenticator code; normal local
+bundles serve it at <http://localhost:3002>. Customer sign-in does not create administrator access,
+and customer sign-out only ends the customer session. See the
+[administrator setup guide](../apps/control/README.md#standalone-password-authentication).
+
 ## Create and organize Rounds
 
 Choice answers use multiline fields with a separate trash button for each removable answer.

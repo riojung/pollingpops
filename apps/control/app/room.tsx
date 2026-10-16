@@ -136,10 +136,10 @@ function Table({ items, columns }: { items: Row[]; columns: string[] }) {
 }
 export default function ControlRoom({
   enabled,
-  localAdmin = false,
+  authMode = "oidc",
 }: {
   enabled: boolean;
-  localAdmin?: boolean;
+  authMode?: "password" | "oidc" | "local";
 }) {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [csrf, setCsrf] = useState("");
@@ -151,6 +151,7 @@ export default function ControlRoom({
   const [pending, setPending] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [contacts, setContacts] = useState<Row[]>([]);
   const [policyConflict, setPolicyConflict] = useState(false);
   const exactCommand = useRef<{ body: string; key: string } | null>(null);
@@ -313,6 +314,47 @@ export default function ControlRoom({
       setSigningOut(false);
     }
   }
+  async function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    setSigningIn(true);
+    setMessage("");
+    try {
+      const response = await fetch("/auth/password", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          username: String(fields.get("username") ?? ""),
+          password: String(fields.get("password") ?? ""),
+          code: String(fields.get("code") ?? ""),
+        }),
+      });
+      if (!response.ok) {
+        setMessage(
+          response.status === 429
+            ? "Too many sign-in attempts. Wait before trying again."
+            : response.status >= 500
+              ? "Operator sign-in is temporarily unavailable. Try again shortly."
+              : "Check your username, password, and authenticator code and try again.",
+        );
+        return;
+      }
+      form.reset();
+      window.location.reload();
+    } catch {
+      setMessage(
+        "Operator sign-in is temporarily unavailable. Check your connection and try again.",
+      );
+    } finally {
+      for (const name of ["password", "code"]) {
+        const input = form.elements.namedItem(name);
+        if (input instanceof HTMLInputElement) input.value = "";
+      }
+      setSigningIn(false);
+    }
+  }
   function submitForm(event: FormEvent<HTMLFormElement>, action: string) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -433,30 +475,90 @@ export default function ControlRoom({
     return (
       <main className="signin">
         <AdminBrand />
-        <h1>Business operations</h1>
-        <p>Manage organizations, features, plans, billing, support, and operational controls.</p>
-        {enabled && localAdmin ? (
-          <>
-            <a className="button" href="/auth/start" onClick={rememberLoginView}>
-              Sign in to Polling Pops
-            </a>
-            <p className="note">Use your configured development admin account.</p>
-          </>
-        ) : enabled ? (
+        <p className="eyebrow">Platform administration</p>
+        <h1>Sign in to the admin console</h1>
+        <p>Manage organizations, features, billing, support, and operational controls.</p>
+        {enabled && authMode === "password" ? (
+          <form
+            className="signin-form"
+            method="post"
+            action="/auth/password"
+            onSubmit={signIn}
+            aria-busy={signingIn}
+          >
+            <label htmlFor="operator-username">
+              Username
+              <input
+                id="operator-username"
+                name="username"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={128}
+                required
+                disabled={signingIn}
+              />
+            </label>
+            <label htmlFor="operator-password">
+              Password
+              <input
+                id="operator-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                maxLength={1024}
+                required
+                disabled={signingIn}
+              />
+            </label>
+            <label htmlFor="operator-code">
+              Authenticator code
+              <input
+                id="operator-code"
+                name="code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                minLength={6}
+                maxLength={6}
+                aria-describedby="operator-code-help"
+                required
+                disabled={signingIn}
+              />
+            </label>
+            <p className="note" id="operator-code-help">
+              Enter the six-digit code from your authenticator app.
+            </p>
+            <button className="primary" type="submit" disabled={signingIn || loading}>
+              {signingIn ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        ) : enabled && authMode === "oidc" ? (
           <>
             <a className="button" href="/auth/start" onClick={rememberLoginView}>
               Sign in with operator identity
             </a>
             <p className="note">Only provisioned operators with verified MFA can sign in.</p>
           </>
+        ) : enabled ? (
+          <p className="notice">
+            Configure standalone password and authenticator sign-in for this console. The legacy
+            local sign-in mode is unavailable.
+          </p>
         ) : (
           <p className="notice">
-            The operator console is disabled. Configure its dedicated identity provider and database
+            The operator console is disabled. Configure its operator authentication and database
             before enabling it.
           </p>
         )}
         {loading && <p role="status">Checking access…</p>}
-        {message && <p role="alert">{message}</p>}
+        {message && (
+          <p className="signin-error" role="alert">
+            {message}
+          </p>
+        )}
       </main>
     );
   return (
@@ -465,7 +567,7 @@ export default function ControlRoom({
         <AdminBrand />
         <div className="environment">
           <span />
-          <strong>{localAdmin ? "Local development" : "Operator console"}</strong>
+          <strong>Operator console</strong>
         </div>
         <p className="nav-caption">Platform</p>
         <nav aria-label="Operator areas">
@@ -516,25 +618,12 @@ export default function ControlRoom({
             Refresh
           </button>
         </header>
-        {localAdmin && (
-          <div className="local-banner">
-            <Icon name="shield" />
-            <div>
-              <strong>Local development session</strong>
-              <p>
-                You’re signed in with the configured development admin account. Changes apply to
-                this environment.
-              </p>
-            </div>
-            <span className="badge">Local auth</span>
-          </div>
-        )}
         {message && (
           <p role="status" className="notice">
             {message}{" "}
             {message.includes("Sign in again") && (
-              <a href="/auth/start" onClick={rememberLoginView}>
-                {localAdmin ? "Sign in to Polling Pops again" : "Verify identity again"}
+              <a href={authMode === "password" ? "/" : "/auth/start"} onClick={rememberLoginView}>
+                Verify identity again
               </a>
             )}
             {policyConflict && (

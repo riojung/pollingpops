@@ -13,6 +13,43 @@ const optionalValue = z.preprocess(
   (value) => (typeof value === "string" && !value.trim() ? undefined : value),
   z.string().trim().min(1).optional(),
 );
+export function isOperatorCredentialKey(value: string): boolean {
+  return (
+    /^[A-Za-z0-9+/]{43}=$/.test(value) &&
+    Buffer.from(value, "base64").length === 32 &&
+    Buffer.from(value, "base64").toString("base64") === value
+  );
+}
+function isPasswordControlOrigin(
+  value: string,
+  config: { CONTROL_LOCAL_DEVELOPMENT: boolean; OPENROUND_DEPLOYMENT_ENVIRONMENT?: string },
+): boolean {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash)
+      return false;
+    return (
+      url.protocol === "https:" ||
+      (config.CONTROL_LOCAL_DEVELOPMENT &&
+        config.OPENROUND_DEPLOYMENT_ENVIRONMENT === "development" &&
+        isLoopbackHttpOrigin(value))
+    );
+  } catch {
+    return false;
+  }
+}
+export function isPasswordControlEnabled(config: ControlConfig): boolean {
+  return (
+    config.CONTROL_ENABLED &&
+    config.CONTROL_AUTH_MODE === "password" &&
+    Boolean(
+      config.CONTROL_PUBLIC_ORIGIN && isPasswordControlOrigin(config.CONTROL_PUBLIC_ORIGIN, config),
+    ) &&
+    Boolean(
+      config.OPERATOR_CREDENTIAL_KEY && isOperatorCredentialKey(config.OPERATOR_CREDENTIAL_KEY),
+    )
+  );
+}
 export function isLoopbackHttpOrigin(value: string | undefined): boolean {
   if (!value) return false;
   try {
@@ -50,7 +87,7 @@ const configSchema = z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
-    CONTROL_AUTH_MODE: z.enum(["oidc", "local"]).default("oidc"),
+    CONTROL_AUTH_MODE: z.enum(["oidc", "local", "password"]).default("oidc"),
     CONTROL_LOCAL_DEVELOPMENT: z
       .enum(["true", "false"])
       .default("false")
@@ -89,9 +126,44 @@ const configSchema = z
           return z.NEVER;
         }
       }),
+    OPERATOR_CREDENTIAL_KEY: optionalValue,
     INTEGRATION_SECRET_KEY: optionalValue,
   })
   .superRefine((config, context) => {
+    if (config.CONTROL_AUTH_MODE === "password") {
+      if (!config.CONTROL_ENABLED) return;
+      for (const field of [
+        "CONTROL_PUBLIC_ORIGIN",
+        "CONTROL_DATABASE_URL",
+        "OPERATOR_CREDENTIAL_KEY",
+      ] as const)
+        if (!config[field])
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: "Required when password operator control is enabled",
+          });
+      if (
+        config.OPERATOR_CREDENTIAL_KEY &&
+        !isOperatorCredentialKey(config.OPERATOR_CREDENTIAL_KEY)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["OPERATOR_CREDENTIAL_KEY"],
+          message: "Expected a canonical base64 encoded 32-byte credential encryption key",
+        });
+      for (const field of ["CONTROL_PUBLIC_ORIGIN", "CONTROL_PRODUCT_ORIGIN"] as const) {
+        if (!config[field]) continue;
+        if (!isPasswordControlOrigin(config[field], config))
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message:
+              "Password operator control requires an HTTPS origin, or explicit development loopback HTTP",
+          });
+      }
+      return;
+    }
     if (config.CONTROL_AUTH_MODE === "local") {
       if (!config.CONTROL_LOCAL_DEVELOPMENT)
         context.addIssue({

@@ -233,7 +233,15 @@ export async function main(argv = process.argv.slice(2)) {
     }),
   ];
   await assertDockerReady({ cwd: repositoryRoot, dryRun, dockerContext });
-  await run("docker", args, { cwd: repositoryRoot, dryRun });
+  let env = process.env;
+  if (!dryRun && ["start", "restart"].includes(action)) {
+    const { localAdminCredentialKey } = await import("./admin-key.mjs");
+    env = {
+      ...process.env,
+      OPERATOR_CREDENTIAL_KEY: await localAdminCredentialKey(repositoryRoot),
+    };
+  }
+  await run("docker", args, { cwd: repositoryRoot, dryRun, env });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

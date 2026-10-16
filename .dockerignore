@@ -29,5 +29,6 @@ test-results
 test-results-beta
 test-results-*
 **/dist
+**/admin-dist
 *.tsbuildinfo
 *.log

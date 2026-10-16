@@ -10,7 +10,6 @@ import { apiFetch, humanError } from "../../lib/api";
 import { resolveSignInEnvironment, type SignInEnvironment } from "../../lib/signin-environment";
 import {
   LogoutWarningNotice,
-  ManagementNavigationLinks,
   useManagementNavigation,
 } from "../../components/management-navigation";
 
@@ -253,19 +252,6 @@ export default function SignInPage() {
               {status === "sending" ? t("delivery.auth.sending") : t("delivery.auth.sendLink")}
             </button>
           </form>
-          {management.operator ? (
-            <section
-              className="institution-signin"
-              aria-label="Business administration"
-              lang="en-CA"
-            >
-              <h2>Business administration</h2>
-              <p className="muted">
-                Manage tenants, billing, and product operations with your staff account.
-              </p>
-              <ManagementNavigationLinks navigation={management} />
-            </section>
-          ) : null}
         </section>
       </main>
     </>

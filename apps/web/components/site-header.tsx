@@ -123,11 +123,7 @@ export function SiteHeader() {
             <>
               <Link href="/pricing">{t("delivery.site.pricing")}</Link>
               <Link href="/privacy">{t("delivery.site.privacy")}</Link>
-              <Link href="/signin">
-                {management.operator
-                  ? t("delivery.site.signInToCreate")
-                  : t("delivery.site.signIn")}
-              </Link>
+              <Link href="/signin">{t("delivery.site.signIn")}</Link>
             </>
           )}
           <ManagementNavigationLinks navigation={management} />
@@ -144,9 +140,7 @@ export function SiteHeader() {
               ? t("delivery.site.myLibrary")
               : signedIn
                 ? t("delivery.site.account")
-                : management.operator
-                  ? t("delivery.site.signInToCreate")
-                  : t("delivery.site.signIn")}
+                : t("delivery.site.signIn")}
           </Link>
           <button
             aria-controls={mobileMenuId}

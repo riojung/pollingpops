@@ -137,19 +137,19 @@ describe("durable local development administrator", () => {
   });
   it("honors logout and operator revocation without recreating or reactivating the local identity", async () => {
     const { platform, auth } = await fixture();
+    await platform.provisionOperator({
+      issuer: LOCAL_OPERATOR_ISSUER,
+      subject: LOCAL_OPERATOR_SUBJECT,
+      name: "Local admin",
+      role: "support",
+      capabilities: [],
+      active: true,
+    });
     const result = await auth.localLogin("first");
     await auth.logout(await auth.authenticate(result.token), "logout");
     await expect(auth.authenticate(result.token)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     const next = await auth.localLogin("next");
     expect(next.operator.id).toBe(result.operator.id);
-    await platform.provisionOperator({
-      issuer: "https://identity.example.test",
-      subject: "other-founder",
-      name: "Managed founder",
-      role: "founder",
-      capabilities: [],
-      active: true,
-    });
     await platform.provisionOperator({ ...next.operator, active: false });
     await expect(auth.authenticate(next.token)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(auth.localLogin("disabled")).rejects.toMatchObject({
@@ -162,15 +162,15 @@ describe("durable local development administrator", () => {
   });
   it("preserves a deliberately changed local role rather than elevating it at the next login", async () => {
     const { platform, auth } = await fixture();
-    const result = await auth.localLogin("first");
     await platform.provisionOperator({
-      issuer: "https://identity.example.test",
-      subject: "other-founder",
-      name: "Managed founder",
-      role: "founder",
+      issuer: LOCAL_OPERATOR_ISSUER,
+      subject: LOCAL_OPERATOR_SUBJECT,
+      name: "Local admin",
+      role: "support",
       capabilities: [],
       active: true,
     });
+    const result = await auth.localLogin("first");
     await platform.provisionOperator({ ...result.operator, role: "readonly" });
     const next = await auth.localLogin("reader");
     expect(next.operator.role).toBe("readonly");

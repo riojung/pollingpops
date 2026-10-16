@@ -1,6 +1,9 @@
 apiVersion: 1
 
 deleteDatasources:
+  # Upgrades keep the stable UID, so remove its legacy display name before inserting.
+  - name: OpenRound Prometheus
+    orgId: 1
   - name: Polling Pops Prometheus
     orgId: 1
 

@@ -149,6 +149,14 @@ pnpm smoke:observability
 - Grafana: <http://127.0.0.1:3001>, using `OPENROUND_GRAFANA_USER` and
   `OPENROUND_GRAFANA_PASSWORD`
 
+If an existing local Grafana container restarts with `data source with the same uid already
+exists`, check the data-source provisioning configuration. The Polling Pops rename keeps the
+`openround-prometheus` UID, so provisioning must remove both the legacy **OpenRound Prometheus**
+name and **Polling Pops Prometheus** before recreating the configured source. Use the current
+`infra/observability/grafana/provisioning/datasources/pollingpops.yaml` and restart only Grafana.
+Deleting the Grafana database or other service volumes is unnecessary. `pnpm smoke:observability`
+checks the source's UID, current name, type and URL, plus the dashboard and Prometheus queries.
+
 The default Grafana credentials are only for a loopback-bound local evaluation. Set a unique
 password before use and never expose these ports directly to the internet. Prometheus stores 15
 days locally by default; change `OPENROUND_PROMETHEUS_RETENTION` only after sizing disk and backup

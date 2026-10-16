@@ -39,7 +39,7 @@ const destinations: Array<{
   icon: IconName;
   label: MessageKey;
   match: (path: string) => boolean;
-  feature?: "discover" | "groups";
+  feature?: "discover" | "groups" | "ideaBoards";
 }> = [
   {
     href: "/home",
@@ -81,6 +81,13 @@ const destinations: Array<{
     label: "workspace.nav.discover",
     match: (path) => path.startsWith("/discover") || path.startsWith("/templates"),
     feature: "discover",
+  },
+  {
+    href: "/boards",
+    icon: "library",
+    label: "workspace.nav.boards",
+    match: (path) => path.startsWith("/boards"),
+    feature: "ideaBoards",
   },
   {
     href: "/groups",

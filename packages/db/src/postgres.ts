@@ -24,6 +24,8 @@ import {
   TextResponseAnswerIdsSchema,
   SessionDecisionEventSchema,
   SupportedLocaleSchema,
+  IdeaBoardStoredSchema,
+  ideaBoardProjection,
   TrustModeSchema,
   questionDelivery,
   QuestionSchema,
@@ -7387,6 +7389,9 @@ export class PostgresRepository implements Repository {
         const surveyVersions = await queryWorkspaceData(
           "SELECT data FROM survey_versions WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
         );
+        const ideaBoards = await queryWorkspaceData(
+          "SELECT data FROM idea_boards WHERE workspace_id = ANY($1::uuid[]) AND retention_expires_at > clock_timestamp() ORDER BY id",
+        );
         const surveyRooms = await queryWorkspaceData(
           "SELECT data FROM survey_feedback_rooms WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
         );
@@ -7760,6 +7765,13 @@ export class PostgresRepository implements Repository {
           workspaces: workspaceResult.rows,
           folders: folders.rows,
           surveys: surveys.rows.map((row) => row.data),
+          ideaBoards: ideaBoards.rows.flatMap((row) => {
+            const board = IdeaBoardStoredSchema.parse(row.data);
+            const now = new Date();
+            return Date.parse(board.expiresAt) > now.getTime()
+              ? [ideaBoardProjection(board, now, true)]
+              : [];
+          }),
           surveyVersions: surveyVersions.rows.map((row) => row.data),
           surveyRooms: surveyRooms.rows.map((row) => row.data),
           sessionSummarySnapshots: sessionSummarySnapshots.rows,
@@ -8055,6 +8067,10 @@ export class PostgresRepository implements Repository {
           "DELETE FROM survey_feedback_rooms WHERE retention_expires_at <= $1 RETURNING id",
           [now],
         );
+        const ideaBoardResult = await client.query(
+          "DELETE FROM idea_boards WHERE retention_expires_at <= $1 RETURNING id",
+          [now],
+        );
         await client.query("DELETE FROM session_summary_snapshots WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM creator_sessions WHERE expires_at <= $1", [now]);
@@ -8074,9 +8090,12 @@ export class PostgresRepository implements Repository {
           "DELETE FROM recovery_pack_source_approvals WHERE created_at < $1::timestamptz - interval '30 days'",
           [now],
         );
-        return [...result.rows, ...presentationResult.rows, ...surveyResult.rows].map((row) =>
-          String(row.id),
-        );
+        return [
+          ...result.rows,
+          ...presentationResult.rows,
+          ...surveyResult.rows,
+          ...ideaBoardResult.rows,
+        ].map((row) => String(row.id));
       },
       { system: true },
     );

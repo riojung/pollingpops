@@ -162,6 +162,7 @@ export const PublicFeaturesSchema = z.object({
 export type PublicFeatures = z.infer<typeof PublicFeaturesSchema>;
 
 export const WorkspaceProductFeaturesSchema = z.object({
+  ideaBoards: z.boolean().optional(),
   multiSelectPolls: z.boolean().default(false),
   rankingPolls: z.boolean().default(false),
   openTextPolls: z.boolean().default(false),
@@ -6074,3 +6075,4 @@ export type PresentationReportWithSessionContextEnvelope = z.infer<
 
 export * from "./recovery-pack-exports";
 export * from "./feedback";
+export * from "./idea-boards";

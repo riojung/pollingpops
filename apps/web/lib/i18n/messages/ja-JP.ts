@@ -47,6 +47,7 @@ const messages = {
   "workspace.nav.results": "結果",
   "workspace.nav.discover": "探す",
   "workspace.nav.groups": "グループ",
+  "workspace.nav.boards": "アイデアボード",
   "workspace.nav.workspace": "ワークスペース",
   "workspace.switcher.label": "ワークスペース",
   "workspace.switcher.current": "現在のワークスペース",

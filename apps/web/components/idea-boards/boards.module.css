@@ -1,0 +1,142 @@
+.page {
+  width: min(70rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 2rem);
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+.layout,
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.panel,
+.idea {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface-raised);
+}
+.panel {
+  margin-block: 1rem;
+}
+.panel h2,
+.idea p {
+  margin-top: 0;
+}
+.form {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.form label,
+.field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.form input:not([type="checkbox"]),
+.form textarea,
+.form select,
+.field select,
+.field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 11px 14px;
+  border: 1.5px solid var(--ui-border-strong);
+  border-radius: var(--radius-small);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+.form textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+.form .check,
+.check {
+  display: flex;
+  align-items: start;
+  gap: 0.7rem;
+}
+.check input {
+  flex-shrink: 0;
+  min-width: 1.2rem;
+  min-height: 1.2rem;
+  margin-top: 0.15rem;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: center;
+  margin-block: 0.75rem;
+}
+.page button,
+.panel button,
+.idea button,
+.field select {
+  min-height: 44px;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: var(--ui-text-subtle);
+}
+.status {
+  font-weight: 700;
+}
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.heading h1 {
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
+  margin-bottom: 0.5rem;
+}
+.group {
+  min-width: 0;
+  margin-block: 1.5rem;
+}
+.receipt {
+  border-inline-start: 4px solid var(--ui-border);
+  padding-inline-start: 1rem;
+}
+.dialog {
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+}
+.dialog::backdrop {
+  background: var(--ui-overlay);
+}
+@media (max-width: 700px) {
+  .layout,
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page {
+    padding: 1rem;
+  }
+}

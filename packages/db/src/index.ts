@@ -25,3 +25,4 @@ export * from "./platform-types.js";
 export * from "./platform.js";
 export * from "./session-summaries.js";
 export * from "./operator-founder.js";
+export * from "./idea-boards.js";

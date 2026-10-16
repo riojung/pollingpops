@@ -47,6 +47,7 @@ const messages = {
   "workspace.nav.results": "結果",
   "workspace.nav.discover": "探索",
   "workspace.nav.groups": "群組",
+  "workspace.nav.boards": "創意看板",
   "workspace.nav.workspace": "工作區",
   "workspace.switcher.label": "工作區",
   "workspace.switcher.current": "目前的工作區",

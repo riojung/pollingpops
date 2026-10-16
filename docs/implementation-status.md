@@ -8,6 +8,48 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### IDEA 006 Brainstorming and prioritization boards October 16 2026
+
+Implemented locally on `codex/idea-006-brainstorming-boards` after auditing IDEA-004 and IDEA-005
+as complete for their selected, merged scope. See the
+[board implementation plan](idea-006-brainstorming-boards-plan.md) for boundaries and rollout.
+
+- Independent boards collect ideas before, during or after a meeting, without a live Round or
+  Presentation parent. The workspace **Idea boards** entry and classic dashboard link lead to
+  creation and management; guests use direct accountless participant links.
+- A fixed `draft → collecting → voting → closed` lifecycle supports moderated submissions,
+  terminal text removal, collection visibility, manual groups, and one final bounded ballot per
+  guest credential. Ideas, groups and moderation freeze when voting begins; totals appear at closure.
+- Anonymous boards collect no nickname; alias boards use explicit board-only names. Host, guest
+  and account projections omit internal guest IDs, access hashes and other guests' ballots.
+  Pending text is moderator-only except for the submitter's own view.
+- Migration 074 adds a bounded versioned aggregate with forced tenant RLS, immutable policy and
+  deadlines, serialized writes, deletion and retention. Reads and writes evaluate fresh clocks
+  after database/admission waits to enforce closure and expiry. Account exports recheck expiry
+  before projection, including when later export queries wait, before the purge worker runs.
+- Admin **Features → Brainstorming boards** controls availability and Free/Pro/Team assignments.
+  Inherited defaults require `FEATURE_IDEA_BOARDS` and the core-parity allowlist. New boards are
+  disabled by default; retained reads, explicit closure and deletion survive creation pauses.
+- All ten locales include the board workflow. Native labelled controls, readable theme colors,
+  grouped checkboxes, responsive layouts and recoverable idempotent writes support browser use.
+
+Verification complete for the selected local increment: the full repository check passes with
+`CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, including formatting, dependency
+closure, lint, strict types, package/support tests and production builds. The worker limit avoids
+an observed local Vitest fork-worker temporary-file failure without changing test assertions.
+Suites include 382 contract, 259 DB unit, 779 server, 1,003 web and 248 support tests.
+
+The isolated restricted PostgreSQL suite passes 195 tests with one existing skip, including tenant
+RLS, concurrent final ballots, restart, deadline/lock races, deletion and expiry. Deterministic
+regressions cover all seven read paths, creation retries, delayed account exports and the guest API.
+Its temporary
+database container was removed after verification. All three real production-browser journeys pass
+on desktop Chromium, mobile Chromium and mobile WebKit, covering anonymous/alias admission,
+collection, approval/removal, grouping, final ballots, refresh, closure, deletion, classic navigation
+and cookie/referrer omission. Narrow automated axe checks and light/dark 320px/desktop screenshots
+pass; form controls and wrapped long text were visually inspected. No production enablement,
+Firefox, manual assistive-tech, native-speaker or physical-device acceptance is claimed.
+
 ### Standalone administrator authentication October 15 2026
 
 Implemented locally on `codex/standalone-admin-console`. Administrators open the separate console

@@ -12,15 +12,20 @@ import { expectSessionHistoryConformance } from "./support/session-history-confo
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
+import {
+  expectIdeaBoardConformance,
+  expectIdeaBoardAdmissionConformance,
+} from "./support/idea-board-conformance.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Pool, type PoolClient } from "pg";
 import {
   ProductEventNameSchema,
+  IdeaBoardCreateSchema,
   type AuthoringDraft,
   type PresentationDraft,
   type QuizDraft,
@@ -46,6 +51,7 @@ import {
   PostgresPresentationRepository,
   PostgresPresentationSessionRepository,
   createSurveyRepository,
+  createIdeaBoardRepository,
   createFeedbackRepository,
   createRecoveryPackRepository,
   createAudienceScopeRepository,
@@ -1248,6 +1254,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 71, name: "room_passwords" },
       { version: 72, name: "feature_policy" },
       { version: 73, name: "operator_password_credentials" },
+      { version: 74, name: "idea_boards" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -3142,6 +3149,397 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       }
     },
   );
+
+  it("persists idea boards with fenced moderation, concurrent final ballots, tenant isolation and private exports", async () => {
+    const owner = await creator("idea-board-owner"),
+      other = await creator("idea-board-other");
+    const result = await expectIdeaBoardConformance(
+      repository,
+      owner.workspaceId,
+      other.workspaceId,
+    );
+    const restarted = new PostgresRepository(runtimeUrl!);
+    try {
+      const board = await createIdeaBoardRepository(restarted).getModerator(
+        owner.workspaceId,
+        result.id,
+        result.now,
+      );
+      expect(board.ideas.find((idea) => idea.id === result.approvedId)?.voteCount).toBe(2);
+      const exported = JSON.stringify(
+        (await restarted.exportAccount(owner.userId)) as { ideaBoards: unknown[] },
+      );
+      for (const forbidden of [
+        result.token,
+        "PRIVATE REMOVED IDEA",
+        "guestId",
+        "tokenHash",
+        "votedIdeaIds",
+      ])
+        expect(exported).not.toContain(forbidden);
+    } finally {
+      await restarted.close();
+    }
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [other.workspaceId]);
+      expect(
+        (await client.query("SELECT id FROM idea_boards WHERE id=$1", [result.id])).rows,
+      ).toEqual([]);
+      expect(
+        (await client.query("DELETE FROM idea_boards WHERE id=$1", [result.id])).rowCount,
+      ).toBe(0);
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      const stored = (await client.query("SELECT data FROM idea_boards WHERE id=$1", [result.id]))
+        .rows[0].data;
+      await client.query("SAVEPOINT denied_workspace");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [other.workspaceId]);
+      const deniedId = randomUUID(),
+        deniedKey = randomUUID();
+      await expect(
+        client.query(
+          "INSERT INTO idea_boards(id,workspace_id,creation_key,retention_expires_at,data) VALUES($1,$2,$3,$4,$5)",
+          [
+            deniedId,
+            owner.workspaceId,
+            deniedKey,
+            result.settings.expiresAt,
+            { ...stored, id: deniedId, creationKey: deniedKey },
+          ],
+        ),
+      ).rejects.toMatchObject({ code: "42501" });
+      await client.query("ROLLBACK TO SAVEPOINT denied_workspace");
+      await client.query("SAVEPOINT future_board_version");
+      await expect(
+        client.query(
+          "UPDATE idea_boards SET data=jsonb_set(data,'{schemaVersion}','2') WHERE id=$1",
+          [result.id],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await client.query("ROLLBACK TO SAVEPOINT future_board_version");
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+    await repository.purgeExpired(new Date(result.settings.expiresAt));
+    await expect(
+      createIdeaBoardRepository(repository).getGuest(result.id, result.token, result.now),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(
+      ((await repository.exportAccount(owner.userId)) as { ideaBoards: unknown[] }).ideaBoards,
+    ).toEqual([]);
+  });
+
+  it("serializes idea board admission restrictions and deletes all private state with its owner", async () => {
+    const owner = await creator("idea-board-lifecycle-owner");
+    const result = await expectIdeaBoardAdmissionConformance(repository, owner.workspaceId);
+    await repository.deleteAccount(owner.userId);
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.system_access','on',true)");
+      expect(
+        (await client.query("SELECT id FROM idea_boards WHERE id=$1", [result.id])).rows,
+      ).toEqual([]);
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+  });
+
+  it.each(["join", "submit", "vote"] as const)(
+    "rechecks idea board %s deadlines after waiting for the aggregate row lock",
+    async (operation) => {
+      const owner = await creator(`idea-board-deadline-${operation}`),
+        boards = createIdeaBoardRepository(repository);
+      let now = new Date();
+      const closesAt = new Date(now.getTime() + 86_400_000).toISOString();
+      let board = await boards.create(
+        owner.workspaceId,
+        randomUUID(),
+        IdeaBoardCreateSchema.parse({ title: "Deadline fence", moderationEnabled: false }),
+        randomUUID(),
+        {
+          participantLimit: 10,
+          closesAt,
+          expiresAt: new Date(now.getTime() + 2 * 86_400_000).toISOString(),
+        },
+        now,
+      );
+      board = (
+        await boards.hostCommand(
+          owner.workspaceId,
+          board.id,
+          { type: "collect" },
+          board.revision,
+          randomUUID(),
+          now,
+        )
+      ).board;
+      const token = createHash("sha256").update(randomUUID()).digest("hex");
+      if (operation !== "join") await boards.join(board.id, token, null, now);
+      let ideaId: string = randomUUID();
+      if (operation === "vote") {
+        ideaId = (
+          await boards.submitIdea(board.id, token, "Stable voting target", randomUUID(), now)
+        ).ownIdeas[0]!.id;
+        board = await boards.getModerator(owner.workspaceId, board.id, now);
+        await boards.hostCommand(
+          owner.workspaceId,
+          board.id,
+          { type: "start_voting" },
+          board.revision,
+          randomUUID(),
+          now,
+        );
+      }
+      const blocker = await runtimePool.connect();
+      let pending: Promise<unknown> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        await blocker.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+        await blocker.query("SELECT id FROM workspaces WHERE id=$1 FOR SHARE", [owner.workspaceId]);
+        await blocker.query("SELECT id FROM idea_boards WHERE id=$1 FOR UPDATE", [board.id]);
+        const action =
+          operation === "join"
+            ? boards.join(board.id, token, null, () => now)
+            : operation === "submit"
+              ? boards.submitIdea(
+                  board.id,
+                  token,
+                  "LATE IDEA MUST NOT SAVE",
+                  randomUUID(),
+                  () => now,
+                )
+              : boards.vote(board.id, token, [ideaId], 0, randomUUID(), () => now);
+        pending = action.then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        );
+        await vi.waitFor(
+          async () => {
+            const waiting = await runtimePool.query(
+              "SELECT count(*) AS count FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM idea_boards%FOR UPDATE%'",
+            );
+            expect(Number(waiting.rows[0]?.count)).toBeGreaterThan(0);
+          },
+          { timeout: 3_000, interval: 10 },
+        );
+        now = new Date(closesAt);
+        await blocker.query("COMMIT");
+        expect(await pending).toMatchObject({ error: { code: "ROOM_CLOSED" } });
+        const final = await boards.getModerator(owner.workspaceId, board.id, now);
+        expect(JSON.stringify(final)).not.toContain("LATE IDEA MUST NOT SAVE");
+        if (operation === "vote") expect(final.ideas[0]!.voteCount).toBe(0);
+        if (operation === "join") expect(final.participantCount).toBe(0);
+      } finally {
+        await blocker.query("ROLLBACK");
+        blocker.release();
+        await pending;
+      }
+    },
+  );
+
+  it.each([
+    "guest",
+    "moderator",
+    "viewer",
+    "public info",
+    "moderator list",
+    "viewer list",
+    "creation replay",
+  ] as const)("rechecks idea board %s retention after a PostgreSQL lock wait", async (reader) => {
+    const owner = await creator(`idea-board-read-deadline-${reader.replaceAll(" ", "-")}`),
+      boards = createIdeaBoardRepository(repository),
+      creationKey = randomUUID();
+    let now = new Date();
+    const expiresAt = new Date(now.getTime() + 2 * 86_400_000).toISOString();
+    const board = await boards.create(
+      owner.workspaceId,
+      randomUUID(),
+      IdeaBoardCreateSchema.parse({ title: "Read retention fence", moderationEnabled: false }),
+      creationKey,
+      {
+        participantLimit: 10,
+        closesAt: new Date(now.getTime() + 86_400_000).toISOString(),
+        expiresAt,
+      },
+      now,
+    );
+    await boards.hostCommand(
+      owner.workspaceId,
+      board.id,
+      { type: "collect" },
+      board.revision,
+      randomUUID(),
+      now,
+    );
+    const token = createHash("sha256").update(randomUUID()).digest("hex");
+    await boards.join(board.id, token, null, now);
+    await boards.submitIdea(
+      board.id,
+      token,
+      "RETAINED IDEA MUST NOT ESCAPE AFTER EXPIRY",
+      randomUUID(),
+      now,
+    );
+    const read = (clock: Date | (() => Date)) => {
+      switch (reader) {
+        case "guest":
+          return boards.getGuest(board.id, token, clock);
+        case "moderator":
+          return boards.getModerator(owner.workspaceId, board.id, clock);
+        case "viewer":
+          return boards.getViewer(owner.workspaceId, board.id, clock);
+        case "public info":
+          return boards.getPublicInfo(board.id, clock);
+        case "moderator list":
+          return boards.list(owner.workspaceId, clock);
+        case "viewer list":
+          return boards.list(owner.workspaceId, clock, false);
+        case "creation replay":
+          return boards.getCreation(owner.workspaceId, creationKey, clock);
+      }
+    };
+    expect(JSON.stringify(await read(now))).toContain(board.title);
+    const blocker = await runtimePool.connect();
+    let pending: Promise<unknown> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      // Staff reads wait on the workspace fence; public and guest reads reach the board lock.
+      await blocker.query("SELECT id FROM workspaces WHERE id=$1 FOR SHARE", [owner.workspaceId]);
+      await blocker.query("SELECT id FROM idea_boards WHERE id=$1 FOR UPDATE", [board.id]);
+      const blockerPid = Number(
+        (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid,
+      );
+      const clock = vi.fn(() => now);
+      pending = read(clock).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      await vi.waitFor(
+        async () => {
+          const waiting = await runtimePool.query(
+            "SELECT count(*) AS count FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND $1::int=ANY(pg_blocking_pids(pid))",
+            [blockerPid],
+          );
+          expect(Number(waiting.rows[0]?.count)).toBeGreaterThan(0);
+        },
+        { timeout: 3_000, interval: 10 },
+      );
+      expect(clock).not.toHaveBeenCalled();
+      now = new Date(expiresAt);
+      await blocker.query("COMMIT");
+      const result = await pending;
+      if (reader.endsWith("list")) expect(result).toEqual({ value: [] });
+      else if (reader === "creation replay") expect(result).toEqual({ value: null });
+      else expect(result).toMatchObject({ error: { code: "NOT_FOUND" } });
+      expect(clock).toHaveBeenCalledTimes(1);
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await pending;
+    }
+  });
+
+  it("excludes retained idea text when expiry crosses during an account export lock wait", async () => {
+    const owner = await creator("idea-board-delayed-export"),
+      boards = createIdeaBoardRepository(repository),
+      now = new Date();
+    const expiresAt = new Date(now.getTime() + 2 * 86_400_000).toISOString();
+    const board = await boards.create(
+      owner.workspaceId,
+      randomUUID(),
+      IdeaBoardCreateSchema.parse({ title: "Delayed export", moderationEnabled: false }),
+      randomUUID(),
+      {
+        participantLimit: 1,
+        closesAt: new Date(now.getTime() + 86_400_000).toISOString(),
+        expiresAt,
+      },
+      now,
+    );
+    await boards.hostCommand(
+      owner.workspaceId,
+      board.id,
+      { type: "collect" },
+      board.revision,
+      randomUUID(),
+      now,
+    );
+    const token = createHash("sha256").update(randomUUID()).digest("hex");
+    await boards.join(board.id, token, null, now);
+    await boards.submitIdea(
+      board.id,
+      token,
+      "EXPIRED IDEA MUST NOT ESCAPE A DELAYED EXPORT",
+      randomUUID(),
+      now,
+    );
+    expect(JSON.stringify(await repository.exportAccount(owner.userId))).toContain(
+      "EXPIRED IDEA MUST NOT ESCAPE A DELAYED EXPORT",
+    );
+    const blocker = await runtimePool.connect();
+    let pending: ReturnType<typeof repository.exportAccount> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      // The export has loaded idea board data before reaching this next table.
+      await blocker.query("LOCK TABLE survey_feedback_rooms IN ACCESS EXCLUSIVE MODE");
+      const blockerPid = Number(
+        (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid,
+      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now);
+      pending = repository.exportAccount(owner.userId);
+      await vi.waitFor(
+        async () => {
+          const waiting = await runtimePool.query(
+            "SELECT count(*) AS count FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM survey_feedback_rooms%' AND $1::int=ANY(pg_blocking_pids(pid))",
+            [blockerPid],
+          );
+          expect(Number(waiting.rows[0]?.count)).toBeGreaterThan(0);
+        },
+        { timeout: 3_000, interval: 10 },
+      );
+      vi.setSystemTime(new Date(expiresAt));
+      await blocker.query("COMMIT");
+      expect((await pending).ideaBoards).toEqual([]);
+    } finally {
+      try {
+        await blocker.query("ROLLBACK");
+        blocker.release();
+        await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  });
+
+  it("excludes expired idea boards from account exports while retention cleanup is pending", async () => {
+    const owner = await creator("idea-board-expired-export"),
+      boards = createIdeaBoardRepository(repository),
+      now = new Date("2000-01-01T00:00:00.000Z");
+    const board = await boards.create(
+      owner.workspaceId,
+      randomUUID(),
+      IdeaBoardCreateSchema.parse({ title: "Expired board" }),
+      randomUUID(),
+      {
+        participantLimit: 1,
+        closesAt: "2000-01-02T00:00:00.000Z",
+        expiresAt: "2000-02-01T00:00:00.000Z",
+      },
+      now,
+    );
+    await expect(
+      boards.getModerator(owner.workspaceId, board.id, new Date()),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(
+      ((await repository.exportAccount(owner.userId)) as { ideaBoards: unknown[] }).ideaBoards,
+    ).toEqual([]);
+  });
 
   it("persists moderated text with atomic CAS, restricted lookups and safe account exports", async () => {
     const owner = await creator("text-opinion-owner");

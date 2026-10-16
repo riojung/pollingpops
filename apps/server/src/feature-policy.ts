@@ -47,6 +47,7 @@ const flagKeys: Partial<Record<ProductFeatureKey, keyof AppConfig>> = {
   feedbackRooms: "FEATURE_FEEDBACK_ROOMS",
   surveys: "FEATURE_SURVEYS",
   sessionSummaries: "FEATURE_SESSION_SUMMARIES",
+  ideaBoards: "FEATURE_IDEA_BOARDS",
 };
 const professional = new Set<ProductFeatureKey>([
   "uxBeta",
@@ -75,6 +76,7 @@ const parity = new Set<ProductFeatureKey>([
   "feedbackRooms",
   "surveys",
   "sessionSummaries",
+  "ideaBoards",
 ]);
 const dependencies = new Map(
   productFeatureCatalog.map((feature) => [feature.key, feature.dependencies]),
@@ -150,6 +152,7 @@ export async function workspaceProductFeatures(
     repository.getOperationalFeatures(),
   ]);
   return {
+    ideaBoards: features.enabled("ideaBoards"),
     multiSelectPolls: features.enabled("roundClientProtocol"),
     rankingPolls: features.enabled("roundClientProtocol"),
     openTextPolls: features.enabled("roundClientProtocol"),

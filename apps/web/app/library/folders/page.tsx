@@ -7,6 +7,7 @@ import { useLocale } from "../../../components/locale-provider";
 import { WorkspaceProvider, useWorkspace } from "../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../../lib/api";
+import { clientUuid } from "../../../lib/uuid";
 import {
   folderArtifactType,
   folderPathLabel,
@@ -169,7 +170,7 @@ function FolderManager({ type, workspaceId }: { type: LibraryType; workspaceId: 
         const path = type === "rounds" ? "quizzes" : type;
         const body =
           type === "surveys"
-            ? { folderId, expectedRevision: record.revision, idempotencyKey: crypto.randomUUID() }
+            ? { folderId, expectedRevision: record.revision, idempotencyKey: clientUuid() }
             : { folderId };
         return apiFetch(`/v1/${path}/${record.id}/organization`, {
           method: "PATCH",

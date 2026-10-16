@@ -27,6 +27,7 @@ import {
 } from "../../../../lib/room-password";
 import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
+import { clientUuid } from "../../../../lib/uuid";
 import {
   resolveSetupRecipe,
   setupRecipeStorageKey,
@@ -304,24 +305,24 @@ export default function HostSetupPage() {
     setBusy(true);
     setError("");
     setErrorIsRaw(false);
-    const body = JSON.stringify({
-      quizId: quiz.id,
-      settings: {
-        ...settings,
-        ...(!launchFeatures?.liveFlexMode ? { timeMode: "timed" } : {}),
-      },
-      clientCapabilities: currentRoundClientCapabilities(),
-      ...(roundExperiencesAvailable &&
-      experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
-        ? { experiencePresetOverride: experiencePreset }
-        : {}),
-      presenterSoundEnabled: roundExperiencesAvailable && presenterSoundEnabled,
-      useEventCredit,
-      ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
-    });
-    if (creationIntent.current?.body !== body)
-      creationIntent.current = { body, key: crypto.randomUUID() };
     try {
+      const body = JSON.stringify({
+        quizId: quiz.id,
+        settings: {
+          ...settings,
+          ...(!launchFeatures?.liveFlexMode ? { timeMode: "timed" } : {}),
+        },
+        clientCapabilities: currentRoundClientCapabilities(),
+        ...(roundExperiencesAvailable &&
+        experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
+          ? { experiencePresetOverride: experiencePreset }
+          : {}),
+        presenterSoundEnabled: roundExperiencesAvailable && presenterSoundEnabled,
+        useEventCredit,
+        ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
+      });
+      if (creationIntent.current?.body !== body)
+        creationIntent.current = { body, key: clientUuid() };
       const session = await apiFetch<{
         sessionId: string;
         code: string;

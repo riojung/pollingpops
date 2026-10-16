@@ -31,6 +31,7 @@ import {
   type PresentationRecoveryPackUpdatePreview,
 } from "@openround/contracts";
 import { ApiClientError, apiFetch, humanError } from "../../lib/api";
+import { clientUuid } from "../../lib/uuid";
 import {
   clearBuilderRecovery,
   loadBuilderRecovery,
@@ -620,7 +621,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     (candidate: PresentationDraft): Promise<void> => {
       const serialized = JSON.stringify(candidate);
       if (serialized === lastSavedJson.current) return Promise.resolve();
-      const mutationId = crypto.randomUUID();
+      const mutationId = clientUuid();
       setSaveState("saving");
       void saveBuilderRecovery(recoveryKey, revisionRef.current, candidate).catch(() => undefined);
       const queued = saveQueue.current.enqueue(async () => {
@@ -908,7 +909,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           body: JSON.stringify({
             draft: { ...draft, title },
             expectedRevision: created.presentation.draftRevision,
-            mutationId: crypto.randomUUID(),
+            mutationId: clientUuid(),
             schemaVersion: 2,
           }),
         },
@@ -1064,7 +1065,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           packVersionId: versionId,
           afterBlockId: selectedBlockId,
           expectedRevision: revisionRef.current,
-          mutationId: crypto.randomUUID(),
+          mutationId: clientUuid(),
         });
         packPending.current = { body: JSON.stringify(request), draftJson, versionId };
       }
@@ -1390,7 +1391,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           questionIds: selectedQuestionIds,
           afterBlockId: selectedBlockId,
           expectedRevision: revisionRef.current,
-          mutationId: crypto.randomUUID(),
+          mutationId: clientUuid(),
         }),
       });
       if (draft) setUndoStack((history) => [...history, draft].slice(-HISTORY_LIMIT));

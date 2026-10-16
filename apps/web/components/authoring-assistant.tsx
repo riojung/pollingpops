@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AuthoringJob, AuthoringSourceType } from "@openround/contracts";
 import { apiFetch, humanError } from "../lib/api";
+import { clientUuid } from "../lib/uuid";
 import {
   authoringProposalSelectionCount,
   defaultAuthoringProposalSelection,
@@ -255,7 +256,7 @@ export function AuthoringAssistant({
                   ...presentationSelection,
                   afterBlockId: insertionTarget.afterBlockId,
                   expectedRevision: insertionTarget.expectedRevision,
-                  mutationId: crypto.randomUUID(),
+                  mutationId: clientUuid(),
                 }
               : artifactType === "presentation"
                 ? presentationSelection

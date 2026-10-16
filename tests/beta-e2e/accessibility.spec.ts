@@ -357,6 +357,47 @@ test("Round Builder follows system appearance changes", async ({ page }) => {
   await expectNoAxeViolations(page);
 });
 
+test("Round live setup recipes and settings stay readable in light and dark appearances", async ({
+  page,
+}, testInfo) => {
+  await signIn(page);
+  const quizId = await createPublishedPracticeSource(page);
+
+  for (const mode of ["light", "dark"] as const) {
+    await page.evaluate((preference) => {
+      window.localStorage.setItem("openround:color-mode", preference);
+    }, mode);
+    await page.goto(`/host/setup/${quizId}`);
+    await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
+    await expect(page.getByTestId("session-setup")).toBeVisible();
+
+    for (const name of ["Recovery", "Friendly competition", "Open discussion"]) {
+      const recipe = page.getByRole("button", { name: new RegExp(`^${name}`) });
+      await recipe.click();
+      await expect(recipe).toHaveAttribute("aria-pressed", "true");
+      await expectNoAxeViolations(page);
+    }
+
+    const desktopViewport = page.viewportSize()!;
+    await page.screenshot({
+      path: testInfo.outputPath(`round-setup-${mode}-desktop.png`),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: testInfo.outputPath(`round-setup-${mode}-mobile.png`),
+      fullPage: true,
+    });
+    await page.setViewportSize(desktopViewport);
+
+    await page.getByText("Review settings", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Audience and joining" })).toBeVisible();
+    await expectNoAxeViolations(page);
+  }
+});
+
 test("practice assignment and management surfaces pass automated accessibility checks", async ({
   page,
 }) => {

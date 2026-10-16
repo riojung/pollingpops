@@ -2988,10 +2988,10 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 .recipe-card {
-  background: #f8fbfc;
-  border: 2px solid var(--line);
+  background: var(--ui-surface-soft);
+  border: 2px solid var(--ui-border);
   border-radius: 16px;
-  color: var(--ink);
+  color: var(--ui-text);
   min-height: 150px;
   padding: 18px;
   text-align: left;
@@ -3003,21 +3003,21 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 .recipe-card span {
-  color: var(--ink-soft);
+  color: var(--ui-text-subtle);
   margin-top: 8px;
 }
 
 .recipe-card[aria-pressed="true"] {
-  background: var(--sky);
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(8, 115, 117, 0.12);
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 3px var(--ui-canvas-glow);
 }
 
 .setup-review > summary,
 .editor-disclosure > summary,
 .choice-diagnostics > summary,
 .participant-preview-disclosure > summary {
-  color: var(--navy);
+  color: var(--ui-text-strong);
   cursor: pointer;
   font-weight: 800;
   min-height: 44px;

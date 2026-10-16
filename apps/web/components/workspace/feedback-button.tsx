@@ -3,6 +3,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { feedbackPage } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
+import { clientUuid } from "../../lib/uuid";
 import { useLocale } from "../locale-provider";
 import styles from "./feedback.module.css";
 import shellStyles from "./workspace.module.css";
@@ -63,7 +64,7 @@ export function FeedbackDialog({ page, onClose }: { page: string; onClose: () =>
     if (busy) return;
     const content = JSON.stringify({ category, message: message.trim(), page, allowContact });
     if (!retry.current || retry.current.content !== content)
-      retry.current = { content, id: crypto.randomUUID() };
+      retry.current = { content, id: clientUuid() };
     setBusy(true);
     setError("");
     try {

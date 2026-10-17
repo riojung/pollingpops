@@ -44,6 +44,10 @@ coverage copy, the pricing destination, absent download controls, and authentica
 denials. The sign-in header link uses the theme foreground directly; light/dark browser checks
 assert its rendered color and retain the complete axe scan.
 
+The beta CI step explicitly opts into the existing session-summary and idea-board writer
+journeys. Their default-off test switches previously skipped eight profile cases. These use
+isolated in-memory fixtures; the shared-workspace suite retains its single worker.
+
 The initial hosted Security run passed dependency review, the dependency audit, third-party
 notices, the PR-commit Gitleaks scan, source SBOM generation and CodeQL at `2e48656`. See
 [the readiness PR](https://github.com/riojung/pollingpops/pull/135) for exact follow-up commits and

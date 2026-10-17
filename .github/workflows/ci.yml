@@ -132,6 +132,8 @@ jobs:
         env:
           BETA_E2E_AUTHORING: "true"
           BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
       - name: Run business administration browser journeys
         run: pnpm test:e2e:business
       - name: Run operator administration browser journeys

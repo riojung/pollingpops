@@ -24,7 +24,9 @@ pnpm audit --audit-level low
 pnpm licenses:report
 git diff --exit-code -- THIRD_PARTY_NOTICES.md
 PLAYWRIGHT_PRODUCTION=true pnpm test:e2e
-PLAYWRIGHT_PRODUCTION=true pnpm test:e2e:beta
+PLAYWRIGHT_PRODUCTION=true BETA_E2E_AUTHORING=true \
+  BETA_E2E_ROUND_PROTOCOL=true BETA_E2E_SESSION_SUMMARIES=true \
+  BETA_E2E_IDEA_BOARDS=true pnpm test:e2e:beta
 pnpm readiness:check
 pnpm research:check
 ```

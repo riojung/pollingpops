@@ -39,6 +39,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 - [Release readiness ledger](release-readiness.json) is the machine-validated source of truth for
   single-VM beta and GA promotion gates; [evidence templates](evidence/README.md) cover human and
   provider verification.
+- [Beta release preparation](runbooks/beta-release-preparation.md) lists the staging inputs,
+  candidate binding, protected environment handoff, and execution order before gate acceptance.
 - [Evidence command reference](evidence/README.md#repository-evidence-tools) lists the synthetic
   alert rehearsal, target-load bundler, backup/restore validator, research aggregate evaluator, and
   release-ledger checks. These tools validate structure and binding; they do not authenticate an

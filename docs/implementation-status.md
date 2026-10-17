@@ -8,6 +8,40 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Beta release engineering preparation October 17 2026
+
+The preparation branch starts from `main` candidate
+`1d8eeb760bf7322867005cdf37778dcb9cd4eb48`, which includes IDEA-006 and the Grafana upgrade repair.
+GitHub Actions was re-enabled after operator authorization. The seven required PR check contexts
+remain unchanged. Main-branch enforcement still awaits a second human collaborator with write
+access who accepts the independent-review responsibility; the release-tag controls also require
+their documented independent review.
+
+Fresh local `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check` passes, including strict
+types, tests and production builds. A fresh `pnpm audit --audit-level low --json` reports no
+advisories across 642 dependencies. Local `gitleaks`, `syft` and `trivy` executables are unavailable;
+the hosted Security workflow supplies secret scanning, SBOM generation and CodeQL.
+
+A manual [production-path smoke run](https://github.com/riojung/pollingpops/actions/runs/39078085458)
+against that exact `main` commit exposed a stale smoke call to the now-blocked public
+`/v1/admin/features` path. The follow-up exercises authenticated operational controls inside the
+disposable server container and asserts that public GET/PATCH access remains blocked. Its full
+production-path result must be checked before acceptance. A manually dispatched run is engineering
+evidence; release acceptance separately requires successful main-push CI, Security and
+production-smoke runs for the exact release candidate. The readiness PR and its reviewed merge
+provide the normal PR-to-main validation path.
+
+Staging will use AWS EC2; the instance is not ready, and its region, application/media domains,
+verified SSH host key and provider configuration remain inputs. The checked-in staging config
+still contains example hosts and is correctly rejected by the deployment preflight. The
+[beta preparation handoff](runbooks/beta-release-preparation.md) sequences configuration,
+protected staging, signed images, deployment, operational exercises and independent acceptance.
+
+The release ledger remains unchanged: two historical engineering gates are recorded complete,
+while twelve beta-preflight gates and the signed-release gate remain pending. Local checks,
+restored Actions and prepared runbooks do not supply human-review, hosted-operation or customer
+study acceptance.
+
 ### IDEA 006 Brainstorming and prioritization boards October 16 2026
 
 Implemented locally on `codex/idea-006-brainstorming-boards` after auditing IDEA-004 and IDEA-005

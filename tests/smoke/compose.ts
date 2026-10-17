@@ -1,22 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { composeOperationalFeatures } from "../support/compose-operational-features.js";
 import { waitForReadyReport } from "../support/report-readiness.js";
 
 const baseUrl = (process.env.SMOKE_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "");
 const mailpitUrl = (process.env.SMOKE_MAILPIT_URL ?? "http://localhost:8025").replace(/\/$/, "");
-const adminToken = process.env.SMOKE_ADMIN_TOKEN ?? "replace-with-a-random-admin-token";
 const email = `compose-smoke-${Date.now()}@example.com`;
 let creatorCookie = "";
 let browserOrigin = process.env.SMOKE_ORIGIN?.replace(/\/$/, "") ?? "";
-
-type OperationalFeatureFlags = {
-  signups: boolean;
-  sessionCreation: boolean;
-  mediaUploads: boolean;
-  roundExperiences: boolean;
-  audiencePulse: boolean;
-  roomChat: boolean;
-};
 
 async function api<T>(path: string, init: RequestInit = {}, bearer?: string): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -75,14 +66,15 @@ async function main() {
     browserOrigin = new URL(bootstrap.publicWebUrl).origin;
   }
 
-  await api(
-    "/v1/admin/features",
-    {
-      method: "PATCH",
-      body: JSON.stringify({ signups: true, sessionCreation: true, mediaUploads: true }),
-    },
-    adminToken,
-  );
+  for (const method of ["GET", "PATCH"]) {
+    const response = await fetch(`${baseUrl}/v1/admin/features`, {
+      method,
+      headers: { origin: browserOrigin, "content-type": "application/json" },
+      ...(method === "PATCH" ? { body: JSON.stringify({ signups: true }) } : {}),
+    });
+    assert.equal(response.status, 404, "The product proxy must not expose operator routes");
+  }
+  await composeOperationalFeatures({ signups: true, sessionCreation: true, mediaUploads: true });
   const verifyResponse = await fetch(await magicLink(), { redirect: "manual" });
   assert.ok([301, 302, 303, 307, 308].includes(verifyResponse.status));
   creatorCookie = verifyResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
@@ -97,20 +89,13 @@ async function main() {
   assert.equal(me.entitlements.csvExport, true);
   assert.equal(me.entitlements.brandTheme, true);
 
-  const featureView = await api<{
-    configured: OperationalFeatureFlags;
-    runtime: OperationalFeatureFlags;
-    effective: OperationalFeatureFlags;
-  }>("/v1/admin/features", {}, adminToken);
+  const featureView = await composeOperationalFeatures();
   try {
-    const paused = await api<typeof featureView>(
-      "/v1/admin/features",
-      {
-        method: "PATCH",
-        body: JSON.stringify({ signups: false, sessionCreation: false, mediaUploads: false }),
-      },
-      adminToken,
-    );
+    const paused = await composeOperationalFeatures({
+      signups: false,
+      sessionCreation: false,
+      mediaUploads: false,
+    });
     assert.deepEqual(paused.effective, {
       ...featureView.effective,
       signups: false,
@@ -160,14 +145,7 @@ async function main() {
       assert.equal((await request).status, 503);
     }
   } finally {
-    await api(
-      "/v1/admin/features",
-      {
-        method: "PATCH",
-        body: JSON.stringify({ signups: true, sessionCreation: true, mediaUploads: true }),
-      },
-      adminToken,
-    );
+    await composeOperationalFeatures({ signups: true, sessionCreation: true, mediaUploads: true });
   }
   const resumedFeatures = await api<{
     signups: boolean;

@@ -81,6 +81,15 @@ for (const colorScheme of ["light", "dark"] as const) {
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         `${path} fits the viewport`,
       ).toBe(true);
+      if (path === "/signin") {
+        const textColor = await page
+          .locator("html")
+          .evaluate((element) => getComputedStyle(element).color);
+        await expect(page.getByRole("link", { name: "Join a Round", exact: true })).toHaveCSS(
+          "color",
+          textColor,
+        );
+      }
       const result = await new AxeBuilder({ page }).analyze();
       expect(result.violations, `${path} in ${colorScheme}`).toEqual([]);
     }

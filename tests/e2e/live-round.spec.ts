@@ -182,7 +182,18 @@ test("creator and participant complete a live round", async ({ browser }, testIn
       .filter({ hasText: "initial accuracy" })
       .getByText("100%", { exact: true }),
   ).toBeVisible({ timeout: 10_000 });
-  await expect(creator.getByRole("link", { name: "CSV export requires Pro" })).toBeVisible();
+  const exportNotice = creator.getByRole("link", { name: "CSV was not included for this room" });
+  await expect(exportNotice).toBeVisible();
+  await expect(exportNotice).toHaveAttribute("href", "/pricing");
+  await expect(creator.getByRole("link", { name: /^Download (CSV|JSON)$/ })).toHaveCount(0);
+  const reportId = new URL(creator.url()).pathname.split("/").at(-1)!;
+  for (const format of ["csv", "json"]) {
+    const response = await creator.request.get(
+      `http://127.0.0.1:4100/v1/reports/${reportId}.${format}`,
+    );
+    expect(response.status()).toBe(402);
+    expect(await response.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
+  }
   await expect(creator.getByText(/current free plan defaults to 30 days/)).toBeVisible();
   expect((await new AxeBuilder({ page: creator }).analyze()).violations).toEqual([]);
 

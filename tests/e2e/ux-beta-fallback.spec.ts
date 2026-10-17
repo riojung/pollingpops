@@ -104,7 +104,16 @@ test("feature-off creator remains on the legacy dashboard", async ({ page }, tes
     await expect(page.getByRole("columnheader", { name: "Distribution", exact: true })).toHaveCount(
       0,
     );
-    await expect(page.getByRole("link", { name: "CSV export requires Pro" })).toBeVisible();
+    const exportNotice = page.getByRole("link", { name: "CSV was not included for this room" });
+    await expect(exportNotice).toBeVisible();
+    await expect(exportNotice).toHaveAttribute("href", "/pricing");
+    await expect(page.getByRole("link", { name: /^Download (CSV|JSON)$/ })).toHaveCount(0);
+    const reportId = new URL(page.url()).pathname.split("/").at(-1)!;
+    for (const format of ["csv", "json"]) {
+      const response = await page.request.get(`${apiUrl}/v1/reports/${reportId}.${format}`);
+      expect(response.status()).toBe(402);
+      expect(await response.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
+    }
   } finally {
     await participant.close();
   }

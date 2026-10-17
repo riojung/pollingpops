@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SummarySource } from "@openround/contracts";
 import { translate, type MessageKey } from "../../lib/i18n/catalog";
 import { sessionSummaryEnglishMessages } from "../../lib/i18n/domains/session-summary";
+import * as summaryClient from "../../lib/session-summary-client";
 import { summarySource } from "../../test-utils/session-summary";
 import { SessionSummaryButton } from "./summary-dialog";
 
@@ -51,6 +52,7 @@ vi.mock("../locale-provider", () => ({
 
 afterEach(() => {
   fixtures.hooks = null;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -89,17 +91,23 @@ function deferredAvailability() {
   return {
     promise,
     complete(enabled: boolean) {
-      resolve(new Response(JSON.stringify({ enabled })));
+      // Body delivery can finish after the fetch promise and the current microtask queue.
+      const body = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({ enabled })));
+            controller.close();
+          }, 0);
+        },
+      });
+      resolve(new Response(body));
     },
   };
 }
 
-async function settle() {
-  for (let index = 0; index < 8; index++) await Promise.resolve();
-}
-
 describe("source-specific session summary availability", () => {
   it("hides unrelated paused sources and keeps a retained source available after an ID or kind change", async () => {
+    const availability = vi.spyOn(summaryClient, "fetchSummaryAvailability");
     const retainedSource: SummarySource = {
       kind: "round",
       id: "00000000-0000-4000-8000-000000000003",
@@ -119,20 +127,19 @@ describe("source-specific session summary availability", () => {
     expect(harness.render(summarySource)).toBe("");
     harness.commitSourceEffect();
     first.complete(false);
-    await settle();
+    await availability.mock.results[0]!.value;
     expect(harness.render(summarySource)).toBe("");
 
     expect(harness.render(retainedSource)).toBe("");
     harness.commitSourceEffect();
     retained.complete(true);
-    await settle();
-    expect(harness.render(retainedSource)).toContain("Share summary");
+    await vi.waitFor(() => expect(harness.render(retainedSource)).toContain("Share summary"));
 
     // A previous positive result must disappear during render, before the next effect runs.
     expect(harness.render(unrelatedPresentation)).toBe("");
     harness.commitSourceEffect();
     presentation.complete(false);
-    await settle();
+    await availability.mock.results[2]!.value;
     expect(harness.render(unrelatedPresentation)).toBe("");
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       `/v1/session-summaries/features?kind=round&id=${summarySource.id}`,
@@ -143,6 +150,7 @@ describe("source-specific session summary availability", () => {
   });
 
   it("aborts the old source request and ignores a late positive result for that source", async () => {
+    const availability = vi.spyOn(summaryClient, "fetchSummaryAvailability");
     const currentSource: SummarySource = {
       kind: "survey",
       id: "00000000-0000-4000-8000-000000000004",
@@ -166,11 +174,11 @@ describe("source-specific session summary availability", () => {
       `/v1/session-summaries/features?kind=survey&id=${currentSource.id}`,
     );
     current.complete(false);
-    await settle();
+    await availability.mock.results[1]!.value;
     expect(harness.render(currentSource)).toBe("");
     // Model a transport that finishes even after its AbortSignal was cancelled.
     previous.complete(true);
-    await settle();
+    await availability.mock.results[0]!.value;
     expect(harness.render(currentSource)).toBe("");
 
     const currentSignal = (fetchMock.mock.calls[1]![1] as RequestInit).signal;

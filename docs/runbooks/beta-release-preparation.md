@@ -38,13 +38,13 @@ or secrets into the repository.
 
 ## Inputs needed before staging execution
 
-| Decision                 | Required handoff                                                                                                                                                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| EC2 target               | AWS region, instance type/resources, supported Linux baseline, storage, network/security groups, dedicated deployment user/root, and approved SSH sources. Verify compatibility with the current `imagePlatform: linux/amd64`; do not select an Arm instance without a reviewed platform change. |
-| DNS and SSH trust        | Real application/API and separate media domains, DNS ownership, certificate-monitoring owner, host/port, and the exact SSH host key obtained through an independently verified provisioning channel.                                                                                             |
-| External services        | SMTP provider and dedicated sink, telemetry backend and observer adapters, host log shipping, page/warning/ticket receivers, named responders, support and incident contacts.                                                                                                                    |
-| Recovery and measurement | Separately administered encrypted off-host database/object backups, key custody, approved RPO/RTO, clean replacement EC2 host, private durable evidence archive, and an isolated load runner near the target VM.                                                                                 |
-| People and scope         | Operations owner, independent gate reviewers, second human write collaborator, research/accessibility/security/legal reviewers, exercise windows, launch populations/markets, and the exact enabled feature/workspace scope.                                                                     |
+| Decision                 | Required handoff                                                                                                                                                                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EC2 target               | AWS region, instance type/resources, supported Linux baseline, storage, network/security groups, non-root deployment user and release-directory ownership, and approved SSH sources. Verify compatibility with the current `imagePlatform: linux/amd64`; do not select an Arm instance without a reviewed platform change. |
+| DNS and SSH trust        | Real application/API and separate media domains, DNS ownership, certificate-monitoring owner, host/port, and the exact SSH host key obtained through an independently verified provisioning channel.                                                                                                                       |
+| External services        | SMTP provider and dedicated sink, telemetry backend and observer adapters, host log shipping, page/warning/ticket receivers, named responders, support and incident contacts.                                                                                                                                              |
+| Recovery and measurement | Separately administered encrypted off-host database/object backups, key custody, approved RPO/RTO, clean replacement EC2 host, private durable evidence archive, and an isolated load runner near the target VM.                                                                                                           |
+| People and scope         | Operations owner, independent gate reviewers, second human write collaborator, research/accessibility/security/legal reviewers, exercise windows, launch populations/markets, and the exact enabled feature/workspace scope.                                                                                               |
 
 Record non-secret target choices in `config/deploy/staging.json` and the reviewed exact key pin
 in `config/deploy/ssh/staging_known_hosts`. Review and merge those changes before building.
@@ -133,7 +133,11 @@ create the synthetic creator through normal sign-in, and follow
 [synthetic capacity provisioning](staging-readiness.md#provision-the-synthetic-capacity-workspace)
 to auditably grant its isolated workspace the required 250-participant capacity. Keep billing
 disabled. Then make a second reviewed, signed build/config deployment with that workspace's
-allowlists and feature ceilings. Refresh the candidate binding above and retain both build IDs.
+allowlists and feature ceilings. Merge a reviewed non-secret configuration change or deployment
+change record to establish a new descendant `main` commit before repeating the candidate binding,
+signed-image dispatch, manifest download, and deployment above. Updating ignored runtime inputs
+alone does not change the build ID, and deployment rejects an already-active build ID. Retain both
+build IDs and the matching private runtime-input records.
 Do not edit an active release or redeploy the same build in place. Use the final candidate for
 readiness and gate acceptance; capture its synthetic cookie only after confirming effective flags.
 

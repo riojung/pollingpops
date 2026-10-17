@@ -18,6 +18,7 @@ import {
 } from "../src/index.js";
 import type { MemoryPlatformRepository } from "../src/platform-memory.js";
 import { createLibraryDeletionFixture } from "./support/library-deletion-fixtures.js";
+import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 
 const snapshot = {
   plan: "pro" as const,
@@ -64,6 +65,7 @@ for (const backend of ["memory", "postgres"] as const) {
       let isolatedRuntimeUrl = runtimeUrl;
       beforeAll(async () => {
         if (backend === "postgres") {
+          await preparePostgresTestRuntime(adminUrl!, runtimeUrl!);
           const cluster = new PostgresRepository(adminUrl!);
           await cluster.pool.query(`CREATE DATABASE "${databaseName}"`);
           await cluster.close();

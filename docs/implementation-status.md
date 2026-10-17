@@ -26,10 +26,30 @@ A manual [production-path smoke run](https://github.com/riojung/pollingpops/acti
 against that exact `main` commit exposed a stale smoke call to the now-blocked public
 `/v1/admin/features` path. The follow-up exercises authenticated operational controls inside the
 disposable server container and asserts that public GET/PATCH access remains blocked. Its full
-production-path result must be checked before acceptance. A manually dispatched run is engineering
-evidence; release acceptance separately requires successful main-push CI, Security and
-production-smoke runs for the exact release candidate. The readiness PR and its reviewed merge
-provide the normal PR-to-main validation path.
+production-path follow-up passed that boundary and reached the restore drill, which exposed a
+second harness race: a background heartbeat can change a row between the source inventory and
+`pg_dump`. The drill now imports one exported snapshot for both operations while retaining full
+durable-table and row comparisons.
+
+Fresh PR CI also exposed a parallel PostgreSQL fixture race and a summary test that assumed
+response-body parsing would finish within eight microtasks. Both PostgreSQL suites now initialize
+their restricted test login under a shared transaction lock; fresh-cluster standalone and parallel
+runs pass, including 196 tests in the combined run with one existing skip. Summary tests await
+actual request/render completion and exercise delayed response bodies. Three password integration
+cases retain real scrypt and all assertions with bounded per-case budgets for shared CI CPUs.
+
+The first complete feature-off browser run exposed stale CSV upgrade copy in two journeys and
+a dark-mode sign-in link contrast failure on mobile WebKit. The journeys now check retained-room
+coverage copy, the pricing destination, absent download controls, and authenticated CSV/JSON API
+denials. The sign-in header link uses the theme foreground directly; light/dark browser checks
+assert its rendered color and retain the complete axe scan.
+
+The initial hosted Security run passed dependency review, the dependency audit, third-party
+notices, the PR-commit Gitleaks scan, source SBOM generation and CodeQL at `2e48656`. See
+[the readiness PR](https://github.com/riojung/pollingpops/pull/135) for exact follow-up commits and
+hosted outcomes. A manually dispatched or PR run is engineering evidence; release acceptance
+separately requires successful main-push CI, Security and production-smoke runs for the exact
+release candidate. The readiness PR and its reviewed merge provide the normal PR-to-main path.
 
 Staging will use AWS EC2; the instance is not ready, and its region, application/media domains,
 verified SSH host key and provider configuration remain inputs. The checked-in staging config

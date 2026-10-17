@@ -221,6 +221,7 @@ function expectNoAuthoringSecrets(snapshot: unknown) {
 }
 
 describe("PresentationSessionService realtime integration", () => {
+  // Four real scrypt derivations retain production password checks on shared CI CPUs.
   it("requires paid protection and checks passwords only for new Presentation admissions", async () => {
     const { repository, sessions, service, ids, hosted: open, joined: openJoin } = await fixture();
     const input = {
@@ -269,7 +270,7 @@ describe("PresentationSessionService realtime integration", () => {
       expect(JSON.stringify(value)).not.toContain(stored!.joinPasswordHash!);
       expect(JSON.stringify(value)).not.toContain("joinPasswordHash");
     }
-  });
+  }, 15_000);
 
   it("returns a usable rotated companion pass when its audit fails without revoking the host", async () => {
     const { repository, service, hosted, ids } = await fixture();

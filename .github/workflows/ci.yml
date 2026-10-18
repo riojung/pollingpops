@@ -139,17 +139,18 @@ jobs:
         run: pnpm test:e2e:control
       - name: Run local admin browser journeys
         run: pnpm test:e2e:local-admin
-      - name: Upload browser failure artifacts
-        if: ${{ failure() || cancelled() }}
+      - name: Retain browser reports and retry diagnostics
+        if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-core-failure
+          name: browser-core-results
           path: |
             playwright-report/
             test-results/
             test-results-business/
             playwright-report-business/
           if-no-files-found: ignore
+          retention-days: 14
 
   browser-beta:
     runs-on: ubuntu-26.04
@@ -182,15 +183,16 @@ jobs:
           BETA_E2E_ROUND_PROTOCOL: "true"
           BETA_E2E_SESSION_SUMMARIES: "true"
           BETA_E2E_IDEA_BOARDS: "true"
-      - name: Upload beta browser failure artifacts
-        if: ${{ failure() || cancelled() }}
+      - name: Retain beta reports and retry diagnostics
+        if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-beta-${{ matrix.project }}-failure
+          name: browser-beta-${{ matrix.project }}-results
           path: |
             playwright-report-beta/
             test-results-beta/
           if-no-files-found: ignore
+          retention-days: 14
 
   browser-smoke:
     runs-on: ubuntu-26.04

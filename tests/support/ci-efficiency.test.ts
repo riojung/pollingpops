@@ -191,14 +191,16 @@ describe("CI efficiency without coverage bypasses", () => {
     const betaArtifacts = beta.steps.find((step) =>
       step.uses?.startsWith("actions/upload-artifact@"),
     );
-    expect(coreArtifacts?.with?.name).toBe("browser-core-failure");
-    expect(betaArtifacts?.with?.name).toBe("browser-beta-${{ matrix.project }}-failure");
+    expect(coreArtifacts?.with?.name).toBe("browser-core-results");
+    expect(betaArtifacts?.with?.name).toBe("browser-beta-${{ matrix.project }}-results");
     expect(coreArtifacts?.with?.path).toBe(
       "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
     );
     expect(betaArtifacts?.with?.path).toBe("playwright-report-beta/\ntest-results-beta/\n");
     for (const artifacts of [coreArtifacts, betaArtifacts]) {
-      expect(artifacts?.if).toBe("${{ failure() || cancelled() }}");
+      // A passing retry must not discard the first attempt's failure evidence.
+      expect(artifacts?.if).toBe("${{ always() }}");
+      expect(artifacts?.with?.["retention-days"]).toBe(14);
     }
   });
 

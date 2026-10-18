@@ -67,7 +67,9 @@ settings and evidence. The required `browser-smoke` context waits for core and e
 and fails unless all succeed, including when a dependency is skipped or cancelled. Feature-off
 and beta runs serve standalone production output, including public/static assets, rather than
 paying on-demand development compilation during every journey.
-First-failure traces and screenshots remain; CI video is recorded on the first retry.
+Browser reports and first-failure traces/screenshots are retained for 14 days even when a retry
+passes; CI video is recorded on the first retry. A passing job must not discard the evidence
+needed to diagnose a flaky case.
 
 For a red run, inspect the failed job and annotations before retrying:
 

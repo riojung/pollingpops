@@ -17,7 +17,7 @@ remain unchanged. Main-branch enforcement still awaits a second human collaborat
 access who accepts the independent-review responsibility; the release-tag controls also require
 their documented independent review.
 
-Fresh local `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check` passes, including strict
+Fresh local `CI=true VITEST_MAX_WORKERS=1 pnpm check` passes, including strict
 types, tests and production builds. A fresh `pnpm audit --audit-level low --json` reports no
 advisories across 642 dependencies. Local `gitleaks`, `syft` and `trivy` executables are unavailable;
 the hosted Security workflow supplies secret scanning, SBOM generation and CodeQL.
@@ -47,6 +47,10 @@ assert its rendered color and retain the complete axe scan.
 The beta CI step explicitly opts into the existing session-summary and idea-board writer
 journeys. Their default-off test switches previously skipped eight profile cases. These use
 isolated in-memory fixtures; the shared-workspace suite retains its single worker.
+
+Unit CI bounds package tasks and Vitest workers independently instead of multiplying the
+default package and worker pools. The worker setting is explicitly included in Turbo's strict
+test environment. The separate restricted PostgreSQL job keeps its normal parallel execution.
 
 The initial hosted Security run passed dependency review, the dependency audit, third-party
 notices, the PR-commit Gitleaks scan, source SBOM generation and CodeQL at `2e48656`. See

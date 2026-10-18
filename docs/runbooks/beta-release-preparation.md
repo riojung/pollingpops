@@ -19,7 +19,7 @@ without another build writing their shared Next output directory.
 
 ```bash
 pnpm install --frozen-lockfile
-CI=true pnpm check
+CI=true VITEST_MAX_WORKERS=1 pnpm check
 pnpm audit --audit-level low
 pnpm licenses:report
 git diff --exit-code -- THIRD_PARTY_NOTICES.md

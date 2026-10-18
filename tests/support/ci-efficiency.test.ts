@@ -8,6 +8,7 @@ type Step = {
   uses?: string;
   run?: string;
   if?: string;
+  env?: Record<string, string>;
   with?: Record<string, unknown>;
 };
 type Workflow = {
@@ -60,7 +61,6 @@ describe("CI efficiency without coverage bypasses", () => {
       "pnpm check:docker-context",
       "pnpm lint",
       "pnpm typecheck",
-      "pnpm test",
       "pnpm build",
       "pnpm readiness:check",
       "pnpm smoke:tracing",
@@ -70,6 +70,16 @@ describe("CI efficiency without coverage bypasses", () => {
         run,
       ).toBe(true);
     }
+    const tests = ci.jobs.check.steps.find((step) =>
+      step.run?.includes("pnpm exec turbo run test"),
+    );
+    expect(tests?.run).toMatch(/^pnpm exec turbo run test --concurrency=2$/m);
+    expect(tests?.run).toMatch(/^pnpm test:smoke-support$/m);
+    expect(tests?.env?.VITEST_MAX_WORKERS).toBe("1");
+    const turbo = JSON.parse(
+      await readFile(new URL("../../turbo.json", import.meta.url), "utf8"),
+    ) as { tasks: { test: { env?: string[] } } };
+    expect(turbo.tasks.test.env).toContain("VITEST_MAX_WORKERS");
     const postgres = ci.jobs["postgres-migration"].steps;
     expect(
       postgres.filter((step) => step.run === "pnpm --filter @openround/db migrate"),

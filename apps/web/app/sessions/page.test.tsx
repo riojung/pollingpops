@@ -1,3 +1,4 @@
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -9,6 +10,7 @@ interface SessionHooks {
   cursor: number;
   slots: unknown[];
   pendingEffects: Array<() => void>;
+  dirty: boolean;
 }
 
 const fixtures = vi.hoisted(() => ({
@@ -54,10 +56,14 @@ vi.mock("react", async (importOriginal) => {
       return [
         hooks.slots[index] as T,
         (next: T | ((current: T) => T)) => {
-          hooks.slots[index] =
+          const value =
             typeof next === "function"
               ? (next as (current: T) => T)(hooks.slots[index] as T)
               : next;
+          if (!Object.is(value, hooks.slots[index])) {
+            hooks.slots[index] = value;
+            hooks.dirty = true;
+          }
         },
       ];
     },
@@ -940,9 +946,10 @@ describe("Sessions workspace", () => {
 });
 
 function sessionsHarness() {
-  const hooks: SessionHooks = { cursor: 0, slots: [], pendingEffects: [] };
+  const hooks: SessionHooks = { cursor: 0, slots: [], pendingEffects: [], dirty: false };
   const render = () => {
     hooks.cursor = 0;
+    hooks.dirty = false;
     fixtures.hooks = hooks;
     try {
       return renderToStaticMarkup(<SessionsPage />);
@@ -952,12 +959,16 @@ function sessionsHarness() {
   };
   const flushEffects = () => hooks.pendingEffects.splice(0).forEach((effect) => effect());
   const settle = async () => {
+    let markup = render();
     for (let index = 0; index < 16; index++) {
-      render();
       flushEffects();
-      await Promise.resolve();
+      // Drain ready promise callbacks without waiting for deliberately pending request fixtures.
+      // Render again only when a state update or effect needs to be committed.
+      await nextTurn();
+      if (!hooks.dirty && hooks.pendingEffects.length === 0) return markup;
+      markup = render();
     }
-    return render();
+    throw new Error("Sessions test harness did not settle after 16 state/effect passes");
   };
   return { render, flushEffects, settle };
 }

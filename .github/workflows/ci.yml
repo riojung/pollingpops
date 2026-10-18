@@ -30,7 +30,13 @@ jobs:
       - run: pnpm check:docker-context
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - name: Run bounded package and smoke-support tests
+        run: |
+          node -e "console.log({ availableParallelism: require('node:os').availableParallelism(), vitestMaxWorkers: process.env.VITEST_MAX_WORKERS })"
+          pnpm exec turbo run test --concurrency=2
+          pnpm test:smoke-support
+        env:
+          VITEST_MAX_WORKERS: "1"
       - run: pnpm build
       - name: Validate fail-fast hosted production configuration
         run: pnpm --filter @openround/server config:check

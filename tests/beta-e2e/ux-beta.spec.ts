@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { currentRoundClientCapabilities } from "@openround/contracts";
+import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { betaEmail, signInBeta } from "./sign-in";
 
 const webUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;

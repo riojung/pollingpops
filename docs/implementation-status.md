@@ -57,8 +57,12 @@ preference, retaining exact theme and axe assertions despite Firefox media-emula
 The beta CI step explicitly opts into the existing session-summary and idea-board writer
 journeys. Their default-off test switches previously skipped eight profile cases. These use
 isolated in-memory fixtures; the shared-workspace suite retains its single worker.
-The complete browser job has a 45-minute outer budget for the expanded matrix and all admin
-journeys; individual case deadlines, retries and assertions remain unchanged.
+The serial hosted run passed 240 of 302 beta cases without failures before exhausting its
+45-minute outer budget; the remaining beta cases and administration suites were incomplete.
+CI now gives each beta browser profile its own runner and seeded workspace, retaining one worker
+within each profile. Feature-off and administration journeys execute once in a separate job.
+The required `browser-smoke` aggregate fails unless both groups succeed, including every matrix
+profile. Individual case deadlines, retries and assertions remain unchanged.
 
 Unit CI bounds package tasks and Vitest workers independently instead of multiplying the
 default package and worker pools. The worker setting is explicitly included in Turbo's strict

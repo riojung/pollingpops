@@ -59,11 +59,14 @@ digest-bound release image SBOMs cover different artifacts and must not be remov
 CodeQL scans the checked-in JavaScript/TypeScript sources with `build-mode: none`; a second full
 application install/build is unnecessary for this interpreted-language scan. See GitHub's
 [build-mode documentation](https://github.com/github/codeql-action/blob/2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2/init/action.yml).
-The primary CI job still validates the production build. Browser runs use one beta invocation for
-all four profiles, preserving their shared report/artifact set and avoiding four cold server starts.
-Beta remains serial because its seeded workspace includes shared mutable settings and evidence.
-CI builds the web app once per feature mode and serves its standalone production output, including
-public/static assets, rather than paying on-demand development compilation during every journey.
+The primary CI job still validates the production build. Feature-off and administration browser
+suites run once in the core browser job. Each of the four beta profiles runs on its own runner,
+with its own seeded workspace, application processes, production build, and failure artifacts.
+Beta remains serial within each runner because its seeded workspace includes shared mutable
+settings and evidence. The required `browser-smoke` context waits for core and every beta profile
+and fails unless all succeed, including when a dependency is skipped or cancelled. Feature-off
+and beta runs serve standalone production output, including public/static assets, rather than
+paying on-demand development compilation during every journey.
 First-failure traces and screenshots remain; CI video is recorded on the first retry.
 
 For a red run, inspect the failed job and annotations before retrying:
@@ -91,12 +94,14 @@ output directory):
 
 ```bash
 PLAYWRIGHT_PRODUCTION=true pnpm test:e2e
-PLAYWRIGHT_PRODUCTION=true pnpm test:e2e:beta
+PLAYWRIGHT_PRODUCTION=true BETA_E2E_AUTHORING=true BETA_E2E_ROUND_PROTOCOL=true \
+  BETA_E2E_SESSION_SUMMARIES=true BETA_E2E_IDEA_BOARDS=true pnpm test:e2e:beta
 ```
 
-Omit the flag to keep the normal local development server. Do not run a build or another browser
-suite against that output directory while a suite is serving it. Full local tests also require all
-three installed browser engines; an engine that cannot launch locally is not a passing test.
+Omit `PLAYWRIGHT_PRODUCTION=true` to keep the normal local development server. Do not run a build
+or another browser suite against that output directory while a suite is serving it. Full local
+tests also require all three installed browser engines; an engine that cannot launch locally is
+not a passing test.
 
 ## Release-tag ruleset specifications
 

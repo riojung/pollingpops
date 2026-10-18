@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -8,13 +9,24 @@ type Step = {
   uses?: string;
   run?: string;
   if?: string;
+  "continue-on-error"?: boolean;
   env?: Record<string, string>;
   with?: Record<string, unknown>;
+};
+type Job = {
+  steps: Step[];
+  env?: Record<string, string>;
+  "runs-on": string;
+  "timeout-minutes": number;
+  "continue-on-error"?: boolean;
+  needs?: string[];
+  if?: string;
+  strategy?: { "fail-fast": boolean; matrix: { project: string[] } };
 };
 type Workflow = {
   on: Record<string, unknown>;
   concurrency: { group: string; "cancel-in-progress": string };
-  jobs: Record<string, { steps: Step[]; env?: Record<string, string>; "runs-on": string }>;
+  jobs: Record<string, Job>;
 };
 
 async function workflow(name: string) {
@@ -27,7 +39,13 @@ describe("CI efficiency without coverage bypasses", () => {
   it("retains every required context and runs CI/Security on all PRs and main pushes", async () => {
     const ci = await workflow("ci");
     const security = await workflow("security");
-    expect(Object.keys(ci.jobs).sort()).toEqual(["browser-smoke", "check", "postgres-migration"]);
+    expect(Object.keys(ci.jobs).sort()).toEqual([
+      "browser-beta",
+      "browser-core",
+      "browser-smoke",
+      "check",
+      "postgres-migration",
+    ]);
     expect(Object.keys(security.jobs).sort()).toEqual([
       "codeql",
       "dependency-and-secret-review",
@@ -115,18 +133,107 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(steps.some((step) => step.uses?.startsWith("github/codeql-action/analyze@"))).toBe(true);
   });
 
-  it("retains feature-off and beta browser suites with all browser packages", async () => {
-    const browser = (await workflow("ci")).jobs["browser-smoke"];
-    expect(browser.env?.PLAYWRIGHT_PRODUCTION).toBe("true");
-    for (const run of [
-      "pnpm exec playwright install --with-deps chromium firefox webkit",
-      "pnpm test:e2e",
-      "pnpm test:e2e:beta",
-    ]) {
+  it("runs feature-off and administration coverage once and isolates every beta profile", async () => {
+    const ci = await workflow("ci");
+    const core = ci.jobs["browser-core"];
+    const beta = ci.jobs["browser-beta"];
+    const projects = [
+      "chromium-beta",
+      "firefox-beta",
+      "chromium-beta-mobile",
+      "webkit-beta-mobile",
+    ];
+    expect(beta.strategy).toEqual({ "fail-fast": false, matrix: { project: projects } });
+    const config = (await import("../../playwright.beta.config")).default;
+    expect(config.projects?.map((project) => project.name)).toEqual(projects);
+    expect(config.workers).toBe(1);
+    expect(config.fullyParallel).toBe(false);
+    expect(core.strategy).toBeUndefined();
+    expect(core["timeout-minutes"]).toBe(25);
+    expect(beta["timeout-minutes"]).toBe(30);
+    for (const browser of [core, beta]) {
+      expect(browser.env?.PLAYWRIGHT_PRODUCTION).toBe("true");
+      expect(browser.if).toBeUndefined();
+      expect(browser["continue-on-error"]).toBeUndefined();
+      expect(browser.steps.every((step) => step["continue-on-error"] === undefined)).toBe(true);
       expect(
-        browser.steps.some((step) => step.run === run),
-        run,
+        browser.steps.some(
+          (step) => step.run === "pnpm exec playwright install --with-deps chromium firefox webkit",
+        ),
       ).toBe(true);
+    }
+    for (const run of [
+      "pnpm test:e2e",
+      "pnpm test:e2e:business",
+      "pnpm test:e2e:control",
+      "pnpm test:e2e:local-admin",
+    ]) {
+      const coreRuns = core.steps.filter((step) => step.run === run);
+      expect(coreRuns, run).toHaveLength(1);
+      expect(coreRuns[0]?.if, run).toBeUndefined();
+      expect(
+        Object.values(ci.jobs).flatMap((job) => job.steps.filter((step) => step.run === run)),
+        run,
+      ).toHaveLength(1);
+    }
+    const betaRun = beta.steps.find((step) => step.name === "Run isolated UX beta browser project");
+    expect(betaRun?.run).toBe('pnpm test:e2e:beta --project="${{ matrix.project }}"');
+    expect(betaRun?.if).toBeUndefined();
+    expect(betaRun?.env).toEqual({
+      BETA_E2E_AUTHORING: "true",
+      BETA_E2E_ROUND_PROTOCOL: "true",
+      BETA_E2E_SESSION_SUMMARIES: "true",
+      BETA_E2E_IDEA_BOARDS: "true",
+    });
+    const coreArtifacts = core.steps.find((step) =>
+      step.uses?.startsWith("actions/upload-artifact@"),
+    );
+    const betaArtifacts = beta.steps.find((step) =>
+      step.uses?.startsWith("actions/upload-artifact@"),
+    );
+    expect(coreArtifacts?.with?.name).toBe("browser-core-failure");
+    expect(betaArtifacts?.with?.name).toBe("browser-beta-${{ matrix.project }}-failure");
+    expect(coreArtifacts?.with?.path).toBe(
+      "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
+    );
+    expect(betaArtifacts?.with?.path).toBe("playwright-report-beta/\ntest-results-beta/\n");
+    for (const artifacts of [coreArtifacts, betaArtifacts]) {
+      expect(artifacts?.if).toBe("${{ failure() || cancelled() }}");
+    }
+  });
+
+  it("keeps the required browser context fail-closed for every dependency outcome", async () => {
+    const aggregate = (await workflow("ci")).jobs["browser-smoke"];
+    expect(aggregate.needs).toEqual(["browser-core", "browser-beta"]);
+    expect(aggregate.if).toBe("${{ always() }}");
+    expect(aggregate["timeout-minutes"]).toBe(5);
+    expect(aggregate["continue-on-error"]).toBeUndefined();
+    expect(aggregate.steps).toHaveLength(1);
+    const gate = aggregate.steps[0]!;
+    expect(gate.if).toBeUndefined();
+    expect(gate["continue-on-error"]).toBeUndefined();
+    expect(gate.env).toEqual({
+      CORE_RESULT: "${{ needs.browser-core.result }}",
+      BETA_RESULT: "${{ needs.browser-beta.result }}",
+    });
+    expect(gate.run).toBeTruthy();
+    for (const core of ["success", "failure", "cancelled", "skipped", ""]) {
+      for (const beta of ["success", "failure", "cancelled", "skipped", ""]) {
+        const result = spawnSync(
+          "bash",
+          ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", gate.run!],
+          {
+            env: { CORE_RESULT: core, BETA_RESULT: beta },
+            encoding: "utf8",
+            timeout: 5_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.signal).toBeNull();
+        expect(result.status === 0, `core=${core}, beta=${beta}`).toBe(
+          core === "success" && beta === "success",
+        );
+      }
     }
   });
 });

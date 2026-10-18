@@ -110,7 +110,10 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   const participantContext = await browser.newContext();
   const participant = await participantContext.newPage();
   await participant.goto(`/join?code=${code}`);
-  await participant.getByLabel("Nickname").fill("Learner");
+  // Preflight replaces the initial nickname field with this Round's friendly-only form.
+  // Wait for that rendered privacy policy before activating Join.
+  await expect(participant.getByTestId("friendly-alias-notice")).toBeVisible();
+  await expect(participant.getByLabel("Nickname", { exact: true })).toHaveCount(0);
   await participant.getByRole("button", { name: "Join round" }).click();
   await expect(participant).toHaveURL(/\/play\//);
   await expect(participant.locator(".live-shell")).toHaveAttribute("data-pattern", "grid");

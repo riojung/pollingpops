@@ -1,4 +1,11 @@
-import { request, expect, type BrowserContext, type Page } from "@playwright/test";
+import {
+  request,
+  expect,
+  test as base,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import { operatorTotpCode } from "../../packages/control-plane/src/index.js";
 
 export const controlOrigin = "http://127.0.0.1:3302";
@@ -32,15 +39,7 @@ interface FixtureState {
   mfaConfigured: boolean;
 }
 
-export async function localAdminHarness(context: BrowserContext) {
-  // This request context has no browser cookie jar. Forward only cookies that
-  // the browser actually sent; a missing product bridge cannot be repaired here.
-  const transport = await request.newContext({ baseURL: apiOrigin });
-  context.on("close", () => {
-    // Playwright can already have closed the request context during teardown.
-    // Consume that disposal rejection instead of leaking it into the next test.
-    void transport.dispose().catch(() => {});
-  });
+async function localAdminHarness(context: BrowserContext, transport: APIRequestContext) {
   const cookie = async (name: string) =>
     (await context.cookies(controlOrigin)).find((entry) => entry.name === name)?.value;
   const cookieHeader = async () =>
@@ -105,6 +104,25 @@ export async function localAdminHarness(context: BrowserContext) {
   };
   return { cookie, state, revoke, ageSession, provision };
 }
+
+export const test = base.extend<{ localAdmin: Awaited<ReturnType<typeof localAdminHarness>> }>({
+  localAdmin: async ({ context }, use) => {
+    // This request context has no browser cookie jar. Forward only cookies that
+    // the browser actually sent; a missing product bridge cannot be repaired here.
+    const transport = await request.newContext({ baseURL: apiOrigin });
+    try {
+      await use(await localAdminHarness(context, transport));
+    } finally {
+      // Drain forwarding before disposing its transport, and finish disposal before
+      // the next test starts tracing existing request contexts.
+      try {
+        await context.unrouteAll({ behavior: "wait" });
+      } finally {
+        await transport.dispose();
+      }
+    }
+  },
+});
 
 export interface AdminCredentials {
   username: string;

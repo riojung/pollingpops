@@ -17,15 +17,15 @@ for (const surface of ["", "@mobile "]) {
     await page
       .getByLabel("Question", { exact: true })
       .fill("Which support would help? Choose two.");
-    await page.getByLabel("Option 1", { exact: true }).fill("Examples");
-    await page.getByLabel("Option 2", { exact: true }).fill("Practice");
+    await page.getByRole("textbox", { name: "Option 1", exact: true }).fill("Examples");
+    await page.getByRole("textbox", { name: "Option 2", exact: true }).fill("Practice");
     await page.getByRole("button", { name: "Add option", exact: true }).click();
-    await page.getByLabel("Option 3", { exact: true }).fill("Discussion");
+    await page.getByRole("textbox", { name: "Option 3", exact: true }).fill("Discussion");
     await page.getByLabel("Maximum selections").selectOption("3");
     await page.getByRole("button", { name: "Remove option 3", exact: true }).click();
     await expect(page.getByLabel("Maximum selections")).toHaveValue("2");
     await page.getByRole("button", { name: "Add option", exact: true }).click();
-    await page.getByLabel("Option 3", { exact: true }).fill("Discussion");
+    await page.getByRole("textbox", { name: "Option 3", exact: true }).fill("Discussion");
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("Maximum selections")).toHaveValue("2");

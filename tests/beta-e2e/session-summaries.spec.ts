@@ -461,6 +461,24 @@ async function accessibleAt320px(page: Page, dialog?: Locator) {
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
       true,
     );
+    // The real Presentation report remains behind this modal. Exercise another
+    // installed system font so its timeline cannot force the page wider than 320px.
+    const originalFont = await page.evaluate(() => document.documentElement.style.fontFamily);
+    try {
+      await page.evaluate(() => {
+        document.documentElement.style.fontFamily = "Arial, sans-serif";
+      });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+    } finally {
+      await page.evaluate((family) => {
+        document.documentElement.style.fontFamily = family;
+      }, originalFont);
+    }
     await dialog.getByRole("button", { name: "Close", exact: true }).focus();
     await page.keyboard.press("Shift+Tab");
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);

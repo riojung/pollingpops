@@ -234,10 +234,13 @@
 
 .report {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
 .reportCard {
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 22px;
 }
 
@@ -249,6 +252,7 @@
 
 .reportGrid {
   display: grid;
+  min-width: 0;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
 }
@@ -263,7 +267,7 @@
 
 .timeline li {
   display: grid;
-  grid-template-columns: 42px 1fr auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--ui-border);
@@ -327,6 +331,16 @@
 
   .choiceGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  .timeline li {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .timeline time {
+    grid-column: 2;
   }
 }
 

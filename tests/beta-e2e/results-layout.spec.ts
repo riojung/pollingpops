@@ -398,6 +398,33 @@ for (const mobile of [false, true]) {
       await page.screenshot({ path: `${path}.png`, fullPage: true });
       throw error;
     }
+    if (!mobile) {
+      // System font metrics differ across hosts. Keep the shared header and its
+      // controls usable when the action labels need more room at desktop width.
+      await page.setViewportSize({ width: 1280, height: 844 });
+      const originalFont = await page.evaluate(() => document.documentElement.style.fontFamily);
+      try {
+        for (const font of ["Arial, sans-serif", "Verdana, sans-serif"]) {
+          await page.evaluate((family) => {
+            document.documentElement.style.fontFamily = family;
+          }, font);
+          await page.getByRole("button", { name: "List view", exact: true }).click();
+          await expect(presentations).toHaveAttribute("data-view", "list");
+          await page.getByRole("button", { name: "Grid view", exact: true }).click();
+          await expect(presentations).toHaveAttribute("data-view", "grid");
+          await expect(presentations.getByRole("article")).toHaveCount(1);
+          await expect
+            .poll(() =>
+              page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+            )
+            .toBe(true);
+        }
+      } finally {
+        await page.evaluate((family) => {
+          document.documentElement.style.fontFamily = family;
+        }, originalFont);
+      }
+    }
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: `/tmp/pollingpops-results-presentation-${test.info().project.name}.png`,

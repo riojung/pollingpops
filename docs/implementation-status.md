@@ -44,6 +44,14 @@ coverage copy, the pricing destination, absent download controls, and authentica
 denials. The sign-in header link uses the theme foreground directly; light/dark browser checks
 assert its rendered color and retain the complete axe scan.
 
+The expanded beta matrix also exposed intrinsic sizing defects in the shared workspace header
+and narrow Presentation reports. The search column can now shrink around header actions, and
+report content wraps within its grid with timeline times on a separate row on small screens.
+Browser regressions exercise alternate system-font metrics at 1280px and real reports at 320px.
+Named Sessions history collections use semantic sections. Stale password-availability copy,
+Survey textarea locators, join-protocol expectations, and Firefox control-character insertion
+fixtures are corrected while preserving the entitlement, accessibility and submission checks.
+
 The beta CI step explicitly opts into the existing session-summary and idea-board writer
 journeys. Their default-off test switches previously skipped eight profile cases. These use
 isolated in-memory fixtures; the shared-workspace suite retains its single worker.

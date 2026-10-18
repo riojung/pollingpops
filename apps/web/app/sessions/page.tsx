@@ -740,7 +740,7 @@ function SessionsContent() {
           </div>
         ) : null}
         {!loading ? (
-          <div
+          <section
             className={styles.collection}
             data-view={view}
             aria-label={t(
@@ -978,7 +978,7 @@ function SessionsContent() {
                 </article>
               );
             })}
-          </div>
+          </section>
         ) : null}
         {hasMore ? (
           <div className={styles.loadMore}>

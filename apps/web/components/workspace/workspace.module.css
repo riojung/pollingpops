@@ -153,7 +153,7 @@
   min-height: 72px;
   align-items: center;
   gap: 1rem;
-  grid-template-columns: minmax(150px, 0.55fr) minmax(260px, 1.35fr) auto;
+  grid-template-columns: minmax(150px, 0.55fr) minmax(0, 1.35fr) auto;
   border-bottom: 1px solid var(--ui-border);
   background: var(--ui-surface-translucent);
   padding: 0.7rem clamp(1rem, 2.5vw, 2rem);
@@ -205,6 +205,7 @@
   position: relative;
   display: flex;
   width: min(100%, 560px);
+  min-width: 0;
   min-height: 44px;
   align-items: center;
   justify-self: center;

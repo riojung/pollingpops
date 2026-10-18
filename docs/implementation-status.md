@@ -51,6 +51,8 @@ Browser regressions exercise alternate system-font metrics at 1280px and real re
 Named Sessions history collections use semantic sections. Stale password-availability copy,
 Survey textarea locators, join-protocol expectations, and Firefox control-character insertion
 fixtures are corrected while preserving the entitlement, accessibility and submission checks.
+The summary accessibility journey uses the real saved Dark preference with a light system
+preference, retaining exact theme and axe assertions despite Firefox media-emulation drift.
 
 The beta CI step explicitly opts into the existing session-summary and idea-board writer
 journeys. Their default-off test switches previously skipped eight profile cases. These use
@@ -61,6 +63,12 @@ journeys; individual case deadlines, retries and assertions remain unchanged.
 Unit CI bounds package tasks and Vitest workers independently instead of multiplying the
 default package and worker pools. The worker setting is explicitly included in Turbo's strict
 test environment. The separate restricted PostgreSQL job keeps its normal parallel execution.
+
+The image scan isolated high-severity advisories to unused package managers inherited from the
+Node base image. Server, web and control runtime stages omit those tools while retaining Node
+entry points and build-stage package installation. The image canary now builds and scans the
+control image too, and executes non-root checks for runtime assets, licenses, migration/jobs
+entry points and the bundled administrator CLI. Its existing scan-reporting policy is unchanged.
 
 The initial hosted Security run passed dependency review, the dependency audit, third-party
 notices, the PR-commit Gitleaks scan, source SBOM generation and CodeQL at `2e48656`. See

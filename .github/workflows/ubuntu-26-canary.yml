@@ -7,6 +7,8 @@ on:
       - .dockerignore
       - apps/server/Dockerfile
       - apps/web/Dockerfile
+      - apps/control/Dockerfile
+      - scripts/check-image-runtime.mjs
       - compose.yaml
       - compose.*.yaml
       - pnpm-lock.yaml
@@ -130,6 +132,22 @@ jobs:
             --build-arg OPENROUND_BUILD_ID="$GITHUB_SHA" \
             --tag openround-web:ubuntu-26-canary \
             .
+      - name: Build control image
+        run: |
+          docker buildx build \
+            --load \
+            --file apps/control/Dockerfile \
+            --build-arg OPENROUND_BUILD_ID="$GITHUB_SHA" \
+            --tag openround-control:ubuntu-26-canary \
+            .
+      - name: Verify runtime image invariants
+        run: |
+          set -euo pipefail
+          for component in server web control; do
+            docker run --rm --interactive --network none --entrypoint node \
+              "openround-${component}:ubuntu-26-canary" \
+              --input-type=module - "$component" < scripts/check-image-runtime.mjs
+          done | tee artifacts/readiness/ubuntu-26-runtime-invariants.txt
       - name: Scan canary images
         run: |
           trivy image \
@@ -144,6 +162,12 @@ jobs:
             --exit-code 0 \
             --output artifacts/readiness/ubuntu-26-web-trivy.txt \
             openround-web:ubuntu-26-canary
+          trivy image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --output artifacts/readiness/ubuntu-26-control-trivy.txt \
+            openround-control:ubuntu-26-canary
       - name: Sign and verify a local canary payload
         env:
           COSIGN_PASSWORD: ubuntu-26-canary-only
@@ -176,8 +200,10 @@ jobs:
           name: ubuntu-26-image-toolchain-${{ github.run_id }}
           path: |
             artifacts/readiness/ubuntu-26-image-toolchain.txt
+            artifacts/readiness/ubuntu-26-runtime-invariants.txt
             artifacts/readiness/ubuntu-26-server-trivy.txt
             artifacts/readiness/ubuntu-26-web-trivy.txt
+            artifacts/readiness/ubuntu-26-control-trivy.txt
             artifacts/readiness/ubuntu-26-cosign-payload.txt
             artifacts/readiness/ubuntu-26-cosign-signature.txt
             artifacts/readiness/ubuntu-26-cosign-verification.txt

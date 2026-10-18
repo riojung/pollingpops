@@ -274,7 +274,7 @@ for (const mobile of [false, true]) {
       ).status(),
     ).toBe(200);
     await page.goto(`/host/setup/${quiz.id}`);
-    await expect(page.getByText(/Password protection is available with Pro/)).toBeVisible();
+    await expect(page.getByText(/Password protection is not enabled for this run/)).toBeVisible();
     await expect(page.getByLabel("Room password", { exact: true })).toHaveCount(0);
     const [created] = await Promise.all([
       page.waitForResponse(

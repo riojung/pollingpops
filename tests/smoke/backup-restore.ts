@@ -2,22 +2,16 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
-import {
-  createDatabaseTableFingerprints,
-  parseDatabaseTableNames,
-  quotePostgresIdentifier,
-} from "./backup-restore-support.js";
+import { databaseSnapshot, withExportedDatabaseSnapshot } from "./backup-restore-support.js";
 
 const runFile = promisify(execFile);
 const compose = ["compose", "-f", "compose.yaml", "-f", "compose.media.yaml"];
 
-interface DatabaseSnapshot {
-  tables: string[];
-  rowFingerprints: Record<string, string>;
-}
-
 async function composeExec(service: string, args: string[]) {
-  return runFile("docker", [...compose, "exec", "-T", service, ...args], {
+  // Stop PostgreSQL clients inside the container before the host Docker CLI deadline. Killing
+  // only that CLI can leave pg_dump writing while the outer finally block removes its dump.
+  const boundedArgs = service === "postgres" ? ["timeout", "-s", "KILL", "110", ...args] : args;
+  return runFile("docker", [...compose, "exec", "-T", service, ...boundedArgs], {
     cwd: process.cwd(),
     timeout: 120_000,
     maxBuffer: 8 * 1024 * 1024,
@@ -42,60 +36,21 @@ function composeExecWithInput(service: string, args: string[], input: Buffer) {
   });
 }
 
-async function discoverDatabaseTables(database: string) {
-  // Only permanent ordinary tables contain durable application rows. Views have no independent
-  // rows, while temporary and unlogged relations are deliberately not durable backup targets.
-  const sql = `
-    SELECT COALESCE(json_agg(table_name ORDER BY table_name), '[]'::json)::text
-    FROM (
-      SELECT relation.relname AS table_name
-      FROM pg_catalog.pg_class AS relation
-      JOIN pg_catalog.pg_namespace AS namespace
-        ON namespace.oid = relation.relnamespace
-      WHERE namespace.nspname = 'public'
-        AND relation.relkind = 'r'
-        AND relation.relpersistence = 'p'
-    ) AS durable_tables
-  `;
-  const { stdout } = await composeExec("postgres", [
-    "psql",
-    "-U",
-    "openround",
-    "-d",
-    database,
-    "-Atc",
-    sql,
-  ]);
-  return parseDatabaseTableNames(stdout.trim());
-}
-
-async function databaseSnapshot(database: string): Promise<DatabaseSnapshot> {
-  const tables = await discoverDatabaseTables(database);
-  const rowFingerprints = createDatabaseTableFingerprints();
-
-  for (const table of tables) {
-    const qualifiedTable = `${quotePostgresIdentifier("public")}.${quotePostgresIdentifier(table)}`;
-    const sql = `
-      SELECT count(*)::text || ':' ||
-        md5(COALESCE(string_agg(row_hash, '' ORDER BY row_hash), ''))
-      FROM (
-        SELECT md5(to_jsonb(row_data)::text) AS row_hash
-        FROM ${qualifiedTable} AS row_data
-      ) AS row_hashes
-    `;
+function queryDatabase(database: string) {
+  return async (sql: string) => {
     const { stdout } = await composeExec("postgres", [
       "psql",
       "-U",
       "openround",
       "-d",
       database,
-      "-Atc",
+      "-XqAt",
+      "--set=ON_ERROR_STOP=1",
+      "-c",
       sql,
     ]);
-    rowFingerprints[table] = stdout.trim();
-  }
-
-  return { tables, rowFingerprints };
+    return stdout;
+  };
 }
 
 async function main() {
@@ -110,20 +65,53 @@ async function main() {
   let storageAliasCreated = false;
 
   try {
-    const sourceSnapshot = await databaseSnapshot("openround");
-    assert.ok(sourceSnapshot.tables.length > 0, "Source database has no durable public tables");
-    await composeExec("postgres", [
-      "pg_dump",
-      "-U",
-      "openround",
-      "-d",
-      "openround",
-      "--format=custom",
-      "--no-owner",
-      "--no-privileges",
-      "--file",
-      dumpPath,
-    ]);
+    const sourceSnapshot = await withExportedDatabaseSnapshot(
+      spawn(
+        "docker",
+        [
+          ...compose,
+          "exec",
+          "-T",
+          "postgres",
+          // Outlive the 120s snapshot deadline plus draining one bounded 110s command.
+          "timeout",
+          "-s",
+          "KILL",
+          "250",
+          "psql",
+          "-U",
+          "openround",
+          "-d",
+          "openround",
+          "-XqAt",
+          "--set=ON_ERROR_STOP=1",
+        ],
+        { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] },
+      ),
+      async (snapshot, signal) => {
+        // Background workers keep writing (including heartbeats). Inventory and pg_dump must
+        // import the same frozen source view rather than comparing different points in time.
+        const inventory = await databaseSnapshot(queryDatabase("openround"), snapshot, signal);
+        assert.ok(inventory.tables.length > 0, "Source database has no durable public tables");
+        signal.throwIfAborted();
+        await composeExec("postgres", [
+          "pg_dump",
+          "-U",
+          "openround",
+          "-d",
+          "openround",
+          "--snapshot",
+          snapshot,
+          "--format=custom",
+          "--no-owner",
+          "--no-privileges",
+          "--file",
+          dumpPath,
+        ]);
+        signal.throwIfAborted();
+        return inventory;
+      },
+    );
     const dumpBytes = Number(
       (await composeExec("postgres", ["stat", "-c", "%s", dumpPath])).stdout.trim(),
     );
@@ -141,7 +129,7 @@ async function main() {
       "--no-privileges",
       dumpPath,
     ]);
-    const restoredSnapshot = await databaseSnapshot(restoredDatabase);
+    const restoredSnapshot = await databaseSnapshot(queryDatabase(restoredDatabase));
     assert.deepEqual(
       restoredSnapshot.tables,
       sourceSnapshot.tables,

@@ -115,10 +115,18 @@ async function workflow(page: Page, browser: Browser, testInfo: TestInfo) {
   await page.getByRole("button", { name: "Launch companion", exact: true }).click();
   const companion = await popup;
   await expect(companion.getByRole("heading", { name: "Presentation Companion" })).toBeVisible();
-  const pass = await companion.evaluate(
-    (id) => sessionStorage.getItem(`openround:presentation-companion:${id}`),
-    sessionId,
-  );
+  const readPass = () =>
+    companion.evaluate(
+      (id) => sessionStorage.getItem(`openround:presentation-companion:${id}`),
+      sessionId,
+    );
+  // The server-rendered heading can appear before hydration captures the launch pass.
+  await expect
+    .poll(async () => Boolean(await readPass()), {
+      message: "The companion launch credential is persisted before recovery actions",
+    })
+    .toBe(true);
+  const pass = await readPass();
   expect(pass).toBeTruthy();
   const headers: Array<Promise<Record<string, string>>> = [];
   companion.on("request", (request) => {

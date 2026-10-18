@@ -494,6 +494,7 @@ describe("live event credit integration", () => {
     });
     expect((await f.repository.getSessionById(room.sessionId))!.state.phase).toBe("finished");
   });
+  // Four creation hashes and three admission checks use real scrypt on shared CI CPUs.
   it("applies the same funding and retention rules to Presentations", async () => {
     const f = await fixture();
     const presentations = createPresentationRepository(f.repository);
@@ -637,7 +638,7 @@ describe("live event credit integration", () => {
     expect(
       (await sessions.getSessionById(roomId))!.retentionExpiresAt.getTime() - Date.now(),
     ).toBeGreaterThan(364 * 86_400_000);
-  });
+  }, 15_000);
   it.each([
     { funding: "credit", change: "disabled" },
     { funding: "subscription", change: "reassigned" },

@@ -110,7 +110,9 @@ export default function SignInPage() {
     <>
       <header className="shell topbar">
         <Brand />
-        <Link href="/join">{t("delivery.site.joinRound")}</Link>
+        <Link className="auth-join-link" href="/join">
+          {t("delivery.site.joinRound")}
+        </Link>
       </header>
       <main className="shell auth-wrap">
         <section className="join-card auth-card" aria-labelledby="signin-title">

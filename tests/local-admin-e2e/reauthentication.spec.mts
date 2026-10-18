@@ -1,22 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { operatorTotpCode } from "../../packages/control-plane/src/index.js";
 import { testEmail } from "../e2e/test-email.js";
-import {
-  apiOrigin,
-  controlOrigin,
-  cookieNames,
-  localAdminHarness,
-  signIn,
-  signInAdmin,
-} from "./fixtures.mjs";
+import { apiOrigin, controlOrigin, cookieNames, test, signIn, signInAdmin } from "./fixtures.mjs";
 
 test("sensitive feature changes preserve the review until fresh authentication and explicit apply", async ({
   page,
-  context,
+  localAdmin: fixture,
 }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
-  const fixture = await localAdminHarness(context);
   const credentials = await fixture.provision();
   await signInAdmin(page, credentials);
   const before = await fixture.state();
@@ -160,8 +152,7 @@ test("sensitive feature changes preserve the review until fresh authentication a
   });
 });
 
-test("admin sign-in explains a throttled attempt", async ({ page, context }) => {
-  const fixture = await localAdminHarness(context);
+test("admin sign-in explains a throttled attempt", async ({ page, localAdmin: fixture }) => {
   const credentials = await fixture.provision();
   await page.route(`${controlOrigin}/auth/password`, async (route) => {
     await route.fulfill({
@@ -187,9 +178,8 @@ test("admin sign-in explains a throttled attempt", async ({ page, context }) => 
 
 test("a direct credit grant preserves its payload and reason through fresh authentication", async ({
   page,
-  context,
+  localAdmin: fixture,
 }, testInfo) => {
-  const fixture = await localAdminHarness(context);
   const credentials = await fixture.provision();
   await signIn(page, testEmail("direct-credit-reauth", testInfo));
   const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();

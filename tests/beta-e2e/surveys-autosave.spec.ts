@@ -68,8 +68,10 @@ for (const surface of ["", "@mobile "]) {
     const editorUrl = page.url();
     // Freeze the browser timer so slow CI cannot accidentally complete the 700 ms
     // debounce before exercising each navigation surface.
-    await page.clock.install();
-    await page.clock.pauseAt(new Date());
+    // Pin wall time first so transport latency cannot put the pause target in the past.
+    const pauseTime = new Date();
+    await page.clock.setFixedTime(pauseTime);
+    await page.clock.pauseAt(pauseTime);
     await page.getByLabel("Title", { exact: true }).fill("Synthetic local work");
     for (const link of exitLinks(page, Boolean(surface))) {
       await expect(link).toBeVisible();

@@ -240,6 +240,7 @@ describe("standalone administrator password and authenticator authentication", (
       "token",
     );
   });
+  // Eleven real scrypt derivations retain both username paths and rate limits on shared CI CPUs.
   it("returns the same helpful rate-limit refusal for existing and nonexistent usernames", async () => {
     const { login } = await fixture();
     const errors: unknown[] = [];
@@ -266,7 +267,7 @@ describe("standalone administrator password and authenticator authentication", (
       },
       errors[0],
     ]);
-  });
+  }, 15_000);
   it("allows more than five successful reauthentications inside one username throttle window", async () => {
     const { login, auth, platform, now } = await fixture();
     let previousToken: string | undefined;
@@ -284,6 +285,7 @@ describe("standalone administrator password and authenticator authentication", (
       (await platform.listAuditEvents()).filter((event) => event.action === "operator.login"),
     ).toHaveLength(7);
   });
+  // Eleven real scrypt derivations cover failed factors, successful sign-in and replay lockout.
   it("clears prior failed factors after success and still limits subsequent authenticator replays", async () => {
     const { login } = await fixture();
     for (const override of [
@@ -300,7 +302,7 @@ describe("standalone administrator password and authenticator authentication", (
     for (let index = 0; index < 5; index++)
       await expect(login()).rejects.toMatchObject({ status: 401, code: "INVALID_CREDENTIALS" });
     await expect(login()).rejects.toMatchObject({ status: 429, code: "LOGIN_RATE_LIMITED" });
-  });
+  }, 15_000);
   it("preserves the global attempt budget after successful sign-in and offline credential reset", async () => {
     const { platform, config, login, now } = await fixture();
     const globalKey = tokenHash("operator-login-global");
@@ -373,6 +375,7 @@ describe("standalone administrator password and authenticator authentication", (
       }),
     ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
   });
+  // Ten real scrypt derivations include both rolled-back and successful offline credential resets.
   it("recovers a locked username immediately after an atomic offline credential reset", async () => {
     const { login, auth, platform, config, now } = await fixture();
     const signedIn = await login();
@@ -402,7 +405,7 @@ describe("standalone administrator password and authenticator authentication", (
     await expect(
       login({ password: input.password, code: operatorTotpCode(reset.totpSecret, now) }),
     ).resolves.toHaveProperty("token");
-  });
+  }, 15_000);
   it("rejects swapped seed ciphertext or a wrong encryption key", async () => {
     const { config, platform, provisioned, now, login } = await fixture();
     const wrongKey = new OperatorAuthService(platform, configuration(), provider());

@@ -201,6 +201,10 @@ button:disabled {
   gap: 24px;
 }
 
+.auth-join-link {
+  color: var(--ui-text);
+}
+
 .site-header {
   position: relative;
 }

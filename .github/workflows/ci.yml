@@ -30,7 +30,13 @@ jobs:
       - run: pnpm check:docker-context
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - name: Run bounded package and smoke-support tests
+        run: |
+          node -e "console.log({ availableParallelism: require('node:os').availableParallelism(), vitestMaxWorkers: process.env.VITEST_MAX_WORKERS })"
+          pnpm exec turbo run test --concurrency=2
+          pnpm test:smoke-support
+        env:
+          VITEST_MAX_WORKERS: "1"
       - run: pnpm build
       - name: Validate fail-fast hosted production configuration
         run: pnpm --filter @openround/server config:check
@@ -109,9 +115,9 @@ jobs:
           TEST_DATABASE_URL: postgresql://openround_test_app:test-only-runtime@localhost:5432/openround
           TEST_REDIS_URL: redis://localhost:6379
 
-  browser-smoke:
+  browser-core:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 25
     env:
       PLAYWRIGHT_PRODUCTION: "true"
     steps:
@@ -127,27 +133,77 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Run feature-off browser suite
         run: pnpm test:e2e
-      - name: Run UX beta browser suite
-        run: pnpm test:e2e:beta
-        env:
-          BETA_E2E_AUTHORING: "true"
-          BETA_E2E_ROUND_PROTOCOL: "true"
       - name: Run business administration browser journeys
         run: pnpm test:e2e:business
       - name: Run operator administration browser journeys
         run: pnpm test:e2e:control
       - name: Run local admin browser journeys
         run: pnpm test:e2e:local-admin
-      - name: Upload browser failure artifacts
-        if: failure()
+      - name: Retain browser reports and retry diagnostics
+        if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-smoke-failure
+          name: browser-core-results
           path: |
             playwright-report/
-            playwright-report-beta/
             test-results/
-            test-results-beta/
             test-results-business/
             playwright-report-business/
           if-no-files-found: ignore
+          retention-days: 14
+
+  browser-beta:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - chromium-beta
+          - firefox-beta
+          - chromium-beta-mobile
+          - webkit-beta-mobile
+    env:
+      PLAYWRIGHT_PRODUCTION: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Run isolated UX beta browser project
+        run: pnpm test:e2e:beta --project="${{ matrix.project }}"
+        env:
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Retain beta reports and retry diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-beta-${{ matrix.project }}-results
+          path: |
+            playwright-report-beta/
+            test-results-beta/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  browser-smoke:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    needs: [browser-core, browser-beta]
+    if: ${{ always() }}
+    steps:
+      - name: Require every browser suite to succeed
+        run: |
+          test "$CORE_RESULT" = "success"
+          test "$BETA_RESULT" = "success"
+        env:
+          CORE_RESULT: ${{ needs.browser-core.result }}
+          BETA_RESULT: ${{ needs.browser-beta.result }}

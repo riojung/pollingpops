@@ -128,7 +128,8 @@
   background: var(--ui-surface);
 }
 .filterField select {
-  overflow: hidden;
+  /* Keep native option layout from extending WebKit's document scroll area. */
+  contain: layout;
   padding-right: 28px;
 }
 

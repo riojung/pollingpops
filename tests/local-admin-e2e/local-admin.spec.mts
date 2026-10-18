@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { operatorTotpCode } from "../../packages/control-plane/src/index.js";
 import { testEmail } from "../e2e/test-email.js";
 import {
@@ -7,7 +7,7 @@ import {
   controlOrigin,
   cookieNames,
   expectNoBusinessAccess,
-  localAdminHarness,
+  test,
   operatorStatus,
   productOrigin,
   signIn,
@@ -16,9 +16,8 @@ import {
 
 test("customer sign-in never provisions or discovers console access", async ({
   page,
-  context,
+  localAdmin: fixture,
 }, testInfo) => {
-  const fixture = await localAdminHarness(context);
   const before = (await fixture.state()).operator;
   await page.goto(productOrigin);
   await expectNoBusinessAccess(page);
@@ -46,8 +45,8 @@ test("customer sign-in never provisions or discovers console access", async ({
 test("admin signs in directly with password and TOTP and remains independent of product logout", async ({
   page,
   context,
+  localAdmin: fixture,
 }, testInfo) => {
-  const fixture = await localAdminHarness(context);
   const credentials = await fixture.provision();
   expect((await page.request.get(`${apiOrigin}/v1/auth/me`)).status()).toBe(401);
   await page.goto(controlOrigin);
@@ -116,8 +115,8 @@ test("admin signs in directly with password and TOTP and remains independent of 
 test("switching customer accounts cannot replace or revoke an administrator session", async ({
   page,
   context,
+  localAdmin: fixture,
 }, testInfo) => {
-  const fixture = await localAdminHarness(context);
   await signInAdmin(page, await fixture.provision());
   const token = await fixture.cookie(cookieNames.session);
   const product = await context.newPage();
@@ -130,9 +129,8 @@ test("switching customer accounts cannot replace or revoke an administrator sess
 
 test("durable administrator revocation immediately denies the standalone console", async ({
   page,
-  context,
+  localAdmin: fixture,
 }) => {
-  const fixture = await localAdminHarness(context);
   await signInAdmin(page, await fixture.provision());
   await fixture.revoke();
   expect((await fixture.state()).operator).toMatchObject({ active: false });

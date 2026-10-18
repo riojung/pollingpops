@@ -56,6 +56,7 @@ async function signIn(app: FastifyInstance) {
   return { cookie };
 }
 describe("Survey creator and participant APIs", () => {
+  // Nine real scrypt derivations cover creation retries and both admission paths on shared CI CPUs.
   it("gates protected rooms, admits exact passwords through codes and direct links, and preserves bearer resume", async () => {
     const { app, headers, repository, workspaceId } = await fixture();
     const created = await app.inject({
@@ -210,7 +211,7 @@ describe("Survey creator and participant APIs", () => {
       expect(response.body).not.toContain("joinPasswordHash");
       expect(response.body).not.toContain("scrypt$");
     }
-  });
+  }, 15_000);
 
   it.each([true, false])(
     "blocks new Survey admissions and preserves existing guests when business writers are enabled=%s",

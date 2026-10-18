@@ -8,6 +8,90 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Beta release engineering preparation October 17 2026
+
+The preparation branch starts from `main` candidate
+`1d8eeb760bf7322867005cdf37778dcb9cd4eb48`, which includes IDEA-006 and the Grafana upgrade repair.
+GitHub Actions was re-enabled after operator authorization. The seven required PR check contexts
+remain unchanged. Main-branch enforcement still awaits a second human collaborator with write
+access who accepts the independent-review responsibility; the release-tag controls also require
+their documented independent review.
+
+Fresh local `CI=true VITEST_MAX_WORKERS=1 pnpm check` passes, including strict
+types, tests and production builds. A fresh `pnpm audit --audit-level low --json` reports no
+advisories across 642 dependencies. Local `gitleaks`, `syft` and `trivy` executables are unavailable;
+the hosted Security workflow supplies secret scanning, SBOM generation and CodeQL.
+
+A manual [production-path smoke run](https://github.com/riojung/pollingpops/actions/runs/39078085458)
+against that exact `main` commit exposed a stale smoke call to the now-blocked public
+`/v1/admin/features` path. The follow-up exercises authenticated operational controls inside the
+disposable server container and asserts that public GET/PATCH access remains blocked. Its full
+production-path follow-up passed that boundary and reached the restore drill, which exposed a
+second harness race: a background heartbeat can change a row between the source inventory and
+`pg_dump`. The drill now imports one exported snapshot for both operations while retaining full
+durable-table and row comparisons.
+
+Fresh PR CI also exposed a parallel PostgreSQL fixture race and a summary test that assumed
+response-body parsing would finish within eight microtasks. Both PostgreSQL suites now initialize
+their restricted test login under a shared transaction lock; fresh-cluster standalone and parallel
+runs pass, including 196 tests in the combined run with one existing skip. Summary tests await
+actual request/render completion and exercise delayed response bodies. Three password integration
+cases retain real scrypt and all assertions with bounded per-case budgets for shared CI CPUs.
+
+The first complete feature-off browser run exposed stale CSV upgrade copy in two journeys and
+a dark-mode sign-in link contrast failure on mobile WebKit. The journeys now check retained-room
+coverage copy, the pricing destination, absent download controls, and authenticated CSV/JSON API
+denials. The sign-in header link uses the theme foreground directly; light/dark browser checks
+assert its rendered color and retain the complete axe scan.
+
+The expanded beta matrix also exposed intrinsic sizing defects in the shared workspace header
+and narrow Presentation reports. The search column can now shrink around header actions, and
+report content wraps within its grid with timeline times on a separate row on small screens.
+Browser regressions exercise alternate system-font metrics at 1280px and real reports at 320px.
+Named Sessions history collections use semantic sections. Stale password-availability copy,
+Survey textarea locators, join-protocol expectations, and Firefox control-character insertion
+fixtures are corrected while preserving the entitlement, accessibility and submission checks.
+The summary accessibility journey uses the real saved Dark preference with a light system
+preference, retaining exact theme and axe assertions despite Firefox media-emulation drift.
+
+The beta CI step explicitly opts into the existing session-summary and idea-board writer
+journeys. Their default-off test switches previously skipped eight profile cases. These use
+isolated in-memory fixtures; the shared-workspace suite retains its single worker.
+The serial hosted run passed 240 of 302 beta cases without failures before exhausting its
+45-minute outer budget; the remaining beta cases and administration suites were incomplete.
+CI now gives each beta browser profile its own runner and seeded workspace, retaining one worker
+within each profile. Feature-off and administration journeys execute once in a separate job.
+The required `browser-smoke` aggregate fails unless both groups succeed, including every matrix
+profile. Individual case deadlines, retries and assertions remain unchanged.
+
+Unit CI bounds package tasks and Vitest workers independently instead of multiplying the
+default package and worker pools. The worker setting is explicitly included in Turbo's strict
+test environment. The separate restricted PostgreSQL job keeps its normal parallel execution.
+
+The image scan isolated high-severity advisories to unused package managers inherited from the
+Node base image. Server, web and control runtime stages omit those tools while retaining Node
+entry points and build-stage package installation. The image canary now builds and scans the
+control image too, and executes non-root checks for runtime assets, licenses, migration/jobs
+entry points and the bundled administrator CLI. Its existing scan-reporting policy is unchanged.
+
+The initial hosted Security run passed dependency review, the dependency audit, third-party
+notices, the PR-commit Gitleaks scan, source SBOM generation and CodeQL at `2e48656`. See
+[the readiness PR](https://github.com/riojung/pollingpops/pull/135) for exact follow-up commits and
+hosted outcomes. A manually dispatched or PR run is engineering evidence; release acceptance
+separately requires successful main-push CI, Security and production-smoke runs for the exact
+release candidate. The readiness PR and its reviewed merge provide the normal PR-to-main path.
+
+Staging will use AWS EC2; the instance is not ready, and its region, application/media domains,
+verified SSH host key and provider configuration remain inputs. The checked-in staging config
+still contains example hosts and is correctly rejected by the deployment preflight. The
+[beta preparation handoff](runbooks/beta-release-preparation.md) sequences configuration,
+protected staging, signed images, deployment, operational exercises and independent acceptance.
+
+The release ledger remains unchanged: two historical engineering gates are recorded complete,
+while twelve beta-preflight gates and the signed-release gate remain pending. Local checks,
+restored Actions and prepared runbooks do not supply human-review, hosted-operation or customer
+study acceptance.
+
 ### IDEA 006 Brainstorming and prioritization boards October 16 2026
 
 Implemented locally on `codex/idea-006-brainstorming-boards` after auditing IDEA-004 and IDEA-005

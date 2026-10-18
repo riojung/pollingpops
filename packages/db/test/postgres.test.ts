@@ -81,6 +81,7 @@ import {
   surveyFixture,
 } from "./support/survey-conformance.js";
 import { createLibraryDeletionFixture } from "./support/library-deletion-fixtures.js";
+import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 import {
   expectPresentationSessionRepositoryConformance,
   expectPresentationRecoveryPackLiveCardsConformance,
@@ -1153,25 +1154,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   let runtimePool: Pool;
 
   beforeAll(async () => {
-    const adminPool = new Pool({ connectionString: adminUrl });
-    const database = await adminPool.query<{ current_database: string }>(
-      "SELECT current_database()",
-    );
-    const databaseIdentifier = database.rows[0]!.current_database.replaceAll('"', '""');
-    await adminPool.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'openround_runtime') THEN
-          CREATE ROLE openround_runtime NOLOGIN;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'openround_test_app') THEN
-          CREATE ROLE openround_test_app LOGIN PASSWORD 'test-only-runtime';
-        END IF;
-      END $$;
-      GRANT openround_runtime TO openround_test_app;
-      GRANT CONNECT ON DATABASE "${databaseIdentifier}" TO openround_test_app;
-    `);
-    await adminPool.end();
+    await preparePostgresTestRuntime(adminUrl!, runtimeUrl!);
 
     const migrationRepository = new PostgresRepository(adminUrl!);
     await migrationRepository.migrate();
@@ -9179,6 +9162,40 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       unexpectedRoleMember: false,
       ownerRoleMember: false,
     });
+  });
+
+  it("bootstraps a fresh restricted test login concurrently and reuses it safely", async () => {
+    const login = `openround_test_bootstrap_${randomUUID().replaceAll("-", "")}`;
+    const isolatedRuntime = new URL(runtimeUrl!);
+    isolatedRuntime.username = login;
+    isolatedRuntime.password = `test-only-quote'${randomUUID()}`;
+    const isolated = new PostgresRepository(isolatedRuntime.toString());
+    const adminPool = new Pool({ connectionString: adminUrl });
+    try {
+      const attempts = await Promise.allSettled(
+        Array.from({ length: 4 }, () =>
+          preparePostgresTestRuntime(adminUrl!, isolatedRuntime.toString()),
+        ),
+      );
+      for (const attempt of attempts) expect(attempt).toMatchObject({ status: "fulfilled" });
+      await preparePostgresTestRuntime(adminUrl!, isolatedRuntime.toString());
+      const principal = await isolated.inspectRuntimeDatabasePrincipal();
+      expect(principal).toMatchObject({ principal: login, sessionPrincipal: login });
+      expect(() => assertRestrictedRuntimeDatabasePrincipal(principal)).not.toThrow();
+    } finally {
+      await isolated.close();
+      try {
+        const existing = await adminPool.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [
+          login,
+        ]);
+        if (existing.rowCount) {
+          await adminPool.query(`DROP OWNED BY "${login}"`);
+          await adminPool.query(`DROP ROLE "${login}"`);
+        }
+      } finally {
+        await adminPool.end();
+      }
+    }
   });
 
   it("rejects an otherwise restricted runtime principal with an unexpected role grant", async () => {

@@ -192,6 +192,7 @@ afterEach(() => {
 });
 
 describe("session service ordering", () => {
+  // Five real scrypt derivations exercise exact-password and resume boundaries on shared CI CPUs.
   it("gates protected creation and keeps password admission frozen across downgrade and resume", async () => {
     const { repository, service, creator, quizId } = await hostedRoundFixture();
     const settings = {
@@ -255,7 +256,7 @@ describe("session service ordering", () => {
       service.join({ code: hosted.code, nickname: "Next", password }),
     ).resolves.toHaveProperty("participantId");
     service.close();
-  });
+  }, 15_000);
 
   it("allows Community rooms to use their effective paid protection", async () => {
     const {

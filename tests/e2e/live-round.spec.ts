@@ -110,7 +110,10 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   const participantContext = await browser.newContext();
   const participant = await participantContext.newPage();
   await participant.goto(`/join?code=${code}`);
-  await participant.getByLabel("Nickname").fill("Learner");
+  // Preflight replaces the initial nickname field with this Round's friendly-only form.
+  // Wait for that rendered privacy policy before activating Join.
+  await expect(participant.getByTestId("friendly-alias-notice")).toBeVisible();
+  await expect(participant.getByLabel("Nickname", { exact: true })).toHaveCount(0);
   await participant.getByRole("button", { name: "Join round" }).click();
   await expect(participant).toHaveURL(/\/play\//);
   await expect(participant.locator(".live-shell")).toHaveAttribute("data-pattern", "grid");
@@ -182,7 +185,18 @@ test("creator and participant complete a live round", async ({ browser }, testIn
       .filter({ hasText: "initial accuracy" })
       .getByText("100%", { exact: true }),
   ).toBeVisible({ timeout: 10_000 });
-  await expect(creator.getByRole("link", { name: "CSV export requires Pro" })).toBeVisible();
+  const exportNotice = creator.getByRole("link", { name: "CSV was not included for this room" });
+  await expect(exportNotice).toBeVisible();
+  await expect(exportNotice).toHaveAttribute("href", "/pricing");
+  await expect(creator.getByRole("link", { name: /^Download (CSV|JSON)$/ })).toHaveCount(0);
+  const reportId = new URL(creator.url()).pathname.split("/").at(-1)!;
+  for (const format of ["csv", "json"]) {
+    const response = await creator.request.get(
+      `http://127.0.0.1:4100/v1/reports/${reportId}.${format}`,
+    );
+    expect(response.status()).toBe(402);
+    expect(await response.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
+  }
   await expect(creator.getByText(/current free plan defaults to 30 days/)).toBeVisible();
   expect((await new AxeBuilder({ page: creator }).analyze()).violations).toEqual([]);
 

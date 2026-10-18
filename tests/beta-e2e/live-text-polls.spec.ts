@@ -129,7 +129,18 @@ for (const suffix of ["desktop", "@mobile"]) {
       await input.fill("a".repeat(1001));
       await guest.getByRole("button", { name: "Submit response", exact: true }).click();
       await expect(guest.getByText("Use up to 1000 characters.", { exact: true })).toBeVisible();
-      await input.fill("valid\u0001control");
+      // Firefox strips C0 controls from native text insertion. Set the actual invalid value
+      // through the native setter so React receives it and exercises the same client validator.
+      const invalidControlResponse = "valid\u0001control";
+      await input.evaluate((element, value) => {
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          "value",
+        )!.set!;
+        setter.call(element, value);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      }, invalidControlResponse);
+      await expect(input).toHaveValue(invalidControlResponse);
       await guest.getByRole("button", { name: "Submit response", exact: true }).click();
       await expect(
         guest.getByText("Remove unsupported control characters from your response.", {

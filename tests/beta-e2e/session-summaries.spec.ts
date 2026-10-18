@@ -19,6 +19,9 @@ import { joinBetaParticipant } from "./round-join";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
+// Exercise the saved Dark choice taking priority over a light system preference.
+test.use({ colorScheme: "light" });
+
 const summaryNetwork = new WeakMap<Page, string[]>();
 function observeSummaryNetwork(page: Page) {
   const history: string[] = [];
@@ -461,6 +464,24 @@ async function accessibleAt320px(page: Page, dialog?: Locator) {
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
       true,
     );
+    // The real Presentation report remains behind this modal. Exercise another
+    // installed system font so its timeline cannot force the page wider than 320px.
+    const originalFont = await page.evaluate(() => document.documentElement.style.fontFamily);
+    try {
+      await page.evaluate(() => {
+        document.documentElement.style.fontFamily = "Arial, sans-serif";
+      });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+    } finally {
+      await page.evaluate((family) => {
+        document.documentElement.style.fontFamily = family;
+      }, originalFont);
+    }
     await dialog.getByRole("button", { name: "Close", exact: true }).focus();
     await page.keyboard.press("Shift+Tab");
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
@@ -509,14 +530,27 @@ for (const mobile of [false, true]) {
     test.setTimeout(240_000);
     page.setDefaultTimeout(15_000);
     observeSummaryNetwork(page);
-    await page.emulateMedia({ colorScheme: "dark" });
     await signInBeta(page);
     await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: /^Appearance:/ }).click();
+    await page.getByRole("radio", { name: "Dark", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-color-mode-preference", "dark");
     const { isMobile, hasTouch, userAgent, deviceScaleFactor } = test.info().project.use;
+    const webOrigin = new URL(page.url()).origin;
     const publicContext = await browser.newContext({
-      baseURL: new URL(page.url()).origin,
+      baseURL: webOrigin,
       viewport: page.viewportSize()!,
-      colorScheme: "dark",
+      colorScheme: "light",
+      // Only the appearance preference crosses into this anonymous context, never creator auth.
+      storageState: {
+        cookies: [],
+        origins: [
+          {
+            origin: webOrigin,
+            localStorage: [{ name: "openround:color-mode", value: "dark" }],
+          },
+        ],
+      },
       reducedMotion: "reduce",
       acceptDownloads: true,
       isMobile,

@@ -359,9 +359,13 @@ test("enabled founder signs in through OIDC, retries one audited credit grant, r
   await grant.getByLabel("Credits", { exact: true }).fill("5");
   await grant.getByLabel("Reason", { exact: true }).fill("Synthetic approved launch grant");
   await grant.getByRole("button", { name: "Grant credits", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(/fetch|failed/i);
+  await expect(page.getByRole("status").filter({ hasText: /fetch|failed/i })).toContainText(
+    /fetch|failed/i,
+  );
   await grant.getByRole("button", { name: "Grant credits", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Command completed");
+  await expect(page.getByRole("status").filter({ hasText: "Command completed" })).toContainText(
+    "Command completed",
+  );
   expect(fixture.commandKeys.slice(0, 2)[0]).toBe(fixture.commandKeys.slice(0, 2)[1]);
   expect(await fixture.platform.getCreditBalance(fixture.organization.id)).toMatchObject({
     balance: 5,
@@ -388,7 +392,9 @@ test("enabled founder signs in through OIDC, retries one audited credit grant, r
     .getByRole("dialog")
     .getByRole("button", { name: "Apply command", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Command completed");
+  await expect(page.getByRole("status").filter({ hasText: "Command completed" })).toContainText(
+    "Command completed",
+  );
   await expect(
     page.getByRole("button", {
       name: `Retry failed Authoring · ${fixture.retryableAuthoringId}`,
@@ -443,7 +449,9 @@ test("stale CSRF after another tab signs in preserves rejected logout access unt
   );
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   expect((await rejected).status()).toBe(403);
-  await expect(page.getByRole("status")).toContainText("Sign-out could not be confirmed");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Sign-out could not be confirmed" }),
+  ).toContainText("Sign-out could not be confirmed");
   await expect(page.getByRole("navigation", { name: "Operator areas" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in with operator identity" })).toHaveCount(0);
   expect(await page.evaluate(async () => (await fetch("/api/me")).status)).toBe(200);

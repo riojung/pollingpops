@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { betaEmail, signInBeta } from "./sign-in";
 
 const webUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
@@ -51,7 +52,7 @@ async function joinParticipant(browser: Browser, code: string) {
   expect((await joinRequest).postDataJSON()).toEqual({
     code,
     avatarId: "owl",
-    clientCapabilities: { protocolVersion: 2, capabilities: [] },
+    clientCapabilities: currentRoundClientCapabilities(),
   });
   await expect(page).toHaveURL(/\/play\//);
   await expect(page.getByRole("img", { name: "Owl avatar" })).toBeVisible();

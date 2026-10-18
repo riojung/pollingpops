@@ -47,6 +47,8 @@ assert its rendered color and retain the complete axe scan.
 The beta CI step explicitly opts into the existing session-summary and idea-board writer
 journeys. Their default-off test switches previously skipped eight profile cases. These use
 isolated in-memory fixtures; the shared-workspace suite retains its single worker.
+The complete browser job has a 45-minute outer budget for the expanded matrix and all admin
+journeys; individual case deadlines, retries and assertions remain unchanged.
 
 Unit CI bounds package tasks and Vitest workers independently instead of multiplying the
 default package and worker pools. The worker setting is explicitly included in Turbo's strict

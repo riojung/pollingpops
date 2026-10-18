@@ -117,7 +117,7 @@ jobs:
 
   browser-smoke:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       PLAYWRIGHT_PRODUCTION: "true"
     steps:

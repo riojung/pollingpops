@@ -52,7 +52,7 @@ export function FolderTree({
                   <span aria-hidden="true" className={styles.folderIcon}>
                     ▱
                   </span>
-                  <span className={styles.folderName}>{folder.name}</span>
+                  <span className={styles.folderName}>{folder.name}</span>{" "}
                   <span className={styles.count}>{counts.get(folder.id) ?? 0}</span>
                 </button>
                 {canEdit ? (

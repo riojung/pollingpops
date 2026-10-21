@@ -8,6 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Current engineering revalidation October 21 2026
+
+The current `main` candidate `427f3e6` has failing hosted CI, Security and Production-path smoke
+runs. The release ledger therefore reopens `source-ci` and `local-production-smoke`: all fifteen
+gates are pending, including the thirteen unchanged external or human-evidence gates. Earlier
+September engineering passes remain historical evidence and do not accept this candidate.
+Repairs and local checks need fresh successful main-push runs for the exact reviewed candidate
+before those two gates can be accepted again. See the
+[recent-changes catchup evidence](evidence/recent-changes-catchup.md).
+
 ### Beta release engineering preparation October 17 2026
 
 The preparation branch starts from `main` candidate
@@ -79,7 +89,7 @@ notices, the PR-commit Gitleaks scan, source SBOM generation and CodeQL at `2e48
 [the readiness PR](https://github.com/riojung/pollingpops/pull/135) for exact follow-up commits and
 hosted outcomes. A manually dispatched or PR run is engineering evidence; release acceptance
 separately requires successful main-push CI, Security and production-smoke runs for the exact
-release candidate. The readiness PR and its reviewed merge provide the normal PR-to-main path.
+release candidate. The readiness PR's reviewed merge supplied the normal PR-to-main path.
 
 Staging will use AWS EC2; the instance is not ready, and its region, application/media domains,
 verified SSH host key and provider configuration remain inputs. The checked-in staging config
@@ -87,8 +97,9 @@ still contains example hosts and is correctly rejected by the deployment preflig
 [beta preparation handoff](runbooks/beta-release-preparation.md) sequences configuration,
 protected staging, signed images, deployment, operational exercises and independent acceptance.
 
-The release ledger remains unchanged: two historical engineering gates are recorded complete,
-while twelve beta-preflight gates and the signed-release gate remain pending. Local checks,
+At this preparation checkpoint, two historical engineering gates were recorded complete,
+while twelve beta-preflight gates and the signed-release gate remained pending. The October 21
+revalidation above supersedes those engineering statuses. Local checks,
 restored Actions and prepared runbooks do not supply human-review, hosted-operation or customer
 study acceptance.
 
@@ -905,9 +916,9 @@ At the 2026-09-25 transition checkpoint, Phase 0 repository implementation was m
 rollback ownership, and browser media smoke. [PR #42](https://github.com/riojung/pollingpops/pull/42)
 completed Presentation rolling-upgrade sequence compatibility, and
 [PR #43](https://github.com/riojung/pollingpops/pull/43) added the research Prototype Lab and the next
-behavior-preserving Presentation refactor slice. The release ledger therefore records the source-CI
-and local-production-smoke gates complete.
-The Phase 0 exit remains open with thirteen gates pending. Most require external or human evidence.
+behavior-preserving Presentation refactor slice. At that checkpoint the release ledger recorded
+the source-CI and local-production-smoke gates complete, with thirteen gates still pending.
+Those engineering passes are historical; the October 21 revalidation above reopens both gates.
 
 The completion-hardening slice now also closes the last repository-side target-load setup gap. A
 staging-only, non-HTTP one-shot command can provision one reviewed synthetic Free workspace for the
@@ -1622,12 +1633,17 @@ problem, validate a delayed probe, select a roadmap branch, or close any release
 
 ## Professional workspace and interactive Presentation beta
 
-The professional workspace is implemented as an additive, selected-workspace beta. Five independent
-workspace ceilings—`FEATURE_WORKSPACE_SHELL`, `FEATURE_BUILDER_V2`, `FEATURE_PRESENTATIONS`,
-`FEATURE_GROUPS`, and `FEATURE_DISCOVER`—default off and additionally require the existing
-workspace allowlist. New live Presentation creation also requires `FEATURE_PRESENTATION_REALTIME`
-and `EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST`. Direct authenticated APIs fail closed outside the
-allowlists; disabling creation preserves access to existing sessions and reports.
+Home, Library, Sessions and Results are the default workspace navigation on Free, Pro and Team.
+They require neither the UX beta nor a pilot allowlist; `FEATURE_WORKSPACE_SHELL` is retained only
+for configuration compatibility. Explicit Admin availability and plan assignments remain
+authoritative, and disabling workspace navigation preserves the classic fallback.
+
+Professional capabilities retain their inherited, selected-workspace rollout. `FEATURE_BUILDER_V2`,
+`FEATURE_PRESENTATIONS`, `FEATURE_GROUPS` and `FEATURE_DISCOVER` default off and require their
+applicable UX beta/allowlist checks when no explicit Admin rule exists. New live Presentation
+creation also uses `FEATURE_PRESENTATION_REALTIME` and `EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST`.
+Explicit Admin rules override inherited flags and allowlists while preserving prerequisites and
+plan checks. Disabling creation preserves existing sessions and reports.
 
 | Area                      | Repository status                                                                                                                                                                                                                                                                                                                                                                | Deferred or still requiring external evidence                                                                                                                                           |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1643,11 +1659,12 @@ fence instead of accepting silent last-write-wins content replacement.
 
 ## 2026 P0 UX beta implementation
 
-The current branch contains the gated creator workspace, authoring, setup, live host, participant,
+The current branch contains baseline workspace navigation plus gated authoring, setup, live host, participant,
 report, history, Recovery Rehearsal, and standalone practice-assignment experience plus its
-additive contracts and storage. All three beta flags default off; repository presence is not a
-launch claim. The global `FEATURE_UX_BETA` ceiling and explicit `UX_BETA_WORKSPACE_ALLOWLIST`
-membership resolve per workspace; an empty allowlist fails closed. Session snapshots carry that
+additive contracts and storage. The beta controls default off; repository presence is not a
+launch claim. Inherited beta access uses `FEATURE_UX_BETA` and explicit `UX_BETA_WORKSPACE_ALLOWLIST`
+membership per workspace; an empty allowlist fails closed for those capabilities, while baseline
+Home/Library/Sessions/Results remain available under the resolved Admin policy. Session snapshots carry that
 result to unauthenticated participant surfaces. Recovery Rehearsal and standalone assignment
 creation additionally have independent `FEATURE_RECOVERY_REHEARSAL` and
 `FEATURE_PRACTICE_ASSIGNMENTS` kill switches.
@@ -1697,8 +1714,10 @@ Playwright/test results for 30 days. Failure logs remain failure-only. This make
 evidence retrievable but does not itself satisfy the hosted capacity or production-readiness
 gates.
 
-The release ledger records source CI and local production-path smoke complete from CI, Security,
+The September baseline recorded source CI and local production-path smoke complete from CI, Security,
 dependency review, and Production-path smoke evidence incorporated by main commit `7532397`.
+Those historical passes do not accept the current candidate: October 21 engineering revalidation
+reopens both gates, leaving all fifteen gates pending.
 Single-VM staging, privacy/legal approval, design-partner observation, manual VoiceOver/NVDA and
 physical-device coverage, target-host load/soak, encrypted off-host backup and clean replacement-VM
 restore, real-provider source-corpus evaluation, and provider-originated Stripe rehearsal remain

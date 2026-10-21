@@ -137,6 +137,8 @@ test("beta workspace and creation surfaces pass automated accessibility checks",
   page,
 }) => {
   await signIn(page);
+  await page.goto("/home");
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
   await expectNoAxeViolations(page);
 
   await page.goto("/create");

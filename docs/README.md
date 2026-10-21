@@ -80,6 +80,7 @@ or deployed, nor do they establish legal approval, school-contract readiness, ex
 assurance, or production capacity.
 
 The signed-in `/help` page is available in the default Compose profile and adapts its written
-steps and destinations to the active rollout. Its two captioned professional-builder videos are
-shown only when the workspace shell, Round Builder v2, Presentations, Groups, Discover, and
-practice assignments are all enabled for that allowlisted workspace.
+steps and destinations to the active rollout. Its captioned quick-start video appears when the
+professional Round builder is available. The longer user-guide video also requires themes,
+Pulse, chat, Presentations and practice assignments for the workspace. Home, Library, Sessions
+and Results navigation is available by default on every plan, subject to explicit Admin policy.

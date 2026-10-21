@@ -15,6 +15,7 @@ import type {
   SupportedLocale,
   WorkspaceProductFeatures as ContractWorkspaceProductFeatures,
 } from "@openround/contracts";
+import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
 import { useConfirmNavigation } from "../navigation-guard";
@@ -72,12 +73,17 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
 
   const refreshAccount = useCallback(async () => {
     setError("");
+    setLoading(true);
     let redirecting = false;
     try {
       const account = await apiFetch<WorkspaceAccountResponse>("/v1/auth/me");
+      const features = WorkspaceProductFeaturesSchema.safeParse(account.productFeatures);
+      if (!features.success) {
+        throw new Error("Workspace access could not be loaded. Try again.");
+      }
       setCreator(account.creator);
       setEntitlements(account.entitlements);
-      setProductFeatures(account.productFeatures);
+      setProductFeatures(features.data);
       try {
         if (account.creator.localePreferenceSet) {
           if (account.creator.locale !== localeRef.current) {
@@ -102,6 +108,9 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
         // preference is retried on the next account refresh.
       }
     } catch (caught) {
+      setCreator(null);
+      setEntitlements(null);
+      setProductFeatures(null);
       if ((caught as { status?: number }).status === 401) {
         // An authenticated billing-only user has no workspace context.
         const navigation = await fetchCustomerManagementNavigation().catch(() => null);

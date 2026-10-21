@@ -74,8 +74,8 @@
     "check": "pnpm format:check && pnpm check:docker-context && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
-    "@eslint/js": "10.0.1",
     "@axe-core/playwright": "4.13.0",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.63.0",
     "@types/node": "26.5.1",
     "eslint": "10.12.0",
@@ -86,6 +86,7 @@
     "turbo": "2.11.7",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.0",
+    "vite": "8.3.3",
     "vitest": "5.0.3",
     "yaml": "2.9.1"
   }

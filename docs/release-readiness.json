@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-27",
+  "updatedAt": "2026-10-21",
   "releaseTarget": "single-vm-beta",
   "gates": [
     {
@@ -8,7 +8,7 @@
       "name": "Source, database, browser, and security CI",
       "owner": "engineering",
       "requiredFor": ["single-vm-beta-preflight", "single-vm-beta", "single-vm-ga"],
-      "status": "complete",
+      "status": "pending",
       "criterion": "Main passes checks, PostgreSQL isolation, browser coverage, dependency review, secret scanning, SBOM generation, and CodeQL.",
       "evidence": [
         "https://github.com/riojung/pollingpops/actions/runs/36173766173",
@@ -17,20 +17,25 @@
         "https://github.com/riojung/pollingpops/actions/runs/36073326995",
         "https://github.com/riojung/pollingpops/actions/runs/36073327061",
         "https://github.com/riojung/pollingpops/actions/runs/36052921874",
-        "https://github.com/riojung/pollingpops/actions/runs/35868559946"
-      ]
+        "https://github.com/riojung/pollingpops/actions/runs/35868559946",
+        "https://github.com/riojung/pollingpops/actions/runs/39557976752",
+        "https://github.com/riojung/pollingpops/actions/runs/39557976778"
+      ],
+      "nextAction": "Review and merge codex/recent-changes-catchup, then retain passing CI and Security workflows for the exact resulting main commit. Historical passing runs and local branch checks do not establish readiness for the merged candidate."
     },
     {
       "id": "local-production-smoke",
       "name": "Local production-path smoke",
       "owner": "engineering",
       "requiredFor": ["single-vm-beta-preflight", "single-vm-beta", "single-vm-ga"],
-      "status": "complete",
+      "status": "pending",
       "criterion": "The containerized production profile passes media, observability, multi-writer, backup/restore, restart, and 100-client correctness checks.",
       "evidence": [
         "https://github.com/riojung/pollingpops/actions/runs/36173765942",
-        "https://github.com/riojung/pollingpops/actions/runs/36073327273"
-      ]
+        "https://github.com/riojung/pollingpops/actions/runs/36073327273",
+        "https://github.com/riojung/pollingpops/actions/runs/39557976777"
+      ],
+      "nextAction": "The isolated local production-path checks passed; after review and merge, retain a complete passing Production-path smoke workflow for the exact resulting main commit, including observability, process-loss recovery, backup/restore, and the 100-client restart exercise."
     },
     {
       "id": "single-vm-staging",

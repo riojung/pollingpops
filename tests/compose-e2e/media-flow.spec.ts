@@ -18,13 +18,24 @@ test("creator uploads scanned media and a guest receives it privately", async ({
     signInPin: () => readMailpitCredential(mailpitUrl, email, "pin"),
   });
   const creatorOrigin = new URL(creator.url()).origin;
+  await expect(creator).toHaveURL(/\/home\?welcome=1$/);
 
-  await creator.getByRole("link", { name: "Account", exact: true }).click();
+  await creator
+    .getByRole("link", { name: "Open account and workspace settings", exact: true })
+    .click();
   await expect(creator).toHaveURL(/\/account/);
   await creator.getByLabel("Organization name").fill("Compose Learning");
   await creator.getByRole("button", { name: "Save theme" }).click();
   await expect(creator.getByRole("status")).toContainText("brand theme was saved");
-  await creator.getByRole("link", { name: "Dashboard" }).click();
+  await creator
+    .getByRole("navigation", { name: "Workspace", exact: true })
+    .getByRole("link", { name: "Library", exact: true })
+    .click();
+  await expect(creator).toHaveURL(/\/library$/);
+  await creator.getByRole("button", { name: "Create", exact: true }).click();
+  const createRound = creator.getByRole("link", { name: /^Round\b/ });
+  await expect(createRound).toHaveAttribute("href", "/dashboard");
+  await createRound.click();
 
   await creator.getByLabel("Checkpoint set title").fill("Scanned image round");
   await creator.getByRole("button", { name: "Create checkpoint set" }).click();

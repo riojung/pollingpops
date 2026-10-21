@@ -76,7 +76,7 @@ than enabling Surveys globally before the release gates pass.
 
 - A running Docker Desktop, Docker Engine, or Docker-backed Colima profile, with Docker Compose v2
 - At least 2 GB of memory for the core profile; allow at least 4 GB for ClamAV image scanning
-- Local ports `8080`, `8025`, and `9000` available
+- Local ports `8080`, `8025`, `9000`, and `3002` available
 - A modern browser; use a second browser or private window to simulate a participant
 
 Run all commands from the repository root, the directory containing `compose.yaml`.
@@ -185,16 +185,24 @@ Open:
 
 ### Local admin access
 
-Use the normal **Sign in** form with `admin@pollingpops.local`, then open its captured sign-in
-email in Mailpit. Verified sign-in creates a session for the built-in **Local admin**, which has
-Super admin access. The Business menu then exposes tenant, billing, credits, operations, support,
-integrations, and audit areas. Public pages and ordinary accounts have no business-admin links.
-Set `LOCAL_ADMIN_EMAIL` to change the development admin email. Local sign-in needs no SSO, MFA,
-or password.
+The service bundles start the separate operator console at <http://localhost:3002>. Provision
+the first administrator explicitly in an interactive terminal after the services are running:
 
-Use the product's `http://localhost:8080` origin for automatic admin menus. Participant links can
-continue using the configured LAN address. The configured admin email is an explicit development
-binding to the operator identity; customer workspace roles never grant global administration.
+```bash
+pnpm admin:setup --username admin --name "Platform admin" --role founder
+```
+
+Enter and confirm a hidden password, then add the displayed TOTP secret or enrollment URI manually
+to an authenticator app or compatible vault. Open the console and sign in with the chosen
+username, password and current six-digit authenticator code. There is no default account or
+password. Customer email verification, PIN sign-in and workspace roles do not grant console access;
+the customer product has no business-admin navigation.
+
+Local startup reuses the private `data/admin/credential.key`, unless `OPERATOR_CREDENTIAL_KEY` is
+explicitly configured. Back up the key securely with the database because it encrypts authenticator
+secrets. Keep enrollment material out of shared logs. See the
+[console authentication guide](../apps/control/README.md#standalone-password-authentication) for
+credential resets, other Docker contexts and hosted provisioning.
 
 ## 2. Sign in as a creator
 
@@ -555,7 +563,7 @@ safe return destination was supplied.
 The `.env.example` values target services by their Compose network names and are intended for the containerized profile. Do not copy that file unchanged for a host-native server process.
 
 Management workflows need a durable PostgreSQL database shared by the native API and console.
-For that setup, use the [native local-admin settings](../apps/control/README.md#local-development-authentication)
+For that setup, use the [native administrator settings](../apps/control/README.md#standalone-password-authentication)
 with your PostgreSQL connection. The in-memory recipe above provides the customer product only.
 
 For an operational pause without restarting containers, use the `ADMIN_TOKEN`-protected
@@ -581,14 +589,14 @@ Accepted answers are retained. Keep session storage intact so the participant or
 can resume the original session. Operators should deploy matching compatible web/API releases;
 turning off a creation flag does not make an older server safe for newly accepted state versions.
 
-| Symptom                                          | Check                                                                                                                             |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Product does not open                            | Run `docker compose ps` and wait for health checks; then inspect `docker compose logs server web caddy`.                          |
-| Port is already allocated                        | Stop the process using `8080`, `8025`, or `9000`, or change the corresponding Compose port mapping.                               |
-| No sign-in message                               | Open Mailpit, verify the `mailpit` service is running, and request a fresh link. Links are single-use.                            |
-| Image control is disabled                        | Start with `compose.media.yaml` and wait for `clamav` to become healthy.                                                          |
-| Host or participant cannot resume in another tab | Credentials are stored in that tab's session storage. Return to the original tab; if needed, create or join a new session.        |
-| Browser shows **Reconnecting…**                  | Keep the page open and inspect server/Caddy logs. The client automatically requests an authoritative snapshot after reconnecting. |
+| Symptom                                          | Check                                                                                                                              |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Product does not open                            | Run `docker compose ps` and wait for health checks; then inspect `docker compose logs server web caddy`.                           |
+| Port is already allocated                        | Stop the process using `8080`, `8025`, `9000`, or `3002`, or change the corresponding Compose port mapping.                        |
+| No verification or PIN email                     | Open Mailpit and verify the `mailpit` service is running. Request the matching email again after its cooldown; use the newest PIN. |
+| Image control is disabled                        | Start with `compose.media.yaml` and wait for `clamav` to become healthy.                                                           |
+| Host or participant cannot resume in another tab | Credentials are stored in that tab's session storage. Return to the original tab; if needed, create or join a new session.         |
+| Browser shows **Reconnecting…**                  | Keep the page open and inspect server/Caddy logs. The client automatically requests an authoritative snapshot after reconnecting.  |
 
 ## Before public or production use
 

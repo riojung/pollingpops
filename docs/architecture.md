@@ -879,7 +879,8 @@ Stable errors include `INVALID_CODE`, `SESSION_FULL`, `SESSION_LOCKED`, `NICKNAM
 
 ### Credentials and authorization
 
-- Creator access uses an HttpOnly session cookie issued after a single-use email link.
+- Creator email access uses an HttpOnly session cookie issued after a verified identity consumes
+  a single-use sign-in PIN. Account-verification links establish mailbox ownership only.
 - Generic OIDC can establish the same creator session only after explicit issuer/subject linking;
   unknown identities and removed workspace memberships are rejected.
 - LTI instructor access uses verified platform launch claims and an explicit first-link step. Tool
@@ -969,8 +970,8 @@ schemas and exact citation grounding before it is saved.
 `compose.yaml` runs Caddy, web, one API/realtime process, PostgreSQL, Valkey, MinIO, and Mailpit. `compose.media.yaml` adds ClamAV. Caddy serves the product on one origin and routes `/v1/*`, `/health/*`, and `/socket.io/*` to the server.
 
 The default browser API URL is relative, so opening Caddy through a reachable LAN address keeps
-page, REST, and Socket.IO traffic on that address. `OPENROUND_PUBLIC_URL` defines the canonical QR,
-redirect, and email-link origin. Cross-device direct media delivery additionally requires a
+page, REST, and Socket.IO traffic on that address. `OPENROUND_PUBLIC_URL` defines the canonical
+origin for QR links, redirects and email verification. Cross-device direct media delivery additionally requires a
 reachable `OPENROUND_STORAGE_URL` and an explicit non-loopback `OPENROUND_STORAGE_BIND`.
 
 Community mode disables application billing gates and lets the operator configure the participant ceiling, up to the supported P0 ceiling. The included configuration and credentials are development examples, not internet-safe defaults.

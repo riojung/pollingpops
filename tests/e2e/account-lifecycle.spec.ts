@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 
 import { testEmail } from "./test-email";
 
-test("creator can return to the signed-in dashboard and sign out on a narrow screen", async ({
+test("creator can return to signed-in Home and sign out on a narrow screen", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -25,24 +25,31 @@ test("creator can return to the signed-in dashboard and sign out on a narrow scr
   const publicHeaderBrand = page
     .locator("header.site-header")
     .getByRole("link", { name: "Polling Pops", exact: true });
-  await expect(publicHeaderBrand).toHaveAttribute("href", "/dashboard");
+  await expect(publicHeaderBrand).toHaveAttribute("href", "/home");
   await publicHeaderBrand.click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/home/);
 
+  // Explicit classic authoring stays available for workspaces without builderV2.
+  await page.goto("/dashboard");
   await page.getByLabel("Checkpoint set title").fill("Navigation quiz");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();
   await expect(page).toHaveURL(/\/quiz\//);
   const creatorBrand = page.getByRole("link", { name: "Polling Pops" });
-  await expect(creatorBrand).toHaveAttribute("href", "/dashboard");
+  await expect(creatorBrand).toHaveAttribute("href", "/home");
   await creatorBrand.click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/home/);
   await expect(
     page
       .getByRole("article")
       .filter({ has: page.getByRole("heading", { name: "Navigation quiz", exact: true }) }),
   ).toHaveCount(1);
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Mobile navigation", exact: true })
+    .getByRole("button", { name: "Sign out", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/$/);
   await expect(mobileSignInLink).toBeVisible();
 
@@ -53,7 +60,7 @@ test("creator can return to the signed-in dashboard and sign out on a narrow scr
 test("creator can archive, restore, export, and delete their account", async ({
   page,
 }, testInfo) => {
-  await signInCreator(page, testEmail("lifecycle", testInfo));
+  await signInCreator(page, testEmail("lifecycle", testInfo), { returnTo: "/dashboard" });
 
   await page.getByLabel("Checkpoint set title").fill("Lifecycle quiz");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();
@@ -88,7 +95,8 @@ test("creator can archive, restore, export, and delete their account", async ({
 test("workspace owner invites a viewer with read-only access", async ({ browser }, testInfo) => {
   const ownerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
-  await signInCreator(owner, testEmail("workspace-owner", testInfo));
+  await signInCreator(owner, testEmail("workspace-owner", testInfo), { returnTo: "/dashboard" });
+  const ownerIdentity = await (await owner.request.get("http://127.0.0.1:4100/v1/auth/me")).json();
 
   await owner.getByLabel("Checkpoint set title").fill("Shared safety check");
   await owner.getByRole("button", { name: "Create checkpoint set" }).click();
@@ -127,7 +135,19 @@ test("workspace owner invites a viewer with read-only access", async ({ browser 
   await expectAnonymousCreator(viewer, new URL(invitationResponse.url()).origin);
   const { pin } = await requestCreatorPin(viewer, viewerEmail);
   await submitCreatorPin(viewer, pin);
-  await expect(viewer).toHaveURL(/\/dashboard\?invitation=accepted/);
+  await expect(viewer).toHaveURL(/\/home\?invitation=accepted/);
+  await expect(viewer.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  expect(await (await viewer.request.get("http://127.0.0.1:4100/v1/auth/me")).json()).toMatchObject(
+    {
+      creator: {
+        email: viewerEmail,
+        role: "viewer",
+        workspaceId: ownerIdentity.creator.workspaceId,
+      },
+    },
+  );
+  await expect(viewer.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
+  await viewer.goto("/dashboard");
   await expect(viewer.getByText("Viewer access is read-only")).toBeVisible();
   await expect(viewer.getByRole("button", { name: "Create checkpoint set" })).toHaveCount(0);
   const sharedSet = viewer.getByRole("article").filter({ hasText: "Shared safety check" });

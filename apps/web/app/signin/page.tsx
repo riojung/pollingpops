@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { OidcStartSchema, type OidcStatus, type PublicFeatures } from "@openround/contracts";
+import {
+  LocalReturnPathSchema,
+  OidcStartSchema,
+  type OidcStatus,
+  type PublicFeatures,
+} from "@openround/contracts";
 import { Brand } from "../../components/brand";
 import { useLocale } from "../../components/locale-provider";
 import { LocalizedPolicyConsent } from "../../components/localized-policy-consent";
-import { apiFetch, humanError } from "../../lib/api";
+import { API_URL, apiFetch, humanError, type ApiClientError } from "../../lib/api";
+import { clearPinEntry, readPinEntry, savePinEntry, type PinEntry } from "../../lib/signin-pin";
 import { resolveSignInEnvironment, type SignInEnvironment } from "../../lib/signin-environment";
 import {
   LogoutWarningNotice,
@@ -14,15 +20,7 @@ import {
 } from "../../components/management-navigation";
 
 type EmailFlow =
-  | { step: "email" }
-  | { step: "verification-sent"; email: string }
-  | {
-      step: "pin";
-      email: string;
-      challengeId: string;
-      expiresAt: number;
-      resendAt: number;
-    };
+  { step: "email" } | { step: "verification-sent"; email: string } | ({ step: "pin" } & PinEntry);
 
 interface PinRequestResponse {
   accepted: boolean;
@@ -38,7 +36,8 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [segment, setSegment] = useState<"education" | "workplace">("workplace");
   const [flow, setFlow] = useState<EmailFlow>({ step: "email" });
-  const [busy, setBusy] = useState<"sending" | "verifying" | null>(null);
+  const [sending, setSending] = useState(false);
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [error, setError] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [acceptPolicies, setAcceptPolicies] = useState(false);
@@ -51,10 +50,19 @@ export default function SignInPage() {
   const [signInEnvironment, setSignInEnvironment] = useState<SignInEnvironment | null>(null);
   const [pin, setPin] = useState("");
   const [now, setNow] = useState(0);
+  const [pinInvalid, setPinInvalid] = useState(false);
+  const requestVersion = useRef(0);
   const emailInput = useRef<HTMLInputElement>(null);
   const pinInput = useRef<HTMLInputElement>(null);
   const verificationNotice = useRef<HTMLDivElement>(null);
-  const pending = busy !== null || federatedBusy;
+  const pending = sending || verifyingPin || federatedBusy;
+
+  useEffect(
+    () => () => {
+      requestVersion.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     setHydrated(true);
@@ -62,11 +70,25 @@ export default function SignInPage() {
     const requestedWorkspace = OidcStartSchema.shape.workspaceId.safeParse(
       query.get("workspaceId"),
     );
-    const requestedReturn = query.get("returnTo");
-    if (requestedReturn?.startsWith("/") && !requestedReturn.startsWith("//")) {
-      setReturnTo(requestedReturn);
+    const requestedReturn = LocalReturnPathSchema.safeParse(query.get("returnTo"));
+    const localReturn = requestedReturn.success ? requestedReturn.data : undefined;
+    if (localReturn) setReturnTo(localReturn);
+    const isVerificationLanding = query.get("verified") === "1";
+    if (isVerificationLanding) clearPinEntry();
+    const restored = isVerificationLanding
+      ? null
+      : readPinEntry({
+          apiUrl: API_URL,
+          ...(localReturn ? { returnTo: localReturn } : {}),
+          ...(requestedWorkspace.success ? { workspaceId: requestedWorkspace.data } : {}),
+        });
+    if (restored) {
+      setFlow({ step: "pin", ...restored });
+      setEmail(restored.email);
+      setAcceptPolicies(true);
+      setNow(Date.now());
     }
-    setVerified(query.get("verified") === "1");
+    setVerified(isVerificationLanding);
     if (!requestedWorkspace.success) return;
     setWorkspaceId(requestedWorkspace.data);
     apiFetch<OidcStatus>(
@@ -98,102 +120,176 @@ export default function SignInPage() {
   }, [flow]);
 
   useEffect(() => {
-    if (!hydrated || pending) return;
+    if (!hydrated || verifyingPin || federatedBusy) return;
     if (flow.step === "pin") pinInput.current?.focus();
+    else if (sending) return;
     else if (flow.step === "verification-sent" || verified) verificationNotice.current?.focus();
     else emailInput.current?.focus();
-  }, [flow, hydrated, mode, pending, verified, error]);
+  }, [flow, hydrated, mode, sending, verifyingPin, federatedBusy, verified, error]);
 
   function changeMode(nextMode: "signin" | "signup") {
+    requestVersion.current += 1;
+    clearPinEntry();
+    setSending(false);
     setMode(nextMode);
     setFlow({ step: "email" });
     setPin("");
+    setPinInvalid(false);
     setError("");
     setAcceptPolicies(false);
     setVerified(false);
   }
 
-  async function requestPin(submittedEmail: string) {
-    const result = await apiFetch<PinRequestResponse>("/v1/auth/pin/request", {
-      method: "POST",
-      body: JSON.stringify({
-        email: submittedEmail,
-        acceptPolicies,
+  function commitPinEntry(entry: PinEntry) {
+    setFlow({ step: "pin", ...entry });
+    savePinEntry(entry);
+  }
+
+  async function requestPin(submittedEmail: string, previous?: PinEntry) {
+    // Consume this one-time notice before accepting a new challenge, so a later
+    // reload can resume that challenge instead of resetting it again.
+    const address = new URL(window.location.href);
+    if (address.searchParams.has("verified")) {
+      address.searchParams.delete("verified");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${address.pathname}${address.search}${address.hash}`,
+      );
+    }
+    setVerified(false);
+    const startedAt = Date.now();
+    const version = ++requestVersion.current;
+    const oldChallenge =
+      previous?.challenge && previous.challenge.expiresAt > startedAt ? previous.challenge : null;
+    const oldPin = pin;
+    const entry: PinEntry = {
+      email: submittedEmail,
+      context: previous?.context ?? {
+        apiUrl: API_URL,
         ...(returnTo ? { returnTo } : {}),
         ...(workspaceId ? { workspaceId } : {}),
-      }),
-    });
-    const requestedAt = Date.now();
-    setNow(requestedAt);
-    setPin("");
-    setFlow({
-      step: "pin",
-      email: submittedEmail,
-      challengeId: result.challengeId,
-      expiresAt: requestedAt + result.expiresInSeconds * 1000,
-      resendAt: requestedAt + result.resendAfterSeconds * 1000,
-    });
+      },
+      challenge: oldChallenge,
+      delivery: "requesting",
+      resendAt: startedAt + 60_000,
+    };
+    setSending(true);
+    setError("");
+    setPinInvalid(false);
+    setNow(startedAt);
+    if (!previous) setPin("");
+    // Show the input before SMTP completes. Only a server-accepted handle is
+    // persisted, and verification waits for this request's 202 response.
+    commitPinEntry(entry);
+    try {
+      const result = await apiFetch<PinRequestResponse>("/v1/auth/pin/request", {
+        method: "POST",
+        body: JSON.stringify({
+          email: submittedEmail,
+          acceptPolicies: true,
+          ...(entry.context.returnTo ? { returnTo: entry.context.returnTo } : {}),
+          ...(entry.context.workspaceId ? { workspaceId: entry.context.workspaceId } : {}),
+        }),
+      });
+      if (requestVersion.current !== version) return;
+      if (previous) setPin((current) => (current === oldPin ? "" : current));
+      const receivedAt = Date.now();
+      setNow(receivedAt);
+      commitPinEntry({
+        ...entry,
+        challenge: {
+          challengeId: result.challengeId,
+          expiresAt: receivedAt + result.expiresInSeconds * 1_000,
+        },
+        delivery: "requested",
+        resendAt: receivedAt + result.resendAfterSeconds * 1_000,
+      });
+    } catch (caught) {
+      if (requestVersion.current !== version) return;
+      const failedAt = Date.now();
+      setNow(failedAt);
+      const failure = caught as Partial<ApiClientError>;
+      if (failure.status === 429) {
+        commitPinEntry({
+          ...entry,
+          delivery: "throttled",
+          resendAt: failedAt + Math.max(1, failure.retryAfterSeconds ?? 60) * 1_000,
+        });
+      } else if (failure.code === "EMAIL_DELIVERY_FAILED") {
+        commitPinEntry({ ...entry, challenge: null, delivery: "failed" });
+        setPin("");
+      } else {
+        // An interrupted response does not prove delivery failed. Preserve only
+        // an earlier accepted handle; a new request remains an explicit action.
+        commitPinEntry({ ...entry, delivery: "uncertain" });
+      }
+    } finally {
+      if (requestVersion.current === version) setSending(false);
+    }
   }
 
   async function submitEmail(event: FormEvent) {
     event.preventDefault();
     if (!hydrated || !acceptPolicies || pending) return;
     const submittedEmail = email.trim().toLowerCase();
-    setBusy("sending");
     setError("");
+    if (mode === "signin") {
+      await requestPin(submittedEmail);
+      return;
+    }
+    setSending(true);
     try {
-      if (mode === "signup") {
-        await apiFetch("/v1/auth/email-verification", {
-          method: "POST",
-          body: JSON.stringify({
-            email: submittedEmail,
-            segment,
-            acceptPolicies,
-            ...(returnTo ? { returnTo } : {}),
-          }),
-        });
-        setFlow({ step: "verification-sent", email: submittedEmail });
-      } else {
-        await requestPin(submittedEmail);
-      }
+      await apiFetch("/v1/auth/email-verification", {
+        method: "POST",
+        body: JSON.stringify({
+          email: submittedEmail,
+          segment,
+          acceptPolicies,
+          ...(returnTo ? { returnTo } : {}),
+        }),
+      });
+      setFlow({ step: "verification-sent", email: submittedEmail });
     } catch (caught) {
       setError(humanError(caught));
     } finally {
-      setBusy(null);
+      setSending(false);
     }
   }
 
   async function resendPin() {
-    if (flow.step !== "pin" || pending || Date.now() < flow.resendAt) return;
-    setBusy("sending");
-    setError("");
-    try {
-      await requestPin(flow.email);
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setBusy(null);
-    }
+    if (flow.step !== "pin" || pending) return;
+    if (Date.now() < flow.resendAt) return;
+    await requestPin(flow.email, flow);
   }
 
   async function verifyPin(event: FormEvent) {
     event.preventDefault();
-    if (flow.step !== "pin" || pending || !/^\d{6}$/.test(pin)) return;
-    setBusy("verifying");
+    if (
+      flow.step !== "pin" ||
+      !flow.challenge ||
+      sending ||
+      verifyingPin ||
+      flow.challenge.expiresAt <= Date.now() ||
+      !/^\d{6}$/.test(pin)
+    )
+      return;
+    setVerifyingPin(true);
     setError("");
+    setPinInvalid(false);
     try {
       const result = await apiFetch<{ redirectTo: string }>("/v1/auth/pin/verify", {
         method: "POST",
-        body: JSON.stringify({ challengeId: flow.challengeId, pin }),
+        body: JSON.stringify({ challengeId: flow.challenge.challengeId, pin }),
       });
+      requestVersion.current += 1;
+      clearPinEntry();
       window.location.replace(result.redirectTo);
     } catch (caught) {
-      setError(
-        (caught as { status?: number }).status === 401
-          ? t("delivery.auth.invalidPin")
-          : humanError(caught),
-      );
-      setBusy(null);
+      const invalid = (caught as { status?: number }).status === 401;
+      setPinInvalid(invalid);
+      setError(invalid ? t("delivery.auth.invalidPin") : humanError(caught));
+      setVerifyingPin(false);
       pinInput.current?.focus();
     }
   }
@@ -217,6 +313,20 @@ export default function SignInPage() {
   const resendSeconds =
     flow.step === "pin" ? Math.max(0, Math.ceil((flow.resendAt - now) / 1000)) : 0;
   const deliveryEmail = flow.step === "email" ? "" : flow.email;
+  const pinNotice =
+    flow.step !== "pin"
+      ? "delivery.auth.pinSent"
+      : flow.delivery === "requesting"
+        ? "delivery.auth.pinRequesting"
+        : flow.delivery === "uncertain"
+          ? "delivery.auth.pinUncertain"
+          : flow.delivery === "throttled"
+            ? flow.challenge
+              ? "delivery.auth.pinThrottledExisting"
+              : "delivery.auth.pinThrottled"
+            : flow.delivery === "failed"
+              ? "delivery.auth.pinDeliveryFailed"
+              : "delivery.auth.pinSent";
 
   return (
     <>
@@ -376,7 +486,7 @@ export default function SignInPage() {
                 disabled={!hydrated || !acceptPolicies || pending}
                 type="submit"
               >
-                {busy === "sending"
+                {sending
                   ? t("delivery.auth.sending")
                   : mode === "signup"
                     ? t("delivery.auth.sendVerification")
@@ -406,8 +516,11 @@ export default function SignInPage() {
             </>
           ) : (
             <>
-              <div className="success" role="status">
-                {t("delivery.auth.pinSent", { email: flow.email })}
+              <div
+                className={flow.delivery === "failed" ? "error" : "success"}
+                role={flow.delivery === "failed" ? "alert" : "status"}
+              >
+                {t(pinNotice, { email: flow.email, seconds: resendSeconds })}
               </div>
               <form
                 aria-label={t("delivery.auth.verifyPinForm")}
@@ -418,15 +531,18 @@ export default function SignInPage() {
                   <label htmlFor="signin-pin">{t("delivery.auth.pinLabel")}</label>
                   <input
                     aria-describedby="signin-pin-help"
-                    aria-invalid={error ? true : undefined}
+                    aria-invalid={pinInvalid ? true : undefined}
                     autoComplete="one-time-code"
                     className="input auth-pin-input"
-                    disabled={pending}
+                    disabled={verifyingPin}
                     id="signin-pin"
                     inputMode="numeric"
                     maxLength={6}
                     minLength={6}
-                    onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onChange={(event) => {
+                      setPin(event.target.value.replace(/\D/g, "").slice(0, 6));
+                      setPinInvalid(false);
+                    }}
                     pattern="[0-9]{6}"
                     ref={pinInput}
                     required
@@ -435,18 +551,26 @@ export default function SignInPage() {
                   />
                   <p className="muted auth-pin-help" id="signin-pin-help">
                     {t(
-                      now >= flow.expiresAt ? "delivery.auth.pinExpired" : "delivery.auth.pinHelp",
+                      !flow.challenge
+                        ? "delivery.auth.pinNoChallenge"
+                        : now >= flow.challenge.expiresAt
+                          ? "delivery.auth.pinExpired"
+                          : "delivery.auth.pinHelp",
                     )}
                   </p>
                 </div>
                 <button
                   className="button full-width"
-                  disabled={pending || !/^\d{6}$/.test(pin)}
+                  disabled={
+                    sending ||
+                    verifyingPin ||
+                    !flow.challenge ||
+                    now >= flow.challenge.expiresAt ||
+                    !/^\d{6}$/.test(pin)
+                  }
                   type="submit"
                 >
-                  {busy === "verifying"
-                    ? t("delivery.auth.verifying")
-                    : t("delivery.auth.signInMode")}
+                  {verifyingPin ? t("delivery.auth.verifying") : t("delivery.auth.signInMode")}
                 </button>
                 <div className="button-row auth-pin-actions">
                   <button
@@ -455,7 +579,7 @@ export default function SignInPage() {
                     onClick={() => void resendPin()}
                     type="button"
                   >
-                    {busy === "sending"
+                    {sending
                       ? t("delivery.auth.sending")
                       : resendSeconds > 0
                         ? t("delivery.auth.resendIn", { seconds: resendSeconds })
@@ -463,7 +587,7 @@ export default function SignInPage() {
                   </button>
                   <button
                     className="button-quiet"
-                    disabled={pending}
+                    disabled={verifyingPin}
                     onClick={() => changeMode("signin")}
                     type="button"
                   >

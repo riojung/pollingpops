@@ -21,7 +21,7 @@ export function HelpGuidance() {
   const { canEdit, productFeatures } = useWorkspace();
   const showProfessionalVideos = professionalBuilderGuidesAvailable(productFeatures);
   const roundBuilderAvailable = professionalRoundBuilderAvailable(productFeatures);
-  const workspaceAvailable = productFeatures?.uxBeta && productFeatures.workspaceShell;
+  const workspaceAvailable = productFeatures?.workspaceShell === true;
   const assignmentsAvailable = productFeatures?.practiceAssignments === true;
   const createHref = roundBuilderAvailable ? "/create?start=starters" : "/dashboard";
   const libraryHref = workspaceAvailable ? "/library" : "/dashboard";

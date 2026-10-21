@@ -85,6 +85,17 @@ export default {
   "delivery.auth.pinLabel": "ログイン用PIN",
   "delivery.auth.pinSent":
     "{email}に確認済みのアカウントがある場合、ログイン用PINを送信しました。最新のメールをご確認ください。",
+  "delivery.auth.pinRequesting":
+    "{email} 宛ての PIN を要求しています。届き次第、ここに入力できます。",
+  "delivery.auth.pinUncertain":
+    "PIN の要求が中断されました。再送信ボタンが有効になったら、新しい PIN を要求してください。",
+  "delivery.auth.pinThrottledExisting":
+    "別の PIN を要求するには {seconds} 秒お待ちください。すでに要求した PIN は引き続き使用できます。",
+  "delivery.auth.pinThrottled":
+    "PIN を要求するには {seconds} 秒お待ちください。すでに要求した場合は、要求元のタブを使用してください。",
+  "delivery.auth.pinDeliveryFailed":
+    "PIN を配信できませんでした。再送信ボタンが有効になったら、新しい PIN を要求してください。",
+  "delivery.auth.pinNoChallenge": "サインインするには新しい PIN を要求してください。",
   "delivery.auth.pinHelp":
     "最新のメールに記載された6桁のPINを入力してください。有効期限は10分です。",
   "delivery.auth.pinExpired":

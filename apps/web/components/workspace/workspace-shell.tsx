@@ -3,7 +3,7 @@
 import { GuardedLink as Link, useConfirmNavigation } from "../navigation-guard";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { CreatorBrand } from "../brand";
+import { CreatorBrand, creatorLandingHref } from "../brand";
 import { useLocale } from "../locale-provider";
 import { humanError } from "../../lib/api";
 import { librarySearchHref } from "../../lib/library-controls";
@@ -215,6 +215,7 @@ interface WorkspaceShellProps {
   description?: string;
   actions?: ReactNode;
   children: ReactNode;
+  /** Compatibility name: requires the baseline shell, independently of UX beta. */
   requireBeta?: boolean;
   requiredFeature?: WorkspaceRolloutFeature;
   featureFallbackHref?: string;
@@ -320,6 +321,29 @@ function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeat
   );
 }
 
+function WorkspaceAccessState({ error, retry }: { error: string; retry: () => Promise<void> }) {
+  const { locale, t } = useLocale();
+  return (
+    <main className={styles.loading} id="main" lang={locale}>
+      {error ? (
+        <>
+          <p className="error" lang="en-CA" role="alert">
+            {error}
+          </p>
+          <button className="button-quiet" onClick={() => void retry()} type="button">
+            {t("workspace.retry")}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className={styles.loadingMark} aria-hidden="true" />
+          <p>{t("workspace.loading")}</p>
+        </>
+      )}
+    </main>
+  );
+}
+
 export function WorkspaceShell({
   eyebrow = "Creator workspace",
   title,
@@ -329,40 +353,44 @@ export function WorkspaceShell({
   children,
   requireBeta = true,
   requiredFeature,
-  featureFallbackHref = "/dashboard",
+  featureFallbackHref,
   translationLevel = "none",
 }: WorkspaceShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const confirmNavigation = useConfirmNavigation();
   const { locale, t } = useLocale();
-  const { creator, productFeatures, loading, error, canEdit, signOut, startUpgrade, management } =
-    useWorkspace();
+  const {
+    creator,
+    productFeatures,
+    loading,
+    error,
+    canEdit,
+    signOut,
+    startUpgrade,
+    management,
+    refreshAccount,
+  } = useWorkspace();
   const [actionError, setActionError] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
   const workspaceAccessUnavailable =
     Boolean(error) ||
-    (requireBeta &&
-      (productFeatures?.workspaceShell !== true || productFeatures?.uxBeta !== true)) ||
+    (requireBeta && productFeatures?.workspaceShell !== true) ||
     (requiredFeature !== undefined && productFeatures?.[requiredFeature] !== true);
-  const shouldReturnToDashboard =
-    !loading &&
-    (creator !== null || productFeatures !== null || Boolean(error)) &&
-    workspaceAccessUnavailable;
+  const resolvedFallbackHref =
+    featureFallbackHref ??
+    (requiredFeature === "builderV2" ? "/dashboard" : creatorLandingHref(productFeatures));
+  const shouldReturnToFallback =
+    !loading && !error && productFeatures !== null && workspaceAccessUnavailable;
 
   useEffect(() => {
-    if (shouldReturnToDashboard) {
-      router.replace(featureFallbackHref);
+    if (shouldReturnToFallback) {
+      router.replace(resolvedFallbackHref);
     }
-  }, [featureFallbackHref, router, shouldReturnToDashboard]);
+  }, [resolvedFallbackHref, router, shouldReturnToFallback]);
 
   if (loading || workspaceAccessUnavailable) {
-    return (
-      <main className={styles.loading} id="main" lang={locale}>
-        <div className={styles.loadingMark} aria-hidden="true" />
-        <p>{t("workspace.loading")}</p>
-      </main>
-    );
+    return <WorkspaceAccessState error={error} retry={refreshAccount} />;
   }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -436,7 +464,11 @@ export function WorkspaceShell({
           <div className={styles.mobileBrand}>
             <CreatorBrand productFeatures={productFeatures} />
           </div>
-          <Link className={styles.workspaceSwitch} href="/account">
+          <Link
+            aria-current={pathname.startsWith("/account") ? "page" : undefined}
+            className={styles.workspaceSwitch}
+            href="/account"
+          >
             <ShellIcon name="workspace" />
             <span>
               <small>{t("workspace.switcher.label")}</small>
@@ -470,6 +502,7 @@ export function WorkspaceShell({
             <LanguageMenu />
             <ColorModeMenu />
             <Link
+              aria-current={pathname === "/activity" ? "page" : undefined}
               className={styles.utilityAction}
               href="/activity"
               title={t("workspace.activityTitle")}
@@ -477,12 +510,20 @@ export function WorkspaceShell({
               <ShellIcon name="activity" />
               <span className={styles.utilityLabel}>{t("workspace.activity")}</span>
             </Link>
-            <Link className={styles.utilityAction} href="/help" title={t("workspace.help")}>
+            <Link
+              aria-current={
+                pathname === "/help" || pathname.startsWith("/help/") ? "page" : undefined
+              }
+              className={styles.utilityAction}
+              href="/help"
+              title={t("workspace.help")}
+            >
               <ShellIcon name="help" />
               <span className={styles.utilityLabel}>{t("workspace.help")}</span>
             </Link>
             <FeedbackButton />
             <Link
+              aria-current={pathname.startsWith("/account") ? "page" : undefined}
               aria-label={t("workspace.accountSettings")}
               className={styles.accountButton}
               href="/account"
@@ -542,29 +583,25 @@ export function WorkspacePage(props: WorkspaceShellProps) {
 export function WorkspaceFeatureGate({
   feature,
   children,
-  fallbackHref = "/dashboard",
+  fallbackHref,
 }: {
   feature: WorkspaceRolloutFeature;
   children: ReactNode;
   fallbackHref?: string;
 }) {
   const router = useRouter();
-  const { locale, t } = useLocale();
-  const { productFeatures, loading, error } = useWorkspace();
-  const resolved = productFeatures !== null || Boolean(error);
-  const unavailable = resolved && (Boolean(error) || productFeatures?.[feature] !== true);
+  const { productFeatures, loading, error, refreshAccount } = useWorkspace();
+  const resolvedFallbackHref =
+    fallbackHref ?? (feature === "builderV2" ? "/dashboard" : creatorLandingHref(productFeatures));
+  const resolved = productFeatures !== null;
+  const unavailable = resolved && productFeatures?.[feature] !== true;
 
   useEffect(() => {
-    if (!loading && resolved && unavailable) router.replace(fallbackHref);
-  }, [fallbackHref, loading, resolved, router, unavailable]);
+    if (!loading && !error && resolved && unavailable) router.replace(resolvedFallbackHref);
+  }, [resolvedFallbackHref, loading, error, resolved, router, unavailable]);
 
-  if (loading || !resolved || unavailable) {
-    return (
-      <main className={styles.loading} id="main" lang={locale}>
-        <div className={styles.loadingMark} aria-hidden="true" />
-        <p>{t("workspace.loading")}</p>
-      </main>
-    );
+  if (loading || error || !resolved || unavailable) {
+    return <WorkspaceAccessState error={error} retry={refreshAccount} />;
   }
 
   return children;

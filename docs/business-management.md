@@ -81,8 +81,14 @@ addresses remain in Stripe rather than the webhook inbox or PollingPops audit re
 Open **Features** in the operator console to manage implemented product capabilities. **Features**
 shows availability and plan assignments; **Plans** shows the same policy as a Free/Pro/Team matrix.
 Choose **Enabled** or **Disabled** for a feature and select its included plans. **Inherit deployment**
-returns that feature to its existing environment and workspace rollout configuration. Each feature
-can be migrated independently; saving one setting does not change inherited settings elsewhere.
+returns that feature to its default or existing environment and workspace rollout configuration.
+Each feature can be migrated independently; saving one setting does not change inherited settings elsewhere.
+
+**Workspace navigation** (`workspaceShell`) defaults to available on every plan and provides Home, Library, Sessions, and
+Results. It is independent of the UX beta, pilot allowlists, and the retired
+`FEATURE_WORKSPACE_SHELL` gate. Explicit Enabled/Disabled settings and included-plan assignments
+still control access; disabling it preserves the classic workspace fallback. This baseline does
+not enable the professional Round builder, Presentations, Surveys, or other gated capabilities.
 
 Explicit policy is authoritative for that feature's product flag and workspace allowlist. It takes
 effect on subsequent server requests without an application restart. Prerequisite features must
@@ -142,7 +148,8 @@ controls, while billing members see billing and event credits. Links select the 
 grants the required permission. Direct visits to `/organization` ask signed-out users to sign in
 and show an unavailable state when hosted management is disabled, including Community deployments.
 
-Customer email-link sign-in always issues customer sessions using the configured product URLs.
+Customer email verification creates no session; the separate PIN sign-in issues customer sessions
+using the configured product URLs and defaults to Home, preserving safe return paths and invitations.
 It never creates, reuses, clears or revokes administrator credentials. Customer sign-out revokes
 only the supplied customer session. Customer navigation neither discovers the console nor probes
 its session; the compatible `operatorConsoleOrigin` response field is always `null`. Administrator

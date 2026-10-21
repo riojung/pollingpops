@@ -83,6 +83,17 @@ export const deliveryAuthoringEnglishMessages = {
   "delivery.auth.pinLabel": "Sign-in PIN",
   "delivery.auth.pinSent":
     "If {email} has a verified account, we sent a sign-in PIN. Check the newest email.",
+  "delivery.auth.pinRequesting":
+    "Requesting a PIN for {email}. You can enter it here as soon as it arrives.",
+  "delivery.auth.pinUncertain":
+    "The PIN request was interrupted. Wait for the resend button, then request a new PIN.",
+  "delivery.auth.pinThrottledExisting":
+    "Wait {seconds}s before requesting another PIN. You can still use the PIN you already requested.",
+  "delivery.auth.pinThrottled":
+    "Wait {seconds}s before requesting a PIN. If you already requested one, use the original tab.",
+  "delivery.auth.pinDeliveryFailed":
+    "We could not deliver your PIN. Wait for the resend button, then request a new PIN.",
+  "delivery.auth.pinNoChallenge": "Request a new PIN before signing in.",
   "delivery.auth.pinHelp":
     "Enter the six-digit PIN from the newest email. It expires in 10 minutes.",
   "delivery.auth.pinExpired": "This PIN has expired. Request a new PIN to sign in.",

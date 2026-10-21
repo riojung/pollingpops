@@ -40,9 +40,26 @@ export class ApiClientError extends Error {
     message: string,
     public readonly code = "INTERNAL_ERROR",
     public readonly status = 500,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }
+}
+
+function retryDelaySeconds(structured: unknown, header: string | null | undefined) {
+  if (typeof structured === "number" && Number.isFinite(structured) && structured >= 0) {
+    return Math.ceil(structured);
+  }
+  if (!header?.trim()) return undefined;
+  const value = header.trim();
+  if (/^\d+(?:\.\d+)?$/.test(value)) {
+    const seconds = Number(value);
+    return Number.isFinite(seconds) ? Math.ceil(seconds) : undefined;
+  }
+  // HTTP dates are supported without accepting arbitrary numeric/date-like strings.
+  if (!/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), /i.test(value)) return undefined;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, Math.ceil((date - Date.now()) / 1000)) : undefined;
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -56,12 +73,21 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
-      error?: { code?: string; message?: string };
+      error?: {
+        code?: string;
+        message?: string;
+        retryAfterSeconds?: unknown;
+        details?: { retryAfterSeconds?: unknown };
+      };
     } | null;
     throw new ApiClientError(
       body?.error?.message ?? `Request failed (${response.status})`,
       body?.error?.code,
       response.status,
+      retryDelaySeconds(
+        body?.error?.details?.retryAfterSeconds ?? body?.error?.retryAfterSeconds,
+        response.headers?.get("retry-after"),
+      ),
     );
   }
   const loggedOut = path === "/v1/auth/logout" && init.method?.toUpperCase() === "POST";

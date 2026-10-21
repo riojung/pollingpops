@@ -1640,7 +1640,7 @@ export function helpGuideAction(
   canEdit: boolean,
 ) {
   if (!helpGuideAvailable(guide, features) || (guide.action.editorOnly && !canEdit)) return null;
-  const shell = features?.uxBeta === true && features.workspaceShell === true;
+  const shell = features?.workspaceShell === true;
   const builder = professionalRoundBuilderAvailable(features);
   const target = guide.action.target;
   const paths: Record<ActionTarget, string | null> = {

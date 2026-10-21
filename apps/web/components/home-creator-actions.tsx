@@ -4,16 +4,21 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useLocale } from "./locale-provider";
+import { creatorLandingHref, type CreatorNavigationFeatures } from "./brand";
 
 export function HomeCreatorActions() {
   const { t } = useLocale();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [productFeatures, setProductFeatures] = useState<CreatorNavigationFeatures | null>(null);
 
   useEffect(() => {
     let active = true;
-    apiFetch("/v1/auth/me")
-      .then(() => {
-        if (active) setSignedIn(true);
+    apiFetch<{ productFeatures?: CreatorNavigationFeatures }>("/v1/auth/me")
+      .then((account) => {
+        if (active) {
+          setSignedIn(true);
+          setProductFeatures(account.productFeatures ?? null);
+        }
       })
       .catch(() => {
         if (active) setSignedIn(false);
@@ -25,7 +30,10 @@ export function HomeCreatorActions() {
 
   return (
     <div className="hero-actions">
-      <Link className="button" href={signedIn === false ? "/signin" : "/dashboard"}>
+      <Link
+        className="button"
+        href={signedIn === false ? "/signin" : creatorLandingHref(productFeatures)}
+      >
         {signedIn === true
           ? t("delivery.landing.manage")
           : signedIn === false

@@ -77,9 +77,12 @@ infrastructure images are also digest-pinned in `compose.single-vm.yaml` and
 `compose.single-vm.observability.yaml`; upgrade them through a reviewed source change and record
 them in the release software bill of materials.
 
-The example defaults to a non-billing Community deployment and keeps professional workspace gates
-off. That is intentional: rollout is workspace allowlisted. An approved alpha or beta can enable
-the workspace shell, Builder, Presentations, Groups, and Discover without changing Compose by
+The example defaults to a non-billing Community deployment with Home, Library, Sessions, and
+Results available on every plan. Core workspace navigation does not require UX beta flags or
+pilot allowlists; explicit Admin availability and plan assignments remain authoritative.
+`FEATURE_WORKSPACE_SHELL` is retained only for configuration compatibility. Other professional
+capabilities remain off by default. An approved alpha or beta can enable
+Builder, Presentations, Groups, and Discover without changing Compose by
 setting their `FEATURE_*` values to `true`, enabling `FEATURE_UX_BETA`, and adding the pilot
 workspace UUID to `UX_BETA_WORKSPACE_ALLOWLIST`. Commercial production can set
 `COMMUNITY_MODE=false`, `BILLING_MODE=stripe`, and the required Stripe secrets after the billing
@@ -110,8 +113,8 @@ tunnel or local operator session. Collector health probes the live endpoint usin
 installed by a digest-pinned, networkless init container. Prometheus renders its deployment label
 from the exact reviewed `OPENROUND_DEPLOYMENT_ENVIRONMENT` value.
 
-Workspace allowlists need the real UUID created by the first hosted sign-in. Bootstrap a new
-target with workspace-gated features disabled and empty allowlists, capture and review the
+Optional feature allowlists need the real UUID created by the first hosted sign-in. Bootstrap a new
+target with optional workspace-gated features disabled and empty allowlists, capture and review the
 synthetic workspace UUID, run the staging-capacity provisioner when required, and activate that
 UUID through a second signed build/config deployment. Do not edit the active release `.env` or
 replace its immutable directory in place; the deployment command rejects the currently active

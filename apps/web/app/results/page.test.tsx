@@ -247,6 +247,16 @@ afterEach(() => {
 });
 
 describe("Results workspace", () => {
+  it("opens the modern Round library from the empty results state", async () => {
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path.startsWith("/v1/reports?") ? { items: [], nextCursor: null } : response(path),
+    );
+    const markup = await resultsHarness().settle();
+    expect(markup).toContain("No results yet");
+    expect(markup).toContain('<a class="button" href="/library">Choose a Round</a>');
+    expect(markup).not.toContain('href="/dashboard"');
+  });
+
   it.each([
     {
       view: "results",

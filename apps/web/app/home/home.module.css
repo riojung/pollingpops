@@ -129,6 +129,7 @@
 .sidePanel,
 .onboarding,
 .errorState {
+  min-width: 0;
   border: 1px solid var(--ui-border);
   border-radius: 1.1rem;
   background: var(--ui-surface-translucent);
@@ -160,12 +161,24 @@
   margin-bottom: 1rem;
 }
 
+.sectionHeading > div,
+.sideHeading > div {
+  min-width: 0;
+}
+
 .sectionHeading h2,
 .sideHeading h2,
 .onboarding h2 {
   margin: 0;
   color: var(--ui-text-strong);
   letter-spacing: -0.035em;
+}
+
+.section .sectionHeading h2,
+.sideHeading h2 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .sectionHeading > div > p:not(.eyebrow) {
@@ -180,6 +193,11 @@
   color: var(--ui-accent-ink);
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.sectionHeading > a,
+.sideHeading > a {
+  flex-shrink: 0;
 }
 
 .artifactGrid {

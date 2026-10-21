@@ -196,7 +196,7 @@ describe("institution policy and OIDC API", () => {
       });
       expect(loggedIn.statusCode).toBe(302);
       expect(loggedIn.headers["set-cookie"]).toBeDefined();
-      expect(loggedIn.headers.location).toBe("http://localhost:3000/dashboard?federated=1");
+      expect(loggedIn.headers.location).toBe("http://localhost:3000/home?federated=1");
 
       expect(
         repository.audits

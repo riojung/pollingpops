@@ -19,7 +19,7 @@ for (const path of ["/", "/join", "/signin", "/pricing"]) {
 test("authenticated creator surfaces have no automatically detectable accessibility violations", async ({
   page,
 }, testInfo) => {
-  await signInCreator(page, testEmail("accessibility", testInfo));
+  await signInCreator(page, testEmail("accessibility", testInfo), { returnTo: "/dashboard" });
   await page.waitForURL(/\/dashboard/, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Your checkpoint sets", level: 1 })).toBeVisible();
 

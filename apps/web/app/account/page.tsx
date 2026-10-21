@@ -73,7 +73,6 @@ export default function AccountPage() {
   const [oidcStatus, setOidcStatus] = useState<OidcStatus | null>(null);
   const [federatedIdentities, setFederatedIdentities] = useState<FederatedIdentity[]>([]);
   const [ltiRegistrations, setLtiRegistrations] = useState<LtiRegistration[]>([]);
-  const [uxBeta, setUxBeta] = useState(false);
   const [productFeatures, setProductFeatures] = useState<{ workspaceShell: boolean } | null>(null);
 
   useEffect(() => {
@@ -98,7 +97,6 @@ export default function AccountPage() {
         setCreator(account.creator);
         setBusinessManagementEnabled(account.businessManagementEnabled === true);
         setEntitlements(account.entitlements);
-        setUxBeta(Boolean(account.productFeatures?.uxBeta));
         setProductFeatures({ workspaceShell: account.productFeatures?.workspaceShell === true });
         setSavedTheme(branding.theme);
         setTheme(
@@ -517,7 +515,7 @@ export default function AccountPage() {
     );
 
   const content = (
-    <div className={uxBeta ? styles.account : undefined}>
+    <div className={productFeatures?.workspaceShell ? styles.account : undefined}>
       {error ? (
         <p className="error" lang="en-CA" role="alert">
           {error}
@@ -1028,7 +1026,7 @@ export default function AccountPage() {
     </div>
   );
 
-  if (uxBeta) {
+  if (productFeatures?.workspaceShell) {
     return (
       <WorkspaceProvider>
         <WorkspaceShell

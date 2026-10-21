@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GuardedLink } from "./navigation-guard";
+import { usePathname } from "next/navigation";
+import { NavigationLink } from "./navigation-link";
 import {
   customerManagementLinks,
   emptyCustomerManagementNavigation,
@@ -109,13 +110,14 @@ export function ManagementNavigationLinks({
   navigation: ManagementNavigationState;
   variant?: "dropdown" | "sections";
 }) {
+  const pathname = usePathname();
   const customerLinks = customerManagementLinks(navigation);
   if (!customerLinks.length) return null;
 
   const organizationItems = customerLinks.map((link) => (
-    <GuardedLink href={link.href} key={link.id}>
+    <NavigationLink href={link.href} key={link.id}>
       {link.label}
-    </GuardedLink>
+    </NavigationLink>
   ));
 
   return (
@@ -126,8 +128,19 @@ export function ManagementNavigationLinks({
           {organizationItems}
         </section>
       ) : (
-        <details className={styles.menu}>
-          <summary>
+        <details
+          className={styles.menu}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !event.currentTarget.open) return;
+            event.preventDefault();
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector("summary")?.focus();
+          }}
+        >
+          <summary
+            className="navigation-control"
+            data-current={pathname === "/organization" || undefined}
+          >
             Organization <span aria-hidden="true">▾</span>
           </summary>
           <div className={styles.panel}>{organizationItems}</div>

@@ -88,6 +88,17 @@ export default {
   "delivery.auth.pinLabel": "Code PIN de connexion",
   "delivery.auth.pinSent":
     "Si {email} correspond à un compte vérifié, nous avons envoyé un code PIN de connexion. Consultez le dernier e-mail.",
+  "delivery.auth.pinRequesting":
+    "Demande de code PIN pour {email} en cours. Vous pouvez le saisir ici dès son arrivée.",
+  "delivery.auth.pinUncertain":
+    "La demande de code PIN a été interrompue. Attendez que le bouton de renvoi soit disponible, puis demandez un nouveau code.",
+  "delivery.auth.pinThrottledExisting":
+    "Patientez {seconds} s avant de demander un autre code PIN. Vous pouvez toujours utiliser celui déjà demandé.",
+  "delivery.auth.pinThrottled":
+    "Patientez {seconds} s avant de demander un code PIN. Si vous en avez déjà demandé un, utilisez l’onglet d’origine.",
+  "delivery.auth.pinDeliveryFailed":
+    "Nous n’avons pas pu transmettre votre code PIN. Attendez que le bouton de renvoi soit disponible, puis demandez un nouveau code.",
+  "delivery.auth.pinNoChallenge": "Demandez un nouveau code PIN avant de vous connecter.",
   "delivery.auth.pinHelp":
     "Saisissez le code PIN à six chiffres du dernier e-mail. Il expire dans 10 minutes.",
   "delivery.auth.pinExpired": "Ce code PIN a expiré. Demandez-en un nouveau pour vous connecter.",

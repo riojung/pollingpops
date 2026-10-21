@@ -355,7 +355,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
               ? t("pages.results.emptyDescription")
               : t("pages.results.noMatches")}
           </p>
-          <Link className="button" href="/dashboard">
+          <Link className="button" href="/library">
             {t("pages.assignments.chooseRound")}
           </Link>
         </div>

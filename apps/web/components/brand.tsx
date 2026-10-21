@@ -32,12 +32,18 @@ export function Brand({ href = "/", inverted = false, name = PRODUCT_BRAND.name 
   );
 }
 
-type CreatorNavigationFeatures = Pick<WorkspaceProductFeatures, "workspaceShell">;
+export type CreatorNavigationFeatures = Partial<Pick<WorkspaceProductFeatures, "workspaceShell">>;
 
 export function creatorLandingHref(
   productFeatures: CreatorNavigationFeatures | null | undefined,
 ): "/home" | "/dashboard" {
-  return productFeatures?.workspaceShell === true ? "/home" : "/dashboard";
+  return productFeatures?.workspaceShell === false ? "/dashboard" : "/home";
+}
+
+export function creatorLibraryHref(
+  productFeatures: CreatorNavigationFeatures | null | undefined,
+): "/library" | "/dashboard" {
+  return productFeatures?.workspaceShell === false ? "/dashboard" : "/library";
 }
 
 interface CreatorBrandProps extends Omit<BrandProps, "href"> {

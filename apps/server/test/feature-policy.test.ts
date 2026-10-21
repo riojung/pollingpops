@@ -29,6 +29,35 @@ function fixture(community = false) {
 }
 
 describe("operator product feature policy", () => {
+  it("provides core navigation without beta rollout while honoring explicit plan restrictions", async () => {
+    const f = fixture();
+    for (const plan of ["free", "pro", "team"] as const) {
+      const features = await workspaceProductFeatures(f.repository, f.config, f.workspaceId, plan);
+      expect(features.workspaceShell).toBe(true);
+      expect(features.uxBeta).toBe(false);
+      expect(features.presentations).toBe(false);
+      expect(features.surveys).toBe(false);
+    }
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { workspaceShell: { enabled: true, plans: ["pro", "team"] } },
+    });
+    expect(
+      (await workspaceProductFeatures(f.repository, f.config, f.workspaceId, "free"))
+        .workspaceShell,
+    ).toBe(false);
+    expect(
+      (await workspaceProductFeatures(f.repository, f.config, f.workspaceId, "pro")).workspaceShell,
+    ).toBe(true);
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: { workspaceShell: { enabled: false, plans: ["free", "pro", "team"] } },
+    });
+    expect(
+      (await workspaceProductFeatures(f.repository, f.config, f.workspaceId, "pro")).workspaceShell,
+    ).toBe(false);
+  });
+
   it("keeps standalone boards independent of Survey dependencies and enforces assigned plans", async () => {
     const f = fixture();
     expect(await workspaceFeatureEnabled(f.repository, f.config, f.workspaceId, "ideaBoards")).toBe(

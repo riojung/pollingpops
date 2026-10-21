@@ -86,9 +86,8 @@ export const productFeatureCatalog: readonly ProductFeatureDefinition[] = [
   define(
     "workspaceShell",
     "Workspace navigation",
-    "Use the Home, Library, Sessions and Results workspace navigation.",
+    "Default Home, Library, Sessions and Results navigation. Administrators can restrict access by plan.",
     "Workspace",
-    ["uxBeta"],
   ),
   define(
     "builderV2",

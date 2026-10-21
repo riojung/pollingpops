@@ -13,6 +13,7 @@
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   min-height: 72px;
   align-items: center;
   justify-content: space-between;
@@ -25,6 +26,35 @@
 
 .topbar a {
   color: inherit;
+}
+
+.topbar :global(.button-row) > :is(a, button):not(:global(.button)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--ui-on-hero) 35%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ui-on-hero) 8%, transparent);
+  color: var(--ui-on-hero);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  padding: 10px 15px;
+  text-decoration: none;
+}
+
+.topbar :global(.button-row) > :is(a, button):not(:global(.button)):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ui-on-hero) 16%, transparent);
+  border-color: var(--ui-on-hero);
+}
+
+.topbar :global(.small-button) {
+  min-height: 44px;
+}
+
+.topbar :is(a, button):focus-visible {
+  outline-color: var(--ui-on-hero);
 }
 
 .stage {

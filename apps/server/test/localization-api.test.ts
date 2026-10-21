@@ -62,7 +62,7 @@ describe("account locale preference API", () => {
     expect(unauthenticated.statusCode).toBe(401);
 
     const firstVerification = await verifySignIn(app, "locale-first@example.com");
-    expect(firstVerification.json().redirectTo).toBe("http://localhost:3000/dashboard?welcome=1");
+    expect(firstVerification.json().redirectTo).toBe("http://localhost:3000/home?welcome=1");
     expect(setCookies(firstVerification)).toHaveLength(1);
     expect(setCookies(firstVerification)[0]).not.toContain("openround-locale=");
     const firstCookie = setCookies(firstVerification)[0]!.split(";")[0]!;
@@ -113,7 +113,7 @@ describe("account locale preference API", () => {
     const localeBridge = new URL(returningVerification.json().redirectTo);
     expect(localeBridge.pathname).toBe("/auth/locale");
     expect(localeBridge.searchParams.get("locale")).toBe("ja-JP");
-    expect(localeBridge.searchParams.get("returnTo")).toBe("/dashboard?welcome=1");
+    expect(localeBridge.searchParams.get("returnTo")).toBe("/home?welcome=1");
 
     const otherUser = await app.inject({
       method: "GET",

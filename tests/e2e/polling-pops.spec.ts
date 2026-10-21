@@ -32,7 +32,9 @@ for (const colorScheme of ["light", "dark"] as const) {
   test(`classic-editor checkpoint tabs remain readable in ${colorScheme} mode`, async ({
     page,
   }, testInfo) => {
-    await signInCreator(page, testEmail("pops-classic-tabs", testInfo));
+    await signInCreator(page, testEmail("pops-classic-tabs", testInfo), {
+      returnTo: "/dashboard",
+    });
     await page.getByLabel("Checkpoint set title").fill("Readable checkpoints");
     await page.getByRole("button", { name: "Create checkpoint set" }).click();
 
@@ -93,7 +95,7 @@ test("Candy Pop remains accessible for a host and guest using dark appearance", 
   page,
   browser,
 }, testInfo) => {
-  await signInCreator(page, testEmail("pops-live", testInfo));
+  await signInCreator(page, testEmail("pops-live", testInfo), { returnTo: "/dashboard" });
   await page.getByLabel("Checkpoint set title").fill("Every voice pops");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();
   await expect(page.getByLabel("Experience preset")).toHaveValue("pops");

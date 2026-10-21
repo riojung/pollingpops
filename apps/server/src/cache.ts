@@ -8,6 +8,13 @@ export interface CachedSessionEvent {
   serverTime: string;
 }
 
+export interface RateLimitBudget {
+  allowed: boolean;
+  retryAfterSeconds: number;
+}
+
+export type EmailAuthBudget = RateLimitBudget;
+
 export interface SessionCache {
   get(sessionId: string): Promise<GameState | null>;
   set(state: GameState, ttlSeconds: number): Promise<void>;
@@ -24,6 +31,10 @@ export interface SessionCache {
   releaseMutationLease(sessionId: string, owner: string): Promise<void>;
   /** Atomic fixed-window admission counter shared by HTTP and Socket.IO paths. */
   consumeRateLimit(key: string, maximum: number, windowMs: number): Promise<boolean>;
+  /** The same counter, with the remaining fixed-window wait when denied. */
+  consumeRateLimitBudget(key: string, maximum: number, windowMs: number): Promise<RateLimitBudget>;
+  /** Atomically reserve an email request; rejected cooldown retries do not spend its quota. */
+  consumeEmailAuthBudget(key: string): Promise<EmailAuthBudget>;
   /** Charge each scoped intent once, including concurrent retries on different processes. */
   consumeIdempotentRateLimit(
     key: string,
@@ -112,11 +123,19 @@ export class MemorySessionCache implements SessionCache {
   }
 
   async consumeRateLimit(key: string, maximum: number, windowMs: number) {
+    return (await this.consumeRateLimitBudget(key, maximum, windowMs)).allowed;
+  }
+
+  async consumeRateLimitBudget(
+    key: string,
+    maximum: number,
+    windowMs: number,
+  ): Promise<RateLimitBudget> {
     const now = Date.now();
     const current = this.rateLimits.get(key);
     if (!current || current.expiresAt <= now) {
       this.rateLimits.set(key, { count: 1, expiresAt: now + windowMs });
-      return true;
+      return { allowed: true, retryAfterSeconds: 0 };
     }
     current.count += 1;
     if (this.rateLimits.size > 10_000) {
@@ -124,7 +143,34 @@ export class MemorySessionCache implements SessionCache {
         if (bucket.expiresAt <= now) this.rateLimits.delete(candidate);
       }
     }
-    return current.count <= maximum;
+    const allowed = current.count <= maximum;
+    return {
+      allowed,
+      retryAfterSeconds: allowed ? 0 : Math.max(1, Math.ceil((current.expiresAt - now) / 1000)),
+    };
+  }
+
+  async consumeEmailAuthBudget(key: string): Promise<EmailAuthBudget> {
+    const now = Date.now();
+    const addressKey = `email-auth:v2:${key}:address`;
+    const cooldownKey = `email-auth:v2:${key}:cooldown`;
+    const address = this.rateLimits.get(addressKey);
+    const cooldown = this.rateLimits.get(cooldownKey);
+    if (address && address.expiresAt > now && address.count >= 3)
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.ceil(
+          (Math.max(address.expiresAt, cooldown?.expiresAt ?? now) - now) / 1000,
+        ),
+      };
+    if (cooldown && cooldown.expiresAt > now)
+      return { allowed: false, retryAfterSeconds: Math.ceil((cooldown.expiresAt - now) / 1000) };
+    this.rateLimits.set(addressKey, {
+      count: address && address.expiresAt > now ? address.count + 1 : 1,
+      expiresAt: address && address.expiresAt > now ? address.expiresAt : now + 15 * 60_000,
+    });
+    this.rateLimits.set(cooldownKey, { count: 1, expiresAt: now + 60_000 });
+    return { allowed: true, retryAfterSeconds: 60 };
   }
 
   async delete(sessionId: string) {
@@ -300,19 +346,50 @@ export class RedisSessionCache implements SessionCache {
   }
 
   async consumeRateLimit(key: string, maximum: number, windowMs: number) {
-    const result = await this.redis.eval(
+    return (await this.consumeRateLimitBudget(key, maximum, windowMs)).allowed;
+  }
+
+  async consumeRateLimitBudget(
+    key: string,
+    maximum: number,
+    windowMs: number,
+  ): Promise<RateLimitBudget> {
+    const result = (await this.redis.eval(
       `local count = redis.call('incr', KEYS[1])
        if count == 1 then
          redis.call('pexpire', KEYS[1], ARGV[1])
        end
-       if count <= tonumber(ARGV[2]) then return 1 end
-       return 0`,
+       if count <= tonumber(ARGV[2]) then return {1, 0} end
+       return {0, math.max(1, math.ceil(redis.call('pttl', KEYS[1]) / 1000))}`,
       1,
       `openround:rate-limit:${key}`,
       String(windowMs),
       String(maximum),
-    );
-    return Number(result) === 1;
+    )) as [number, number];
+    return { allowed: Number(result[0]) === 1, retryAfterSeconds: Number(result[1]) };
+  }
+
+  async consumeEmailAuthBudget(key: string): Promise<EmailAuthBudget> {
+    const result = (await this.redis.eval(
+      `local count = tonumber(redis.call('get', KEYS[1]) or '0')
+       local addressTtl = redis.call('pttl', KEYS[1])
+       local cooldownTtl = redis.call('pttl', KEYS[2])
+       if count >= 3 and addressTtl > 0 then
+         return {0, math.ceil(math.max(addressTtl, cooldownTtl) / 1000)}
+       end
+       if cooldownTtl > 0 then return {0, math.ceil(cooldownTtl / 1000)} end
+       if addressTtl <= 0 then
+         redis.call('set', KEYS[1], '1', 'PX', 900000)
+       else
+         redis.call('incr', KEYS[1])
+       end
+       redis.call('set', KEYS[2], '1', 'PX', 60000)
+       return {1, 60}`,
+      2,
+      `openround:rate-limit:email-auth:v2:${key}:address`,
+      `openround:rate-limit:email-auth:v2:${key}:cooldown`,
+    )) as [number, number];
+    return { allowed: Number(result[0]) === 1, retryAfterSeconds: Number(result[1]) };
   }
 
   async delete(sessionId: string) {

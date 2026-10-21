@@ -180,10 +180,10 @@ export default function FeaturesPanel({
           </p>
         )}
         <p className="note policy-explanation">
-          Inherit uses deployment flags and workspace allowlists; it does not mean a feature is
-          available. Choose Enabled to assign plans. An explicit enabled or disabled setting
-          overrides that feature’s deployment flag and workspace allowlist. Dependencies and
-          required provider configuration still apply.
+          Workspace navigation is available by default for all plans. Other inherited features use
+          deployment flags and workspace allowlists. Choose Enabled to assign plans. An explicit
+          enabled or disabled setting overrides that feature’s deployment flag and workspace
+          allowlist. Dependencies and required provider configuration still apply.
         </p>
         <p className="note policy-explanation">
           Community mode uses Team assignments. Event-credit rooms use Pro; retained funded rooms

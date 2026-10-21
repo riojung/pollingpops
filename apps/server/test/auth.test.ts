@@ -120,7 +120,7 @@ describe("magic-link response exposure", () => {
     );
     expect(rejectedExternal.origin).toBe("https://app.openround.example");
     expect(rejectedExternal.pathname).toBe("/auth/locale");
-    expect(rejectedExternal.searchParams.get("returnTo")).toBe("/dashboard");
+    expect(rejectedExternal.searchParams.get("returnTo")).toBe("/home");
 
     const rejectedControlCharacter = new URL(
       auth.localeAwareWebRedirect(
@@ -128,7 +128,7 @@ describe("magic-link response exposure", () => {
         `/${String.fromCharCode(9)}/evil.example`,
       ),
     );
-    expect(rejectedControlCharacter.searchParams.get("returnTo")).toBe("/dashboard");
+    expect(rejectedControlCharacter.searchParams.get("returnTo")).toBe("/home");
   });
 
   it("keeps the link out of a hosted production response", async () => {

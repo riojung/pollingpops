@@ -194,11 +194,14 @@ button:disabled {
 }
 
 .topbar {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   min-height: 76px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
+  padding-block: 12px;
 }
 
 .auth-topbar {
@@ -218,7 +221,7 @@ button:disabled {
 
 .site-desktop-nav {
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px;
   justify-content: flex-end;
 }
 
@@ -232,6 +235,8 @@ button:disabled {
   gap: 10px;
   letter-spacing: -0.04em;
   text-decoration: none;
+  border-radius: 12px;
+  min-width: 0;
 }
 
 .brand-pop {
@@ -272,8 +277,6 @@ button:disabled {
 }
 
 .nav-links a {
-  font-size: 0.94rem;
-  font-weight: 650;
   text-decoration: none;
 }
 
@@ -284,16 +287,6 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.nav-text-button {
-  background: transparent;
-  border: 0;
-  color: var(--ui-text-strong);
-  font: inherit;
-  font-size: 0.94rem;
-  font-weight: 650;
-  padding: 0;
 }
 
 .site-mobile-actions,
@@ -371,6 +364,83 @@ button:disabled {
   .small-button {
     min-height: 44px;
   }
+}
+
+/* Shared navigation controls for public pages and the classic creator shell. */
+.navigation-control:where(:not(.button):not(.button-secondary):not(.button-danger)),
+.topbar
+  > :where(a, button):where(
+    :not(.brand):not(.skip-link):not(.button):not(.button-secondary):not(.button-danger)
+  ),
+.topbar
+  > :where(nav, .button-row)
+  > :where(a, button):where(:not(.button):not(.button-secondary):not(.button-danger)) {
+  align-items: center;
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  color: var(--ui-text-strong);
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.3;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 15px;
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.topbar > :is(nav, .button-row) {
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+.topbar :where(a, button):where(:not(.brand):not(.skip-link)),
+.live-topbar :where(a, button):where(:not(.brand)) {
+  min-height: 44px;
+}
+
+.live-topbar summary {
+  min-height: 44px;
+}
+
+.topbar > .auth-join-link {
+  min-height: 46px;
+}
+
+.navigation-control:where(:not(.button):not(.button-secondary):not(.button-danger)):hover:not(
+    :disabled
+  ),
+.topbar
+  > :where(a, button):where(
+    :not(.brand):not(.skip-link):not(.button):not(.button-secondary):not(.button-danger)
+  ):hover:not(:disabled),
+.topbar
+  > :where(nav, .button-row)
+  > :where(a, button):where(:not(.button):not(.button-secondary):not(.button-danger)):hover:not(
+    :disabled
+  ) {
+  background: var(--ui-surface-hover);
+  border-color: var(--ui-border-strong);
+}
+
+.navigation-control[aria-current="page"],
+.navigation-control[data-current="true"] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent-ink);
+  box-shadow: inset 0 -2px 0 var(--ui-accent-ink);
+  color: var(--ui-accent-ink);
+  font-weight: 850;
 }
 
 .hero {
@@ -2869,35 +2939,35 @@ html[data-openround-motion="reduced"] *::after {
     border-radius: 18px;
     box-shadow: 0 14px 34px rgba(16, 42, 67, 0.12);
     flex: 1 0 100%;
-    overflow: hidden;
     padding: 8px;
   }
 
   .site-mobile-nav:not([hidden]) {
     display: grid;
+    gap: 6px;
   }
 
   .site-mobile-nav a,
   .site-mobile-nav button {
-    background: transparent;
-    border: 0;
     border-radius: 12px;
     color: var(--ui-text-strong);
     font: inherit;
     font-weight: 750;
-    padding: 13px 14px;
+    justify-content: flex-start;
+    min-height: 44px;
+    padding: 12px 14px;
     text-align: left;
     text-decoration: none;
   }
 
   .site-mobile-nav a:hover,
   .site-mobile-nav button:hover {
-    background: var(--sky);
+    background: var(--ui-surface-hover);
   }
 
   .site-mobile-nav .site-mobile-primary {
-    background: var(--sky);
-    color: var(--teal-dark);
+    background: var(--ui-accent-soft);
+    color: var(--ui-accent-ink);
   }
 
   .site-mobile-session {
@@ -2921,6 +2991,11 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 @media (max-width: 560px) {
+  .topbar:not(.site-header) > :is(nav, .button-row) {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .shell {
     width: min(100% - 22px, 1180px);
   }

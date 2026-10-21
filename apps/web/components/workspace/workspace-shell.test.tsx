@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LocaleProvider } from "../locale-provider";
@@ -8,6 +9,8 @@ import germanWorkspacePageMessages from "../../lib/i18n/domains/workspace-pages/
 import germanMessages from "../../lib/i18n/messages/de-DE";
 
 const fixtures = vi.hoisted(() => ({
+  captureEffects: false,
+  effects: [] as Array<() => void>,
   pathname: "/library",
   push: vi.fn(),
   replace: vi.fn(),
@@ -44,6 +47,14 @@ const fixtures = vi.hoisted(() => ({
     canEdit: true,
     signOut: vi.fn(),
     startUpgrade: vi.fn(),
+    refreshAccount: vi.fn(async () => undefined),
+  },
+}));
+
+vi.mock("react", async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactModule>()),
+  useEffect: (effect: () => void) => {
+    if (fixtures.captureEffects) fixtures.effects.push(effect);
   },
 }));
 
@@ -61,7 +72,11 @@ import { WorkspaceFeatureGate, WorkspaceShell } from "./workspace-shell";
 
 describe("professional workspace shell", () => {
   beforeEach(() => {
+    fixtures.captureEffects = false;
+    fixtures.effects = [];
     fixtures.pathname = "/library";
+    fixtures.workspace.error = "";
+    fixtures.workspace.refreshAccount.mockClear();
     fixtures.workspace.canEdit = true;
     fixtures.workspace.productFeatures.uxBeta = true;
     fixtures.workspace.productFeatures.workspaceShell = true;
@@ -73,6 +88,21 @@ describe("professional workspace shell", () => {
     fixtures.workspace.productFeatures.ideaBoards = false;
     fixtures.push.mockClear();
     fixtures.replace.mockClear();
+  });
+
+  it.each([
+    ["/activity", "/activity"],
+    ["/help/getting-started", "/help"],
+    ["/account", "/account"],
+  ])("marks the current topbar destination for %s", (pathname, href) => {
+    fixtures.pathname = pathname;
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Workspace">
+        <p>Content</p>
+      </WorkspaceShell>,
+    );
+    const topbar = markup.match(/<header[^]*?<\/header>/)?.[0] ?? "";
+    expect(topbar).toMatch(new RegExp(`aria-current="page"[^>]*href="${href}"`));
   });
 
   it("exposes the complete task navigation and marks Library current", () => {
@@ -239,7 +269,54 @@ describe("professional workspace shell", () => {
     expect(markup).not.toContain('class="brand" href="/home"');
   });
 
-  it("continues to gate beta surfaces when the workspace shell rollout is off", () => {
+  it("keeps account failures on the modern route with an explicit retry action", () => {
+    fixtures.workspace.error = "Workspace could not be loaded";
+    fixtures.captureEffects = true;
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Workspace content</p>
+      </WorkspaceShell>,
+    );
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Workspace could not be loaded");
+    expect(markup).toContain("Try again");
+    expect(markup).not.toContain('href="/dashboard"');
+    expect(markup).not.toContain("Workspace content");
+    fixtures.effects.forEach((effect) => effect());
+    expect(fixtures.replace).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["presentations", "/home"],
+    ["builderV2", "/dashboard"],
+  ] as const)(
+    "falls back from disabled %s without losing the baseline workspace",
+    (feature, destination) => {
+      fixtures.workspace.productFeatures[feature] = false;
+      fixtures.captureEffects = true;
+      renderToStaticMarkup(
+        <WorkspaceShell requiredFeature={feature} title="Unavailable feature">
+          <p>Hidden</p>
+        </WorkspaceShell>,
+      );
+      fixtures.effects.forEach((effect) => effect());
+      expect(fixtures.replace).toHaveBeenCalledWith(destination);
+    },
+  );
+
+  it("renders the core workspace without the UX beta rollout", () => {
+    fixtures.workspace.productFeatures.uxBeta = false;
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Core workspace content</p>
+      </WorkspaceShell>,
+    );
+    expect(markup).toContain("Core workspace content");
+    expect(markup).not.toContain("Loading your workspace");
+    expect(markup).toContain('class="brand" href="/home"');
+  });
+
+  it("continues to honor an explicitly disabled core workspace shell", () => {
     fixtures.workspace.productFeatures.workspaceShell = false;
 
     const markup = renderToStaticMarkup(

@@ -100,6 +100,23 @@ export interface MagicLinkIdentity {
   user: UserPrincipal;
   creator: CreatorContext | null;
 }
+export interface EmailPinChallengeRecord {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  pinHash: string;
+  policyVersion: string;
+  returnTo: string | null;
+  workspaceId?: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  attempts: number;
+}
+export interface EmailPinIdentityResult {
+  identity: MagicLinkIdentity;
+  returnTo: string | null;
+}
 
 export interface WorkspaceSummaryRecord {
   id: string;
@@ -1092,6 +1109,14 @@ export interface Repository {
   createMagicToken(input: MagicTokenRecord): Promise<void>;
   consumeMagicToken(tokenHash: string, now: Date): Promise<CreatorContext | null>;
   consumeMagicLinkIdentity(tokenHash: string, now: Date): Promise<MagicLinkIdentity | null>;
+  getVerifiedEmailIdentity(email: string): Promise<MagicLinkIdentity | null>;
+  createEmailPinChallenge(input: EmailPinChallengeRecord): Promise<void>;
+  consumeEmailPinChallenge(
+    tokenHash: string,
+    pinHash: string,
+    now: Date,
+  ): Promise<EmailPinIdentityResult | null>;
+  revokeEmailPinChallenge(tokenHash: string): Promise<void>;
   createCreatorSession(input: {
     id: string;
     userId: string;

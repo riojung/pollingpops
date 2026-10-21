@@ -1,5 +1,6 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import type { FastifyInstance } from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRepository, type CreatorContext } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
@@ -14,7 +15,7 @@ async function verifySignIn(target: FastifyInstance, email: string) {
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  return target.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  return verifyEmailAndSignIn(target, `/v1/auth/verify?token=${token}`, email);
 }
 
 async function signIn(target: FastifyInstance, email: string) {
@@ -32,10 +33,12 @@ function setCookies(response: Awaited<ReturnType<FastifyInstance["inject"]>>) {
 afterEach(async () => {
   if (app) await app.close();
   app = undefined;
+  vi.useRealTimers();
 });
 
 describe("account locale preference API", () => {
   it("persists a supported locale idempotently without changing another user", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     const built = await buildApp(
       ConfigSchema.parse({
         NODE_ENV: "test",
@@ -59,7 +62,7 @@ describe("account locale preference API", () => {
     expect(unauthenticated.statusCode).toBe(401);
 
     const firstVerification = await verifySignIn(app, "locale-first@example.com");
-    expect(firstVerification.headers.location).toBe("http://localhost:3000/dashboard?welcome=1");
+    expect(firstVerification.json().redirectTo).toBe("http://localhost:3000/dashboard?welcome=1");
     expect(setCookies(firstVerification)).toHaveLength(1);
     expect(setCookies(firstVerification)[0]).not.toContain("openround-locale=");
     const firstCookie = setCookies(firstVerification)[0]!.split(";")[0]!;
@@ -96,6 +99,7 @@ describe("account locale preference API", () => {
       localePreferenceSet: true,
     });
 
+    vi.advanceTimersByTime(61_000);
     const returningVerification = await verifySignIn(app, "locale-first@example.com");
     const returningCookies = setCookies(returningVerification);
     const sessionCookie = returningCookies.find((cookie) =>
@@ -106,7 +110,7 @@ describe("account locale preference API", () => {
     expect(sessionCookie).toContain("Secure");
     expect(sessionCookie).toContain("Max-Age=2592000");
     expect(returningCookies).toHaveLength(1);
-    const localeBridge = new URL(returningVerification.headers.location!);
+    const localeBridge = new URL(returningVerification.json().redirectTo);
     expect(localeBridge.pathname).toBe("/auth/locale");
     expect(localeBridge.searchParams.get("locale")).toBe("ja-JP");
     expect(localeBridge.searchParams.get("returnTo")).toBe("/dashboard?welcome=1");

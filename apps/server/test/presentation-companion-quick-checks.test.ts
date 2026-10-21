@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -669,7 +670,11 @@ describe("Companion session-only Quick Checks", () => {
       },
     });
     const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-    const verified = await f.app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+    const verified = await verifyEmailAndSignIn(
+      f.app,
+      `/v1/auth/verify?token=${token}`,
+      "quick-check-report@example.com",
+    );
     const cookies = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
     const url = `/v1/presentation-sessions/${f.sessionId}/report`;

@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -26,7 +27,7 @@ async function signIn(app: FastifyInstance, email = "board-owner@example.com") {
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json().debugUrl).searchParams.get("token");
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(app, `/v1/auth/verify?token=${token}`, email);
   return { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
 }
 async function fixture(
@@ -109,8 +110,10 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
     url: "/v1/invitations/accept",
     payload: { token, acceptPolicies: true },
   });
+  expect(accepted.headers["set-cookie"]).toBeUndefined();
+  const acceptedSignIn = await requestPinAndSignIn(app, `board-${role}@example.com`);
   expect(accepted.statusCode, accepted.body).toBe(200);
-  return { cookie: String(accepted.headers["set-cookie"]).split(";")[0]! };
+  return { cookie: String(acceptedSignIn.headers["set-cookie"]).split(";")[0]! };
 }
 
 describe("independent idea board APIs", () => {
@@ -157,6 +160,7 @@ describe("independent idea board APIs", () => {
         }
         const replacementEmail =
           scope === "same workspace" ? "board-owner@example.com" : "replacement-owner@example.com";
+        vi.advanceTimersByTime(61_000);
         const replacementHeaders = await signIn(app, replacementEmail);
         const replacementOwner = [...repository.users.values()].find(
           (user) => user.email === replacementEmail,

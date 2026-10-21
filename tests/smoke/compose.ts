@@ -1,3 +1,4 @@
+import { authenticateMailpitCreator } from "../support/mailpit-auth.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { composeOperationalFeatures } from "../support/compose-operational-features.js";
@@ -29,33 +30,6 @@ async function api<T>(path: string, init: RequestInit = {}, bearer?: string): Pr
   return response.json() as Promise<T>;
 }
 
-async function magicLink(): Promise<string> {
-  await api("/v1/auth/magic-link", {
-    method: "POST",
-    body: JSON.stringify({ email, segment: "education", acceptPolicies: true }),
-  });
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const list = (await fetch(`${mailpitUrl}/api/v1/messages`).then((response) =>
-      response.json(),
-    )) as {
-      messages: Array<{ ID: string; To: Array<{ Address: string }> }>;
-    };
-    const message = list.messages.find((candidate) =>
-      candidate.To.some((recipient) => recipient.Address === email),
-    );
-    if (message) {
-      const detail = (await fetch(`${mailpitUrl}/api/v1/message/${message.ID}`).then((response) =>
-        response.json(),
-      )) as { Text: string };
-      const link = detail.Text.match(/https?:\/\/\S+\/v1\/auth\/verify\?token=[^\s]+/)?.[0];
-      if (link) return link;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("The smoke-test magic link did not reach Mailpit");
-}
-
 async function main() {
   if (!browserOrigin) {
     const response = await fetch(`${baseUrl}/v1/features`);
@@ -75,10 +49,13 @@ async function main() {
     assert.equal(response.status, 404, "The product proxy must not expose operator routes");
   }
   await composeOperationalFeatures({ signups: true, sessionCreation: true, mediaUploads: true });
-  const verifyResponse = await fetch(await magicLink(), { redirect: "manual" });
-  assert.ok([301, 302, 303, 307, 308].includes(verifyResponse.status));
-  creatorCookie = verifyResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
-  assert.match(creatorCookie, /^openround_creator=/);
+  creatorCookie = await authenticateMailpitCreator({
+    baseUrl,
+    browserOrigin,
+    mailpitUrl,
+    email,
+    segment: "education",
+  });
 
   const me = await api<{
     creator: { workspaceId: string; plan: string };
@@ -114,7 +91,7 @@ async function main() {
       mediaUploads: false,
     });
     for (const request of [
-      fetch(`${baseUrl}/v1/auth/magic-link`, {
+      fetch(`${baseUrl}/v1/auth/email-verification`, {
         method: "POST",
         headers: { origin: browserOrigin, "content-type": "application/json" },
         body: JSON.stringify({

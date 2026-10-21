@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
@@ -33,13 +34,14 @@ async function fixture(type: "poll" | "ranking" | "open_text" | "word_cloud") {
   });
   const app = (await buildApp(config, { repository, cache: new MemorySessionCache() })).app;
   apps.push(app);
+  const verifiedEmail = `${randomUUID()}@example.com`;
   const magic = await app.inject({
     method: "POST",
     url: "/v1/auth/magic-link",
-    payload: { email: `${randomUUID()}@example.com`, segment: "workplace", acceptPolicies: true },
+    payload: { email: verifiedEmail, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await app.inject({ url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(app, `/v1/auth/verify?token=${token}`, verifiedEmail);
   const cookies = verified.headers["set-cookie"]!;
   const cookie = (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
   const common = {

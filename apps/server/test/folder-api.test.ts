@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -12,13 +13,18 @@ afterEach(async () => {
   app = undefined;
 });
 async function signIn(target: FastifyInstance) {
+  const verifiedEmail = `${randomUUID()}@example.com`;
   const magic = await target.inject({
     method: "POST",
     url: "/v1/auth/magic-link",
-    payload: { email: `${randomUUID()}@example.com`, segment: "workplace", acceptPolicies: true },
+    payload: { email: verifiedEmail, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json().debugUrl).searchParams.get("token");
-  const verified = await target.inject({ url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(
+    target,
+    `/v1/auth/verify?token=${token}`,
+    verifiedEmail,
+  );
   return String(verified.headers["set-cookie"]).split(";")[0]!;
 }
 async function fixture() {
@@ -71,11 +77,12 @@ describe("scoped folder API", () => {
     const staleRound = (
       await app.inject({ url: `/v1/quizzes/${quiz.id}`, headers: { cookie } })
     ).json().quiz;
+    const invitedEmail = `${randomUUID()}@example.com`;
     const invitation = await app.inject({
       method: "POST",
       url: "/v1/workspace/invitations",
       headers: { cookie },
-      payload: { email: `${randomUUID()}@example.com`, role: "editor" },
+      payload: { email: invitedEmail, role: "editor" },
     });
     const token = new URL(invitation.json().debugUrl).searchParams.get("token");
     const accepted = await app.inject({
@@ -83,7 +90,9 @@ describe("scoped folder API", () => {
       url: "/v1/invitations/accept",
       payload: { token, acceptPolicies: true },
     });
-    const editorCookie = String(accepted.headers["set-cookie"]).split(";")[0]!;
+    expect(accepted.headers["set-cookie"]).toBeUndefined();
+    const acceptedSignIn = await requestPinAndSignIn(app, invitedEmail);
+    const editorCookie = String(acceptedSignIn.headers["set-cookie"]).split(";")[0]!;
     expect(
       (
         await app.inject({
@@ -228,11 +237,12 @@ describe("scoped folder API", () => {
     ).json().folder;
     expect((await app.inject({ url: "/v1/folders" })).statusCode).toBe(401);
     for (const role of ["editor", "viewer"] as const) {
+      const invitedEmail = `${randomUUID()}@example.com`;
       const invitation = await app.inject({
         method: "POST",
         url: "/v1/workspace/invitations",
         headers: { cookie },
-        payload: { email: `${randomUUID()}@example.com`, role },
+        payload: { email: invitedEmail, role },
       });
       const token = new URL(invitation.json().debugUrl).searchParams.get("token");
       const accepted = await app.inject({
@@ -240,7 +250,9 @@ describe("scoped folder API", () => {
         url: "/v1/invitations/accept",
         payload: { token, acceptPolicies: true },
       });
-      const memberCookie = String(accepted.headers["set-cookie"]).split(";")[0]!;
+      expect(accepted.headers["set-cookie"]).toBeUndefined();
+      const acceptedSignIn = await requestPinAndSignIn(app, invitedEmail);
+      const memberCookie = String(acceptedSignIn.headers["set-cookie"]).split(";")[0]!;
       expect(
         (await app.inject({ url: "/v1/folders", headers: { cookie: memberCookie } })).statusCode,
       ).toBe(200);

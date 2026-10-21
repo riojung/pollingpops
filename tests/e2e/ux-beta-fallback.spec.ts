@@ -1,3 +1,4 @@
+import { signInCreator } from "../support/creator-auth";
 import { expect, test } from "@playwright/test";
 
 import { testEmail } from "./test-email";
@@ -6,12 +7,7 @@ const apiUrl = "http://127.0.0.1:4100";
 
 test("feature-off creator remains on the legacy dashboard", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
-  await page.goto("/signin");
-  await page.getByRole("button", { name: "Workplace" }).click();
-  await page.getByLabel("Email address").fill(testEmail("ux-beta-off", testInfo));
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, testEmail("ux-beta-off", testInfo));
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByRole("heading", { name: "Your checkpoint sets" })).toBeVisible();
   await expect(page.getByLabel("Checkpoint set title")).toBeVisible();

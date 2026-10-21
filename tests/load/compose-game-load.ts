@@ -1,3 +1,4 @@
+import { authenticateMailpitCreator } from "../support/mailpit-auth.js";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -125,33 +126,6 @@ async function api<T>(path: string, init: RequestInit = {}, bearer?: string): Pr
   return response.json() as Promise<T>;
 }
 
-async function magicLink(email: string) {
-  await api("/v1/auth/magic-link", {
-    method: "POST",
-    body: JSON.stringify({ email, segment: "workplace", acceptPolicies: true }),
-  });
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const list = (await fetch(`${mailpitUrl}/api/v1/messages`).then((response) =>
-      response.json(),
-    )) as { messages: Array<{ ID: string; To: Array<{ Address: string }> }> };
-    const message = list.messages.find((candidate) =>
-      candidate.To.some((recipient) => recipient.Address === email),
-    );
-    if (message) {
-      const detail = (await fetch(`${mailpitUrl}/api/v1/message/${message.ID}`).then((response) =>
-        response.json(),
-      )) as { Text: string };
-      const link = detail.Text.match(/https?:\/\/\S+\/v1\/auth\/verify\?token=[^\s]+/)?.[0];
-      if (link) {
-        const verification = new URL(link);
-        return `${baseUrl}${verification.pathname}${verification.search}`;
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error("The load-test magic link did not reach Mailpit");
-}
-
 function connectSocket() {
   const socket = io(baseUrl, {
     transports: ["websocket"],
@@ -246,10 +220,7 @@ async function main() {
     await api("/v1/auth/me");
   } else {
     const email = `compose-load-${Date.now()}-${randomUUID()}@example.com`;
-    const verifyResponse = await fetch(await magicLink(email), { redirect: "manual" });
-    assert.ok([301, 302, 303, 307, 308].includes(verifyResponse.status));
-    creatorCookie = verifyResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
-    assert.match(creatorCookie, /^openround_creator=/);
+    creatorCookie = await authenticateMailpitCreator({ baseUrl, browserOrigin, mailpitUrl, email });
     accountCreated = true;
   }
 

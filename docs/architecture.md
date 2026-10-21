@@ -299,7 +299,8 @@ than accumulating in the active state snapshot.
 
 ### PostgreSQL
 
-PostgreSQL stores creator identity, workspaces, roles/invitations, magic links, creator sessions,
+PostgreSQL stores creator identity, workspaces, roles/invitations, email-verification tokens,
+sign-in PIN challenge hashes and attempt counts, creator sessions,
 Round and Presentation drafts, immutable versions, revision history and mutation receipts,
 Question Health dismissals/application provenance, folders/tags/favorites, media metadata, live
 Round and Presentation sessions, durable decision events, round/intervention evidence, accepted
@@ -338,7 +339,8 @@ Question media is uploaded directly to a private quarantine prefix with a constr
 
 ### External services
 
-- SMTP sends single-use creator magic links. Local Compose uses Mailpit instead of external delivery.
+- SMTP sends account-verification links and separate creator sign-in PINs. Local Compose captures
+  both in Mailpit instead of delivering external email.
 - Stripe Checkout, portal, and signature-verified webhooks are enabled only in hosted billing mode.
 - An optional operator-approved OpenAI-compatible endpoint receives only bounded authoring source
   sections. It is disabled by default and is not used during a live round.
@@ -361,15 +363,26 @@ sequenceDiagram
   participant D as PostgreSQL
   participant M as SMTP / Mailpit
 
-  B->>S: POST /v1/auth/magic-link
-  S->>D: Store hashed, expiring one-time token and consent
-  S->>M: Send public callback URL
+  B->>S: POST /v1/auth/email-verification
+  S->>D: Store hashed, expiring verification token
+  S->>M: Send verification link
   B->>S: GET /v1/auth/verify?token=...
-  S->>D: Consume token; create creator session
-  S-->>B: HttpOnly creator cookie + redirect
+  S->>D: Consume verification; provision free identity and consent
+  S-->>B: Redirect to sign-in without session cookie
+  B->>S: POST /v1/auth/pin/request
+  S->>D: Store challenge/PIN hashes for a verified identity
+  S->>M: Send six-digit PIN
+  B->>S: POST /v1/auth/pin/verify
+  S->>D: Consume unexpired PIN once; create creator session
+  S-->>B: HttpOnly creator cookie + validated redirect
 ```
 
-Raw magic-link and creator-session tokens are not stored as plaintext. Hosted production refuses
+Raw verification, PIN, challenge, and creator-session credentials are not stored as plaintext.
+PIN challenges expire after ten minutes and five wrong attempts; resending replaces older PINs.
+Shared per-email and per-IP limits apply across server instances. Only verified active identities
+receive PINs, and PIN requests never provision accounts. Existing sessions remain valid; old unused
+magic links verify email only. See [ADR 001](decisions/001-creator-authentication.md) for migration
+and security invariants. Hosted production refuses
 to start with sign-ups enabled unless SMTP is configured, and public origins plus creator cookies
 must use HTTPS and secure attributes. The explicit private-LAN HTTP exception is limited to
 non-billing community operation.

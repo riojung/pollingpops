@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -13,6 +14,7 @@ afterEach(async () => {
   await app?.close();
   app = undefined;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 const config = (extra: Record<string, string> = {}) =>
   ConfigSchema.parse({
@@ -31,7 +33,7 @@ async function signIn(target: FastifyInstance, email: string) {
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await target.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(target, `/v1/auth/verify?token=${token}`, email);
   const rawCookie = verified.headers["set-cookie"]!;
   const cookie = (Array.isArray(rawCookie) ? rawCookie[0]! : rawCookie).split(";")[0]!;
   const me = await target.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
@@ -440,6 +442,7 @@ describe("customer organization administration", () => {
     ).toBe(200);
   });
   it("keeps billing-only principal access independent from workspace content and denies cross-organization reads", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     const repository = new MemoryRepository();
     const built = await buildApp(config(), { repository, cache: new MemorySessionCache() });
     app = built.app;
@@ -467,6 +470,7 @@ describe("customer organization administration", () => {
       (await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie: finance.cookie } }))
         .statusCode,
     ).toBe(401);
+    vi.advanceTimersByTime(61_000);
     const freshMagic = await app.inject({
       method: "POST",
       url: "/v1/auth/magic-link",
@@ -479,12 +483,13 @@ describe("customer organization administration", () => {
     const freshToken = new URL(freshMagic.json<{ debugUrl: string }>().debugUrl).searchParams.get(
       "token",
     )!;
-    const freshVerified = await app.inject({
-      method: "GET",
-      url: `/v1/auth/verify?token=${freshToken}`,
-    });
-    expect(freshVerified.statusCode).toBe(302);
-    expect(freshVerified.headers.location).toBe("http://localhost:3000/organization");
+    const freshVerified = await verifyEmailAndSignIn(
+      app,
+      `/v1/auth/verify?token=${freshToken}`,
+      "organization-finance@example.com",
+    );
+    expect(freshVerified.statusCode).toBe(200);
+    expect(freshVerified.json().redirectTo).toBe("http://localhost:3000/organization");
     const freshCookies = freshVerified.headers["set-cookie"]!;
     const freshCookie = (Array.isArray(freshCookies) ? freshCookies[0]! : freshCookies).split(
       ";",

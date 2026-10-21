@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -43,7 +44,11 @@ async function fixture() {
     payload: { email: "protected-room@example.test", segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json().debugUrl).searchParams.get("token")!;
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(
+    app,
+    `/v1/auth/verify?token=${token}`,
+    "protected-room@example.test",
+  );
   const headers = { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
   const actor = (await app.inject({ method: "GET", url: "/v1/auth/me", headers })).json().creator;
   const now = new Date();

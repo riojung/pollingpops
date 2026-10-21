@@ -91,7 +91,7 @@ https://YOUR_WEB_ORIGIN/signin?workspaceId=WORKSPACE_UUID
 
 An unknown OIDC subject is rejected with `FEDERATED_IDENTITY_NOT_LINKED`. If membership is later
 removed, the linked identity cannot create a creator session. Owners can revoke their link from
-Account; email magic-link access remains available.
+Account; verified-email PIN sign-in remains available.
 
 ## 3. Configure LTI 1.3 and Deep Linking
 

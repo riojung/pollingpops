@@ -93,7 +93,7 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     assert.equal(ready, true, `Traced server did not become ready: ${childOutput}`);
-    const traced = await fetch(`${origin}/v1/auth/magic-link`, {
+    const traced = await fetch(`${origin}/v1/auth/email-verification`, {
       method: "POST",
       headers: { "content-type": "application/json", origin },
       body: JSON.stringify({

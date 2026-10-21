@@ -32,7 +32,7 @@
   sign-up ceiling is enabled. Keep `FEATURE_SIGNUPS=false` until email delivery is verified. The
   `ALLOW_INSECURE_LOCAL_HTTP` escape hatch is restricted to non-billing community deployments on
   loopback or private-network URLs and must never be enabled in hosted production. Keep
-  `AUTH_DEBUG_MAGIC_LINKS=false`; exposing a sign-in token in an API response is only for explicit,
+  `AUTH_DEBUG_MAGIC_LINKS=false`; exposing verification tokens or sign-in PINs in API responses is only for explicit,
   loopback-bound local testing.
 - Build the exact candidate image with `OPENROUND_BUILD_ID` set to its full Git commit (or immutable
   image digest) and execute `node dist/config-check.js` with the deployment's server environment

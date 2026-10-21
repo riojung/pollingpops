@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -53,8 +54,12 @@ async function fixture(options: { rolloutEnabled?: boolean } = {}) {
   });
   expect(magic.statusCode).toBe(202);
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
-  expect(verified.statusCode).toBe(302);
+  const verified = await verifyEmailAndSignIn(
+    app,
+    `/v1/auth/verify?token=${token}`,
+    "session-deletion-owner@example.com",
+  );
+  expect(verified.statusCode).toBe(200);
   const cookie = responseCookie(verified.headers);
   const account = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
   const creator = account.json<{ creator: CreatorContext }>().creator;
@@ -139,9 +144,14 @@ async function fixture(options: { rolloutEnabled?: boolean } = {}) {
       url: "/v1/invitations/accept",
       payload: { token: invitationToken, acceptPolicies: true },
     });
+    expect(accepted.headers["set-cookie"]).toBeUndefined();
+    const acceptedSignIn = await requestPinAndSignIn(
+      built.app,
+      `session-deletion-${role}@example.com`,
+    );
     expect(accepted.statusCode).toBe(200);
     expect(accepted.json()).toMatchObject({ creator: { workspaceId: creator.workspaceId, role } });
-    return responseCookie(accepted.headers);
+    return responseCookie(acceptedSignIn.headers);
   }
 
   return { ...built, repository, creator, cookie, seedSession, memberCookie };

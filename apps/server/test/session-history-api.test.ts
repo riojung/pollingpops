@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -37,20 +38,22 @@ async function fixture(presentationsEnabled = true) {
   );
   app = built.app;
   async function signIn() {
+    const verifiedEmail = `${randomUUID()}@example.com`;
     const magic = await built.app.inject({
       method: "POST",
       url: "/v1/auth/magic-link",
       payload: {
-        email: `${randomUUID()}@example.com`,
+        email: verifiedEmail,
         segment: "workplace",
         acceptPolicies: true,
       },
     });
     const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token");
-    const verified = await built.app.inject({
-      method: "GET",
-      url: `/v1/auth/verify?token=${token}`,
-    });
+    const verified = await verifyEmailAndSignIn(
+      built.app,
+      `/v1/auth/verify?token=${token}`,
+      verifiedEmail,
+    );
     const cookies = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
     const me = await built.app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });

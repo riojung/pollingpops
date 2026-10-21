@@ -26,11 +26,14 @@ export default function WorkspaceInvitationPage() {
     setBusy(true);
     setError("");
     try {
-      await apiFetch("/v1/invitations/accept", {
-        method: "POST",
-        body: JSON.stringify({ token, acceptPolicies }),
-      });
-      router.replace("/dashboard?invitation=accepted");
+      const result = await apiFetch<{ requiresSignIn: boolean; redirectTo: string }>(
+        "/v1/invitations/accept",
+        {
+          method: "POST",
+          body: JSON.stringify({ token, acceptPolicies }),
+        },
+      );
+      router.replace(result.redirectTo);
     } catch (caught) {
       setError(humanError(caught));
       setBusy(false);

@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
@@ -108,7 +109,11 @@ async function setup(
     },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(
+    app,
+    `/v1/auth/verify?token=${token}`,
+    "presentation-pack-author@example.com",
+  );
   const cookies = verified.headers["set-cookie"]!;
   const cookie = (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
   return { app, repository, workspaceId, cookie };

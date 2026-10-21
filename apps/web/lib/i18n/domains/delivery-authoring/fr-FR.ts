@@ -67,15 +67,52 @@ export default {
   "delivery.join.codeLabel": "Code du Round à sept chiffres",
   "delivery.auth.creatorAccess": "Accès créateur",
   "delivery.auth.signInTitle": "Connexion par e-mail",
-  "delivery.auth.signInDescription":
-    "Nous enverrons un lien à usage unique. Aucun mot de passe requis.",
   "delivery.auth.facilitate": "J’anime principalement",
   "delivery.auth.workplace": "Formation professionnelle",
   "delivery.auth.education": "Éducation",
   "delivery.auth.email": "Adresse e-mail",
   "delivery.auth.policy": "J’accepte les {terms} et reconnais l’avis de {privacy}.",
   "delivery.auth.sending": "Envoi…",
-  "delivery.auth.sendLink": "Envoyer le lien de connexion",
+  "delivery.auth.signInDescription":
+    "Saisissez votre adresse e-mail vérifiée pour recevoir un code PIN de connexion à usage unique. Aucun mot de passe requis.",
+  "delivery.auth.accessMode": "Accès au compte",
+  "delivery.auth.signInMode": "Se connecter",
+  "delivery.auth.createAccount": "Créer un compte",
+  "delivery.auth.createAccountDescription":
+    "Vérifiez d’abord votre e-mail. Connectez-vous ensuite séparément avec un code PIN envoyé dans votre boîte de réception.",
+  "delivery.auth.sendVerification": "Envoyer l’e-mail de vérification",
+  "delivery.auth.sendPin": "Envoyer le code PIN de connexion",
+  "delivery.auth.pinTitle": "Saisissez votre code PIN de connexion",
+  "delivery.auth.pinDescription":
+    "Saisissez le code PIN envoyé à votre adresse e-mail vérifiée pour accéder à Polling Pops.",
+  "delivery.auth.pinLabel": "Code PIN de connexion",
+  "delivery.auth.pinSent":
+    "Si {email} correspond à un compte vérifié, nous avons envoyé un code PIN de connexion. Consultez le dernier e-mail.",
+  "delivery.auth.pinHelp":
+    "Saisissez le code PIN à six chiffres du dernier e-mail. Il expire dans 10 minutes.",
+  "delivery.auth.pinExpired": "Ce code PIN a expiré. Demandez-en un nouveau pour vous connecter.",
+  "delivery.auth.verifyPinForm": "Vérifier le code PIN de connexion",
+  "delivery.auth.verifying": "Connexion…",
+  "delivery.auth.invalidPin":
+    "Le code PIN est invalide ou a expiré. Réessayez ou demandez un nouveau code.",
+  "delivery.auth.resendPin": "Envoyer un nouveau code PIN",
+  "delivery.auth.resendIn": "Renvoyer dans {seconds} s",
+  "delivery.auth.useAnotherEmail": "Utiliser un autre e-mail",
+  "delivery.auth.verificationSent": "E-mail de vérification demandé",
+  "delivery.auth.verificationInstructions":
+    "Si {email} doit être vérifié, nous avons envoyé un lien à usage unique valable 15 minutes. Ouvrez le dernier e-mail, puis revenez ici et connectez-vous pour demander un code PIN. Vérifier votre e-mail ne vous connecte pas.",
+  "delivery.auth.verified": "E-mail vérifié. Connectez-vous pour demander un code PIN.",
+  "delivery.auth.needAccount":
+    "Besoin d’un compte ? Créez-en un et vérifiez votre e-mail avant de vous connecter.",
+  "delivery.auth.inboxInstructions":
+    "Ouvrez la boîte de réception de développement locale et sélectionnez le dernier message envoyé à {email}.",
+  "delivery.auth.openInbox": "Ouvrir la boîte e-mail locale",
+  "delivery.auth.originTitle": "Utilisez l’adresse configurée pour vous connecter.",
+  "delivery.auth.originDescription":
+    "Cette page est ouverte sur {currentOrigin}. Les e-mails de vérification et les cookies du navigateur utilisent {configuredOrigin}.",
+  "delivery.auth.openConfigured": "Ouvrir la page de connexion configurée",
+  "delivery.auth.deliveryOrigin":
+    "Utilisez {origin} pour vérifier votre e-mail et saisir votre code PIN de connexion.",
   "delivery.auth.invitation": "Invitation à l’espace de travail",
   "delivery.auth.joinTeam": "Rejoindre l’équipe",
   "delivery.auth.invitationDescription":

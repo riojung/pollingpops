@@ -1,3 +1,10 @@
+import {
+  expectAnonymousCreator,
+  requestCreatorPin,
+  signInCreator,
+  submitCreatorPin,
+  verifyCreatorEmail,
+} from "../support/creator-auth";
 import { expect, test } from "@playwright/test";
 
 import { testEmail } from "./test-email";
@@ -11,12 +18,9 @@ test("creator can return to the signed-in dashboard and sign out on a narrow scr
     .locator(".site-mobile-actions")
     .getByRole("link", { name: "Sign in", exact: true });
   await mobileSignInLink.click();
+  await page.waitForURL(/\/signin$/, { waitUntil: "load" });
 
-  await page.getByRole("button", { name: "Workplace" }).click();
-  await page.getByLabel("Email address").fill(testEmail("navigation", testInfo));
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, testEmail("navigation", testInfo));
   await page.goto("/");
   const publicHeaderBrand = page
     .locator("header.site-header")
@@ -49,12 +53,7 @@ test("creator can return to the signed-in dashboard and sign out on a narrow scr
 test("creator can archive, restore, export, and delete their account", async ({
   page,
 }, testInfo) => {
-  await page.goto("/signin");
-  await page.getByRole("button", { name: "Workplace" }).click();
-  await page.getByLabel("Email address").fill(testEmail("lifecycle", testInfo));
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, testEmail("lifecycle", testInfo));
 
   await page.getByLabel("Checkpoint set title").fill("Lifecycle quiz");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();
@@ -89,12 +88,7 @@ test("creator can archive, restore, export, and delete their account", async ({
 test("workspace owner invites a viewer with read-only access", async ({ browser }, testInfo) => {
   const ownerContext = await browser.newContext();
   const owner = await ownerContext.newPage();
-  await owner.goto("/signin");
-  await owner.getByRole("button", { name: "Workplace" }).click();
-  await owner.getByLabel("Email address").fill(testEmail("workspace-owner", testInfo));
-  await owner.getByLabel(/I accept the Terms/).check();
-  await owner.getByRole("button", { name: "Send sign-in link" }).click();
-  await owner.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(owner, testEmail("workspace-owner", testInfo));
 
   await owner.getByLabel("Checkpoint set title").fill("Shared safety check");
   await owner.getByRole("button", { name: "Create checkpoint set" }).click();
@@ -102,6 +96,11 @@ test("workspace owner invites a viewer with read-only access", async ({ browser 
   await owner.getByRole("link", { name: "Account", exact: true }).click();
 
   const viewerEmail = testEmail("workspace-viewer", testInfo);
+  const viewerContext = await browser.newContext();
+  const viewer = await viewerContext.newPage();
+  // An existing account has its own workspace before accepting this invitation.
+  // Verification leaves it anonymous, so its first PIN must select the invited one.
+  await verifyCreatorEmail(viewer, viewerEmail);
   await owner.getByLabel("Email address").fill(viewerEmail);
   await owner.getByLabel("Role").selectOption("viewer");
   await owner.getByRole("button", { name: "Invite member" }).click();
@@ -111,11 +110,23 @@ test("workspace owner invites a viewer with read-only access", async ({ browser 
     .getAttribute("href");
   expect(invitationUrl).toBeTruthy();
 
-  const viewerContext = await browser.newContext();
-  const viewer = await viewerContext.newPage();
   await viewer.goto(invitationUrl!);
   await viewer.getByLabel(/I accept the Terms/).check();
+  const accepted = viewer.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/v1/invitations/accept",
+  );
   await viewer.getByRole("button", { name: "Accept invitation" }).click();
+  const invitationResponse = await accepted;
+  expect(invitationResponse.status()).toBe(200);
+  expect(invitationResponse.headers()["set-cookie"]).toBeUndefined();
+  await expect(viewer).toHaveURL(
+    (url) => url.pathname === "/signin" && url.searchParams.get("verified") === "1",
+  );
+  await expectAnonymousCreator(viewer, new URL(invitationResponse.url()).origin);
+  const { pin } = await requestCreatorPin(viewer, viewerEmail);
+  await submitCreatorPin(viewer, pin);
   await expect(viewer).toHaveURL(/\/dashboard\?invitation=accepted/);
   await expect(viewer.getByText("Viewer access is read-only")).toBeVisible();
   await expect(viewer.getByRole("button", { name: "Create checkpoint set" })).toHaveCount(0);

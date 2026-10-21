@@ -27,6 +27,24 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds verified-email PIN credentials with forced system-only isolation and bounded attempts", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 75)!;
+    expect(migration.name).toBe("verified_email_pin_auth");
+    expect(migration.sql).toContain("email_verified_at = created_at");
+    expect(migration.sql).toContain("WHERE deleted_at IS NULL AND email_verified_at IS NULL");
+    expect(migration.sql).toContain("attempts BETWEEN 0 AND 5");
+    expect(migration.sql).toContain("REFERENCES users(id) ON DELETE CASCADE");
+    expect(migration.sql).toContain("workspace_id uuid");
+    expect(migration.sql).toContain("REFERENCES workspaces(id) ON DELETE SET NULL");
+    expect(migration.sql).toContain("FORCE ROW LEVEL SECURITY");
+    expect(migration.sql).toContain("current_setting('app.system_access', true) = 'on'");
+    expect(migration.sql).toContain(
+      "GRANT SELECT, INSERT, UPDATE, DELETE ON auth_email_pin_challenges",
+    );
+    expect(migration.sql).not.toContain("DISABLE ROW LEVEL SECURITY");
+  });
   it("adds private operator credential and durable login throttle record kinds without changing isolation", async () => {
     const migration = (
       await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))

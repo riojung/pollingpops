@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LocalReturnPathSchema } from "@openround/contracts";
 import type { CreatorContext, Repository, Segment, UserPrincipal } from "@openround/db";
@@ -21,6 +21,10 @@ export class AuthService {
   }
 
   async requestMagicLink(email: string, segment: Segment, returnTo?: string) {
+    return this.requestAccountVerification(email, segment, returnTo);
+  }
+
+  async requestAccountVerification(email: string, segment: Segment, returnTo?: string) {
     const token = opaqueToken();
     await this.repository.createMagicToken({
       id: randomUUID(),
@@ -34,18 +38,73 @@ export class AuthService {
     const verifyUrl = new URL("/v1/auth/verify", this.config.PUBLIC_API_URL);
     verifyUrl.searchParams.set("token", token);
     if (returnTo) verifyUrl.searchParams.set("returnTo", returnTo);
-    await this.mailer.sendMagicLink(email, verifyUrl.href);
+    await this.mailer.sendAccountVerification(email, verifyUrl.href);
     return this.config.NODE_ENV !== "production" || this.config.AUTH_DEBUG_MAGIC_LINKS
       ? verifyUrl.href
       : undefined;
   }
 
   async verifyMagicLink(token: string) {
-    const identity = await this.repository.consumeMagicLinkIdentity(hashToken(token), new Date());
-    if (!identity) return null;
-    if (identity.creator) return this.issueCreatorSession(identity.creator);
+    // A verification credential must never be exchanged for a session.
+    return this.repository.consumeMagicLinkIdentity(hashToken(token), new Date());
+  }
+
+  async requestSignInPin(email: string, returnTo?: string, workspaceId?: string) {
+    const challengeId = opaqueToken();
+    const identity = await this.repository.getVerifiedEmailIdentity(email);
+    const result = {
+      accepted: true as const,
+      challengeId,
+      expiresInSeconds: 600,
+      resendAfterSeconds: 60,
+    };
+    // The response is indistinguishable for unknown, deleted and unverified accounts.
+    if (!identity) return result;
+    const pin = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const now = new Date();
+    await this.repository.createEmailPinChallenge({
+      id: randomUUID(),
+      userId: identity.user.userId,
+      tokenHash: hashToken(challengeId),
+      // The raw high-entropy challenge is absent from storage. A database-only leak
+      // cannot enumerate the small PIN space using the stored challenge hash.
+      pinHash: hashToken(`${challengeId}:${pin}`),
+      policyVersion: this.config.POLICY_VERSION,
+      returnTo: returnTo ?? null,
+      workspaceId: workspaceId ?? null,
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 10 * 60_000),
+      consumedAt: null,
+      attempts: 0,
+    });
+    try {
+      await this.mailer.sendSignInPin(email, pin);
+    } catch (error) {
+      await this.repository.revokeEmailPinChallenge(hashToken(challengeId));
+      throw error;
+    }
+    return this.config.NODE_ENV !== "production" || this.config.AUTH_DEBUG_MAGIC_LINKS
+      ? { ...result, debugPin: pin }
+      : result;
+  }
+
+  async verifySignInPin(challengeId: string, pin: string) {
+    const consumed = await this.repository.consumeEmailPinChallenge(
+      hashToken(challengeId),
+      hashToken(`${challengeId}:${pin}`),
+      new Date(),
+    );
+    if (!consumed) return null;
+    const { identity, returnTo } = consumed;
+    if (identity.creator) {
+      return {
+        ...(await this.issueCreatorSession(identity.creator)),
+        user: identity.user,
+        returnTo,
+      };
+    }
     const sessionToken = await this.issueIdentitySession(identity.user);
-    return { user: identity.user, creator: null, sessionToken };
+    return { user: identity.user, creator: null, sessionToken, returnTo };
   }
 
   private async issueIdentitySession(user: UserPrincipal, activeWorkspaceId?: string) {
@@ -107,7 +166,7 @@ export class AuthService {
       this.config.POLICY_VERSION,
     );
     if (!creator) return null;
-    return this.issueCreatorSession(creator);
+    return this.effectiveCreator(creator);
   }
 
   async switchWorkspace(request: FastifyRequest, creator: CreatorContext, workspaceId: string) {

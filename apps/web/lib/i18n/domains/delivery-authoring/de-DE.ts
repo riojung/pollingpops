@@ -65,15 +65,52 @@ export default {
   "delivery.join.codeLabel": "Siebenstelliger Round-Code",
   "delivery.auth.creatorAccess": "Erstellerzugang",
   "delivery.auth.signInTitle": "Per E-Mail anmelden",
-  "delivery.auth.signInDescription":
-    "Wir senden einen einmal verwendbaren Link. Kein Passwort erforderlich.",
   "delivery.auth.facilitate": "Ich moderiere hauptsächlich",
   "delivery.auth.workplace": "Betriebliche Weiterbildung",
   "delivery.auth.education": "Bildung",
   "delivery.auth.email": "E-Mail-Adresse",
   "delivery.auth.policy": "Ich akzeptiere die {terms} und bestätige den {privacy}.",
   "delivery.auth.sending": "Wird gesendet…",
-  "delivery.auth.sendLink": "Anmeldelink senden",
+  "delivery.auth.signInDescription":
+    "Gib deine bestätigte E-Mail-Adresse ein, um eine einmalige Anmelde-PIN zu erhalten. Kein Passwort erforderlich.",
+  "delivery.auth.accessMode": "Kontozugang",
+  "delivery.auth.signInMode": "Anmelden",
+  "delivery.auth.createAccount": "Konto erstellen",
+  "delivery.auth.createAccountDescription":
+    "Bestätige zuerst deine E-Mail-Adresse. Melde dich danach separat mit einer PIN aus deinem Posteingang an.",
+  "delivery.auth.sendVerification": "Bestätigungs-E-Mail senden",
+  "delivery.auth.sendPin": "Anmelde-PIN senden",
+  "delivery.auth.pinTitle": "Gib deine Anmelde-PIN ein",
+  "delivery.auth.pinDescription":
+    "Gib die PIN ein, die an deine bestätigte E-Mail-Adresse gesendet wurde, um auf Polling Pops zuzugreifen.",
+  "delivery.auth.pinLabel": "Anmelde-PIN",
+  "delivery.auth.pinSent":
+    "Falls für {email} ein bestätigtes Konto besteht, haben wir eine Anmelde-PIN gesendet. Prüfe die neueste E-Mail.",
+  "delivery.auth.pinHelp":
+    "Gib die sechsstellige PIN aus der neuesten E-Mail ein. Sie läuft nach 10 Minuten ab.",
+  "delivery.auth.pinExpired": "Diese PIN ist abgelaufen. Fordere eine neue PIN zur Anmeldung an.",
+  "delivery.auth.verifyPinForm": "Anmelde-PIN prüfen",
+  "delivery.auth.verifying": "Anmeldung läuft…",
+  "delivery.auth.invalidPin":
+    "Die PIN ist ungültig oder abgelaufen. Versuche es erneut oder fordere eine neue PIN an.",
+  "delivery.auth.resendPin": "Neue PIN senden",
+  "delivery.auth.resendIn": "Erneut senden in {seconds} s",
+  "delivery.auth.useAnotherEmail": "Andere E-Mail verwenden",
+  "delivery.auth.verificationSent": "Bestätigungs-E-Mail angefordert",
+  "delivery.auth.verificationInstructions":
+    "Falls {email} bestätigt werden muss, haben wir einen einmaligen Link gesendet, der 15 Minuten gültig ist. Öffne die neueste E-Mail, kehre hierher zurück und melde dich an, um eine PIN anzufordern. Die E-Mail-Bestätigung meldet dich nicht an.",
+  "delivery.auth.verified": "E-Mail bestätigt. Melde dich an, um eine PIN anzufordern.",
+  "delivery.auth.needAccount":
+    "Noch kein Konto? Erstelle eines und bestätige deine E-Mail-Adresse vor der Anmeldung.",
+  "delivery.auth.inboxInstructions":
+    "Öffne den lokalen Entwicklungs-Posteingang und wähle die neueste Nachricht an {email}.",
+  "delivery.auth.openInbox": "Lokalen E-Mail-Posteingang öffnen",
+  "delivery.auth.originTitle": "Verwende zur Anmeldung die konfigurierte Adresse.",
+  "delivery.auth.originDescription":
+    "Diese Seite ist unter {currentOrigin} geöffnet. Bestätigungs-E-Mails und Browser-Cookies verwenden {configuredOrigin}.",
+  "delivery.auth.openConfigured": "Konfigurierte Anmeldeseite öffnen",
+  "delivery.auth.deliveryOrigin":
+    "Verwende {origin}, um deine E-Mail-Adresse zu bestätigen und deine Anmelde-PIN einzugeben.",
   "delivery.auth.invitation": "Arbeitsbereichseinladung",
   "delivery.auth.joinTeam": "Team beitreten",
   "delivery.auth.invitationDescription":

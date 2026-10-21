@@ -81,16 +81,15 @@ Then open:
 - Polling Pops: <http://localhost:8080>
 - Development email inbox: <http://localhost:8025>
 
-Local development includes the management console. Use the normal product sign-in form with
-`admin@pollingpops.local` and open its captured sign-in email in Mailpit. This verified local
-identity establishes the **Local admin** session with Super admin access, revealing the Business
-menu for tenants, billing, credits, operations, support, integrations, and audit. Public pages and
-ordinary customer accounts have no business-admin entry. Local admin sign-in needs no SSO, MFA,
-or password. Use `http://localhost:8080` for the product; `LOCAL_ADMIN_EMAIL` configures the local
-admin email.
+Local development includes a separate management console at <http://localhost:3002>. Its
+provisioned administrator uses a username, password, and authenticator code; customer email
+verification and PIN sign-in do not grant platform administration. See the
+[administrator setup guide](apps/control/README.md#standalone-password-authentication).
 
-Use any valid development email address to request a sign-in link, then open the captured message
-in Mailpit. The core profile uses development credentials and disables untrusted image uploads
+For a new creator, select **Create account**, request a verification email, and open its captured
+link in Mailpit. Verification returns to sign-in without granting access. Select **Send sign-in
+PIN**, read the newest six-digit code in Mailpit, and enter it to sign in. Existing verified
+accounts request a PIN directly. The core profile uses development credentials and disables untrusted image uploads
 because no malware scanner is attached.
 
 For an existing Colima installation on macOS, use `pnpm local:start` after rebooting. With Node.js
@@ -100,7 +99,7 @@ Use `pnpm local:start --no-build` when the application images are already built 
 See [Colima startup and explicit recovery](docs/quick-start.md#one-command-startup-after-a-reboot-colima).
 
 Stop the stack while preserving its PostgreSQL, Valkey, and MinIO named volumes. Captured Mailpit
-messages and unused development sign-in links are ephemeral and will be discarded:
+messages are ephemeral and will be discarded; request fresh verification/PIN emails after restarting:
 
 ```bash
 docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml down

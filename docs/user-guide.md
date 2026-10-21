@@ -200,16 +200,24 @@ facilitator can change round settings before creating a room.
 ## Sign in and workspace access
 
 1. Select **Create a free checkpoint set** or open `/signin`.
-2. Choose education or workplace learning.
-3. Enter an email address, accept the displayed policies, and request a sign-in link.
-4. Follow the single-use link. Local Compose captures it in Mailpit at
-   <http://localhost:8025>; after requesting the link, select **Open local email inbox** on the
-   sign-in page. If the configured public address differs from the browser address, move to the
-   configured sign-in page first and continue using that origin after authentication.
+2. For a new account, select **Create account**, choose education or workplace learning, enter
+   your email, accept the displayed policies, and select **Send verification email**.
+3. Open the verification email and follow its single-use link within 15 minutes. Verification
+   creates the free account and returns you to sign-in; it does not sign you in.
+4. Select **Sign in**, enter your verified email, accept the displayed policies, and select
+   **Send sign-in PIN**. Enter the six-digit PIN from the newest email and select **Sign in**.
+   The PIN expires after ten minutes and can be used once. Wait 60 seconds before requesting
+   another PIN; doing so replaces the previous one. Future sign-ins use this PIN step directly.
+
+Local Compose captures both emails in Mailpit at <http://localhost:8025>. Select **Open local
+email inbox** on the sign-in page. If the configured public address differs from the browser
+address, move to the configured sign-in page first and continue using that origin after
+authentication. Participants can use **Join a Round** without creating a creator account.
 
 Use **Home** or **Library** to return to your Rounds in the professional workspace; the classic view
 uses **My checkpoint sets**. Select **Sign out** to revoke the current browser session. Owners can
-invite editors or viewers from **Account**. An invitation is single-use and expiring. A person who
+invite editors or viewers from **Account**. An invitation is single-use and expiring; anonymous
+invitees accept it and then separately sign in with an email PIN. A person who
 belongs to multiple workspaces can switch the active workspace there.
 
 Platform administrator access uses a separate console and account. Provisioned administrators

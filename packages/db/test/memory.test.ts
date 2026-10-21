@@ -709,7 +709,7 @@ describe("memory repository", () => {
     const repository = new MemoryRepository();
     const workspaceId = randomUUID();
     const quizId = randomUUID();
-    const now = new Date("2026-09-18T12:00:00.000Z");
+    const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60_000);
     const content = { title: "Failed report fixture", description: "", questions: [] };
     await repository.createQuiz({

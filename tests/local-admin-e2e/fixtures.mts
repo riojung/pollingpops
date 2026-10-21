@@ -1,3 +1,4 @@
+import { signInCreator } from "../support/creator-auth.js";
 import {
   request,
   expect,
@@ -142,21 +143,7 @@ export async function signInAdmin(page: Page, credentials: AdminCredentials) {
 }
 
 export async function signIn(page: Page, email: string) {
-  await page.goto(`${productOrigin}/signin`);
-  await page.getByRole("button", { name: "Workplace learning", exact: true }).click();
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel(/I accept the Terms/).check();
-  const requested = page.waitForResponse(
-    (response) =>
-      response.request().method() === "POST" && response.url().endsWith("/v1/auth/magic-link"),
-  );
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  const result = await requested;
-  expect(result.status()).toBe(202);
-  const link = await page.getByRole("link", { name: "Continue to dashboard" }).getAttribute("href");
-  expect(new URL(link!).hostname).toBe("127.0.0.1");
-  expect(new URL(link!).port).toBe("4300");
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, email, { signinUrl: `${productOrigin}/signin` });
   await expect(page).toHaveURL(new RegExp(`^${productOrigin}/dashboard`));
 }
 

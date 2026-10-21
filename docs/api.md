@@ -358,8 +358,19 @@ counts under the bounded `product_event` resource label.
 
 ## Authentication, workspaces, and account
 
-- `POST /v1/auth/magic-link`
-- `GET /v1/auth/verify?token=...`
+- `POST /v1/auth/email-verification` — `{email, segment, acceptPolicies: true, returnTo?}`;
+  sends a single-use 15-minute verification link. No account or session is created on request.
+- `POST /v1/auth/magic-link` — compatibility alias for email verification; never signs in.
+- `GET /v1/auth/verify?token=...` — verifies/provisions the free identity, then redirects to
+  `/signin?verified=1&returnTo=...` without setting a session cookie. Invalid, expired, and reused
+  verification links return 400.
+- `POST /v1/auth/pin/request` — `{email, acceptPolicies: true, returnTo?, workspaceId?}`;
+  returns 202 `{accepted, challengeId, expiresInSeconds: 600, resendAfterSeconds: 60}`. Only verified
+  active identities receive an email; unknown/unverified identities receive the same hosted response
+  shape. Optional workspace selection requires current membership. A new PIN replaces older PINs.
+- `POST /v1/auth/pin/verify` — `{challengeId, pin}` with a six-digit string (including leading zeros);
+  returns `{redirectTo}` and the creator cookie only after successful, single-use verification.
+  Wrong, expired, exhausted, and reused credentials return 401; malformed input returns 400.
 - `GET /v1/auth/me` — creator/workspace context, entitlements (including `cohosting`), branding,
   and workspace-resolved `productFeatures` after the partner allowlist and global switches are
   applied.
@@ -368,7 +379,9 @@ counts under the bounded `product_event` resource label.
 - `POST /v1/workspaces/{id}/select`
 - `GET /v1/workspace/members`
 - `POST /v1/workspace/invitations`
-- `POST /v1/invitations/accept`
+- `POST /v1/invitations/accept` — returns `{creator, requiresSignIn, redirectTo}`. Anonymous invitees
+  must separately request and enter a PIN. A matching authenticated user keeps their existing session
+  and switches to the invited workspace.
 - `DELETE /v1/workspace/invitations/{invitationId}`
 - `PATCH|DELETE /v1/workspace/members/{userId}`
 - `GET|PUT|DELETE /v1/account/theme`

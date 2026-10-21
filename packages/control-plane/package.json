@@ -19,6 +19,6 @@
     "@openround/db": "workspace:*",
     "@openround/contracts": "workspace:*",
     "openid-client": "6.8.8",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   }
 }

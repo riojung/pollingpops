@@ -502,6 +502,8 @@ export async function buildApp(
     auth,
     config,
     boards: createIdeaBoardRepository(repository),
+    storage,
+    metrics,
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
   const summaryExports = overrides.summaryExports ?? createSessionSummaryExportService();

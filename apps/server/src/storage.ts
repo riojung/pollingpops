@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -8,6 +7,7 @@ import {
   PutObjectTaggingCommand,
   PutObjectCommand,
   S3Client,
+  type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { MediaAssetRecord } from "@openround/db";
@@ -63,8 +63,27 @@ function validSignature(content: Uint8Array, mimeType: AllowedMimeType) {
   );
 }
 
-function encodedCopySource(bucket: string, key: string) {
-  return `${encodeURIComponent(bucket)}/${key.split("/").map(encodeURIComponent).join("/")}`;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+async function boundedImageBytes(body: GetObjectCommandOutput["Body"]) {
+  if (!body) throw new Error("Uploaded media content is unavailable");
+  const reader = body.transformToWebStream().getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return Buffer.concat(chunks, size);
+      size += value.byteLength;
+      if (size > MAX_IMAGE_BYTES) throw new Error("Images must be 10 MB or smaller");
+      chunks.push(value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export class StorageService {
@@ -175,8 +194,7 @@ export class StorageService {
       new GetObjectCommand({ Bucket: this.config.S3_BUCKET, Key: sourceObjectKey }),
       { abortSignal: AbortSignal.timeout(STORAGE_OPERATION_TIMEOUT_MS) },
     );
-    if (!object.Body) throw new Error("Uploaded media content is unavailable");
-    const content = await object.Body.transformToByteArray();
+    const content = await boundedImageBytes(object.Body);
     if (content.byteLength !== asset.sizeBytes || !validSignature(content, asset.mimeType)) {
       return { scanStatus: "rejected" as const, objectKey: asset.objectKey };
     }
@@ -186,12 +204,15 @@ export class StorageService {
     }
 
     await this.internalClient.send(
-      new CopyObjectCommand({
+      // The quarantined PUT remains usable until its ticket expires. Publish the exact
+      // bytes we scanned rather than copying a source that may have been overwritten.
+      new PutObjectCommand({
         Bucket: this.config.S3_BUCKET,
-        CopySource: encodedCopySource(this.config.S3_BUCKET, sourceObjectKey),
         Key: promotedObjectKey,
-        MetadataDirective: "COPY",
-        TaggingDirective: "REPLACE",
+        Body: content,
+        ContentType: asset.mimeType,
+        ContentLength: content.byteLength,
+        Metadata: head.Metadata,
         Tagging: FINALIZATION_TEMPORARY_TAGGING,
       }),
       { abortSignal: AbortSignal.timeout(STORAGE_OPERATION_TIMEOUT_MS) },
@@ -269,6 +290,19 @@ export class StorageService {
       new GetObjectCommand({ Bucket: this.config.S3_BUCKET, Key: asset.objectKey }),
       { expiresIn: 5 * 60 },
     );
+  }
+
+  async readImage(asset: MediaAssetRecord) {
+    if (!this.internalClient || asset.scanStatus !== "clean")
+      throw new Error("Media is not available");
+    const object = await this.internalClient.send(
+      new GetObjectCommand({ Bucket: this.config.S3_BUCKET, Key: asset.objectKey }),
+      { abortSignal: AbortSignal.timeout(STORAGE_OPERATION_TIMEOUT_MS) },
+    );
+    const content = await boundedImageBytes(object.Body);
+    if (content.byteLength !== asset.sizeBytes || !validSignature(content, asset.mimeType))
+      throw new Error("Media content does not match the scanned image");
+    return content;
   }
 
   async deleteAsset(asset: MediaAssetRecord) {

@@ -2,10 +2,13 @@ import {
   IdeaBoardGuestViewSchema,
   IdeaBoardPublicInfoSchema,
   IdeaBoardViewSchema,
+  MediaUploadRequestSchema,
+  MediaUploadTicketSchema,
   type IdeaBoardCreate,
   type IdeaBoardHostCommand,
+  type IdeaBoardSubmitSchema,
 } from "@openround/contracts";
-import { apiFetch } from "./api";
+import { API_URL, ApiClientError, apiFetch, retryDelaySeconds } from "./api";
 import { clientUuid } from "./uuid";
 
 export function ideaBoardPath(id: string) {
@@ -124,7 +127,7 @@ export async function commandIdeaBoard(
 export async function submitBoardIdea(
   id: string,
   token: string,
-  input: { schemaVersion: 1; idempotencyKey: string; body: string },
+  input: ReturnType<typeof IdeaBoardSubmitSchema.parse>,
   signal?: AbortSignal,
 ) {
   return IdeaBoardGuestViewSchema.parse(
@@ -135,6 +138,95 @@ export async function submitBoardIdea(
       signal,
     }),
   );
+}
+
+function boardMediaPath(id: string, mediaId: string) {
+  ideaBoardPath(mediaId);
+  return `${ideaBoardPath(id)}/media/${mediaId}`;
+}
+
+/** A board credential is sent only to the board API, never to an object-storage URL. */
+export async function uploadIdeaBoardImage(
+  id: string,
+  token: string,
+  file: File,
+  altText: string,
+  signal?: AbortSignal,
+): Promise<{ mediaId: string; scanStatus: "clean"; altText: string }> {
+  const input = MediaUploadRequestSchema.parse({
+    fileName: file.name,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    altText,
+  });
+  const ticket = MediaUploadTicketSchema.parse(
+    await apiFetch(`${ideaBoardPath(id)}/media`, {
+      ...guestOptions(token),
+      signal,
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  );
+  const destination = new URL(ticket.uploadUrl);
+  if (
+    !["http:", "https:"].includes(destination.protocol) ||
+    destination.username ||
+    destination.password
+  )
+    throw new Error("Invalid image upload destination");
+  const uploaded = await fetch(destination.href, {
+    method: "PUT",
+    credentials: "omit",
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+    headers: { "content-type": input.mimeType },
+    body: file,
+    signal,
+  });
+  if (!uploaded.ok)
+    throw new ApiClientError("The image upload could not finish", "UPLOAD_FAILED", uploaded.status);
+  const completed = await apiFetch<{
+    media: { id: string; scanStatus: string; altText: string };
+  }>(`${boardMediaPath(id, ticket.mediaId)}/complete`, {
+    ...guestOptions(token),
+    signal,
+    method: "POST",
+  });
+  if (completed?.media?.id !== ticket.mediaId || completed.media.scanStatus !== "clean")
+    throw new ApiClientError("The image could not be approved for use", "MEDIA_REJECTED", 422);
+  return { mediaId: ticket.mediaId, scanStatus: "clean", altText: input.altText };
+}
+
+/** Authenticated bytes avoid putting audience credentials or reusable signed links in markup. */
+export async function fetchIdeaBoardImage(
+  id: string,
+  mediaId: string,
+  token?: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const response = await fetch(`${API_URL}${boardMediaPath(id, mediaId)}/content`, {
+    ...guestOptions(token),
+    credentials: token === undefined ? "include" : "omit",
+    signal,
+  });
+  if (!response.ok) {
+    const details = (await response.json().catch(() => null)) as {
+      error?: { code?: string; retryAfterSeconds?: number };
+    } | null;
+    throw new ApiClientError(
+      "This board image is unavailable",
+      details?.error?.code ?? "NOT_FOUND",
+      response.status,
+      retryDelaySeconds(details?.error?.retryAfterSeconds, response.headers.get("retry-after")),
+    );
+  }
+  const mediaType = response.headers.get("content-type")?.split(";")[0]?.trim();
+  if (!mediaType || !["image/jpeg", "image/png", "image/webp"].includes(mediaType))
+    throw new Error("Invalid board image response");
+  const content = await response.blob();
+  if (content.size < 1 || content.size > 10 * 1024 * 1024)
+    throw new Error("Invalid board image size");
+  return content;
 }
 
 export async function submitBoardVotes(

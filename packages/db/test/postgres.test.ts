@@ -12,6 +12,7 @@ import { expectSessionHistoryConformance } from "./support/session-history-confo
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
+import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
 import {
   expectIdeaBoardConformance,
   expectIdeaBoardAdmissionConformance,
@@ -1239,6 +1240,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 73, name: "operator_password_credentials" },
       { version: 74, name: "idea_boards" },
       { version: 75, name: "verified_email_pin_auth" },
+      { version: 76, name: "rich_idea_boards" },
     ]);
 
     // An existing P0 database has the full schema but no ledger. Replaying the
@@ -3133,6 +3135,11 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       }
     },
   );
+
+  it("persists rich idea boards with exclusive image ownership, private projections and lifecycle cleanup", async () => {
+    const owner = await creator("rich-idea-board-owner");
+    await expectIdeaBoardRichConformance(repository, owner.workspaceId, owner.userId);
+  });
 
   it("persists idea boards with fenced moderation, concurrent final ballots, tenant isolation and private exports", async () => {
     const owner = await creator("idea-board-owner"),

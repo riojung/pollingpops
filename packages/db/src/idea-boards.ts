@@ -11,18 +11,22 @@ import {
   IdeaBoardPublicInfoSchema,
   IdeaBoardStoredSchema,
   IdeaBoardVoteSchema,
+  IdeaBoardRichContentSchema,
+  ideaBoardRichContent,
   ideaBoardProjection,
   type IdeaBoardCreate,
   type IdeaBoardGuestView,
   type IdeaBoardHostCommand,
   type IdeaBoardReceipt,
   type IdeaBoardStored,
+  type IdeaBoardRichContent,
 } from "@openround/contracts";
 import { MemoryRepository, type MemoryRepositoryLifecycleContext } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
 import { assertAudienceAdmissionInMemory, getMemoryPlatformRepository } from "./platform-memory.js";
 import { assertAudienceAdmissionForTransaction } from "./platform-postgres.js";
-import type { Repository } from "./types.js";
+import type { MediaAssetCreateInput, MediaAssetRecord, Repository } from "./types.js";
+import { ideaBoardMediaIds } from "./media-references.js";
 
 export class IdeaBoardError extends Error {
   constructor(
@@ -47,8 +51,23 @@ interface Transaction {
   get(id: string): Promise<IdeaBoardStored | null>;
   list(): Promise<IdeaBoardStored[]>;
   put(row: IdeaBoardStored, insert?: boolean): Promise<void>;
-  remove(id: string): Promise<void>;
+  remove(id: string, now?: Date): Promise<void>;
   admission(workspaceId: string): Promise<void>;
+  isBoardMedia?(mediaId: string): Promise<boolean>;
+  getMedia?(
+    workspaceId: string,
+    mediaId: string,
+  ): Promise<{
+    asset: MediaAssetRecord;
+    boardId: string;
+    guestId: string;
+    retained: boolean;
+  } | null>;
+  reserveMedia?(
+    row: IdeaBoardStored,
+    guestId: string,
+    input: MediaAssetCreateInput,
+  ): Promise<MediaAssetRecord>;
 }
 type Run = <T>(
   workspaceId: string | null,
@@ -114,6 +133,20 @@ function remember(
 }
 function validKey(key: string) {
   IdeaBoardVoteSchema.shape.idempotencyKey.parse(key);
+}
+function unavailableMedia(): never {
+  throw new IdeaBoardError("NOT_FOUND", "Image not found or unavailable for this board");
+}
+async function boardMedia(tx: Transaction, row: IdeaBoardStored, mediaId: string) {
+  const media = await tx.getMedia?.(row.workspaceId, mediaId);
+  if (
+    !media ||
+    media.boardId !== row.id ||
+    !media.retained ||
+    media.asset.scanStatus === "deleting"
+  )
+    return unavailableMedia();
+  return media;
 }
 export function ideaBoardAccountExport(value: unknown, now = new Date()) {
   return ideaBoardProjection(IdeaBoardStoredSchema.parse(value), now, true);
@@ -358,6 +391,9 @@ export class IdeaBoardRepository {
             idea.body = null;
             idea.alias = null;
             idea.groupId = null;
+            delete idea.attachments;
+            delete idea.links;
+            delete idea.sketch;
           }
         } else if (parsed.type === "group.create") {
           if (row.groups.length >= IDEA_BOARD_MAX_GROUPS)
@@ -393,17 +429,32 @@ export class IdeaBoardRepository {
       return { board: ideaBoardProjection(row, now, true), receipt };
     });
   }
-  async submitIdea(id: string, tokenHash: string, body: string, key: string, clock: Clock) {
+  async submitIdea(
+    id: string,
+    tokenHash: string,
+    body: string,
+    key: string,
+    clock: Clock,
+    rich: IdeaBoardRichContent = {},
+  ) {
     const parsed = IdeaBoardBodySchema.parse(body);
+    const content = ideaBoardRichContent(IdeaBoardRichContentSchema.parse(rich));
     validKey(key);
     return this.run(null, id, async (tx) => {
       const locked = await tx.get(id);
-      const now = instant(clock),
-        row = found(locked, now),
+      let now = instant(clock);
+      const row = found(locked, now),
         guest = guestFor(row, tokenHash),
-        input = { body: parsed };
+        input = { body: parsed, ...content };
       const previous = retry(row, guest.id, key, input);
       if (previous) return { ...guestView(row, guest, now), receipt: previous };
+      collecting(row, now);
+      for (const attachment of content.attachments ?? []) {
+        const media = await boardMedia(tx, row, attachment.mediaId);
+        if (media.guestId !== guest.id || media.asset.scanStatus !== "clean") unavailableMedia();
+      }
+      now = instant(clock);
+      found(row, now);
       collecting(row, now);
       if (
         guest.ideaIds.length >= IDEA_BOARD_MAX_GUEST_IDEAS ||
@@ -422,12 +473,138 @@ export class IdeaBoardRepository {
         status: row.moderationEnabled ? "pending" : "approved",
         createdAt: now.toISOString(),
         guestId: guest.id,
+        ...content,
       });
       guest.ideaIds.push(ideaId);
       row.revision++;
       const receipt = remember(row, guest.id, key, input, "idea.submit", guest.revision, ideaId);
       await tx.put(row);
       return { ...guestView(row, guest, now), receipt };
+    });
+  }
+  getUploadContext(id: string, tokenHash: string, clock: Clock = () => new Date()) {
+    return this.run(null, id, async (tx) => {
+      const locked = await tx.get(id),
+        now = instant(clock),
+        row = found(locked, now);
+      guestFor(row, tokenHash);
+      collecting(row, now);
+      return row.workspaceId;
+    });
+  }
+  /** Generic creator media routes must not bypass a board's content projection or expiry. */
+  isBoardMedia(mediaId: string): Promise<boolean> {
+    return this.run(null, null, async (tx) => {
+      if (!tx.isBoardMedia) throw new Error("Board media provenance is unavailable");
+      return tx.isBoardMedia(mediaId);
+    });
+  }
+  reserveMedia(
+    id: string,
+    tokenHash: string,
+    input: MediaAssetCreateInput,
+    clock: Clock = () => new Date(),
+  ) {
+    return this.run(null, id, async (tx) => {
+      const locked = await tx.get(id),
+        now = instant(clock),
+        row = found(locked, now);
+      const guest = guestFor(row, tokenHash);
+      collecting(row, now);
+      if (
+        input.workspaceId !== row.workspaceId ||
+        !tx.reserveMedia ||
+        !IdeaBoardVoteSchema.shape.idempotencyKey.safeParse(input.id).success ||
+        input.scanStatus !== "pending" ||
+        !["image/jpeg", "image/png", "image/webp"].includes(input.mimeType) ||
+        !Number.isInteger(input.sizeBytes) ||
+        input.sizeBytes < 1 ||
+        input.sizeBytes > 10 * 1024 * 1024 ||
+        !input.objectKey ||
+        input.objectKey.length > 1_024 ||
+        input.altText.length > 300 ||
+        !Number.isFinite(input.createdAt.getTime())
+      )
+        throw new IdeaBoardError(
+          "VALIDATION_ERROR",
+          "Choose a JPEG, PNG or WebP image up to 10 MiB",
+        );
+      if (
+        (guest.uploadCount ?? 0) >= 40 ||
+        (row.uploadCount ?? 0) >= 600 ||
+        (row.uploadBytes ?? 0) + input.sizeBytes > 200 * 1024 * 1024
+      )
+        throw new IdeaBoardError(
+          "ENTITLEMENT_LIMIT",
+          "This board has reached its image upload limit",
+        );
+      guest.uploadCount = (guest.uploadCount ?? 0) + 1;
+      row.uploadCount = (row.uploadCount ?? 0) + 1;
+      row.uploadBytes = (row.uploadBytes ?? 0) + input.sizeBytes;
+      validateStored(row);
+      return tx.reserveMedia(row, guest.id, input);
+    });
+  }
+  getGuestUpload(id: string, tokenHash: string, mediaId: string, clock: Clock = () => new Date()) {
+    return this.run(null, id, async (tx) => {
+      const locked = await tx.get(id),
+        row = found(locked, instant(clock));
+      const guest = guestFor(row, tokenHash),
+        media = await boardMedia(tx, row, mediaId);
+      const now = instant(clock);
+      found(row, now);
+      collecting(row, now);
+      if (media.guestId !== guest.id) unavailableMedia();
+      return media.asset;
+    });
+  }
+  authorizeGuestMedia(
+    id: string,
+    tokenHash: string,
+    mediaId: string,
+    clock: Clock = () => new Date(),
+  ) {
+    return this.run(null, id, async (tx) => {
+      const locked = await tx.get(id),
+        row = found(locked, instant(clock));
+      const guest = guestFor(row, tokenHash),
+        media = await boardMedia(tx, row, mediaId);
+      const now = instant(clock);
+      found(row, now);
+      if (media.asset.scanStatus !== "clean") unavailableMedia();
+      const view = guestView(row, guest, now);
+      const submitted = [...view.board.ideas, ...view.ownIdeas].some((idea) =>
+        idea.attachments?.some((attachment) => attachment.mediaId === mediaId),
+      );
+      const preview =
+        media.guestId === guest.id &&
+        row.status === "collecting" &&
+        Date.parse(row.closesAt) > now.getTime();
+      if (!submitted && !preview) unavailableMedia();
+      return row.workspaceId;
+    });
+  }
+  authorizeHostMedia(
+    workspaceId: string,
+    id: string,
+    mediaId: string,
+    moderator: boolean,
+    clock: Clock = () => new Date(),
+  ) {
+    return this.run(workspaceId, id, async (tx) => {
+      const locked = await tx.get(id),
+        row = found(locked, instant(clock));
+      const media = await boardMedia(tx, row, mediaId),
+        now = instant(clock);
+      found(row, now);
+      if (
+        media.asset.scanStatus !== "clean" ||
+        !ideaBoardProjection(row, now, moderator).ideas.some((idea) =>
+          idea.attachments?.some((attachment) => attachment.mediaId === mediaId),
+        )
+      )
+        unavailableMedia();
+      return row.workspaceId;
     });
   }
   async vote(
@@ -490,7 +667,7 @@ export class IdeaBoardRepository {
       const ids: string[] = [];
       for (const row of await tx.list())
         if (Date.parse(row.expiresAt) <= now.getTime()) {
-          await tx.remove(row.id);
+          await tx.remove(row.id, now);
           ids.push(row.id);
         }
       return ids;
@@ -502,6 +679,82 @@ class MemoryIdeaBoards {
   readonly rows = new Map<string, IdeaBoardStored>();
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private readonly parent: MemoryRepository) {}
+  private assertWritable(row: IdeaBoardStored, insert = false) {
+    if (!this.parent.workspaces.has(row.workspaceId) || (!insert && !this.rows.has(row.id)))
+      throw new IdeaBoardError("NOT_FOUND", "Idea board workspace was deleted");
+    this.parent.assertWorkspaceLiveSessionCreationAllowed(row.workspaceId);
+    if (insert && this.rows.has(row.id))
+      throw new IdeaBoardError("IDEMPOTENCY_CONFLICT", "Board identifier already used");
+  }
+  private validateImages(row: IdeaBoardStored) {
+    for (const idea of row.ideas)
+      for (const attachment of idea.attachments ?? []) {
+        const owner = this.parent.ideaBoardMediaOwners.get(attachment.mediaId);
+        const asset = this.parent.mediaAssets.get(attachment.mediaId);
+        if (
+          idea.status === "removed" ||
+          !owner?.retained ||
+          owner.workspaceId !== row.workspaceId ||
+          owner.boardId !== row.id ||
+          owner.guestId !== idea.guestId ||
+          asset?.scanStatus !== "clean"
+        )
+          unavailableMedia();
+      }
+  }
+  private tombstone(mediaId: string, now: Date) {
+    const asset = this.parent.mediaAssets.get(mediaId);
+    if (asset) {
+      asset.scanStatus = "deleting";
+      asset.deletionStartedAt ??= new Date(now);
+      this.parent.mediaFinalizationLeases.delete(mediaId);
+      this.parent.mediaObjectCleanup.delete(mediaId);
+    }
+  }
+  private save(row: IdeaBoardStored, insert = false) {
+    const parsed = validateStored(structuredClone(row));
+    this.assertWritable(parsed, insert);
+    this.validateImages(parsed);
+    const previousIds = this.rows.get(row.id) ? ideaBoardMediaIds(this.rows.get(row.id)!) : [];
+    const nextIds = new Set(ideaBoardMediaIds(parsed));
+    for (const mediaId of previousIds)
+      if (!nextIds.has(mediaId)) {
+        const owner = this.parent.ideaBoardMediaOwners.get(mediaId);
+        if (owner) owner.retained = false;
+      }
+    for (const [key, reference] of this.parent.mediaReferences)
+      if (reference.ownerType === "idea_board" && reference.ownerId === row.id)
+        this.parent.mediaReferences.delete(key);
+    for (const [mediaId, owner] of this.parent.ideaBoardMediaOwners) {
+      if (owner.boardId !== row.id) continue;
+      if (!owner.retained) this.tombstone(mediaId, new Date());
+      else {
+        const asset = this.parent.mediaAssets.get(mediaId);
+        if (!asset || asset.scanStatus === "deleting") continue;
+        this.parent.mediaReferences.set(`${row.workspaceId}:${mediaId}:idea_board:${row.id}`, {
+          workspaceId: row.workspaceId,
+          mediaId,
+          ownerType: "idea_board",
+          ownerId: row.id,
+          createdAt: new Date(asset.createdAt),
+        });
+      }
+    }
+    this.rows.set(row.id, parsed);
+  }
+  private remove(id: string, now = new Date()) {
+    const row = this.rows.get(id);
+    if (!row) return;
+    this.parent.removeMediaReferencesForOwners(row.workspaceId, [
+      { ownerType: "idea_board", ownerId: id },
+    ]);
+    for (const [mediaId, owner] of this.parent.ideaBoardMediaOwners)
+      if (owner.boardId === id) {
+        this.tombstone(mediaId, now);
+        this.parent.ideaBoardMediaOwners.delete(mediaId);
+      }
+    this.rows.delete(id);
+  }
   run: Run = (workspaceId, _boardId, work) => {
     const execute = async () => {
       const tx: Transaction = {
@@ -516,18 +769,45 @@ class MemoryIdeaBoards {
             .filter((row) => !workspaceId || row.workspaceId === workspaceId)
             .map((row) => IdeaBoardStoredSchema.parse(structuredClone(row))),
         put: async (row, insert) => {
-          if (!this.parent.workspaces.has(row.workspaceId) || (!insert && !this.rows.has(row.id)))
-            throw new IdeaBoardError("NOT_FOUND", "Idea board workspace was deleted");
-          this.parent.assertWorkspaceLiveSessionCreationAllowed(row.workspaceId);
-          if (insert && this.rows.has(row.id))
-            throw new IdeaBoardError("IDEMPOTENCY_CONFLICT", "Board identifier already used");
-          this.rows.set(row.id, validateStored(structuredClone(row)));
+          this.save(row, insert);
         },
-        remove: async (id) => {
+        remove: async (id, now) => {
           const row = this.rows.get(id);
-          if (row && (!workspaceId || row.workspaceId === workspaceId)) this.rows.delete(id);
+          if (row && (!workspaceId || row.workspaceId === workspaceId)) this.remove(id, now);
         },
         admission: async (id) => assertAudienceAdmissionInMemory(this.parent, id),
+        isBoardMedia: async (mediaId) => this.parent.ideaBoardMediaOwners.has(mediaId),
+        getMedia: async (workspaceId, mediaId) => {
+          const asset = this.parent.mediaAssets.get(mediaId),
+            owner = this.parent.ideaBoardMediaOwners.get(mediaId);
+          return asset && owner && asset.workspaceId === workspaceId
+            ? { asset: structuredClone(asset), ...owner }
+            : null;
+        },
+        reserveMedia: async (row, guestId, input) => {
+          validateStored(row);
+          this.assertWritable(row);
+          this.validateImages(row);
+          if (
+            this.parent.mediaAssets.has(input.id) ||
+            this.parent.ideaBoardMediaOwners.has(input.id)
+          )
+            throw new IdeaBoardError("IDEMPOTENCY_CONFLICT", "Image identifier already used");
+          const asset: MediaAssetRecord = {
+            ...structuredClone(input),
+            deletionStartedAt: null,
+            finalizedAt: null,
+          };
+          this.parent.mediaAssets.set(asset.id, asset);
+          this.parent.ideaBoardMediaOwners.set(asset.id, {
+            workspaceId: row.workspaceId,
+            boardId: row.id,
+            guestId,
+            retained: true,
+          });
+          this.save(row);
+          return structuredClone(asset);
+        },
       };
       // Mutators edit detached documents and commit only after all validation succeeds.
       return work(tx);
@@ -550,14 +830,13 @@ class MemoryIdeaBoards {
     };
   }
   deleteAccount({ ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
-    for (const [id, row] of this.rows)
-      if (ownedWorkspaceIds.has(row.workspaceId)) this.rows.delete(id);
+    for (const [id, row] of this.rows) if (ownedWorkspaceIds.has(row.workspaceId)) this.remove(id);
   }
   purgeExpired(now: Date) {
     const ids: string[] = [];
     for (const [id, row] of this.rows)
       if (Date.parse(row.expiresAt) <= now.getTime()) {
-        this.rows.delete(id);
+        this.remove(id, now);
         ids.push(id);
       }
     return ids;
@@ -616,6 +895,70 @@ function postgresRun(repository: PostgresRepository): Run {
           await client.query("DELETE FROM idea_boards WHERE id=$1", [id]);
         },
         admission: (id) => assertAudienceAdmissionForTransaction(client, id),
+        isBoardMedia: async (mediaId) =>
+          Boolean(
+            (await client.query("SELECT 1 FROM idea_board_uploads WHERE media_id=$1", [mediaId]))
+              .rowCount,
+          ),
+        getMedia: async (workspaceId, mediaId) => {
+          const result = await client.query(
+            `SELECT asset.*, upload.board_id, upload.guest_id, upload.retained
+             FROM media_assets asset JOIN idea_board_uploads upload
+               ON upload.workspace_id=asset.workspace_id AND upload.media_id=asset.id
+             WHERE asset.workspace_id=$1 AND asset.id=$2 FOR SHARE OF asset, upload`,
+            [workspaceId, mediaId],
+          );
+          const value = result.rows[0];
+          if (!value) return null;
+          return {
+            boardId: String(value.board_id),
+            guestId: String(value.guest_id),
+            retained: Boolean(value.retained),
+            asset: {
+              id: String(value.id),
+              workspaceId: String(value.workspace_id),
+              objectKey: String(value.object_key),
+              mimeType: value.mime_type,
+              sizeBytes: Number(value.size_bytes),
+              scanStatus: value.scan_status,
+              altText: String(value.alt_text),
+              createdAt: new Date(value.created_at),
+              deletionStartedAt: value.deletion_started_at
+                ? new Date(value.deletion_started_at)
+                : null,
+              finalizedAt: value.finalized_at ? new Date(value.finalized_at) : null,
+            },
+          };
+        },
+        reserveMedia: async (row, guestId, input) => {
+          const eligible = await client.query(
+            `SELECT id FROM workspaces WHERE id=$1 AND deletion_started_at IS NULL
+             AND NOT EXISTS (SELECT 1 FROM workspace_media_deletion_jobs WHERE workspace_id=$1) FOR SHARE`,
+            [row.workspaceId],
+          );
+          if (!eligible.rowCount)
+            throw new IdeaBoardError("ROOM_CLOSED", "This workspace is being deleted");
+          await client.query(
+            `INSERT INTO media_assets(id,workspace_id,object_key,mime_type,size_bytes,scan_status,alt_text,created_at)
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [
+              input.id,
+              row.workspaceId,
+              input.objectKey,
+              input.mimeType,
+              input.sizeBytes,
+              input.scanStatus,
+              input.altText,
+              input.createdAt,
+            ],
+          );
+          await client.query(
+            "INSERT INTO idea_board_uploads(workspace_id,board_id,guest_id,media_id) VALUES($1,$2,$3,$4)",
+            [row.workspaceId, row.id, guestId, input.id],
+          );
+          await tx.put(row);
+          return { ...input, deletionStartedAt: null, finalizedAt: null };
+        },
       };
       const value = await work(tx);
       await client.query("COMMIT");

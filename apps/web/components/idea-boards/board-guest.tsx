@@ -16,11 +16,13 @@ import { formatDateTime } from "../../lib/i18n/format";
 import { Brand } from "../brand";
 import { useLocale } from "../locale-provider";
 import { IdeaBoardIdeas } from "./idea-list";
+import { emptyIdeaDraft, IdeaComposer, type IdeaDraft } from "./idea-composer";
+import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
 
 type IdeaIntent = {
   kind: "idea";
-  input: { schemaVersion: 1; idempotencyKey: string; body: string };
+  input: Parameters<typeof submitBoardIdea>[2];
 };
 type VoteIntent = {
   kind: "votes";
@@ -32,7 +34,8 @@ export function BoardGuest({ id }: { id: string }) {
   const [info, setInfo] = useState<IdeaBoardPublicInfo | null>(null);
   const [guest, setGuest] = useState<IdeaBoardGuestView | null>(null);
   const [alias, setAlias] = useState("");
-  const [body, setBody] = useState("");
+  const [draft, setDraft] = useState<IdeaDraft>(emptyIdeaDraft);
+  const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -87,6 +90,9 @@ export function BoardGuest({ id }: { id: string }) {
         if (unavailable) {
           setInfo(null);
           setGuest(null);
+          setDraft(emptyIdeaDraft());
+          setUploading(false);
+          pending.current = null;
         } else timer = setTimeout(() => void poll(), 5_000);
       } finally {
         if (!active.signal.aborted) setLoading(false);
@@ -125,6 +131,9 @@ export function BoardGuest({ id }: { id: string }) {
         if (unavailable) {
           setInfo(null);
           setGuest(null);
+          setDraft(emptyIdeaDraft());
+          setUploading(false);
+          pending.current = null;
         }
         setError(unavailable ? "boards.unavailable" : "boards.error");
       }
@@ -150,7 +159,7 @@ export function BoardGuest({ id }: { id: string }) {
       accept(value);
       pending.current = null;
       if (operation.kind === "idea") {
-        setBody("");
+        setDraft(emptyIdeaDraft());
         setNotice("boards.submitted");
       }
     } catch (caught) {
@@ -163,13 +172,22 @@ export function BoardGuest({ id }: { id: string }) {
       setBusy(false);
     }
   }
-  function submitIdea(event: FormEvent) {
-    event.preventDefault();
+  function submitIdea() {
+    if (!guest || guest.board.status !== "collecting" || uploading || !draft.body.trim()) return;
     try {
       if (!pending.current)
         pending.current = {
           kind: "idea",
-          input: { schemaVersion: 1, idempotencyKey: clientUuid(), body: body.trim() },
+          input: {
+            schemaVersion: 1,
+            idempotencyKey: clientUuid(),
+            body: draft.body.trim(),
+            ...(draft.attachments.length
+              ? { attachments: draft.attachments.map((item) => ({ ...item })) }
+              : {}),
+            ...(draft.links.length ? { links: draft.links.map((item) => ({ ...item })) } : {}),
+            ...(draft.sketch ? { sketch: structuredClone(draft.sketch) } : {}),
+          },
         };
     } catch {
       setError("boards.error");
@@ -215,6 +233,9 @@ export function BoardGuest({ id }: { id: string }) {
         if (unavailable) {
           setInfo(null);
           setGuest(null);
+          setDraft(emptyIdeaDraft());
+          setUploading(false);
+          pending.current = null;
         }
         setError(unavailable ? "boards.unavailable" : "boards.error");
       }
@@ -223,7 +244,7 @@ export function BoardGuest({ id }: { id: string }) {
     }
   }
   const board = guest?.board ?? info;
-  const locked = busy || pending.current !== null;
+  const locked = busy || uploading || pending.current !== null;
   return (
     <main className={styles.page} lang={locale}>
       <Brand />
@@ -250,7 +271,12 @@ export function BoardGuest({ id }: { id: string }) {
       {error ? (
         <p className="error" role="alert">
           {t(error)}{" "}
-          <button type="button" disabled={busy} onClick={() => void refresh()}>
+          <button
+            type="button"
+            className="button-quiet"
+            disabled={busy}
+            onClick={() => void refresh()}
+          >
             {t("boards.retry")}
           </button>
         </p>
@@ -301,32 +327,16 @@ export function BoardGuest({ id }: { id: string }) {
             <section className={styles.panel}>
               <h2>{t("boards.submitIdea")}</h2>
               <p>{t("boards.ideaLimit")}</p>
-              <form className={styles.form} onSubmit={submitIdea}>
-                <label>
-                  {t("boards.idea")}
-                  <textarea
-                    required
-                    maxLength={1000}
-                    disabled={
-                      locked || guest.ownIdeas.length >= 10 || guest.board.totalIdeas >= 200
-                    }
-                    value={body}
-                    onChange={(event) => setBody(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="button"
-                  type="submit"
-                  disabled={
-                    locked ||
-                    !body.trim() ||
-                    guest.ownIdeas.length >= 10 ||
-                    guest.board.totalIdeas >= 200
-                  }
-                >
-                  {t("boards.submitIdea")}
-                </button>
-              </form>
+              <IdeaComposer
+                boardId={id}
+                guestToken={token.current!}
+                value={draft}
+                disabled={locked || guest.ownIdeas.length >= 10 || guest.board.totalIdeas >= 200}
+                imagesAvailable={guest.imageUploadsAvailable}
+                onChange={setDraft}
+                onSubmit={submitIdea}
+                onUploading={setUploading}
+              />
             </section>
           ) : null}
           {guest.ownIdeas.length ? (
@@ -335,11 +345,7 @@ export function BoardGuest({ id }: { id: string }) {
               <ul className={styles.list}>
                 {guest.ownIdeas.map((idea) => (
                   <li className={styles.idea} key={idea.id}>
-                    {idea.body ? (
-                      <p className={styles.body} lang="" dir="auto">
-                        {idea.body}
-                      </p>
-                    ) : null}
+                    <IdeaContent boardId={id} idea={idea} guestToken={token.current ?? undefined} />
                     <p>
                       {t(
                         idea.status === "pending"
@@ -370,6 +376,7 @@ export function BoardGuest({ id }: { id: string }) {
                 <p>{t("boards.select", { budget: guest.board.voteBudget })}</p>
                 <IdeaBoardIdeas
                   board={guest.board}
+                  guestToken={token.current ?? undefined}
                   selected={selected}
                   disabled={locked}
                   onSelect={(ideaId, checked) =>
@@ -389,7 +396,7 @@ export function BoardGuest({ id }: { id: string }) {
                 </button>
               </form>
             ) : (
-              <IdeaBoardIdeas board={guest.board} />
+              <IdeaBoardIdeas board={guest.board} guestToken={token.current ?? undefined} />
             )}
           </section>
         </>

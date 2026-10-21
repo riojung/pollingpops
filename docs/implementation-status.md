@@ -8,6 +8,35 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Rich idea boards October 21 2026
+
+The follow-up on `codex/rich-idea-boards` extends each moderated idea with up to three scanned
+images, an editable sketch, and three website/social-post link cards. A link can use one of the
+idea's uploaded images as its thumbnail. The sketch supports pen strokes, shapes, arrows and
+text with pointer and keyboard editing, undo and redo. Cards use the same approved/own/pending
+projections as text, and voting still freezes their content.
+
+Migration 076 adds board/guest upload provenance and bounded reservations. Board images cannot
+be read or completed through the generic creator media APIs or referenced from other authored
+content. Authenticated binary reads recheck current visibility, membership and expiry after
+storage access. The storage finalizer publishes the exact bytes scanned rather than copying a
+quarantine object that a still-valid upload ticket could replace. Client reads are lazy, share
+duplicate requests, bound concurrency and honor retry delays; removal revokes local blob URLs.
+
+Existing version 1 plain-text documents and receipt hashes retain their shape. Rich payloads need
+matching server/web readers; no stored-row rewrite is required. Images require configured
+storage and malware scanning, while text, sketches and links remain usable without that pipeline.
+This branch does not enable features in the running customer environment. See the
+[implementation plan](idea-006-brainstorming-boards-plan.md) and
+[upgrade notes](runbooks/upgrade.md#rich-idea-attachments-and-sketches).
+
+Local verification covers the full repository check, 197 active PostgreSQL tests, six production
+browser journeys across desktop Chromium, mobile Chromium and mobile WebKit, and a real
+disposable MinIO/ClamAV image pipeline. Browser journeys include strict automated accessibility
+checks at 320px and light/dark layout evidence. The pipeline verifies scanned byte delivery,
+moderation visibility and removal; it uses an in-memory repository, with database persistence
+validated separately. These are local engineering results, not hosted release acceptance.
+
 ### Current engineering revalidation October 21 2026
 
 The current `main` candidate `427f3e6` has failing hosted CI, Security and Production-path smoke

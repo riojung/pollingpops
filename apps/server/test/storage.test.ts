@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
-  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectTaggingCommand,
+  PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import type { MediaAssetRecord } from "@openround/db";
 import { describe, expect, it, vi } from "vitest";
@@ -54,7 +54,7 @@ function mockClient(storage: StorageService, send: ReturnType<typeof vi.fn>) {
 }
 
 describe("storage media fencing", () => {
-  it("copies a clean upload only to the finalization token's candidate key", async () => {
+  it("publishes only scanned bytes to the finalization token's candidate despite a quarantine overwrite", async () => {
     const asset = media();
     const token = randomUUID();
     const pngSignature = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -67,26 +67,105 @@ describe("storage media fencing", () => {
         };
       }
       if (command instanceof GetObjectCommand) {
-        return { Body: { transformToByteArray: async () => pngSignature } };
+        return {
+          Body: {
+            transformToWebStream: () =>
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(pngSignature);
+                  controller.close();
+                },
+              }),
+          },
+        };
       }
-      if (command instanceof CopyObjectCommand) return {};
+      if (command instanceof PutObjectCommand) return {};
       throw new Error("Unexpected storage command");
     });
-    const storage = new StorageService(config(), {
-      scan: async () => ({ clean: true, signature: null }),
-    });
+    const scan = vi.fn(async (_bytes: Uint8Array) => ({ clean: true, signature: null }));
+    const storage = new StorageService(config(), { scan });
     mockClient(storage, send);
 
     await expect(storage.finalize(asset, token)).resolves.toEqual({
       scanStatus: "clean",
       objectKey: mediaFinalizationObjectKey(asset, token),
     });
-    const copy = send.mock.calls
+    const published = send.mock.calls
       .map(([command]) => command)
-      .find((command) => command instanceof CopyObjectCommand);
-    expect(copy?.input.Key).toBe(mediaFinalizationObjectKey(asset, token));
-    expect(copy?.input.Tagging).toBe("openround-finalization-state=temporary");
+      .find((command) => command instanceof PutObjectCommand);
+    expect(published?.input.Key).toBe(mediaFinalizationObjectKey(asset, token));
+    expect(published?.input.Tagging).toBe("openround-finalization-state=temporary");
+    expect(published?.input.Body).toEqual(Buffer.from(pngSignature));
+    expect(published?.input.Body).toBe(scan.mock.calls[0]?.[0]);
+    expect(published?.input.Metadata).toEqual({ mediaid: asset.id });
+    expect(send.mock.calls.filter(([command]) => command instanceof GetObjectCommand)).toHaveLength(
+      1,
+    );
     expect(send.mock.calls.some(([command]) => command instanceof DeleteObjectCommand)).toBe(false);
+  });
+
+  it("cancels oversized image streams before scanning or publishing them", async () => {
+    const asset = media();
+    const cancel = vi.fn();
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof HeadObjectCommand)
+        return {
+          ContentLength: asset.sizeBytes,
+          ContentType: asset.mimeType,
+          Metadata: { mediaid: asset.id },
+        };
+      if (command instanceof GetObjectCommand)
+        return {
+          Body: {
+            transformToWebStream: () =>
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new Uint8Array(10 * 1024 * 1024 + 1));
+                },
+                cancel,
+              }),
+          },
+        };
+      throw new Error("Unexpected storage command");
+    });
+    const scan = vi.fn();
+    const storage = new StorageService(config(), { scan });
+    mockClient(storage, send);
+    await expect(storage.finalize(asset, randomUUID())).rejects.toThrow(/10 MB/);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(scan).not.toHaveBeenCalled();
+    expect(send.mock.calls.some(([command]) => command instanceof PutObjectCommand)).toBe(false);
+  });
+
+  it("reads only clean images and rejects mismatched or oversized content", async () => {
+    const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const asset = media({ scanStatus: "clean" });
+    let uploadedBytes = bytes;
+    const storage = new StorageService(config(), null);
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof GetObjectCommand)
+        return {
+          Body: {
+            transformToWebStream: () =>
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(uploadedBytes);
+                  controller.close();
+                },
+              }),
+          },
+        };
+      throw new Error("Unexpected storage command");
+    });
+    mockClient(storage, send);
+    await expect(storage.readImage(asset)).resolves.toEqual(Buffer.from(bytes));
+    await expect(storage.readImage(media({ scanStatus: "pending" }))).rejects.toThrow(
+      /not available/,
+    );
+    uploadedBytes = new Uint8Array(8);
+    await expect(storage.readImage(asset)).rejects.toThrow(/does not match/);
+    uploadedBytes = new Uint8Array(10 * 1024 * 1024 + 1);
+    await expect(storage.readImage(asset)).rejects.toThrow(/10 MB/);
   });
 
   it("makes only the claimed finalization candidate lifecycle-safe", async () => {

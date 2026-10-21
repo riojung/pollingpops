@@ -2,6 +2,7 @@
 
 import type { IdeaBoardView } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
+import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
 
 /** Receives only the server's sanitized projection; vote totals are never calculated here. */
@@ -10,11 +11,13 @@ export function IdeaBoardIdeas({
   selected,
   onSelect,
   disabled = false,
+  guestToken,
 }: {
   board: IdeaBoardView;
   selected?: string[];
   onSelect?: (id: string, checked: boolean) => void;
   disabled?: boolean;
+  guestToken?: string;
 }) {
   const { t } = useLocale();
   const ideas = board.ideas.filter((idea) => idea.status === "approved");
@@ -28,7 +31,7 @@ export function IdeaBoardIdeas({
         return (
           <section className={styles.group} key={group.id ?? "ungrouped"}>
             <h3 lang={group.id ? "" : undefined}>{group.name}</h3>
-            <ul className={styles.list}>
+            <ul className={`${styles.list} ${styles.ideaGrid}`}>
               {rows.map((idea) => (
                 <li className={styles.idea} key={idea.id}>
                   {onSelect && selected ? (
@@ -46,11 +49,13 @@ export function IdeaBoardIdeas({
                         {idea.body}
                       </span>
                     </label>
-                  ) : (
-                    <p className={styles.body} dir="auto" lang="">
-                      {idea.body}
-                    </p>
-                  )}
+                  ) : null}
+                  <IdeaContent
+                    boardId={board.id}
+                    idea={idea}
+                    guestToken={guestToken}
+                    showBody={!onSelect || !selected}
+                  />
                   {idea.alias ? (
                     <p className={styles.muted} dir="auto" lang="">
                       {idea.alias}

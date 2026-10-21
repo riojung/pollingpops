@@ -36,7 +36,9 @@ describe("beta sign-in fixture contract", () => {
     const setup = await readFile(new URL("auth-setup.ts", betaDirectory), "utf8");
     expect(helper).toContain("if (await validSession(page, apiOrigin, email))");
     expect(helper).toContain("page.request.get(`${apiOrigin}/v1/auth/me`)");
-    expect(helper).toContain('await signInCreator(page, email, { segment: "education" })');
+    expect(helper).toContain(
+      'await signInCreator(page, email, { segment: "education", returnTo: "/dashboard" })',
+    );
     expect(helper).toContain("mode: 0o600");
     expect(setup).toContain("const namespace = randomUUID()");
     expect(setup).toContain(

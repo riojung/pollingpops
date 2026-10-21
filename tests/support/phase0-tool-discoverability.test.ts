@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  independentlyReviewedGateIds,
+  validateIndependentGateAcceptance,
+} from "../../scripts/ops/evidence-acceptance.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
@@ -39,7 +43,10 @@ describe("Phase 0 evidence tool discoverability", () => {
     }
     expect(documentation).toMatch(/does not prove receiver delivery/);
     expect(documentation).toMatch(/leave the\s+ledger pending/);
-    expect(ledger.gates.filter(({ status }) => status === "complete")).toHaveLength(2);
-    expect(ledger.gates.filter(({ status }) => status === "pending")).toHaveLength(13);
+    const externalGates = ledger.gates.filter(({ id }) => independentlyReviewedGateIds.has(id));
+    expect(externalGates).toHaveLength(13);
+    // Require actual review for completed human-assurance gates without freezing the ledger
+    // at a historical count of pending gates that would block legitimate acceptance later.
+    for (const gate of externalGates) validateIndependentGateAcceptance(gate);
   });
 });

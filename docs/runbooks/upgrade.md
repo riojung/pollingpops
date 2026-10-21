@@ -7,13 +7,15 @@
    row-level security with the production-like integration test. New code must tolerate both old
    and new columns during the deployment window. The published server image exposes the one-shot
    `node dist/migrate.js` command; run it from a restricted maintenance job and never place
-   `DATABASE_MIGRATION_URL` in the long-lived server environment.
+   `DATABASE_MIGRATION_URL` in the long-lived server environment. For a pre-PIN upgrade, first
+   fence old email-authentication handlers as described in the
+   [migration 075 checklist](#verified-email-and-sign-in-pin-compatibility).
 4. Deploy to staging and run the synthetic creator, host, three-player, reconnect, finish, report, and deletion flow.
 5. Promote one canary, check error rate, event-loop lag, acknowledgement latency, reconnects, database pool, Redis latency, and reconciliation.
    Keep `FEATURE_RECOVERY_PACK_LIVE_CARDS=false` while any v5 server or worker can receive traffic;
    authoring-only and ordinary rooms remain v5-readable during this mixed-version window.
 6. Promote production only when thresholds remain normal.
-7. Roll back by deploying the prior immutable image. Do not reverse a destructive database migration; use the documented forward repair.
+7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
 ## Live response format compatibility
@@ -45,9 +47,53 @@ Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`069_text_opinion_moderation.sql`. Apply the complete ordered migration set with the restricted
+`075_verified_email_pin_auth.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
+
+### Verified-email and sign-in PIN compatibility
+
+Migration 075 adds `users.email_verified_at` and the system-only, forced-RLS
+`auth_email_pin_challenges` table. It marks existing active identities verified because the prior
+flow already proved mailbox ownership, and leaves existing creator sessions valid until their
+normal expiry or revocation. Apply it through the owner-only maintenance job before deploying the
+matching web, server and jobs images; keep the runtime role non-owner.
+
+The new authentication boundary requires verification links to establish mailbox ownership only.
+Verification redirects to sign-in without creating a session or sending a PIN automatically.
+Only a separate, single-use six-digit PIN for a verified active identity creates an email-authenticated
+session. Previously issued unused magic links and the legacy `POST /v1/auth/magic-link` alias now
+perform verification only. They must never regain session-issuing behavior.
+
+Before applying migration 075 to a pre-PIN deployment, fence public email-authentication traffic
+at ingress with a reviewed maintenance rule, or take every pre-PIN API instance out of service.
+Include `/v1/auth/magic-link` and `/v1/auth/verify`; verify that neither can reach an old handler.
+Let already admitted pre-PIN authentication requests finish, and confirm those writers have
+drained before starting the migration.
+The old verification callback ignores `FEATURE_SIGNUPS=false`, so that flag alone cannot fence
+completion. Keep the fence through migration and the web/API cutover so no old handler can create
+an identity after the verification backfill or issue a session from a verification link. Replace
+the images, verify the serving image set, then remove the fence and restore the reviewed settings.
+Existing sessions retain their normal expiry; an authentication-route fence does not revoke them.
+On the new release, `FEATURE_SIGNUPS=false` pauses email requests and completion. Keep
+`AUTH_DEBUG_MAGIC_LINKS=false` in hosted deployments and verify real SMTP delivery for both
+verification and PIN emails.
+
+A rollback target must preserve verified-email/PIN authentication and verification-only legacy
+callbacks. A pre-PIN image is not a compatible rollback even though migration 075 is additive:
+its old callback could issue a session from a verification credential. Pause new authentication
+and use a reviewed forward fix or another compatible image if needed. Keep migration 075 and its
+verification/challenge records; do not undo the verification backfill or discard durable challenge
+state to make an older binary serve traffic.
+
+Before promotion, rehearse a new account, an existing verified account, an unused pre-upgrade
+verification link, and an existing session. Check verification without a session, separate PIN
+sign-in, ten-minute expiry, five wrong attempts, resend replacement after 60 seconds, one-time and
+concurrent consumption, SMTP failure recovery, and safe return/invitation workspace preservation.
+Verify that unknown/unverified accounts receive the generic accepted response, account deletion
+and expiry purge remove challenges, and customer authentication cannot grant operator access.
+Retain the serving image set, migration result and compatible rollback target with the release
+evidence. See [ADR 001](../decisions/001-creator-authentication.md).
 
 | Change                                 | Data and compatibility behavior                                                                                                                                                                                                                                                                                    | Rollout/rollback requirement                                                                                                                                                                                                                                                                                                                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

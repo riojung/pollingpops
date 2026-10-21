@@ -507,8 +507,12 @@ change—requires a new reviewed release build and tag.
 - Database migrations are forward-only. Repair schema/data with a reviewed forward migration.
 - A code rollback is safe only when the older images tolerate the current schema. Preserve
   expand/contract compatibility during every rollout window.
+- Apply the complete ordered migrations through `075_verified_email_pin_auth.sql` before the
+  current server. Rollback must preserve verified-email/PIN authentication and verification-only
+  legacy callbacks; a pre-PIN image can restore unsafe session-issuing behavior. Follow the
+  [authentication rollout and rollback checklist](upgrade.md#verified-email-and-sign-in-pin-compatibility).
 - Presentation v2/custom geometry and capture-enabled Round sessions/Report V4 also constrain the
-  rollback target. Apply migrations through 052 before the current server and follow the
+  rollback target. Follow the
   [content, report, and deletion upgrade checklist](upgrade.md#recent-content-report-and-deletion-upgrades).
   An older image cannot undo a completed deletion or safely reconstruct missing decision events.
 - Keep `FEATURE_RECOVERY_PACK_LIVE_CARDS=false` throughout a mixed-version canary. Authoring-only

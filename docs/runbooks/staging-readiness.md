@@ -42,26 +42,26 @@ environment is not a configured or accepted staging environment. The workflow de
 its API, web, and media targets from the validated `config/deploy/staging.json`; do not duplicate
 those origins as environment variables. Configure these non-secret variables:
 
-| Variable                                         | Example/purpose                                                                             |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `OPENROUND_EXPECTED_BILLING`                     | `disabled` for the active staging profile                                                   |
-| `OPENROUND_EXPECTED_COMMUNITY_MODE`              | Reviewed staging value                                                                      |
-| `OPENROUND_EXPECTED_SIGNUPS`                     | Expected public signup switch                                                               |
-| `OPENROUND_EXPECTED_SESSION_CREATION`            | `true` when running the game                                                                |
-| `OPENROUND_EXPECTED_MEDIA_UPLOADS`               | Expected scanner-backed media switch                                                        |
-| `OPENROUND_EXPECTED_UX_BETA`                     | Expected deployment-level UX beta switch                                                    |
-| `OPENROUND_EXPECTED_RECOVERY_REHEARSAL`          | Expected Rehearsal kill switch                                                              |
-| `OPENROUND_EXPECTED_PRACTICE_ASSIGNMENTS`        | Expected practice-assignment kill switch                                                    |
-| `OPENROUND_EXPECTED_WORKSPACE_SHELL`             | Expected professional workspace shell switch                                                |
-| `OPENROUND_EXPECTED_BUILDER_V2`                  | Expected interactive Round Builder v2 switch                                                |
-| `OPENROUND_EXPECTED_PRESENTATIONS`               | Expected Presentation artifact switch                                                       |
-| `OPENROUND_EXPECTED_PRESENTATION_REALTIME`       | Expected Presentation realtime workspace allowlist                                          |
-| `OPENROUND_EXPECTED_GROUPS`                      | Expected facilitator Groups switch                                                          |
-| `OPENROUND_EXPECTED_DISCOVER`                    | Expected approved-content Discover switch                                                   |
-| `OPENROUND_EXPECTED_HOME_REGION`                 | Workspace home-region value approved for this staging target                                |
-| `OPENROUND_LOAD_RUNNER_REGION`                   | Location of the VM and nearby isolated load generator                                       |
-| `OPENROUND_TARGET_SATURATION_EVIDENCE_REFERENCE` | Stable private reference covering target CPU, memory, disk, network, PostgreSQL, and Valkey |
-| `OPENROUND_TARGET_DURABLE_ARCHIVE_REFERENCE`     | Stable private archive reference for the complete evidence bundle                           |
+| Variable                                         | Example/purpose                                                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `OPENROUND_EXPECTED_BILLING`                     | `disabled` for the active staging profile                                                           |
+| `OPENROUND_EXPECTED_COMMUNITY_MODE`              | Reviewed staging value                                                                              |
+| `OPENROUND_EXPECTED_SIGNUPS`                     | Expected public signup switch                                                                       |
+| `OPENROUND_EXPECTED_SESSION_CREATION`            | `true` when running the game                                                                        |
+| `OPENROUND_EXPECTED_MEDIA_UPLOADS`               | Expected scanner-backed media switch                                                                |
+| `OPENROUND_EXPECTED_UX_BETA`                     | Expected deployment-level UX beta switch                                                            |
+| `OPENROUND_EXPECTED_RECOVERY_REHEARSAL`          | Expected Rehearsal kill switch                                                                      |
+| `OPENROUND_EXPECTED_PRACTICE_ASSIGNMENTS`        | Expected practice-assignment kill switch                                                            |
+| `OPENROUND_EXPECTED_WORKSPACE_SHELL`             | Expected resolved workspace navigation policy; defaults on for every plan unless Admin restricts it |
+| `OPENROUND_EXPECTED_BUILDER_V2`                  | Expected interactive Round Builder v2 switch                                                        |
+| `OPENROUND_EXPECTED_PRESENTATIONS`               | Expected Presentation artifact switch                                                               |
+| `OPENROUND_EXPECTED_PRESENTATION_REALTIME`       | Expected Presentation realtime workspace allowlist                                                  |
+| `OPENROUND_EXPECTED_GROUPS`                      | Expected facilitator Groups switch                                                                  |
+| `OPENROUND_EXPECTED_DISCOVER`                    | Expected approved-content Discover switch                                                           |
+| `OPENROUND_EXPECTED_HOME_REGION`                 | Workspace home-region value approved for this staging target                                        |
+| `OPENROUND_LOAD_RUNNER_REGION`                   | Location of the VM and nearby isolated load generator                                               |
+| `OPENROUND_TARGET_SATURATION_EVIDENCE_REFERENCE` | Stable private reference covering target CPU, memory, disk, network, PostgreSQL, and Valkey         |
+| `OPENROUND_TARGET_DURABLE_ARCHIVE_REFERENCE`     | Stable private archive reference for the complete evidence bundle                                   |
 
 Configure these encrypted environment secrets:
 

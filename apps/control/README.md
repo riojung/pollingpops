@@ -16,7 +16,8 @@ pnpm admin:setup --username admin --name "Platform admin" --role founder
 ```
 
 Open <http://localhost:3002> after enrollment. The customer application continues at
-<http://localhost:8080> with its own email-link sign-in and organization navigation.
+<http://localhost:8080> with email verification for account creation, separate email-PIN sign-in,
+and organization navigation.
 
 The default configuration outside the local profile remains disabled.
 `pnpm --filter @openround/control dev` serves the native console on port 3002. The production build

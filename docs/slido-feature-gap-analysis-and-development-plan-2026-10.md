@@ -394,7 +394,10 @@ The first 90 days should deliver a reviewed foundation, privacy/access improveme
 
 ### Production work proceeds alongside feature work
 
-The existing [release ledger](release-readiness.json) has two recorded complete gates and thirteen pending gates. This research does not close any of them. Keep exact-build evidence for:
+The [release ledger](release-readiness.json) has fifteen pending gates after October 21 engineering
+revalidation reopened source CI and local production smoke. The thirteen external or human-evidence
+gates remain pending, and earlier September engineering passes remain historical evidence. This
+research does not close any gate. Keep exact-build evidence for:
 
 - Single-VM staging with public TLS, strict SSH pinning, private telemetry, SMTP, object storage, and scanning.
 - Named paging/support rota and incident rehearsal.

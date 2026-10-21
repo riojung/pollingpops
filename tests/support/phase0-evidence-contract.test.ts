@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { validateIndependentGateAcceptance } from "../../scripts/ops/evidence-acceptance.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
@@ -33,7 +34,7 @@ function workflowJobs(source: string) {
 }
 
 describe("Phase 0 evidence contract", () => {
-  it("records merged-main engineering evidence without advancing external gates", async () => {
+  it("retains engineering history and requires evidence when readiness gates advance", async () => {
     const [ledgerText, status, plan, decision] = await Promise.all([
       repositoryFile("docs/release-readiness.json"),
       repositoryFile("docs/implementation-status.md"),
@@ -41,17 +42,19 @@ describe("Phase 0 evidence contract", () => {
       repositoryFile("docs/evidence/phase0-stage-decision.md"),
     ]);
     const ledger = JSON.parse(ledgerText) as {
-      gates: Array<{ id: string; status: string; evidence: string[] }>;
+      gates: Array<{ id: string; status: string; evidence: string[]; nextAction?: string }>;
     };
     const gates = new Map(ledger.gates.map((gate) => [gate.id, gate]));
 
     const sourceCi = gates.get("source-ci");
-    expect(sourceCi).toMatchObject({ status: "complete" });
+    expect(["pending", "complete"]).toContain(sourceCi?.status);
     expect(sourceCi?.evidence).toEqual(
       expect.arrayContaining([
         "https://github.com/riojung/pollingpops/actions/runs/36173766173",
         "https://github.com/riojung/pollingpops/actions/runs/36173765973",
         "https://github.com/riojung/pollingpops/actions/runs/36172849143",
+        "https://github.com/riojung/pollingpops/actions/runs/39557976752",
+        "https://github.com/riojung/pollingpops/actions/runs/39557976778",
       ]),
     );
     expect(
@@ -61,20 +64,24 @@ describe("Phase 0 evidence contract", () => {
     ).toBe(true);
 
     const localProductionSmoke = gates.get("local-production-smoke");
-    expect(localProductionSmoke).toMatchObject({ status: "complete" });
+    expect(["pending", "complete"]).toContain(localProductionSmoke?.status);
     expect(localProductionSmoke?.evidence).toContain(
       "https://github.com/riojung/pollingpops/actions/runs/36173765942",
     );
-    expect(ledger.gates.filter(({ status: gateStatus }) => gateStatus === "complete")).toHaveLength(
-      2,
+    expect(localProductionSmoke?.evidence).toContain(
+      "https://github.com/riojung/pollingpops/actions/runs/39557976777",
     );
-    expect(ledger.gates.filter(({ status: gateStatus }) => gateStatus === "pending")).toHaveLength(
-      13,
-    );
-    expect(status).toMatch(/Phase 0 exit remains open with thirteen gates/);
-    expect(plan).toMatch(
-      /thirteen release-readiness gates remain, primarily awaiting external or human evidence/,
-    );
+    for (const gate of ledger.gates) {
+      validateIndependentGateAcceptance(gate);
+      if (gate.status === "complete") {
+        expect(gate.evidence.length).toBeGreaterThan(0);
+        expect(gate.nextAction).toBeUndefined();
+      } else if (gate.status === "pending" || gate.status === "blocked") {
+        expect(gate.nextAction?.trim().length).toBeGreaterThan(0);
+      }
+    }
+    expect(status).toContain("evidence/recent-changes-catchup.md");
+    expect(plan).toContain("evidence/recent-changes-catchup.md");
     expect(decision).toMatch(
       /Selected Phase 1 branch \(access\/companion\/measured failure\/pending\): Pending/,
     );

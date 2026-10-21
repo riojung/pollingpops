@@ -144,7 +144,7 @@ export async function signInAdmin(page: Page, credentials: AdminCredentials) {
 
 export async function signIn(page: Page, email: string) {
   await signInCreator(page, email, { signinUrl: `${productOrigin}/signin` });
-  await expect(page).toHaveURL(new RegExp(`^${productOrigin}/dashboard`));
+  await expect(page).toHaveURL((url) => url.origin === productOrigin && url.pathname === "/home");
 }
 
 export async function expectNoBusinessAccess(page: Page) {

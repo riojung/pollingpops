@@ -13,8 +13,8 @@ successful local run.
 
 ## Work that can proceed now
 
-Finish the readiness PR and fresh engineering validation. From the reviewed checkout, use the
-existing commands below and retain the candidate SHA and results. Run browser suites sequentially,
+Refresh engineering validation after the merged readiness work. From the reviewed checkout, use
+the existing commands below and retain the candidate SHA and results. Run browser suites sequentially,
 without another build writing their shared Next output directory.
 
 ```bash

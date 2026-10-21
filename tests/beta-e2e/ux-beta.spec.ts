@@ -316,10 +316,21 @@ test("creator reuses a main question with its linked recheck as independent copi
   }
 });
 
-test("direct beta pages fail closed when the account lookup is unavailable", async ({ page }) => {
+test("direct beta pages fail closed and retry when the account lookup is unavailable", async ({
+  page,
+}) => {
   await signIn(page, betaEmail);
 
+  const protectedReads: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (["/v1/sessions", "/v1/sessions/counts", "/v1/quizzes"].includes(path)) {
+      protectedReads.push(path);
+    }
+  });
+  let unavailable = true;
   await page.route("**/v1/auth/me", async (route) => {
+    if (!unavailable) return route.continue();
     await route.fulfill({
       body: JSON.stringify({ error: { message: "Account lookup unavailable." } }),
       contentType: "application/json",
@@ -327,22 +338,90 @@ test("direct beta pages fail closed when the account lookup is unavailable", asy
     });
   });
   await page.goto("/sessions");
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Account lookup unavailable.");
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sessions", level: 1 })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
+  await page.waitForLoadState("networkidle");
+  expect(protectedReads).toEqual([]);
+  await expect(page).toHaveURL(/\/sessions$/);
   await expect(page).not.toHaveURL(/\/signin/);
+  expect(
+    (await page.context().cookies()).some((cookie) => cookie.name === "openround_creator"),
+  ).toBe(true);
+
+  unavailable = false;
+  const refreshedAccount = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/v1/auth/me",
+  );
+  const sessions = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/v1/sessions",
+  );
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  expect((await refreshedAccount).status()).toBe(200);
+  expect((await sessions).status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Sessions", level: 1 })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/sessions$/);
 });
 
-test("direct beta pages fail closed when product features are missing", async ({ page }) => {
-  await signIn(page, betaEmail);
+for (const invalidFeatures of [
+  { label: "null", value: null },
+  { label: "missing", value: undefined },
+  { label: "incomplete", value: { workspaceShell: true } },
+]) {
+  test(`direct beta pages fail closed and retry when product features are ${invalidFeatures.label}`, async ({
+    page,
+  }) => {
+    await signIn(page, betaEmail);
 
-  await page.route("**/v1/auth/me", async (route) => {
-    const response = await route.fetch();
-    const account = (await response.json()) as Record<string, unknown>;
-    await route.fulfill({ response, json: { ...account, productFeatures: null } });
+    const protectedReads: string[] = [];
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (["/v1/reports", "/v1/followups", "/v1/quizzes"].includes(path)) {
+        protectedReads.push(path);
+      }
+    });
+    let missingFeatures = true;
+    await page.route("**/v1/auth/me", async (route) => {
+      if (!missingFeatures) return route.continue();
+      const response = await route.fetch();
+      const account = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: { ...account, productFeatures: invalidFeatures.value },
+      });
+    });
+    await page.goto("/results");
+    await expect(page.getByRole("main").getByRole("alert")).toHaveText(
+      "Workspace access could not be loaded. Try again.",
+    );
+    await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Results", level: 1 })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
+    await page.waitForLoadState("networkidle");
+    expect(protectedReads).toEqual([]);
+    await expect(page).toHaveURL(/\/results$/);
+    await expect(page).not.toHaveURL(/\/signin/);
+    expect(
+      (await page.context().cookies()).some((cookie) => cookie.name === "openround_creator"),
+    ).toBe(true);
+
+    missingFeatures = false;
+    const refreshedAccount = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/v1/auth/me",
+    );
+    const reports = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/v1/reports",
+    );
+    await page.getByRole("button", { name: "Try again", exact: true }).click();
+    expect((await refreshedAccount).status()).toBe(200);
+    expect((await reports).status()).toBe(200);
+    await expect(page.getByRole("heading", { name: "Results", level: 1 })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/results$/);
   });
-  await page.goto("/results");
-  await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page).not.toHaveURL(/\/signin/);
-});
+}
 
 test("viewer template access remains read-only", async ({ page }) => {
   await signIn(page, betaEmail);

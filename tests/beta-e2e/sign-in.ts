@@ -44,7 +44,9 @@ export async function signInBeta(page: Page, email = betaEmail) {
     await page.context().clearCookies({ name: "openround_creator" });
   }
 
-  await signInCreator(page, email, { segment: "education" });
+  // Fixture callers exercise the Round library after setup. Use the same explicit
+  // destination as cached sessions instead of inheriting the product's Home default.
+  await signInCreator(page, email, { segment: "education", returnTo: "/dashboard" });
   cookies = (await page.context().cookies()).filter(
     (cookie) => cookie.name === "openround_creator",
   );

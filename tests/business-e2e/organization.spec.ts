@@ -22,7 +22,7 @@ async function expectSectionAtTop(page: Page, section: string, maxTop = 60) {
     .toBe(true);
 }
 
-test("organization menus scroll to delayed sections and preserve later manual scrolling", async ({
+test("organization workspace links scroll to delayed sections and preserve later manual scrolling", async ({
   page,
 }, testInfo) => {
   await signIn(page, testEmail("business-section-scroll", testInfo));
@@ -51,9 +51,10 @@ test("organization menus scroll to delayed sections and preserve later manual sc
     }
     await route.continue();
   });
-  const accountNavigation = page.getByRole("navigation", { name: "Account navigation" });
-  await accountNavigation.locator("summary").filter({ hasText: "Organization" }).click();
-  await accountNavigation.getByRole("link", { name: "Billing", exact: true }).click();
+  const organizationNavigation = page
+    .getByRole("complementary")
+    .getByRole("region", { name: "Organization management", exact: true });
+  await organizationNavigation.getByRole("link", { name: "Billing", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/organization\\?organizationId=${firstId}#billing$`));
   await collectionPending;
   await expect(page.locator("#billing")).toHaveCount(0);
@@ -121,14 +122,17 @@ test("organization owner invites billing-only administrator and funds a premium 
   const ownerEmail = testEmail("business-owner", testInfo);
   const financeEmail = testEmail("business-finance", testInfo);
   await signIn(owner, ownerEmail);
-  await expect(owner).toHaveURL(/\/dashboard/);
+  await expect(owner).toHaveURL(/\/home\?welcome=1$/);
   const ownerIdentity = (await (await owner.request.get(`${api}/v1/auth/me`)).json()).creator as {
     userId: string;
   };
-  const accountNavigation = owner.getByRole("navigation", { name: "Account navigation" });
-  await accountNavigation.locator("summary").filter({ hasText: "Organization" }).click();
-  await expect(accountNavigation.getByRole("link", { name: "Members", exact: true })).toBeVisible();
-  await accountNavigation.getByRole("link", { name: "Organization", exact: true }).click();
+  const organizationNavigation = owner
+    .getByRole("complementary")
+    .getByRole("region", { name: "Organization management", exact: true });
+  await expect(
+    organizationNavigation.getByRole("link", { name: "Members", exact: true }),
+  ).toBeVisible();
+  await organizationNavigation.getByRole("link", { name: "Organization", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
   await owner.getByLabel("Organization name", { exact: true }).fill("Browser business launch");
   await owner.getByRole("button", { name: "Create organization", exact: true }).click();

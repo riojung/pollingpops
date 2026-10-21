@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ManagementNavigationModule from "../../components/management-navigation";
 import type * as ApiModule from "../../lib/api";
-import { LOGOUT_REVOCATION_WARNING } from "../../lib/api";
+import { ApiClientError, LOGOUT_REVOCATION_WARNING } from "../../lib/api";
+import { PIN_RESUME_STORAGE_KEY } from "../../lib/signin-pin";
 
 type EffectSlot = { dependencies?: unknown[]; cleanup?: () => void };
 
@@ -14,9 +15,10 @@ const fixtures = vi.hoisted(() => ({
   effects: [] as Array<() => void>,
   api: vi.fn(),
   replace: vi.fn(),
+  storage: new Map<string, string>(),
+  issued: [] as string[],
   pinResponse: {
     accepted: true,
-    challengeId: "challenge-one",
     expiresInSeconds: 600,
     resendAfterSeconds: 60,
     debugPin: "012345",
@@ -134,8 +136,21 @@ async function hydratedPage(query = "") {
       replace: fixtures.replace,
       assign: vi.fn(),
     },
+    history: {
+      state: null,
+      replaceState: vi.fn((_state: unknown, _unused: string, address: string) => {
+        const target = new URL(address, window.location.href);
+        window.location.href = target.href;
+        window.location.search = target.search;
+      }),
+    },
     setInterval: globalThis.setInterval,
     clearInterval: globalThis.clearInterval,
+    sessionStorage: {
+      getItem: (key: string) => fixtures.storage.get(key) ?? null,
+      setItem: (key: string, value: string) => fixtures.storage.set(key, value),
+      removeItem: (key: string) => fixtures.storage.delete(key),
+    },
   });
   renderPage();
   await Promise.resolve();
@@ -184,6 +199,25 @@ async function submit(node: ReactNode) {
   });
 }
 
+function pinRequests() {
+  return fixtures.api.mock.calls
+    .filter(([path]) => path === "/v1/auth/pin/request")
+    .map(([, init]) => JSON.parse(init.body));
+}
+
+function expectPinRequest(expected: Record<string, unknown>) {
+  const body = pinRequests().at(-1);
+  expect(body).toEqual(expected);
+  return { challengeId: fixtures.issued.at(-1)! };
+}
+
+function remount() {
+  fixtures.slots.forEach((slot) => (slot as EffectSlot | null)?.cleanup?.());
+  fixtures.slots = [];
+  fixtures.cursor = 0;
+  fixtures.effects = [];
+}
+
 async function requestPin(query = "") {
   let page = await hydratedPage(query);
   enterEmail(page.node);
@@ -205,14 +239,19 @@ describe("public product sign-in", () => {
     fixtures.navigation.operatorLinks = [];
     fixtures.navigation.logoutWarning = null;
     fixtures.features = { publicWebUrl: "http://localhost:8080", developmentEmailInboxUrl: null };
-    fixtures.pinResponse.challengeId = "challenge-one";
+    fixtures.storage.clear();
+    fixtures.issued = [];
     vi.clearAllMocks();
     fixtures.api.mockImplementation(async (path: string) => {
       if (path === "/v1/features") return fixtures.features;
       if (path === "/v1/auth/email-verification") {
         return { accepted: true, debugUrl: "http://localhost:8080/secret-verification-token" };
       }
-      if (path === "/v1/auth/pin/request") return { ...fixtures.pinResponse };
+      if (path === "/v1/auth/pin/request") {
+        const challengeId = String.fromCharCode(65 + fixtures.issued.length).repeat(43);
+        fixtures.issued.push(challengeId);
+        return { ...fixtures.pinResponse, challengeId };
+      }
       if (path === "/v1/auth/pin/verify") return { redirectTo: "http://localhost:8080/dashboard" };
       if (path.startsWith("/v1/auth/oidc/status?")) return { enabled: false };
       throw new Error(`Unexpected request: ${path}`);
@@ -308,13 +347,10 @@ describe("public product sign-in", () => {
 
   it("requests a generic PIN challenge and keeps leading zeros until explicit verification succeeds", async () => {
     let page = await requestPin("?returnTo=%2Faccount");
-    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/request", {
-      method: "POST",
-      body: JSON.stringify({
-        email: "creator@example.com",
-        acceptPolicies: true,
-        returnTo: "/account",
-      }),
+    const { challengeId } = expectPinRequest({
+      email: "creator@example.com",
+      acceptPolicies: true,
+      returnTo: "/account",
     });
     expect(page.markup).toContain("If creator@example.com has a verified account");
     expect(page.markup).toContain(
@@ -326,20 +362,21 @@ describe("public product sign-in", () => {
     expect(page.markup).toContain('autoComplete="one-time-code"');
     expect(page.markup).toContain('aria-describedby="signin-pin-help"');
     expect(page.markup).not.toContain("012345");
-    expect(page.markup).not.toContain("challenge-one");
+    expect(page.markup).not.toContain(challengeId);
     expect(fixtures.replace).not.toHaveBeenCalled();
     enterPin(page.node, "012345");
     page = renderPage();
     await submit(page.node);
     expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/verify", {
       method: "POST",
-      body: JSON.stringify({ challengeId: "challenge-one", pin: "012345" }),
+      body: JSON.stringify({ challengeId, pin: "012345" }),
     });
     expect(fixtures.replace).toHaveBeenCalledWith("http://localhost:8080/dashboard");
   });
 
   it("retains the PIN challenge and refocuses the field after a rejected PIN", async () => {
     let page = await requestPin();
+    const challengeId = fixtures.issued.at(-1)!;
     const focus = vi.fn();
     const input = find(page.node, (element) => element.props.id === "signin-pin");
     (input.props.ref as { current: unknown }).current = { focus };
@@ -361,7 +398,7 @@ describe("public product sign-in", () => {
     await submit(page.node);
     expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/verify", {
       method: "POST",
-      body: JSON.stringify({ challengeId: "challenge-one", pin: "012345" }),
+      body: JSON.stringify({ challengeId, pin: "012345" }),
     });
   });
 
@@ -371,30 +408,24 @@ describe("public product sign-in", () => {
       `?verified=1&workspaceId=${workspaceId}&returnTo=%2Fdashboard%3Finvitation%3Daccepted`,
     );
     const expectedRequest = {
-      method: "POST",
-      body: JSON.stringify({
-        email: "creator@example.com",
-        acceptPolicies: true,
-        returnTo: "/dashboard?invitation=accepted",
-        workspaceId,
-      }),
+      email: "creator@example.com",
+      acceptPolicies: true,
+      returnTo: "/dashboard?invitation=accepted",
+      workspaceId,
     };
-    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/request", expectedRequest);
+    expectPinRequest(expectedRequest);
     expect(fixtures.api).toHaveBeenCalledWith(`/v1/auth/oidc/status?workspaceId=${workspaceId}`);
     vi.advanceTimersByTime(60_000);
     const page = renderPage();
     await click(button(page.node, "Send a new PIN"));
     await Promise.resolve();
-    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/request", expectedRequest);
+    expectPinRequest(expectedRequest);
   });
 
   it("ignores a malformed workspace query instead of passing it into email or OIDC authentication", async () => {
     await requestPin("?workspaceId=malformed-workspace");
     expect(fixtures.api).toHaveBeenCalledTimes(2);
-    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/request", {
-      method: "POST",
-      body: JSON.stringify({ email: "creator@example.com", acceptPolicies: true }),
-    });
+    expectPinRequest({ email: "creator@example.com", acceptPolicies: true });
   });
 
   it("enforces the resend delay and verifies against the replacement challenge", async () => {
@@ -407,10 +438,12 @@ describe("public product sign-in", () => {
     ).toHaveLength(1);
     vi.advanceTimersByTime(60_000);
     page = renderPage();
-    fixtures.pinResponse.challengeId = "challenge-two";
+    const firstId = fixtures.issued.at(-1)!;
     await click(button(page.node, "Send a new PIN"));
     await Promise.resolve();
     page = renderPage();
+    const replacementId = fixtures.issued.at(-1)!;
+    expect(replacementId).not.toBe(firstId);
     expect(button(page.node, "Resend in 60s").props.disabled).toBe(true);
     expect(find(page.node, (element) => element.props.id === "signin-pin").props.value).toBe("");
     enterPin(page.node, "012345");
@@ -418,7 +451,7 @@ describe("public product sign-in", () => {
     await submit(page.node);
     expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/verify", {
       method: "POST",
-      body: JSON.stringify({ challengeId: "challenge-two", pin: "012345" }),
+      body: JSON.stringify({ challengeId: replacementId, pin: "012345" }),
     });
   });
 
@@ -452,9 +485,249 @@ describe("public product sign-in", () => {
 
   it("rejects protocol-relative return destinations before requesting a PIN", async () => {
     await requestPin("?returnTo=%2F%2Foutside.example");
-    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/request", {
+    expectPinRequest({ email: "creator@example.com", acceptPolicies: true });
+  });
+
+  it("opens PIN entry before delivery, preserves typing on 202, and verifies only with the accepted handle", async () => {
+    let page = await hydratedPage();
+    enterEmail(page.node);
+    page = renderPage();
+    let delivered!: (result: unknown) => void;
+    fixtures.api.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          delivered = resolve;
+        }),
+    );
+    const requesting = submit(page.node);
+    page = renderPage();
+    expect(page.markup).toContain("Requesting a PIN for creator@example.com");
+    expect(find(page.node, (element) => element.props.id === "signin-pin").props.disabled).toBe(
+      false,
+    );
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    enterPin(page.node, "012345");
+    page = renderPage();
+    expect(
+      find(page.node, (element) => element.type === "button" && element.props.type === "submit")
+        .props.disabled,
+    ).toBe(true);
+    await submit(page.node);
+    expect(fixtures.replace).not.toHaveBeenCalled();
+    const challengeId = "A".repeat(43);
+    delivered({ ...fixtures.pinResponse, challengeId });
+    await requesting;
+    page = renderPage();
+    expect(find(page.node, (element) => element.props.id === "signin-pin").props.value).toBe(
+      "012345",
+    );
+    expect(
+      find(page.node, (element) => element.type === "button" && element.props.type === "submit")
+        .props.disabled,
+    ).toBe(false);
+    expectPinRequest({ email: "creator@example.com", acceptPolicies: true });
+    expect(fixtures.replace).not.toHaveBeenCalled();
+    await submit(page.node);
+    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/verify", {
       method: "POST",
-      body: JSON.stringify({ email: "creator@example.com", acceptPolicies: true }),
+      body: JSON.stringify({ challengeId, pin: "012345" }),
     });
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+  });
+
+  it("resumes an accepted server handle after reload without storing the PIN or issuing another request", async () => {
+    let page = await requestPin("?returnTo=%2Faccount");
+    const challengeId = fixtures.issued.at(-1)!;
+    enterPin(page.node, "012345");
+    renderPage();
+    expect(fixtures.storage.get(PIN_RESUME_STORAGE_KEY)).not.toContain("012345");
+    remount();
+    page = await hydratedPage("?returnTo=%2Faccount");
+    expect(page.markup).toContain('id="signin-pin"');
+    expect(find(page.node, (element) => element.props.id === "signin-pin").props.value).toBe("");
+    expect(pinRequests()).toHaveLength(1);
+    enterPin(page.node, "012345");
+    page = renderPage();
+    await submit(page.node);
+    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/verify", {
+      method: "POST",
+      body: JSON.stringify({ challengeId, pin: "012345" }),
+    });
+  });
+
+  it("does not persist a lost initial response and offers a fresh explicit request after its countdown", async () => {
+    let page = await hydratedPage();
+    enterEmail(page.node);
+    page = renderPage();
+    fixtures.api.mockRejectedValueOnce(new TypeError("Network interrupted"));
+    await submit(page.node);
+    page = renderPage();
+    expect(page.markup).toContain("The PIN request was interrupted");
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    expect(button(page.node, "Resend in 60s").props.disabled).toBe(true);
+    expect(pinRequests()).toHaveLength(1);
+    vi.advanceTimersByTime(60_000);
+    page = renderPage();
+    await click(button(page.node, "Send a new PIN"));
+    page = renderPage();
+    expect(pinRequests()).toHaveLength(2);
+    expect(pinRequests()).toEqual([
+      { email: "creator@example.com", acceptPolicies: true },
+      { email: "creator@example.com", acceptPolicies: true },
+    ]);
+    expect(page.markup).toContain("If creator@example.com has a verified account");
+    expect(fixtures.replace).not.toHaveBeenCalled();
+  });
+
+  it("resets an older handle on verification and resumes only the explicitly requested new PIN", async () => {
+    await requestPin("?returnTo=%2Faccount");
+    const oldId = fixtures.issued.at(-1)!;
+    remount();
+    let page = await hydratedPage("?verified=1&returnTo=%2Faccount");
+    expect(page.markup).toContain("Email verified. Sign in to request a PIN.");
+    expect(page.markup).not.toContain('id="signin-pin"');
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    expect(pinRequests()).toHaveLength(1);
+    enterEmail(page.node);
+    page = renderPage();
+    await submit(page.node);
+    expect(window.location.search).toBe("?returnTo=%2Faccount");
+    const newId = fixtures.issued.at(-1)!;
+    expect(newId).not.toBe(oldId);
+    remount();
+    page = await hydratedPage(window.location.search);
+    expect(page.markup).toContain('id="signin-pin"');
+    expect(pinRequests()).toHaveLength(2);
+    expect(JSON.parse(fixtures.storage.get(PIN_RESUME_STORAGE_KEY)!).challenge.challengeId).toBe(
+      newId,
+    );
+  });
+
+  it("keeps initial throttling on the PIN screen with a real countdown and no invented handle", async () => {
+    let page = await hydratedPage();
+    enterEmail(page.node);
+    page = renderPage();
+    fixtures.api.mockRejectedValueOnce(new ApiClientError("Wait", "RATE_LIMITED", 429, 90));
+    await submit(page.node);
+    page = renderPage();
+    expect(page.markup).toContain('id="signin-pin"');
+    expect(page.markup).toContain("Wait 90s before requesting a PIN");
+    expect(button(page.node, "Resend in 90s").props.disabled).toBe(true);
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    enterPin(page.node, "012345");
+    page = renderPage();
+    expect(
+      find(page.node, (element) => element.type === "button" && element.props.type === "submit")
+        .props.disabled,
+    ).toBe(true);
+    expect(fixtures.replace).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(90_000);
+    page = renderPage();
+    await click(button(page.node, "Send a new PIN"));
+    expect(pinRequests()).toHaveLength(2);
+  });
+
+  it("retains the accepted handle and entered PIN when a resend is throttled", async () => {
+    let page = await requestPin();
+    const originalId = fixtures.issued.at(-1)!;
+    enterPin(page.node, "012345");
+    vi.advanceTimersByTime(60_000);
+    page = renderPage();
+    fixtures.api.mockRejectedValueOnce(new ApiClientError("Wait", "RATE_LIMITED", 429, 300));
+    await click(button(page.node, "Send a new PIN"));
+    page = renderPage();
+    expect(page.markup).toContain("You can still use the PIN you already requested");
+    expect(button(page.node, "Resend in 300s").props.disabled).toBe(true);
+    expect(find(page.node, (element) => element.props.id === "signin-pin").props.value).toBe(
+      "012345",
+    );
+    expect(JSON.parse(fixtures.storage.get(PIN_RESUME_STORAGE_KEY)!).challenge.challengeId).toBe(
+      originalId,
+    );
+    expect(fixtures.storage.get(PIN_RESUME_STORAGE_KEY)).not.toContain("012345");
+    await submit(page.node);
+    expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/pin/verify", {
+      method: "POST",
+      body: JSON.stringify({ challengeId: originalId, pin: "012345" }),
+    });
+  });
+
+  it.each(["accepted", "throttled"])(
+    "preserves PIN edits made during a resend when it is %s",
+    async (outcome) => {
+      let page = await requestPin();
+      enterPin(page.node, "012345");
+      vi.advanceTimersByTime(60_000);
+      page = renderPage();
+      let delivered!: (result: unknown) => void;
+      let rejected!: (error: unknown) => void;
+      fixtures.api.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            delivered = resolve;
+            rejected = reject;
+          }),
+      );
+      const requesting = click(button(page.node, "Send a new PIN"));
+      page = renderPage();
+      expect(find(page.node, (element) => element.props.id === "signin-pin").props.value).toBe(
+        "012345",
+      );
+      enterPin(page.node, "654321");
+      renderPage();
+      if (outcome === "accepted") {
+        delivered({ ...fixtures.pinResponse, challengeId: "B".repeat(43) });
+      } else {
+        rejected(new ApiClientError("Wait", "RATE_LIMITED", 429, 60));
+      }
+      await requesting;
+      page = renderPage();
+      expect(find(page.node, (element) => element.props.id === "signin-pin").props.value).toBe(
+        "654321",
+      );
+    },
+  );
+
+  it("clears a revoked handle after hard delivery failure and allows a fresh request", async () => {
+    await requestPin();
+    const firstId = fixtures.issued.at(-1)!;
+    vi.advanceTimersByTime(60_000);
+    let page = renderPage();
+    fixtures.api.mockRejectedValueOnce(
+      new ApiClientError("Internal SMTP details", "EMAIL_DELIVERY_FAILED", 503),
+    );
+    await click(button(page.node, "Send a new PIN"));
+    page = renderPage();
+    expect(page.markup).toContain('role="alert"');
+    expect(page.markup).toContain("We could not deliver your PIN");
+    expect(page.markup).not.toContain("Internal SMTP details");
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    vi.advanceTimersByTime(60_000);
+    page = renderPage();
+    await click(button(page.node, "Send a new PIN"));
+    expect(fixtures.issued.at(-1)).not.toBe(firstId);
+    expect(fixtures.replace).not.toHaveBeenCalled();
+  });
+
+  it("clears pending intent on explicit email change and ignores late delivery responses", async () => {
+    let page = await hydratedPage();
+    enterEmail(page.node);
+    page = renderPage();
+    let delivered!: (result: unknown) => void;
+    fixtures.api.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          delivered = resolve;
+        }),
+    );
+    const requesting = submit(page.node);
+    page = renderPage();
+    await click(button(page.node, "Use another email"));
+    delivered({ ...fixtures.pinResponse, challengeId: "A".repeat(43) });
+    await requesting;
+    page = renderPage();
+    expect(page.markup).not.toContain('id="signin-pin"');
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    expect(fixtures.replace).not.toHaveBeenCalled();
   });
 });

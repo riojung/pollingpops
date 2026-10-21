@@ -105,7 +105,8 @@ import {
 } from "@openround/db";
 import { experiencePresets } from "@openround/experience";
 import type { AppConfig } from "./config.js";
-import type { AuthService } from "./auth.js";
+import { AuthEmailDeliveryError, type AuthService } from "./auth.js";
+import type { EmailAuthBudget, RateLimitBudget } from "./cache.js";
 import { cleanPlainText, hashToken } from "./security.js";
 import type { SessionService } from "./session-service.js";
 import { SessionError } from "./session-service.js";
@@ -436,6 +437,12 @@ export async function registerRoutes(
     metrics: MetricsService;
     productEvents: ProductEventDispatcher;
     consumeAuthBudget: (key: string, maximum: number, windowMs: number) => Promise<boolean>;
+    consumeAuthIpBudget: (
+      key: string,
+      maximum: number,
+      windowMs: number,
+    ) => Promise<RateLimitBudget>;
+    consumeEmailAuthBudget: (key: string) => Promise<EmailAuthBudget>;
     readiness: () => Promise<void>;
     stripeClient?: Stripe | null;
   },
@@ -811,12 +818,33 @@ export async function registerRoutes(
     return { presets: experiencePresets };
   });
 
-  async function allowEmailRequest(request: FastifyRequest, email: string, purpose: string) {
-    const consume = dependencies.consumeAuthBudget;
-    if (!(await consume(`email-auth:request-ip:${request.ip}`, 300, 15 * 60_000))) return false;
-    const account = hashToken(email);
-    if (!(await consume(`email-auth:${purpose}:address:${account}`, 3, 15 * 60_000))) return false;
-    return consume(`email-auth:${purpose}:cooldown:${account}`, 1, 60_000);
+  function emailRateLimited(
+    reply: FastifyReply,
+    requestId: string,
+    message: string,
+    seconds: number,
+  ) {
+    const retryAfterSeconds = Math.max(1, Math.ceil(seconds));
+    return reply
+      .header("retry-after", String(retryAfterSeconds))
+      .code(429)
+      .send({
+        error: {
+          code: "RATE_LIMITED",
+          message,
+          requestId,
+          retryAfterSeconds,
+          details: { retryAfterSeconds },
+        },
+      });
+  }
+
+  async function emailRequestIpBudget(request: FastifyRequest) {
+    return dependencies.consumeAuthIpBudget(
+      `email-auth:request-ip:${request.ip}`,
+      300,
+      15 * 60_000,
+    );
   }
 
   const requestEmailVerification = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -831,15 +859,24 @@ export async function registerRoutes(
       );
     }
     const input = EmailVerificationRequestSchema.parse(request.body);
-    if (!(await allowEmailRequest(request, input.email, "verification"))) {
-      return apiError(
+    const ipBudget = await emailRequestIpBudget(request);
+    if (!ipBudget.allowed)
+      return emailRateLimited(
         reply,
-        429,
-        "RATE_LIMITED",
-        "Wait before requesting another verification email",
         request.id,
+        "Too many email requests. Try again later",
+        ipBudget.retryAfterSeconds,
       );
-    }
+    const budget = await dependencies.consumeEmailAuthBudget(
+      `verification:${hashToken(input.email)}`,
+    );
+    if (!budget.allowed)
+      return emailRateLimited(
+        reply,
+        request.id,
+        "Wait before requesting another verification email",
+        budget.retryAfterSeconds,
+      );
     const debugUrl = await auth.requestAccountVerification(
       input.email,
       input.segment,
@@ -884,7 +921,7 @@ export async function registerRoutes(
     signIn.searchParams.set("verified", "1");
     signIn.searchParams.set(
       "returnTo",
-      verified.creator ? (returnTo ?? "/dashboard?welcome=1") : "/organization",
+      verified.creator ? (returnTo ?? "/home?welcome=1") : "/organization",
     );
     return reply.redirect(signIn.href);
   });
@@ -901,18 +938,37 @@ export async function registerRoutes(
       );
     }
     const input = EmailPinRequestSchema.parse(request.body);
-    if (!(await allowEmailRequest(request, input.email, "pin"))) {
-      return apiError(
+    const ipBudget = await emailRequestIpBudget(request);
+    if (!ipBudget.allowed)
+      return emailRateLimited(
         reply,
-        429,
-        "RATE_LIMITED",
-        "Wait before requesting another sign-in PIN",
         request.id,
+        "Too many email requests. Try again later",
+        ipBudget.retryAfterSeconds,
       );
+    try {
+      const identity = await auth.prepareSignInPin(input.email);
+      const purpose = identity ? "pin-verified" : "pin-unverified";
+      const budget = await dependencies.consumeEmailAuthBudget(
+        `${purpose}:${hashToken(input.email)}`,
+      );
+      if (!budget.allowed)
+        return emailRateLimited(
+          reply,
+          request.id,
+          "Wait before requesting another sign-in PIN",
+          budget.retryAfterSeconds,
+        );
+      return reply
+        .code(202)
+        .send(
+          await auth.requestSignInPin(input.email, input.returnTo, input.workspaceId, identity),
+        );
+    } catch (error) {
+      if (error instanceof AuthEmailDeliveryError)
+        return apiError(reply, 503, "EMAIL_DELIVERY_FAILED", error.message, request.id);
+      throw error;
     }
-    return reply
-      .code(202)
-      .send(await auth.requestSignInPin(input.email, input.returnTo, input.workspaceId));
   });
 
   app.post("/v1/auth/pin/verify", async (request, reply) => {
@@ -956,7 +1012,7 @@ export async function registerRoutes(
     return {
       redirectTo: auth.localeAwareWebRedirect(
         verified.user,
-        verified.creator ? (verified.returnTo ?? "/dashboard") : "/organization",
+        verified.creator ? (verified.returnTo ?? "/home") : "/organization",
       ),
     };
   });
@@ -1077,9 +1133,7 @@ export async function registerRoutes(
       if (result.mode === "login") {
         const session = await auth.issueCreatorSession(result.creator);
         auth.setSessionCookie(reply, session.sessionToken);
-        return reply.redirect(
-          auth.localeAwareWebRedirect(session.creator, "/dashboard?federated=1"),
-        );
+        return reply.redirect(auth.localeAwareWebRedirect(session.creator, "/home?federated=1"));
       }
       return reply.redirect(`${config.WEB_ORIGIN}/account?federated=linked`);
     },
@@ -1268,11 +1322,11 @@ export async function registerRoutes(
       await auth.switchWorkspace(request, accepted, accepted.workspaceId);
     }
     const destination = new URL(
-      alreadyAuthenticated ? "/dashboard?invitation=accepted" : "/signin?verified=1",
+      alreadyAuthenticated ? "/home?invitation=accepted" : "/signin?verified=1",
       config.WEB_ORIGIN,
     );
     if (!alreadyAuthenticated) {
-      destination.searchParams.set("returnTo", "/dashboard?invitation=accepted");
+      destination.searchParams.set("returnTo", "/home?invitation=accepted");
       destination.searchParams.set("workspaceId", accepted.workspaceId);
     }
     return {

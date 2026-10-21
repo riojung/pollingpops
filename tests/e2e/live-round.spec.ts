@@ -21,7 +21,10 @@ async function closePresenter(page: Page) {
 test("creator and participant complete a live round", async ({ browser }, testInfo) => {
   const creatorContext = await browser.newContext();
   const creator = await creatorContext.newPage();
-  await signInCreator(creator, testEmail("live-round", testInfo), { segment: "education" });
+  await signInCreator(creator, testEmail("live-round", testInfo), {
+    segment: "education",
+    returnTo: "/dashboard",
+  });
   await expect(creator).toHaveURL(/\/dashboard/);
 
   await creator.getByLabel("Checkpoint set title").fill("A one-question check");
@@ -203,7 +206,7 @@ test("creator and participant complete a live round", async ({ browser }, testIn
 test("quiz autosave serializes overlapping edits", async ({ browser }, testInfo) => {
   const context = await browser.newContext();
   const creator = await context.newPage();
-  await signInCreator(creator, testEmail("autosave", testInfo));
+  await signInCreator(creator, testEmail("autosave", testInfo), { returnTo: "/dashboard" });
   await expect(creator).toHaveURL(/\/dashboard/);
   await creator.getByLabel("Checkpoint set title").fill("Autosave ordering");
   await creator.getByRole("button", { name: "Create checkpoint set" }).click();
@@ -250,7 +253,7 @@ test("quiz autosave serializes overlapping edits", async ({ browser }, testInfo)
 });
 
 test("incomplete questions autosave with actionable guidance", async ({ page }, testInfo) => {
-  await signInCreator(page, testEmail("guidance", testInfo));
+  await signInCreator(page, testEmail("guidance", testInfo), { returnTo: "/dashboard" });
 
   await page.getByLabel("Checkpoint set title").fill("Validation guidance");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();

@@ -46,10 +46,11 @@ around a recovery loop:
 - **Self-hostable foundations:** the modular monolith runs with PostgreSQL, Valkey, private object
   storage, and optional media scanning and observability profiles.
 
-The default Community experience focuses on live Rounds and their recovery workflow. The
-professional workspace, Presentations, and research prototypes are pre-release capabilities
-controlled by their deployment flags and applicable workspace allowlists. Source-grounded
-authoring is disabled by default; configuring its provider enables it deployment-wide subject to
+The default workspace opens at **Home**, with Library, Sessions, and Results navigation on every
+plan. Its `workspaceShell` capability is independent of the UX beta flags and pilot allowlist;
+explicit Admin availability and plan assignments still apply. The professional Round builder,
+Presentations, Surveys, and research prototypes retain their separate feature and plan gates.
+Source-grounded authoring is disabled by default; configuring its provider enables it deployment-wide subject to
 workspace roles and plan entitlements, not a rollout allowlist. Institution integrations require
 provider configuration plus a per-workspace contract policy. Their presence in the repository is
 not a launch or readiness claim.
@@ -88,9 +89,10 @@ verification and PIN sign-in do not grant platform administration. See the
 
 For a new creator, select **Create account**, request a verification email, and open its captured
 link in Mailpit. Verification returns to sign-in without granting access. Select **Send sign-in
-PIN**, read the newest six-digit code in Mailpit, and enter it to sign in. Existing verified
-accounts request a PIN directly. The core profile uses development credentials and disables untrusted image uploads
-because no malware scanner is attached.
+PIN**, read the newest six-digit code in Mailpit, and enter it to sign in. Normal sign-ins open
+Home; a requested return path or accepted invitation keeps its destination and selected workspace.
+Existing verified accounts request a PIN directly. The core profile uses development credentials
+and disables untrusted image uploads because no malware scanner is attached.
 
 For an existing Colima installation on macOS, use `pnpm local:start` after rebooting. With Node.js
 22+ and dependencies installed (`pnpm install --frozen-lockfile`), it starts the existing `default`

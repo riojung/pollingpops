@@ -84,6 +84,17 @@ export default {
   "delivery.auth.pinLabel": "로그인 PIN",
   "delivery.auth.pinSent":
     "{email}에 인증된 계정이 있으면 로그인 PIN을 보냈습니다. 가장 최근 이메일을 확인하세요.",
+  "delivery.auth.pinRequesting":
+    "{email} 주소로 PIN을 요청하고 있습니다. 도착하는 즉시 여기에 입력할 수 있습니다.",
+  "delivery.auth.pinUncertain":
+    "PIN 요청이 중단되었습니다. 다시 보내기 버튼이 활성화되면 새 PIN을 요청하세요.",
+  "delivery.auth.pinThrottledExisting":
+    "새 PIN을 요청하려면 {seconds}초 기다리세요. 이미 요청한 PIN은 계속 사용할 수 있습니다.",
+  "delivery.auth.pinThrottled":
+    "PIN을 요청하려면 {seconds}초 기다리세요. 이미 요청했다면 요청한 원래 탭을 사용하세요.",
+  "delivery.auth.pinDeliveryFailed":
+    "PIN을 전달하지 못했습니다. 다시 보내기 버튼이 활성화되면 새 PIN을 요청하세요.",
+  "delivery.auth.pinNoChallenge": "로그인하려면 새 PIN을 요청하세요.",
   "delivery.auth.pinHelp": "가장 최근 이메일의 6자리 PIN을 입력하세요. 유효 시간은 10분입니다.",
   "delivery.auth.pinExpired": "이 PIN이 만료되었습니다. 새 PIN을 요청해 로그인하세요.",
   "delivery.auth.verifyPinForm": "로그인 PIN 확인",

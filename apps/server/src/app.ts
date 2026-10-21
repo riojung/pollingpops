@@ -231,6 +231,7 @@ export async function buildApp(
     exposedHeaders: [
       "x-request-id",
       "x-trace-id",
+      "retry-after",
       ...(isLocalProductAdminDevelopment(config) ? ["x-local-operator-revocation"] : []),
     ],
   });
@@ -442,6 +443,8 @@ export async function buildApp(
     productEvents,
     readiness,
     consumeAuthBudget: cache.consumeRateLimit.bind(cache),
+    consumeAuthIpBudget: cache.consumeRateLimitBudget.bind(cache),
+    consumeEmailAuthBudget: cache.consumeEmailAuthBudget.bind(cache),
     stripeClient: overrides.stripe,
   });
   await registerQuestionHealthRoutes(app, { config, repository, auth });

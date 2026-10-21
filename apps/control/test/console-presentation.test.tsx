@@ -65,7 +65,10 @@ describe("feature policy presentation", () => {
       expect(markup).toContain("Deployment controlled");
       expect(markup).toContain("Choose Enabled to assign plans.");
       expect(markup).toContain("No feature overrides have been saved.");
-      expect(markup).toContain("it does not mean a feature is available");
+      expect(markup).toContain("Workspace navigation is available by default for all plans");
+      expect(markup).toContain(
+        "Other inherited features use deployment flags and workspace allowlists",
+      );
       expect(markup).not.toContain('type="checkbox"');
       expect(markup).not.toContain("Free plan includes Session summaries");
       if (tab === "plans") expect(markup).toContain('colSpan="3"');
@@ -117,7 +120,7 @@ describe("feature policy presentation", () => {
           policy: {
             revision: 4,
             features: {
-              workspaceShell: { enabled: true, plans: ["free"] },
+              builderV2: { enabled: true, plans: ["free"] },
               uxBeta: { enabled: false, plans: ["free"] },
             },
             updatedAt: null,

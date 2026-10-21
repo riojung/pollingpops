@@ -58,6 +58,7 @@ export const englishMessages = {
   "delivery.site.status": "Status",
   "workspace.skipToMain": "Skip to main content",
   "workspace.loading": "Loading your workspace…",
+  "workspace.retry": "Try again",
   "workspace.nav.label": "Workspace",
   "workspace.nav.mobileLabel": "Workspace sections",
   "workspace.nav.home": "Home",

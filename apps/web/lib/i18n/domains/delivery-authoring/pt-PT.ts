@@ -86,6 +86,17 @@ export default {
   "delivery.auth.pinLabel": "PIN de acesso",
   "delivery.auth.pinSent":
     "Se {email} tiver uma conta verificada, enviámos um PIN de acesso. Consulte o e-mail mais recente.",
+  "delivery.auth.pinRequesting":
+    "A pedir um PIN para {email}. Pode introduzi-lo aqui assim que chegar.",
+  "delivery.auth.pinUncertain":
+    "O pedido de PIN foi interrompido. Aguarde que o botão de reenvio fique disponível e peça um novo PIN.",
+  "delivery.auth.pinThrottledExisting":
+    "Aguarde {seconds} s antes de pedir outro PIN. Pode continuar a usar o PIN que já pediu.",
+  "delivery.auth.pinThrottled":
+    "Aguarde {seconds} s antes de pedir um PIN. Se já pediu um, utilize o separador original.",
+  "delivery.auth.pinDeliveryFailed":
+    "Não foi possível entregar o PIN. Aguarde que o botão de reenvio fique disponível e peça um novo PIN.",
+  "delivery.auth.pinNoChallenge": "Peça um novo PIN antes de iniciar sessão.",
   "delivery.auth.pinHelp":
     "Introduza o PIN de seis dígitos do e-mail mais recente. Expira em 10 minutos.",
   "delivery.auth.pinExpired": "Este PIN expirou. Peça um novo PIN para iniciar sessão.",

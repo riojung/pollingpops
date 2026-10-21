@@ -39,6 +39,7 @@ const messages = {
   "delivery.site.status": "Status",
   "workspace.skipToMain": "Zum Hauptinhalt springen",
   "workspace.loading": "Arbeitsbereich wird geladen…",
+  "workspace.retry": "Erneut versuchen",
   "workspace.nav.label": "Arbeitsbereich",
   "workspace.nav.mobileLabel": "Bereiche des Arbeitsbereichs",
   "workspace.nav.home": "Start",

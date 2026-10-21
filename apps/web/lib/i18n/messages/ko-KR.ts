@@ -38,6 +38,7 @@ const messages = {
   "delivery.site.status": "상태",
   "workspace.skipToMain": "주요 콘텐츠로 이동",
   "workspace.loading": "워크스페이스를 불러오는 중…",
+  "workspace.retry": "다시 시도",
   "workspace.nav.label": "워크스페이스",
   "workspace.nav.mobileLabel": "워크스페이스 섹션",
   "workspace.nav.home": "홈",

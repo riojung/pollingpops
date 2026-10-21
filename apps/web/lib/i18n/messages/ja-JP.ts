@@ -38,6 +38,7 @@ const messages = {
   "delivery.site.status": "稼働状況",
   "workspace.skipToMain": "メインコンテンツへ移動",
   "workspace.loading": "ワークスペースを読み込んでいます…",
+  "workspace.retry": "もう一度試す",
   "workspace.nav.label": "ワークスペース",
   "workspace.nav.mobileLabel": "ワークスペースのセクション",
   "workspace.nav.home": "ホーム",

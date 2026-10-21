@@ -38,6 +38,7 @@ const messages = {
   "delivery.site.status": "狀態",
   "workspace.skipToMain": "跳至主要內容",
   "workspace.loading": "正在載入工作區…",
+  "workspace.retry": "重試",
   "workspace.nav.label": "工作區",
   "workspace.nav.mobileLabel": "工作區區段",
   "workspace.nav.home": "首頁",

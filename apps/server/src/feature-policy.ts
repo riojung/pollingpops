@@ -28,7 +28,6 @@ const flagKeys: Partial<Record<ProductFeatureKey, keyof AppConfig>> = {
   uxBeta: "FEATURE_UX_BETA",
   recoveryRehearsal: "FEATURE_RECOVERY_REHEARSAL",
   practiceAssignments: "FEATURE_PRACTICE_ASSIGNMENTS",
-  workspaceShell: "FEATURE_WORKSPACE_SHELL",
   builderV2: "FEATURE_BUILDER_V2",
   presentations: "FEATURE_PRESENTATIONS",
   groups: "FEATURE_GROUPS",
@@ -53,7 +52,6 @@ const professional = new Set<ProductFeatureKey>([
   "uxBeta",
   "recoveryRehearsal",
   "practiceAssignments",
-  "workspaceShell",
   "builderV2",
   "presentations",
   "groups",
@@ -104,6 +102,9 @@ export function featureResolver(
   workspaceId?: string,
 ) {
   const legacy = (key: ProductFeatureKey) => {
+    // Tenant navigation is the core product experience. Retired rollout flags and
+    // pilot allowlists must not hide it from newly provisioned workspaces.
+    if (key === "workspaceShell") return true;
     if (!flagKeys[key] && entitlementFeatures.includes(key as (typeof entitlementFeatures)[number]))
       return plan !== "free";
     const flag = flagKeys[key];

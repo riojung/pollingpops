@@ -5,9 +5,11 @@ import { testEmail } from "./test-email";
 
 const apiUrl = "http://127.0.0.1:4100";
 
-test("feature-off creator remains on the legacy dashboard", async ({ page }, testInfo) => {
+test("legacy authoring remains available while professional features are off", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(120_000);
-  await signInCreator(page, testEmail("ux-beta-off", testInfo));
+  await signInCreator(page, testEmail("ux-beta-off", testInfo), { returnTo: "/dashboard" });
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByRole("heading", { name: "Your checkpoint sets" })).toBeVisible();
   await expect(page.getByLabel("Checkpoint set title")).toBeVisible();
@@ -129,4 +131,9 @@ test("feature-off creator remains on the legacy dashboard", async ({ page }, tes
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByLabel("Checkpoint set title")).toBeVisible();
   await expect(page.getByRole("heading", { name: "How do you want to start?" })).toHaveCount(0);
+
+  // Core tenant navigation remains available without the professional pilot.
+  await page.goto("/home");
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
 });

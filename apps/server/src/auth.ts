@@ -1,10 +1,22 @@
 import { randomInt, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LocalReturnPathSchema } from "@openround/contracts";
-import type { CreatorContext, Repository, Segment, UserPrincipal } from "@openround/db";
+import type {
+  CreatorContext,
+  MagicLinkIdentity,
+  Repository,
+  Segment,
+  UserPrincipal,
+} from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { Mailer } from "./mailer.js";
 import { hashToken, opaqueToken } from "./security.js";
+
+export class AuthEmailDeliveryError extends Error {
+  constructor() {
+    super("We could not send your sign-in PIN. Please try again.");
+  }
+}
 
 export class AuthService {
   constructor(
@@ -49,9 +61,21 @@ export class AuthService {
     return this.repository.consumeMagicLinkIdentity(hashToken(token), new Date());
   }
 
-  async requestSignInPin(email: string, returnTo?: string, workspaceId?: string) {
+  async prepareSignInPin(email: string) {
+    return this.repository.getVerifiedEmailIdentity(email);
+  }
+
+  async requestSignInPin(
+    email: string,
+    returnTo?: string,
+    workspaceId?: string,
+    preparedIdentity?: MagicLinkIdentity | null,
+  ) {
     const challengeId = opaqueToken();
-    const identity = await this.repository.getVerifiedEmailIdentity(email);
+    const identity =
+      preparedIdentity === undefined
+        ? await this.repository.getVerifiedEmailIdentity(email)
+        : preparedIdentity;
     const result = {
       accepted: true as const,
       challengeId,
@@ -79,9 +103,9 @@ export class AuthService {
     });
     try {
       await this.mailer.sendSignInPin(email, pin);
-    } catch (error) {
+    } catch {
       await this.repository.revokeEmailPinChallenge(hashToken(challengeId));
-      throw error;
+      throw new AuthEmailDeliveryError();
     }
     return this.config.NODE_ENV !== "production" || this.config.AUTH_DEBUG_MAGIC_LINKS
       ? { ...result, debugPin: pin }
@@ -188,11 +212,11 @@ export class AuthService {
     const localReturnTo = LocalReturnPathSchema.safeParse(returnTo);
     let destination: URL;
     try {
-      destination = new URL(localReturnTo.success ? localReturnTo.data : "/dashboard", webOrigin);
+      destination = new URL(localReturnTo.success ? localReturnTo.data : "/home", webOrigin);
     } catch {
-      destination = new URL("/dashboard", webOrigin);
+      destination = new URL("/home", webOrigin);
     }
-    if (destination.origin !== webOrigin.origin) destination = new URL("/dashboard", webOrigin);
+    if (destination.origin !== webOrigin.origin) destination = new URL("/home", webOrigin);
     if (!creator.localePreferenceSet) return destination.href;
 
     const bridge = new URL("/auth/locale", webOrigin);

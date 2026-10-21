@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Brand, CreatorBrand, creatorLandingHref } from "./brand";
+import { Brand, CreatorBrand, creatorLandingHref, creatorLibraryHref } from "./brand";
 
 describe("Brand", () => {
   it("keeps the home link named when responsive styles hide the visible name", () => {
@@ -29,7 +29,7 @@ describe("Brand", () => {
     expect(markup).not.toContain("OpenRound");
   });
 
-  it("routes creators only to workspace Home when that rollout is available", () => {
+  it("uses workspace Home by default and preserves an explicitly disabled shell", () => {
     const publicMarkup = renderToStaticMarkup(<Brand />);
     const betaMarkup = renderToStaticMarkup(
       <CreatorBrand productFeatures={{ workspaceShell: true }} />,
@@ -42,13 +42,21 @@ describe("Brand", () => {
     expect(publicMarkup).toContain('href="/"');
     expect(betaMarkup).toContain('href="/home"');
     expect(legacyMarkup).toContain('href="/dashboard"');
-    expect(unresolvedMarkup).toContain('href="/dashboard"');
+    expect(unresolvedMarkup).toContain('href="/home"');
   });
 
-  it("fails closed to the legacy dashboard until workspace features resolve", () => {
-    expect(creatorLandingHref(undefined)).toBe("/dashboard");
-    expect(creatorLandingHref(null)).toBe("/dashboard");
+  it("keeps Home canonical while account features resolve", () => {
+    expect(creatorLandingHref(undefined)).toBe("/home");
+    expect(creatorLandingHref(null)).toBe("/home");
+    expect(creatorLandingHref({})).toBe("/home");
     expect(creatorLandingHref({ workspaceShell: false })).toBe("/dashboard");
     expect(creatorLandingHref({ workspaceShell: true })).toBe("/home");
+  });
+
+  it("opens the modern library unless the shell was explicitly disabled", () => {
+    expect(creatorLibraryHref(undefined)).toBe("/library");
+    expect(creatorLibraryHref(null)).toBe("/library");
+    expect(creatorLibraryHref({ workspaceShell: true })).toBe("/library");
+    expect(creatorLibraryHref({ workspaceShell: false })).toBe("/dashboard");
   });
 });

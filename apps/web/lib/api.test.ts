@@ -233,3 +233,84 @@ describe("product logout and admin session revocation", () => {
     expect(() => dismissLogoutWarning()).not.toThrow();
   });
 });
+
+describe("API retry timing", () => {
+  it("retains structured server timing on throttled requests", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: {
+              code: "RATE_LIMITED",
+              message: "Wait before trying again",
+              retryAfterSeconds: 85,
+            },
+          },
+          { status: 429, headers: { "Retry-After": "85" } },
+        ),
+      ),
+    );
+    await expect(
+      apiFetch("/v1/auth/pin/request", { method: "POST", body: "{}" }),
+    ).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      status: 429,
+      retryAfterSeconds: 85,
+    });
+  });
+
+  it("reads Retry-After when a structured delay is absent or invalid", async () => {
+    for (const retryAfterSeconds of [undefined, -10, "malformed"]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json(
+            { error: { message: "Wait", retryAfterSeconds } },
+            { status: 429, headers: { "Retry-After": "90" } },
+          ),
+        ),
+      );
+      await expect(apiFetch("/v1/auth/pin/request")).rejects.toMatchObject({
+        retryAfterSeconds: 90,
+      });
+    }
+  });
+
+  it("handles HTTP-date retry timing and ignores malformed values", async () => {
+    const now = Date.now();
+    const date = new Date(now + 60_000).toUTCString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("Unavailable", {
+            status: 503,
+            headers: { "Retry-After": date },
+          }),
+      ),
+    );
+    const failure = (await apiFetch("/v1/features").catch(
+      (error: unknown) => error,
+    )) as ApiClientError;
+    expect(failure.retryAfterSeconds).toBeGreaterThanOrEqual(59);
+    expect(failure.retryAfterSeconds).toBeLessThanOrEqual(60);
+    for (const header of ["", "soon", "-1", "NaN"]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json(
+            { error: { message: "Wait" } },
+            {
+              status: 429,
+              headers: { "Retry-After": header },
+            },
+          ),
+        ),
+      );
+      await expect(apiFetch("/v1/auth/pin/request")).rejects.toMatchObject({
+        retryAfterSeconds: undefined,
+      });
+    }
+  });
+});

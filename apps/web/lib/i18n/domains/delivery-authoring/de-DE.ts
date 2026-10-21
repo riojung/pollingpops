@@ -86,6 +86,17 @@ export default {
   "delivery.auth.pinLabel": "Anmelde-PIN",
   "delivery.auth.pinSent":
     "Falls für {email} ein bestätigtes Konto besteht, haben wir eine Anmelde-PIN gesendet. Prüfe die neueste E-Mail.",
+  "delivery.auth.pinRequesting":
+    "Eine PIN für {email} wird angefordert. Du kannst sie hier eingeben, sobald sie ankommt.",
+  "delivery.auth.pinUncertain":
+    "Die PIN-Anfrage wurde unterbrochen. Fordere eine neue PIN an, sobald die Schaltfläche zum erneuten Senden verfügbar ist.",
+  "delivery.auth.pinThrottledExisting":
+    "Warte {seconds} s, bevor du eine weitere PIN anforderst. Die bereits angeforderte PIN kannst du weiter verwenden.",
+  "delivery.auth.pinThrottled":
+    "Warte {seconds} s, bevor du eine PIN anforderst. Falls du schon eine angefordert hast, verwende den ursprünglichen Tab.",
+  "delivery.auth.pinDeliveryFailed":
+    "Deine PIN konnte nicht zugestellt werden. Fordere eine neue PIN an, sobald die Schaltfläche zum erneuten Senden verfügbar ist.",
+  "delivery.auth.pinNoChallenge": "Fordere vor der Anmeldung eine neue PIN an.",
   "delivery.auth.pinHelp":
     "Gib die sechsstellige PIN aus der neuesten E-Mail ein. Sie läuft nach 10 Minuten ab.",
   "delivery.auth.pinExpired": "Diese PIN ist abgelaufen. Fordere eine neue PIN zur Anmeldung an.",

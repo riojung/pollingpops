@@ -4,6 +4,7 @@ import type * as ManagementNavigationModule from "./management-navigation";
 import { LOGOUT_REVOCATION_WARNING } from "../lib/api";
 
 const fixtures = vi.hoisted(() => ({
+  pathname: "/",
   navigation: {
     loading: false,
     error: "",
@@ -25,10 +26,13 @@ vi.mock("./management-navigation", async (importOriginal) => ({
   useManagementNavigation: () => fixtures.navigation,
 }));
 
+vi.mock("next/navigation", () => ({ usePathname: () => fixtures.pathname }));
+
 import { SiteHeader } from "./site-header";
 
 describe("management discovery in the product header", () => {
   beforeEach(() => {
+    fixtures.pathname = "/";
     fixtures.navigation.user = null;
     fixtures.navigation.organizationManagementEnabled = false;
     fixtures.navigation.organizations = [];
@@ -36,6 +40,15 @@ describe("management discovery in the product header", () => {
     fixtures.navigation.operatorConsoleOrigin = null;
     fixtures.navigation.operatorLinks = [];
     fixtures.navigation.logoutWarning = null;
+  });
+
+  it("uses current-page navigation controls in desktop and mobile layouts", () => {
+    fixtures.pathname = "/pricing";
+    const markup = renderToStaticMarkup(<SiteHeader />);
+    expect(markup.match(/<a[^>]*aria-current="page"[^>]*href="\/pricing"/g)).toHaveLength(2);
+    expect(markup).toContain('class="navigation-control" href="/privacy"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain('<a role="button"');
   });
 
   it("recognizes billing-only identity before workspace authentication succeeds", () => {

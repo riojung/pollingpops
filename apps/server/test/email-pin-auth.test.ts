@@ -12,12 +12,14 @@ class Inbox implements Mailer {
   readonly verifications: Array<{ email: string; url: string }> = [];
   readonly pins: Array<{ email: string; pin: string }> = [];
   failPin = false;
+  pinDelivery: Promise<void> | null = null;
   async sendAccountVerification(email: string, url: string) {
     this.verifications.push({ email, url });
   }
   async sendSignInPin(email: string, pin: string) {
     this.pins.push({ email, pin });
     if (this.failPin) throw new Error("Synthetic SMTP failure");
+    await this.pinDelivery;
   }
   async sendWorkspaceInvitation() {}
 }
@@ -165,6 +167,17 @@ describe("verified email followed by a separate sign-in PIN", () => {
     expect(f.repository.creatorSessions.size).toBe(0);
   });
 
+  it("keeps the delivered PIN usable when a resend is denied by the cooldown", async () => {
+    const f = await fixture();
+    await f.register();
+    await f.verify();
+    const requested = await f.requestPin();
+    expect((await f.requestPin()).statusCode).toBe(429);
+    expect(f.mailer.pins).toHaveLength(1);
+    expect((await f.complete(requested.json().challengeId)).statusCode).toBe(200);
+    expect(f.repository.creatorSessions.size).toBe(1);
+  });
+
   it("keeps PIN and verification purposes separate and rejects malformed credentials", async () => {
     const f = await fixture();
     await f.register();
@@ -243,15 +256,67 @@ describe("verified email followed by a separate sign-in PIN", () => {
     await a.register();
     await a.verify();
     expect((await a.requestPin()).statusCode).toBe(202);
-    expect((await b.requestPin()).statusCode).toBe(429);
+    for (let retry = 0; retry < 20; retry++) {
+      const limited = await b.requestPin();
+      expect(limited.statusCode).toBe(429);
+      expect(limited.headers["retry-after"]).toBe("60");
+      expect(limited.json().error.details.retryAfterSeconds).toBe(60);
+    }
     vi.setSystemTime(Date.now() + 61_000);
     expect((await b.requestPin()).statusCode).toBe(202);
     vi.setSystemTime(Date.now() + 61_000);
-    expect((await a.requestPin()).statusCode).toBe(429);
-    expect(a.mailer.pins.length + b.mailer.pins.length).toBe(2);
+    expect((await a.requestPin()).statusCode).toBe(202);
+    vi.setSystemTime(Date.now() + 61_000);
+    const exhausted = await b.requestPin();
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.json().error.retryAfterSeconds).toBeGreaterThan(60);
+    expect(a.mailer.pins.length + b.mailer.pins.length).toBe(3);
     expect(
       [...repository.emailPinChallenges.values()].filter((challenge) => !challenge.consumedAt),
     ).toHaveLength(1);
+  });
+
+  it("reports the remaining shared IP window for PIN and verification requests", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const startedAt = Date.now();
+    const f = await fixture();
+    await f.register();
+    await f.verify();
+    // Registration already charged this IP once. Fill its existing fixed window
+    // through the boolean cache API to model requests served by other processes.
+    for (let request = 1; request < 300; request++)
+      expect(await f.cache.consumeRateLimit("email-auth:request-ip:127.0.0.1", 300, 900_000)).toBe(
+        true,
+      );
+    const endpoints = [
+      "/v1/auth/pin/request",
+      "/v1/auth/email-verification",
+      "/v1/auth/magic-link",
+    ];
+    for (const remaining of [60, 30]) {
+      vi.setSystemTime(startedAt + (900 - remaining) * 1_000);
+      for (const url of endpoints) {
+        const limited = await f.post(url, {
+          email: "creator@example.com",
+          acceptPolicies: true,
+          ...(url === "/v1/auth/pin/request" ? {} : { segment: "education" }),
+        });
+        expect(limited.statusCode).toBe(429);
+        expect(limited.headers["retry-after"]).toBe(String(remaining));
+        expect(limited.json().error).toMatchObject({
+          code: "RATE_LIMITED",
+          retryAfterSeconds: remaining,
+          details: { retryAfterSeconds: remaining },
+        });
+      }
+    }
+    expect(f.mailer.pins).toHaveLength(0);
+    expect(f.mailer.verifications).toHaveLength(1);
+    vi.setSystemTime(startedAt + 900_000);
+    expect((await f.requestPin()).statusCode).toBe(202);
+    expect((await f.register()).statusCode).toBe(202);
+    expect(f.mailer.pins).toHaveLength(1);
+    expect(f.mailer.verifications).toHaveLength(2);
   });
 
   it("requires explicit policy acceptance and rejects external return destinations", async () => {
@@ -290,7 +355,11 @@ describe("verified email followed by a separate sign-in PIN", () => {
     const f = await fixture({ production: true });
     const registration = await f.register();
     expect(registration.json()).toEqual({ accepted: true });
-    expect((await f.verify()).headers["set-cookie"]).toBeUndefined();
+    const verified = await f.verify();
+    expect(verified.headers["set-cookie"]).toBeUndefined();
+    const destination = new URL(verified.headers.location!);
+    expect(destination.pathname).toBe("/signin");
+    expect(destination.searchParams.get("returnTo")).toBe("/home?welcome=1");
     const requested = await f.requestPin();
     expect(requested.json()).not.toHaveProperty("debugPin");
     const completed = await f.complete(requested.json().challengeId);
@@ -298,7 +367,7 @@ describe("verified email followed by a separate sign-in PIN", () => {
     expect(completed.headers["set-cookie"]).toEqual(expect.stringContaining("HttpOnly"));
     expect(completed.headers["set-cookie"]).toEqual(expect.stringContaining("Secure"));
     expect(completed.headers["set-cookie"]).toEqual(expect.stringContaining("SameSite=Lax"));
-    expect(completed.json().redirectTo).toBe("https://app.example.ca/dashboard");
+    expect(completed.json().redirectTo).toBe("https://app.example.ca/home");
   });
 
   it("revokes a challenge when SMTP fails and cannot authenticate a deleted identity", async () => {
@@ -307,7 +376,9 @@ describe("verified email followed by a separate sign-in PIN", () => {
     await f.register();
     await f.verify();
     f.mailer.failPin = true;
-    expect((await f.requestPin()).statusCode).toBe(500);
+    const failed = await f.requestPin();
+    expect(failed.statusCode).toBe(503);
+    expect(failed.json().error.code).toBe("EMAIL_DELIVERY_FAILED");
     expect(
       [...f.repository.emailPinChallenges.values()].every((challenge) => challenge.consumedAt),
     ).toBe(true);
@@ -326,6 +397,47 @@ describe("verified email followed by a separate sign-in PIN", () => {
     expect(f.mailer.pins).toHaveLength(delivered);
     expect((await f.complete(deleted.json().challengeId, "000000")).statusCode).toBe(401);
     expect(f.repository.creatorSessions.size).toBe(0);
+  });
+
+  it("does not carry an unverified request cooldown into the first verified sign-in", async () => {
+    const f = await fixture();
+    expect((await f.requestPin()).statusCode).toBe(202);
+    expect(f.mailer.pins).toHaveLength(0);
+    await f.register();
+    await f.verify();
+    expect((await f.requestPin()).statusCode).toBe(202);
+    expect(f.mailer.pins).toHaveLength(1);
+    expect(f.repository.creatorSessions.size).toBe(0);
+  });
+
+  it("returns a server-issued challenge once SMTP accepts the PIN", async () => {
+    const f = await fixture();
+    await f.register();
+    await f.verify();
+    let release!: () => void;
+    f.mailer.pinDelivery = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let settled = false;
+    const pending = f
+      .post("/v1/auth/pin/request", {
+        email: "creator@example.com",
+        acceptPolicies: true,
+      })
+      .then((response) => {
+        settled = true;
+        return response;
+      });
+    try {
+      await vi.waitFor(() => expect(f.mailer.pins).toHaveLength(1));
+      expect(settled).toBe(false);
+      expect(f.repository.creatorSessions.size).toBe(0);
+    } finally {
+      release();
+      const requested = await pending;
+      expect(requested.statusCode).toBe(202);
+      expect((await f.complete(requested.json().challengeId)).statusCode).toBe(200);
+    }
   });
 
   it("preserves an accepted invitation's workspace through a separate PIN sign-in", async () => {
@@ -354,6 +466,7 @@ describe("verified email followed by a separate sign-in PIN", () => {
     expect(accepted.json().requiresSignIn).toBe(true);
     const destination = new URL(accepted.json().redirectTo);
     expect(destination.pathname).toBe("/signin");
+    expect(destination.searchParams.get("returnTo")).toBe("/home?invitation=accepted");
     expect(destination.searchParams.get("workspaceId")).toBe(owner.workspaceId);
     const requested = await f.requestPin(
       "member@example.com",
@@ -364,6 +477,7 @@ describe("verified email followed by a separate sign-in PIN", () => {
     expect(f.repository.creatorSessions.size).toBe(0);
     const signedIn = await f.complete(requested.json().challengeId);
     expect(signedIn.statusCode).toBe(200);
+    expect(signedIn.json().redirectTo).toBe("http://localhost:3000/home?invitation=accepted");
     const me = await f.app.inject({
       method: "GET",
       url: "/v1/auth/me",

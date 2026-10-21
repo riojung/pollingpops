@@ -20,6 +20,10 @@
   backdrop-filter: blur(14px);
 }
 
+.commandBar :is(a, button):not(:global(.brand)) {
+  min-height: 44px;
+}
+
 .titleGroup {
   display: flex;
   min-width: 0;

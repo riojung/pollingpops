@@ -173,9 +173,11 @@ This documentation does not enable beta, institution, provider, or paid capabili
 Guide content is maintained in `apps/web/lib/help-feature-guides.ts`; tests verify unique routes,
 required sections, search/filter behavior, feature/role-safe actions, and valid video chapter links.
 
-The default Community setup uses the classic Round workflow. The professional workspace and
-Presentation builder require operator-enabled beta flags and a workspace allowlist. Live
-Presentations, whole-room flex timing, Question Health, and decision replay have additional
+The default workspace opens at **Home**, with **Library**, **Sessions**, and **Results** on every
+plan. It does not require UX beta flags or pilot allowlist membership. An administrator can still
+disable the workspace navigation or restrict its included plans. The professional Round builder,
+Presentations, and Surveys retain their separate feature and plan gates. Live Presentations,
+whole-room flex timing, Question Health, and decision replay have additional
 workspace rollout gates. A feature described here may therefore be absent from your deployment;
 see [optional beta configuration](quick-start.md#optional-beta-workflows). These controls do not
 mean that public production or institutional readiness gates have passed.
@@ -205,18 +207,36 @@ facilitator can change round settings before creating a room.
 3. Open the verification email and follow its single-use link within 15 minutes. Verification
    creates the free account and returns you to sign-in; it does not sign you in.
 4. Select **Sign in**, enter your verified email, accept the displayed policies, and select
-   **Send sign-in PIN**. Enter the six-digit PIN from the newest email and select **Sign in**.
-   The PIN expires after ten minutes and can be used once. Wait 60 seconds before requesting
-   another PIN; doing so replaces the previous one. Future sign-ins use this PIN step directly.
+   **Send sign-in PIN**. PIN entry opens immediately while the email request is in progress.
+   Enter the six-digit PIN from the newest email, then select **Sign in** once the request is
+   accepted. The PIN expires after ten minutes and can be used once. Future sign-ins use this
+   PIN step directly.
+
+Normal sign-in opens **Home** (`/home`). If you were returning to a specific page, that destination
+is preserved. An accepted invitation opens Home in the invited workspace after PIN sign-in.
+If an administrator has disabled the workspace navigation for your plan, the classic view remains
+the fallback.
+
+Keep the sign-in tab open while waiting for the email. Once the request is accepted, that tab
+remembers the pending sign-in across a refresh; it never stores the PIN digits. If the first
+request's response is interrupted before acceptance is confirmed, wait for the displayed cooldown
+and request a new PIN.
+
+Wait at least 60 seconds before requesting another PIN. An accepted resend replaces the previous
+PIN. If a resend is rate-limited, the current PIN entry stays available and the existing PIN still
+works until it expires. Follow the displayed wait time before retrying. Rejected cooldown retries
+do not use the three-request email quota, and requests made before account verification do not
+block the first request after verification. If sending fails, the page shows a delivery error;
+wait for the cooldown and request a new PIN.
 
 Local Compose captures both emails in Mailpit at <http://localhost:8025>. Select **Open local
 email inbox** on the sign-in page. If the configured public address differs from the browser
 address, move to the configured sign-in page first and continue using that origin after
 authentication. Participants can use **Join a Round** without creating a creator account.
 
-Use **Home** or **Library** to return to your Rounds in the professional workspace; the classic view
-uses **My checkpoint sets**. Select **Sign out** to revoke the current browser session. Owners can
-invite editors or viewers from **Account**. An invitation is single-use and expiring; anonymous
+Use **Home** or **Library** to return to your Rounds and enabled Presentation or Survey tools;
+the classic fallback uses **My checkpoint sets**. Select **Sign out** to revoke the current browser
+session. Owners can invite editors or viewers from **Account**. An invitation is single-use and expiring; anonymous
 invitees accept it and then separately sign in with an email PIN. A person who
 belongs to multiple workspaces can switch the active workspace there.
 

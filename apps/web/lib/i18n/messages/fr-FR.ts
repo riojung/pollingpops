@@ -39,6 +39,7 @@ const messages = {
   "delivery.site.status": "État",
   "workspace.skipToMain": "Aller au contenu principal",
   "workspace.loading": "Chargement de votre espace de travail…",
+  "workspace.retry": "Réessayer",
   "workspace.nav.label": "Espace de travail",
   "workspace.nav.mobileLabel": "Sections de l’espace de travail",
   "workspace.nav.home": "Accueil",

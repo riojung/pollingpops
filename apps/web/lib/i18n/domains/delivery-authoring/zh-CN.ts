@@ -81,6 +81,14 @@ export default {
   "delivery.auth.pinDescription": "输入发送至已验证电子邮件地址的 PIN，即可访问 Polling Pops。",
   "delivery.auth.pinLabel": "登录 PIN",
   "delivery.auth.pinSent": "如果 {email} 有已验证的账户，我们已发送登录 PIN。请查看最新的邮件。",
+  "delivery.auth.pinRequesting": "正在为 {email} 请求 PIN。收到后即可在此输入。",
+  "delivery.auth.pinUncertain": "PIN 请求已中断。重新发送按钮可用后，请请求新的 PIN。",
+  "delivery.auth.pinThrottledExisting":
+    "请等待 {seconds} 秒后再请求新的 PIN。您仍可使用已请求的 PIN。",
+  "delivery.auth.pinThrottled":
+    "请等待 {seconds} 秒后再请求 PIN。如果已经请求过，请使用原来的标签页。",
+  "delivery.auth.pinDeliveryFailed": "未能发送您的 PIN。重新发送按钮可用后，请请求新的 PIN。",
+  "delivery.auth.pinNoChallenge": "登录前请请求新的 PIN。",
   "delivery.auth.pinHelp": "输入最新邮件中的六位数 PIN。有效期为 10 分钟。",
   "delivery.auth.pinExpired": "此 PIN 已过期。请申请新的 PIN 以登录。",
   "delivery.auth.verifyPinForm": "验证登录 PIN",

@@ -1022,9 +1022,12 @@ function BetaDashboard() {
 }
 
 function DashboardGate() {
-  const { loading, productFeatures } = useWorkspace();
-  if (loading) return <p className={styles.dashboardLoading}>Loading your workspace…</p>;
-  if (!productFeatures?.uxBeta || !productFeatures.workspaceShell) return <LegacyDashboardPage />;
+  const { loading, productFeatures, error } = useWorkspace();
+  if (loading || error || productFeatures === null) {
+    return <WorkspaceShell title="Rounds">{null}</WorkspaceShell>;
+  }
+  if (productFeatures?.workspaceShell !== true || productFeatures.builderV2 !== true)
+    return <LegacyDashboardPage />;
   return <BetaDashboard />;
 }
 

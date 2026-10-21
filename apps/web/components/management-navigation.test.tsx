@@ -15,6 +15,9 @@ vi.mock("../lib/api", async (importOriginal) => ({
   apiFetch: vi.fn(),
 }));
 
+const routing = vi.hoisted(() => ({ pathname: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => routing.pathname }));
+
 const origin = "https://control.example.com";
 const empty: ManagementNavigationState = {
   ...emptyCustomerManagementNavigation,
@@ -25,8 +28,26 @@ const empty: ManagementNavigationState = {
 
 describe("role-aware management menus", () => {
   afterEach(() => {
+    routing.pathname = "/";
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("marks the organization destination without marking all section links current", () => {
+    routing.pathname = "/organization";
+    const markup = renderToStaticMarkup(
+      <ManagementNavigationLinks
+        navigation={{
+          ...empty,
+          user: { userId: "user", email: "owner@example.com" },
+          organizationManagementEnabled: true,
+          organizations: [{ id: "owned", name: "Customer", role: "owner" }],
+        }}
+      />,
+    );
+    expect(markup).toContain('data-current="true"');
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(markup).toMatch(/aria-current="page"[^>]*href="\/organization"/);
   });
 
   it("refreshes customer navigation without querying an independently configured console", async () => {

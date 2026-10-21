@@ -15,8 +15,14 @@ rooms and advanced feedback exports remain pending.
 
 ## Try the new creation workflows
 
-After signing in, **Create → Round** offers Live quiz, Live poll, Survey and Custom Round. Search
-24 templates and preview questions before making a copy. Polls are host-paced; Surveys are self-paced.
+Sign-in opens **Home**, with Library, Sessions, and Results available by default on every plan.
+Core navigation requires no UX beta flag or pilot allowlist; explicit Admin feature and plan
+restrictions still apply. Presentations, Surveys, and the professional Round builder keep their
+existing gates.
+
+When the professional Round builder is enabled, **Create → Round** offers Live quiz, Live poll,
+Survey and Custom Round. Search 24 templates and preview questions before making a copy.
+Polls are host-paced; Surveys are self-paced.
 
 To opt into the Survey beta, migrate the current database release first, then configure these existing
 environment keys for your current deployment/runtime, preserving other allowlisted workspace IDs:
@@ -202,7 +208,8 @@ binding to the operator identity; customer workspace roles never grant global ad
    accept the policies, and select **Send sign-in PIN**.
 7. Open the newest PIN email in Mailpit, enter its six-digit PIN, and select **Sign in**. PINs
    expire after ten minutes. Wait 60 seconds before requesting another; the newest PIN replaces
-   the previous one. Existing accounts start at step 6.
+   the previous one. Existing accounts start at step 6. Normal sign-in opens **Home** (`/home`);
+   a safe return path or invitation preserves its destination and selected workspace.
 
 Mailpit keeps local messages inside the development stack; it does not send external email. The
 Compose profile does not return verification tokens or sign-in PINs in API responses by default.
@@ -212,31 +219,19 @@ different origin—for example, `localhost` while the stack is configured for a 
 page identifies both addresses and links to the configured one. Continue using that configured
 address after opening the email link.
 
-Once signed in, `/help` is available in the default classic setup as well as the professional
-workspace beta. The page keeps its steps and links aligned with the capabilities enabled for the
+Once signed in, `/help` is available in the default workspace and its classic fallback. The page
+keeps its steps and links aligned with the capabilities enabled for the
 current workspace. The Polling Pops quick-start video appears when the professional Round Builder
 is enabled. The longer user guide also requires the themes, Pulse, chat, Presentation, and practice
 features it demonstrates. Both have English narration, captions, transcripts, and chapter shortcuts;
-the default Compose profile shows the supported classic Round path instead.
+the default Compose profile uses the classic Round editor inside the standard workspace navigation.
 
 The bundled files are served at `/guides/polling-pops-quick-start.mp4` and
 `/guides/polling-pops-user-guide.mp4`. Start with the quick video, then try one question from a second
 browser or phone. A phone needs a reachable LAN or public join address, not `localhost`.
-The recording's **Continue to dashboard** button is an isolated testing shortcut, not the normal
-Compose or production sign-in flow. Rebuild the app after updating this checkout to see new media.
-
-For isolated, one-computer testing only, you can expose **Continue to dashboard** while also binding
-the product to loopback so another LAN client cannot request a token for an existing creator:
-
-```bash
-OPENROUND_PUBLIC_URL=http://localhost:8080 \
-OPENROUND_HTTP_BIND=127.0.0.1 \
-AUTH_DEBUG_MAGIC_LINKS=true \
-docker compose up --build -d
-```
-
-Do not use this shortcut while the product is reachable by other devices. Return to the secure
-default by running the normal `docker compose up -d` command again.
+The recording's older **Continue to dashboard** shortcut is not part of the current sign-in flow;
+use the separate verification and PIN steps above. Rebuild the app after updating this checkout
+to see new media.
 
 ## 3. Create and publish a Round
 
@@ -346,15 +341,18 @@ After the scanner is healthy, the quiz editor accepts JPEG, PNG, and WebP images
 
 ## Optional beta workflows
 
-The default Compose profile leaves these beta flags off. An operator can enable a local test
+Core Home, Library, Sessions, and Results navigation is already available without these flags.
+`FEATURE_WORKSPACE_SHELL` remains accepted for older configurations but no longer gates that
+baseline. A saved Admin feature rule can still disable workspace navigation or restrict its plans.
+The default Compose profile leaves the remaining beta flags off. An operator can enable a local test
 workspace using its UUID in the applicable comma-separated allowlist and the required flags in
 `.env`, then rebuild the server and web services. Feature availability also follows workspace
 roles and entitlements; flags do not complete production or institutional readiness gates.
 
 | Workflow                                          | Required deployment configuration                                                                                                          |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Professional workspace and Round builder          | `FEATURE_UX_BETA=true`, `FEATURE_WORKSPACE_SHELL=true`, `FEATURE_BUILDER_V2=true`, and the workspace UUID in `UX_BETA_WORKSPACE_ALLOWLIST` |
-| Presentation authoring                            | Professional workspace configuration plus `FEATURE_PRESENTATIONS=true`                                                                     |
+| Professional Round builder                        | `FEATURE_UX_BETA=true`, `FEATURE_BUILDER_V2=true`, and the workspace UUID in `UX_BETA_WORKSPACE_ALLOWLIST`                                 |
+| Presentation authoring                            | `FEATURE_UX_BETA=true`, `FEATURE_PRESENTATIONS=true`, and the workspace UUID in `UX_BETA_WORKSPACE_ALLOWLIST`                              |
 | Live Presentation creation                        | Presentation configuration plus `FEATURE_PRESENTATION_REALTIME=true` and the workspace UUID in `EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST`     |
 | Presentation Companion foundation                 | Live Presentation configuration plus `FEATURE_PRESENTATION_COMPANION=true`; issuance remains owner/editor-only                             |
 | Presentation Q&A                                  | Live Presentation configuration plus `FEATURE_AUDIENCE_SCOPES=true` and the workspace UUID in `CORE_PARITY_WORKSPACE_ALLOWLIST`            |
@@ -548,7 +546,9 @@ env \
   pnpm exec turbo run dev --env-mode=loose
 ```
 
-Open <http://localhost:3000>. In development mode, the sign-in page displays **Continue to dashboard** after accepting the policies and requesting a link.
+Open <http://localhost:3000> and use the verification and PIN flow. The in-memory mailer prints
+verification links and sign-in PINs in the API terminal. Successful sign-in opens Home unless a
+safe return destination was supplied.
 
 `--env-mode=loose` is required here so Turborepo passes the explicitly listed shell variables to the web and server development tasks.
 
@@ -586,7 +586,6 @@ turning off a creation flag does not make an older server safe for newly accepte
 | Product does not open                            | Run `docker compose ps` and wait for health checks; then inspect `docker compose logs server web caddy`.                          |
 | Port is already allocated                        | Stop the process using `8080`, `8025`, or `9000`, or change the corresponding Compose port mapping.                               |
 | No sign-in message                               | Open Mailpit, verify the `mailpit` service is running, and request a fresh link. Links are single-use.                            |
-| No local **Continue to dashboard** link          | This unsafe shortcut is off by default. Use Mailpit, or enable it only with the loopback-only command above.                      |
 | Image control is disabled                        | Start with `compose.media.yaml` and wait for `clamav` to become healthy.                                                          |
 | Host or participant cannot resume in another tab | Credentials are stored in that tab's session storage. Return to the original tab; if needed, create or join a new session.        |
 | Browser shows **Reconnecting…**                  | Keep the page open and inspect server/Caddy logs. The client automatically requests an authoritative snapshot after reconnecting. |

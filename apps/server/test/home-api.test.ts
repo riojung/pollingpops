@@ -359,9 +359,14 @@ describe("Home workspace summary", () => {
       url: "/v1/home/summary",
       headers: { cookie: outsider.cookie },
     });
-    expect(isolated.statusCode).toBe(404);
+    expect(isolated.statusCode).toBe(200);
     expect(isolated.json()).toMatchObject({
-      error: { code: "NOT_FOUND", message: "Workspace summary not found" },
+      recentArtifacts: [],
+      sessions: [],
+      assignments: [],
+      resultHighlights: [],
+      groupSchedule: [],
+      totals: { artifacts: 0, activeSessions: 0, activeAssignments: 0 },
     });
   });
 

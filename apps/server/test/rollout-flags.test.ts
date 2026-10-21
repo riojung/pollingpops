@@ -53,7 +53,7 @@ describe("professional workspace rollout flags", () => {
     const account = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
     expect(account.json()).toMatchObject({
       productFeatures: {
-        workspaceShell: false,
+        workspaceShell: true,
         builderV2: false,
         presentations: false,
         presentationRealtime: false,
@@ -65,6 +65,9 @@ describe("professional workspace rollout flags", () => {
     expect((await app.inject({ method: "GET", url: "/v1/features" })).json()).toMatchObject({
       presentations: false,
     });
+    for (const url of ["/v1/home/summary", "/v1/library/favorites"]) {
+      expect((await app.inject({ method: "GET", url, headers: { cookie } })).statusCode).toBe(200);
+    }
     expect(
       (await app.inject({ method: "GET", url: "/v1/presentations", headers: { cookie } }))
         .statusCode,
@@ -98,7 +101,7 @@ describe("professional workspace rollout flags", () => {
     ).toBe(404);
   });
 
-  it("keeps globally enabled professional features closed outside the beta allowlist", async () => {
+  it("keeps staged capabilities gated while core workspace navigation is available", async () => {
     const built = await buildApp(
       ConfigSchema.parse({
         NODE_ENV: "test",
@@ -123,7 +126,7 @@ describe("professional workspace rollout flags", () => {
     expect(account.json()).toMatchObject({
       productFeatures: {
         uxBeta: false,
-        workspaceShell: false,
+        workspaceShell: true,
         builderV2: false,
         presentations: false,
         presentationRealtime: false,
@@ -148,11 +151,11 @@ describe("professional workspace rollout flags", () => {
     expect(
       (await app.inject({ method: "GET", url: "/v1/home/summary", headers: { cookie } }))
         .statusCode,
-    ).toBe(404);
+    ).toBe(200);
     expect(
       (await app.inject({ method: "GET", url: "/v1/library/favorites", headers: { cookie } }))
         .statusCode,
-    ).toBe(404);
+    ).toBe(200);
     expect(
       (await app.inject({ method: "GET", url: "/v1/quizzes", headers: { cookie } })).statusCode,
     ).toBe(200);

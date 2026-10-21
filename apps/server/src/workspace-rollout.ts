@@ -18,8 +18,8 @@ export type EvidenceWorkspaceFeature =
   | "verifiedInstitution";
 
 /**
- * The professional workspace is an allowlisted beta. A deployment-level flag makes a feature
- * available to the rollout, but it never grants access to every workspace by itself.
+ * Staged professional capabilities remain an allowlisted beta. Core workspace navigation is
+ * available by default; durable operator policy is resolved by feature-policy.ts.
  */
 export function professionalWorkspaceEligible(
   config: Pick<AppConfig, "FEATURE_UX_BETA" | "UX_BETA_WORKSPACE_ALLOWLIST">,
@@ -42,10 +42,9 @@ export function professionalWorkspaceFeatureEnabled(
   workspaceId: string,
   feature: ProfessionalWorkspaceFeature,
 ) {
+  if (feature === "workspaceShell") return true;
   if (!professionalWorkspaceEligible(config, workspaceId)) return false;
   switch (feature) {
-    case "workspaceShell":
-      return config.FEATURE_WORKSPACE_SHELL;
     case "builderV2":
       return config.FEATURE_BUILDER_V2;
     case "presentations":

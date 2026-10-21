@@ -86,6 +86,10 @@
   cursor: not-allowed;
 }
 
+.commandBar :is(a, button):not(:global(.brand)) {
+  min-height: 44px;
+}
+
 .exitLink {
   display: inline-flex;
   align-items: center;

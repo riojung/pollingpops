@@ -1,8 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useId, useState } from "react";
-import { Brand, creatorLandingHref } from "./brand";
+import { NavigationLink as Link } from "./navigation-link";
+import { useEffect, useId, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import {
+  Brand,
+  creatorLandingHref,
+  creatorLibraryHref,
+  type CreatorNavigationFeatures,
+} from "./brand";
 import { apiFetch, humanError } from "../lib/api";
 import { useLocale } from "./locale-provider";
 import {
@@ -21,7 +27,7 @@ type SessionState =
   | {
       status: "signed-in";
       creator: CreatorSummary;
-      productFeatures: { workspaceShell: boolean } | null;
+      productFeatures: CreatorNavigationFeatures | null;
     };
 
 export function SiteHeader() {
@@ -32,21 +38,25 @@ export function SiteHeader() {
   const [signOutError, setSignOutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const mobileMenuId = useId();
+  const menuToggle = useRef<HTMLButtonElement>(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     let active = true;
     apiFetch<{
       creator: CreatorSummary;
-      productFeatures?: { workspaceShell?: boolean };
+      productFeatures?: CreatorNavigationFeatures;
     }>("/v1/auth/me")
       .then(({ creator, productFeatures }) => {
         if (active) {
           setSession({
             status: "signed-in",
             creator,
-            productFeatures: {
-              workspaceShell: productFeatures?.workspaceShell === true,
-            },
+            productFeatures: productFeatures ?? null,
           });
         }
       })
@@ -78,6 +88,7 @@ export function SiteHeader() {
   const workspaceSignedIn = session.status === "signed-in";
   const signedIn = workspaceSignedIn || management.user !== null;
   const email = workspaceSignedIn ? session.creator.email : management.user?.email;
+  const libraryHref = creatorLibraryHref(workspaceSignedIn ? session.productFeatures : null);
   const brandHref = workspaceSignedIn
     ? creatorLandingHref(session.productFeatures)
     : signedIn && management.organizationManagementEnabled
@@ -86,7 +97,15 @@ export function SiteHeader() {
 
   return (
     <>
-      <header className="shell topbar site-header">
+      <header
+        className="shell topbar site-header"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || !menuOpen) return;
+          event.preventDefault();
+          setMenuOpen(false);
+          menuToggle.current?.focus();
+        }}
+      >
         <a className="skip-link" href="#main">
           {t("delivery.site.skip")}
         </a>
@@ -102,11 +121,11 @@ export function SiteHeader() {
                 {email}
               </span>
               {workspaceSignedIn ? (
-                <Link href="/dashboard">{t("delivery.site.myRounds")}</Link>
+                <Link href={libraryHref}>{t("delivery.site.myRounds")}</Link>
               ) : null}
               <Link href="/account">{t("delivery.site.account")}</Link>
               <button
-                className="nav-text-button"
+                className="navigation-control"
                 disabled={signingOut}
                 onClick={() => void signOut()}
                 type="button"
@@ -134,7 +153,7 @@ export function SiteHeader() {
         <div className="site-mobile-actions">
           <Link
             className="button small-button"
-            href={workspaceSignedIn ? "/dashboard" : signedIn ? "/account" : "/signin"}
+            href={workspaceSignedIn ? libraryHref : signedIn ? "/account" : "/signin"}
           >
             {workspaceSignedIn
               ? t("delivery.site.myLibrary")
@@ -147,6 +166,7 @@ export function SiteHeader() {
             aria-expanded={menuOpen}
             className="button-quiet small-button"
             onClick={() => setMenuOpen((open) => !open)}
+            ref={menuToggle}
             type="button"
           >
             {menuOpen ? t("delivery.site.close") : t("delivery.site.menu")}
@@ -166,11 +186,16 @@ export function SiteHeader() {
                 <strong>{email}</strong>
               </div>
               {workspaceSignedIn ? (
-                <Link href="/dashboard">{t("delivery.site.myRounds")}</Link>
+                <Link href={libraryHref}>{t("delivery.site.myRounds")}</Link>
               ) : null}
               <Link href="/account">{t("delivery.site.account")}</Link>
               <Link href="/pricing">{t("delivery.site.plans")}</Link>
-              <button disabled={signingOut} onClick={() => void signOut()} type="button">
+              <button
+                className="navigation-control"
+                disabled={signingOut}
+                onClick={() => void signOut()}
+                type="button"
+              >
                 {signingOut ? t("delivery.site.signingOut") : t("delivery.site.signOut")}
               </button>
             </>

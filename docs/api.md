@@ -308,11 +308,17 @@ including retries. These interaction budgets do not increase participant caps or
   events entered the bounded best-effort persistence queue; the request does not wait for storage.
 - `GET /metrics` — private Prometheus output when enabled and authorized.
 
-`FEATURE_UX_BETA`, `FEATURE_RECOVERY_REHEARSAL`, `FEATURE_PRACTICE_ASSIGNMENTS`,
-`FEATURE_WORKSPACE_SHELL`, `FEATURE_BUILDER_V2`, `FEATURE_PRESENTATIONS`,
+`workspaceShell` is enabled by default for Free, Pro, and Team workspaces, independently of
+`uxBeta`, deployment flags, and pilot allowlists. A saved Admin feature rule remains authoritative
+for its enabled state and included plans. Home, Library, Sessions, and Results use that resolved
+workspace policy. `FEATURE_WORKSPACE_SHELL` remains accepted for configuration compatibility but
+no longer gates the baseline workspace.
+
+For features without a saved Admin rule, `FEATURE_UX_BETA`, `FEATURE_RECOVERY_REHEARSAL`,
+`FEATURE_PRACTICE_ASSIGNMENTS`, `FEATURE_BUILDER_V2`, `FEATURE_PRESENTATIONS`,
 `FEATURE_PRESENTATION_REALTIME`, `FEATURE_PRESENTATION_COMPANION`, `FEATURE_LIVE_FLEX_MODE`, `FEATURE_QUESTION_HEALTH`,
 `FEATURE_DECISION_REPLAY`, `FEATURE_GROUPS`, and `FEATURE_DISCOVER` default off. These
-opt-in switches are independent rollback ceilings. Disabling Presentations blocks
+opt-in switches control their inherited rollout. Disabling Presentations blocks
 new Presentation authoring; disabling Presentation realtime, or removing its workspace allowlist,
 blocks new live-session creation. Existing live sessions, scoped credentials, reports, joins,
 commands, responses, and recovery reads remain registered and usable so a rollback cannot strand
@@ -323,12 +329,13 @@ Disabling `FEATURE_LIVE_FLEX_MODE` prevents new flex Rounds or Presentations, bu
 control, joining, answering, or reporting for an existing flex room. Decision replay eligibility
 is resolved by the server and frozen on each new Round session; disabling its creation gate preserves captured evidence and existing reports.
 Question Health has separate rollback behavior described below.
-The authenticated
-`productFeatures` view requires explicit membership in `UX_BETA_WORKSPACE_ALLOWLIST`; an empty
-allowlist fails closed and enables no workspace. Presentation authoring, new Presentation-session
-creation, Groups, Home, and Library-metadata APIs enforce their applicable workspace eligibility;
-a deployment flag alone cannot make new gated content available to an unlisted workspace. Public
-Presentation join and participant routes authenticate against the existing session rather than
+Inherited professional beta features require explicit membership in `UX_BETA_WORKSPACE_ALLOWLIST`;
+an empty allowlist enables none of those beta features. This does not restrict baseline workspace
+navigation. Presentation authoring, new Presentation-session creation, and Groups enforce their
+applicable workspace eligibility; a deployment flag alone cannot make new gated content available
+to an unlisted workspace. Explicit Admin rules override the inherited feature flags and allowlists
+while preserving prerequisite and plan checks. Public Presentation join and participant routes
+authenticate against the existing session rather than
 re-evaluating creation eligibility. Rehearsal requires both flags and allowlist membership.
 Standalone practice creation similarly requires the UX beta, its
 independent practice flag, and allowlist membership; already-issued participant links and creator
@@ -365,15 +372,17 @@ counts under the bounded `product_event` resource label.
   `/signin?verified=1&returnTo=...` without setting a session cookie. Invalid, expired, and reused
   verification links return 400.
 - `POST /v1/auth/pin/request` — `{email, acceptPolicies: true, returnTo?, workspaceId?}`;
-  returns 202 `{accepted, challengeId, expiresInSeconds: 600, resendAfterSeconds: 60}`. Only verified
-  active identities receive an email; unknown/unverified identities receive the same hosted response
-  shape. Optional workspace selection requires current membership. A new PIN replaces older PINs.
+  returns 202 `{accepted, challengeId, expiresInSeconds: 600, resendAfterSeconds: 60}` with a
+  server-issued challenge handle. Only verified active identities receive an email;
+  unknown/unverified identities receive the same hosted response shape. A 202 response does not
+  confirm recipient delivery. Optional workspace selection requires current membership.
+  A newly issued PIN replaces older PINs.
 - `POST /v1/auth/pin/verify` — `{challengeId, pin}` with a six-digit string (including leading zeros);
   returns `{redirectTo}` and the creator cookie only after successful, single-use verification.
   Wrong, expired, exhausted, and reused credentials return 401; malformed input returns 400.
 - `GET /v1/auth/me` — creator/workspace context, entitlements (including `cohosting`), branding,
-  and workspace-resolved `productFeatures` after the partner allowlist and global switches are
-  applied.
+  and workspace-resolved `productFeatures` after Admin policy or inherited rollout configuration
+  is applied.
 - `POST /v1/auth/logout`
 - `GET /v1/workspaces`
 - `POST /v1/workspaces/{id}/select`
@@ -390,6 +399,31 @@ counts under the bounded `product_event` resource label.
 - `GET /v1/workspace/audit-export?since=...` — contract-gated owner export, at most 10,000
   ordered events with explicit truncation metadata.
 - `DELETE /v1/account` with `{ "confirmation": "DELETE" }`
+
+Successful PIN sign-in defaults to `/home`. Verification without an explicit local `returnTo`
+forwards `/home?welcome=1` to the sign-in page. Safe explicit return paths are preserved, and
+accepted invitations retain their selected workspace and use `/home?invitation=accepted`.
+Principals without a workspace continue to `/organization`. Locale preferences may add the
+existing `/auth/locale` bridge before the destination.
+
+Email requests have an atomic per-address limit of three requests per 15-minute window and a
+60-second cooldown, plus a shared IP limit. Cooldown-rejected retries do not spend the address
+quota or extend its window. Unverified and verified PIN requests have separate budgets, so an
+earlier request before account verification does not block the first verified request.
+Rate-limited requests return 429 `RATE_LIMITED` with a `Retry-After` header in seconds and matching
+`error.retryAfterSeconds` and `error.details.retryAfterSeconds` fields. IP rejections report the
+remaining shared IP window; address rejections report the longer quota/cooldown wait.
+A rate-limited resend leaves the existing PIN valid.
+
+A PIN email SMTP failure returns 503 `EMAIL_DELIVERY_FAILED` with a safe message and revokes the new
+challenge. Provider details and credentials are not included in the response. Request a new PIN
+after the displayed cooldown; successful PIN verification is still required for a session.
+
+The sign-in page opens PIN entry while the send request is in progress and attaches the
+server-issued handle only after its 202 response arrives. Accepted request metadata is kept in
+the current tab so a refresh can restore PIN entry; PIN digits are never stored. A denied resend
+preserves the existing accepted request. If the first request's response is lost before its handle
+is received, wait for the cooldown and request a new PIN.
 
 Owners manage members, billing, and workspace deletion. Editors create and host. Viewers have
 read-only content/report access. Account export excludes bearer-token hashes and includes

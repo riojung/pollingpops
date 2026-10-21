@@ -69,18 +69,18 @@ describe("rich idea composition", () => {
     );
     const buttons = [...markup.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].map((match) => ({
       attributes: match[1]!,
-      text: match[2]!.replace(/<[^>]*>/g, ""),
+      content: match[2]!,
     }));
-    expect(buttons.find((button) => button.text.endsWith("Image"))!.attributes).toContain(
+    expect(buttons.find((button) => button.content.endsWith("Image"))!.attributes).toContain(
       "disabled",
     );
-    expect(buttons.find((button) => button.text.endsWith("Draw"))!.attributes).not.toContain(
+    expect(buttons.find((button) => button.content.endsWith("Draw"))!.attributes).not.toContain(
       "disabled",
     );
-    expect(buttons.find((button) => button.text.endsWith("Link"))!.attributes).not.toContain(
+    expect(buttons.find((button) => button.content.endsWith("Link"))!.attributes).not.toContain(
       "disabled",
     );
-    expect(buttons.find((button) => button.text === "Submit idea")!.attributes).toContain(
+    expect(buttons.find((button) => button.content === "Submit idea")!.attributes).toContain(
       "disabled",
     );
     expect(markup).toContain("Image uploads are unavailable for this board.");

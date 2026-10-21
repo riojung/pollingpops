@@ -118,7 +118,7 @@ export function LanguageMenu() {
     <>
       <details className={styles.menu} onKeyDown={closeOnEscape} ref={detailsRef}>
         <summary
-          aria-label={t("locale.trigger", { language: selected.nativeLabel })}
+          aria-label={`${selected.shortLabel}: ${t("locale.trigger", { language: selected.nativeLabel })}`}
           className={styles.trigger}
           ref={triggerRef}
           role="button"

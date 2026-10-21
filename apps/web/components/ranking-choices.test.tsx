@@ -14,8 +14,8 @@ describe("RankingChoices", () => {
       withEnglishLocale(<RankingChoices question={question} selectedChoiceIds={["c", "a", "b"]} />),
     );
     expect(markup).toContain("Rank 3 of 3 choices. First is the highest priority.");
-    expect(markup).toContain('aria-label="Move Priority C down"');
-    expect(markup).toContain('aria-label="Move Priority A up"');
+    expect(markup).toContain('aria-label="Move down: Priority C"');
+    expect(markup).toContain('aria-label="Move up: Priority A"');
     expect(markup).toContain("Current order: Priority C, Priority A, Priority B");
     expect(markup).not.toContain("Remove Priority");
     expect(markup).not.toContain('draggable="true"');

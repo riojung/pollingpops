@@ -166,7 +166,7 @@ describe("professional workspace shell", () => {
     expect(markup).toContain('href="/help"');
     expect(markup).toContain('aria-label="Open account and workspace settings"');
     expect(markup).toMatch(/<summary[^>]*class="[^"]*createButton[^"]*"[^>]*role="button"[^>]*>/);
-    expect(markup).toContain('aria-label="Language: English (Canada)"');
+    expect(markup).toContain('aria-label="EN: Language: English (Canada)"');
     expect(markup).toContain('aria-label="Interface language"');
     expect(markup).toContain('lang="en-CA" role="radio" tabindex="0"');
     for (const language of ["Français", "Deutsch", "日本語", "한국어", "简体中文", "繁體中文"]) {
@@ -207,7 +207,7 @@ describe("professional workspace shell", () => {
       </LocaleProvider>,
     );
 
-    expect(markup).toContain('aria-label="Sprache: Deutsch"');
+    expect(markup).toContain('aria-label="DE: Sprache: Deutsch"');
     expect(markup).toContain('aria-label="Sprache der Benutzeroberfläche"');
     expect(markup).toContain('placeholder="Bibliothek durchsuchen"');
     expect(markup).toContain("Neu erstellen");

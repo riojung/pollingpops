@@ -150,7 +150,7 @@ scaling constraints, or the [API and realtime reference](docs/api.md) for interf
 
 ## Development
 
-Host-native development requires Node.js 22 or newer and pnpm 10.15.1:
+Host-native development requires Node.js 22.13+ (22.x), 24.x, or 26+, and pnpm 10.15.1:
 
 ```bash
 corepack enable

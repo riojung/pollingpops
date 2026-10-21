@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.15.1",
   "engines": {
-    "node": ">=22"
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
   },
   "pnpm": {
     "overrides": {
@@ -74,16 +74,16 @@
     "check": "pnpm format:check && pnpm check:docker-context && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
-    "@playwright/test": "1.63.0",
-    "@types/node": "26.5.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.5",
     "eslint": "10.12.0",
     "prettier": "3.9.6",
     "socket.io-client": "4.8.4",
     "tsup": "8.5.1",
     "tsx": "4.23.13",
-    "turbo": "2.11.7",
+    "turbo": "2.11.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.0",
     "vite": "8.3.3",

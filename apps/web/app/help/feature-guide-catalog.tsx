@@ -85,7 +85,6 @@ export function FeatureGuideCatalog() {
               href={`/help/${guide.id}`}
               key={guide.id}
               prefetch={false}
-              aria-labelledby={`guide-${guide.id}-title`}
             >
               <GuideCover guide={guide} />
               <div className={styles.cardBody}>

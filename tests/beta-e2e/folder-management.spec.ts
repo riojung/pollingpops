@@ -76,7 +76,7 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
         .getByRole("link", { name: journey.label, exact: true }),
     ).toHaveAttribute("aria-current", "page");
     await expect(
-      page.getByRole("button", { name: `Open folder ${foreignName}`, exact: true }),
+      page.getByRole("button", { name: `Open folder ${foreignName} 0`, exact: true }),
     ).toHaveCount(0);
 
     const rootName = `Workshop ${suffix}`;
@@ -99,10 +99,10 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
     const second = await createFolder(secondName);
     const child = await createFolder(childName, root.id);
     await expect(
-      page.getByRole("button", { name: `Open folder ${rootName} / ${childName}`, exact: true }),
+      page.getByRole("button", { name: `Open folder ${rootName} / ${childName} 0`, exact: true }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: `Move ${rootName} down`, exact: true }).click();
+    await page.getByRole("button", { name: `Move down: ${rootName}`, exact: true }).click();
     await expect
       .poll(async () => {
         const rows = await folders(page, journey.artifactType);
@@ -117,7 +117,7 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
     await page.getByLabel("New folder name", { exact: true }).fill(renamed);
     await page.getByRole("button", { name: "Save name", exact: true }).click();
     await expect(
-      page.getByRole("button", { name: `Open folder ${renamed}`, exact: true }),
+      page.getByRole("button", { name: `Open folder ${renamed} 0`, exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: `Move ${rootName} / ${childName}`, exact: true })
@@ -163,7 +163,7 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
     }
     await page.reload();
     await page
-      .getByRole("button", { name: `Open folder ${renamed} / ${childName}`, exact: true })
+      .getByRole("button", { name: `Open folder ${renamed} / ${childName} 1`, exact: true })
       .click();
     await expect(
       page.getByRole("checkbox", { name: `Select ${title}`, exact: true }),
@@ -180,7 +180,7 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
       .toBe(null);
     await expect.poll(async () => (await getArtifact()).folderId).toBe(child.id);
     await expect(
-      page.getByRole("button", { name: `Open folder ${childName}`, exact: true }),
+      page.getByRole("button", { name: `Open folder ${childName} 1`, exact: true }),
     ).toBeVisible();
     if (mobile) {
       await page.setViewportSize({ width: 320, height: 844 });

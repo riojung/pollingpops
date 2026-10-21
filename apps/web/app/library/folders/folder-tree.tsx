@@ -42,7 +42,7 @@ export function FolderTree({
             <li data-folder-id={folder.id} key={folder.id}>
               <div className={styles.folderRow}>
                 <button
-                  aria-label={t("pages.folders.openFolder", { folder: option.label })}
+                  aria-label={`${t("pages.folders.openFolder", { folder: option.label })} ${counts.get(folder.id) ?? 0}`}
                   aria-pressed={selectedFolderId === folder.id}
                   className={styles.folderSelect}
                   disabled={busy}
@@ -70,7 +70,7 @@ export function FolderTree({
                     ))}
                     {(["up", "down"] as const).map((direction) => (
                       <button
-                        aria-label={t(`pages.folders.${direction}Label`, { folder: option.label })}
+                        aria-label={`${t(`pages.folders.${direction}`)}: ${option.label}`}
                         disabled={
                           busy || folderSiblingPosition(folders, folder.id, direction) === null
                         }

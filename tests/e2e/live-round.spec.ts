@@ -80,6 +80,9 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   const code = (await creator.locator(".session-code").textContent())!.trim();
   const expectedJoinUrl = `${new URL(creator.url()).origin}/join?code=${code}`;
   await expect(creator.getByTestId("join-url")).toHaveAttribute("href", expectedJoinUrl);
+  await expect(creator.getByTestId("join-url")).toHaveAccessibleName(
+    `${expectedJoinUrl}: Open the prefilled participant join link`,
+  );
   await expect(
     creator.getByLabel(new RegExp(`QR code for round ${code.split("").join(" ")}`)),
   ).toBeVisible();
@@ -95,6 +98,9 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await creator.getByLabel("Network or public product address").fill("http://192.168.1.20:8080");
   await creator.getByRole("button", { name: "Update QR" }).click();
   await expect(creator.getByTestId("join-url")).toHaveAttribute("href", lanJoinUrl);
+  await expect(creator.getByTestId("join-url")).toHaveAccessibleName(
+    `${lanJoinUrl}: Open the prefilled participant join link`,
+  );
 
   const presenterPagePromise = creatorContext.waitForEvent("page");
   await creator.getByRole("button", { name: "Presenter view" }).click();

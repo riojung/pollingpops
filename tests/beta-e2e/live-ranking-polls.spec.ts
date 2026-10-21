@@ -136,8 +136,8 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(
         guest.getByRole("button", { name: "Add Discussion to ranking", exact: true }),
       ).toBeDisabled();
-      await guest.getByRole("button", { name: "Move Practice up", exact: true }).focus();
-      await guest.getByRole("button", { name: "Move Practice up", exact: true }).press("Enter");
+      await guest.getByRole("button", { name: "Move up: Practice", exact: true }).focus();
+      await guest.getByRole("button", { name: "Move up: Practice", exact: true }).press("Enter");
       await expect(guest.locator(".ranking-list li > strong")).toHaveText(["Practice", "Examples"]);
       await expect(guest.getByText("Answer received and saved.", { exact: true })).toHaveCount(0);
       expect((await new AxeBuilder({ page: guest }).analyze()).violations).toEqual([]);
@@ -148,7 +148,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(guest.getByText("Answer received and saved.", { exact: true })).toBeVisible();
       await expect(guest.locator(".ranking-list li > strong")).toHaveText(["Practice", "Examples"]);
       await expect(
-        guest.getByRole("button", { name: "Move Examples up", exact: true }),
+        guest.getByRole("button", { name: "Move up: Examples", exact: true }),
       ).toBeDisabled();
       await guest.screenshot({
         path: `/tmp/pollingpops-ranking-participant-${test.info().project.name}.png`,
@@ -207,8 +207,8 @@ for (const suffix of ["desktop", "@mobile"]) {
         "Discussion",
       ]);
       await expect(guest.getByText("Answer received and saved.", { exact: true })).toHaveCount(0);
-      await guest.getByRole("button", { name: "Move Examples down", exact: true }).focus();
-      await guest.getByRole("button", { name: "Move Examples down", exact: true }).press("Enter");
+      await guest.getByRole("button", { name: "Move down: Examples", exact: true }).focus();
+      await guest.getByRole("button", { name: "Move down: Examples", exact: true }).press("Enter");
       await expect(guest.locator(".ranking-list li > strong")).toHaveText([
         "Practice",
         "Examples",

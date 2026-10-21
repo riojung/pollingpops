@@ -118,7 +118,7 @@ If you already use Colima on macOS, run this from the repository root after each
 pnpm local:start
 ```
 
-This requires Node.js 22+, pnpm, installed repository dependencies
+This requires a supported Node.js version (22.13+ on 22.x, 24.x, or 26+), pnpm, installed repository dependencies
 (`pnpm install --frozen-lockfile`), Colima, the Docker CLI, and Docker Compose v2. It verifies your
 existing **`default` Colima VM / `colima` Docker context**, starts that VM if stopped, waits up to
 180 seconds for Docker readiness, and starts the **core** services. A healthy VM is reused.
@@ -473,7 +473,7 @@ record the external pilot evidence. Do not use the example Compose secrets for a
 
 ## Day-to-day commands
 
-If Node.js 22 and pnpm 10 are available, use the repository's lifecycle wrapper so every command
+If a supported Node.js version and pnpm 10 are available, use the repository's lifecycle wrapper so every command
 selects a consistent service profile. A restart rebuilds and force-recreates that profile unless
 `--no-build` is supplied:
 
@@ -537,7 +537,7 @@ This command is destructive and cannot be undone without a backup. Do not use `-
 
 For a fast code-editing loop without PostgreSQL, Valkey, SMTP, or object storage, use the in-memory development mode. It is intentionally non-durable: all data disappears when the server stops, and media uploads are disabled.
 
-Requirements are Node.js 22 or newer and Corepack/pnpm.
+Requirements are Node.js 22.13+ (22.x), 24.x, or 26+, and Corepack/pnpm.
 
 ```bash
 corepack enable

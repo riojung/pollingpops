@@ -175,7 +175,7 @@ describe("editor views", () => {
     ).toContain('<select class="select" disabled=""');
     const preview = renderLocalized(<ParticipantPreview question={ranking} />);
     expect(preview).toContain("Your ranking");
-    expect(preview).toContain('aria-label="Move Model A down"');
+    expect(preview).toContain('aria-label="Move down: Model A"');
     expect(preview).not.toContain("Confidence will be requested");
   });
   it("gates the live poll limit picker and previews multiple selection without scoring controls", () => {

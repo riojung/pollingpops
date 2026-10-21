@@ -135,7 +135,7 @@ describe("dedicated folder manager", () => {
     expect(markup).toContain("Unfiled");
     expect(markup).not.toContain("Create folder");
     const tree = treeMarkup(false);
-    expect(tree).toContain('aria-label="Open folder First / Nested"');
+    expect(tree).toContain('aria-label="Open folder First / Nested 0"');
     expect(tree).not.toContain('aria-label="Rename');
     expect(tree).not.toContain('aria-label="Delete');
     expect(tree).not.toContain('aria-label="Move');
@@ -144,13 +144,13 @@ describe("dedicated folder manager", () => {
   it("expresses nesting and scopes accessible actions to full folder paths", () => {
     const markup = treeMarkup();
     expect(markup).toMatch(/data-folder-id="first"[^]*?<ul[^]*?data-folder-id="child"/);
-    expect(markup).toContain('aria-label="Open folder First / Nested" aria-pressed="true"');
+    expect(markup).toContain('aria-label="Open folder First / Nested 0" aria-pressed="true"');
     expect(markup).toContain('aria-label="Rename First / Nested"');
     expect(markup).toContain('aria-label="Move First / Nested"');
-    expect(markup).toMatch(/aria-label="Move First up" disabled=""/);
-    expect(markup).not.toMatch(/aria-label="Move First down" disabled=""/);
-    expect(markup).toMatch(/aria-label="Move Last down" disabled=""/);
-    expect(markup).toMatch(/aria-label="Move First \/ Nested down" disabled=""/);
+    expect(markup).toMatch(/aria-label="Move up: First" disabled=""/);
+    expect(markup).not.toMatch(/aria-label="Move down: First" disabled=""/);
+    expect(markup).toMatch(/aria-label="Move down: Last" disabled=""/);
+    expect(markup).toMatch(/aria-label="Move down: First \/ Nested" disabled=""/);
   });
 
   it("disables folder selection and every mutation while an action is in flight", () => {

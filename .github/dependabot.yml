@@ -7,6 +7,9 @@ updates:
     groups:
       production-dependencies:
         dependency-type: production
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: docker
     directory: /
     schedule:
@@ -15,3 +18,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      codeql-actions:
+        patterns:
+          - github/codeql-action*

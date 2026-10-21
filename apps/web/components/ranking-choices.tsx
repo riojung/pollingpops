@@ -47,7 +47,7 @@ export function RankingChoices({
                 <button
                   className="button-quiet small-button"
                   type="button"
-                  aria-label={t("live.ranking.moveUp", { choice: choice.label })}
+                  aria-label={`${t("live.ranking.up")}: ${choice.label}`}
                   disabled={index === 0}
                   onClick={() => onChange?.(moveRankedChoice(selectedChoiceIds, id, -1))}
                 >
@@ -56,7 +56,7 @@ export function RankingChoices({
                 <button
                   className="button-quiet small-button"
                   type="button"
-                  aria-label={t("live.ranking.moveDown", { choice: choice.label })}
+                  aria-label={`${t("live.ranking.down")}: ${choice.label}`}
                   disabled={index === selectedChoiceIds.length - 1}
                   onClick={() => onChange?.(moveRankedChoice(selectedChoiceIds, id, 1))}
                 >

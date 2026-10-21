@@ -186,7 +186,7 @@ export function JoinAccess({
             />
           </div>
           <a
-            aria-label={t("live.joinAccess.openLinkAria")}
+            aria-label={`${joinUrl}: ${t("live.joinAccess.openLinkAria")}`}
             className="join-url"
             data-testid="join-url"
             href={joinUrl}

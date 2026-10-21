@@ -1,3 +1,4 @@
+import { signInCreator } from "../support/creator-auth";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -145,14 +146,8 @@ test("record the Polling Pops product demo", async ({ browser }) => {
       "Author the evidence you need.",
       "Polling Pops supports scored, unscored, confidence-aware, and linked recheck checkpoints.",
     );
-    await page.goto("/signin");
-    await beat(page, 1_100);
-    await click(page, page.getByRole("button", { name: "Education" }));
-    await fill(page, page.getByLabel("Email address"), `demo-${Date.now()}@openround.local`);
-    await page.getByLabel(/I accept the Terms/).check();
-    await beat(page, 450);
-    await click(page, page.getByRole("button", { name: "Send sign-in link" }), 800);
-    await click(page, page.getByRole("link", { name: "Continue to dashboard" }), 1_300);
+    await signInCreator(page, `demo-${Date.now()}@example.test`, { segment: "education" });
+    await beat(page, 1_300);
 
     await fill(page, page.getByLabel("Checkpoint set title"), "Safety readiness: completion rates");
     await click(page, page.getByRole("button", { name: "Create checkpoint set" }), 1_200);

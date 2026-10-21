@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
@@ -62,7 +63,11 @@ async function fixture(
     payload: { email: "companion-owner@example.com", segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(
+    app,
+    `/v1/auth/verify?token=${token}`,
+    "companion-owner@example.com",
+  );
   const cookie = responseCookie(verified.headers);
   const account = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
   const creator = account.json<{ creator: CreatorContext }>().creator;
@@ -142,8 +147,10 @@ async function fixture(
       url: "/v1/invitations/accept",
       payload: { token: invitationToken, acceptPolicies: true },
     });
+    expect(accepted.headers["set-cookie"]).toBeUndefined();
+    const acceptedSignIn = await requestPinAndSignIn(built.app, `companion-${role}@example.com`);
     expect(accepted.statusCode).toBe(200);
-    return responseCookie(accepted.headers);
+    return responseCookie(acceptedSignIn.headers);
   }
   return { ...built, config, cache, cookie, creator, seedSession, memberCookie };
 }

@@ -1,3 +1,4 @@
+import { signInCreator } from "../support/creator-auth";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { testEmail } from "./test-email";
@@ -31,11 +32,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   test(`classic-editor checkpoint tabs remain readable in ${colorScheme} mode`, async ({
     page,
   }, testInfo) => {
-    await page.goto("/signin");
-    await page.getByLabel("Email address").fill(testEmail("pops-classic-tabs", testInfo));
-    await page.getByLabel(/I accept the Terms/).check();
-    await page.getByRole("button", { name: "Send sign-in link" }).click();
-    await page.getByRole("link", { name: "Continue to dashboard" }).click();
+    await signInCreator(page, testEmail("pops-classic-tabs", testInfo));
     await page.getByLabel("Checkpoint set title").fill("Readable checkpoints");
     await page.getByRole("button", { name: "Create checkpoint set" }).click();
 
@@ -82,13 +79,9 @@ for (const colorScheme of ["light", "dark"] as const) {
         `${path} fits the viewport`,
       ).toBe(true);
       if (path === "/signin") {
-        const textColor = await page
-          .locator("html")
-          .evaluate((element) => getComputedStyle(element).color);
-        await expect(page.getByRole("link", { name: "Join a Round", exact: true })).toHaveCSS(
-          "color",
-          textColor,
-        );
+        const joinLink = page.getByRole("link", { name: "Join a Round", exact: true });
+        await expect(joinLink).toHaveClass(/button-quiet/);
+        await expect(joinLink).toHaveCSS("min-height", "46px");
       }
       const result = await new AxeBuilder({ page }).analyze();
       expect(result.violations, `${path} in ${colorScheme}`).toEqual([]);
@@ -100,11 +93,7 @@ test("Candy Pop remains accessible for a host and guest using dark appearance", 
   page,
   browser,
 }, testInfo) => {
-  await page.goto("/signin");
-  await page.getByLabel("Email address").fill(testEmail("pops-live", testInfo));
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, testEmail("pops-live", testInfo));
   await page.getByLabel("Checkpoint set title").fill("Every voice pops");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();
   await expect(page.getByLabel("Experience preset")).toHaveValue("pops");

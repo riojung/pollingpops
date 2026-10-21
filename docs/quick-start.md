@@ -193,14 +193,19 @@ binding to the operator identity; customer workspace roles never grant global ad
 ## 2. Sign in as a creator
 
 1. Select **Create a free checkpoint set**.
-2. Choose **Workplace learning** or **Education**. This sets the session defaults described in the [user guide](user-guide.md#roles-and-screens).
+2. Select **Create account**, then choose **Workplace learning** or **Education**. This sets the session defaults described in the [user guide](user-guide.md#roles-and-screens).
 3. Enter any valid development email address.
-4. Accept the draft Terms and Privacy notice, then select **Send sign-in link**.
+4. Accept the draft Terms and Privacy notice, then select **Send verification email**.
 5. Select **Open local email inbox** in the confirmation, choose the newest Polling Pops message, and
-   open its sign-in link. You can also open Mailpit directly at <http://localhost:8025>.
+   open its verification link within 15 minutes. You can also open Mailpit directly at <http://localhost:8025>.
+6. Verification returns to **Sign in** without creating a session. Enter the verified email,
+   accept the policies, and select **Send sign-in PIN**.
+7. Open the newest PIN email in Mailpit, enter its six-digit PIN, and select **Sign in**. PINs
+   expire after ten minutes. Wait 60 seconds before requesting another; the newest PIN replaces
+   the previous one. Existing accounts start at step 6.
 
 Mailpit keeps local messages inside the development stack; it does not send external email. The
-Compose profile does not return sign-in bearer tokens in API responses by default.
+Compose profile does not return verification tokens or sign-in PINs in API responses by default.
 
 Sign-in cookies belong to the configured `OPENROUND_PUBLIC_URL`. If the browser is using a
 different origin—for example, `localhost` while the stack is configured for a LAN IP—the sign-in
@@ -309,7 +314,7 @@ One seven-digit code identifies one live session; it is intentionally shared by 
 
 Polling Pops uses same-origin API and realtime routes in the Compose profile, so participants need only reach port `8080`. If access fails, allow Docker/Caddy through the host firewall and check that the Wi-Fi does not use client isolation. A LAN address works only on that network; internet-wide access requires a deployed HTTPS domain.
 
-To make the LAN address canonical for sign-in links, redirects, and QR codes, start or rebuild the stack with it:
+To make the LAN address canonical for verification emails, redirects, and QR codes, start or rebuild the stack with it:
 
 ```bash
 OPENROUND_PUBLIC_URL=http://192.168.1.20:8080 docker compose up --build -d
@@ -495,7 +500,7 @@ docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control
 ```
 
 Stop the stack while preserving the PostgreSQL, Valkey, and MinIO named volumes. Mailpit messages
-and unused development sign-in links are ephemeral and will be discarded:
+are ephemeral and will be discarded; request fresh verification/PIN emails after restarting:
 
 ```bash
 docker compose -f compose.yaml -f compose.business.yaml -f compose.local-control.yaml down

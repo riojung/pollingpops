@@ -17,6 +17,7 @@ const nextCommand = productionWeb
 
 export default defineConfig({
   testDir: "./tests/beta-e2e",
+  globalSetup: "./tests/beta-e2e/auth-setup.ts",
   fullyParallel: false,
   // Locale and whole-workspace evidence assertions share one seeded beta account.
   // Do not increase concurrency until those fixtures have independent workspaces.

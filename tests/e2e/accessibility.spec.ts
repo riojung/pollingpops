@@ -1,3 +1,4 @@
+import { signInCreator } from "../support/creator-auth";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
@@ -18,12 +19,7 @@ for (const path of ["/", "/join", "/signin", "/pricing"]) {
 test("authenticated creator surfaces have no automatically detectable accessibility violations", async ({
   page,
 }, testInfo) => {
-  await page.goto("/signin");
-  await page.getByRole("button", { name: "Workplace" }).click();
-  await page.getByLabel("Email address").fill(testEmail("accessibility", testInfo));
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, testEmail("accessibility", testInfo));
   await page.waitForURL(/\/dashboard/, { waitUntil: "load" });
   await expect(page.getByRole("heading", { name: "Your checkpoint sets", level: 1 })).toBeVisible();
 

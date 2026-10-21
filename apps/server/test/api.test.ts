@@ -7,6 +7,7 @@ import { MEDIA_DELETION_TOMBSTONE_HOLD_MS, MemoryRepository } from "@openround/d
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
 import { MemorySessionCache } from "../src/cache.js";
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { mediaFinalizationObjectKey, StorageService } from "../src/storage.js";
 
 let app: FastifyInstance | undefined;
@@ -18,7 +19,7 @@ async function signIn(target: FastifyInstance, email: string) {
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await target.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(target, `/v1/auth/verify?token=${token}`, email);
   const setCookie = verified.headers["set-cookie"]!;
   const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
   const me = await target.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
@@ -428,8 +429,12 @@ describe("creator to report journey", () => {
     expect(magic.statusCode).toBe(202);
     const debugUrl = magic.json<{ debugUrl: string }>().debugUrl;
     const token = new URL(debugUrl).searchParams.get("token")!;
-    const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
-    expect(verified.statusCode).toBe(302);
+    const verified = await verifyEmailAndSignIn(
+      app,
+      `/v1/auth/verify?token=${token}`,
+      "facilitator@example.com",
+    );
+    expect(verified.statusCode).toBe(200);
     const setCookie = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
 
@@ -471,7 +476,10 @@ describe("creator to report journey", () => {
         role: "editor",
       },
     });
-    const collaboratorSetCookie = acceptedInvitation.headers["set-cookie"]!;
+    expect(acceptedInvitation.headers["set-cookie"]).toBeUndefined();
+    expect(acceptedInvitation.json()).toMatchObject({ requiresSignIn: true });
+    const collaboratorSignedIn = await requestPinAndSignIn(app, "collaborator@example.com");
+    const collaboratorSetCookie = collaboratorSignedIn.headers["set-cookie"]!;
     const collaboratorCookie = (
       Array.isArray(collaboratorSetCookie) ? collaboratorSetCookie[0]! : collaboratorSetCookie
     ).split(";")[0]!;
@@ -1526,7 +1534,11 @@ describe("creator to report journey", () => {
       payload: { email: "delete@example.com", segment: "workplace", acceptPolicies: true },
     });
     const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-    const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+    const verified = await verifyEmailAndSignIn(
+      app,
+      `/v1/auth/verify?token=${token}`,
+      "delete@example.com",
+    );
     const setCookie = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
     const me = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
@@ -1611,12 +1623,13 @@ describe("creator to report journey", () => {
     const accepted = await app.inject({
       method: "POST",
       url: "/v1/invitations/accept",
+      headers: { cookie: member.cookie },
       payload: { token: invitationToken, acceptPolicies: true },
     });
-    const acceptedCookieHeader = accepted.headers["set-cookie"]!;
-    const sharedCookie = (
-      Array.isArray(acceptedCookieHeader) ? acceptedCookieHeader[0]! : acceptedCookieHeader
-    ).split(";")[0]!;
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().requiresSignIn).toBe(false);
+    expect(accepted.headers["set-cookie"]).toBeUndefined();
+    const sharedCookie = member.cookie;
     const sharedAssetId = randomUUID();
     await repository.createMediaAsset({
       id: sharedAssetId,
@@ -1781,7 +1794,11 @@ describe("creator to report journey", () => {
       payload: { email: "checkout@example.com", segment: "workplace", acceptPolicies: true },
     });
     const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-    const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+    const verified = await verifyEmailAndSignIn(
+      app,
+      `/v1/auth/verify?token=${token}`,
+      "checkout@example.com",
+    );
     const setCookie = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
     const account = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
@@ -1845,7 +1862,11 @@ describe("creator to report journey", () => {
       payload: { email: "limits@example.com", segment: "education", acceptPolicies: true },
     });
     const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-    const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+    const verified = await verifyEmailAndSignIn(
+      app,
+      `/v1/auth/verify?token=${token}`,
+      "limits@example.com",
+    );
     const setCookie = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
     const account = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie } });
@@ -1992,7 +2013,11 @@ describe("creator to report journey", () => {
       },
     });
     const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-    const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+    const verified = await verifyEmailAndSignIn(
+      app,
+      `/v1/auth/verify?token=${token}`,
+      "runtime-flags@example.com",
+    );
     const setCookie = verified.headers["set-cookie"]!;
     const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
 

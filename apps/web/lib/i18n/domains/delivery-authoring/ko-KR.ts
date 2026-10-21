@@ -64,14 +64,49 @@ export default {
   "delivery.join.codeLabel": "7자리 Round 코드",
   "delivery.auth.creatorAccess": "제작자 액세스",
   "delivery.auth.signInTitle": "이메일로 로그인",
-  "delivery.auth.signInDescription": "일회용 링크를 보내드립니다. 비밀번호가 필요 없습니다.",
   "delivery.auth.facilitate": "주요 진행 분야",
   "delivery.auth.workplace": "직장 학습",
   "delivery.auth.education": "교육",
   "delivery.auth.email": "이메일 주소",
   "delivery.auth.policy": "{terms}에 동의하고 {privacy}을 확인했습니다.",
   "delivery.auth.sending": "보내는 중…",
-  "delivery.auth.sendLink": "로그인 링크 보내기",
+  "delivery.auth.signInDescription":
+    "인증된 이메일 주소를 입력하면 일회용 로그인 PIN을 보내드립니다. 비밀번호는 필요 없습니다.",
+  "delivery.auth.accessMode": "계정 액세스",
+  "delivery.auth.signInMode": "로그인",
+  "delivery.auth.createAccount": "계정 만들기",
+  "delivery.auth.createAccountDescription":
+    "먼저 이메일을 인증하세요. 그런 다음 받은 편지함으로 전송된 PIN을 사용해 별도로 로그인하세요.",
+  "delivery.auth.sendVerification": "인증 이메일 보내기",
+  "delivery.auth.sendPin": "로그인 PIN 보내기",
+  "delivery.auth.pinTitle": "로그인 PIN 입력",
+  "delivery.auth.pinDescription": "인증된 이메일로 전송된 PIN을 입력해 Polling Pops에 접속하세요.",
+  "delivery.auth.pinLabel": "로그인 PIN",
+  "delivery.auth.pinSent":
+    "{email}에 인증된 계정이 있으면 로그인 PIN을 보냈습니다. 가장 최근 이메일을 확인하세요.",
+  "delivery.auth.pinHelp": "가장 최근 이메일의 6자리 PIN을 입력하세요. 유효 시간은 10분입니다.",
+  "delivery.auth.pinExpired": "이 PIN이 만료되었습니다. 새 PIN을 요청해 로그인하세요.",
+  "delivery.auth.verifyPinForm": "로그인 PIN 확인",
+  "delivery.auth.verifying": "로그인 중…",
+  "delivery.auth.invalidPin":
+    "PIN이 올바르지 않거나 만료되었습니다. 다시 시도하거나 새 PIN을 요청하세요.",
+  "delivery.auth.resendPin": "새 PIN 보내기",
+  "delivery.auth.resendIn": "{seconds}초 후 다시 보내기",
+  "delivery.auth.useAnotherEmail": "다른 이메일 사용",
+  "delivery.auth.verificationSent": "인증 이메일을 요청했습니다",
+  "delivery.auth.verificationInstructions":
+    "{email}에 인증이 필요하면 15분 후 만료되는 일회용 링크를 보냈습니다. 가장 최근 이메일을 연 후 여기로 돌아와 로그인 PIN을 요청하세요. 이메일 인증만으로는 로그인되지 않습니다.",
+  "delivery.auth.verified": "이메일이 인증되었습니다. 로그인 PIN을 요청하세요.",
+  "delivery.auth.needAccount":
+    "계정이 필요하신가요? 계정을 만들고 이메일을 인증한 후 로그인하세요.",
+  "delivery.auth.inboxInstructions":
+    "로컬 개발용 받은 편지함을 열고 {email}(으)로 전송된 가장 최근 메시지를 선택하세요.",
+  "delivery.auth.openInbox": "로컬 이메일 받은 편지함 열기",
+  "delivery.auth.originTitle": "설정된 주소를 사용해 로그인하세요.",
+  "delivery.auth.originDescription":
+    "이 페이지는 {currentOrigin}에서 열려 있습니다. 인증 이메일과 브라우저 쿠키는 {configuredOrigin}을 사용합니다.",
+  "delivery.auth.openConfigured": "설정된 로그인 페이지 열기",
+  "delivery.auth.deliveryOrigin": "{origin}에서 이메일을 인증하고 로그인 PIN을 입력하세요.",
   "delivery.auth.invitation": "워크스페이스 초대",
   "delivery.auth.joinTeam": "팀 참여",
   "delivery.auth.invitationDescription":

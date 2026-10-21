@@ -201,8 +201,15 @@ button:disabled {
   gap: 24px;
 }
 
+.auth-topbar {
+  flex-wrap: wrap;
+  padding-block: 12px;
+}
+
 .auth-join-link {
-  color: var(--ui-text);
+  flex-shrink: 0;
+  max-width: 100%;
+  text-align: center;
 }
 
 .site-header {
@@ -1354,6 +1361,43 @@ textarea::placeholder {
   margin: auto;
   max-width: 520px;
   width: 100%;
+}
+
+.auth-modes {
+  margin: 24px 0;
+}
+
+.auth-segment {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.auth-segment legend {
+  margin-bottom: 8px;
+}
+
+.auth-pin-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2em;
+}
+
+.auth-pin-help {
+  font-size: 0.88rem;
+  margin: 10px 0 0;
+}
+
+.auth-pin-actions {
+  align-items: stretch;
+  margin-top: 12px;
+}
+
+.auth-pin-actions > button {
+  flex: 1 1 180px;
+}
+
+.auth-account-help {
+  margin: 24px 0 10px;
 }
 
 .segmented {

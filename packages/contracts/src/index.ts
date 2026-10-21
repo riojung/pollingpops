@@ -3358,6 +3358,19 @@ export const MagicLinkRequestSchema = z.object({
   returnTo: LocalReturnPathSchema.optional(),
 });
 
+/** Registration verifies email ownership; it never grants a signed-in session. */
+export const EmailVerificationRequestSchema = MagicLinkRequestSchema;
+export const EmailPinRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  acceptPolicies: z.literal(true),
+  returnTo: LocalReturnPathSchema.optional(),
+  workspaceId: z.string().uuid().optional(),
+});
+export const EmailPinVerifySchema = z.object({
+  challengeId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  pin: z.string().regex(/^\d{6}$/, "Enter the six-digit sign-in PIN"),
+});
+
 const ReportMetricsSchema = z.object({
   participantCount: z.number().int().nonnegative(),
   completedCount: z.number().int().nonnegative(),

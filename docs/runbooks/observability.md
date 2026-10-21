@@ -212,7 +212,8 @@ repository.
 
 The following startup settings are hard capability ceilings:
 
-- `FEATURE_SIGNUPS=false` pauses new magic-link requests.
+- `FEATURE_SIGNUPS=false` pauses email-verification/PIN requests and their completion. Existing
+  creator sessions remain valid until their normal expiry or revocation.
 - `FEATURE_SESSION_CREATION=false` pauses creation of new live sessions.
 - `FEATURE_MEDIA_UPLOADS=false` pauses new quarantine uploads.
 - `FEATURE_ROUND_EXPERIENCES=false` freezes newly created sessions to Focus.

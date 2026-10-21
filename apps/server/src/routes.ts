@@ -47,7 +47,9 @@ import {
   LtiLoginInitiationSchema,
   LtiRegistrationSchema,
   LocalReturnPathSchema,
-  MagicLinkRequestSchema,
+  EmailVerificationRequestSchema,
+  EmailPinRequestSchema,
+  EmailPinVerifySchema,
   ManagementNavigationSchema,
   MediaUploadRequestSchema,
   ModerateQnaQuestionSchema,
@@ -433,6 +435,7 @@ export async function registerRoutes(
     retention: RetentionService;
     metrics: MetricsService;
     productEvents: ProductEventDispatcher;
+    consumeAuthBudget: (key: string, maximum: number, windowMs: number) => Promise<boolean>;
     readiness: () => Promise<void>;
     stripeClient?: Stripe | null;
   },
@@ -808,7 +811,16 @@ export async function registerRoutes(
     return { presets: experiencePresets };
   });
 
-  app.post("/v1/auth/magic-link", async (request, reply) => {
+  async function allowEmailRequest(request: FastifyRequest, email: string, purpose: string) {
+    const consume = dependencies.consumeAuthBudget;
+    if (!(await consume(`email-auth:request-ip:${request.ip}`, 300, 15 * 60_000))) return false;
+    const account = hashToken(email);
+    if (!(await consume(`email-auth:${purpose}:address:${account}`, 3, 15 * 60_000))) return false;
+    return consume(`email-auth:${purpose}:cooldown:${account}`, 1, 60_000);
+  }
+
+  const requestEmailVerification = async (request: FastifyRequest, reply: FastifyReply) => {
+    reply.header("cache-control", "private, no-store");
     if (!(await operationalFeatures()).effective.signups) {
       return apiError(
         reply,
@@ -818,15 +830,41 @@ export async function registerRoutes(
         request.id,
       );
     }
-    const input = MagicLinkRequestSchema.parse(request.body);
-    const debugUrl = await auth.requestMagicLink(input.email, input.segment, input.returnTo);
+    const input = EmailVerificationRequestSchema.parse(request.body);
+    if (!(await allowEmailRequest(request, input.email, "verification"))) {
+      return apiError(
+        reply,
+        429,
+        "RATE_LIMITED",
+        "Wait before requesting another verification email",
+        request.id,
+      );
+    }
+    const debugUrl = await auth.requestAccountVerification(
+      input.email,
+      input.segment,
+      input.returnTo,
+    );
     return reply.code(202).send({
       accepted: true,
       ...(debugUrl ? { debugUrl } : {}),
     });
-  });
+  };
+  app.post("/v1/auth/email-verification", requestEmailVerification);
+  // Legacy clients can still request verification, but this endpoint no longer authenticates.
+  app.post("/v1/auth/magic-link", requestEmailVerification);
 
   app.get("/v1/auth/verify", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("referrer-policy", "no-referrer");
+    if (!(await operationalFeatures()).effective.signups) {
+      return apiError(
+        reply,
+        503,
+        "DEPENDENCY_UNAVAILABLE",
+        "New sign-ins are temporarily paused",
+        request.id,
+      );
+    }
     const { token, returnTo } = z
       .object({
         token: z.string().min(20),
@@ -839,15 +877,88 @@ export async function registerRoutes(
         reply,
         400,
         "UNAUTHORIZED",
-        "This sign-in link is invalid or expired",
+        "This email verification link is invalid, expired, or already used",
         request.id,
       );
-    auth.setSessionCookie(reply, verified.sessionToken);
-    if (!verified.creator)
-      return reply.redirect(auth.localeAwareWebRedirect(verified.user, "/organization"));
-    return reply.redirect(
-      auth.localeAwareWebRedirect(verified.creator, returnTo ?? "/dashboard?welcome=1"),
+    const signIn = new URL("/signin", config.WEB_ORIGIN);
+    signIn.searchParams.set("verified", "1");
+    signIn.searchParams.set(
+      "returnTo",
+      verified.creator ? (returnTo ?? "/dashboard?welcome=1") : "/organization",
     );
+    return reply.redirect(signIn.href);
+  });
+
+  app.post("/v1/auth/pin/request", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    if (!(await operationalFeatures()).effective.signups) {
+      return apiError(
+        reply,
+        503,
+        "DEPENDENCY_UNAVAILABLE",
+        "New sign-ins are temporarily paused",
+        request.id,
+      );
+    }
+    const input = EmailPinRequestSchema.parse(request.body);
+    if (!(await allowEmailRequest(request, input.email, "pin"))) {
+      return apiError(
+        reply,
+        429,
+        "RATE_LIMITED",
+        "Wait before requesting another sign-in PIN",
+        request.id,
+      );
+    }
+    return reply
+      .code(202)
+      .send(await auth.requestSignInPin(input.email, input.returnTo, input.workspaceId));
+  });
+
+  app.post("/v1/auth/pin/verify", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    if (!(await operationalFeatures()).effective.signups) {
+      return apiError(
+        reply,
+        503,
+        "DEPENDENCY_UNAVAILABLE",
+        "New sign-ins are temporarily paused",
+        request.id,
+      );
+    }
+    if (
+      !(await dependencies.consumeAuthBudget(
+        `email-auth:verify-ip:${request.ip}`,
+        120,
+        15 * 60_000,
+      ))
+    ) {
+      return apiError(
+        reply,
+        429,
+        "RATE_LIMITED",
+        "Too many sign-in attempts. Try again later",
+        request.id,
+      );
+    }
+    const input = EmailPinVerifySchema.parse(request.body);
+    const verified = await auth.verifySignInPin(input.challengeId, input.pin);
+    if (!verified) {
+      return apiError(
+        reply,
+        401,
+        "UNAUTHORIZED",
+        "The sign-in PIN is invalid or expired. Request a new PIN if needed",
+        request.id,
+      );
+    }
+    auth.setSessionCookie(reply, verified.sessionToken);
+    return {
+      redirectTo: auth.localeAwareWebRedirect(
+        verified.user,
+        verified.creator ? (verified.returnTo ?? "/dashboard") : "/organization",
+      ),
+    };
   });
 
   app.get("/v1/auth/navigation", async (request, reply) => {
@@ -1151,8 +1262,24 @@ export async function registerRoutes(
         request.id,
       );
     }
-    auth.setSessionCookie(reply, accepted.sessionToken);
-    return { creator: accepted.creator };
+    const currentUser = await auth.userFromRequest(request);
+    const alreadyAuthenticated = currentUser?.userId === accepted.userId;
+    if (alreadyAuthenticated) {
+      await auth.switchWorkspace(request, accepted, accepted.workspaceId);
+    }
+    const destination = new URL(
+      alreadyAuthenticated ? "/dashboard?invitation=accepted" : "/signin?verified=1",
+      config.WEB_ORIGIN,
+    );
+    if (!alreadyAuthenticated) {
+      destination.searchParams.set("returnTo", "/dashboard?invitation=accepted");
+      destination.searchParams.set("workspaceId", accepted.workspaceId);
+    }
+    return {
+      creator: accepted,
+      requiresSignIn: !alreadyAuthenticated,
+      redirectTo: destination.href,
+    };
   });
 
   app.get("/v1/workspaces", async (request, reply) => {

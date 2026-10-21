@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -23,7 +24,7 @@ async function signIn(target: FastifyInstance, email: string) {
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(requested.json().debugUrl).searchParams.get("token");
-  const verified = await target.inject({ url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(target, `/v1/auth/verify?token=${token}`, email);
   return { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
 }
 async function fixture() {

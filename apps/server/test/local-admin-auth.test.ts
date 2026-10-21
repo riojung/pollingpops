@@ -12,6 +12,7 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema, isLocalProductAdminDevelopment } from "../src/config.js";
 import { ConsoleMailer } from "../src/mailer.js";
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 
 const email = "admin@pollingpops.local";
 const local = {
@@ -35,6 +36,7 @@ afterEach(async () => {
   await app?.close();
   app = undefined;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 async function fixture(extra: Record<string, string | undefined> = {}) {
@@ -91,14 +93,10 @@ async function verify(
   const magic = await requestLink(target, address, requestHeaders);
   expect(magic.statusCode).toBe(202);
   const url = new URL(magic.json().debugUrl);
-  return target.inject({
-    method: "GET",
-    url: `${url.pathname}${url.search}`,
-    headers: {
-      ...requestHeaders,
-      "x-request-id": "verified-local-login",
-      ...(priorCookies ? { cookie: priorCookies } : {}),
-    },
+  return verifyEmailAndSignIn(target, `${url.pathname}${url.search}`, address, {
+    ...requestHeaders,
+    "x-request-id": "verified-local-login",
+    ...(priorCookies ? { cookie: priorCookies } : {}),
   });
 }
 
@@ -143,13 +141,9 @@ describe("customer authentication stays separate from administrator authenticati
     expect(url.searchParams.get("returnTo")).toBe("/account?via=signin#profile");
     expect(ConsoleMailer.prototype.sendMagicLink).toHaveBeenCalledWith(email, url.href);
     expect(cookies(magic)).toEqual([]);
-    const signed = await app.inject({
-      method: "GET",
-      url: `${url.pathname}${url.search}`,
-      headers,
-    });
-    expect(signed.statusCode).toBe(302);
-    expect(signed.headers.location).toBe(`${local.WEB_ORIGIN}/account?via=signin#profile`);
+    const signed = await verifyEmailAndSignIn(app, `${url.pathname}${url.search}`, email, headers);
+    expect(signed.statusCode).toBe(200);
+    expect(signed.json().redirectTo).toBe(`${local.WEB_ORIGIN}/account?via=signin#profile`);
     expect(cookies(signed).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
     expect(cookies(signed)[0]).toContain("HttpOnly");
     expect(cookies(signed)[0]).toContain("SameSite=Lax");
@@ -191,6 +185,7 @@ describe("customer authentication stays separate from administrator authenticati
   });
 
   it("preserves explicit locale and return paths on the standard customer redirect", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     const { app, repository } = await fixture();
     const first = await verify(app);
     const me = await app.inject({
@@ -199,8 +194,10 @@ describe("customer authentication stays separate from administrator authenticati
       headers: { ...headers, cookie: cookieHeader(first) },
     });
     await repository.updateUserLocale(me.json().creator.userId, "ja-JP");
+    // A subsequent sign-in remains subject to the real one-minute email cooldown.
+    vi.advanceTimersByTime(61_000);
     const next = await verify(app, email, cookieHeader(first));
-    const destination = new URL(next.headers.location!);
+    const destination = new URL(next.json().redirectTo);
     expect(destination.origin).toBe(local.WEB_ORIGIN);
     expect(destination.pathname).toBe("/auth/locale");
     expect(destination.searchParams.get("locale")).toBe("ja-JP");
@@ -224,12 +221,13 @@ describe("customer authentication stays separate from administrator authenticati
     expect(magic.statusCode).toBe(202);
     expect(magic.json()).not.toHaveProperty("signInOrigin");
     const url = new URL(magic.json().debugUrl);
-    const signed = await app.inject({
-      method: "GET",
-      url: `${url.pathname}${url.search}`,
+    const signed = await verifyEmailAndSignIn(
+      app,
+      `${url.pathname}${url.search}`,
+      "owner@example.test",
       headers,
-    });
-    expect(signed.statusCode).toBe(302);
+    );
+    expect(signed.statusCode).toBe(200);
     expect(cookies(signed).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
     expect(await platform.listOperators()).toEqual([]);
   });
@@ -240,7 +238,7 @@ describe("customer authentication stays separate from administrator authenticati
       const { app, platform, config, names } = await fixture();
       const legacy = await legacyOperatorSession(platform, names);
       const signed = await verify(app, address, legacy.cookie);
-      expect(signed.statusCode).toBe(302);
+      expect(signed.statusCode).toBe(200);
       expect(cookieToken(signed, config.COOKIE_NAME)).not.toBe(legacy.token);
       expect(cookies(signed).map((cookie) => cookie.split("=")[0])).toEqual([config.COOKIE_NAME]);
       expect(await platform.getOperatorSession(tokenHash(legacy.token))).toEqual(legacy.context);
@@ -323,7 +321,7 @@ describe("customer authentication stays separate from administrator authenticati
       .spyOn(platform, "withOperatorTransaction")
       .mockRejectedValue(new Error("operator service unavailable"));
     const signed = await verify(app, email, legacy.cookie);
-    expect(signed.statusCode).toBe(302);
+    expect(signed.statusCode).toBe(200);
     const logout = await app.inject({
       method: "POST",
       url: "/v1/auth/logout",
@@ -388,7 +386,7 @@ describe("deprecated local administrator configuration validation", () => {
       origin: "http://192.168.1.142:3000",
     });
     expect(cookieToken(signed, names.session)).toBeUndefined();
-    expect(signed.headers.location).toBe("http://192.168.1.142:3000/account?via=signin#profile");
+    expect(signed.json().redirectTo).toBe("http://192.168.1.142:3000/account?via=signin#profile");
     expect(await platform.listOperators()).toEqual([]);
   });
 });

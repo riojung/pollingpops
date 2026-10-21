@@ -1,15 +1,11 @@
+import { signInCreator } from "../support/creator-auth";
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { testEmail } from "../e2e/test-email";
 
 const api = "http://127.0.0.1:4300";
 async function signIn(page: Page, email: string) {
-  await page.goto("/signin");
-  await page.getByRole("button", { name: "Workplace learning", exact: true }).click();
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, email);
 }
 
 async function expectSectionAtTop(page: Page, section: string, maxTop = 60) {
@@ -120,6 +116,8 @@ test("organization owner invites billing-only administrator and funds a premium 
   page: owner,
   browser,
 }, testInfo) => {
+  // This journey signs the same account in twice and honors the real PIN resend cooldown.
+  test.setTimeout(150_000);
   const ownerEmail = testEmail("business-owner", testInfo);
   const financeEmail = testEmail("business-finance", testInfo);
   await signIn(owner, ownerEmail);

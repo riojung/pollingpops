@@ -16,7 +16,7 @@ Let customers sign up and sign in with **Google, Facebook, and Apple** so they c
 account without creating a separate Polling Pops password or repeatedly entering profile details.
 Request only the identity information needed, with clear consent.
 
-Keep email magic-link access as a fallback and preserve account-free audience participation.
+Keep verified-email PIN sign-in as a fallback and preserve account-free audience participation.
 Existing customers should be able to explicitly link or unlink a provider without losing their
 workspace or creating duplicate accounts. The current generic institution OIDC foundation is
 separate from this customer-facing, multi-provider sign-in experience; see the

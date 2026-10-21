@@ -65,15 +65,52 @@ export default {
   "delivery.join.codeLabel": "Código de Round de siete dígitos",
   "delivery.auth.creatorAccess": "Acceso de creador",
   "delivery.auth.signInTitle": "Iniciar sesión por correo",
-  "delivery.auth.signInDescription":
-    "Enviaremos un enlace de un solo uso. No necesitas contraseña.",
   "delivery.auth.facilitate": "Facilito principalmente",
   "delivery.auth.workplace": "Formación laboral",
   "delivery.auth.education": "Educación",
   "delivery.auth.email": "Correo electrónico",
   "delivery.auth.policy": "Acepto los {terms} y reconozco el aviso de {privacy}.",
   "delivery.auth.sending": "Enviando…",
-  "delivery.auth.sendLink": "Enviar enlace de acceso",
+  "delivery.auth.signInDescription":
+    "Introduce tu correo electrónico verificado para recibir un PIN de acceso de un solo uso. No necesitas contraseña.",
+  "delivery.auth.accessMode": "Acceso a la cuenta",
+  "delivery.auth.signInMode": "Iniciar sesión",
+  "delivery.auth.createAccount": "Crear cuenta",
+  "delivery.auth.createAccountDescription":
+    "Primero verifica tu correo. Después inicia sesión por separado con un PIN enviado a tu bandeja de entrada.",
+  "delivery.auth.sendVerification": "Enviar correo de verificación",
+  "delivery.auth.sendPin": "Enviar PIN de acceso",
+  "delivery.auth.pinTitle": "Introduce tu PIN de acceso",
+  "delivery.auth.pinDescription":
+    "Introduce el PIN enviado a tu correo electrónico verificado para acceder a Polling Pops.",
+  "delivery.auth.pinLabel": "PIN de acceso",
+  "delivery.auth.pinSent":
+    "Si {email} tiene una cuenta verificada, hemos enviado un PIN de acceso. Consulta el correo más reciente.",
+  "delivery.auth.pinHelp":
+    "Introduce el PIN de seis dígitos del correo más reciente. Caduca en 10 minutos.",
+  "delivery.auth.pinExpired": "Este PIN ha caducado. Solicita uno nuevo para iniciar sesión.",
+  "delivery.auth.verifyPinForm": "Verificar PIN de acceso",
+  "delivery.auth.verifying": "Iniciando sesión…",
+  "delivery.auth.invalidPin":
+    "El PIN no es válido o ha caducado. Inténtalo de nuevo o solicita otro PIN.",
+  "delivery.auth.resendPin": "Enviar un nuevo PIN",
+  "delivery.auth.resendIn": "Reenviar en {seconds} s",
+  "delivery.auth.useAnotherEmail": "Usar otro correo",
+  "delivery.auth.verificationSent": "Correo de verificación solicitado",
+  "delivery.auth.verificationInstructions":
+    "Si {email} necesita verificación, hemos enviado un enlace de un solo uso que caduca en 15 minutos. Abre el correo más reciente, vuelve aquí e inicia sesión para solicitar un PIN. Verificar tu correo no inicia la sesión.",
+  "delivery.auth.verified": "Correo verificado. Inicia sesión para solicitar un PIN.",
+  "delivery.auth.needAccount":
+    "¿Necesitas una cuenta? Crea una y verifica tu correo antes de iniciar sesión.",
+  "delivery.auth.inboxInstructions":
+    "Abre la bandeja de desarrollo local y selecciona el mensaje más reciente enviado a {email}.",
+  "delivery.auth.openInbox": "Abrir bandeja de correo local",
+  "delivery.auth.originTitle": "Usa la dirección configurada para iniciar sesión.",
+  "delivery.auth.originDescription":
+    "Esta página está abierta en {currentOrigin}. Los correos de verificación y las cookies del navegador usan {configuredOrigin}.",
+  "delivery.auth.openConfigured": "Abrir la página de acceso configurada",
+  "delivery.auth.deliveryOrigin":
+    "Usa {origin} para verificar tu correo e introducir tu PIN de acceso.",
   "delivery.auth.invitation": "Invitación al espacio de trabajo",
   "delivery.auth.joinTeam": "Unirse al equipo",
   "delivery.auth.invitationDescription":

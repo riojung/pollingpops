@@ -62,15 +62,50 @@ export const deliveryAuthoringEnglishMessages = {
   "delivery.join.codeLabel": "Seven-digit Round code",
   "delivery.auth.creatorAccess": "Creator access",
   "delivery.auth.signInTitle": "Sign in by email",
-  "delivery.auth.signInDescription":
-    "We will send a single-use link. No password or memory puzzle required.",
   "delivery.auth.facilitate": "I mainly facilitate",
   "delivery.auth.workplace": "Workplace learning",
   "delivery.auth.education": "Education",
   "delivery.auth.email": "Email address",
   "delivery.auth.policy": "I accept the {terms} and acknowledge the {privacy}.",
   "delivery.auth.sending": "Sending…",
-  "delivery.auth.sendLink": "Send sign-in link",
+  "delivery.auth.signInDescription":
+    "Enter your verified email address to receive a single-use sign-in PIN. No password required.",
+  "delivery.auth.accessMode": "Account access",
+  "delivery.auth.signInMode": "Sign in",
+  "delivery.auth.createAccount": "Create account",
+  "delivery.auth.createAccountDescription":
+    "First verify your email. Then sign in separately with a PIN sent to your inbox.",
+  "delivery.auth.sendVerification": "Send verification email",
+  "delivery.auth.sendPin": "Send sign-in PIN",
+  "delivery.auth.pinTitle": "Enter your sign-in PIN",
+  "delivery.auth.pinDescription":
+    "Enter the PIN sent to your verified email to access Polling Pops.",
+  "delivery.auth.pinLabel": "Sign-in PIN",
+  "delivery.auth.pinSent":
+    "If {email} has a verified account, we sent a sign-in PIN. Check the newest email.",
+  "delivery.auth.pinHelp":
+    "Enter the six-digit PIN from the newest email. It expires in 10 minutes.",
+  "delivery.auth.pinExpired": "This PIN has expired. Request a new PIN to sign in.",
+  "delivery.auth.verifyPinForm": "Verify sign-in PIN",
+  "delivery.auth.verifying": "Signing in…",
+  "delivery.auth.invalidPin": "The PIN is invalid or expired. Try again or request a new PIN.",
+  "delivery.auth.resendPin": "Send a new PIN",
+  "delivery.auth.resendIn": "Resend in {seconds}s",
+  "delivery.auth.useAnotherEmail": "Use another email",
+  "delivery.auth.verificationSent": "Verification email requested",
+  "delivery.auth.verificationInstructions":
+    "If {email} needs verification, we sent a single-use link that expires in 15 minutes. Open the newest email, then return here and sign in to request a PIN. Verifying your email does not sign you in.",
+  "delivery.auth.verified": "Email verified. Sign in to request a PIN.",
+  "delivery.auth.needAccount":
+    "Need an account? Create one and verify your email before signing in.",
+  "delivery.auth.inboxInstructions":
+    "Open the local development inbox and select the newest message sent to {email}.",
+  "delivery.auth.openInbox": "Open local email inbox",
+  "delivery.auth.originTitle": "Use the configured address to sign in.",
+  "delivery.auth.originDescription":
+    "This page is open at {currentOrigin}. Verification emails and browser cookies use {configuredOrigin}.",
+  "delivery.auth.openConfigured": "Open the configured sign-in page",
+  "delivery.auth.deliveryOrigin": "Use {origin} to verify your email and enter your sign-in PIN.",
   "delivery.auth.invitation": "Workspace invitation",
   "delivery.auth.joinTeam": "Join the team",
   "delivery.auth.invitationDescription":

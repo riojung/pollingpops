@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,7 +40,7 @@ async function signIn(app: FastifyInstance, email = "pack-update@example.com") {
     },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const result = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const result = await verifyEmailAndSignIn(app, `/v1/auth/verify?token=${token}`, email);
   const cookies = result.headers["set-cookie"]!;
   return (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
 }

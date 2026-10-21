@@ -1865,8 +1865,10 @@ access-scoped attempt token now makes replayed starts converge on one durable at
 
 ## Known technical differences and incomplete items
 
-- Creator authentication is a local, hashed-token magic-link implementation with PostgreSQL
-  persistence, not the Auth.js adapter named in the initial plan. ADR 001 accepts the current
+- Creator authentication uses email verification followed by a separately requested six-digit
+  sign-in PIN, with PostgreSQL persistence, expiry, attempt limits, resend replacement, and shared
+  rate limits. Verification alone never creates a session. It retains server-owned sessions
+  rather than the Auth.js adapter named in the initial plan. ADR 001 accepts the current
   behavior for P0 and defines federated identity, account linking, institutional SSO, or a separate
   identity service as migration triggers; a library-only rewrite is not an open P0 gate.
 - The editor now saves and opens a participant-style whole-quiz preview before publication.

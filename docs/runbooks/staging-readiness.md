@@ -78,7 +78,7 @@ Configure these encrypted environment secrets:
 | `OPENROUND_STRIPE_WEBHOOK_SECRET`    | Test endpoint secret; only present for the optional replay                                        |
 
 Store only the cookie name/value pair, not copied browser headers. Create accounts through the
-normal magic-link path, never use a human or customer account, rotate/revoke sessions after an
+normal email-verification and separate PIN sign-in path, never use a human or customer account, rotate/revoke sessions after an
 exercise, and restrict environment access. Select only an approved synthetic workspace before
 capturing `OPENROUND_CREATOR_COOKIE`. The public probe uses that cookie to assert the synthetic
 workspace's effective workspace-shell, Builder, Presentations, Presentation realtime, Groups, Discover, and other

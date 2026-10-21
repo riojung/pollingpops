@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { randomUUID } from "node:crypto";
@@ -227,10 +228,11 @@ it("registers group writers even when the deployment flag starts disabled", asyn
       payload: { email: "dynamic-groups@example.test", segment: "workplace", acceptPolicies: true },
     });
     const token = new URL(magic.json().debugUrl).searchParams.get("token");
-    const verified = await built.app.inject({
-      method: "GET",
-      url: `/v1/auth/verify?token=${token}`,
-    });
+    const verified = await verifyEmailAndSignIn(
+      built.app,
+      `/v1/auth/verify?token=${token}`,
+      "dynamic-groups@example.test",
+    );
     const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
     const create = () =>
       built.app.inject({

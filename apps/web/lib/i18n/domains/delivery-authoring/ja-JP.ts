@@ -64,14 +64,53 @@ export default {
   "delivery.join.codeLabel": "7桁のRoundコード",
   "delivery.auth.creatorAccess": "作成者アクセス",
   "delivery.auth.signInTitle": "メールでログイン",
-  "delivery.auth.signInDescription": "一度だけ使えるリンクを送信します。パスワードは不要です。",
   "delivery.auth.facilitate": "主な利用分野",
   "delivery.auth.workplace": "職場学習",
   "delivery.auth.education": "教育",
   "delivery.auth.email": "メールアドレス",
   "delivery.auth.policy": "{terms}に同意し、{privacy}を確認しました。",
   "delivery.auth.sending": "送信中…",
-  "delivery.auth.sendLink": "ログインリンクを送信",
+  "delivery.auth.signInDescription":
+    "確認済みのメールアドレスを入力すると、使い捨てのログイン用PINが届きます。パスワードは不要です。",
+  "delivery.auth.accessMode": "アカウントへのアクセス",
+  "delivery.auth.signInMode": "ログイン",
+  "delivery.auth.createAccount": "アカウントを作成",
+  "delivery.auth.createAccountDescription":
+    "最初にメールアドレスを確認してください。その後、受信したPINを使って別途ログインします。",
+  "delivery.auth.sendVerification": "確認メールを送信",
+  "delivery.auth.sendPin": "ログイン用PINを送信",
+  "delivery.auth.pinTitle": "ログイン用PINを入力",
+  "delivery.auth.pinDescription":
+    "確認済みのメールアドレスに送信されたPINを入力して、Polling Popsにアクセスしてください。",
+  "delivery.auth.pinLabel": "ログイン用PIN",
+  "delivery.auth.pinSent":
+    "{email}に確認済みのアカウントがある場合、ログイン用PINを送信しました。最新のメールをご確認ください。",
+  "delivery.auth.pinHelp":
+    "最新のメールに記載された6桁のPINを入力してください。有効期限は10分です。",
+  "delivery.auth.pinExpired":
+    "このPINの有効期限が切れています。新しいPINをリクエストしてログインしてください。",
+  "delivery.auth.verifyPinForm": "ログイン用PINを確認",
+  "delivery.auth.verifying": "ログイン中…",
+  "delivery.auth.invalidPin":
+    "PINが無効か、有効期限が切れています。もう一度試すか、新しいPINをリクエストしてください。",
+  "delivery.auth.resendPin": "新しいPINを送信",
+  "delivery.auth.resendIn": "{seconds}秒後に再送信",
+  "delivery.auth.useAnotherEmail": "別のメールアドレスを使用",
+  "delivery.auth.verificationSent": "確認メールをリクエストしました",
+  "delivery.auth.verificationInstructions":
+    "{email}の確認が必要な場合、有効期限15分の使い捨てリンクを送信しました。最新のメールを開いてからここに戻り、ログイン用PINをリクエストしてください。メールアドレスを確認してもログインは行われません。",
+  "delivery.auth.verified": "メールアドレスを確認しました。ログイン用PINをリクエストしてください。",
+  "delivery.auth.needAccount":
+    "アカウントが必要ですか？アカウントを作成し、メールアドレスを確認してからログインしてください。",
+  "delivery.auth.inboxInstructions":
+    "ローカル開発用の受信トレイを開き、{email}宛ての最新のメッセージを選択してください。",
+  "delivery.auth.openInbox": "ローカルの受信トレイを開く",
+  "delivery.auth.originTitle": "設定されたアドレスからログインしてください。",
+  "delivery.auth.originDescription":
+    "このページは{currentOrigin}で開かれています。確認メールとブラウザーのCookieには{configuredOrigin}が使用されます。",
+  "delivery.auth.openConfigured": "設定されたログインページを開く",
+  "delivery.auth.deliveryOrigin":
+    "{origin}でメールアドレスを確認し、ログイン用PINを入力してください。",
   "delivery.auth.invitation": "ワークスペース招待",
   "delivery.auth.joinTeam": "チームに参加",
   "delivery.auth.invitationDescription":

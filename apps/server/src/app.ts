@@ -39,7 +39,7 @@ import { AuthoringService } from "./authoring-service.js";
 import { AuthoringWorker } from "./authoring-worker.js";
 import { MemorySessionCache, RedisSessionCache, type SessionCache } from "./cache.js";
 import { isLocalProductAdminDevelopment, type AppConfig } from "./config.js";
-import { ConsoleMailer, SmtpMailer } from "./mailer.js";
+import { ConsoleMailer, SmtpMailer, type Mailer } from "./mailer.js";
 import { FollowupService } from "./followup-service.js";
 import { ClamAvScanner, type MalwareScanner } from "./malware-scanner.js";
 import { MetricsService } from "./metrics.js";
@@ -82,6 +82,7 @@ export async function buildApp(
   overrides: {
     repository?: Repository;
     cache?: SessionCache;
+    mailer?: Mailer;
     scanner?: MalwareScanner | null;
     stripe?: Stripe | null;
     readiness?: () => Promise<void>;
@@ -108,6 +109,13 @@ export async function buildApp(
           "*.controlToken",
           "*.companionToken",
           "*.token",
+          "pin",
+          "pinHash",
+          "challengeId",
+          "*.pin",
+          "*.pinHash",
+          "*.debugPin",
+          "*.challengeId",
           "*.attemptToken",
           "*.genericToken",
           "*.accessSeed",
@@ -272,7 +280,8 @@ export async function buildApp(
     }
   });
 
-  const mailer = config.SMTP_URL ? new SmtpMailer(config) : new ConsoleMailer();
+  const mailer =
+    overrides.mailer ?? (config.SMTP_URL ? new SmtpMailer(config) : new ConsoleMailer());
   const auth = new AuthService(repository, mailer, config);
   const oidcProvider =
     overrides.oidcProvider !== undefined
@@ -432,6 +441,7 @@ export async function buildApp(
     metrics,
     productEvents,
     readiness,
+    consumeAuthBudget: cache.consumeRateLimit.bind(cache),
     stripeClient: overrides.stripe,
   });
   await registerQuestionHealthRoutes(app, { config, repository, auth });

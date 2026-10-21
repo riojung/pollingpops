@@ -35,6 +35,9 @@ import type {
   ChatReactionRecord,
   ChatReactionSummaryRecord,
   CreatorContext,
+  EmailPinChallengeRecord,
+  EmailPinIdentityResult,
+  MagicLinkIdentity,
   FolderRecord,
   FolderCreateInput,
   FolderUpdateInput,
@@ -138,6 +141,7 @@ import {
 
 interface UserRecord extends CreatorContext {
   deletedAt: Date | null;
+  emailVerifiedAt: Date | null;
 }
 
 interface ConsentRecord {
@@ -293,6 +297,7 @@ export class MemoryRepository implements Repository {
   private nextInitialWorkspaceId: string | undefined;
   private nextInitialPlan: Plan | undefined;
   readonly magicTokens = new Map<string, MagicTokenRecord>();
+  readonly emailPinChallenges = new Map<string, EmailPinChallengeRecord>();
   readonly creatorSessions = new Map<
     string,
     { userId: string; activeWorkspaceId: string; expiresAt: Date; revoked: boolean }
@@ -573,7 +578,9 @@ export class MemoryRepository implements Repository {
     const token = this.magicTokens.get(tokenHash);
     if (!token || token.consumedAt || token.expiresAt <= now) return null;
     token.consumedAt = now;
-    let user = [...this.users.values()].find((candidate) => candidate.email === token.email);
+    let user = [...this.users.values()].find(
+      (candidate) => candidate.email === token.email && !candidate.deletedAt,
+    );
     if (!user) {
       const userId = crypto.randomUUID();
       const usesInitialWorkspace = Boolean(
@@ -593,6 +600,7 @@ export class MemoryRepository implements Repository {
         role: "owner",
         plan,
         deletedAt: null,
+        emailVerifiedAt: now,
       };
       this.users.set(userId, user);
       this.plans.set(user.workspaceId, plan);
@@ -610,6 +618,7 @@ export class MemoryRepository implements Repository {
         joinedAt: now,
       });
     }
+    user.emailVerifiedAt ??= now;
     for (const documentType of ["terms", "privacy"] as const) {
       if (
         !this.consents.some(
@@ -638,6 +647,112 @@ export class MemoryRepository implements Repository {
       },
       creator: this.contextFor(user),
     };
+  }
+
+  private verifiedEmailIdentityFor(
+    user: UserRecord,
+    workspaceId?: string | null,
+  ): MagicLinkIdentity | null {
+    if (user.deletedAt || !user.emailVerifiedAt) return null;
+    const membership = [...this.workspaceMembers.values()].find(
+      (member) => member.userId === user.userId && this.workspaces.has(member.workspaceId),
+    );
+    return {
+      user: {
+        userId: user.userId,
+        email: user.email,
+        locale: user.locale,
+        localePreferenceSet: user.localePreferenceSet ?? false,
+      },
+      creator:
+        (workspaceId ? this.contextFor(user, workspaceId) : null) ??
+        this.contextFor(user) ??
+        (membership ? this.contextFor(user, membership.workspaceId) : null),
+    };
+  }
+
+  async getVerifiedEmailIdentity(email: string): Promise<MagicLinkIdentity | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = [...this.users.values()].find(
+      (candidate) => candidate.email.toLowerCase() === normalizedEmail && !candidate.deletedAt,
+    );
+    return user ? this.verifiedEmailIdentityFor(user) : null;
+  }
+
+  async createEmailPinChallenge(input: EmailPinChallengeRecord) {
+    const user = this.users.get(input.userId);
+    if (!user || !this.verifiedEmailIdentityFor(user)) return;
+    if (
+      this.emailPinChallenges.has(input.tokenHash) ||
+      [...this.emailPinChallenges.values()].some((challenge) => challenge.id === input.id)
+    )
+      throw new Error("Email PIN challenge already exists");
+    // No awaits occur between checking the identity, replacing old challenges and inserting.
+    for (const challenge of this.emailPinChallenges.values())
+      if (challenge.userId === input.userId && !challenge.consumedAt)
+        challenge.consumedAt = new Date();
+    this.emailPinChallenges.set(
+      input.tokenHash,
+      structuredClone({
+        ...input,
+        workspaceId:
+          input.workspaceId &&
+          this.workspaces.has(input.workspaceId) &&
+          this.workspaceMembers.has(`${input.workspaceId}:${input.userId}`)
+            ? input.workspaceId
+            : null,
+      }),
+    );
+  }
+
+  async consumeEmailPinChallenge(
+    tokenHash: string,
+    pinHash: string,
+    now: Date,
+  ): Promise<EmailPinIdentityResult | null> {
+    const challenge = this.emailPinChallenges.get(tokenHash);
+    const checkedAt = new Date(Math.max(now.getTime(), Date.now()));
+    if (
+      !challenge ||
+      challenge.consumedAt ||
+      challenge.expiresAt <= checkedAt ||
+      challenge.attempts >= 5
+    )
+      return null;
+    const user = this.users.get(challenge.userId);
+    const identity = user ? this.verifiedEmailIdentityFor(user, challenge.workspaceId) : null;
+    if (!identity) return null;
+    if (challenge.pinHash !== pinHash) {
+      challenge.attempts += 1;
+      return null;
+    }
+    challenge.consumedAt = checkedAt;
+    if (identity.creator) {
+      for (const documentType of ["terms", "privacy"] as const) {
+        if (
+          !this.consents.some(
+            (record) =>
+              record.workspaceId === identity.creator!.workspaceId &&
+              record.userId === user!.userId &&
+              record.documentType === documentType &&
+              record.documentVersion === challenge.policyVersion,
+          )
+        )
+          this.consents.push({
+            workspaceId: identity.creator.workspaceId,
+            userId: identity.user.userId,
+            documentType,
+            documentVersion: challenge.policyVersion,
+            acceptedAt: checkedAt,
+          });
+      }
+    }
+    return { identity, returnTo: challenge.returnTo };
+  }
+
+  async revokeEmailPinChallenge(tokenHash: string) {
+    const challenge = this.emailPinChallenges.get(tokenHash);
+    if (challenge && !challenge.consumedAt) challenge.consumedAt = new Date();
   }
 
   async createCreatorSession(input: {
@@ -832,9 +947,11 @@ export class MemoryRepository implements Repository {
         role: invitation.role,
         plan: this.plans.get(invitation.workspaceId) ?? "free",
         deletedAt: null,
+        emailVerifiedAt: now,
       };
       this.users.set(user.userId, user);
     }
+    user.emailVerifiedAt ??= now;
     const key = `${invitation.workspaceId}:${user.userId}`;
     const existing = this.workspaceMembers.get(key);
     if (!existing) {
@@ -5113,6 +5230,7 @@ export class MemoryRepository implements Repository {
           email: user.email,
           locale: user.locale,
           localePreferenceSet: user.localePreferenceSet,
+          emailVerifiedAt: user.emailVerifiedAt,
           segment: user.segment,
         },
         workspaceMemberships,
@@ -5268,6 +5386,7 @@ export class MemoryRepository implements Repository {
       if (!user || user.deletedAt) return;
       const originalEmail = user.email;
       user.deletedAt = new Date();
+      user.emailVerifiedAt = null;
       user.email = `deleted-${userId.slice(0, 8)}@invalid.local`;
       user.locale = "en-CA";
       user.localePreferenceSet = false;
@@ -5275,6 +5394,8 @@ export class MemoryRepository implements Repository {
         if (session.userId === userId) this.creatorSessions.delete(token);
       for (const [token, value] of this.magicTokens)
         if (value.email === originalEmail) this.magicTokens.delete(token);
+      for (const [token, challenge] of this.emailPinChallenges)
+        if (challenge.userId === userId) this.emailPinChallenges.delete(token);
       for (const [id, identity] of this.externalIdentities)
         if (identity.userId === userId) this.externalIdentities.delete(id);
       for (const credential of this.sessionStaff.values())
@@ -5310,6 +5431,7 @@ export class MemoryRepository implements Repository {
         this.deletedMediaReferenceOwners.delete(key);
     }
     user.deletedAt = new Date();
+    user.emailVerifiedAt = null;
     user.email = `deleted-${userId.slice(0, 8)}@invalid.local`;
     user.locale = "en-CA";
     user.localePreferenceSet = false;
@@ -5318,6 +5440,9 @@ export class MemoryRepository implements Repository {
     }
     for (const [tokenHash, token] of this.magicTokens) {
       if (token.email === originalEmail) this.magicTokens.delete(tokenHash);
+    }
+    for (const [tokenHash, challenge] of this.emailPinChallenges) {
+      if (challenge.userId === userId) this.emailPinChallenges.delete(tokenHash);
     }
     for (const [id, quiz] of this.quizzes) {
       if (ownedWorkspaceIds.has(quiz.workspaceId)) this.quizzes.delete(id);
@@ -5434,6 +5559,9 @@ export class MemoryRepository implements Repository {
     }
     for (const [tokenHash, token] of this.magicTokens) {
       if (token.expiresAt <= now) this.magicTokens.delete(tokenHash);
+    }
+    for (const [tokenHash, challenge] of this.emailPinChallenges) {
+      if (challenge.expiresAt <= now) this.emailPinChallenges.delete(tokenHash);
     }
     for (const [tokenHash, session] of this.creatorSessions) {
       if (session.expiresAt <= now) this.creatorSessions.delete(tokenHash);

@@ -1,3 +1,4 @@
+import { signInCreator } from "../support/creator-auth";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
@@ -20,12 +21,7 @@ async function closePresenter(page: Page) {
 test("creator and participant complete a live round", async ({ browser }, testInfo) => {
   const creatorContext = await browser.newContext();
   const creator = await creatorContext.newPage();
-  await creator.goto("/signin");
-  await creator.getByRole("button", { name: "Education" }).click();
-  await creator.getByLabel("Email address").fill(testEmail("live-round", testInfo));
-  await creator.getByLabel(/I accept the Terms/).check();
-  await creator.getByRole("button", { name: "Send sign-in link" }).click();
-  await creator.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(creator, testEmail("live-round", testInfo), { segment: "education" });
   await expect(creator).toHaveURL(/\/dashboard/);
 
   await creator.getByLabel("Checkpoint set title").fill("A one-question check");
@@ -207,12 +203,7 @@ test("creator and participant complete a live round", async ({ browser }, testIn
 test("quiz autosave serializes overlapping edits", async ({ browser }, testInfo) => {
   const context = await browser.newContext();
   const creator = await context.newPage();
-  await creator.goto("/signin");
-  await creator.getByRole("button", { name: "Workplace" }).click();
-  await creator.getByLabel("Email address").fill(testEmail("autosave", testInfo));
-  await creator.getByLabel(/I accept the Terms/).check();
-  await creator.getByRole("button", { name: "Send sign-in link" }).click();
-  await creator.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(creator, testEmail("autosave", testInfo));
   await expect(creator).toHaveURL(/\/dashboard/);
   await creator.getByLabel("Checkpoint set title").fill("Autosave ordering");
   await creator.getByRole("button", { name: "Create checkpoint set" }).click();
@@ -259,12 +250,7 @@ test("quiz autosave serializes overlapping edits", async ({ browser }, testInfo)
 });
 
 test("incomplete questions autosave with actionable guidance", async ({ page }, testInfo) => {
-  await page.goto("/signin");
-  await page.getByRole("button", { name: "Workplace" }).click();
-  await page.getByLabel("Email address").fill(testEmail("guidance", testInfo));
-  await page.getByLabel(/I accept the Terms/).check();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await signInCreator(page, testEmail("guidance", testInfo));
 
   await page.getByLabel("Checkpoint set title").fill("Validation guidance");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();

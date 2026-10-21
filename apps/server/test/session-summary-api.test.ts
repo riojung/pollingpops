@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -61,7 +62,11 @@ async function fixture(
     payload: { email: "summary-fixture@example.test", segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json().debugUrl).searchParams.get("token");
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(
+    app,
+    `/v1/auth/verify?token=${token}`,
+    "summary-fixture@example.test",
+  );
   const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
   const creator = (await repository.getCreatorBySession(
     hashToken(cookie.slice(cookie.indexOf("=") + 1)),
@@ -450,7 +455,11 @@ describe("session summary APIs", () => {
         },
       });
       const token = new URL(magic.json().debugUrl).searchParams.get("token");
-      const verified = await f.app.inject({ url: `/v1/auth/verify?token=${token}` });
+      const verified = await verifyEmailAndSignIn(
+        f.app,
+        `/v1/auth/verify?token=${token}`,
+        "summary-outsider@example.test",
+      );
       const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
       expect(
         (await f.app.inject({ url: featuresPath(retained), headers: { cookie } })).json(),

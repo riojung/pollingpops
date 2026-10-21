@@ -1,3 +1,4 @@
+import { authenticateMailpitCreator } from "../support/mailpit-auth.js";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -86,33 +87,6 @@ async function apiAt<T>(
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
-}
-
-async function magicLink(email: string) {
-  await apiAt(primaryUrl, "/v1/auth/magic-link", {
-    method: "POST",
-    body: JSON.stringify({ email, segment: "workplace", acceptPolicies: true }),
-  });
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const list = (await fetch(`${mailpitUrl}/api/v1/messages`).then((response) =>
-      response.json(),
-    )) as { messages: Array<{ ID: string; To: Array<{ Address: string }> }> };
-    const message = list.messages.find((candidate) =>
-      candidate.To.some((recipient) => recipient.Address === email),
-    );
-    if (message) {
-      const detail = (await fetch(`${mailpitUrl}/api/v1/message/${message.ID}`).then((response) =>
-        response.json(),
-      )) as { Text: string };
-      const link = detail.Text.match(/https?:\/\/\S+\/v1\/auth\/verify\?token=[^\s]+/)?.[0];
-      if (link) {
-        const verification = new URL(link);
-        return `${primaryUrl}${verification.pathname}${verification.search}`;
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error("The multi-process magic link did not reach Mailpit");
 }
 
 function connectSocket(endpoint: string) {
@@ -251,10 +225,12 @@ async function removeSecondary() {
 async function main() {
   await Promise.all([waitForReady(primaryUrl), waitForReady(secondaryUrl)]);
   const email = `multi-process-${Date.now()}-${randomUUID()}@example.com`;
-  const verification = await fetch(await magicLink(email), { redirect: "manual" });
-  assert.ok([301, 302, 303, 307, 308].includes(verification.status));
-  creatorCookie = verification.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
-  assert.match(creatorCookie, /^openround_creator=/);
+  creatorCookie = await authenticateMailpitCreator({
+    baseUrl: primaryUrl,
+    browserOrigin,
+    mailpitUrl,
+    email,
+  });
   accountCreated = true;
 
   const created = await apiAt<{ quiz: { id: string } }>(primaryUrl, "/v1/quizzes", {

@@ -132,7 +132,7 @@ describe("media references", () => {
     const presentations = createPresentationRepository(repository);
     const workspaceId = randomUUID();
     const userId = randomUUID();
-    const now = new Date("2026-09-20T12:00:00.000Z");
+    const now = new Date();
     const referencedId = randomUUID();
     const orphanId = randomUUID();
     await repository.createMediaAsset(

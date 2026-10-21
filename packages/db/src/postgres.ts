@@ -93,6 +93,9 @@ import type {
   ChatReactionRecord,
   ChatReactionSummaryRecord,
   CreatorContext,
+  EmailPinChallengeRecord,
+  EmailPinIdentityResult,
+  MagicLinkIdentity,
   FolderRecord,
   FolderCreateInput,
   FolderUpdateInput,
@@ -1359,27 +1362,61 @@ export class PostgresRepository implements Repository {
   async consumeMagicLinkIdentity(tokenHash: string, now: Date) {
     return this.transaction(
       async (client) => {
-        const tokenResult = await client.query(
-          `UPDATE auth_magic_tokens SET consumed_at = $2
-         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > $2
-         RETURNING email, segment, policy_version`,
+        // Discover the mailbox without locking its token. Account deletion locks the user
+        // before removing tokens, so verification must acquire those locks in the same order.
+        const candidate = await client.query<{ email: string }>(
+          `SELECT email FROM auth_magic_tokens
+           WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > $2`,
           [tokenHash, now],
         );
-        const token = tokenResult.rows[0] as
-          { email: string; segment: Segment; policy_version: string } | undefined;
-        if (!token) return null;
+        const email = candidate.rows[0]?.email;
+        if (!email) return null;
+
+        // Different verification links for one mailbox must provision only one identity.
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 73502))", [
+          `email-verification:${email.toLowerCase()}`,
+        ]);
 
         let userResult = await client.query(
-          "SELECT id, email FROM users WHERE email = $1 AND deleted_at IS NULL",
-          [token.email],
+          "SELECT id, email FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL FOR UPDATE",
+          [email],
         );
+        const tokenResult = await client.query(
+          `SELECT email, segment, policy_version, expires_at, consumed_at
+           FROM auth_magic_tokens WHERE token_hash = $1 FOR UPDATE`,
+          [tokenHash],
+        );
+        const token = tokenResult.rows[0] as
+          | {
+              email: string;
+              segment: Segment;
+              policy_version: string;
+              expires_at: Date;
+              consumed_at: Date | null;
+            }
+          | undefined;
+        if (!token || token.consumed_at) return null;
+        // Recheck time after waiting for either row lock, before consuming or provisioning.
+        const clock = await client.query<{ checked_at: Date }>(
+          "SELECT GREATEST($1::timestamptz, clock_timestamp()) AS checked_at",
+          [now],
+        );
+        const checkedAt = clock.rows[0]!.checked_at;
+        if (new Date(token.expires_at) <= checkedAt) return null;
+        await client.query("UPDATE auth_magic_tokens SET consumed_at = $2 WHERE token_hash = $1", [
+          tokenHash,
+          checkedAt,
+        ]);
+
+        // A deletion that completed while we waited also removed the token above. Only a
+        // still-valid credential may provision a new identity when no active user exists.
         let user = userResult.rows[0] as { id: string; email: string } | undefined;
         if (!user) {
           user = { id: randomUUID(), email: token.email };
-          await client.query("INSERT INTO users (id, email) VALUES ($1, $2)", [
-            user.id,
-            user.email,
-          ]);
+          await client.query(
+            "INSERT INTO users (id, email, email_verified_at) VALUES ($1, $2, $3)",
+            [user.id, user.email, checkedAt],
+          );
           const workspaceId = randomUUID();
           await client.query(
             `INSERT INTO workspaces (id, name, segment, owner_id, retention_days)
@@ -1392,6 +1429,10 @@ export class PostgresRepository implements Repository {
           );
           await client.query("INSERT INTO subscriptions (workspace_id) VALUES ($1)", [workspaceId]);
         }
+        await client.query(
+          "UPDATE users SET email_verified_at = COALESCE(email_verified_at, $2) WHERE id = $1 AND deleted_at IS NULL",
+          [user.id, checkedAt],
+        );
 
         userResult = await client.query(
           `SELECT u.id AS user_id, u.email, u.locale, u.locale_explicit,
@@ -1419,7 +1460,7 @@ export class PostgresRepository implements Repository {
                 row.user_id,
                 documentType,
                 token.policy_version,
-                now,
+                checkedAt,
               ],
             );
           }
@@ -1454,6 +1495,187 @@ export class PostgresRepository implements Repository {
         };
       },
       { system: true },
+    );
+  }
+
+  private async verifiedEmailIdentityForClient(
+    client: PoolClient,
+    userId: string,
+    workspaceId?: string | null,
+  ): Promise<MagicLinkIdentity | null> {
+    const result = await client.query(
+      `SELECT u.id AS user_id, u.email, u.locale, u.locale_explicit,
+              membership.workspace_id, membership.segment, membership.role,
+              COALESCE(subscription.plan, 'free') AS plan
+       FROM users u
+       LEFT JOIN LATERAL (
+         SELECT workspace.id AS workspace_id, workspace.segment, member.role
+         FROM workspace_members member JOIN workspaces workspace ON workspace.id = member.workspace_id
+         WHERE member.user_id = u.id
+         ORDER BY COALESCE(workspace.id = $2::uuid, false) DESC, workspace.created_at, workspace.id
+         LIMIT 1
+       ) membership ON true
+       LEFT JOIN subscriptions subscription ON subscription.workspace_id = membership.workspace_id
+       WHERE u.id = $1 AND u.deleted_at IS NULL AND u.email_verified_at IS NOT NULL`,
+      [userId, workspaceId ?? null],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const user = {
+      userId: String(row.user_id),
+      email: String(row.email),
+      locale: supportedLocale(row.locale),
+      localePreferenceSet: Boolean(row.locale_explicit),
+    };
+    const platform = new PlatformService(new PostgresPlatformStore(null, client));
+    return {
+      user,
+      creator: row.workspace_id
+        ? {
+            ...user,
+            workspaceId: String(row.workspace_id),
+            segment: row.segment,
+            role: row.role,
+            plan: (await platform.effectiveWorkspacePlan(row.workspace_id)) ?? row.plan,
+          }
+        : null,
+    };
+  }
+
+  async getVerifiedEmailIdentity(email: string): Promise<MagicLinkIdentity | null> {
+    return this.transaction(
+      async (client) => {
+        const result = await client.query(
+          "SELECT id FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL AND email_verified_at IS NOT NULL",
+          [email.trim()],
+        );
+        return result.rows[0]
+          ? this.verifiedEmailIdentityForClient(client, String(result.rows[0].id))
+          : null;
+      },
+      { system: true },
+    );
+  }
+
+  async createEmailPinChallenge(input: EmailPinChallengeRecord) {
+    await this.transaction(
+      async (client) => {
+        const user = await client.query(
+          "SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL AND email_verified_at IS NOT NULL FOR UPDATE",
+          [input.userId],
+        );
+        if (!user.rows[0]) return;
+        await client.query(
+          "UPDATE auth_email_pin_challenges SET consumed_at = clock_timestamp() WHERE user_id = $1 AND consumed_at IS NULL",
+          [input.userId],
+        );
+        await client.query(
+          `INSERT INTO auth_email_pin_challenges
+             (id, user_id, token_hash, pin_hash, policy_version, return_to, created_at,
+              expires_at, consumed_at, attempts, workspace_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+                   (SELECT member.workspace_id FROM workspace_members member
+                    JOIN workspaces workspace ON workspace.id = member.workspace_id
+                    WHERE member.workspace_id = $11::uuid AND member.user_id = $2))`,
+          [
+            input.id,
+            input.userId,
+            input.tokenHash,
+            input.pinHash,
+            input.policyVersion,
+            input.returnTo,
+            input.createdAt,
+            input.expiresAt,
+            input.consumedAt,
+            input.attempts,
+            input.workspaceId ?? null,
+          ],
+        );
+      },
+      { system: true },
+    );
+  }
+
+  async consumeEmailPinChallenge(
+    tokenHash: string,
+    pinHash: string,
+    now: Date,
+  ): Promise<EmailPinIdentityResult | null> {
+    return this.transaction(
+      async (client) => {
+        const candidate = await client.query(
+          "SELECT user_id FROM auth_email_pin_challenges WHERE token_hash = $1",
+          [tokenHash],
+        );
+        if (!candidate.rows[0]) return null;
+        // Match issuance/deletion lock order, then inspect credentials and time after any wait.
+        const user = await client.query(
+          "SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL AND email_verified_at IS NOT NULL FOR UPDATE",
+          [candidate.rows[0].user_id],
+        );
+        if (!user.rows[0]) return null;
+        const result = await client.query(
+          "SELECT * FROM auth_email_pin_challenges WHERE token_hash = $1 FOR UPDATE",
+          [tokenHash],
+        );
+        const challenge = result.rows[0];
+        const clock = await client.query(
+          "SELECT GREATEST($1::timestamptz, clock_timestamp()) AS checked_at",
+          [now],
+        );
+        const checkedAt = new Date(clock.rows[0].checked_at);
+        if (
+          !challenge ||
+          challenge.consumed_at ||
+          new Date(challenge.expires_at) <= checkedAt ||
+          challenge.attempts >= 5
+        )
+          return null;
+        if (challenge.pin_hash !== pinHash) {
+          await client.query(
+            "UPDATE auth_email_pin_challenges SET attempts = attempts + 1 WHERE id = $1",
+            [challenge.id],
+          );
+          return null;
+        }
+        const identity = await this.verifiedEmailIdentityForClient(
+          client,
+          challenge.user_id,
+          challenge.workspace_id,
+        );
+        if (!identity) return null;
+        await client.query("UPDATE auth_email_pin_challenges SET consumed_at = $2 WHERE id = $1", [
+          challenge.id,
+          checkedAt,
+        ]);
+        if (identity.creator) {
+          for (const documentType of ["terms", "privacy"]) {
+            await client.query(
+              `INSERT INTO consent_records
+                 (id, workspace_id, user_id, document_type, document_version, accepted_at)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON CONFLICT (workspace_id, user_id, document_type, document_version) DO NOTHING`,
+              [
+                randomUUID(),
+                identity.creator.workspaceId,
+                identity.user.userId,
+                documentType,
+                challenge.policy_version,
+                checkedAt,
+              ],
+            );
+          }
+        }
+        return { identity, returnTo: challenge.return_to };
+      },
+      { system: true },
+    );
+  }
+
+  async revokeEmailPinChallenge(tokenHash: string) {
+    await this.systemQuery(
+      "UPDATE auth_email_pin_challenges SET consumed_at = clock_timestamp() WHERE token_hash = $1 AND consumed_at IS NULL",
+      [tokenHash],
     );
   }
 
@@ -1715,11 +1937,15 @@ export class PostgresRepository implements Repository {
         let user = userResult.rows[0] as { id: string; email: string } | undefined;
         if (!user) {
           user = { id: randomUUID(), email: String(invitation.email) };
-          await client.query("INSERT INTO users (id, email) VALUES ($1, $2)", [
-            user.id,
-            user.email,
-          ]);
+          await client.query(
+            "INSERT INTO users (id, email, email_verified_at) VALUES ($1, $2, $3)",
+            [user.id, user.email, now],
+          );
         }
+        await client.query(
+          "UPDATE users SET email_verified_at = COALESCE(email_verified_at, $2) WHERE id = $1 AND deleted_at IS NULL",
+          [user.id, now],
+        );
         await client.query(
           `INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
            VALUES ($1,$2,$3,$4)
@@ -7355,7 +7581,8 @@ export class PostgresRepository implements Repository {
     return this.transaction(
       async (client) => {
         const userResult = await client.query(
-          `SELECT id, email, locale, locale_explicit AS "localePreferenceSet", created_at
+          `SELECT id, email, locale, locale_explicit AS "localePreferenceSet", created_at,
+                  email_verified_at AS "emailVerifiedAt"
            FROM users WHERE id = $1 AND deleted_at IS NULL`,
           [userId],
         );
@@ -7951,6 +8178,7 @@ export class PostgresRepository implements Repository {
   async deleteUserIdentity(userId: string) {
     await this.transaction(
       async (client) => {
+        await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
         const platform = new PlatformService(new PostgresPlatformStore(null, client));
         await platform.deleteIdentityMemberships(userId);
         await this.deleteCollaborationGroupMemberships(client, userId);
@@ -7976,8 +8204,9 @@ export class PostgresRepository implements Repository {
           `DELETE FROM auth_magic_tokens WHERE email=(SELECT email FROM users WHERE id=$1)`,
           [userId],
         );
+        await client.query("DELETE FROM auth_email_pin_challenges WHERE user_id = $1", [userId]);
         await client.query(
-          `UPDATE users SET email=$2,locale='en-CA',locale_explicit=false,deleted_at=now()
+          `UPDATE users SET email=$2,locale='en-CA',locale_explicit=false,email_verified_at=NULL,deleted_at=now()
         WHERE id=$1 AND deleted_at IS NULL`,
           [
             userId,
@@ -7992,6 +8221,7 @@ export class PostgresRepository implements Repository {
   async deleteAccount(userId: string) {
     await this.transaction(
       async (client) => {
+        await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
         const workspaceResult = await client.query(
           "SELECT workspace_id FROM workspace_members WHERE user_id = $1 AND role = 'owner'",
           [userId],
@@ -8007,8 +8237,13 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM workspace_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id = $1", [userId]);
         await client.query(
+          "DELETE FROM auth_magic_tokens WHERE email = (SELECT email FROM users WHERE id = $1)",
+          [userId],
+        );
+        await client.query("DELETE FROM auth_email_pin_challenges WHERE user_id = $1", [userId]);
+        await client.query(
           `UPDATE users
-           SET email = $2, locale = 'en-CA', locale_explicit = false, deleted_at = now()
+           SET email = $2, locale = 'en-CA', locale_explicit = false, email_verified_at = NULL, deleted_at = now()
            WHERE id = $1`,
           [
             userId,
@@ -8073,6 +8308,7 @@ export class PostgresRepository implements Repository {
         );
         await client.query("DELETE FROM session_summary_snapshots WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);
+        await client.query("DELETE FROM auth_email_pin_challenges WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM creator_sessions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM authoring_jobs WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM federated_auth_transactions WHERE expires_at <= $1", [now]);

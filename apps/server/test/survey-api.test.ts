@@ -1,3 +1,4 @@
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -51,7 +52,11 @@ async function signIn(app: FastifyInstance) {
     payload: { email: "survey-owner@example.com", segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json().debugUrl).searchParams.get("token");
-  const verified = await app.inject({ method: "GET", url: `/v1/auth/verify?token=${token}` });
+  const verified = await verifyEmailAndSignIn(
+    app,
+    `/v1/auth/verify?token=${token}`,
+    "survey-owner@example.com",
+  );
   const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
   return { cookie };
 }
@@ -630,8 +635,10 @@ describe("Survey creator and participant APIs", () => {
         url: "/v1/invitations/accept",
         payload: { token, acceptPolicies: true },
       });
+      expect(accepted.headers["set-cookie"]).toBeUndefined();
+      const acceptedSignIn = await requestPinAndSignIn(app, `survey-${role}@example.com`);
       expect(accepted.statusCode, accepted.body).toBe(200);
-      const memberHeaders = { cookie: String(accepted.headers["set-cookie"]).split(";")[0]! };
+      const memberHeaders = { cookie: String(acceptedSignIn.headers["set-cookie"]).split(";")[0]! };
       const denied = await app.inject({
         method: "DELETE",
         url: `/v1/survey-rooms/${room.id}`,

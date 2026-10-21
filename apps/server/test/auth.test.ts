@@ -11,6 +11,16 @@ class CapturingMailer implements Mailer {
     this.messages.push({ email, verifyUrl });
   }
 
+  async sendAccountVerification(email: string, verifyUrl: string) {
+    await this.sendMagicLink(email, verifyUrl);
+  }
+
+  readonly pins: Array<{ email: string; pin: string }> = [];
+
+  async sendSignInPin(email: string, pin: string) {
+    this.pins.push({ email, pin });
+  }
+
   async sendWorkspaceInvitation(email: string, verifyUrl: string) {
     this.messages.push({ email, verifyUrl });
   }

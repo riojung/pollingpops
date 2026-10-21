@@ -46,7 +46,7 @@ export class ApiClientError extends Error {
   }
 }
 
-function retryDelaySeconds(structured: unknown, header: string | null | undefined) {
+export function retryDelaySeconds(structured: unknown, header: string | null | undefined) {
   if (typeof structured === "number" && Number.isFinite(structured) && structured >= 0) {
     return Math.ceil(structured);
   }

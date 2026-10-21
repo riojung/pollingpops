@@ -136,7 +136,12 @@ export function BoardLibrary() {
       {error ? (
         <p className="error" role="alert">
           {t("boards.error")}{" "}
-          <button type="button" disabled={busy} onClick={() => setRefresh((value) => value + 1)}>
+          <button
+            type="button"
+            className="button-quiet"
+            disabled={busy}
+            onClick={() => setRefresh((value) => value + 1)}
+          >
             {t("boards.refresh")}
           </button>
         </p>
@@ -155,6 +160,7 @@ export function BoardLibrary() {
                   </strong>
                 </Link>
                 <p>{t(`boards.${board.status}`)}</p>
+                <p className={styles.muted}>{t("boards.richTypes")}</p>
               </li>
             ))}
           </ul>

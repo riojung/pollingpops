@@ -349,6 +349,16 @@ export class MemoryRepository implements Repository {
   readonly audienceRestrictions = new Map<string, AudienceRestrictionRecord>();
   readonly audienceOutbox = new Map<string, AudienceOutboxRecord>();
   readonly mediaAssets = new Map<string, MediaAssetRecord>();
+  /** Private upload provenance. Board images cannot be attached to other authoring content. */
+  readonly ideaBoardMediaOwners = new Map<
+    string,
+    {
+      workspaceId: string;
+      boardId: string;
+      guestId: string;
+      retained: boolean;
+    }
+  >();
   readonly mediaFinalizationLeases = new Map<string, { token: string; startedAt: Date }>();
   readonly mediaObjectCleanup = new Map<
     string,
@@ -3635,7 +3645,7 @@ export class MemoryRepository implements Repository {
     // A pending authoring save may resume after permanent deletion removed its owner.
     if (this.deletedMediaReferenceOwners.has(`${workspaceId}:${ownerType}:${ownerId}`)) return [];
     const uniqueMediaIds = [...new Set(mediaIds)];
-    this.validateMediaReferences(workspaceId, uniqueMediaIds);
+    this.validateMediaReferences(workspaceId, uniqueMediaIds, { ownerType, ownerId });
     for (const [key, reference] of this.mediaReferences) {
       if (
         reference.workspaceId === workspaceId &&
@@ -3662,10 +3672,24 @@ export class MemoryRepository implements Repository {
     );
   }
 
-  validateMediaReferences(workspaceId: string, mediaIds: string[]) {
+  validateMediaReferences(
+    workspaceId: string,
+    mediaIds: string[],
+    owner?: { ownerType: MediaReferenceOwnerType; ownerId: string },
+  ) {
     const invalidMediaId = [...new Set(mediaIds)].find((mediaId) => {
       const asset = this.mediaAssets.get(mediaId);
-      return !asset || asset.workspaceId !== workspaceId || asset.scanStatus === "deleting";
+      const upload = this.ideaBoardMediaOwners.get(mediaId);
+      return (
+        !asset ||
+        asset.workspaceId !== workspaceId ||
+        asset.scanStatus === "deleting" ||
+        (upload !== undefined &&
+          (owner?.ownerType !== "idea_board" ||
+            owner.ownerId !== upload.boardId ||
+            !upload.retained)) ||
+        (owner?.ownerType === "idea_board" && !upload)
+      );
     });
     if (invalidMediaId) {
       throw new Error(`Media asset ${invalidMediaId} is unavailable in this workspace`);
@@ -4011,6 +4035,7 @@ export class MemoryRepository implements Repository {
     }
     this.mediaFinalizationLeases.delete(mediaId);
     this.mediaObjectCleanup.delete(mediaId);
+    this.ideaBoardMediaOwners.delete(mediaId);
     return this.mediaAssets.delete(mediaId);
   }
 

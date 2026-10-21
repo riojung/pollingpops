@@ -1170,7 +1170,27 @@ the participant link:
 - `POST /v1/idea-boards/{id}/join` admits or restores the same guest; alias boards require a
   chosen board nickname, while anonymous boards reject aliases.
 - `GET /v1/idea-boards/{id}/guest` returns visible approved ideas, own submissions and own ballot.
-- `POST /v1/idea-boards/{id}/ideas` accepts `body` and `idempotencyKey` during collection.
+- `POST /v1/idea-boards/{id}/ideas` accepts `body` and `idempotencyKey` during collection, plus
+  optional `attachments`, `links` and `sketch`. The request limit is 64 KiB. Text remains required.
+  Attachments are `{mediaId, alt}` (up to three); images must be clean uploads owned by this
+  board and guest. Links are `{url, label?, imageMediaId?}` (up to three), using HTTP(S) without
+  URL credentials. A link's optional image must be in the same idea's attachments. Sketches are
+  versioned typed geometry, at most 32 elements / 1,024 points / 16 KiB; arbitrary SVG is rejected.
+  Empty rich fields are omitted, preserving text-only idea objects and legacy retry fingerprints.
+- `POST /v1/idea-boards/{id}/media` reserves a board-private image upload using the existing
+  media upload request (`fileName`, `mimeType`, `sizeBytes`, `altText`). The admitted guest
+  must be in collection and the upload pipeline available. It returns
+  `{mediaId, uploadUrl, expiresInSeconds, scanStatus}`. PUT the file bytes to `uploadUrl` without
+  creator cookies or the guest bearer. Reservations count toward the board/guest quotas.
+- `POST /v1/idea-boards/{id}/media/{mediaId}/complete` scans and finalizes the same guest's
+  upload, returning `{media: {id, scanStatus, altText}}`. Only `clean` images can be submitted.
+  It does not return a signed download URL.
+- `GET /v1/idea-boards/{id}/media/{mediaId}/content` returns authorized JPEG/PNG/WebP bytes.
+  Send the guest bearer without creator cookies, or the creator cookie for a host view. Pending
+  images are limited to their author and moderators; other guests see images only in approved,
+  currently visible ideas. Removed or expired content is unavailable. The endpoint rechecks
+  authorization after storage I/O and uses private/no-store, nosniff and no-referrer headers.
+  Board-private assets cannot use the generic creator media completion/download routes.
 - `PUT /v1/idea-boards/{id}/votes` accepts distinct `ideaIds`, guest `expectedRevision`, and
   `idempotencyKey` during voting. One accepted ballot is final; exact retries return its receipt.
 
@@ -1178,3 +1198,9 @@ Responses are private/no-store. Vote totals are null before closure. Fixed deadl
 restrictions are checked transactionally; expired boards are unavailable. Staff commands use the
 board revision, while ballots use the guest revision so other guests' activity cannot create a
 false ballot conflict.
+
+Guest view responses include optional `imageUploadsAvailable` for the current pipeline; it is
+computed by the server rather than stored with the board. The rich-content fields are additive
+to version 1 and require a coordinated server/web deployment for strict readers. Public admission
+metadata never contains idea text or attachments. Link cards are user-supplied links: no remote
+metadata fetches or social embeds are performed.

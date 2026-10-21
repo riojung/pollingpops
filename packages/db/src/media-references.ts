@@ -3,10 +3,19 @@ import type {
   PresentationDraft,
   QuizDraft,
   RecoveryPackDraft,
+  IdeaBoardStored,
 } from "@openround/contracts";
 
 function uniqueMediaIds(mediaIds: Array<string | null | undefined>) {
   return [...new Set(mediaIds.filter((mediaId): mediaId is string => Boolean(mediaId)))];
+}
+
+export function ideaBoardMediaIds(content: Pick<IdeaBoardStored, "ideas">) {
+  return uniqueMediaIds(
+    content.ideas.flatMap((idea) =>
+      idea.status === "removed" ? [] : (idea.attachments ?? []).map((item) => item.mediaId),
+    ),
+  );
 }
 
 export function quizMediaIds(content: QuizDraft) {

@@ -11,6 +11,7 @@ import { IdeaBoardRepository, MemoryRepository, createPlatformRepository } from 
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
+import { mediaFinalizationObjectKey, StorageService } from "../src/storage.js";
 
 let activeApp: FastifyInstance | undefined;
 afterEach(async () => {
@@ -34,6 +35,7 @@ async function fixture(
   enabled = true,
   plan: "free" | "pro" = "free",
   configureCache?: (cache: MemorySessionCache) => void,
+  mediaEnabled = false,
 ) {
   const workspaceId = randomUUID();
   const repository = new MemoryRepository({ initialWorkspaceId: workspaceId, initialPlan: plan });
@@ -45,10 +47,22 @@ async function fixture(
     PUBLIC_API_URL: "http://localhost:4000",
     FEATURE_IDEA_BOARDS: String(enabled),
     CORE_PARITY_WORKSPACE_ALLOWLIST: workspaceId,
+    FEATURE_MEDIA_UPLOADS: String(mediaEnabled),
+    ...(mediaEnabled
+      ? {
+          S3_ENDPOINT: "http://127.0.0.1:9000",
+          S3_ACCESS_KEY_ID: "test-access",
+          S3_SECRET_ACCESS_KEY: "test-secret",
+        }
+      : {}),
   });
   const cache = new MemorySessionCache();
   configureCache?.(cache);
-  const { app } = await buildApp(config, { repository, cache });
+  const { app } = await buildApp(config, {
+    repository,
+    cache,
+    scanner: mediaEnabled ? { scan: async () => ({ clean: true, signature: null }) } : null,
+  });
   activeApp = app;
   return { app, repository, config, cache, workspaceId, headers: await signIn(app) };
 }
@@ -117,6 +131,509 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
 }
 
 describe("independent idea board APIs", () => {
+  it("reports image availability on guest responses and refuses uploads without storage and scanning", async () => {
+    const { app, headers } = await fixture();
+    const { board } = await createBoard(app, headers);
+    await host(app, board.id, headers, { type: "collect" });
+    const guest = guestHeaders();
+    expect((await join(app, board.id, guest)).imageUploadsAvailable).toBe(false);
+    const unavailable = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media`,
+      headers: guest,
+      payload: {
+        fileName: "diagram.png",
+        mimeType: "image/png",
+        sizeBytes: 8,
+        altText: "A diagram",
+      },
+    });
+    expect(unavailable.statusCode, unavailable.body).toBe(503);
+    expect(unavailable.json().error.code).toBe("DEPENDENCY_UNAVAILABLE");
+    const submitted = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: guest,
+      payload: { body: "A text idea", idempotencyKey: randomUUID() },
+    });
+    expect(submitted.statusCode, submitted.body).toBe(200);
+    expect(submitted.json().imageUploadsAvailable).toBe(false);
+    const resumed = await app.inject({
+      method: "GET",
+      url: `/v1/idea-boards/${board.id}/guest`,
+      headers: guest,
+    });
+    expect(resumed.json().imageUploadsAvailable).toBe(false);
+  });
+
+  it("keeps image tickets, completion, and binary delivery scoped to the board, author, and moderation state", async () => {
+    const { app, headers, repository, workspaceId } = await fixture(true, "free", undefined, true);
+    vi.spyOn(StorageService.prototype, "finalize").mockImplementation(async (asset, token) => ({
+      scanStatus: "clean",
+      objectKey: mediaFinalizationObjectKey(asset, token),
+    }));
+    vi.spyOn(StorageService.prototype, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(StorageService.prototype, "cleanupFinalization").mockResolvedValue();
+    const read = vi
+      .spyOn(StorageService.prototype, "readImage")
+      .mockResolvedValue(Buffer.from("private scanned image"));
+    const signedDownload = vi.spyOn(StorageService.prototype, "createDownloadUrl");
+    const { board } = await createBoard(app, headers);
+    await host(app, board.id, headers, { type: "collect" });
+    const author = guestHeaders(),
+      other = guestHeaders();
+    expect((await join(app, board.id, author)).imageUploadsAvailable).toBe(true);
+    await join(app, board.id, other);
+    const uploadPayload = {
+      fileName: "diagram.png",
+      mimeType: "image/png",
+      sizeBytes: 8,
+      altText: "A useful diagram",
+    };
+    const deniedTicket = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media`,
+      headers: guestHeaders(),
+      payload: uploadPayload,
+    });
+    expect(deniedTicket.statusCode, deniedTicket.body).toBe(401);
+    const ticket = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media`,
+      headers: author,
+      payload: uploadPayload,
+    });
+    expect(ticket.statusCode, ticket.body).toBe(201);
+    const mediaId = ticket.json().mediaId as string;
+    expect(ticket.json()).toMatchObject({
+      scanStatus: "pending",
+      expiresInSeconds: 600,
+      uploadUrl: expect.stringContaining("quarantine/"),
+    });
+    const completeUrl = `/v1/idea-boards/${board.id}/media/${mediaId}/complete`;
+    const contentUrl = `/v1/idea-boards/${board.id}/media/${mediaId}/content`;
+    const wrongOwner = await app.inject({ method: "POST", url: completeUrl, headers: other });
+    expect(wrongOwner.statusCode, wrongOwner.body).toBe(404);
+    const incomplete = await app.inject({ method: "GET", url: contentUrl, headers: author });
+    expect(incomplete.statusCode, incomplete.body).toBe(404);
+    const complete = await app.inject({ method: "POST", url: completeUrl, headers: author });
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(complete.json()).toEqual({
+      media: { id: mediaId, scanStatus: "clean", altText: uploadPayload.altText },
+    });
+    const preview = await app.inject({ method: "GET", url: contentUrl, headers: author });
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.body).toBe("private scanned image");
+    expect(preview.headers).toMatchObject({
+      "content-type": "image/png",
+      "cache-control": "private, no-store",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    });
+    const privatePreview = await app.inject({ method: "GET", url: contentUrl, headers: other });
+    expect(privatePreview.statusCode, privatePreview.body).toBe(404);
+    const submitted = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: author,
+      payload: {
+        body: "Diagram proposal",
+        attachments: [{ mediaId, alt: "A useful diagram" }],
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(submitted.statusCode, submitted.body).toBe(200);
+    const ideaId = submitted.json().receipt.ideaId as string;
+    const moderatorView = await app.inject({ method: "GET", url: contentUrl, headers });
+    expect(moderatorView.statusCode, moderatorView.body).toBe(200);
+    const pending = await app.inject({ method: "GET", url: contentUrl, headers: other });
+    expect(pending.statusCode, pending.body).toBe(404);
+    await host(app, board.id, headers, { type: "moderate", ideaId, status: "approved" });
+    const hidden = await app.inject({ method: "GET", url: contentUrl, headers: other });
+    expect(hidden.statusCode, hidden.body).toBe(404);
+    await host(app, board.id, headers, { type: "visibility", visible: true });
+    const visible = await app.inject({ method: "GET", url: contentUrl, headers: other });
+    expect(visible.statusCode, visible.body).toBe(200);
+    expect(signedDownload).not.toHaveBeenCalled();
+
+    const unrelatedId = randomUUID();
+    await repository.createMediaAsset({
+      id: unrelatedId,
+      workspaceId,
+      objectKey: `media/${workspaceId}/${unrelatedId}.png`,
+      mimeType: "image/png",
+      sizeBytes: 8,
+      altText: "Creator private image",
+      scanStatus: "clean",
+      createdAt: new Date(),
+    });
+    for (const path of [
+      `/v1/idea-boards/${board.id}/media/${unrelatedId}/content`,
+      `/v1/idea-boards/${board.id}/media/${unrelatedId}/complete`,
+    ]) {
+      const response = await app.inject({
+        method: path.endsWith("complete") ? "POST" : "GET",
+        url: path,
+        headers: author,
+      });
+      expect(response.statusCode, response.body).toBe(404);
+    }
+    read.mockImplementationOnce(async () => {
+      await host(app, board.id, headers, { type: "moderate", ideaId, status: "removed" });
+      return Buffer.from("removed private image");
+    });
+    const removedDuringRead = await app.inject({ method: "GET", url: contentUrl, headers: other });
+    expect(removedDuringRead.statusCode, removedDuringRead.body).toBe(404);
+    expect(removedDuringRead.body).not.toContain("removed private image");
+  });
+
+  it("keeps historical image reads available when new uploads pause and rechecks expiry after storage", async () => {
+    const { app, headers, repository } = await fixture(true, "free", undefined, true);
+    vi.spyOn(StorageService.prototype, "finalize").mockImplementation(async (asset, token) => ({
+      scanStatus: "clean",
+      objectKey: mediaFinalizationObjectKey(asset, token),
+    }));
+    vi.spyOn(StorageService.prototype, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(StorageService.prototype, "cleanupFinalization").mockResolvedValue();
+    const read = vi
+      .spyOn(StorageService.prototype, "readImage")
+      .mockResolvedValue(Buffer.from("private image"));
+    const { board } = await createBoard(app, headers, {
+      moderationEnabled: false,
+      ideasVisible: true,
+    });
+    await host(app, board.id, headers, { type: "collect" });
+    const author = guestHeaders();
+    await join(app, board.id, author);
+    const ticket = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media`,
+      headers: author,
+      payload: { fileName: "diagram.png", mimeType: "image/png", sizeBytes: 8, altText: "Diagram" },
+    });
+    expect(ticket.statusCode, ticket.body).toBe(201);
+    const mediaId = ticket.json().mediaId as string;
+    const complete = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media/${mediaId}/complete`,
+      headers: author,
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    const idea = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: author,
+      payload: {
+        body: "Image idea",
+        attachments: [{ mediaId, alt: "Diagram" }],
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(idea.statusCode, idea.body).toBe(200);
+    const operational = await repository.getOperationalFeatures();
+    vi.spyOn(repository, "getOperationalFeatures").mockResolvedValue({
+      ...operational,
+      mediaUploads: false,
+    });
+    const contentUrl = `/v1/idea-boards/${board.id}/media/${mediaId}/content`;
+    const historical = await app.inject({ method: "GET", url: contentUrl, headers: author });
+    expect(historical.statusCode, historical.body).toBe(200);
+    const resumed = await app.inject({
+      method: "GET",
+      url: `/v1/idea-boards/${board.id}/guest`,
+      headers: author,
+    });
+    expect(resumed.json().imageUploadsAvailable).toBe(false);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    read.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.parse(board.expiresAt) + 1);
+      return Buffer.from("expired image");
+    });
+    const expired = await app.inject({ method: "GET", url: contentUrl, headers: author });
+    expect(expired.statusCode, expired.body).toBe(404);
+    expect(expired.body).not.toContain("expired image");
+  });
+
+  it("blocks generic creator media routes from signing or finalizing private board uploads", async () => {
+    const { app, headers, repository, workspaceId } = await fixture(true, "free", undefined, true);
+    const finalize = vi
+      .spyOn(StorageService.prototype, "finalize")
+      .mockImplementation(async (asset, token) => ({
+        scanStatus: "clean",
+        objectKey: mediaFinalizationObjectKey(asset, token),
+      }));
+    vi.spyOn(StorageService.prototype, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(StorageService.prototype, "cleanupFinalization").mockResolvedValue();
+    const signed = vi
+      .spyOn(StorageService.prototype, "createDownloadUrl")
+      .mockResolvedValue("https://storage.example.test/ordinary-image");
+    const { board } = await createBoard(app, headers);
+    await host(app, board.id, headers, { type: "collect" });
+    const author = guestHeaders();
+    await join(app, board.id, author);
+    const viewer = await member(app, headers, "viewer");
+    const ticket = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media`,
+      headers: author,
+      payload: {
+        fileName: "diagram.png",
+        mimeType: "image/png",
+        sizeBytes: 8,
+        altText: "Private diagram",
+      },
+    });
+    expect(ticket.statusCode, ticket.body).toBe(201);
+    const mediaId = ticket.json().mediaId as string;
+    const generic = async (imageId: string, owner: Headers, method: "GET" | "POST") =>
+      app.inject({
+        method,
+        url: `/v1/media/${imageId}${method === "POST" ? "/complete" : ""}`,
+        headers: owner,
+      });
+    for (const method of ["GET", "POST"] as const) {
+      const response = await generic(mediaId, headers, method);
+      expect(response.statusCode, response.body).toBe(404);
+    }
+    expect(finalize).not.toHaveBeenCalled();
+    const completed = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media/${mediaId}/complete`,
+      headers: author,
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(finalize).toHaveBeenCalledOnce();
+    for (const owner of [headers, viewer]) {
+      const response = await generic(mediaId, owner, "GET");
+      expect(response.statusCode, response.body).toBe(404);
+    }
+    const completeBypass = await generic(mediaId, headers, "POST");
+    expect(completeBypass.statusCode, completeBypass.body).toBe(404);
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(signed).not.toHaveBeenCalled();
+
+    const ordinaryId = randomUUID();
+    await repository.createMediaAsset({
+      id: ordinaryId,
+      workspaceId,
+      objectKey: `media/${workspaceId}/${ordinaryId}.png`,
+      mimeType: "image/png",
+      sizeBytes: 8,
+      altText: "Ordinary creator image",
+      scanStatus: "clean",
+      createdAt: new Date(),
+    });
+    for (const method of ["GET", "POST"] as const) {
+      const response = await generic(ordinaryId, headers, method);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().downloadUrl).toBe("https://storage.example.test/ordinary-image");
+    }
+    expect(signed).toHaveBeenCalledTimes(2);
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/v1/idea-boards/${board.id}`,
+      headers,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    for (const method of ["GET", "POST"] as const) {
+      const response = await generic(mediaId, headers, method);
+      expect(response.statusCode, response.body).toBe(404);
+    }
+    expect(signed).toHaveBeenCalledTimes(2);
+  });
+
+  it("reauthorizes image access after the final asset lookup waits beyond board expiry", async () => {
+    const { app, headers, repository } = await fixture(true, "free", undefined, true);
+    vi.spyOn(StorageService.prototype, "finalize").mockImplementation(async (asset, token) => ({
+      scanStatus: "clean",
+      objectKey: mediaFinalizationObjectKey(asset, token),
+    }));
+    vi.spyOn(StorageService.prototype, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(StorageService.prototype, "cleanupFinalization").mockResolvedValue();
+    const { board } = await createBoard(app, headers);
+    await host(app, board.id, headers, { type: "collect" });
+    const author = guestHeaders();
+    await join(app, board.id, author);
+    const ticket = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media`,
+      headers: author,
+      payload: {
+        fileName: "private.png",
+        mimeType: "image/png",
+        sizeBytes: 8,
+        altText: "Private image",
+      },
+    });
+    expect(ticket.statusCode, ticket.body).toBe(201);
+    const mediaId = ticket.json().mediaId as string;
+    const complete = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/media/${mediaId}/complete`,
+      headers: author,
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    let storageFinished = false;
+    vi.spyOn(StorageService.prototype, "readImage").mockImplementationOnce(async () => {
+      storageFinished = true;
+      return Buffer.from("PRIVATE IMAGE AFTER METADATA WAIT");
+    });
+    let signalStarted!: () => void;
+    let releaseRead!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const original = repository.getMediaAsset.bind(repository);
+    vi.spyOn(repository, "getMediaAsset").mockImplementation(async (...args) => {
+      const asset = await original(...args);
+      if (storageFinished) {
+        signalStarted();
+        await release;
+      }
+      return asset;
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const reading = app.inject({
+      method: "GET",
+      url: `/v1/idea-boards/${board.id}/media/${mediaId}/content`,
+      headers: author,
+    });
+    await started;
+    vi.setSystemTime(Date.parse(board.expiresAt) + 1);
+    releaseRead();
+    const response = await reading;
+    expect(response.statusCode, response.body).toBe(404);
+    expect(response.body).not.toContain("PRIVATE IMAGE AFTER METADATA WAIT");
+  });
+
+  it("rechecks retained content after a delayed image availability read crosses board expiry", async () => {
+    const { app, headers, repository } = await fixture(true, "free", undefined, true);
+    const { board } = await createBoard(app, headers);
+    await host(app, board.id, headers, { type: "collect" });
+    const author = guestHeaders();
+    await join(app, board.id, author);
+    const submitted = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: author,
+      payload: { body: "Private retained content", idempotencyKey: randomUUID() },
+    });
+    expect(submitted.statusCode, submitted.body).toBe(200);
+    const operational = await repository.getOperationalFeatures();
+    let signalStarted!: () => void;
+    let releaseRead!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    vi.spyOn(repository, "getOperationalFeatures").mockImplementationOnce(async () => {
+      signalStarted();
+      await release;
+      return operational;
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const reading = app.inject({
+      method: "GET",
+      url: `/v1/idea-boards/${board.id}/guest`,
+      headers: author,
+    });
+    await started;
+    vi.setSystemTime(Date.parse(board.expiresAt) + 1);
+    releaseRead();
+    const response = await reading;
+    expect(response.statusCode, response.body).toBe(404);
+    expect(response.body).not.toContain("Private retained content");
+  });
+
+  it.each(["demoted", "removed"] as const)(
+    "reauthorizes an editor %s during a deferred private image read",
+    async (change) => {
+      const { app, headers, repository, workspaceId } = await fixture(
+        true,
+        "free",
+        undefined,
+        true,
+      );
+      vi.spyOn(StorageService.prototype, "finalize").mockImplementation(async (asset, token) => ({
+        scanStatus: "clean",
+        objectKey: mediaFinalizationObjectKey(asset, token),
+      }));
+      vi.spyOn(StorageService.prototype, "commitFinalizationCandidate").mockResolvedValue();
+      vi.spyOn(StorageService.prototype, "cleanupFinalization").mockResolvedValue();
+      const { board } = await createBoard(app, headers);
+      await host(app, board.id, headers, { type: "collect" });
+      const author = guestHeaders();
+      await join(app, board.id, author);
+      const editor = await member(app, headers, "editor");
+      const profile = await app.inject({ method: "GET", url: "/v1/auth/me", headers: editor });
+      const editorId = profile.json().creator.userId as string;
+      const ticket = await app.inject({
+        method: "POST",
+        url: `/v1/idea-boards/${board.id}/media`,
+        headers: author,
+        payload: {
+          fileName: "private.png",
+          mimeType: "image/png",
+          sizeBytes: 8,
+          altText: "Pending private image",
+        },
+      });
+      expect(ticket.statusCode, ticket.body).toBe(201);
+      const mediaId = ticket.json().mediaId as string;
+      const complete = await app.inject({
+        method: "POST",
+        url: `/v1/idea-boards/${board.id}/media/${mediaId}/complete`,
+        headers: author,
+      });
+      expect(complete.statusCode, complete.body).toBe(200);
+      const submitted = await app.inject({
+        method: "POST",
+        url: `/v1/idea-boards/${board.id}/ideas`,
+        headers: author,
+        payload: {
+          body: "Private pending proposal",
+          attachments: [{ mediaId, alt: "Pending private image" }],
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(submitted.statusCode, submitted.body).toBe(200);
+      let signalStarted!: () => void;
+      let releaseRead!: () => void;
+      const started = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+      });
+      const release = new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+      vi.spyOn(StorageService.prototype, "readImage").mockImplementationOnce(async () => {
+        signalStarted();
+        await release;
+        return Buffer.from("PRIVATE IMAGE AFTER REVOCATION");
+      });
+      const reading = app.inject({
+        method: "GET",
+        url: `/v1/idea-boards/${board.id}/media/${mediaId}/content`,
+        headers: editor,
+      });
+      await started;
+      if (change === "demoted")
+        expect(
+          await repository.updateWorkspaceMemberRole(workspaceId, editorId, "viewer"),
+        ).not.toBeNull();
+      else expect(await repository.removeWorkspaceMember(workspaceId, editorId)).toBe(true);
+      releaseRead();
+      const response = await reading;
+      expect(response.statusCode, response.body).toBe(change === "demoted" ? 404 : 401);
+      expect(response.body).not.toContain("PRIVATE IMAGE AFTER REVOCATION");
+      expect(response.headers["content-type"]).not.toContain("image/");
+    },
+  );
+
   it("allocates a server board ID and replays exact and concurrent creation retries", async () => {
     const { app, headers } = await fixture();
     const payload = { title: "Concurrent priorities", idempotencyKey: randomUUID() };
@@ -648,7 +1165,7 @@ describe("independent idea board APIs", () => {
       method: "POST",
       url: `/v1/idea-boards/${board.id}/ideas`,
       headers: guest,
-      payload: { body: "x".repeat(10_000), idempotencyKey: randomUUID() },
+      payload: { body: "x".repeat(70_000), idempotencyKey: randomUUID() },
     });
     expect(huge.statusCode).toBe(413);
     const malformed = await app.inject({
@@ -661,6 +1178,8 @@ describe("independent idea board APIs", () => {
     limitedPrefix = "idea-board-ip:";
     const limited = await app.inject({ method: "GET", url: `/v1/idea-boards/${board.id}/guest` });
     expect(limited.statusCode).toBe(429);
+    expect(limited.headers["retry-after"]).toBe("60");
+    expect(limited.json().error.retryAfterSeconds).toBe(60);
     limitedPrefix = "idea-board-guest:";
     const credentialLimited = await app.inject({
       method: "GET",
@@ -668,6 +1187,8 @@ describe("independent idea board APIs", () => {
       headers: guest,
     });
     expect(credentialLimited.statusCode).toBe(429);
+    expect(credentialLimited.headers["retry-after"]).toBe("60");
+    expect(credentialLimited.json().error.retryAfterSeconds).toBe(60);
   });
 
   it("does not return idea text when a guest read waits past retention", async () => {

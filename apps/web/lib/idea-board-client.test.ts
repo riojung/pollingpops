@@ -5,12 +5,14 @@ import {
   commandIdeaBoard,
   fetchGuestIdeaBoard,
   fetchPublicIdeaBoard,
+  fetchIdeaBoardImage,
   ideaBoardCommandIntent,
   ideaBoardCredential,
   ideaBoardPath,
   joinIdeaBoard,
   submitBoardIdea,
   submitBoardVotes,
+  uploadIdeaBoardImage,
 } from "./idea-board-client";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -105,5 +107,198 @@ describe("idea board browser boundaries", () => {
     await expect(commandIdeaBoard(boardId, intent)).rejects.toThrow();
     await commandIdeaBoard(boardId, intent);
     expect(mock.mock.calls[0]![1].body).toEqual(mock.mock.calls[1]![1].body);
+  });
+
+  it("uploads and scans board images without sending a board credential to storage", async () => {
+    const token = "ab".repeat(32);
+    const file = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], "diagram.png", {
+      type: "image/png",
+    });
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          mediaId: boardIdeaId,
+          uploadUrl: "https://storage.example.test/quarantine/diagram.png?signature=synthetic",
+          expiresInSeconds: 600,
+          scanStatus: "pending",
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          media: { id: boardIdeaId, scanStatus: "clean", altText: "A blue square" },
+        }),
+      );
+    vi.stubGlobal("fetch", mock);
+    await expect(uploadIdeaBoardImage(boardId, token, file, "A blue square")).resolves.toEqual({
+      mediaId: boardIdeaId,
+      scanStatus: "clean",
+      altText: "A blue square",
+    });
+    const calls = mock.mock.calls as Array<[string, RequestInit]>;
+    expect(calls[0]![0]).toContain(`/idea-boards/${boardId}/media`);
+    expect(calls[0]![1].headers).toMatchObject({ authorization: `Bearer ${token}` });
+    expect(calls[1]![1]).toMatchObject({ method: "PUT", body: file });
+    expect(calls[1]![1].headers).not.toHaveProperty("authorization");
+    expect(calls[2]![0]).toContain(`/idea-boards/${boardId}/media/${boardIdeaId}/complete`);
+    expect(calls[2]![1].headers).toMatchObject({ authorization: `Bearer ${token}` });
+    for (const [url, init] of calls) {
+      expect(url).not.toContain(token);
+      expect(init).toMatchObject({
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        cache: "no-store",
+      });
+    }
+  });
+
+  it("rejects unsupported images and missing descriptions before reserving an upload", async () => {
+    const mock = vi.fn();
+    vi.stubGlobal("fetch", mock);
+    await expect(
+      uploadIdeaBoardImage(
+        boardId,
+        "ab".repeat(32),
+        new File(["<svg/>"], "unsafe.svg", { type: "image/svg+xml" }),
+        "A sketch",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      uploadIdeaBoardImage(
+        boardId,
+        "ab".repeat(32),
+        new File(["image"], "image.png", { type: "image/png" }),
+        "  ",
+      ),
+    ).rejects.toThrow();
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it.each(["rejected", "pending"])(
+    "never accepts a %s scan result as an attachment",
+    async (scanStatus) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce(
+            Response.json({
+              mediaId: boardIdeaId,
+              uploadUrl: "https://storage.example.test/image",
+              expiresInSeconds: 600,
+              scanStatus: "pending",
+            }),
+          )
+          .mockResolvedValueOnce(new Response(null))
+          .mockResolvedValueOnce(
+            Response.json({ media: { id: boardIdeaId, scanStatus, altText: "A square" } }),
+          ),
+      );
+      await expect(
+        uploadIdeaBoardImage(
+          boardId,
+          "ab".repeat(32),
+          new File(["image"], "image.png", { type: "image/png" }),
+          "A square",
+        ),
+      ).rejects.toThrow("approved");
+    },
+  );
+
+  it("fetches image bytes with audience credentials outside URLs and preserves creator authentication", async () => {
+    const mock = vi.fn().mockImplementation(
+      async () =>
+        new Response(new Uint8Array([137, 80, 78, 71]), {
+          headers: { "content-type": "image/png", "cache-control": "private, no-store" },
+        }),
+    );
+    vi.stubGlobal("fetch", mock);
+    const token = "ab".repeat(32);
+    expect((await fetchIdeaBoardImage(boardId, boardIdeaId, token)).type).toBe("image/png");
+    await fetchIdeaBoardImage(boardId, boardIdeaId);
+    expect(mock.mock.calls[0]![0]).toContain(
+      `/idea-boards/${boardId}/media/${boardIdeaId}/content`,
+    );
+    expect(mock.mock.calls[0]![0]).not.toContain(token);
+    expect(mock.mock.calls[0]![0]).not.toContain("?");
+    expect(mock.mock.calls[0]![1]).toMatchObject({
+      credentials: "omit",
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(mock.mock.calls[1]![1].credentials).toBe("include");
+    expect(mock.mock.calls[1]![1].headers).toBeUndefined();
+  });
+
+  it("does not turn denied or non-image responses into displayable blobs", async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ error: "not an image" }));
+    vi.stubGlobal("fetch", mock);
+    await expect(fetchIdeaBoardImage(boardId, boardIdeaId, "ab".repeat(32))).rejects.toMatchObject({
+      status: 401,
+    });
+    await expect(fetchIdeaBoardImage(boardId, boardIdeaId, "ab".repeat(32))).rejects.toThrow(
+      "Invalid board image",
+    );
+  });
+
+  it("preserves image throttling delays so reads do not retry ahead of the server budget", async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ error: { code: "RATE_LIMITED", retryAfterSeconds: 60 } }, { status: 429 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 503, headers: { "retry-after": "30" } }));
+    vi.stubGlobal("fetch", mock);
+    await expect(fetchIdeaBoardImage(boardId, boardIdeaId)).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 60,
+    });
+    await expect(fetchIdeaBoardImage(boardId, boardIdeaId)).rejects.toMatchObject({
+      status: 503,
+      retryAfterSeconds: 30,
+    });
+  });
+
+  it("preserves the exact rich submission through an uncertain retry", async () => {
+    const mock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Interrupted"))
+      .mockResolvedValueOnce(Response.json(boardGuestFixture));
+    vi.stubGlobal("fetch", mock);
+    const input = {
+      schemaVersion: 1 as const,
+      idempotencyKey: boardIdeaId,
+      body: "A diagram and reference",
+      attachments: [{ mediaId: boardIdeaId, alt: "A square" }],
+      links: [
+        { url: "https://example.test/reference", label: "Reference", imageMediaId: boardIdeaId },
+      ],
+      sketch: {
+        schemaVersion: 1 as const,
+        width: 1000 as const,
+        height: 600 as const,
+        elements: [
+          {
+            id: boardIdeaId,
+            type: "rect" as const,
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 60,
+            color: "blue" as const,
+            strokeWidth: 2 as const,
+          },
+        ],
+      },
+    };
+    await expect(submitBoardIdea(boardId, "ab".repeat(32), input)).rejects.toThrow("Interrupted");
+    await submitBoardIdea(boardId, "ab".repeat(32), input);
+    expect(mock.mock.calls[0]![1].body).toBe(mock.mock.calls[1]![1].body);
+    expect(JSON.parse(mock.mock.calls[1]![1].body)).toEqual(input);
   });
 });

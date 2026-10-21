@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 import { signInBeta } from "./sign-in";
 
 async function hostCommand(page: Page, action: () => Promise<unknown>) {
@@ -31,6 +31,7 @@ async function visualEvidence(page: Page, label: string) {
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true);
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({
         path: test.info().outputPath(`idea-board-${label}-${colorScheme}-${width}.png`),
         fullPage: true,
@@ -40,6 +41,171 @@ async function visualEvidence(page: Page, label: string) {
 }
 
 for (const mobile of [false, true]) {
+  test(`${mobile ? "@mobile " : ""}rich ideas preserve drawings and link cards through moderation`, async ({
+    page,
+    browser,
+  }) => {
+    test.skip(process.env.BETA_E2E_IDEA_BOARDS !== "true", "Opt-in idea board writer journey");
+    test.setTimeout(180_000);
+    page.setDefaultTimeout(15_000);
+    await signInBeta(page);
+    await page.goto("/boards");
+    const title = `Synthetic rich board ${randomUUID().slice(0, 8)}`;
+    const idea = `Synthetic diagram ${randomUUID().slice(0, 8)}`;
+    const caption = "A reference for this diagram";
+    await page.getByLabel("Board title", { exact: true }).fill(title);
+    await page.getByRole("button", { name: "Create board", exact: true }).click();
+    await expect(page).toHaveURL(/\/boards\/[0-9a-f-]{36}$/);
+    const id = new URL(page.url()).pathname.split("/").at(-1)!;
+    await page.getByRole("button", { name: "Open collection", exact: true }).click();
+
+    const participantDevice = mobile
+      ? devices[test.info().project.name.startsWith("webkit") ? "iPhone 15" : "Pixel 5"]
+      : {};
+    const guestContext = await browser.newContext({
+      ...participantDevice,
+      baseURL: new URL(page.url()).origin,
+      viewport: { width: mobile ? 390 : 1280, height: 844 },
+      reducedMotion: "reduce",
+    });
+    const otherContext = await browser.newContext({
+      ...participantDevice,
+      baseURL: new URL(page.url()).origin,
+      viewport: { width: mobile ? 390 : 1280, height: 844 },
+    });
+    try {
+      const guest = await guestContext.newPage();
+      const other = await otherContext.newPage();
+      guest.setDefaultTimeout(15_000);
+      other.setDefaultTimeout(15_000);
+      await guest.goto(`/board/${id}`);
+      await guest.getByRole("button", { name: "Join board", exact: true }).click();
+      await guest.getByLabel("Your idea", { exact: true }).fill(idea);
+      // This in-memory fixture deliberately has no storage/scanner. The real upload path is
+      // exercised by the storage/API suites; the composer must not offer unscanned images.
+      await expect(guest.getByRole("button", { name: "Image", exact: true })).toBeDisabled();
+      await expect(guest.getByText("Image uploads are unavailable for this board.")).toBeVisible();
+      await guest.getByRole("button", { name: "Link", exact: true }).click();
+      await guest
+        .getByLabel("Website or social post URL", { exact: true })
+        .fill("https://example.test/idea");
+      await guest.getByLabel("Link caption (optional)", { exact: true }).fill(caption);
+      await guest.getByRole("button", { name: "Add link", exact: true }).click();
+      await guest.getByRole("button", { name: "Draw", exact: true }).click();
+      const editor = guest.getByRole("dialog", { name: "Draw your idea", exact: true });
+      await expect(editor).toBeVisible();
+      await editor.getByRole("button", { name: "Rectangle", exact: true }).click();
+      await editor.getByRole("button", { name: "Add Rectangle", exact: true }).click();
+      await editor.getByLabel("Horizontal position", { exact: true }).fill("100");
+      await editor.getByLabel("Vertical position", { exact: true }).fill("100");
+      await editor.getByLabel("Colour", { exact: true }).selectOption("blue");
+      await editor.getByRole("button", { name: "Text", exact: true }).click();
+      await editor.getByRole("button", { name: "Add Text", exact: true }).click();
+      await editor.getByLabel("Drawing text", { exact: true }).fill("Plan together");
+      await editor.getByRole("button", { name: "Arrow", exact: true }).click();
+      await editor.getByRole("button", { name: "Add Arrow", exact: true }).click();
+      await editor.getByRole("button", { name: "Undo", exact: true }).click();
+      await expect(editor.getByRole("button", { name: "Arrow 3", exact: true })).toHaveCount(0);
+      await editor.getByRole("button", { name: "Redo", exact: true }).click();
+      await expect(editor.getByRole("button", { name: "Arrow 3", exact: true })).toBeVisible();
+
+      // A pointer gesture creates one shape, without an extra shape on tool selection.
+      await editor.getByRole("button", { name: "Ellipse", exact: true }).click();
+      const canvas = editor.locator('svg[aria-label="Drawing canvas"]');
+      await canvas.scrollIntoViewIfNeeded();
+      const bounds = (await canvas.boundingBox())!;
+      await guest.mouse.move(bounds.x + bounds.width * 0.55, bounds.y + bounds.height * 0.3);
+      await guest.mouse.down();
+      await guest.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.6, {
+        steps: 5,
+      });
+      await guest.mouse.up();
+      await expect(editor.getByRole("button", { name: "Ellipse 4", exact: true })).toBeVisible();
+      if (mobile) {
+        await editor.getByRole("button", { name: "Text", exact: true }).tap();
+        await canvas.tap({ position: { x: bounds.width * 0.4, y: bounds.height * 0.5 } });
+        await expect(editor.getByRole("button", { name: "Text 5", exact: true })).toBeVisible();
+        await editor.getByLabel("Drawing text", { exact: true }).fill("Placed by touch");
+        await editor.getByRole("button", { name: "Delete selected", exact: true }).tap();
+        await expect(editor.getByRole("button", { name: "Text 5", exact: true })).toHaveCount(0);
+      }
+      await narrowAccessibility(guest);
+      await guest.screenshot({
+        path: test.info().outputPath("idea-board-sketch-editor-320.png"),
+        fullPage: true,
+      });
+      await editor.getByRole("button", { name: "Save drawing", exact: true }).click();
+      await expect(editor).toHaveCount(0);
+      const [submission] = await Promise.all([
+        guest.waitForRequest(
+          (request) =>
+            request.method() === "POST" &&
+            new URL(request.url()).pathname === `/v1/idea-boards/${id}/ideas`,
+        ),
+        guest.getByRole("button", { name: "Submit idea", exact: true }).click(),
+      ]);
+      const content = submission.postDataJSON();
+      expect(content.body).toBe(idea);
+      expect(content.links).toEqual([{ url: "https://example.test/idea", label: caption }]);
+      expect(content.sketch.elements.map((element: { type: string }) => element.type)).toEqual([
+        "rect",
+        "text",
+        "arrow",
+        "ellipse",
+      ]);
+      await expect(guest.getByText("Your idea was submitted.", { exact: true })).toBeVisible();
+      await guest.reload();
+      await expect(guest.getByRole("link", { name: new RegExp(caption) })).toBeVisible();
+      await expect(guest.getByText("Plan together", { exact: true })).toBeVisible();
+      await other.goto(`/board/${id}`);
+      await other.getByRole("button", { name: "Join board", exact: true }).click();
+      await expect(other.getByText(idea, { exact: true })).toHaveCount(0);
+      await expect(other.getByRole("link", { name: new RegExp(caption) })).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      const pending = page
+        .locator("section")
+        .filter({ has: page.getByRole("heading", { name: "Awaiting review", exact: true }) });
+      await expect(pending.getByRole("link", { name: new RegExp(caption) })).toBeVisible();
+      await expect(pending.getByText("Plan together", { exact: true })).toBeVisible();
+      await pending.getByRole("button", { name: "Approve", exact: true }).click();
+      await hostCommand(page, () =>
+        page.getByLabel("Show approved ideas during collection", { exact: true }).click(),
+      );
+      await other.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect(other.getByRole("link", { name: new RegExp(caption) })).toBeVisible();
+      await other.getByRole("button", { name: "Expand drawing", exact: true }).click();
+      await expect(
+        other
+          .getByRole("dialog", { name: "Drawing", exact: true })
+          .getByText("Plan together", { exact: true }),
+      ).toBeVisible();
+      await other.getByRole("button", { name: "Close drawing", exact: true }).click();
+      await visualEvidence(other, "rich-guest");
+      await narrowAccessibility(other);
+      await visualEvidence(page, "rich-host");
+      await narrowAccessibility(page);
+      const approved = page
+        .locator("section")
+        .filter({ has: page.getByRole("heading", { name: "Approved ideas", exact: true }) });
+      await approved.getByRole("button", { name: "Remove", exact: true }).click();
+      await guest.getByRole("button", { name: "Refresh", exact: true }).click();
+      await other.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect(guest.getByText(idea, { exact: true })).toHaveCount(0);
+      await expect(guest.getByRole("link", { name: new RegExp(caption) })).toHaveCount(0);
+      await expect(other.getByText("Plan together", { exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "Delete board", exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "Delete board", exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/boards$/);
+    } finally {
+      await otherContext.close();
+      await guestContext.close();
+    }
+  });
+
   test(`${mobile ? "@mobile " : ""}idea boards collect, moderate, group and freeze a private guest ballot`, async ({
     page,
     browser,

@@ -8,6 +8,7 @@ import { boardFixture, boardGuestFixture, boardId } from "../../test-utils/idea-
 import english from "../../lib/i18n/domains/idea-boards/en-CA";
 import { BoardHost } from "./board-host";
 import { BoardGuest } from "./board-guest";
+import { IdeaComposer, type IdeaDraft } from "./idea-composer";
 
 interface Hooks {
   cursor: number;
@@ -20,6 +21,8 @@ const fixtures = vi.hoisted(() => ({
   publicRead: vi.fn(),
   guestRead: vi.fn(),
   command: vi.fn(),
+  submitIdea: vi.fn(),
+  uploadImage: vi.fn(),
 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof ReactModule>();
@@ -75,6 +78,8 @@ vi.mock("../../lib/idea-board-client", async (importOriginal) => ({
   fetchPublicIdeaBoard: fixtures.publicRead,
   fetchGuestIdeaBoard: fixtures.guestRead,
   commandIdeaBoard: fixtures.command,
+  submitBoardIdea: fixtures.submitIdea,
+  uploadIdeaBoardImage: fixtures.uploadImage,
 }));
 
 function harness(render: () => ReactElement) {
@@ -139,6 +144,113 @@ afterEach(() => {
 });
 
 describe("idea board async state", () => {
+  it.each([
+    { name: "a server failure", failure: new ApiClientError("Try again", "INTERNAL_ERROR", 503) },
+    { name: "an unknown network outcome", failure: new TypeError("Connection lost") },
+  ])("retries the original rich idea snapshot after $name", async ({ failure }) => {
+    fixtures.publicRead.mockResolvedValue(boardFixture);
+    fixtures.guestRead.mockResolvedValue(boardGuestFixture);
+    let rejectSubmission!: (error: unknown) => void;
+    fixtures.submitIdea
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectSubmission = reject;
+          }),
+      )
+      .mockResolvedValueOnce(boardGuestFixture);
+    const imageId = "00000000-0000-4000-8000-000000000010";
+    const draft: IdeaDraft = {
+      body: "  Explain the rich idea  ",
+      attachments: [{ mediaId: imageId, alt: "An already uploaded diagram" }],
+      links: [
+        { url: "https://example.com/post", label: "A useful caption", imageMediaId: imageId },
+      ],
+      sketch: {
+        schemaVersion: 1,
+        width: 1000,
+        height: 600,
+        elements: [
+          {
+            id: "00000000-0000-4000-8000-000000000011",
+            type: "text",
+            x: 30,
+            y: 40,
+            text: "Original diagram label",
+            color: "blue",
+            strokeWidth: 2,
+            fontSize: 24,
+          },
+          {
+            id: "00000000-0000-4000-8000-000000000012",
+            type: "freehand",
+            color: "ink",
+            strokeWidth: 4,
+            points: [
+              [10, 20],
+              [30, 40],
+            ],
+          },
+        ],
+      },
+    };
+    const expectedDraft = structuredClone(draft);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    const initialComposer = view.find((element) => element.type === IdeaComposer);
+    (initialComposer.props.onChange as (value: IdeaDraft) => void)(draft);
+    view.render();
+    const composer = view.find((element) => element.type === IdeaComposer);
+    (composer.props.onSubmit as () => void)();
+    expect(fixtures.submitIdea).toHaveBeenCalledTimes(1);
+    const originalInput = fixtures.submitIdea.mock.calls[0]![2];
+    const expectedInput = {
+      schemaVersion: 1,
+      idempotencyKey: originalInput.idempotencyKey,
+      ...expectedDraft,
+      body: expectedDraft.body.trim(),
+    };
+    expect(originalInput.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(originalInput).toEqual(expectedInput);
+
+    // Parent state keeps its own submission intent even if a caller later mutates the draft.
+    draft.body = "Changed after starting";
+    draft.attachments[0]!.alt = "Changed image description";
+    draft.attachments.push({ mediaId: "00000000-0000-4000-8000-000000000013", alt: "New image" });
+    draft.links[0]!.label = "Changed caption";
+    draft.links[0]!.imageMediaId = "00000000-0000-4000-8000-000000000013";
+    const originalText = draft.sketch!.elements[0]!;
+    if (originalText.type === "text") originalText.text = "Changed drawing text";
+    const originalStroke = draft.sketch!.elements[1]!;
+    if (originalStroke.type === "freehand") originalStroke.points[0]![0] = 999;
+    draft.sketch!.elements.reverse();
+    expect(originalInput).toEqual(expectedInput);
+    rejectSubmission(failure);
+    await settle();
+    expect(view.render()).toContain("The request could not finish");
+    expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(true);
+    const retry = view.find(
+      (element) => element.type === "button" && element.props.children === "Retry",
+    );
+    (retry.props.onClick as () => void)();
+    await settle();
+    expect(fixtures.submitIdea).toHaveBeenCalledTimes(2);
+    expect(fixtures.submitIdea.mock.calls[1]![2]).toEqual(expectedInput);
+    expect(fixtures.submitIdea.mock.calls[1]![2].idempotencyKey).toBe(originalInput.idempotencyKey);
+    expect(fixtures.uploadImage).not.toHaveBeenCalled();
+    expect(view.render()).toContain(english["boards.submitted"]);
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual({
+      body: "",
+      attachments: [],
+      links: [],
+      sketch: null,
+    });
+    view.unmount();
+  });
+
   it("preserves a rejected stale command and rebases it only after an explicit retry", async () => {
     const group = { id: "00000000-0000-4000-8000-000000000008", name: "Synthetic group" };
     const initial = { ...boardFixture, groups: [group] };

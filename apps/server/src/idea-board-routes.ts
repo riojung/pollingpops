@@ -7,6 +7,8 @@ import {
   IdeaBoardJoinSchema,
   IdeaBoardSubmitSchema,
   IdeaBoardVoteSchema,
+  MediaUploadRequestSchema,
+  type IdeaBoardGuestView,
 } from "@openround/contracts";
 import {
   IdeaBoardError,
@@ -20,8 +22,12 @@ import type { AuthService } from "./auth.js";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { roomCreationPolicy } from "./room-entitlements.js";
 import { cleanPlainText, hashToken } from "./security.js";
+import type { StorageService } from "./storage.js";
+import type { MetricsService } from "./metrics.js";
+import { completeMediaFinalization, MediaFinalizationConflictError } from "./media-finalization.js";
 
 const Id = z.object({ id: z.string().uuid() }).strict();
+const MediaParams = z.object({ id: z.string().uuid(), mediaId: z.string().uuid() }).strict();
 const CreateMutation = IdeaBoardCreateSchema.extend({ idempotencyKey: z.string().uuid() });
 // A full board may poll behind one shared office/school IP. Match the shared
 // budget instead of applying Fastify's 300/minute production default here.
@@ -55,6 +61,8 @@ export async function registerIdeaBoardRoutes(
     config: AppConfig;
     repository: Repository;
     boards: IdeaBoardRepository;
+    storage: StorageService;
+    metrics: MetricsService;
     consumeAdmission: (key: string, maximum: number, windowMs: number) => Promise<boolean>;
   },
 ) {
@@ -95,8 +103,14 @@ export async function registerIdeaBoardRoutes(
                     : error.code === "VALIDATION_ERROR"
                       ? 422
                       : 409;
+        if (error.code === "RATE_LIMITED") reply.header("retry-after", "60");
         return reply.code(status).send({
-          error: { code: error.code, message: error.message, requestId: request.id },
+          error: {
+            code: error.code,
+            message: error.message,
+            requestId: request.id,
+            ...(error.code === "RATE_LIMITED" ? { retryAfterSeconds: 60 } : {}),
+          },
         });
       }
       throw error;
@@ -132,6 +146,24 @@ export async function registerIdeaBoardRoutes(
         throw new IdeaBoardError("RATE_LIMITED", "Too many requests. Wait a minute and retry");
       return tokenHash;
     };
+    const uploadsAvailable = async () =>
+      deps.storage.mediaUploadsEnabled &&
+      (await deps.repository.getOperationalFeatures()).mediaUploads;
+    const guestResponse = async (read: () => Promise<IdeaBoardGuestView>) => {
+      // Operational reads may block across expiry. Resolve this display hint before
+      // the store performs its fresh authorization and retained-content projection.
+      const imageUploadsAvailable = await uploadsAvailable();
+      return { ...(await read()), imageUploadsAvailable };
+    };
+    const unavailable = (request: FastifyRequest, reply: FastifyReply) =>
+      reply.code(503).send({
+        error: {
+          code: "DEPENDENCY_UNAVAILABLE",
+          message:
+            "Image uploads are unavailable. The operator must enable media storage and malware scanning.",
+          requestId: request.id,
+        },
+      });
     const requireCreation = async (workspaceId: string) => {
       if (!(await workspaceFeatureEnabled(deps.repository, deps.config, workspaceId, "ideaBoards")))
         throw new IdeaBoardError("NOT_FOUND", "Board creation is not enabled for this workspace");
@@ -307,25 +339,32 @@ export async function registerIdeaBoardRoutes(
           throw new IdeaBoardError("RATE_LIMITED", "Too many admissions. Wait a minute and retry");
         const input = IdeaBoardJoinSchema.parse(request.body ?? {});
         const alias = input.alias == null ? null : plainText(input.alias, 40);
-        return deps.boards.join(Id.parse(request.params).id, tokenHash, alias, () => new Date());
+        return guestResponse(() =>
+          deps.boards.join(Id.parse(request.params).id, tokenHash, alias, () => new Date()),
+        );
       },
     );
     routes.get("/v1/idea-boards/:id/guest", routeOptions, async (request) => {
       const tokenHash = await guestHash(request);
-      return deps.boards.getGuest(Id.parse(request.params).id, tokenHash, () => new Date());
+      return guestResponse(() =>
+        deps.boards.getGuest(Id.parse(request.params).id, tokenHash, () => new Date()),
+      );
     });
     routes.post(
       "/v1/idea-boards/:id/ideas",
-      { ...routeOptions, bodyLimit: 8 * 1024 },
+      { ...routeOptions, bodyLimit: 64 * 1024 },
       async (request) => {
         const tokenHash = await guestHash(request);
         const input = IdeaBoardSubmitSchema.parse(request.body);
-        return deps.boards.submitIdea(
-          Id.parse(request.params).id,
-          tokenHash,
-          plainText(input.body, 1_000),
-          input.idempotencyKey,
-          () => new Date(),
+        return guestResponse(() =>
+          deps.boards.submitIdea(
+            Id.parse(request.params).id,
+            tokenHash,
+            plainText(input.body, 1_000),
+            input.idempotencyKey,
+            () => new Date(),
+            { attachments: input.attachments, links: input.links, sketch: input.sketch },
+          ),
         );
       },
     );
@@ -335,14 +374,152 @@ export async function registerIdeaBoardRoutes(
       async (request) => {
         const tokenHash = await guestHash(request);
         const input = IdeaBoardVoteSchema.parse(request.body);
-        return deps.boards.vote(
-          Id.parse(request.params).id,
-          tokenHash,
-          input.ideaIds,
-          input.expectedRevision,
-          input.idempotencyKey,
-          () => new Date(),
+        return guestResponse(() =>
+          deps.boards.vote(
+            Id.parse(request.params).id,
+            tokenHash,
+            input.ideaIds,
+            input.expectedRevision,
+            input.idempotencyKey,
+            () => new Date(),
+          ),
         );
+      },
+    );
+    routes.post(
+      "/v1/idea-boards/:id/media",
+      { ...routeOptions, bodyLimit: 2 * 1024 },
+      async (request, reply) => {
+        const tokenHash = await guestHash(request);
+        const id = Id.parse(request.params).id;
+        const workspaceId = await deps.boards.getUploadContext(id, tokenHash, () => new Date());
+        if (!(await uploadsAvailable())) return unavailable(request, reply);
+        const parsed = MediaUploadRequestSchema.parse(request.body);
+        const upload = await deps.storage.createUpload({
+          workspaceId,
+          ...parsed,
+          altText: plainText(parsed.altText, 300),
+        });
+        await deps.boards.reserveMedia(id, tokenHash, upload.media, () => new Date());
+        await deps.repository.recordAudit({
+          workspaceId,
+          actorId: null,
+          action: "idea_board.media_upload_requested",
+          targetType: "idea_board",
+          targetId: id,
+          requestId: request.id,
+          metadata: {
+            mediaId: upload.media.id,
+            mimeType: upload.media.mimeType,
+            sizeBytes: upload.media.sizeBytes,
+          },
+        });
+        return reply.code(201).send({
+          mediaId: upload.media.id,
+          uploadUrl: upload.uploadUrl,
+          expiresInSeconds: upload.expiresInSeconds,
+          scanStatus: upload.media.scanStatus,
+        });
+      },
+    );
+    routes.post(
+      "/v1/idea-boards/:id/media/:mediaId/complete",
+      { ...routeOptions, bodyLimit: 1024 },
+      async (request, reply) => {
+        const tokenHash = await guestHash(request);
+        const { id, mediaId } = MediaParams.parse(request.params);
+        const asset = await deps.boards.getGuestUpload(id, tokenHash, mediaId, () => new Date());
+        if (asset.scanStatus === "clean" || asset.scanStatus === "rejected")
+          return { media: { id: asset.id, scanStatus: asset.scanStatus, altText: asset.altText } };
+        if (!(await uploadsAvailable())) return unavailable(request, reply);
+        try {
+          return await completeMediaFinalization(
+            {
+              workspaceId: asset.workspaceId,
+              asset,
+              actorId: null,
+              requestId: request.id,
+              log: request.log,
+              repository: deps.repository,
+              storage: deps.storage,
+              metrics: deps.metrics,
+            },
+            async (updated) => {
+              // Scanning can outlive collection or removal. Recheck the board before
+              // acknowledging an upload; content delivery has its own fresh authorization.
+              await deps.boards.getGuestUpload(id, tokenHash, mediaId, () => new Date());
+              return {
+                media: { id: updated.id, scanStatus: updated.scanStatus, altText: updated.altText },
+              };
+            },
+          );
+        } catch (error) {
+          if (!(error instanceof MediaFinalizationConflictError)) throw error;
+          return reply
+            .code(409)
+            .send({ error: { code: "CONFLICT", message: error.message, requestId: request.id } });
+        }
+      },
+    );
+    routes.get(
+      "/v1/idea-boards/:id/media/:mediaId/content",
+      routeOptions,
+      async (request, reply) => {
+        const { id, mediaId } = MediaParams.parse(request.params);
+        const tokenHash =
+          request.headers.authorization === undefined ? null : await guestHash(request);
+        const authorize = async () => {
+          if (tokenHash !== null)
+            return deps.boards.authorizeGuestMedia(id, tokenHash, mediaId, () => new Date());
+          // Membership, role and active workspace can change while object storage
+          // is reading. Resolve the current creator on every authorization pass.
+          const actor = await creator(request, reply);
+          return actor
+            ? deps.boards.authorizeHostMedia(
+                actor.workspaceId,
+                id,
+                mediaId,
+                actor.role !== "viewer",
+                () => new Date(),
+              )
+            : null;
+        };
+        const workspaceId = await authorize();
+        if (!workspaceId) return;
+        const asset = await deps.repository.getMediaAsset(workspaceId, mediaId);
+        if (!asset || asset.scanStatus !== "clean")
+          throw new IdeaBoardError("NOT_FOUND", "Image not found");
+        let content: Buffer;
+        try {
+          content = await deps.storage.readImage(asset);
+        } catch (error) {
+          request.log.warn(
+            { errorType: error instanceof Error ? error.name : "unknown", mediaId },
+            "board image read unavailable",
+          );
+          return reply.code(503).send({
+            error: {
+              code: "DEPENDENCY_UNAVAILABLE",
+              message: "This image is temporarily unavailable",
+              requestId: request.id,
+            },
+          });
+        }
+        const current = await deps.repository.getMediaAsset(workspaceId, mediaId);
+        if (current?.scanStatus !== "clean" || current.objectKey !== asset.objectKey)
+          throw new IdeaBoardError("NOT_FOUND", "Image not found");
+        // Keep the fresh board authorization last: even the metadata read above
+        // may wait past expiry or a moderation change after storage returns.
+        const currentWorkspaceId = await authorize();
+        if (!currentWorkspaceId) return;
+        if (currentWorkspaceId !== workspaceId)
+          throw new IdeaBoardError("NOT_FOUND", "Image not found");
+        return reply
+          .header("cache-control", "private, no-store")
+          .header("referrer-policy", "no-referrer")
+          .header("x-content-type-options", "nosniff")
+          .type(asset.mimeType)
+          .send(content);
       },
     );
   });

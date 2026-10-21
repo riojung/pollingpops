@@ -401,3 +401,25 @@ admin builds cannot manage the new key. Keep migration 074 and board data in pla
 editing an applied migration or dropping the table. Older releases have no board routes: existing
 links need the matching board readers restored to become available again. Rollback therefore
 differs from a writer pause; verify this boundary before enabling customer boards.
+
+### Rich idea attachments and sketches
+
+Migration 076 adds private board-upload provenance, quotas and media-reference lifecycle guards.
+Apply it with migration credentials before starting the matching server and jobs images. Deploy
+matching web readers and writers with the server: version 1 board payloads now support optional
+`attachments`, `links` and `sketch` fields, and older strict readers reject rich ideas. Existing
+plain-text rows and their retry hashes remain unchanged; no bulk content rewrite is required.
+
+Images require effective **Media uploads**, configured object storage, and a working scanner.
+The guest response reports `imageUploadsAvailable`; absence of the pipeline disables the image
+control while preserving text, drawing and link submission. Do not enable uploads by bypassing
+scanning. Historical images remain readable when new uploads are paused, subject to the board's
+current authorization, removal and expiry rules. Board images use an authenticated binary route
+and are excluded from generic creator download, completion and content-reference APIs.
+
+Exercise a scanned upload, pending-author/moderator access, unauthorized-guest denial, approval,
+removal, expiry and account deletion in a disposable environment before customer enablement.
+Check the same image cannot be attached to another board or ordinary authored content. Keep the
+existing orphan cleanup and media deletion jobs running. Preserve migration 076 and private
+provenance on rollback; restoring readers that predate these protections is not a safe media
+rollback. Pause collection and restore the matching image set if a rich-board rollout fails.

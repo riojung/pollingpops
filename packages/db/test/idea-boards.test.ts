@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { IdeaBoardCreateSchema } from "@openround/contracts";
+import { IdeaBoardCreateSchema, type IdeaBoardRichContent } from "@openround/contracts";
 import { MemoryRepository, createIdeaBoardRepository } from "../src/index.js";
+import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
 import {
   expectIdeaBoardConformance,
   expectIdeaBoardAdmissionConformance,
@@ -25,6 +26,68 @@ async function fixture() {
   return { repository, owner, boards: createIdeaBoardRepository(repository) };
 }
 describe("standalone idea board durable state", () => {
+  it("keeps rich ideas and exclusively owned images private through moderation, retries and deletion", async () => {
+    const { repository, owner } = await fixture();
+    await expectIdeaBoardRichConformance(repository, owner.workspaceId, owner.userId);
+  });
+  it("rejects rich content atomically when the retained board reaches one MiB", async () => {
+    const { boards, owner } = await fixture(),
+      now = new Date();
+    const draft = await boards.create(
+      owner.workspaceId,
+      randomUUID(),
+      IdeaBoardCreateSchema.parse({ title: "Bounded drawings", moderationEnabled: false }),
+      randomUUID(),
+      {
+        participantLimit: 20,
+        closesAt: new Date(+now + 86_400_000).toISOString(),
+        expiresAt: new Date(+now + 2 * 86_400_000).toISOString(),
+      },
+      now,
+    );
+    await boards.hostCommand(
+      owner.workspaceId,
+      draft.id,
+      { type: "collect" },
+      0,
+      randomUUID(),
+      now,
+    );
+    const rich: IdeaBoardRichContent = {
+      sketch: {
+        schemaVersion: 1,
+        width: 1000,
+        height: 600,
+        elements: Array.from({ length: 32 }, () => ({
+          id: randomUUID(),
+          type: "text",
+          x: 10,
+          y: 20,
+          text: "x".repeat(300),
+          color: "ink",
+          strokeWidth: 2,
+          fontSize: 24,
+        })),
+      },
+    };
+    let rejected = false;
+    for (let participant = 0; participant < 10 && !rejected; participant++) {
+      const token = ideaGuestHash();
+      await boards.join(draft.id, token, null, now);
+      for (let index = 0; index < 10; index++) {
+        const before = await boards.getModerator(owner.workspaceId, draft.id, now);
+        try {
+          await boards.submitIdea(draft.id, token, "A diagram", randomUUID(), now, rich);
+        } catch (error) {
+          expect(error).toMatchObject({ code: "ENTITLEMENT_LIMIT" });
+          expect(await boards.getModerator(owner.workspaceId, draft.id, now)).toEqual(before);
+          rejected = true;
+          break;
+        }
+      }
+    }
+    expect(rejected).toBe(true);
+  });
   it("conforms for lifecycle, private collection, moderation, groups, final concurrent ballots and safe retries", async () => {
     const { repository, owner } = await fixture();
     await expectIdeaBoardConformance(repository, owner.workspaceId, randomUUID());

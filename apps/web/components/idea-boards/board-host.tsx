@@ -17,6 +17,7 @@ import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
 import { WorkspaceShell } from "../workspace/workspace-shell";
 import { IdeaBoardIdeas } from "./idea-list";
+import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
 
 function BoardDeletionDialog({
@@ -245,6 +246,7 @@ export function BoardHost({ id }: { id: string }) {
           {t(error)}{" "}
           <button
             type="button"
+            className="button-quiet"
             disabled={busy}
             onClick={() => (pending.current ? void command() : void refresh())}
           >
@@ -337,9 +339,7 @@ export function BoardHost({ id }: { id: string }) {
                     .filter((idea) => idea.status === "pending")
                     .map((idea) => (
                       <li className={styles.idea} key={idea.id}>
-                        <p className={styles.body} dir="auto" lang="">
-                          {idea.body}
-                        </p>
+                        <IdeaContent boardId={id} idea={idea} />
                         {idea.alias ? (
                           <p dir="auto" lang="">
                             {idea.alias}
@@ -428,9 +428,7 @@ export function BoardHost({ id }: { id: string }) {
                   .filter((idea) => idea.status === "approved")
                   .map((idea, index) => (
                     <li className={styles.idea} key={idea.id}>
-                      <p className={styles.body} lang="" dir="auto">
-                        {idea.body}
-                      </p>
+                      <IdeaContent boardId={id} idea={idea} />
                       {idea.alias ? (
                         <p className={styles.muted} lang="" dir="auto">
                           {idea.alias}

@@ -209,6 +209,9 @@ test("record the Polling Pops product demo", async ({ browser }) => {
     await click(page, page.getByRole("link", { name: "Dashboard" }), 1_000);
     await click(page, page.getByRole("button", { name: "Host" }), 1_000);
     await page.getByLabel("Maximum participants").fill("100");
+    await page
+      .getByRole("checkbox", { name: "Ask for confidence (optional)", exact: true })
+      .check();
     await beat(page, 450);
     await click(page, page.getByRole("button", { name: "Create live session" }), 1_600);
     await expect(page).toHaveURL(/\/host\/(?!setup\/)[^/]+$/);

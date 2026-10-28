@@ -49,6 +49,12 @@ export function HelpGuidance() {
           </div>
         </div>
 
+        <p className={styles.notice} lang="en-CA">
+          Live Round confidence is optional. Turn collection on or off during setup or from the host
+          controls; participants can always answer without it.{" "}
+          <Link href="/help/confidence-and-concepts">Read the current confidence guide.</Link>
+        </p>
+
         {roundBuilderAvailable ? (
           <>
             <div className={guideStyles.grid}>

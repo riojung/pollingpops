@@ -709,8 +709,18 @@ stored Presentation V1 report and default report response remain unchanged for s
 readers; `GET /v1/presentation-sessions/{id}/report?includeSessionContext=true` adds
 `sessionContext.timeMode` to an opt-in response.
 
+Live Round creation also accepts optional `settings.confidenceEnabled`. `false` turns confidence
+off for the room. `true` offers optional confidence on scored diagnostic and practice questions;
+it does not add confidence to opinion questions. New live rooms persist `false` when the setting
+is omitted, including when the source question authored confidence as optional or required.
+Already-running legacy rooms whose saved setting is absent retain their authored collection:
+authored off stays off, while authored optional or required is offered as optional. A live answer
+never requires confidence. The authoring setting is preserved for other delivery modes.
+
 `POST /v1/sessions/join` accepts an optional `JoinRequest.avatarId` from the fixed, content-free
-allowlist `comet`, `fox`, `owl`, `otter`, `panda`, `robot`, `rocket`, and `star`. Omitting it keeps
+allowlist `comet`, `fox`, `owl`, `otter`, `panda`, `robot`, `rocket`, `star`, `bear`, `bunny`,
+`cat`, `dog`, `koala`, `lion`, `penguin`, `tiger`, `turtle`, `dolphin`, `whale`, `octopus`,
+`butterfly`, `bee`, `frog`, and `hedgehog`. Omitting it keeps
 older clients compatible: after allocating the participant UUID, the server deterministically
 selects one of the same valid IDs. An unrecognized value fails request validation. The selected or
 fallback ID is stored in canonical game state and survives refresh/reconnect; a reconnect cannot
@@ -723,6 +733,14 @@ Host commands carry `commandId` and `expectedVersion`. Recovery actions include
 `intervention.start`, `intervention.finish`, and `recheck.open`; the engine validates when peer
 discussion, explain/example/break, linked recheck, or revote is legal. A dedicated presenter or
 embed credential is read-only and never reuses the host token.
+
+`confidence.set` accepts `confidenceEnabled: boolean` through the same authenticated host command
+route or `host.command` event. It uses the normal `commandId`/`expectedVersion` checks and publishes
+the updated setting and effective question confidence in snapshots, including during an open
+question. Turning confidence off does not change accepted answers, recorded confidence or scores.
+Participant clients discard an unsent confidence selection when the setting turns off. Opinion
+questions always project confidence off. When confidence is off, accepted answers store null
+confidence even if an older or concurrently updated client sends a valid confidence value.
 
 Shareable cohost credential creation requires the `cohosting` entitlement (Pro, Team, or Community);
 presenter credentials remain core. Staff credential views include
@@ -940,12 +958,23 @@ main reveal. A wrong or missed scored question resets the streak; opinions/reche
 unchanged. These recognition fields do not change scoring or tie-breaking. Older entries may omit them.
 Answer acknowledgements confirm acceptance/idempotency without including their optional `score`.
 Clients should read score feedback after reveal instead of inferring correctness from a receipt.
+Round participant snapshots may include private `myScoredResponseSummary` with
+`answeredScoredQuestions`, `correctScoredQuestions`, `revealedScoredQuestions`, and optional
+`lastResponseStatus` (`correct`, `incorrect`, or `unanswered`). These counts cover revealed scored
+main questions only and are available in private and competitive rounds. Host/presenter snapshots
+omit this personal summary. Legacy release history without answer counts omits the summary rather
+than guessing that no responses were saved.
 Presentation host snapshots may also contain a staff-only `competitionStandings`; Presentation
 participant/Companion schemas do not gain other participants' identities.
 
 Client acknowledgements return `{ data }` or `{ error: { code, message } }`. An answer uses the
 canonical versioned response payload plus confidence; legacy `choiceId` remains accepted for
 single-select/true-false clients and is canonicalized. Keep idempotency keys until acknowledged.
+For live Round answers, `confidence` is optional even when the authored question marked it
+required. The participant client sends confidence only when the live question offers it and the
+participant selected a level. Competitive single-choice and true/false main questions submit on
+answer selection; collecting confidence does not add another required action. Other response
+formats and private/recheck flows retain explicit submission.
 
 After reconnect, send `sync.request` with the last observed sequence. The response includes a
 role-filtered authoritative snapshot, bounded replay metadata, and `replayComplete`. Treat the

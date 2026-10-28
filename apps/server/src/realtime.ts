@@ -14,7 +14,11 @@ import {
   ROUND_CLIENT_UPDATE_MESSAGE,
   type SessionSnapshot,
 } from "@openround/contracts";
-import { snapshotForRole, type GameState } from "@openround/game-engine";
+import {
+  scoredResponseSummaryForParticipant,
+  snapshotForRole,
+  type GameState,
+} from "@openround/game-engine";
 import type { AppConfig } from "./config.js";
 import type { MetricsService } from "./metrics.js";
 import { originAllowed } from "./origin.js";
@@ -92,9 +96,11 @@ export function snapshotSelector(state: GameState) {
       return snapshotForRole(state, { role: "participant", participantId });
     }
     const visibleParticipant = visibleParticipantById.get(participantId);
+    const myScoredResponseSummary = scoredResponseSummaryForParticipant(state, participantId);
     return {
       ...participantBase,
       myParticipantId: participantId,
+      ...(myScoredResponseSummary ? { myScoredResponseSummary } : {}),
       participants:
         state.settings.resultVisibility === "private" && visibleParticipant
           ? participantBase.participants.map((participant) =>

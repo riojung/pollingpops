@@ -130,6 +130,10 @@ export default {
   "delivery.join.title": "실시간 Round 입장",
   "delivery.join.description": "진행자가 보여 주는 7자리 코드를 사용하세요. 계정은 필요 없습니다.",
   "delivery.join.nickname": "표시 이름",
+  "delivery.join.nicknameOptional": "닉네임 (선택 사항)",
+  "delivery.join.nicknameHelp": "원하는 닉네임을 입력하세요. 비워 두면 자동으로 생성됩니다.",
+  "delivery.join.friendlyNicknameNotice":
+    "진행자가 이 라운드에서 자동 생성 닉네임을 사용하도록 설정했습니다. 참여 시 닉네임이 지정됩니다.",
   "delivery.join.nicknamePlaceholder": "방에 표시할 이름",
   "delivery.join.avatar": "아바타 선택",
   "delivery.join.joining": "참여 중…",

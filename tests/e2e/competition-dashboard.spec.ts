@@ -230,6 +230,12 @@ async function publicScores(host: Page, session: SessionFixture, guest: GuestFix
 }
 
 async function expectPodium(page: Page, scores: string[], names: readonly string[] = aliases) {
+  const root = dashboard(page);
+  if (await root.getAttribute("data-summary")) {
+    const details = root.locator("details").first();
+    if ((await details.getAttribute("open")) === null)
+      await details.locator("summary").first().click();
+  }
   const podium = dashboard(page).getByTestId("competition-podium");
   await expect(podium).toBeVisible();
   for (const [index, nickname] of names.entries()) {
@@ -377,6 +383,7 @@ test("competition standings release after reveal and remain on the final project
     await winner.close();
     await presenter.emulateMedia({ reducedMotion: "no-preference" });
     const presenterDashboard = dashboard(presenter);
+    await presenterDashboard.getByTestId("competition-display-options").locator("summary").click();
     const motion = presenterDashboard.getByTestId("competition-motion-toggle");
     const replay = presenterDashboard.getByTestId("competition-replay");
     await expect(motion).toBeEnabled();
@@ -403,6 +410,10 @@ test("competition standings release after reveal and remain on the final project
       "aria-pressed",
       "false",
     );
+    await dashboard(presenter)
+      .getByTestId("competition-display-options")
+      .locator("summary")
+      .click();
     await dashboard(presenter).getByTestId("competition-motion-toggle").click();
     await expect(dashboard(presenter).getByTestId("competition-motion-toggle")).toHaveAttribute(
       "aria-pressed",
@@ -589,6 +600,10 @@ test("private-result sessions do not expose a competition dashboard", async ({
     for (const audience of [host, presenter, participant]) {
       await expect(dashboard(audience)).toHaveCount(0);
     }
+    await hostAction(host, "Show standings", "leaderboard");
+    await expect(
+      host.getByRole("heading", { name: currentQuestion.prompt, exact: true }),
+    ).toBeVisible();
     await hostAction(host, "Finish round", "finished");
     for (const audience of [host, presenter, participant]) {
       await expect(dashboard(audience)).toHaveCount(0);

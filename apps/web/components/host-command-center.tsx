@@ -65,6 +65,7 @@ export function RecoveryCompass({
   displayPhaseLabel,
   showSteps = true,
   synthetic = false,
+  collapsible = false,
   children,
 }: {
   snapshot: SessionSnapshot;
@@ -72,6 +73,7 @@ export function RecoveryCompass({
   displayPhaseLabel?: string;
   showSteps?: boolean;
   synthetic?: boolean;
+  collapsible?: boolean;
   children?: ReactNode;
 }) {
   const { t } = useLocale();
@@ -115,29 +117,42 @@ export function RecoveryCompass({
     );
   }
 
+  const Container = collapsible ? "details" : "aside";
+  const steps = (
+    <ol className="recovery-steps" aria-label={t("live.host.recoveryProcess")}>
+      {[
+        [t("live.host.step.ask"), snapshot.phase !== "lobby"],
+        [t("live.host.step.diagnose"), Boolean(snapshot.insight)],
+        [t("live.host.step.act"), Boolean(snapshot.intervention)],
+        [t("live.host.step.recheck"), snapshot.roundKind !== "main"],
+        [t("live.host.step.prove"), snapshot.phase === "finished"],
+      ].map(([label, complete]) => (
+        <li data-complete={complete || undefined} key={String(label)}>
+          {label}
+        </li>
+      ))}
+    </ol>
+  );
+
   return (
-    <aside
+    <Container
       aria-label={synthetic ? t("live.host.syntheticCompassAria") : t("live.host.compassAria")}
-      className="panel recovery-rail"
+      className={`panel recovery-rail${collapsible ? " recovery-rail-collapsible" : ""}`}
       data-synthetic={synthetic || undefined}
       data-testid="recovery-rail"
     >
+      {collapsible ? <summary>{t("live.host.compass")}</summary> : null}
       <p className="eyebrow">{t("live.host.compass")}</p>
       <h2 style={{ fontSize: "1.35rem" }}>{phaseLabel}</h2>
       {synthetic ? <p className="synthetic-label">{t("live.host.syntheticEvidence")}</p> : null}
-      <ol className="recovery-steps" aria-label={t("live.host.recoveryProcess")}>
-        {[
-          [t("live.host.step.ask"), snapshot.phase !== "lobby"],
-          [t("live.host.step.diagnose"), Boolean(snapshot.insight)],
-          [t("live.host.step.act"), Boolean(snapshot.intervention)],
-          [t("live.host.step.recheck"), snapshot.roundKind !== "main"],
-          [t("live.host.step.prove"), snapshot.phase === "finished"],
-        ].map(([label, complete]) => (
-          <li data-complete={complete || undefined} key={String(label)}>
-            {label}
-          </li>
-        ))}
-      </ol>
+      {synthetic ? (
+        steps
+      ) : (
+        <details className="recovery-process">
+          <summary>{t("live.host.recoveryProcess")}</summary>
+          {steps}
+        </details>
+      )}
       <div className="metric-grid recovery-compass-metrics">
         <div className="metric">
           <strong>{snapshot.participants.length}</strong>
@@ -170,7 +185,7 @@ export function RecoveryCompass({
         </div>
       ) : null}
       {children}
-    </aside>
+    </Container>
   );
 }
 

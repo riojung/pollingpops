@@ -137,6 +137,11 @@ export default {
   "delivery.join.description":
     "Utilisez le code à sept chiffres affiché par l’animateur. Aucun compte requis.",
   "delivery.join.nickname": "Pseudonyme",
+  "delivery.join.nicknameOptional": "Pseudonyme (facultatif)",
+  "delivery.join.nicknameHelp":
+    "Choisissez un pseudonyme ou laissez ce champ vide pour en générer un.",
+  "delivery.join.friendlyNicknameNotice":
+    "L’hôte a choisi des pseudonymes générés pour ce Round. Le vôtre sera attribué à votre arrivée.",
   "delivery.join.nicknamePlaceholder": "Quel nom afficher dans la salle ?",
   "delivery.join.avatar": "Choisir un avatar",
   "delivery.join.joining": "Connexion…",

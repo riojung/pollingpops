@@ -120,6 +120,10 @@ export default {
   "delivery.join.title": "进入实时 Round",
   "delivery.join.description": "使用引导者显示的七位代码，无需帐户。",
   "delivery.join.nickname": "显示名称",
+  "delivery.join.nicknameOptional": "昵称（可选）",
+  "delivery.join.nicknameHelp": "输入您想使用的昵称，或留空以自动生成。",
+  "delivery.join.friendlyNicknameNotice":
+    "主持人已为本轮选择自动生成的昵称。加入时将为您分配昵称。",
   "delivery.join.nicknamePlaceholder": "房间中显示什么名称？",
   "delivery.join.avatar": "选择头像",
   "delivery.join.joining": "正在加入…",

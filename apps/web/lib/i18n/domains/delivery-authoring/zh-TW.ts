@@ -120,6 +120,10 @@ export default {
   "delivery.join.title": "進入即時 Round",
   "delivery.join.description": "使用引導者顯示的七位數代碼，不需帳戶。",
   "delivery.join.nickname": "顯示名稱",
+  "delivery.join.nicknameOptional": "暱稱（選填）",
+  "delivery.join.nicknameHelp": "輸入您想使用的暱稱，或留空以自動產生。",
+  "delivery.join.friendlyNicknameNotice":
+    "主持人已為本輪選擇自動產生的暱稱。加入時將為您指派暱稱。",
   "delivery.join.nicknamePlaceholder": "要在房間顯示什麼名稱？",
   "delivery.join.avatar": "選擇頭像",
   "delivery.join.joining": "加入中…",

@@ -513,6 +513,7 @@ export function buildRecoveryRehearsal(input: {
       resultVisibility: "private",
       allowLateJoin: false,
       nicknamePolicy: "friendly_only",
+      confidenceEnabled: questionConfidence(source) !== "off",
     },
   });
 

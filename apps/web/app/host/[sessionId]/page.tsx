@@ -28,6 +28,7 @@ import {
 } from "../../../components/host-command-center";
 import { JoinAccess } from "../../../components/join-access";
 import { useLocale } from "../../../components/locale-provider";
+import { confidenceControlCopy } from "../../../lib/i18n/confidence-control-copy";
 import { ParticipantIdentity } from "../../../components/participant-avatar";
 import { QuestionMedia } from "../../../components/question-media";
 import {
@@ -115,6 +116,7 @@ function hostCredential(sessionId: string) {
 export default function HostPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { locale, t } = useLocale();
+  const confidenceCopy = confidenceControlCopy[locale];
   const socket = useMemo(createRealtimeClient, []);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
   const timeFormatter = useMemo(
@@ -130,6 +132,7 @@ export default function HostPage() {
   const snapshotRef = useRef<SessionSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [commandPending, setCommandPending] = useState(false);
+  const [pendingConfidence, setPendingConfidence] = useState<boolean | null>(null);
   const [staffPending, setStaffPending] = useState(false);
   const [presenterPending, setPresenterPending] = useState(false);
   const [error, setError] = useState("");
@@ -173,7 +176,10 @@ export default function HostPage() {
     commandRecoveryRef.current = createAckRecoveryController({
       acknowledgementTimeoutMs: ACK_TIMEOUT_MS,
       reconciliationTimeoutMs: SYNC_GRACE_MS,
-      onPendingChange: setCommandPending,
+      onPendingChange: (pending) => {
+        setCommandPending(pending);
+        if (!pending) setPendingConfidence(null);
+      },
       onReconciliationRequested: () => {
         setError(HOST_ACK_CHECKING_MESSAGE);
         syncHostRef.current();
@@ -279,8 +285,9 @@ export default function HostPage() {
       const update = withRealtimeReceipt(
         (envelope: EventEnvelope<{ snapshot: SessionSnapshot; reportId?: string }>) => {
           if (
+            envelope.type === "lobby.updated" ||
             audienceContextKey(envelope.payload.snapshot) !==
-            audienceContextKey(snapshotRef.current)
+              audienceContextKey(snapshotRef.current)
           ) {
             setAudienceSyncRevision((current) => current + 1);
           }
@@ -463,6 +470,7 @@ export default function HostPage() {
       recoveryPackCard?: RecoveryPackCardSelection;
       answerId?: string;
       responseStatus?: "approved" | "removed";
+      confidenceEnabled?: boolean;
     } = {},
   ) {
     if (!snapshot || commandPending) return;
@@ -475,6 +483,7 @@ export default function HostPage() {
     setError("");
     const commandId = clientUuid();
     if (!commandRecoveryRef.current?.begin(commandId, null)) return;
+    setPendingConfidence(action === "confidence.set" ? (options.confidenceEnabled ?? null) : null);
     socket.emit(
       "host.command",
       {
@@ -673,6 +682,13 @@ export default function HostPage() {
     sendHostPhaseCommand(item);
   }
   const uxBeta = snapshot?.uxBeta === true;
+  const standingsStage =
+    snapshot?.phase === "finished" ||
+    (snapshot?.phase === "leaderboard" &&
+      snapshot.roundKind === "main" &&
+      Boolean(
+        snapshot.competitionStandings || snapshot.settings.resultVisibility === "leaderboard",
+      ));
   const legacyPhaseActions = snapshot ? getLegacyPhaseActions(snapshot) : [];
   const legacyRecoveryActions = snapshot ? getLegacyRecoveryActions(snapshot) : [];
   const legacyCommandLabel = (item: LegacyHostCommand) => {
@@ -682,6 +698,42 @@ export default function HostPage() {
       <span lang={messageKey ? locale : "en-CA"}>{messageKey ? t(messageKey) : item.label}</span>
     );
   };
+
+  const pendingConfidenceValue = commandPending ? pendingConfidence : null;
+  const inheritedConfidence =
+    pendingConfidenceValue === null &&
+    snapshot?.settings.confidenceEnabled === undefined &&
+    !snapshot?.question;
+  const confidenceControl = snapshot ? (
+    <div className="host-confidence-control" lang={locale}>
+      <label htmlFor="live-confidence-enabled" title={confidenceCopy.help}>
+        <input
+          aria-label={confidenceCopy.label}
+          aria-checked={inheritedConfidence ? "mixed" : undefined}
+          aria-describedby="live-confidence-help"
+          checked={
+            pendingConfidenceValue ??
+            snapshot.settings.confidenceEnabled ??
+            (snapshot.question ? (snapshot.question.confidence ?? "off") !== "off" : true)
+          }
+          disabled={commandPending || !connected || snapshot.phase === "finished"}
+          id="live-confidence-enabled"
+          onChange={(event) =>
+            command("confidence.set", { confidenceEnabled: event.target.checked })
+          }
+          ref={(input) => {
+            if (input) input.indeterminate = inheritedConfidence;
+          }}
+          type="checkbox"
+        />
+        <span>{confidenceCopy.shortLabel}</span>
+      </label>
+      <span className="sr-only" id="live-confidence-help">
+        {confidenceCopy.help}
+        {inheritedConfidence ? ` ${confidenceCopy.inherited}` : ""}
+      </span>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -747,7 +799,7 @@ export default function HostPage() {
           </section>
         ) : (
           <>
-            {uxBeta ? (
+            {uxBeta && !standingsStage ? (
               <section aria-label="Room readiness" className="room-readiness" lang="en-CA">
                 <span>
                   <strong lang={connected ? locale : "en-CA"}>
@@ -807,8 +859,13 @@ export default function HostPage() {
                 </span>
               </section>
             ) : null}
-            <div className="host-grid" data-phase={snapshot.phase} data-testid="host-session">
-              <HostStage enhanced={uxBeta}>
+            <div
+              className={uxBeta ? "host-grid host-layout" : "host-grid"}
+              data-phase={snapshot.phase}
+              data-results-stage={standingsStage || undefined}
+              data-testid="host-session"
+            >
+              <HostStage enhanced={uxBeta} className={standingsStage ? "host-results-stage" : ""}>
                 {snapshot.phase === "lobby" ? (
                   <>
                     <p className="eyebrow" lang="en-CA">
@@ -853,7 +910,7 @@ export default function HostPage() {
                     </ul>
                   </>
                 ) : null}
-                {snapshot.question && snapshot.phase !== "finished" ? (
+                {snapshot.question && !standingsStage ? (
                   <>
                     <div
                       className="page-heading"
@@ -872,7 +929,7 @@ export default function HostPage() {
                         )
                       ) : null}
                     </div>
-                    <h1 lang="" style={{ fontSize: "clamp(2rem, 6vw, 4rem)" }}>
+                    <h1 className="host-question-prompt" lang="">
                       {snapshot.question.prompt}
                     </h1>
                     <QuestionMedia
@@ -949,16 +1006,18 @@ export default function HostPage() {
                     ) : null}
                   </>
                 ) : null}
-                {snapshot.phase === "finished" ? (
-                  <>
-                    <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
-                    <h1 lang="en-CA" style={{ fontSize: "clamp(2.5rem, 7vw, 5rem)" }}>
-                      Results are ready.
-                    </h1>
-                    <p className="lead" lang="en-CA">
-                      {numberFormatter.format(snapshot.participants.length)} participants completed
-                      this live round.
-                    </p>
+                {snapshot.phase === "finished" && !(uxBeta && snapshot.competitionStandings) ? (
+                  <div className="host-completion-summary">
+                    <div>
+                      <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
+                      <h1 className="host-complete-heading" lang="en-CA">
+                        Results are ready.
+                      </h1>
+                      <p className="lead" lang="en-CA">
+                        {numberFormatter.format(snapshot.participants.length)} participants
+                        completed this live round.
+                      </p>
+                    </div>
                     {reportId ? (
                       <Link className="button" href={`/report/${reportId}`}>
                         Open report
@@ -966,7 +1025,31 @@ export default function HostPage() {
                     ) : (
                       <p className="notice">Finalizing the report…</p>
                     )}
-                  </>
+                  </div>
+                ) : null}
+                {snapshot.competitionStandings && snapshot.phase !== "lobby" ? (
+                  <CompetitionDashboard
+                    variant="host"
+                    headingLevel={standingsStage ? 1 : 2}
+                    standings={snapshot.competitionStandings}
+                    finished={snapshot.phase === "finished"}
+                    compact={!standingsStage}
+                    summary={!standingsStage}
+                  />
+                ) : snapshot.settings.resultVisibility === "leaderboard" &&
+                  snapshot.phase !== "lobby" ? (
+                  <ol style={{ paddingLeft: 24, lineHeight: 1.8 }}>
+                    {snapshot.participants.slice(0, 5).map((participant) => (
+                      <li key={participant.id}>
+                        <ParticipantIdentity
+                          avatarId={participant.avatarId}
+                          nickname={participant.nickname}
+                        />
+                        {" · "}
+                        {numberFormatter.format(participant.score)}
+                      </li>
+                    ))}
+                  </ol>
                 ) : null}
                 {snapshot.roundProtocol?.requiredCapabilities.some(
                   (capability) =>
@@ -990,7 +1073,12 @@ export default function HostPage() {
                   />
                 ) : null}
               </HostStage>
-              <RecoveryCompass phaseView={phaseView!} showSteps={uxBeta} snapshot={snapshot}>
+              <RecoveryCompass
+                collapsible={uxBeta && standingsStage}
+                phaseView={phaseView!}
+                showSteps={uxBeta}
+                snapshot={snapshot}
+              >
                 {snapshot.phase === "question_reveal" &&
                 snapshot.roundKind === "main" &&
                 snapshot.recoveryPackCards?.length ? (
@@ -1051,6 +1139,7 @@ export default function HostPage() {
                 ) : null}
                 {!uxBeta ? (
                   <div className="host-controls" lang="en-CA">
+                    {confidenceControl}
                     {legacyPhaseActions.map((item) => (
                       <button
                         className={item.className}
@@ -1088,28 +1177,6 @@ export default function HostPage() {
                       </button>
                     ) : null}
                   </div>
-                ) : null}
-                {snapshot.competitionStandings && snapshot.phase !== "lobby" ? (
-                  <CompetitionDashboard
-                    variant="host"
-                    standings={snapshot.competitionStandings}
-                    finished={snapshot.phase === "finished"}
-                    compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
-                  />
-                ) : snapshot.settings.resultVisibility === "leaderboard" &&
-                  snapshot.phase !== "lobby" ? (
-                  <ol style={{ paddingLeft: 24, lineHeight: 1.8 }}>
-                    {snapshot.participants.slice(0, 5).map((participant) => (
-                      <li key={participant.id}>
-                        <ParticipantIdentity
-                          avatarId={participant.avatarId}
-                          nickname={participant.nickname}
-                        />
-                        {" · "}
-                        {numberFormatter.format(participant.score)}
-                      </li>
-                    ))}
-                  </ol>
                 ) : null}
                 {staffManagementAvailable ? (
                   <details className="staff-management" lang="en-CA">
@@ -1242,12 +1309,16 @@ export default function HostPage() {
                 }
                 leading={
                   <>
+                    {confidenceControl}
                     <button
                       aria-controls="host-audience-drawer"
                       aria-expanded={audienceOpen}
                       className="button-quiet"
                       lang="en-CA"
-                      onClick={() => setAudienceOpen((open) => !open)}
+                      onClick={() => {
+                        if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
+                        setAudienceOpen((open) => !open);
+                      }}
                       ref={audienceButtonRef}
                       type="button"
                     >

@@ -1,6 +1,5 @@
 import {
   AvatarIdSchema,
-  AVATAR_IDS,
   canonicalizeResponse,
   deriveRoundProtocol,
   requiresExtendedRoundResponses,
@@ -24,6 +23,7 @@ import {
   type PreTextResponseDistribution,
   normalizeDecimalString,
   questionConfidence,
+  liveQuestionConfidence,
   questionDelivery,
   questionPurpose,
   RoundProtocolSchema,
@@ -51,6 +51,7 @@ import {
   type SessionPhase,
   type SessionSettings,
   type SessionSnapshot,
+  type ScoredResponseSummary,
 } from "@openround/contracts";
 import { resolveExperienceTheme } from "@openround/experience";
 import { deriveCheckpointInsight } from "@openround/insights";
@@ -62,6 +63,18 @@ export const POLL_PROTOCOL_GAME_STATE_SCHEMA_VERSION = 7;
 export const RANKING_GAME_STATE_SCHEMA_VERSION = 8;
 export const CURRENT_GAME_STATE_SCHEMA_VERSION = 9;
 
+// Keep the original pool and order so catalog additions do not change legacy avatars.
+const FALLBACK_AVATAR_IDS = [
+  "comet",
+  "fox",
+  "owl",
+  "otter",
+  "panda",
+  "robot",
+  "rocket",
+  "star",
+] as const satisfies readonly AvatarId[];
+
 /** Browser-safe stable fallback used for legacy and avatar-less participants. */
 export function avatarIdForSeed(seed: string): AvatarId {
   let hash = 2_166_136_261;
@@ -69,7 +82,7 @@ export function avatarIdForSeed(seed: string): AvatarId {
     hash ^= seed.charCodeAt(index);
     hash = Math.imul(hash, 16_777_619);
   }
-  return AVATAR_IDS[(hash >>> 0) % AVATAR_IDS.length]!;
+  return FALLBACK_AVATAR_IDS[(hash >>> 0) % FALLBACK_AVATAR_IDS.length]!;
 }
 
 export interface EngineParticipant {
@@ -149,6 +162,9 @@ export interface EngineIntervention {
 interface ReleasedCompetitionScore {
   score: number;
   correctCount: number;
+  /** Missing on legacy entries whose historical accepted-response count is unknown. */
+  answeredCount?: number;
+  lastResponseStatus?: ScoredResponseSummary["lastResponseStatus"];
   acceptedResponseMs: number;
   lastScoreDelta?: number;
   correctStreak?: number;
@@ -610,7 +626,10 @@ export function createGameState(input: {
     intervention: null,
     interventions: {},
     lobbyLocked: false,
-    settings: resolvedSettings(input.settings),
+    settings: resolvedSettings({
+      ...input.settings,
+      confidenceEnabled: input.settings.confidenceEnabled ?? false,
+    }),
     brandTheme,
     experienceTheme:
       input.experienceTheme ??
@@ -917,6 +936,7 @@ export function applyHostCommand(
     commandId: string;
     expectedVersion: number;
     action: HostAction;
+    confidenceEnabled?: boolean;
     participantId?: string;
     interventionType?: InterventionType;
     recheckMode?: "linked" | "revote";
@@ -953,6 +973,12 @@ export function applyHostCommand(
     throw new EngineError("STALE_VERSION", "Session state changed; synchronize and retry");
   }
   if (
+    (input.action === "confidence.set" && typeof input.confidenceEnabled !== "boolean") ||
+    (input.action !== "confidence.set" && input.confidenceEnabled !== undefined)
+  ) {
+    throw new EngineError("CONFLICT", "Provide confidenceEnabled only for confidence.set");
+  }
+  if (
     input.recoveryPackCard &&
     (!RecoveryPackCardSelectionSchema.safeParse(input.recoveryPackCard).success ||
       input.action !== "intervention.start" ||
@@ -966,6 +992,19 @@ export function applyHostCommand(
 
   let result: TransitionResult;
   switch (input.action) {
+    case "confidence.set":
+      if (state.phase === "finished" || typeof input.confidenceEnabled !== "boolean") {
+        throw new EngineError(
+          "CONFLICT",
+          "Confidence collection can only change in an active room",
+        );
+      }
+      result = nextState(
+        state,
+        { settings: { ...state.settings, confidenceEnabled: input.confidenceEnabled } },
+        ["session.snapshot"],
+      );
+      break;
     case "start": {
       const firstIndex = nextMainQuestionIndex(state.quiz, -1);
       if (state.phase !== "lobby" || firstIndex === null) {
@@ -1276,6 +1315,22 @@ export function addParticipant(state: GameState, participant: EngineParticipant)
         ...state.participants,
         [participant.id]: existing ? { ...existing, connected: true } : normalizedParticipant,
       },
+      ...(!existing && state.competitionState && !state.competitionState.scores[participant.id]
+        ? {
+            competitionState: {
+              ...state.competitionState,
+              scores: {
+                ...state.competitionState.scores,
+                [participant.id]: {
+                  score: 0,
+                  correctCount: 0,
+                  answeredCount: 0,
+                  acceptedResponseMs: 0,
+                },
+              },
+            },
+          }
+        : {}),
     },
     ["lobby.updated"],
   );
@@ -1472,18 +1527,19 @@ export function acceptAnswer(
         "The text response limit for this checkpoint has been reached",
       );
   }
-  const confidenceMode = questionConfidence(question);
-  if (confidenceMode === "required" && input.confidence === undefined) {
-    throw new EngineError("ANSWER_INVALID", "Select a confidence level");
-  }
-  if (confidenceMode === "off" && input.confidence !== undefined) {
-    throw new EngineError("ANSWER_INVALID", "This checkpoint does not collect confidence");
-  }
+  const confidenceMode = liveQuestionConfidence(question, state.settings);
   const evaluated = evaluateResponse(
     question,
     input.response ?? { kind: "choice", choiceIds: input.choiceId ? [input.choiceId] : [] },
   );
-  const responseMs = Math.max(0, input.nowMs - state.openedAtMs);
+  // Resuming moves the deadline by the paused duration. Use its remaining time so
+  // a host pause does not reduce speed points or inflate the response-time tie-break.
+  const responseMs = Math.max(
+    0,
+    state.settings.timeMode === "timed" && state.deadlineMs !== null
+      ? question.timeLimitSeconds * 1_000 - (state.deadlineMs - input.nowMs)
+      : input.nowMs - state.openedAtMs,
+  );
   const scored =
     state.roundKind === "main" &&
     questionPurpose(question) !== "opinion" &&
@@ -1503,7 +1559,7 @@ export function acceptAnswer(
     participantId: input.participantId,
     roundId: input.roundId,
     response: evaluated.response,
-    confidence: input.confidence ?? null,
+    confidence: confidenceMode === "off" ? null : (input.confidence ?? null),
     choiceId: evaluated.choiceId,
     acceptedAtMs: input.nowMs,
     responseMs,
@@ -1614,8 +1670,17 @@ function releaseCompetitionCheckpoint(state: GameState): EngineCompetitionState 
       score: 0,
       correctCount: 0,
       acceptedResponseMs: 0,
+      ...(history.releasedRoundIds.length === 0 ? { answeredCount: 0 } : {}),
     };
-    scores[participant.id] = { ...previous, lastScoreDelta: 0, correctStreak: 0 };
+    scores[participant.id] = {
+      ...previous,
+      ...(previous.answeredCount === undefined && history.releasedRoundIds.length === 0
+        ? { answeredCount: 0 }
+        : {}),
+      lastScoreDelta: 0,
+      correctStreak: 0,
+      lastResponseStatus: "unanswered",
+    };
   }
   for (const answer of Object.values(state.answers)) {
     if (answer.roundId !== state.roundId) continue;
@@ -1623,10 +1688,15 @@ function releaseCompetitionCheckpoint(state: GameState): EngineCompetitionState 
       score: 0,
       correctCount: 0,
       acceptedResponseMs: 0,
+      ...(history.releasedRoundIds.length === 0 ? { answeredCount: 0 } : {}),
     };
     scores[answer.participantId] = {
       score: previous.score + answer.score,
       correctCount: previous.correctCount + (answer.correct ? 1 : 0),
+      ...(previous.answeredCount === undefined && history.releasedRoundIds.length > 0
+        ? {}
+        : { answeredCount: (previous.answeredCount ?? 0) + 1 }),
+      lastResponseStatus: answer.correct ? "correct" : "incorrect",
       acceptedResponseMs: previous.acceptedResponseMs + answer.responseMs,
       lastScoreDelta: answer.score,
       correctStreak: answer.correct ? (previous.correctStreak ?? 0) + 1 : 0,
@@ -1645,6 +1715,24 @@ function releaseCompetitionCheckpoint(state: GameState): EngineCompetitionState 
     ]),
   );
   return competitionState;
+}
+
+export function scoredResponseSummaryForParticipant(
+  state: GameState,
+  participantId: string | undefined,
+): ScoredResponseSummary | undefined {
+  const history = state.competitionState;
+  if (!history || !participantId || !state.participants[participantId]) return undefined;
+  const score = history.scores[participantId];
+  const revealedScoredQuestions = history.releasedRoundIds.length;
+  // Never reconstruct unknown historical response counts from points or the current answer.
+  if (revealedScoredQuestions > 0 && score?.answeredCount === undefined) return undefined;
+  return {
+    answeredScoredQuestions: score?.answeredCount ?? 0,
+    correctScoredQuestions: score?.correctCount ?? 0,
+    revealedScoredQuestions,
+    ...(score?.lastResponseStatus ? { lastResponseStatus: score.lastResponseStatus } : {}),
+  };
 }
 
 /** Safe live competition view backed by atomically released durable scores, not browser memory. */
@@ -1707,12 +1795,17 @@ export function competitionStandings(state: GameState): CompetitionStandings | u
   };
 }
 
-function sharedQuestion(question: QuestionDraft): ParticipantQuestion {
+function sharedQuestion(
+  question: QuestionDraft,
+  settings?: Pick<SessionSettings, "confidenceEnabled">,
+): ParticipantQuestion {
   const common = {
     id: question.id,
     type: question.type,
     prompt: question.prompt,
-    confidence: questionConfidence(question),
+    confidence: settings
+      ? liveQuestionConfidence(question, settings)
+      : questionConfidence(question),
     timeLimitSeconds: question.timeLimitSeconds,
     basePoints: question.basePoints,
     mediaId: question.mediaId,
@@ -1749,15 +1842,19 @@ function sharedQuestion(question: QuestionDraft): ParticipantQuestion {
 /** Learner-safe question projection for live Round snapshots. */
 export function participantQuestion(
   question: QuestionDraft | undefined,
+  settings?: Pick<SessionSettings, "confidenceEnabled">,
 ): ParticipantQuestion | null {
-  return question ? sharedQuestion(question) : null;
+  return question ? sharedQuestion(question, settings) : null;
 }
 
 /** Facilitator question projection. Kept as the legacy publicQuestion API for follow-ups. */
-export function publicQuestion(question: QuestionDraft | undefined): PublicQuestion | null {
+export function publicQuestion(
+  question: QuestionDraft | undefined,
+  settings?: Pick<SessionSettings, "confidenceEnabled">,
+): PublicQuestion | null {
   if (!question) return null;
   return {
-    ...sharedQuestion(question),
+    ...sharedQuestion(question, settings),
     purpose: questionPurpose(question),
     linkedRecheckAvailable: Boolean(question.linkedRecheckQuestionId),
   };
@@ -1798,6 +1895,10 @@ export function snapshotForRole(
   const question =
     state.questionIndex === null ? undefined : state.quiz.questions[state.questionIndex];
   const standings = competitionStandings(state);
+  const myScoredResponseSummary =
+    options.role === "participant"
+      ? scoredResponseSummaryForParticipant(state, options.participantId)
+      : undefined;
   // Sorting by unreleased totals is itself a correctness signal, even if score text is hidden.
   const projectedParticipants =
     standings && options.role !== "host"
@@ -1891,10 +1992,13 @@ export function snapshotForRole(
     questionPosition: mainQuestionPosition(state.quiz, sourceQuestionIndex),
     questionCount: state.quiz.questions.filter((item) => questionDelivery(item) === "main").length,
     question:
-      options.role === "participant" ? participantQuestion(question) : publicQuestion(question),
+      options.role === "participant"
+        ? participantQuestion(question, state.settings)
+        : publicQuestion(question, state.settings),
     deadline: state.deadlineMs ? new Date(state.deadlineMs).toISOString() : null,
     participants: visibleParticipants,
     ...(standings ? { competitionStandings: standings } : {}),
+    ...(myScoredResponseSummary ? { myScoredResponseSummary } : {}),
     answerCount: Object.values(state.answers).filter((answer) => answer.roundId === state.roundId)
       .length,
     lobbyLocked: state.lobbyLocked,

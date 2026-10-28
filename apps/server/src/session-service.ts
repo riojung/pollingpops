@@ -1029,7 +1029,7 @@ export class SessionService {
             sessionId,
             code,
             quiz: version.content,
-            settings,
+            settings: { ...settings, confidenceEnabled: settings.confidenceEnabled ?? false },
             brandTheme,
             experienceTheme,
             ...(features.enabled("roundClientProtocol") ? { roundProtocol } : {}),
@@ -1653,7 +1653,10 @@ export class SessionService {
               !existingForKey ||
               (existing.participantId === item.participant.id &&
                 existing.roundId === item.input.roundId &&
-                existing.confidence === (item.input.confidence ?? null) &&
+                // Omitted or discarded confidence stays absent on a retry, even if the
+                // host toggled collection after the original receipt. Never fill it in.
+                (existing.confidence === null ||
+                  existing.confidence === (item.input.confidence ?? null)) &&
                 JSON.stringify(canonicalizeResponse(existing.response)) ===
                   JSON.stringify(responseForAnswer(item.input)));
             if (existing.participantId !== item.participant.id || !idempotentRequestMatches) {
@@ -1867,6 +1870,7 @@ export class SessionService {
                 commandId: input.commandId,
                 expectedVersion: input.expectedVersion,
                 action: input.action,
+                confidenceEnabled: input.confidenceEnabled,
                 participantId: input.participantId,
                 interventionType: input.interventionType,
                 recoveryPackCard: input.recoveryPackCard,

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { CompetitionDashboard } from "../../../components/competition-dashboard";
+import { ScoredResponseReceipt } from "../../../components/scored-response-receipt";
+import { OptionalConfidenceControl } from "../../../components/optional-confidence-control";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -37,6 +39,8 @@ import { QuestionMedia } from "../../../components/question-media";
 import { RecoveryPackLiveCardView } from "../../../components/recovery-pack-live-card";
 import { QnaPanel } from "../../../components/qna-panel";
 import { formatNumber } from "../../../lib/i18n/format";
+import { participantSubmissionCopy } from "../../../lib/i18n/participant-submission-copy";
+import { confidenceControlCopy } from "../../../lib/i18n/confidence-control-copy";
 import {
   audienceContextKey,
   createAudienceRealtimeReceipt,
@@ -53,6 +57,7 @@ import {
   multipleSelectionPoll,
   togglePollSelection,
   legacyResponseRequiresSubmit,
+  usesAutomaticChoiceSubmission,
   type LocalResponseReceipt,
 } from "../../../lib/participant-response";
 import {
@@ -87,6 +92,7 @@ export default function PlayerPage() {
   const [error, setError] = useState("");
   const [errorIsEnglish, setErrorIsEnglish] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [automaticSaveFailed, setAutomaticSaveFailed] = useState(false);
   const [acknowledged, setAcknowledged] = useState<AnswerAck | null>(null);
   const [localReceipt, setLocalReceipt] = useState<LocalResponseReceipt | null>(null);
   const [retryableSubmission, setRetryableSubmission] = useState<ParticipantSubmission | null>(
@@ -111,9 +117,11 @@ export default function PlayerPage() {
       mediaCredential ? `${sessionId}:participant:${clientUuid()}` : `${sessionId}:participant`,
     [mediaCredential, sessionId],
   );
-  const confidenceRef = useRef<HTMLFieldSetElement>(null);
+  const submitBarRef = useRef<HTMLDivElement>(null);
+  const [submitBarHeight, setSubmitBarHeight] = useState(200);
   const syncParticipantRef = useRef<() => void>(() => undefined);
   const submissionRecoveryRef = useRef<AckRecoveryController<ParticipantSubmission> | null>(null);
+  const automaticSubmissionRef = useRef<string | null>(null);
 
   if (!submissionRecoveryRef.current) {
     submissionRecoveryRef.current = createAckRecoveryController({
@@ -146,6 +154,8 @@ export default function PlayerPage() {
   }
 
   function resetResponse(question: SessionSnapshot["question"] = null) {
+    automaticSubmissionRef.current = null;
+    setAutomaticSaveFailed(false);
     clearPendingSubmission();
     setAcknowledged(null);
     setLocalReceipt(null);
@@ -323,6 +333,7 @@ export default function PlayerPage() {
     if (!participantToken) return;
     const attemptId = clientUuid();
     if (!submissionRecoveryRef.current?.begin(attemptId, submission)) return;
+    setAutomaticSaveFailed(false);
     setError("");
     setErrorIsEnglish(false);
     setAcknowledged(null);
@@ -342,6 +353,7 @@ export default function PlayerPage() {
       (response: Ack<AnswerAck>) => {
         if (!clearPendingSubmission(attemptId)) return;
         if (response.error) {
+          setAutomaticSaveFailed(true);
           setRetryableSubmission(null);
           setLocalReceipt(null);
           setError(response.error.message);
@@ -357,6 +369,7 @@ export default function PlayerPage() {
             setError("");
             setErrorIsEnglish(false);
           } else {
+            setAutomaticSaveFailed(true);
             setRetryableSubmission(null);
             setLocalReceipt(null);
             setError(
@@ -378,6 +391,7 @@ export default function PlayerPage() {
   function submitResponse(response: ResponsePayload, selectedConfidence = confidence) {
     if (
       !snapshot?.roundId ||
+      snapshot.phase !== "question_open" ||
       acknowledged?.accepted ||
       snapshot.myResponse ||
       snapshot.myResponseAccepted ||
@@ -385,17 +399,11 @@ export default function PlayerPage() {
       retryableSubmission
     )
       return;
-    if (snapshot.question?.confidence === "required" && selectedConfidence === null) {
-      setError(t("live.roundPlay.chooseConfidence"));
-      setErrorIsEnglish(false);
-      confidenceRef.current?.focus();
-      return;
-    }
     sendSubmission({
       idempotencyKey: `${sessionId}:${snapshot.roundId}:${clientUuid()}`,
       roundId: snapshot.roundId,
       response,
-      confidence: selectedConfidence ?? null,
+      confidence: snapshot.question?.confidence === "off" ? null : (selectedConfidence ?? null),
     });
   }
 
@@ -555,13 +563,40 @@ export default function PlayerPage() {
       : ratingValue;
   const displayedConfidence = retryableSubmission
     ? retryableSubmission.confidence
-    : (durableResponse.confidence ?? confidence);
+    : durableResponse.saved
+      ? durableResponse.confidence
+      : confidence;
   const responseControlsDisabled = participantResponseControlsDisabled({
     questionOpen: snapshot?.phase === "question_open",
     saved: responseSaved,
     submitting: submitting || Boolean(retryableSubmission),
   });
   const uxBeta = snapshot?.uxBeta === true;
+  const automaticChoiceSubmission = usesAutomaticChoiceSubmission(snapshot);
+
+  // Include confidence only if already chosen; it never delays saving an answer.
+  // Fence each draft before sending so snapshots/rejections cannot resubmit it.
+  useEffect(() => {
+    if (
+      !automaticChoiceSubmission ||
+      snapshot?.phase !== "question_open" ||
+      !snapshot.roundId ||
+      !connected ||
+      responseSaved ||
+      submitting ||
+      retryableSubmission ||
+      selectedChoiceIds.length !== 1
+    )
+      return;
+    const selectedConfidence = snapshot.question?.confidence === "off" ? null : confidence;
+    const signature = `${snapshot.roundId}:${selectedChoiceIds[0]}:${selectedConfidence ?? "off"}`;
+    if (automaticSubmissionRef.current === signature) return;
+    automaticSubmissionRef.current = signature;
+    submitResponse({ kind: "choice", choiceIds: selectedChoiceIds }, selectedConfidence);
+  });
+  useEffect(() => {
+    if (snapshot?.question?.confidence === "off") setConfidence(null);
+  }, [snapshot?.question?.confidence]);
   const progressStage =
     snapshot && uxBeta ? participantProgressStage(snapshot, responseSaved) : null;
   const progressSteps = [
@@ -576,6 +611,58 @@ export default function PlayerPage() {
   const legacyNeedsSubmit = Boolean(
     snapshot?.question && legacyResponseRequiresSubmit(snapshot.question),
   );
+  const hasResponseDraft =
+    displayedChoiceIds.length > 0 ||
+    displayedRankingIds.length > 0 ||
+    displayedNumericValue.trim().length > 0 ||
+    displayedRatingValue !== null ||
+    textValue.trim().length > 0 ||
+    (automaticChoiceSubmission && displayedConfidence !== null);
+  const showSubmitControls = Boolean(
+    snapshot?.phase === "question_open" &&
+    !responseSaved &&
+    (uxBeta || legacyNeedsSubmit || retryableSubmission || hasResponseDraft),
+  );
+  const submissionCopy = participantSubmissionCopy[locale];
+  const confidenceCopy = confidenceControlCopy[locale];
+  const optionalConfidence =
+    snapshot?.question && snapshot.question.confidence !== "off" ? (
+      <OptionalConfidenceControl
+        value={displayedConfidence}
+        disabled={responseControlsDisabled}
+        onChange={(value) => {
+          setConfidence(value);
+          setError("");
+          setErrorIsEnglish(false);
+        }}
+      />
+    ) : null;
+  const showAutomaticSavedReceipt = automaticChoiceSubmission && responseSaved && !revealed;
+  const closedWithoutResponse =
+    snapshot &&
+    ["question_locked", "question_reveal", "leaderboard"].includes(snapshot.phase) &&
+    !responseSaved &&
+    !submitting &&
+    !retryableSubmission;
+  const submitDocked = Boolean(
+    closedWithoutResponse ||
+    showAutomaticSavedReceipt ||
+    (showSubmitControls && (hasResponseDraft || submitting || retryableSubmission || error)),
+  );
+
+  useEffect(() => {
+    const bar = submitBarRef.current;
+    if (!submitDocked || !bar) return;
+    const measure = () => setSubmitBarHeight(bar.getBoundingClientRect().height);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [submitDocked, retryableSubmission, closedWithoutResponse, showAutomaticSavedReceipt]);
   const [checkpointOpenBefore, checkpointOpenAfter = ""] = t("live.presenter.checkpointOpen", {
     prompt: LOCALIZED_VALUE_MARKER,
   }).split(LOCALIZED_VALUE_MARKER);
@@ -588,7 +675,8 @@ export default function PlayerPage() {
 
   return (
     <div
-      className="live-shell"
+      className="live-shell participant-shell"
+      data-submit-docked={submitDocked || undefined}
       data-corners={snapshot?.experienceTheme.tokens.corners}
       data-motion={snapshot?.experienceTheme.motion}
       data-pattern={snapshot?.experienceTheme.tokens.pattern}
@@ -611,7 +699,10 @@ export default function PlayerPage() {
           </span>
         </div>
       </header>
-      <main className="shell live-stage">
+      <main
+        className="shell live-stage"
+        style={submitDocked ? { paddingBottom: submitBarHeight + 32 } : undefined}
+      >
         {progressStage ? (
           <ol aria-label={t("live.roundPlay.progressAria")} className="participant-progress">
             {progressSteps.map(([stage, label, language]) => (
@@ -659,7 +750,7 @@ export default function PlayerPage() {
             <span lang="en-CA">Connecting to the live round.</span>
           )}
         </p>
-        {error ? (
+        {error && !showSubmitControls ? (
           <section className="live-card">
             <p className="error" lang={errorIsEnglish ? "en-CA" : undefined} role="alert">
               {error}
@@ -743,6 +834,14 @@ export default function PlayerPage() {
             {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
               <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
             ) : null}
+            {automaticChoiceSubmission && snapshot.phase === "question_open" && !responseSaved ? (
+              <p className="notice" lang={locale}>
+                {snapshot.question.confidence === "off"
+                  ? submissionCopy.autoChooseAnswer
+                  : confidenceCopy.autoOptional}
+              </p>
+            ) : null}
+            {automaticChoiceSubmission ? optionalConfidence : null}
             {isTextQuestion(snapshot.question.type) ? (
               responseSaved ? null : (
                 <TextResponseControl
@@ -797,6 +896,11 @@ export default function PlayerPage() {
                         {String.fromCharCode(65 + index)}.
                       </span>
                       <span lang="">{choice.label}</span>
+                      {selected ? (
+                        <span aria-hidden="true" className="answer-selection-check">
+                          ✓
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -846,6 +950,11 @@ export default function PlayerPage() {
                       type="button"
                     >
                       {formatNumber(locale, value)}
+                      {displayedRatingValue === value ? (
+                        <span aria-hidden="true" className="answer-selection-check">
+                          ✓
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -855,88 +964,90 @@ export default function PlayerPage() {
                 </p>
               </fieldset>
             ) : null}
-            {snapshot.question.confidence !== "off" ? (
-              <fieldset
-                className="field"
-                disabled={responseControlsDisabled}
-                ref={confidenceRef}
-                style={{ border: 0, padding: 0 }}
-                tabIndex={-1}
+            {!automaticChoiceSubmission ? optionalConfidence : null}
+            {showSubmitControls ? (
+              <div
+                className="participant-submit-bar"
+                data-testid="response-status"
+                ref={submitBarRef}
               >
-                <legend className="field-label" lang="en-CA">
-                  How sure are you?{snapshot.question.confidence === "required" ? " Required" : ""}
-                </legend>
-                <div className="button-row">
-                  {[
-                    [1, t("live.roundPlay.confidence.notSure")],
-                    [2, t("live.roundPlay.confidence.somewhat")],
-                    [3, t("live.roundPlay.confidence.very")],
-                  ].map(([value, label]) => (
-                    <button
-                      aria-pressed={displayedConfidence === value}
-                      className="button-quiet"
-                      data-selected={displayedConfidence === value || undefined}
-                      key={value}
-                      onClick={() => {
-                        setConfidence(value as ConfidenceValue);
-                        setError("");
-                      }}
-                      type="button"
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <div className="participant-submit-message">
+                  {retryableSubmission ? (
+                    <p className="muted" lang="en-CA">
+                      Your original response is unchanged. Retry uses the same save request so it
+                      cannot create a second answer.
+                    </p>
+                  ) : (
+                    <>
+                      {hasResponseDraft && !submitting && !automaticChoiceSubmission ? (
+                        <strong lang={locale}>{submissionCopy.unsaved}</strong>
+                      ) : null}
+                      {!error ? (
+                        <p className="muted" lang={locale} role="status">
+                          {submitting
+                            ? t("live.common.saving")
+                            : automaticSaveFailed
+                              ? t("live.roundPlay.responseRejected")
+                              : automaticChoiceSubmission
+                                ? !connected
+                                  ? t("live.roundPlay.waitConnection")
+                                  : submissionCopy.autoChooseAnswer
+                                : hasResponseDraft
+                                  ? submissionCopy.submitToSave
+                                  : submissionCopy.chooseResponse}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                  {error ? (
+                    <p className="error" role="alert" lang={errorIsEnglish ? "en-CA" : undefined}>
+                      {error}
+                    </p>
+                  ) : null}
                 </div>
-              </fieldset>
-            ) : null}
-            {snapshot.phase === "question_open" &&
-            !responseSaved &&
-            (uxBeta || legacyNeedsSubmit || retryableSubmission) ? (
-              retryableSubmission ? (
-                <div className="participant-submit-bar" data-testid="response-status">
-                  <p className="muted" lang="en-CA">
-                    Your original response is unchanged. Retry uses the same save request so it
-                    cannot create a second answer.
-                  </p>
+                {!automaticChoiceSubmission ||
+                retryableSubmission ||
+                automaticSaveFailed ||
+                error ? (
                   <button
                     className="button"
                     disabled={submitting || !connected}
-                    onClick={retrySubmission}
+                    onClick={retryableSubmission ? retrySubmission : submitSelectedResponse}
                     type="button"
                   >
-                    {submitting ? t("live.common.saving") : t("live.roundPlay.retry")}
+                    {submitting
+                      ? t("live.common.saving")
+                      : retryableSubmission || automaticSaveFailed
+                        ? t("live.roundPlay.retry")
+                        : t("live.roundPlay.submit")}
                   </button>
-                </div>
-              ) : uxBeta ? (
-                <div className="participant-submit-bar" data-testid="response-status">
-                  <p className="muted" lang="en-CA">
-                    Review your response before submitting. It cannot be changed.
-                  </p>
-                  <button
-                    className="button"
-                    disabled={submitting || !connected}
-                    onClick={submitSelectedResponse}
-                    type="button"
-                  >
-                    {submitting ? t("live.common.saving") : t("live.roundPlay.submit")}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  className="button"
-                  disabled={submitting}
-                  onClick={submitSelectedResponse}
-                  type="button"
+                ) : null}
+              </div>
+            ) : showAutomaticSavedReceipt ? (
+              <div className="participant-submit-bar" ref={submitBarRef}>
+                <p
+                  className="success"
+                  role="status"
+                  lang={locale}
+                  aria-label={t("live.roundPlay.saveStatusAria")}
                 >
-                  {submitting ? t("live.common.saving") : t("live.roundPlay.submit")}
-                </button>
-              )
+                  {submissionCopy.saved}
+                </p>
+              </div>
+            ) : closedWithoutResponse ? (
+              <div className="participant-submit-bar" ref={submitBarRef}>
+                <p data-testid="response-not-saved" role="status" lang={locale}>
+                  {automaticSubmissionRef.current
+                    ? t("live.roundPlay.responseUnconfirmed")
+                    : submissionCopy.closed}
+                </p>
+              </div>
             ) : null}
             {responseSaved && isTextQuestion(snapshot.question.type) ? (
               <p className="success" role="status" lang={locale}>
                 {t(textResponseReceipt(snapshot.myResponseModerationStatus))}
               </p>
-            ) : responseSaved && !revealed ? (
+            ) : responseSaved && !revealed && !showAutomaticSavedReceipt ? (
               <p
                 aria-label={t("live.roundPlay.saveStatusAria")}
                 className="success"
@@ -960,7 +1071,7 @@ export default function PlayerPage() {
             {revealed ? (
               <div className={snapshot.myCorrect ? "success" : "notice"}>
                 <strong>
-                  {snapshot.question.purpose === "opinion" ? (
+                  {snapshot.question.purpose === "opinion" && responseSaved ? (
                     t("live.presentationPlay.responseRecorded")
                   ) : snapshot.myCorrect === true ? (
                     <span lang="en-CA">Correct</span>
@@ -996,6 +1107,9 @@ export default function PlayerPage() {
             <p className="lead" lang="en-CA">
               Your final score is {formatNumber(locale, myRow?.score ?? 0)}.
             </p>
+            {!snapshot.competitionStandings ? (
+              <ScoredResponseReceipt responseSummary={snapshot.myScoredResponseSummary} />
+            ) : null}
           </section>
         ) : null}
         {snapshot?.competitionStandings &&
@@ -1007,6 +1121,7 @@ export default function PlayerPage() {
             standings={snapshot.competitionStandings}
             finished={snapshot.phase === "finished"}
             participantId={snapshot.myParticipantId ?? undefined}
+            responseSummary={snapshot.myScoredResponseSummary}
             compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
           />
         ) : null}

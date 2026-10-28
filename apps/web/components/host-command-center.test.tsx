@@ -86,6 +86,22 @@ function snapshot(phase: SessionSnapshot["phase"]): SessionSnapshot {
 }
 
 describe("host command center", () => {
+  it("discloses secondary host tools without removing recovery guidance", () => {
+    const locked = snapshot("question_locked");
+    const markup = renderLocalized(
+      <RecoveryCompass collapsible phaseView={getHostPhaseView(locked)} snapshot={locked}>
+        <details>
+          <summary>Round staff</summary>Staff controls
+        </details>
+      </RecoveryCompass>,
+    );
+    expect(markup).toMatch(/^<details[^>]*data-testid="recovery-rail"/);
+    expect(markup).not.toMatch(/^<details[^>]*open/);
+    expect(markup).toContain("Recovery process");
+    expect(markup).toContain("Try peer discussion");
+    expect(markup).toContain("Staff controls");
+  });
+
   it("hides recommendations that are illegal in the current phase", () => {
     const revealed = snapshot("question_reveal");
     const revealedView = getHostPhaseView(revealed);

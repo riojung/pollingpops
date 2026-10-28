@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { CompetitionStandingsSchema, type QuizDraft } from "@openround/contracts";
+import {
+  CompetitionStandingsSchema,
+  SessionSnapshotSchema,
+  type QuizDraft,
+} from "@openround/contracts";
 import { describe, expect, it } from "vitest";
 import {
   acceptAnswer,
@@ -12,7 +16,9 @@ import {
   type GameState,
 } from "../src/index.js";
 
-function fixture(options: { private?: boolean; flex?: boolean; opinion?: boolean } = {}) {
+function fixture(
+  options: { private?: boolean; flex?: boolean; opinion?: boolean; speed?: boolean } = {},
+) {
   const correctId = randomUUID();
   const wrongId = randomUUID();
   const question = (delivery: "main" | "recheck" = "main"): QuizDraft["questions"][number] => ({
@@ -42,7 +48,7 @@ function fixture(options: { private?: boolean; flex?: boolean; opinion?: boolean
     settings: {
       audienceLimit: 20,
       resultVisibility: options.private ? "private" : "leaderboard",
-      scoringMode: "accuracy",
+      scoringMode: options.speed ? "speed" : "accuracy",
       timeMode: options.flex ? "flex" : "timed",
       allowLateJoin: true,
       nicknamePolicy: "custom",
@@ -64,12 +70,16 @@ function fixture(options: { private?: boolean; flex?: boolean; opinion?: boolean
   return { state, ids, correctId, wrongId };
 }
 
-function command(state: GameState, action: Parameters<typeof applyHostCommand>[1]["action"]) {
+function command(
+  state: GameState,
+  action: Parameters<typeof applyHostCommand>[1]["action"],
+  nowMs = (state.openedAtMs ?? 0) + 10_000,
+) {
   return applyHostCommand(state, {
     action,
     commandId: randomUUID(),
     expectedVersion: state.version,
-    nowMs: (state.openedAtMs ?? 0) + 10_000,
+    nowMs,
     newRoundId: randomUUID,
   }).state;
 }
@@ -92,6 +102,57 @@ function reveal(state: GameState) {
 }
 
 describe("released competition standings", () => {
+  it("retains a correct deadline speed score through final results, retries and reconnect", () => {
+    const f = fixture({ speed: true });
+    const learnerId = f.ids[0]!;
+    let state = command(
+      {
+        ...f.state,
+        quiz: {
+          ...f.state.quiz,
+          questions: [{ ...f.state.quiz.questions[0]!, confidence: "required" }],
+        },
+        participants: { [learnerId]: f.state.participants[learnerId]! },
+      },
+      "start",
+    );
+    const submission = {
+      answerId: randomUUID(),
+      participantId: learnerId,
+      roundId: state.roundId!,
+      choiceId: f.correctId,
+      confidence: 3 as const,
+      nowMs: state.deadlineMs!,
+      idempotencyKey: randomUUID(),
+    };
+    const accepted = acceptAnswer(state, submission);
+    expect(accepted.answer).toMatchObject({ correct: true, score: 600, responseMs: 20_000 });
+    state = upgradeGameState(JSON.parse(JSON.stringify(accepted.state)) as GameState);
+    const retry = acceptAnswer(state, { ...submission, nowMs: submission.nowMs + 1 });
+    expect(retry.answer.answerId).toBe(accepted.answer.answerId);
+    expect(retry.state.participants[learnerId]?.score).toBe(600);
+    expect(Object.keys(retry.state.answers)).toHaveLength(1);
+    expect(competitionStandings(retry.state)!.entries).toEqual([]);
+
+    state = command(retry.state, "lock", submission.nowMs);
+    state = command(state, "reveal", submission.nowMs + 1_000);
+    state = command(state, "next", submission.nowMs + 2_000);
+    expect(state.phase).toBe("finished");
+    const restored = upgradeGameState(JSON.parse(JSON.stringify(state)) as GameState);
+    for (const role of ["host", "participant", "presenter"] as const) {
+      expect(
+        snapshotForRole(restored, { role, participantId: learnerId }).competitionStandings,
+      ).toMatchObject({
+        status: "final",
+        completedScoredQuestions: 1,
+        totalScoredQuestions: 1,
+        totalParticipants: 1,
+        entries: [{ id: learnerId, score: 600, lastScoreDelta: 600, correctStreak: 1 }],
+      });
+    }
+    expect(restored.competitionState?.releasedRoundIds).toEqual([submission.roundId]);
+  });
+
   it("releases point gains and correct streaks without bonus points and resets a missed question", () => {
     const f = fixture();
     let state = command(f.state, "start");
@@ -293,5 +354,209 @@ describe("released competition standings", () => {
       totalScoredQuestions: 0,
       completedScoredQuestions: 0,
     });
+  });
+});
+
+describe("private revealed scored response summaries", () => {
+  const summary = (state: GameState, participantId: string) =>
+    snapshotForRole(state, { role: "participant", participantId }).myScoredResponseSummary;
+
+  it.each([false, true])(
+    "distinguishes correct, incorrect and unanswered only after reveal (private=%s)",
+    (privateRoom) => {
+      const f = fixture({ private: privateRoom });
+      const unansweredId = randomUUID();
+      let state = addParticipant(f.state, {
+        ...f.state.participants[f.ids[0]!]!,
+        id: unansweredId,
+        nickname: "Unanswered",
+      }).state;
+      state = command(state, "start");
+      const empty = {
+        answeredScoredQuestions: 0,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 0,
+      };
+      expect(summary(state, f.ids[0]!)).toEqual(empty);
+      state = answer(state, f.ids[0]!, f.correctId);
+      state = answer(state, f.ids[1]!, f.wrongId);
+      for (const phase of [state, command(state, "pause"), command(state, "lock")]) {
+        for (const id of [...f.ids, unansweredId]) expect(summary(phase, id)).toEqual(empty);
+      }
+
+      state = reveal(state);
+      expect(summary(state, f.ids[0]!)).toEqual({
+        answeredScoredQuestions: 1,
+        correctScoredQuestions: 1,
+        revealedScoredQuestions: 1,
+        lastResponseStatus: "correct",
+      });
+      expect(summary(state, f.ids[1]!)).toEqual({
+        answeredScoredQuestions: 1,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 1,
+        lastResponseStatus: "incorrect",
+      });
+      expect(summary(state, unansweredId)).toEqual({
+        answeredScoredQuestions: 0,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 1,
+        lastResponseStatus: "unanswered",
+      });
+      for (const role of ["host", "presenter"] as const) {
+        expect(snapshotForRole(state, { role, participantId: f.ids[0] })).not.toHaveProperty(
+          "myScoredResponseSummary",
+        );
+      }
+      const participantSnapshot = snapshotForRole(state, {
+        role: "participant",
+        participantId: f.ids[0],
+      });
+      expect(SessionSnapshotSchema.parse(participantSnapshot).myScoredResponseSummary).toEqual(
+        summary(state, f.ids[0]!),
+      );
+      for (const participant of participantSnapshot.participants) {
+        expect(participant).not.toHaveProperty("answeredCount");
+        expect(participant).not.toHaveProperty("lastResponseStatus");
+      }
+      for (const participant of participantSnapshot.competitionStandings?.entries ?? []) {
+        expect(participant).not.toHaveProperty("answeredCount");
+        expect(participant).not.toHaveProperty("lastResponseStatus");
+      }
+    },
+  );
+
+  it("persists revealed counts across final results and reconnect and releases each question once", () => {
+    const f = fixture();
+    let state = command(f.state, "start");
+    state = answer(state, f.ids[0]!, f.wrongId);
+    state = command(state, "lock");
+    const revealCommand = {
+      action: "reveal" as const,
+      commandId: randomUUID(),
+      expectedVersion: state.version,
+      nowMs: state.openedAtMs! + 10_000,
+      newRoundId: randomUUID,
+    };
+    state = applyHostCommand(state, revealCommand).state;
+    const first = summary(state, f.ids[0]!);
+    state = applyHostCommand(state, revealCommand).state;
+    expect(summary(state, f.ids[0]!)).toEqual(first);
+    state = answer(command(state, "next"), f.ids[0]!, f.correctId);
+    expect(summary(state, f.ids[0]!)).toEqual(first);
+    state = reveal(state);
+    state = command(state, "next");
+    expect(state.phase).toBe("finished");
+    expect(state.answers).toEqual({});
+    const restored = upgradeGameState(JSON.parse(JSON.stringify(state)) as GameState);
+    expect(summary(restored, f.ids[0]!)).toEqual({
+      answeredScoredQuestions: 2,
+      correctScoredQuestions: 1,
+      revealedScoredQuestions: 2,
+      lastResponseStatus: "correct",
+    });
+    expect(summary(restored, f.ids[1]!)).toEqual({
+      answeredScoredQuestions: 0,
+      correctScoredQuestions: 0,
+      revealedScoredQuestions: 2,
+      lastResponseStatus: "unanswered",
+    });
+  });
+
+  it("omits unknown legacy counts even after another scored reveal", () => {
+    const f = fixture();
+    let state = reveal(answer(command(f.state, "start"), f.ids[0]!, f.correctId));
+    const legacy = JSON.parse(JSON.stringify(state)) as GameState;
+    for (const score of Object.values(legacy.competitionState!.scores)) {
+      delete score.answeredCount;
+      delete score.lastResponseStatus;
+    }
+    state = upgradeGameState(legacy);
+    expect(summary(state, f.ids[0]!)).toBeUndefined();
+    state = reveal(answer(command(state, "next"), f.ids[0]!, f.wrongId));
+    expect(summary(state, f.ids[0]!)).toBeUndefined();
+    expect(state.competitionState!.scores[f.ids[0]!]!.answeredCount).toBeUndefined();
+    delete state.competitionState;
+    expect(summary(state, f.ids[0]!)).toBeUndefined();
+  });
+
+  it("keeps unrevealed answers out of counts when a room ends early", () => {
+    const f = fixture();
+    const opened = answer(command(f.state, "start"), f.ids[0]!, f.correctId);
+    expect(summary(command(opened, "end"), f.ids[0]!)).toEqual({
+      answeredScoredQuestions: 0,
+      correctScoredQuestions: 0,
+      revealedScoredQuestions: 0,
+    });
+    let state = reveal(opened);
+    const released = summary(state, f.ids[0]!);
+    state = answer(command(state, "next"), f.ids[0]!, f.wrongId);
+    expect(summary(command(state, "end"), f.ids[0]!)).toEqual(released);
+  });
+
+  it("starts newly admitted participants at known zero without inventing earlier response status", () => {
+    const f = fixture();
+    let state = reveal(answer(command(f.state, "start"), f.ids[0]!, f.correctId));
+    const lateId = randomUUID();
+    state = addParticipant(state, {
+      ...f.state.participants[f.ids[0]!]!,
+      id: lateId,
+      nickname: "Late arrival",
+    }).state;
+    expect(summary(state, lateId)).toEqual({
+      answeredScoredQuestions: 0,
+      correctScoredQuestions: 0,
+      revealedScoredQuestions: 1,
+    });
+    state = reveal(answer(command(state, "next"), lateId, f.correctId));
+    expect(summary(state, lateId)).toEqual({
+      answeredScoredQuestions: 1,
+      correctScoredQuestions: 1,
+      revealedScoredQuestions: 2,
+      lastResponseStatus: "correct",
+    });
+  });
+
+  it("can establish known zero for legacy entries before their first scored reveal", () => {
+    const f = fixture();
+    for (const score of Object.values(f.state.competitionState!.scores)) delete score.answeredCount;
+    const state = reveal(answer(command(f.state, "start"), f.ids[0]!, f.correctId));
+    expect(summary(state, f.ids[0]!)).toEqual({
+      answeredScoredQuestions: 1,
+      correctScoredQuestions: 1,
+      revealedScoredQuestions: 1,
+      lastResponseStatus: "correct",
+    });
+    expect(summary(state, f.ids[1]!)).toEqual({
+      answeredScoredQuestions: 0,
+      correctScoredQuestions: 0,
+      revealedScoredQuestions: 1,
+      lastResponseStatus: "unanswered",
+    });
+  });
+
+  it("excludes opinion questions and recovery rechecks from the private summary", () => {
+    const opinion = fixture({ opinion: true });
+    const opinionState = reveal(
+      answer(command(opinion.state, "start"), opinion.ids[0]!, opinion.correctId),
+    );
+    expect(summary(opinionState, opinion.ids[0]!)).toEqual({
+      answeredScoredQuestions: 0,
+      correctScoredQuestions: 0,
+      revealedScoredQuestions: 0,
+    });
+    const f = fixture();
+    let state = reveal(answer(command(f.state, "start"), f.ids[0]!, f.wrongId));
+    const mainSummary = summary(state, f.ids[0]!);
+    state = applyHostCommand(state, {
+      action: "recheck.open",
+      recheckMode: "linked",
+      commandId: randomUUID(),
+      expectedVersion: state.version,
+      nowMs: 20_000,
+      newRoundId: randomUUID,
+    }).state;
+    state = reveal(answer(state, f.ids[0]!, f.correctId));
+    expect(summary(state, f.ids[0]!)).toEqual(mainSummary);
   });
 });

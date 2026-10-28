@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SessionSettings } from "@openround/contracts";
 import {
+  defaultSetupSettings,
   describeDiscussionRecipe,
   resolveSetupRecipe,
   setupRecipeStorageKey,
@@ -16,6 +17,60 @@ const current: SessionSettings = {
 };
 
 describe("setup recipes", () => {
+  it.each(["education", "workplace"] as const)(
+    "lets participants choose nicknames in new %s rooms and every recipe",
+    (segment) => {
+      const defaults = defaultSetupSettings(segment, 50);
+      expect(defaults.nicknamePolicy).toBe("custom");
+      expect(defaults.confidenceEnabled).toBe(false);
+      expect(defaults.audienceLimit).toBeLessThanOrEqual(50);
+      for (const recipe of ["recovery", "competition", "discussion"] as const) {
+        expect(
+          resolveSetupRecipe(recipe, defaults, {
+            segment,
+            maxParticipants: 50,
+            roundExperiencesAvailable: true,
+          }).settings.nicknamePolicy,
+        ).toBe("custom");
+      }
+    },
+  );
+
+  it("preserves an explicitly chosen generated-only policy across recipes", () => {
+    for (const recipe of ["recovery", "competition", "discussion"] as const) {
+      expect(
+        resolveSetupRecipe(
+          recipe,
+          { ...current, nicknamePolicy: "friendly_only" },
+          {
+            segment: "education",
+            maxParticipants: 100,
+            roundExperiencesAvailable: true,
+          },
+        ).settings.nicknamePolicy,
+      ).toBe("friendly_only");
+    }
+  });
+
+  it.each([true, false, undefined])(
+    "preserves an explicit confidence choice and otherwise defaults off (%s)",
+    (confidenceEnabled) => {
+      for (const recipe of ["recovery", "competition", "discussion"] as const) {
+        expect(
+          resolveSetupRecipe(
+            recipe,
+            { ...current, ...(confidenceEnabled === undefined ? {} : { confidenceEnabled }) },
+            {
+              segment: "education",
+              maxParticipants: 100,
+              roundExperiencesAvailable: true,
+            },
+          ).settings.confidenceEnabled,
+        ).toBe(confidenceEnabled ?? false);
+      }
+    },
+  );
+
   it("maps recovery to private, accuracy-first facilitation while preserving a capped audience", () => {
     expect(
       resolveSetupRecipe("recovery", current, {
@@ -26,11 +81,12 @@ describe("setup recipes", () => {
     ).toEqual({
       settings: {
         audienceLimit: 50,
+        confidenceEnabled: false,
         timeMode: "flex",
         scoringMode: "accuracy",
         resultVisibility: "private",
         allowLateJoin: true,
-        nicknamePolicy: "friendly_only",
+        nicknamePolicy: "custom",
       },
       experiencePreset: "focus",
       presenterSoundEnabled: false,
@@ -58,7 +114,7 @@ describe("setup recipes", () => {
     ).toMatchObject({ experiencePreset: "focus", presenterSoundEnabled: false });
   });
 
-  it("keeps the segment nickname default for discussion and versions stored preferences", () => {
+  it("keeps participant name choice for discussion and versions stored preferences", () => {
     expect(
       resolveSetupRecipe("discussion", current, {
         segment: "workplace",

@@ -367,6 +367,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
           audienceLimit: 20,
           scoringMode: "accuracy",
           resultVisibility: "private",
+          confidenceEnabled: true,
           allowLateJoin: true,
           nicknamePolicy: "friendly_only",
         },

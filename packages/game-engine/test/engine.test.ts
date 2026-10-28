@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AVATAR_IDS, type QuizDraft } from "@openround/contracts";
+import { type QuizDraft } from "@openround/contracts";
 import { describe, expect, it } from "vitest";
 import {
   acceptAnswer,
@@ -62,7 +62,7 @@ function fixture() {
   };
 }
 
-function stateForQuestions(questions: QuizDraft["questions"]) {
+function stateForQuestions(questions: QuizDraft["questions"], confidenceEnabled = false) {
   return createGameState({
     sessionId: randomUUID(),
     code: "1234567",
@@ -73,6 +73,7 @@ function stateForQuestions(questions: QuizDraft["questions"]) {
       resultVisibility: "private",
       allowLateJoin: true,
       nicknamePolicy: "custom",
+      confidenceEnabled,
     },
   });
 }
@@ -117,13 +118,13 @@ describe("game engine", () => {
     });
   });
 
-  it("normalizes deterministic fallback avatars and preserves explicit selections", () => {
+  it("preserves original fallback avatars and expanded explicit selections", () => {
     const { state } = fixture();
-    const fallbackParticipant = participant("00000000-0000-4000-8000-000000000001");
+    const fallbackParticipant = participant("00000000-0000-4000-8000-000000000002");
     const joinedWithFallback = addParticipant(state, fallbackParticipant);
     const fallbackAvatar = avatarIdForSeed(fallbackParticipant.id);
 
-    expect(AVATAR_IDS).toContain(fallbackAvatar);
+    expect(fallbackAvatar).toBe("star");
     expect(joinedWithFallback.state.participants[fallbackParticipant.id]?.avatarId).toBe(
       fallbackAvatar,
     );
@@ -142,17 +143,17 @@ describe("game engine", () => {
 
     const explicitParticipant = {
       ...participant(),
-      nickname: "Fox learner",
-      avatarId: "fox" as const,
+      nickname: "Hedgehog learner",
+      avatarId: "hedgehog" as const,
     };
     const joinedExplicitly = addParticipant(joinedWithFallback.state, explicitParticipant);
-    expect(joinedExplicitly.state.participants[explicitParticipant.id]?.avatarId).toBe("fox");
+    expect(joinedExplicitly.state.participants[explicitParticipant.id]?.avatarId).toBe("hedgehog");
     expect(
       snapshotForRole(joinedExplicitly.state, {
         role: "participant",
         participantId: explicitParticipant.id,
       }).participants.find(({ id }) => id === explicitParticipant.id),
-    ).toMatchObject({ avatarId: "fox" });
+    ).toMatchObject({ avatarId: "hedgehog" });
   });
 
   it("uses the independently specified scoring formula at its boundaries", () => {
@@ -365,11 +366,13 @@ describe("game engine", () => {
   });
 
   it("preserves the remaining server deadline across pause and resume", () => {
-    const { state } = fixture();
-    const started = applyHostCommand(state, {
+    const { state, correctId } = fixture();
+    const learner = participant();
+    const joined = addParticipant(state, learner);
+    const started = applyHostCommand(joined.state, {
       action: "start",
       commandId: randomUUID(),
-      expectedVersion: state.version,
+      expectedVersion: joined.state.version,
       nowMs: 1_000,
       newRoundId: randomUUID,
     });
@@ -392,6 +395,20 @@ describe("game engine", () => {
     });
     expect(resumed.state.phase).toBe("question_open");
     expect(resumed.state.deadlineMs).toBe(27_000);
+
+    const restored = upgradeGameState(JSON.parse(JSON.stringify(resumed.state)));
+    const accepted = acceptAnswer(restored, {
+      answerId: randomUUID(),
+      participantId: learner.id,
+      roundId: restored.roundId!,
+      choiceId: correctId,
+      idempotencyKey: randomUUID(),
+      nowMs: 21_000,
+    });
+    expect(accepted.answer.responseMs).toBe(4_000);
+    expect(accepted.answer.score).toBe(840);
+    expect(accepted.state.participants[learner.id]?.acceptedResponseMs).toBe(4_000);
+    expect(accepted.state.rounds[restored.roundId!]?.openedAtMs).toBe(1_000);
   });
 
   it("keeps flex questions open until host close without speed scoring or a countdown", () => {
@@ -892,34 +909,37 @@ describe("game engine", () => {
     }
   });
 
-  it("requires confidence and scores multi-select only for an exact set", () => {
+  it("keeps legacy-required confidence optional and scores multi-select only for an exact set", () => {
     const first = randomUUID();
     const second = randomUUID();
     const distractor = randomUUID();
     const learner = participant();
     const joined = addParticipant(
-      stateForQuestions([
-        {
-          id: randomUUID(),
-          type: "multi_select",
-          prompt: "Select both prime numbers",
-          purpose: "diagnostic",
-          confidence: "required",
-          delivery: "main",
-          conceptKeys: ["prime-numbers"],
-          linkedRecheckQuestionId: null,
-          choices: [
-            { id: first, label: "2", isCorrect: true },
-            { id: second, label: "3", isCorrect: true },
-            { id: distractor, label: "4", isCorrect: false },
-          ],
-          timeLimitSeconds: 20,
-          basePoints: 1_000,
-          explanation: "Two and three are prime.",
-          mediaId: null,
-          mediaAlt: null,
-        },
-      ]),
+      stateForQuestions(
+        [
+          {
+            id: randomUUID(),
+            type: "multi_select",
+            prompt: "Select both prime numbers",
+            purpose: "diagnostic",
+            confidence: "required",
+            delivery: "main",
+            conceptKeys: ["prime-numbers"],
+            linkedRecheckQuestionId: null,
+            choices: [
+              { id: first, label: "2", isCorrect: true },
+              { id: second, label: "3", isCorrect: true },
+              { id: distractor, label: "4", isCorrect: false },
+            ],
+            timeLimitSeconds: 20,
+            basePoints: 1_000,
+            explanation: "Two and three are prime.",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        ],
+        true,
+      ),
       learner,
     );
     const started = applyHostCommand(joined.state, {
@@ -930,16 +950,19 @@ describe("game engine", () => {
       newRoundId: randomUUID,
     });
 
-    expect(() =>
-      acceptAnswer(started.state, {
-        answerId: randomUUID(),
-        participantId: learner.id,
-        roundId: started.state.roundId!,
-        response: { kind: "choice", choiceIds: [first, second] },
-        idempotencyKey: randomUUID(),
-        nowMs: 2_000,
-      }),
-    ).toThrowError(/confidence level/);
+    const withoutConfidence = acceptAnswer(started.state, {
+      answerId: randomUUID(),
+      participantId: learner.id,
+      roundId: started.state.roundId!,
+      response: { kind: "choice", choiceIds: [first, second] },
+      idempotencyKey: randomUUID(),
+      nowMs: 2_000,
+    });
+    expect(withoutConfidence.answer).toMatchObject({
+      correct: true,
+      score: 1_000,
+      confidence: null,
+    });
 
     const partial = acceptAnswer(started.state, {
       answerId: randomUUID(),
@@ -970,26 +993,29 @@ describe("game engine", () => {
   it("compares normalized numeric responses with decimal tolerance and units", () => {
     const learner = participant();
     const joined = addParticipant(
-      stateForQuestions([
-        {
-          id: randomUUID(),
-          type: "numeric",
-          prompt: "How many metres?",
-          purpose: "practice",
-          confidence: "optional",
-          delivery: "main",
-          conceptKeys: ["measurement"],
-          linkedRecheckQuestionId: null,
-          correctValue: "0.3",
-          tolerance: "0.0000000000000000001",
-          unit: "m",
-          timeLimitSeconds: 20,
-          basePoints: 1_000,
-          explanation: "Three tenths of a metre.",
-          mediaId: null,
-          mediaAlt: null,
-        },
-      ]),
+      stateForQuestions(
+        [
+          {
+            id: randomUUID(),
+            type: "numeric",
+            prompt: "How many metres?",
+            purpose: "practice",
+            confidence: "optional",
+            delivery: "main",
+            conceptKeys: ["measurement"],
+            linkedRecheckQuestionId: null,
+            correctValue: "0.3",
+            tolerance: "0.0000000000000000001",
+            unit: "m",
+            timeLimitSeconds: 20,
+            basePoints: 1_000,
+            explanation: "Three tenths of a metre.",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        ],
+        true,
+      ),
       learner,
     );
     const started = applyHostCommand(joined.state, {
@@ -1030,51 +1056,54 @@ describe("game engine", () => {
     const recheckCorrect = randomUUID();
     const learner = participant();
     const joined = addParticipant(
-      stateForQuestions([
-        {
-          id: randomUUID(),
-          type: "single_select",
-          prompt: "Main checkpoint",
-          purpose: "diagnostic",
-          confidence: "required",
-          delivery: "main",
-          conceptKeys: ["safe-work"],
-          linkedRecheckQuestionId: recheckId,
-          choices: [
-            { id: mainCorrect, label: "Safe", isCorrect: true },
-            {
-              id: mainWrong,
-              label: "Unsafe",
-              isCorrect: false,
-              misconceptionKey: "unsafe-default",
-            },
-          ],
-          timeLimitSeconds: 20,
-          basePoints: 1_000,
-          explanation: "Use the safe procedure.",
-          mediaId: null,
-          mediaAlt: null,
-        },
-        {
-          id: recheckId,
-          type: "true_false",
-          prompt: "Apply the procedure in a new scenario",
-          purpose: "practice",
-          confidence: "off",
-          delivery: "recheck",
-          conceptKeys: ["safe-work"],
-          linkedRecheckQuestionId: null,
-          choices: [
-            { id: recheckCorrect, label: "True", isCorrect: true },
-            { id: randomUUID(), label: "False", isCorrect: false },
-          ],
-          timeLimitSeconds: 20,
-          basePoints: 1_000,
-          explanation: "The procedure still applies.",
-          mediaId: null,
-          mediaAlt: null,
-        },
-      ]),
+      stateForQuestions(
+        [
+          {
+            id: randomUUID(),
+            type: "single_select",
+            prompt: "Main checkpoint",
+            purpose: "diagnostic",
+            confidence: "required",
+            delivery: "main",
+            conceptKeys: ["safe-work"],
+            linkedRecheckQuestionId: recheckId,
+            choices: [
+              { id: mainCorrect, label: "Safe", isCorrect: true },
+              {
+                id: mainWrong,
+                label: "Unsafe",
+                isCorrect: false,
+                misconceptionKey: "unsafe-default",
+              },
+            ],
+            timeLimitSeconds: 20,
+            basePoints: 1_000,
+            explanation: "Use the safe procedure.",
+            mediaId: null,
+            mediaAlt: null,
+          },
+          {
+            id: recheckId,
+            type: "true_false",
+            prompt: "Apply the procedure in a new scenario",
+            purpose: "practice",
+            confidence: "off",
+            delivery: "recheck",
+            conceptKeys: ["safe-work"],
+            linkedRecheckQuestionId: null,
+            choices: [
+              { id: recheckCorrect, label: "True", isCorrect: true },
+              { id: randomUUID(), label: "False", isCorrect: false },
+            ],
+            timeLimitSeconds: 20,
+            basePoints: 1_000,
+            explanation: "The procedure still applies.",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        ],
+        true,
+      ),
       learner,
     );
     const started = applyHostCommand(joined.state, {

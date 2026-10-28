@@ -1,0 +1,42 @@
+.receipt {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text);
+  text-align: start;
+}
+
+.receipt > strong {
+  color: var(--ui-text-strong);
+}
+
+.scope {
+  margin: 0.25rem 0 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.85rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0.8rem 0 0;
+}
+
+.metrics dt {
+  font-size: 0.85rem;
+}
+
+.metrics dd {
+  margin: 0.15rem 0 0;
+  color: var(--ui-text-strong);
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.result {
+  margin: 0.75rem 0 0;
+  font-weight: 650;
+}

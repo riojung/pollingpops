@@ -70,6 +70,19 @@ export function legacyResponseRequiresSubmit(question: {
   );
 }
 
+/** Competitive single answers save immediately; confidence is always skippable. */
+export function usesAutomaticChoiceSubmission(
+  snapshot: Pick<SessionSnapshot, "uxBeta" | "settings" | "roundKind" | "question"> | null,
+) {
+  return Boolean(
+    snapshot?.uxBeta === true &&
+    snapshot.settings.resultVisibility === "leaderboard" &&
+    snapshot.roundKind === "main" &&
+    snapshot.question &&
+    ["single_select", "true_false"].includes(snapshot.question.type),
+  );
+}
+
 /**
  * Builds the learner-safe reveal state from the explicit server signal and the learner's own
  * result. It never needs the facilitator-only correct response.

@@ -35,16 +35,16 @@ similar interaction. Per-question scheduling and native slide add-ins remain sep
 
 ## Delivered scope
 
-| Surface                  | Behavior                                                                                                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Round host               | Dashboard after the lobby: revealed-question progress, top three, top five and expandable full standings. Existing host phase controls remain.                               |
-| Round projector          | Compact standings during the main-question flow, full standings when selected, and automatic retained final podium. Audience race views pause during interventions/rechecks. |
-| Round participant        | Top three and standings plus personal rank, score, rank movement, points behind the leader and points to the next position. Final results survive refresh.                   |
-| Presentation host        | Dashboard for the facilitator's already-authorized participant results. Only completed main scored questions contribute; an open question cannot move standings.             |
-| Presentation participant | Own existing rank and score on the final screen. Other participants' identities remain outside this projection.                                                              |
-| Private Round            | No competition dashboard or public competition payload. Existing private feedback remains.                                                                                   |
-| Opinion-only session     | Clear unscored explanation; no ranked winners, podium or personal race card.                                                                                                 |
-| Early-ended Round        | Only released scores contribute. If none were revealed, an explicit empty final state replaces invented winners.                                                             |
+| Surface                  | Behavior                                                                                                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Round host               | Compact main-stage summary during questions; full-width standings/final stage with revealed progress, top three, top five and expandable full standings. Existing phase controls remain. |
+| Round projector          | Compact standings during the main-question flow, full standings when selected, and automatic retained final podium. Audience race views pause during interventions/rechecks.             |
+| Round participant        | Top three and standings plus personal rank, score, rank movement, points behind the leader and points to the next position. Final results survive refresh.                               |
+| Presentation host        | Dashboard for the facilitator's already-authorized participant results. Only completed main scored questions contribute; an open question cannot move standings.                         |
+| Presentation participant | Own existing rank and score on the final screen. Other participants' identities remain outside this projection.                                                                          |
+| Private Round            | No competition dashboard or public competition payload. Existing private feedback remains.                                                                                               |
+| Opinion-only session     | Clear unscored explanation; no ranked winners, podium or personal race card.                                                                                                             |
+| Early-ended Round        | Only released scores contribute. If none were revealed, an explicit empty final state replaces invented winners.                                                                         |
 
 Presentation audience-wide podiums need a separate explicit public-standings policy. Existing
 Presentations have no such setting; the staff-only improvement does not broaden identity access.
@@ -59,6 +59,10 @@ the full dashboard.
   receipts confirm durability without a score that could reveal correctness.
 - Rechecks, revotes and opinions do not add competition points. Progress and disclosure describe
   revealed scored questions, including at final.
+- Only accepted responses enter the ledger. A participant draft is visibly marked as unsubmitted
+  until the server confirms it. Correct timed speed submissions retain positive earned points
+  through reveal, finish and reconnect; host pauses do not count toward their response time.
+- All-zero finals retain truthful standings without a winner spotlight, confetti or replay reward.
 - Early ending does not release the current question. Historical reports retain their existing
   accepted-answer scoring semantics and can therefore differ from the released competition total.
 - Round ordering remains points, correct count, then response time in timed mode, with a stable

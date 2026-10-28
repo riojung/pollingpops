@@ -135,6 +135,11 @@ export default {
   "delivery.join.description":
     "Usa il codice di sette cifre mostrato dal facilitatore. Nessun account necessario.",
   "delivery.join.nickname": "Nome visualizzato",
+  "delivery.join.nicknameOptional": "Soprannome (facoltativo)",
+  "delivery.join.nicknameHelp":
+    "Scegli un soprannome o lascia questo campo vuoto per generarne uno.",
+  "delivery.join.friendlyNicknameNotice":
+    "L’organizzatore ha scelto soprannomi generati per questo Round. Il tuo verrà assegnato quando partecipi.",
   "delivery.join.nicknamePlaceholder": "Come vuoi apparire nella stanza?",
   "delivery.join.avatar": "Scegli un avatar",
   "delivery.join.joining": "Accesso…",

@@ -66,6 +66,16 @@ describe("join preflight state", () => {
     expect(shouldCollectJoinNickname(ready, "7654321")).toBe(true);
   });
 
+  it("submits a chosen nickname or requests a generated fallback for a custom-name room", () => {
+    const ready = completeJoinPreflight(beginJoinPreflight("1234567", 1), 1, {
+      nicknamePolicy: "custom",
+    });
+
+    expect(shouldCollectJoinNickname(ready, "1234567")).toBe(true);
+    expect(nicknameForJoin(ready, "1234567", "  My chosen name  ")).toBe("My chosen name");
+    expect(nicknameForJoin(ready, "1234567", "   ")).toBeUndefined();
+  });
+
   it("keeps nickname submission available when preflight fails", () => {
     const failed = failJoinPreflight(
       beginJoinPreflight("1234567", 3),

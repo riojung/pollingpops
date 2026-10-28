@@ -515,8 +515,12 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     await client.query(
       `INSERT INTO presentation_session_timeline
         (id, workspace_id, session_id, sequence, event_type, block_index, block_id, occurred_at,
-         recovery_pack_intervention)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+         recovery_pack_intervention, revealed_participant_ids)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
+         CASE WHEN $5 = 'question.revealed' THEN
+           ARRAY(SELECT id FROM presentation_live_participants
+                 WHERE workspace_id = $2 AND session_id = $3 ORDER BY id)
+         ELSE NULL END)`,
       [
         randomUUID(),
         input.workspaceId,

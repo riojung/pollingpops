@@ -163,6 +163,8 @@ export interface PresentationSessionTimelineRecord {
     | "presentation.finished";
   blockIndex: number | null;
   blockId: string | null;
+  /** Staff-private roster frozen at reveal; absent/null only on legacy timeline records. */
+  revealedParticipantIds?: string[] | null;
   recoveryPackIntervention?: PresentationRecoveryPackIntervention | null;
   occurredAt: Date;
 }
@@ -249,7 +251,7 @@ export interface PresentationSessionTransitionInput {
   content?: PresentationContent;
   event: Omit<
     PresentationSessionTimelineRecord,
-    "id" | "workspaceId" | "sessionId" | "sequence" | "occurredAt"
+    "id" | "workspaceId" | "sessionId" | "sequence" | "occurredAt" | "revealedParticipantIds"
   >;
 }
 

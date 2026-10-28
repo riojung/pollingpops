@@ -262,7 +262,9 @@ describe("live multiple-selection opinion polls", () => {
     expect(commits).toHaveBeenCalledTimes(1);
     expect(commits.mock.calls[0]![1]).toHaveLength(4);
     requests[0]!.clientCapabilities = capable;
-    expect(await f.sessions.answer(requests[0]!)).toMatchObject({ accepted: true, score: 0 });
+    const receipt = await f.sessions.answer(requests[0]!);
+    expect(receipt).toMatchObject({ accepted: true });
+    expect(receipt).not.toHaveProperty("score");
     f.sessions.close();
     const restored = new SessionService(
       f.repository,
@@ -278,7 +280,8 @@ describe("live multiple-selection opinion polls", () => {
       ...requests[1]!,
       response: { kind: "poll", choiceIds: [...choiceIds].reverse() },
     });
-    expect(retry).toMatchObject({ accepted: true, duplicate: true, score: 0 });
+    expect(retry).toMatchObject({ accepted: true, duplicate: true });
+    expect(retry).not.toHaveProperty("score");
     const host = await restored.snapshot({
       sessionId: room.sessionId,
       hostToken: room.hostToken,

@@ -461,6 +461,13 @@ export class MemoryPresentationSessionRepository
       sessionId: session.id,
       sequence: updated.eventSeq,
       occurredAt: now,
+      revealedParticipantIds:
+        input.event.type === "question.revealed"
+          ? [...this.participants.values()]
+              .filter((participant) => participant.sessionId === session.id)
+              .map((participant) => participant.id)
+              .sort()
+          : null,
       recoveryPackIntervention: timelineIntervention,
     };
     this.timeline.set(event.id, event);

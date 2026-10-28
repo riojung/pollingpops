@@ -199,6 +199,18 @@ motion, Q&A premoderation, and participant replies off. Workplace onboarding def
 scoring, a leaderboard, entered aliases, Q&A postmoderation, and participant replies on. A
 facilitator can change round settings before creating a room.
 
+For a scored Round with **Leaderboard** results, the competition dashboard shows the top three,
+current standings and each participant's own position and points gap. Scores update only after
+the facilitator reveals a scored main question. Choose **Show standings** for the full competition
+phase; finishing retains the final podium and personal result after refresh. Interventions and
+rechecks pause the audience race view. Private results remain private, and opinion-only polls
+show an unscored explanation without winners. See the [competition dashboard guide](idea-016-competition-dashboard-plan.md).
+
+Switch between **Race view** and **Table view** to compare released scores. The dashboard highlights
+the biggest climb, the latest scored-question gain and correct streaks without bonus points.
+At the finish, **Replay celebration** repeats only the visual effects. The **Motion effects** choice
+is saved for your browser; device and **Display & sound → Reduce motion** settings take precedence.
+
 ## Sign in and workspace access
 
 1. Select **Create a free checkpoint set** or open `/signin`.

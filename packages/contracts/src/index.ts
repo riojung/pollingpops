@@ -1843,6 +1843,63 @@ export const ParticipantViewSchema = z.object({
 });
 export type ParticipantView = z.infer<typeof ParticipantViewSchema>;
 
+/** Released competition results. Never include points from an unrevealed live checkpoint. */
+export const CompetitionStandingEntrySchema = z.object({
+  id: z.string().uuid(),
+  nickname: z.string(),
+  avatarId: AvatarIdSchema.optional(),
+  score: z.number().int().nonnegative(),
+  rank: z.number().int().positive(),
+  previousRank: z.number().int().positive().nullable(),
+  tied: z.boolean(),
+  pointsToLeader: z.number().int().nonnegative(),
+  pointsToNextRank: z.number().int().nonnegative().nullable(),
+  /** Recognition only; neither field changes scoring or includes an unrevealed answer. */
+  lastScoreDelta: z.number().int().nonnegative().optional(),
+  correctStreak: z.number().int().nonnegative().optional(),
+  connected: z.boolean().optional(),
+});
+export type CompetitionStandingEntry = z.infer<typeof CompetitionStandingEntrySchema>;
+
+export const CompetitionStandingsSchema = z
+  .object({
+    status: z.enum(["waiting", "live", "final", "unscored"]),
+    entries: z.array(CompetitionStandingEntrySchema),
+    totalParticipants: z.number().int().nonnegative(),
+    scoringMode: ScoringModeSchema,
+    timeMode: RoundTimeModeSchema,
+    completedScoredQuestions: z.number().int().nonnegative(),
+    totalScoredQuestions: z.number().int().nonnegative(),
+    tieBreak: z.enum(["score_correct_time", "score_correct", "score_join_order"]),
+  })
+  .superRefine((value, context) => {
+    if (value.completedScoredQuestions > value.totalScoredQuestions)
+      context.addIssue({
+        code: "custom",
+        message: "Released competition progress cannot exceed scored checkpoints",
+        path: ["completedScoredQuestions"],
+      });
+    if (value.entries.length > value.totalParticipants)
+      context.addIssue({
+        code: "custom",
+        message: "Competition entries cannot exceed the participant population",
+        path: ["entries"],
+      });
+    if (new Set(value.entries.map((entry) => entry.id)).size !== value.entries.length)
+      context.addIssue({
+        code: "custom",
+        message: "Competition participant identities must be unique",
+        path: ["entries"],
+      });
+    if ((value.status === "unscored" || value.status === "waiting") && value.entries.length)
+      context.addIssue({
+        code: "custom",
+        message: "Waiting and unscored competition views cannot declare ranked winners",
+        path: ["entries"],
+      });
+  });
+export type CompetitionStandings = z.infer<typeof CompetitionStandingsSchema>;
+
 const LiveQuestionBaseSchema = z.object({
   id: z.string().uuid(),
   type: QuestionTypeSchema.default("single_select"),
@@ -2116,6 +2173,8 @@ export const SessionSnapshotSchema = z.object({
   question: LiveQuestionSchema.nullable(),
   deadline: z.string().datetime().nullable(),
   participants: z.array(ParticipantViewSchema),
+  /** Optional for legacy rooms and omitted entirely when public competition is disabled. */
+  competitionStandings: CompetitionStandingsSchema.optional(),
   answerCount: z.number().int().nonnegative(),
   lobbyLocked: z.boolean(),
   settings: SessionSettingsSchema,
@@ -5050,6 +5109,7 @@ export const PresentationHostSnapshotSchema = z
     participantCount: z.number().int().nonnegative(),
     responseCount: z.number().int().nonnegative(),
     participants: z.array(PresentationHostParticipantSchema),
+    competitionStandings: CompetitionStandingsSchema.optional(),
     roomStatus: PresentationRoomStatusSchema,
     finishedAt: z.string().datetime().nullable(),
   })

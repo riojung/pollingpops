@@ -27,6 +27,15 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds optional reveal rosters without fabricating legacy membership", async () => {
+    const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
+    const migrations = await discoverMigrations(migrationsDirectory);
+    const migration = migrations.find(({ version }) => version === 77);
+    expect(migration?.name).toBe("presentation_reveal_rosters");
+    expect(migration?.sql).toContain("ADD COLUMN IF NOT EXISTS revealed_participant_ids uuid[]");
+    expect(migration?.sql).not.toContain("UPDATE presentation_session_timeline");
+  });
+
   it("adds verified-email PIN credentials with forced system-only isolation and bounded attempts", async () => {
     const migration = (
       await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))

@@ -421,6 +421,14 @@ export default function PresentationParticipantPage() {
                 <span className={styles.statusPill}>{t("live.common.complete")}</span>
                 <h1>{t("live.presentationPlay.thanks")}</h1>
                 <p>{t("live.presentationPlay.savedForReport")}</p>
+                {snapshot.standing ? (
+                  <p className="notice">
+                    {t("live.presentationPlay.rankPoints", {
+                      rank: formatNumber(locale, snapshot.standing.rank),
+                      score: formatNumber(locale, snapshot.standing.score),
+                    })}
+                  </p>
+                ) : null}
                 <Link className="button" href="/">
                   {t("live.presentationPlay.leave")}
                 </Link>

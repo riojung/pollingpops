@@ -1097,7 +1097,9 @@ describe("session service ordering", () => {
     ).autoLock(sessionId, deadlineMs);
     releaseLookup();
 
-    await expect(answer).resolves.toMatchObject({ accepted: true, duplicate: false, score: 1_000 });
+    const acknowledgement = await answer;
+    expect(acknowledgement).toMatchObject({ accepted: true, duplicate: false });
+    expect(acknowledgement).not.toHaveProperty("score");
     await automaticLock;
     expect((await repository.getSessionById(sessionId))?.decisionReplayEnabled).toBe(true);
     expect((await repository.getSessionById(sessionId))?.state).toMatchObject({
@@ -1105,6 +1107,7 @@ describe("session service ordering", () => {
       answers: expect.objectContaining({}),
     });
     expect(repository.answers).toHaveLength(1);
+    expect([...repository.answers.values()][0]?.score).toBe(1_000);
     const evidence = await repository.getSessionEvidence(stored.workspaceId, sessionId);
     expect(evidence.decisionReplayEnabled).toBe(true);
     expect(evidence.decisionEvents).toContainEqual(

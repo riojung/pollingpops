@@ -2,6 +2,11 @@
 
 Research date: 2026-09-17
 
+> **Latest research (2026-10-27):** the [competitor refresh](competitor-research-2026-10-27.md) and
+> [detailed backlog](competitor-backlog-2026-10-27.md) reconcile current capabilities and customer-need
+> signals. Older feature-absence statements below are historical. New increments remain deferred
+> and preserve the existing roadmap and release gates.
+
 > **Current implementation checkpoint (2026-10-04):** The strategy and competitor claims below keep
 > their original research dates. PRs #60–69 have since added gated whole-room flex timing, the first
 > Question Health workflow, aggregate Session Decision Replay, bounded text-box placement/resizing

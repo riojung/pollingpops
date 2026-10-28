@@ -16,6 +16,7 @@ import {
   type PresentationSessionParticipantRecord,
   type PresentationSessionRecord,
   type PresentationSessionResponseRecord,
+  type PresentationSessionTimelineRecord,
 } from "@openround/db";
 import {
   frozenPresentationRecoveryPackCards,
@@ -23,11 +24,14 @@ import {
   presentationSnapshotSettings,
 } from "./presentation-recovery-pack-cards.js";
 
+import { presentationCompetitionStandings } from "./presentation-competition.js";
+
 const PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS = 15_000;
 
 export interface PresentationProjectionData {
   participants: PresentationSessionParticipantRecord[];
   responses: PresentationSessionResponseRecord[];
+  timeline: PresentationSessionTimelineRecord[];
   leaderboard: ReturnType<typeof rankedParticipants>;
   facilitatorLeaderboard: ReturnType<typeof rankedParticipants>;
   responseByParticipantAndBlock: Map<string, PresentationSessionResponseRecord>;
@@ -236,6 +240,7 @@ export function buildPresentationProjectionData(
   session: PresentationSessionRecord,
   participants: PresentationSessionParticipantRecord[],
   responses: PresentationSessionResponseRecord[],
+  timeline: PresentationSessionTimelineRecord[] = [],
 ): PresentationProjectionData {
   const responseByParticipantAndBlock = new Map<string, PresentationSessionResponseRecord>();
   const latestReceiptByParticipant = new Map<string, PresentationSessionResponseRecord>();
@@ -251,6 +256,7 @@ export function buildPresentationProjectionData(
   return {
     participants,
     responses,
+    timeline,
     leaderboard: rankedParticipants(participants, responses),
     facilitatorLeaderboard: rankedParticipants(
       participants,
@@ -311,6 +317,12 @@ export function buildPresentationHostSnapshot(
         session.phase === "finished",
     ),
     participantCount: participants.length,
+    competitionStandings: presentationCompetitionStandings(
+      session,
+      participants,
+      data.responses,
+      data.timeline,
+    ),
     responseCount,
     participants: data.facilitatorLeaderboard.map(({ id, nickname, joinedAt, score, rank }) => ({
       id,

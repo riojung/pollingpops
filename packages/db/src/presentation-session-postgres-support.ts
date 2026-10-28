@@ -143,6 +143,7 @@ export function mapTimeline(row: QueryResultRow): PresentationSessionTimelineRec
     type: row.event_type,
     blockIndex: row.block_index == null ? null : Number(row.block_index),
     blockId: row.block_id == null ? null : String(row.block_id),
+    revealedParticipantIds: row.revealed_participant_ids ?? null,
     recoveryPackIntervention: row.recovery_pack_intervention
       ? PresentationRecoveryPackInterventionSchema.parse(row.recovery_pack_intervention)
       : null,

@@ -187,8 +187,11 @@ after reveal. The host records start/finish so the report can connect action to 
 evidence. A linked recheck is stronger evidence than repeating the same checkpoint; revote
 improvement is displayed separately and never relabelled as linked recovery.
 
-Leaderboards wait until the recovery branch is complete so competition does not interrupt the
-learning action.
+Public competition standings use only revealed main-question scores. Audience dashboards pause
+during an intervention or recheck so competition does not interrupt the learning action; the
+facilitator can still review the staff dashboard. Rechecks and revotes remain unscored. Final
+standings retain the top-three podium, disclosed ties and each participant's own rank and score
+gaps. See the [competition dashboard](idea-016-competition-dashboard-plan.md).
 
 ### Prove, carefully
 

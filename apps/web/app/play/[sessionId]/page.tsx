@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CompetitionDashboard } from "../../../components/competition-dashboard";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -996,6 +997,18 @@ export default function PlayerPage() {
               Your final score is {formatNumber(locale, myRow?.score ?? 0)}.
             </p>
           </section>
+        ) : null}
+        {snapshot?.competitionStandings &&
+        snapshot.phase !== "lobby" &&
+        (snapshot.phase === "finished" ||
+          (snapshot.phase !== "intervention" && snapshot.roundKind === "main")) ? (
+          <CompetitionDashboard
+            variant="participant"
+            standings={snapshot.competitionStandings}
+            finished={snapshot.phase === "finished"}
+            participantId={snapshot.myParticipantId ?? undefined}
+            compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
+          />
         ) : null}
         {snapshot && mediaCredential && uxBeta ? (
           <details

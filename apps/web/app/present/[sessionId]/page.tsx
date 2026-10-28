@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { CompetitionDashboard } from "../../../components/competition-dashboard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventEnvelope, SessionSnapshot } from "@openround/contracts";
 import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
@@ -160,6 +161,13 @@ export default function PresenterPage() {
     };
   }, [sessionId, socket]);
 
+  const showCompetitionDashboard = Boolean(
+    snapshot?.competitionStandings &&
+    snapshot.phase !== "lobby" &&
+    (snapshot.phase === "finished" ||
+      (snapshot.phase !== "intervention" && snapshot.roundKind === "main")),
+  );
+
   return (
     <div
       className="live-shell"
@@ -241,7 +249,14 @@ export default function PresenterPage() {
             </ul>
           </section>
         ) : null}
-        {snapshot?.question && snapshot.phase !== "finished" ? (
+        {snapshot?.question &&
+        snapshot.phase !== "finished" &&
+        !(
+          snapshot.phase === "leaderboard" &&
+          showCompetitionDashboard &&
+          snapshot.competitionStandings &&
+          snapshot.competitionStandings.status !== "unscored"
+        ) ? (
           <section className="live-card">
             <div className="page-heading" style={{ alignItems: "center" }}>
               <span className="status-pill">
@@ -381,7 +396,8 @@ export default function PresenterPage() {
             snapshot.responseDistribution ? (
               <ResponseDistributionView distribution={snapshot.responseDistribution} />
             ) : null}
-            {snapshot.phase === "leaderboard" &&
+            {!snapshot.competitionStandings &&
+            snapshot.phase === "leaderboard" &&
             snapshot.settings.resultVisibility === "leaderboard" ? (
               <ol style={{ fontSize: "1.4rem", lineHeight: 1.8 }}>
                 {snapshot.participants.slice(0, 5).map((participant) => (
@@ -397,7 +413,15 @@ export default function PresenterPage() {
             ) : null}
           </section>
         ) : null}
-        {snapshot?.phase === "finished" ? (
+        {snapshot?.competitionStandings && showCompetitionDashboard ? (
+          <CompetitionDashboard
+            variant="presenter"
+            standings={snapshot.competitionStandings}
+            finished={snapshot.phase === "finished"}
+            compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
+          />
+        ) : null}
+        {snapshot?.phase === "finished" && !snapshot.competitionStandings ? (
           <section className="live-card" style={{ textAlign: "center" }}>
             <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
             <h1 style={{ fontSize: "clamp(3rem, 9vw, 6rem)" }}>{t("live.presenter.thankYou")}</h1>

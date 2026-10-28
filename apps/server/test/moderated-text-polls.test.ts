@@ -235,7 +235,7 @@ describe("moderated open text and word clouds", () => {
     const replies = await Promise.all(
       f.guests.map((_, index) => f.submit(index, `PRIVATE REFLECTION ${index + 1}`)),
     );
-    expect(replies.every((reply) => reply.accepted && reply.score === 0)).toBe(true);
+    expect(replies.every((reply) => reply.accepted && reply.score === undefined)).toBe(true);
     const presenter = await f.sessions.createSessionStaffCredential(f.owner, f.room.sessionId, {
       role: "presenter",
       label: "Screen",

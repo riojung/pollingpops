@@ -8,6 +8,28 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Competition dashboard October 27 2026
+
+The product-owner-selected IDEA-016 extends the existing Round leaderboard into a shared host,
+projector and participant dashboard with explicit first/second/third places, expandable standings,
+personal rank/movement/points gaps and retained final results. Newly created competitive Rounds
+carry an additive durable released-score ledger; public standings update at main-question reveal,
+not answer acceptance. Early end does not release the active question. Private results omit the
+competition payload, and opinion-only sessions cannot declare winners. Answer receipts now confirm
+acceptance without a score; optional contract compatibility is retained.
+
+Presentation hosts receive a staff-only dashboard on their existing authorization boundary, and
+participants see their own rank/score at finish. Public Presentation podiums require a separate
+visibility decision. Existing active Round states without the ledger retain their prior UI.
+See the [implementation plan](idea-016-competition-dashboard-plan.md) for behavior and verification.
+Local implementation does not change the release ledger or establish a deployed rollout.
+
+The same-day [Kahoot visual refinement](idea-016-kahoot-scoreboard-refinement.md) extends that
+foundation with original graphical race/podium treatments, table and motion controls, replayable
+celebration, biggest-climb recognition and optional released gain/streak metadata. Incorrect or
+missed scored questions reset streaks; recovery/opinion interactions are neutral. Recognition adds
+no bonus points or scoring changes, and reduced-motion choices take priority over decorative effects.
+
 ### Rich idea boards October 21 2026
 
 The follow-up on `codex/rich-idea-boards` extends each moderated idea with up to three scanned

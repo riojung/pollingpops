@@ -1230,11 +1230,12 @@ export class PresentationSessionService {
   private async projectionData(
     session: PresentationSessionRecord,
   ): Promise<PresentationProjectionData> {
-    const [participants, responses] = await Promise.all([
+    const [participants, responses, timeline] = await Promise.all([
       this.sessions.listParticipants(session.id),
       this.sessions.listResponses(session.id),
+      this.sessions.listTimeline(session.id),
     ]);
-    return buildPresentationProjectionData(session, participants, responses);
+    return buildPresentationProjectionData(session, participants, responses, timeline);
   }
 
   private async consistentProjection(

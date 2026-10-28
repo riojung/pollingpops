@@ -1,6 +1,12 @@
 # Polling Pops market research and evidence-led development plan
 
 Research date: 2026-09-23
+
+> **Latest desk-research round (2026-10-27):** see the [current competitor research](competitor-research-2026-10-27.md)
+> and [prioritized backlog](competitor-backlog-2026-10-27.md). They supersede stale capability rows below,
+> including the six-type response baseline: nine Round types and the selected IDEA-004/005/006 scopes
+> are implemented. This plan's evidence gates and ordered branch-selection rules remain authoritative.
+
 Committed horizon: 24 weeks with one full-time engineer plus fractional product, design,
 accessibility, security, operations, and research support
 Option horizon: six to twelve months, released only through the evidence gates below

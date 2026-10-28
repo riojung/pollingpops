@@ -241,7 +241,7 @@ describe("live ranking opinion polls", () => {
       response: { kind: "ranking" as const, choiceIds: index < 3 ? [a!, b!] : [b!, a!] },
     }));
     const accepted = await Promise.all(requests.map((request) => f.sessions.answer(request)));
-    expect(accepted.every((ack) => ack.accepted && ack.score === 0)).toBe(true);
+    expect(accepted.every((ack) => ack.accepted && ack.score === undefined)).toBe(true);
     const same = await f.sessions.answer(requests[0]!);
     expect(same).toMatchObject({
       accepted: true,
@@ -393,7 +393,8 @@ describe("live ranking opinion polls", () => {
             clientCapabilities: capable,
             idempotencyKey: randomUUID(),
           });
-          expect(accepted).toMatchObject({ accepted: true, score: 0 });
+          expect(accepted).toMatchObject({ accepted: true });
+          expect(accepted).not.toHaveProperty("score");
         }
       }
       await vote(initial.roundId!, initialIds);

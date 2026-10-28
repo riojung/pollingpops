@@ -8,13 +8,34 @@ import {
   type PresentationSessionRepository,
   type PresentationSessionResponseRecord,
 } from "../src/index.js";
-import { mapSession } from "../src/presentation-session-postgres-support.js";
+import { mapSession, mapTimeline } from "../src/presentation-session-postgres-support.js";
 import {
   expectPresentationSessionRepositoryConformance,
   presentationSessionConformanceContent,
 } from "./support/presentation-session-conformance.js";
 
 describe("legacy Presentation session snapshots", () => {
+  it("maps internal reveal rosters and preserves missing legacy roster history", () => {
+    const participantId = randomUUID();
+    const row = {
+      id: randomUUID(),
+      workspace_id: randomUUID(),
+      session_id: randomUUID(),
+      sequence: 1,
+      event_type: "question.revealed",
+      block_index: 0,
+      block_id: randomUUID(),
+      occurred_at: new Date(),
+    };
+    expect(mapTimeline(row).revealedParticipantIds).toBeNull();
+    expect(mapTimeline({ ...row, revealed_participant_ids: [] }).revealedParticipantIds).toEqual(
+      [],
+    );
+    expect(
+      mapTimeline({ ...row, revealed_participant_ids: [participantId] }).revealedParticipantIds,
+    ).toEqual([participantId]);
+  });
+
   it("upcasts v1 slide text before returning a stored live session", () => {
     const now = new Date("2026-09-20T12:00:00.000Z");
     const legacySlideId = randomUUID();

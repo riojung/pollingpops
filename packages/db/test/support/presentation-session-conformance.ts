@@ -257,8 +257,56 @@ export async function expectPresentationSessionRepositoryConformance(
     expect.objectContaining({ id: response.id }),
   ]);
   await expect(input.repository.listTimeline(sessionId)).resolves.toEqual([
-    expect.objectContaining({ sequence: 1, type: "question.launched" }),
-    expect.objectContaining({ sequence: 4, type: "question.revealed" }),
+    expect.objectContaining({
+      sequence: 1,
+      type: "question.launched",
+      revealedParticipantIds: null,
+    }),
+    expect.objectContaining({
+      sequence: 4,
+      type: "question.revealed",
+      revealedParticipantIds: [participantId],
+    }),
+  ]);
+
+  const rosterSession = await input.repository.createSession({
+    ...session,
+    id: randomUUID(),
+    code: String(randomInt(1_000_000, 10_000_000)),
+    phase: "question_open",
+    currentBlockIndex: 0,
+    questionOpenedAt: now,
+  });
+  const skippedParticipant = {
+    ...participant,
+    id: randomUUID(),
+    sessionId: rosterSession.id,
+    tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+  };
+  await input.repository.joinParticipantWithinLimit(skippedParticipant, 20);
+  await input.repository.transitionSession({
+    workspaceId: input.workspaceId,
+    sessionId: rosterSession.id,
+    expectedRevision: 0,
+    phase: "question_reveal",
+    currentBlockIndex: 0,
+    status: "active",
+    occurredAt: new Date(now.getTime() + 2_000),
+    event: { type: "question.revealed", blockIndex: 0, blockId: questionBlock.id },
+  });
+  await input.repository.joinParticipantWithinLimit(
+    {
+      ...skippedParticipant,
+      id: randomUUID(),
+      tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+      joinedAt: new Date(now.getTime() - 1_000),
+    },
+    20,
+  );
+  // Capture includes a participant who skipped the question and remains frozen after a late
+  // admission, even when that admission carries an earlier request-time join timestamp.
+  await expect(input.repository.listTimeline(rosterSession.id)).resolves.toEqual([
+    expect.objectContaining({ revealedParticipantIds: [skippedParticipant.id] }),
   ]);
 
   await input.beginWorkspaceDeletion();

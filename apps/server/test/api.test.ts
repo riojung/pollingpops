@@ -1128,10 +1128,11 @@ describe("creator to report journey", () => {
     expect(retryAttempt.statusCode).toBe(200);
     expect(staleRoundAttempt.statusCode).toBe(200);
     const acknowledgements = [firstAttempt, retryAttempt].map((response) =>
-      response.json<{ accepted: boolean; score: number; duplicate: boolean; answerId: string }>(),
+      response.json<{ accepted: boolean; score?: number; duplicate: boolean; answerId: string }>(),
     );
     expect(acknowledgements.map(({ accepted }) => accepted)).toEqual([true, true]);
-    expect(acknowledgements.map(({ score }) => score)).toEqual([1_000, 1_000]);
+    for (const acknowledgement of acknowledgements)
+      expect(acknowledgement).not.toHaveProperty("score");
     expect(acknowledgements.map(({ duplicate }) => duplicate).sort()).toEqual([false, true]);
     expect(new Set(acknowledgements.map(({ answerId }) => answerId)).size).toBe(1);
     expect(staleRoundAttempt.json()).toMatchObject({
@@ -1159,6 +1160,9 @@ describe("creator to report journey", () => {
       expectedVersion: locked.version,
       action: "reveal",
     });
+    expect(
+      revealed.participants.find(({ id }) => id === participant.snapshot.myParticipantId)?.score,
+    ).toBe(1_000);
     expect(revealed).toMatchObject({
       correctChoiceId,
       correctResponse: { kind: "choice", choiceIds: [correctChoiceId] },

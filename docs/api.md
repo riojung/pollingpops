@@ -929,6 +929,20 @@ Principal server messages are:
 - `game.finished`
 - `qna.question.*`, `qna.reply.*`, and `qna.vote.updated`
 
+New Round snapshots can include optional `competitionStandings` when result visibility is
+`leaderboard`. It contains only released scored-main-question totals, ranks, previous ranks,
+tie markers, points gaps, scoring policy and released-question progress. Private-result sessions
+omit it. Waiting/unscored states have no ranked entries. Scores and ordering remain frozen through
+an unrevealed checkpoint; final early-end standings do not publish that checkpoint's pending points.
+New sessions persist the additive release ledger; legacy active rooms can omit the new field.
+Entries can also include optional `lastScoreDelta` and `correctStreak`, committed only at a scored
+main reveal. A wrong or missed scored question resets the streak; opinions/rechecks leave it
+unchanged. These recognition fields do not change scoring or tie-breaking. Older entries may omit them.
+Answer acknowledgements confirm acceptance/idempotency without including their optional `score`.
+Clients should read score feedback after reveal instead of inferring correctness from a receipt.
+Presentation host snapshots may also contain a staff-only `competitionStandings`; Presentation
+participant/Companion schemas do not gain other participants' identities.
+
 Client acknowledgements return `{ data }` or `{ error: { code, message } }`. An answer uses the
 canonical versioned response payload plus confidence; legacy `choiceId` remains accepted for
 single-select/true-false clients and is canonicalized. Keep idempotency keys until acknowledged.

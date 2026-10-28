@@ -1672,7 +1672,6 @@ export class SessionService {
                   accepted: true,
                   answerId: existing.answerId,
                   acceptedAt: new Date(existing.acceptedAtMs).toISOString(),
-                  score: existing.score,
                   duplicate: true,
                 },
               });
@@ -1707,7 +1706,6 @@ export class SessionService {
               accepted: true,
               answerId: result.answer.answerId,
               acceptedAt: new Date(result.answer.acceptedAtMs).toISOString(),
-              score: result.answer.score,
               duplicate,
             },
           });

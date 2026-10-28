@@ -6,6 +6,7 @@ import type {
   PresentationSessionParticipantRecord,
   PresentationSessionRecord,
   PresentationSessionResponseRecord,
+  PresentationSessionTimelineRecord,
 } from "@openround/db";
 import {
   buildPresentationCompanionSnapshot,
@@ -619,5 +620,298 @@ describe("Presentation session projections", () => {
       standing: { rank: 1, score: 1_000 },
       responseResult: { correct: true, score: 1_000 },
     });
+  });
+});
+
+describe("Presentation competition dashboard", () => {
+  function rankHistoryFixture() {
+    const { session, participants, currentResponse } = fixture();
+    const firstBlock = session.content.blocks[0]!;
+    if (firstBlock.kind !== "question" || !("choices" in firstBlock.question))
+      throw new Error("Expected choice question fixture");
+    const secondBlock = {
+      ...firstBlock,
+      id: randomUUID(),
+      question: {
+        ...firstBlock.question,
+        id: randomUUID(),
+        choices: firstBlock.question.choices.map((choice) => ({ ...choice, id: randomUUID() })),
+      },
+    };
+    // A delayed admission can carry a request-time joinedAt earlier than the published roster.
+    const lateParticipant = {
+      ...participants[0]!,
+      id: randomUUID(),
+      nickname: "Late learner",
+      joinedAt: session.createdAt,
+    };
+    const openSecond: PresentationSessionRecord = {
+      ...session,
+      content: PresentationContentSchema.parse({
+        ...session.content,
+        blocks: [firstBlock, secondBlock],
+      }),
+      currentBlockIndex: 1,
+      eventSeq: 8,
+    };
+    const timeline: PresentationSessionTimelineRecord[] = [
+      {
+        id: randomUUID(),
+        workspaceId: session.workspaceId,
+        sessionId: session.id,
+        sequence: 5,
+        type: "question.revealed",
+        blockIndex: 0,
+        blockId: firstBlock.id,
+        occurredAt: NOW,
+        revealedParticipantIds: participants.map((participant) => participant.id),
+      },
+    ];
+    const responses = [
+      { ...currentResponse, score: 200 },
+      {
+        ...currentResponse,
+        id: randomUUID(),
+        participantId: participants[1]!.id,
+        blockId: secondBlock.id,
+        questionId: secondBlock.question.id,
+        response: { choiceIds: [secondBlock.question.choices[0]!.id] },
+      },
+      {
+        ...currentResponse,
+        id: randomUUID(),
+        participantId: lateParticipant.id,
+        blockId: secondBlock.id,
+        questionId: secondBlock.question.id,
+        response: { choiceIds: [secondBlock.question.choices[0]!.id] },
+        score: 600,
+      },
+    ];
+    return {
+      openSecond,
+      participants: [...participants, lateParticipant],
+      responses,
+      timeline,
+      priorParticipants: participants,
+      lateParticipant,
+    };
+  }
+
+  it("recognizes a participant climbing from a published zero-score rank after skipping Q1", () => {
+    const { openSecond, participants, responses, timeline, priorParticipants, lateParticipant } =
+      rankHistoryFixture();
+    const firstReveal = { ...openSecond, currentBlockIndex: 0, phase: "question_reveal" as const };
+    const firstData = buildPresentationProjectionData(
+      firstReveal,
+      priorParticipants,
+      responses,
+      timeline,
+    );
+    expect(
+      buildPresentationHostSnapshot(firstReveal, firstData).competitionStandings?.entries.find(
+        (entry) => entry.id === priorParticipants[1]!.id,
+      ),
+    ).toMatchObject({ rank: 2, score: 0, previousRank: null });
+
+    const openData = buildPresentationProjectionData(openSecond, participants, responses, timeline);
+    const openStandings = buildPresentationHostSnapshot(openSecond, openData).competitionStandings!;
+    expect(
+      openStandings.entries.find((entry) => entry.id === priorParticipants[1]!.id),
+    ).toMatchObject({ score: 0, lastScoreDelta: 0, previousRank: null, correctStreak: 0 });
+    const revealed = { ...openSecond, phase: "question_reveal" as const };
+    const data = buildPresentationProjectionData(revealed, participants, responses, timeline);
+    const standings = buildPresentationHostSnapshot(revealed, data).competitionStandings!;
+    expect(standings.entries.find((entry) => entry.id === priorParticipants[1]!.id)).toMatchObject({
+      rank: 1,
+      previousRank: 2,
+      score: 1000,
+      lastScoreDelta: 1000,
+      correctStreak: 1,
+    });
+    // The late admission sorts before prior zero-score participants by joinedAt, but cannot
+    // displace their historical ranks or acquire a historical rank of its own.
+    expect(standings.entries.find((entry) => entry.id === lateParticipant.id)).toMatchObject({
+      rank: 2,
+      previousRank: null,
+    });
+    expect(standings.entries.find((entry) => entry.id === priorParticipants[2]!.id)).toMatchObject({
+      rank: 4,
+      previousRank: 3,
+    });
+  });
+
+  it.each(["missing", "legacy", "future"] as const)(
+    "does not invent previous ranks from %s reveal roster history",
+    (history) => {
+      const { openSecond, participants, responses, timeline } = rankHistoryFixture();
+      const revealed = { ...openSecond, phase: "question_reveal" as const };
+      const unavailableTimeline =
+        history === "missing"
+          ? []
+          : timeline.map((event) => ({
+              ...event,
+              ...(history === "legacy"
+                ? { revealedParticipantIds: null }
+                : { sequence: revealed.eventSeq + 1 }),
+            }));
+      const data = buildPresentationProjectionData(
+        revealed,
+        participants,
+        responses,
+        unavailableTimeline,
+      );
+      expect(
+        buildPresentationHostSnapshot(revealed, data).competitionStandings?.entries.map(
+          (entry) => entry.previousRank,
+        ),
+      ).toEqual([null, null, null, null]);
+    },
+  );
+
+  it("never releases an open response through staff standings or expands audience identity access", () => {
+    const { session, participants, currentResponse, ids } = fixture();
+    const data = buildPresentationProjectionData(session, participants, [currentResponse]);
+    expect(buildPresentationHostSnapshot(session, data).competitionStandings).toMatchObject({
+      status: "waiting",
+      entries: [],
+      totalParticipants: 3,
+      completedScoredQuestions: 0,
+    });
+    expect(
+      buildPresentationParticipantSnapshot(session, ids.participantId, data),
+    ).not.toHaveProperty("competitionStandings");
+    const revealed = { ...session, phase: "question_reveal" as const };
+    const revealedData = buildPresentationProjectionData(revealed, participants, [currentResponse]);
+    expect(
+      buildPresentationParticipantSnapshot(revealed, ids.participantId, revealedData),
+    ).not.toHaveProperty("competitionStandings");
+  });
+
+  it("retains final top-three scores, gaps and explicit points ties for the facilitator", () => {
+    const { session, participants, currentResponse } = fixture();
+    const finished = { ...session, phase: "finished" as const, status: "finished" as const };
+    const secondResponse = {
+      ...currentResponse,
+      id: randomUUID(),
+      participantId: participants[1]!.id,
+    };
+    const data = buildPresentationProjectionData(finished, participants, [
+      currentResponse,
+      secondResponse,
+    ]);
+    const standings = buildPresentationHostSnapshot(finished, data).competitionStandings!;
+    expect(standings).toMatchObject({
+      status: "final",
+      completedScoredQuestions: 1,
+      totalScoredQuestions: 1,
+      tieBreak: "score_join_order",
+    });
+    expect(
+      standings.entries.map(({ rank, score, tied, pointsToLeader, pointsToNextRank }) => ({
+        rank,
+        score,
+        tied,
+        pointsToLeader,
+        pointsToNextRank,
+      })),
+    ).toEqual([
+      { rank: 1, score: 1000, tied: true, pointsToLeader: 0, pointsToNextRank: null },
+      { rank: 2, score: 1000, tied: true, pointsToLeader: 0, pointsToNextRank: 0 },
+      { rank: 3, score: 0, tied: false, pointsToLeader: 1000, pointsToNextRank: 1000 },
+    ]);
+  });
+
+  it("does not crown winners in an opinion-only Presentation", () => {
+    const { session, participants } = fixture();
+    const questionBlock = session.content.blocks[0]!;
+    if (questionBlock.kind !== "question" || !("choices" in questionBlock.question))
+      throw new Error("Question fixture expected");
+    const content = PresentationContentSchema.parse({
+      ...session.content,
+      blocks: [
+        {
+          ...questionBlock,
+          question: {
+            ...questionBlock.question,
+            type: "poll",
+            purpose: "opinion",
+            confidence: "off",
+            basePoints: 0,
+            choices: questionBlock.question.choices.map((choice) => ({
+              ...choice,
+              isCorrect: false,
+            })),
+          },
+        },
+      ],
+    });
+    const finished = {
+      ...session,
+      content,
+      phase: "finished" as const,
+      status: "finished" as const,
+    };
+    const data = buildPresentationProjectionData(finished, participants, []);
+    expect(buildPresentationHostSnapshot(finished, data).competitionStandings).toMatchObject({
+      status: "unscored",
+      entries: [],
+      totalScoredQuestions: 0,
+    });
+  });
+});
+
+it("keeps Presentation recognition on revealed checkpoints and breaks missed-question streaks", () => {
+  const { session, participants, currentResponse } = fixture();
+  const firstBlock = session.content.blocks[0]!;
+  if (firstBlock.kind !== "question" || !("choices" in firstBlock.question))
+    throw new Error("Expected scored choice question");
+  const secondBlock = {
+    ...firstBlock,
+    id: randomUUID(),
+    question: {
+      ...firstBlock.question,
+      id: randomUUID(),
+      choices: firstBlock.question.choices.map((choice) => ({ ...choice, id: randomUUID() })),
+    },
+  };
+  const content = PresentationContentSchema.parse({
+    ...session.content,
+    blocks: [firstBlock, secondBlock],
+  });
+  const firstResponses = [
+    currentResponse,
+    { ...currentResponse, id: randomUUID(), participantId: participants[1]!.id },
+  ];
+  const pending = {
+    ...currentResponse,
+    id: randomUUID(),
+    blockId: secondBlock.id,
+    questionId: secondBlock.question.id,
+    response: { ...currentResponse.response, choiceIds: [secondBlock.question.choices[0]!.id] },
+  };
+  const openSecond = { ...session, content, currentBlockIndex: 1, phase: "question_open" as const };
+  const responses = [...firstResponses, pending];
+  const openData = buildPresentationProjectionData(openSecond, participants, responses);
+  const openStandings = buildPresentationHostSnapshot(openSecond, openData).competitionStandings!;
+  expect(
+    openStandings.entries.slice(0, 2).map(({ score, lastScoreDelta, correctStreak }) => ({
+      score,
+      lastScoreDelta,
+      correctStreak,
+    })),
+  ).toEqual([
+    { score: 1000, lastScoreDelta: 1000, correctStreak: 1 },
+    { score: 1000, lastScoreDelta: 1000, correctStreak: 1 },
+  ]);
+  const revealed = { ...openSecond, phase: "question_reveal" as const };
+  const revealedData = buildPresentationProjectionData(revealed, participants, responses);
+  const standings = buildPresentationHostSnapshot(revealed, revealedData).competitionStandings!;
+  expect(
+    standings.entries.find((entry) => entry.id === currentResponse.participantId),
+  ).toMatchObject({ score: 2000, lastScoreDelta: 1000, correctStreak: 2 });
+  expect(standings.entries.find((entry) => entry.id === participants[1]!.id)).toMatchObject({
+    score: 1000,
+    lastScoreDelta: 0,
+    correctStreak: 0,
   });
 });

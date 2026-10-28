@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CompetitionDashboard } from "../../../components/competition-dashboard";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -1088,20 +1089,24 @@ export default function HostPage() {
                     ) : null}
                   </div>
                 ) : null}
-                {snapshot.settings.resultVisibility === "leaderboard" &&
-                snapshot.phase !== "lobby" ? (
+                {snapshot.competitionStandings && snapshot.phase !== "lobby" ? (
+                  <CompetitionDashboard
+                    variant="host"
+                    standings={snapshot.competitionStandings}
+                    finished={snapshot.phase === "finished"}
+                    compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
+                  />
+                ) : snapshot.settings.resultVisibility === "leaderboard" &&
+                  snapshot.phase !== "lobby" ? (
                   <ol style={{ paddingLeft: 24, lineHeight: 1.8 }}>
                     {snapshot.participants.slice(0, 5).map((participant) => (
                       <li key={participant.id}>
-                        <strong>
-                          <span lang="">
-                            <ParticipantIdentity
-                              avatarId={participant.avatarId}
-                              nickname={participant.nickname}
-                            />
-                          </span>
-                        </strong>{" "}
-                        · {numberFormatter.format(participant.score)}
+                        <ParticipantIdentity
+                          avatarId={participant.avatarId}
+                          nickname={participant.nickname}
+                        />
+                        {" · "}
+                        {numberFormatter.format(participant.score)}
                       </li>
                     ))}
                   </ol>

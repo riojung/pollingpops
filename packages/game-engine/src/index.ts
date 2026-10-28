@@ -33,6 +33,7 @@ import {
   type BrandTheme,
   type AvatarId,
   type ConfidenceValue,
+  type CompetitionStandings,
   type ExperienceThemeSnapshot,
   type HostAction,
   type InterventionType,
@@ -145,6 +146,22 @@ export interface EngineIntervention {
   recoveryPackCard?: RecoveryPackCardReference;
 }
 
+interface ReleasedCompetitionScore {
+  score: number;
+  correctCount: number;
+  acceptedResponseMs: number;
+  lastScoreDelta?: number;
+  correctStreak?: number;
+}
+
+/** Additive durable release ledger; legacy rooms without it keep their existing projections. */
+export interface EngineCompetitionState {
+  scores: Record<string, ReleasedCompetitionScore>;
+  releasedRoundIds: string[];
+  ranks: Record<string, number>;
+  previousRanks: Record<string, number> | null;
+}
+
 export interface GameState {
   stateSchemaVersion: number;
   roundProtocol?: RoundProtocol;
@@ -177,6 +194,7 @@ export interface GameState {
   processedCommands: Record<string, number>;
   responseModeration?: TextResponseModerationMap;
   responseModerationReceipts?: Record<string, TextResponseModerationReceipt>;
+  competitionState?: EngineCompetitionState;
 }
 
 export type EngineEventType =
@@ -605,6 +623,12 @@ export function createGameState(input: {
     answers: {},
     rounds: {},
     processedCommands: {},
+    competitionState: {
+      scores: {},
+      releasedRoundIds: [],
+      ranks: {},
+      previousRanks: null,
+    },
     ...(textEnabled ||
     input.roundProtocol?.requiredCapabilities.some(
       (capability) => capability === "response.open_text" || capability === "response.word_cloud",
@@ -1029,6 +1053,9 @@ export function applyHostCommand(
         state,
         {
           phase: "question_reveal",
+          ...(state.competitionState
+            ? { competitionState: releaseCompetitionCheckpoint(state) }
+            : {}),
           ...(state.stateSchemaVersion === 9 && state.roundId
             ? {
                 rounds: {
@@ -1537,6 +1564,149 @@ export function leaderboard(state: GameState): ParticipantView[] {
   }));
 }
 
+function competitionScoredQuestion(question: QuestionDraft) {
+  return (
+    questionDelivery(question) === "main" &&
+    questionPurpose(question) !== "opinion" &&
+    question.basePoints > 0 &&
+    ["single_select", "true_false", "multi_select", "numeric"].includes(question.type)
+  );
+}
+
+function releasedCompetitionParticipants(state: GameState) {
+  const metrics = (participant: EngineParticipant): ReleasedCompetitionScore =>
+    state.competitionState?.scores[participant.id] ?? {
+      score: 0,
+      correctCount: 0,
+      acceptedResponseMs: 0,
+    };
+  return Object.values(state.participants)
+    .filter((participant) => !participant.kicked)
+    .map((participant) => ({ ...participant, ...metrics(participant) }))
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.correctCount - left.correctCount ||
+        (state.settings.timeMode === "flex"
+          ? 0
+          : left.acceptedResponseMs - right.acceptedResponseMs) ||
+        left.id.localeCompare(right.id),
+    );
+}
+
+function releaseCompetitionCheckpoint(state: GameState): EngineCompetitionState {
+  const history = state.competitionState!;
+  const question =
+    state.questionIndex === null ? undefined : state.quiz.questions[state.questionIndex];
+  if (
+    state.roundKind !== "main" ||
+    !state.roundId ||
+    !question ||
+    !competitionScoredQuestion(question) ||
+    history.releasedRoundIds.includes(state.roundId)
+  )
+    return history;
+  const scores = { ...history.scores };
+  // An unanswered scored checkpoint breaks a streak too. Retain the prior ledger while
+  // calculating answered entries so this reset cannot erase their preceding correct run.
+  for (const participant of Object.values(state.participants)) {
+    const previous = history.scores[participant.id] ?? {
+      score: 0,
+      correctCount: 0,
+      acceptedResponseMs: 0,
+    };
+    scores[participant.id] = { ...previous, lastScoreDelta: 0, correctStreak: 0 };
+  }
+  for (const answer of Object.values(state.answers)) {
+    if (answer.roundId !== state.roundId) continue;
+    const previous = history.scores[answer.participantId] ?? {
+      score: 0,
+      correctCount: 0,
+      acceptedResponseMs: 0,
+    };
+    scores[answer.participantId] = {
+      score: previous.score + answer.score,
+      correctCount: previous.correctCount + (answer.correct ? 1 : 0),
+      acceptedResponseMs: previous.acceptedResponseMs + answer.responseMs,
+      lastScoreDelta: answer.score,
+      correctStreak: answer.correct ? (previous.correctStreak ?? 0) + 1 : 0,
+    };
+  }
+  const competitionState = {
+    scores,
+    releasedRoundIds: [...history.releasedRoundIds, state.roundId],
+    ranks: history.ranks,
+    previousRanks: history.releasedRoundIds.length ? history.ranks : null,
+  };
+  competitionState.ranks = Object.fromEntries(
+    releasedCompetitionParticipants({ ...state, competitionState }).map((participant, index) => [
+      participant.id,
+      index + 1,
+    ]),
+  );
+  return competitionState;
+}
+
+/** Safe live competition view backed by atomically released durable scores, not browser memory. */
+export function competitionStandings(state: GameState): CompetitionStandings | undefined {
+  if (state.settings.resultVisibility !== "leaderboard" || !state.competitionState)
+    return undefined;
+  const participants = releasedCompetitionParticipants(state);
+  const totalScoredQuestions = state.quiz.questions.filter(competitionScoredQuestion).length;
+  const completedScoredQuestions = state.competitionState.releasedRoundIds.length;
+  const status =
+    totalScoredQuestions === 0
+      ? "unscored"
+      : completedScoredQuestions === 0 || participants.length === 0
+        ? "waiting"
+        : state.phase === "finished"
+          ? "final"
+          : "live";
+  const meritTie = (
+    left: (typeof participants)[number],
+    right: (typeof participants)[number] | undefined,
+  ) =>
+    Boolean(
+      right &&
+      left.score === right.score &&
+      left.correctCount === right.correctCount &&
+      (state.settings.timeMode === "flex" || left.acceptedResponseMs === right.acceptedResponseMs),
+    );
+  return {
+    status,
+    entries:
+      status === "waiting" || status === "unscored"
+        ? []
+        : participants.map((participant, index) => ({
+            id: participant.id,
+            nickname: participant.nickname,
+            avatarId: participant.avatarId ?? avatarIdForSeed(participant.id),
+            connected: participant.connected,
+            rank: index + 1,
+            score: participant.score,
+            previousRank: state.competitionState!.previousRanks?.[participant.id] ?? null,
+            tied:
+              meritTie(participant, participants[index - 1]) ||
+              meritTie(participant, participants[index + 1]),
+            pointsToLeader: (participants[0]?.score ?? 0) - participant.score,
+            pointsToNextRank:
+              index === 0 ? null : participants[index - 1]!.score - participant.score,
+            ...(participant.lastScoreDelta === undefined
+              ? {}
+              : { lastScoreDelta: participant.lastScoreDelta }),
+            ...(participant.correctStreak === undefined
+              ? {}
+              : { correctStreak: participant.correctStreak }),
+          })),
+    totalParticipants: participants.length,
+    scoringMode: state.settings.scoringMode,
+    timeMode: state.settings.timeMode,
+    completedScoredQuestions,
+    totalScoredQuestions,
+    tieBreak: state.settings.timeMode === "flex" ? "score_correct" : "score_correct_time",
+  };
+}
+
 function sharedQuestion(question: QuestionDraft): ParticipantQuestion {
   const common = {
     id: question.id,
@@ -1627,7 +1797,20 @@ export function snapshotForRole(
   const state = upgradeGameState(inputState);
   const question =
     state.questionIndex === null ? undefined : state.quiz.questions[state.questionIndex];
-  const visibleParticipants = leaderboard(state).map((participant) => ({
+  const standings = competitionStandings(state);
+  // Sorting by unreleased totals is itself a correctness signal, even if score text is hidden.
+  const projectedParticipants =
+    standings && options.role !== "host"
+      ? releasedCompetitionParticipants(state).map((participant, index) => ({
+          id: participant.id,
+          nickname: participant.nickname,
+          avatarId: participant.avatarId ?? avatarIdForSeed(participant.id),
+          connected: participant.connected,
+          score: participant.score,
+          rank: standings.entries.length ? index + 1 : null,
+        }))
+      : leaderboard(state);
+  const visibleParticipants = projectedParticipants.map((participant) => ({
     ...participant,
     avatarId:
       state.settings.resultVisibility === "private" &&
@@ -1711,6 +1894,7 @@ export function snapshotForRole(
       options.role === "participant" ? participantQuestion(question) : publicQuestion(question),
     deadline: state.deadlineMs ? new Date(state.deadlineMs).toISOString() : null,
     participants: visibleParticipants,
+    ...(standings ? { competitionStandings: standings } : {}),
     answerCount: Object.values(state.answers).filter((answer) => answer.roundId === state.roundId)
       .length,
     lobbyLocked: state.lobbyLocked,

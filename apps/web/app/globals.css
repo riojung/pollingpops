@@ -1988,14 +1988,26 @@ textarea::placeholder {
 }
 
 .live-topbar {
+  position: relative;
+  isolation: isolate;
+  z-index: 5;
   align-items: center;
   display: flex;
   justify-content: space-between;
   min-height: 72px;
   background: var(--experience-primary);
+  color: white;
+}
+
+/* Clip the full-width background rather than the header's interactive popovers. */
+.live-topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   box-shadow: 0 0 0 100vmax var(--experience-primary);
   clip-path: inset(0 -100vmax);
-  color: white;
+  pointer-events: none;
 }
 
 .connection {

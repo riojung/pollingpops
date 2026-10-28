@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CompetitionDashboard } from "../../../../components/competition-dashboard";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -624,23 +625,13 @@ function PresentationHostContent() {
                 enabled={productFeatures?.presentationCompanion === true}
                 canEdit={canEdit}
               />
-              {snapshot.participants.length ? (
-                <details>
-                  <summary>
-                    {t("live.common.leaderboard")} ·{" "}
-                    {t("live.common.joinedCount", {
-                      count: formatNumber(locale, snapshot.participants.length),
-                    })}
-                  </summary>
-                  <ol className={styles.leaderboard}>
-                    {snapshot.participants.map((participant) => (
-                      <li key={participant.id}>
-                        <span lang="">{participant.nickname}</span>
-                        <strong>{formatNumber(locale, participant.score)}</strong>
-                      </li>
-                    ))}
-                  </ol>
-                </details>
+              {snapshot.competitionStandings ? (
+                <CompetitionDashboard
+                  variant="host"
+                  standings={snapshot.competitionStandings}
+                  finished={snapshot.phase === "finished"}
+                  compact={snapshot.phase !== "finished"}
+                />
               ) : null}
             </aside>
           </div>

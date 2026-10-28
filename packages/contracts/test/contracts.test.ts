@@ -16,6 +16,7 @@ import {
   HostCommandSchema,
   JoinRequestSchema,
   LegacyReportSchema,
+  liveQuestionConfidence,
   normalizeDecimalString,
   OperationalFeaturesUpdateSchema,
   ParticipantQuestionSchema,
@@ -45,6 +46,100 @@ import {
 } from "../src/index.js";
 
 describe("public contracts", () => {
+  it("keeps live confidence optional and inherits collection only when the setting is omitted", () => {
+    const settings = {
+      audienceLimit: 20,
+      scoringMode: "accuracy" as const,
+      resultVisibility: "private" as const,
+      allowLateJoin: true,
+      nicknamePolicy: "custom" as const,
+    };
+    expect(SessionSettingsSchema.parse(settings)).not.toHaveProperty("confidenceEnabled");
+    for (const enabled of [false, true]) {
+      expect(
+        SessionSettingsSchema.parse({ ...settings, confidenceEnabled: enabled }),
+      ).toMatchObject({
+        confidenceEnabled: enabled,
+      });
+    }
+    for (const purpose of ["diagnostic", "practice"] as const) {
+      for (const confidence of ["off", "optional", "required"] as const) {
+        const question = { type: "single_select" as const, purpose, confidence };
+        expect(liveQuestionConfidence(question, {})).toBe(
+          confidence === "off" ? "off" : "optional",
+        );
+        expect(liveQuestionConfidence(question, { confidenceEnabled: false })).toBe("off");
+        expect(liveQuestionConfidence(question, { confidenceEnabled: true })).toBe("optional");
+      }
+    }
+    for (const confidenceEnabled of [undefined, false, true]) {
+      expect(
+        liveQuestionConfidence(
+          { type: "poll", purpose: "opinion", confidence: "off" },
+          { confidenceEnabled },
+        ),
+      ).toBe("off");
+    }
+  });
+
+  it("requires a confidence toggle boolean only on confidence.set host commands", () => {
+    const command = {
+      sessionId: randomUUID(),
+      hostToken: "host-confidence-command-token-long-enough",
+      commandId: randomUUID(),
+      expectedVersion: 0,
+    };
+    for (const confidenceEnabled of [false, true]) {
+      expect(
+        HostCommandSchema.parse({ ...command, action: "confidence.set", confidenceEnabled }),
+      ).toMatchObject({ action: "confidence.set", confidenceEnabled });
+      expect(
+        HostCommandSchema.safeParse({ ...command, action: "start", confidenceEnabled }).success,
+      ).toBe(false);
+    }
+    expect(HostCommandSchema.safeParse({ ...command, action: "confidence.set" }).success).toBe(
+      false,
+    );
+    expect(
+      HostCommandSchema.safeParse({
+        ...command,
+        action: "confidence.set",
+        confidenceEnabled: "true",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("supports optional private revealed-response summaries with consistent counts", () => {
+    const schema = SessionSnapshotSchema.shape.myScoredResponseSummary;
+    expect(schema.parse(undefined)).toBeUndefined();
+    expect(
+      schema.parse({
+        answeredScoredQuestions: 2,
+        correctScoredQuestions: 1,
+        revealedScoredQuestions: 3,
+        lastResponseStatus: "unanswered",
+      }),
+    ).toEqual({
+      answeredScoredQuestions: 2,
+      correctScoredQuestions: 1,
+      revealedScoredQuestions: 3,
+      lastResponseStatus: "unanswered",
+    });
+    for (const summary of [
+      { answeredScoredQuestions: -1, correctScoredQuestions: 0, revealedScoredQuestions: 0 },
+      { answeredScoredQuestions: 1, correctScoredQuestions: 2, revealedScoredQuestions: 2 },
+      { answeredScoredQuestions: 2, correctScoredQuestions: 1, revealedScoredQuestions: 1 },
+      {
+        answeredScoredQuestions: 0,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 1,
+        lastResponseStatus: "pending",
+      },
+    ]) {
+      expect(schema.safeParse(summary).success).toBe(false);
+    }
+  });
+
   it("validates exact nonnegative session counts and a trimmed bounded history search", () => {
     expect(
       SessionCountsResponseSchema.parse({ counts: { rounds: 28, presentations: 0, surveys: 2 } }),
@@ -300,8 +395,30 @@ describe("public contracts", () => {
       "robot",
       "rocket",
       "star",
+      "bear",
+      "bunny",
+      "cat",
+      "dog",
+      "koala",
+      "lion",
+      "penguin",
+      "tiger",
+      "turtle",
+      "dolphin",
+      "whale",
+      "octopus",
+      "butterfly",
+      "bee",
+      "frog",
+      "hedgehog",
     ]);
-    expect(AvatarIdSchema.parse("otter")).toBe("otter");
+    expect(new Set(AVATAR_IDS).size).toBe(24);
+    for (const avatarId of AVATAR_IDS) {
+      expect(AvatarIdSchema.parse(avatarId)).toBe(avatarId);
+      expect(
+        JoinRequestSchema.parse({ code: "1234567", nickname: "Learner", avatarId }),
+      ).toMatchObject({ avatarId });
+    }
     expect(
       JoinRequestSchema.parse({ code: "1234567", nickname: "Legacy learner" }),
     ).not.toHaveProperty("avatarId");

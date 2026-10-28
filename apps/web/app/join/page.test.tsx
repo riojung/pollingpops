@@ -15,6 +15,7 @@ const fixtures = vi.hoisted(() => ({
   push: vi.fn(),
   artifact: "round" as "round" | "presentation" | "feedback_room",
   protected: true,
+  nicknamePolicy: "custom" as "custom" | "friendly_only",
 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof ReactModule>();
@@ -101,8 +102,15 @@ function harness() {
     (field.props.onChange as (value: string) => void)(value);
     render();
   };
+  const changeNickname = (value: string) => {
+    const field = find(fixtures.tree, (node) => node.props.id === "nickname")!;
+    (field.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value },
+    });
+    render();
+  };
   render();
-  return { render, submit, changePassword };
+  return { render, submit, changePassword, changeNickname };
 }
 const storage = new Map<string, string>();
 const writes: string[] = [];
@@ -122,12 +130,13 @@ beforeEach(() => {
   fixtures.tree = null;
   fixtures.artifact = "round";
   fixtures.protected = true;
+  fixtures.nicknamePolicy = "custom";
   fixtures.push.mockReset();
   fixtures.apiFetch.mockReset();
   fixtures.apiFetch.mockImplementation(async (path: string) => {
     if (path.includes("/preflight"))
       return {
-        nicknamePolicy: "custom",
+        nicknamePolicy: fixtures.nicknamePolicy,
         artifactType: fixtures.artifact,
         passwordRequired: fixtures.protected,
         destination: "/survey/11111111-1111-4111-8111-111111111111",
@@ -137,6 +146,67 @@ beforeEach(() => {
       snapshot: { id: "room-a", sessionId: "room-a" },
       attempt: { roomId: "room-a" },
     };
+  });
+});
+
+describe("participant nickname choice", () => {
+  it("requests a required nickname when an unchecked code resolves to a Presentation", async () => {
+    fixtures.artifact = "presentation";
+    fixtures.protected = false;
+    const ui = harness();
+    await ui.submit();
+    const field = find(fixtures.tree, (node) => node.props.id === "nickname")!;
+    expect(field.props.required).toBe(true);
+    expect(ui.render()).not.toContain("Nickname (optional)");
+    expect(fixtures.apiFetch.mock.calls.some(([, request]) => request?.method === "POST")).toBe(
+      false,
+    );
+    ui.changeNickname("Presenter guest");
+    await ui.submit();
+    expect(fixtures.push).toHaveBeenCalledWith("/presentation-session/room-a/play");
+  });
+
+  it("labels the optional nickname and submits the participant's chosen name", async () => {
+    fixtures.protected = false;
+    const ui = harness();
+    expect(ui.render()).toContain("Nickname (optional)");
+    expect(ui.render()).toContain("leave this blank to get a generated one");
+    const field = find(fixtures.tree, (node) => node.props.id === "nickname")!;
+    expect(field.props.required).toBe(false);
+    ui.changeNickname("  My chosen name  ");
+    await ui.submit();
+    const [, init] = fixtures.apiFetch.mock.calls.find(
+      ([, request]) => request?.method === "POST",
+    )!;
+    expect(JSON.parse(init.body)).toMatchObject({ nickname: "My chosen name" });
+    expect(fixtures.push).toHaveBeenCalledWith("/play/room-a");
+  });
+
+  it("omits a blank nickname so the room generates a fallback", async () => {
+    fixtures.protected = false;
+    const ui = harness();
+    ui.changeNickname("   ");
+    await ui.submit();
+    const [, init] = fixtures.apiFetch.mock.calls.find(
+      ([, request]) => request?.method === "POST",
+    )!;
+    expect(JSON.parse(init.body)).not.toHaveProperty("nickname");
+    expect(fixtures.push).toHaveBeenCalledWith("/play/room-a");
+  });
+
+  it("honors the host's generated-only setting discovered at submission", async () => {
+    fixtures.nicknamePolicy = "friendly_only";
+    const ui = harness();
+    ui.changeNickname("Name entered before the code was checked");
+    await ui.submit();
+    expect(ui.render()).toContain("The host has chosen generated nicknames for this round");
+    expect(find(fixtures.tree, (node) => node.props.id === "nickname")).toBeNull();
+    ui.changePassword("room password");
+    await ui.submit();
+    const [, init] = fixtures.apiFetch.mock.calls.find(
+      ([, request]) => request?.method === "POST",
+    )!;
+    expect(JSON.parse(init.body)).not.toHaveProperty("nickname");
   });
 });
 
@@ -152,6 +222,7 @@ describe("unified password admission", () => {
       ).toHaveLength(0);
       expect(fixtures.push).not.toHaveBeenCalled();
       ui.changePassword("  room secret  ");
+      if (artifact === "presentation") ui.changeNickname("Presentation participant");
       await ui.submit();
       const [path, init] = fixtures.apiFetch.mock.calls.find(
         ([, request]) => request?.method === "POST",

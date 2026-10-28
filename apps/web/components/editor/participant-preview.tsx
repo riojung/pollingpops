@@ -6,9 +6,10 @@ import { RankingChoices } from "../ranking-choices";
 import { initialRanking } from "../../lib/ranking-response";
 import { TextResponseControl } from "../text-response-control";
 import { isTextQuestion } from "../../lib/text-response";
+import { confidenceControlCopy } from "../../lib/i18n/confidence-control-copy";
 
 export function ParticipantPreview({ question }: { question: QuestionDraft }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   return (
     <div className="participant-preview" aria-label={t("delivery.builder.previewParticipant")}>
       <p className="eyebrow">{t("delivery.builder.participantView")}</p>
@@ -52,12 +53,13 @@ export function ParticipantPreview({ question }: { question: QuestionDraft }) {
           ))}
         </div>
       ) : null}
-      {question.confidence !== "off" &&
+      {question.confidence &&
+      question.confidence !== "off" &&
       question.type !== "poll" &&
       question.type !== "rating" &&
       question.type !== "ranking" ? (
-        <p className="muted" lang="en-CA">
-          Confidence will be requested before Submit.
+        <p className="muted" lang={locale}>
+          {confidenceControlCopy[locale].participantHelp}
         </p>
       ) : null}
       <button className="button" disabled type="button">

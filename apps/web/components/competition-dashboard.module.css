@@ -700,46 +700,283 @@
   padding: 0.65rem 0.75rem;
 }
 
+/* The host keeps standings on the stage, with secondary controls behind disclosure. */
+.dashboard[data-variant="host"] {
+  margin-top: 18px;
+}
+.dashboard[data-variant="host"]:not(.summary) {
+  padding: 20px;
+}
+.dashboard[data-variant="host"][data-status="final"] .spotlight {
+  display: none;
+}
+.displayOptions {
+  border-top: 1px solid var(--ui-border-subtle);
+  margin-top: 0.9rem;
+}
+.displayOptions > summary,
+.summaryDetails > summary {
+  color: var(--ui-text-strong);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 750;
+  min-height: 36px;
+  padding: 0.65rem 0;
+}
+.displayOptions .effectsControls {
+  margin-top: 0;
+  border-top: 0;
+}
+.summary {
+  padding: 14px;
+  box-shadow: none;
+}
+.summary .header {
+  align-items: center;
+}
+.summary .header .title {
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+.summary .participantCount {
+  align-items: baseline;
+  display: flex;
+  gap: 0.3rem;
+}
+.summary .participantCount strong {
+  font-size: 0.85rem;
+}
+.summary .progress {
+  margin: 0.4rem 0 0.75rem;
+}
+.summary .progress p {
+  font-size: 0.75rem;
+  margin: 0;
+}
+.summary .empty {
+  padding: 0;
+  margin: 0.55rem 0 0;
+  background: transparent;
+  font-size: 0.85rem;
+}
+.summaryLeaders {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.summaryLeaders li {
+  align-items: start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.4rem;
+  row-gap: 0.2rem;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+.summaryLeaders li > strong {
+  grid-column: 2;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-accent-ink);
+}
+.summaryLeaders .identity :global(.participant-avatar) {
+  display: none;
+}
+.summaryDetails {
+  margin-top: 0.4rem;
+}
+.summaryDetails > summary {
+  padding-bottom: 0;
+}
+.summaryDetails[open] > summary {
+  margin-bottom: 1rem;
+}
+.displayOptions > summary:focus-visible,
+.summaryDetails > summary:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
 @media (min-width: 900px) {
-  .dashboard[data-variant="presenter"] {
-    padding: 1.35rem 1.6rem;
+  .dashboard[data-variant="host"]:not(.summary) {
+    margin-top: 0;
   }
-  .dashboard[data-variant="presenter"] .competitionStage {
+  .dashboard[data-variant="host"]:not(.summary) .competitionStage {
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
     align-items: start;
     gap: 2rem;
     margin: 1rem 0;
   }
-  .dashboard[data-variant="presenter"] .podium {
+  .dashboard[data-variant="host"]:not(.summary) .podium {
+    align-self: start;
+    margin: 0;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .podiumPerson {
+    gap: 0.25rem;
+    padding: 0.5rem 0.3rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .medalArt {
+    width: 2rem;
+    height: 2.35rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .podiumStep {
+    min-height: 4rem;
+    padding-block: 0.75rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .podiumCard[data-rank="1"] .podiumStep {
+    min-height: 5.7rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .podiumCard[data-rank="2"] .podiumStep {
+    min-height: 4.8rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .stepNumber {
+    font-size: 4rem;
+  }
+  .dashboard[data-variant="host"] .progress {
+    margin-block: 0.65rem 0.8rem;
+  }
+  .dashboard[data-variant="host"] .spotlight {
+    margin: 0.65rem 0;
+    padding-block: 0.6rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .race {
+    gap: 0.5rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .race > li {
+    padding: 0.6rem 0.75rem;
+  }
+  .dashboard[data-variant="host"]:not(.summary) .raceTrack {
+    margin-top: 0.4rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .summaryLeaders {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+  .summaryLeaders li {
+    align-items: center;
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    gap: 0.5rem;
+  }
+  .summaryLeaders li > strong {
+    grid-column: auto;
+  }
+  .summary .participantCount {
+    display: grid;
+    gap: 0.1rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) {
+    padding: 1rem 1.25rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .header {
+    align-items: center;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .eyebrow {
+    display: none;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .competitionStage {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    gap: 2rem;
+    margin: 0.75rem 0;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .podium {
     margin: 0;
     align-self: start;
   }
-  .dashboard[data-variant="presenter"] .progress {
-    margin: 0.8rem 0 1rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .podiumPerson {
+    gap: 0.25rem;
+    padding: 0.5rem 0.3rem;
   }
-  .dashboard[data-variant="presenter"] .spotlight {
-    margin: 0.75rem 0;
-    padding-block: 0.65rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .medalArt {
+    width: 2rem;
+    height: 2.35rem;
   }
-  .dashboard[data-variant="presenter"] .scoreboardHeading {
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .podiumStep {
+    min-height: 4rem;
+    padding-block: 0.75rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary)
+    .podiumCard[data-rank="1"]
+    .podiumStep {
+    min-height: 5.7rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary)
+    .podiumCard[data-rank="2"]
+    .podiumStep {
+    min-height: 4.8rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .stepNumber {
+    font-size: 4rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .progress {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    margin: 0.55rem 0 0.75rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .progress p {
+    flex-shrink: 0;
+    margin: 0;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary)
+    .progress
+    progress {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .spotlight {
+    margin: 0.5rem 0;
+    padding-block: 0.5rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .spotlightIcon {
+    flex-basis: 2rem;
+    width: 2rem;
+    height: 2rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary)
+    .scoreboardHeading {
     align-items: start;
+    margin-bottom: 0.5rem;
   }
-  .dashboard[data-variant="presenter"] .race {
-    gap: 0.55rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .race {
+    gap: 0.4rem;
   }
-  .dashboard[data-variant="presenter"] .race > li {
-    padding: 0.6rem 0.75rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .race > li {
+    padding: 0.4rem 0.6rem;
   }
-  .dashboard[data-variant="presenter"] .raceTrack {
-    margin-top: 0.45rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .raceTrack {
+    height: 0.4rem;
+    margin-top: 0.3rem;
   }
-  .dashboard[data-variant="presenter"] .effectsControls {
-    margin-top: 0.75rem;
-    padding-top: 0.7rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary)
+    .race
+    .identity
+    :global(.participant-avatar),
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary)
+    .table
+    .identity
+    :global(.participant-avatar) {
+    font-size: 0.875rem;
+    height: 24px;
+    width: 24px;
   }
-  .dashboard[data-variant="presenter"] .policy {
-    margin-top: 0.75rem;
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .table th,
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .table td {
+    padding-block: 0.5rem;
+  }
+  .dashboard:is([data-variant="presenter"], [data-variant="host"]):not(.summary) .displayOptions {
+    margin-top: 0.6rem;
   }
 }
 

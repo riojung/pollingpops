@@ -1740,10 +1740,23 @@ export const SessionSettingsSchema = z.object({
   allowLateJoin: z.boolean(),
   nicknamePolicy: z.enum(["custom", "friendly_only"]),
   trustMode: TrustModeSchema.default("learning"),
+  /** New rooms default off; omitted retained legacy settings inherit authored collection. */
+  confidenceEnabled: z.boolean().optional(),
 });
 /** Input remains source-compatible while parsing always resolves an explicit trust mode. */
 export type SessionSettings = z.input<typeof SessionSettingsSchema>;
 export type ResolvedSessionSettings = z.output<typeof SessionSettingsSchema>;
+
+/** Live Round collection never requires confidence and never collects it for opinions. */
+export function liveQuestionConfidence(
+  question: Pick<QuestionDraft, "type" | "purpose" | "confidence">,
+  settings: Pick<SessionSettings, "confidenceEnabled">,
+): "off" | "optional" {
+  if (questionPurpose(question) === "opinion" || settings.confidenceEnabled === false) return "off";
+  return settings.confidenceEnabled === true || questionConfidence(question) !== "off"
+    ? "optional"
+    : "off";
+}
 
 export const SessionPhaseSchema = z.enum([
   "lobby",
@@ -1829,6 +1842,22 @@ export const AVATAR_IDS = [
   "robot",
   "rocket",
   "star",
+  "bear",
+  "bunny",
+  "cat",
+  "dog",
+  "koala",
+  "lion",
+  "penguin",
+  "tiger",
+  "turtle",
+  "dolphin",
+  "whale",
+  "octopus",
+  "butterfly",
+  "bee",
+  "frog",
+  "hedgehog",
 ] as const;
 export const AvatarIdSchema = z.enum(AVATAR_IDS);
 export type AvatarId = z.infer<typeof AvatarIdSchema>;
@@ -2146,6 +2175,22 @@ export const ResponseDistributionSchema = z.union([
 ]);
 export type ResponseDistribution = z.infer<typeof ResponseDistributionSchema>;
 
+/** The participant's own results from revealed scored main checkpoints only. */
+export const ScoredResponseSummarySchema = z
+  .object({
+    answeredScoredQuestions: z.number().int().nonnegative(),
+    correctScoredQuestions: z.number().int().nonnegative(),
+    revealedScoredQuestions: z.number().int().nonnegative(),
+    lastResponseStatus: z.enum(["correct", "incorrect", "unanswered"]).optional(),
+  })
+  .refine(
+    (summary) =>
+      summary.correctScoredQuestions <= summary.answeredScoredQuestions &&
+      summary.answeredScoredQuestions <= summary.revealedScoredQuestions,
+    { message: "Scored response counts must follow correct <= answered <= revealed" },
+  );
+export type ScoredResponseSummary = z.infer<typeof ScoredResponseSummarySchema>;
+
 export const SessionSnapshotSchema = z.object({
   myResponseAccepted: z.boolean().optional(),
   myResponseModerationStatus: TextResponseModerationStatusSchema.nullable().optional(),
@@ -2186,6 +2231,8 @@ export const SessionSnapshotSchema = z.object({
   myResponse: PreTextResponsePayloadSchema.nullable().optional(),
   myConfidence: ConfidenceValueSchema.nullable().optional(),
   myCorrect: z.boolean().nullable().optional(),
+  /** Private participant projection; omitted when legacy response counts are unknown. */
+  myScoredResponseSummary: ScoredResponseSummarySchema.optional(),
   correctChoiceId: z.string().uuid().nullable().optional(),
   correctResponse: PreTextResponsePayloadSchema.nullable().optional(),
   explanation: z.string().nullable().optional(),
@@ -2849,6 +2896,7 @@ export const HostActionSchema = z.enum([
   "intervention.finish",
   "recheck.open",
   "response.moderate",
+  "confidence.set",
 ]);
 export type HostAction = z.infer<typeof HostActionSchema>;
 
@@ -2860,6 +2908,7 @@ export const HostCommandSchema = z
     commandId: z.string().min(8).max(160),
     expectedVersion: z.number().int().nonnegative(),
     action: HostActionSchema,
+    confidenceEnabled: z.boolean().optional(),
     participantId: z.string().uuid().optional(),
     answerId: z.string().uuid().optional(),
     responseStatus: z.enum(["approved", "removed"]).optional(),
@@ -2869,6 +2918,13 @@ export const HostCommandSchema = z
     recoveryPackCard: RecoveryPackCardSelectionSchema.optional(),
   })
   .superRefine((command, context) => {
+    if ((command.action === "confidence.set") !== (command.confidenceEnabled !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        message: "confidenceEnabled is required only for confidence.set commands",
+        path: ["confidenceEnabled"],
+      });
+    }
     if (
       (command.action === "response.moderate") !==
         Boolean(command.answerId && command.responseStatus) ||

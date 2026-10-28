@@ -7,8 +7,59 @@ import {
   multipleSelectionPoll,
   togglePollSelection,
   legacyResponseRequiresSubmit,
+  usesAutomaticChoiceSubmission,
 } from "./participant-response";
 import type { SessionSnapshot } from "@openround/contracts";
+
+describe("automatic competitive answers", () => {
+  const snapshot = {
+    uxBeta: true,
+    settings: { resultVisibility: "leaderboard" },
+    roundKind: "main",
+    question: { type: "single_select", confidence: "required" },
+  } as SessionSnapshot;
+
+  it.each(["single_select", "true_false"] as const)(
+    "automatically saves %s whether confidence is skipped or included",
+    (type) => {
+      for (const confidence of ["required", "optional", "off"] as const) {
+        expect(
+          usesAutomaticChoiceSubmission({
+            ...snapshot,
+            question: { ...snapshot.question!, type, confidence },
+          }),
+        ).toBe(true);
+      }
+    },
+  );
+
+  it("preserves explicit review for private and complex answers", () => {
+    expect(usesAutomaticChoiceSubmission(null)).toBe(false);
+    expect(usesAutomaticChoiceSubmission({ ...snapshot, uxBeta: false })).toBe(false);
+    expect(
+      usesAutomaticChoiceSubmission({
+        ...snapshot,
+        settings: { ...snapshot.settings, resultVisibility: "private" },
+      }),
+    ).toBe(false);
+    for (const roundKind of ["linked_recheck", "revote"] as const) {
+      expect(usesAutomaticChoiceSubmission({ ...snapshot, roundKind })).toBe(false);
+    }
+    for (const type of [
+      "multi_select",
+      "poll",
+      "numeric",
+      "rating",
+      "ranking",
+      "open_text",
+      "word_cloud",
+    ] as const) {
+      expect(
+        usesAutomaticChoiceSubmission({ ...snapshot, question: { ...snapshot.question!, type } }),
+      ).toBe(false);
+    }
+  });
+});
 
 describe("participantResponseView", () => {
   it("restores the exact ordered ranking from a receipt and the authoritative snapshot", () => {

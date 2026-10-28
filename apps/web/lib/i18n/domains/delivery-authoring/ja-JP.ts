@@ -134,6 +134,11 @@ export default {
   "delivery.join.title": "ライブRoundに入る",
   "delivery.join.description": "進行役が表示する7桁のコードを使います。アカウントは不要です。",
   "delivery.join.nickname": "表示名",
+  "delivery.join.nicknameOptional": "ニックネーム（任意）",
+  "delivery.join.nicknameHelp":
+    "好きなニックネームを入力してください。空欄にすると自動生成されます。",
+  "delivery.join.friendlyNicknameNotice":
+    "主催者はこのラウンドで自動生成のニックネームを使用するよう設定しています。参加時に割り当てられます。",
   "delivery.join.nicknamePlaceholder": "ルームで表示する名前",
   "delivery.join.avatar": "アバターを選択",
   "delivery.join.joining": "参加中…",

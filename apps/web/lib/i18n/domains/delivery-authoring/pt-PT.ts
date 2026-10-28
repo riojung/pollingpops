@@ -134,6 +134,11 @@ export default {
   "delivery.join.description":
     "Use o código de sete dígitos mostrado pelo facilitador. Não precisa de conta.",
   "delivery.join.nickname": "Nome apresentado",
+  "delivery.join.nicknameOptional": "Alcunha (opcional)",
+  "delivery.join.nicknameHelp":
+    "Escolha a sua alcunha ou deixe este campo em branco para gerar uma.",
+  "delivery.join.friendlyNicknameNotice":
+    "O anfitrião escolheu alcunhas geradas para esta ronda. A sua será atribuída ao entrar.",
   "delivery.join.nicknamePlaceholder": "Como deve aparecer na sala?",
   "delivery.join.avatar": "Escolher um avatar",
   "delivery.join.joining": "A entrar…",

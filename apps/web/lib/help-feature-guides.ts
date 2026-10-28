@@ -362,7 +362,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
       },
       {
         title: "Choose confidence",
-        body: "Set Off, Optional, or Required. Participants choose Not sure, Somewhat sure, or Very sure after selecting their response.",
+        body: "Turn confidence Off or On (optional). Live Round setup defaults off, and the host can switch collection during the round. Participants can always skip confidence without losing points. For competitive single-choice questions, choose optional confidence before the answer if desired; choosing the answer saves it immediately.",
       },
       {
         title: "Tag the concept",

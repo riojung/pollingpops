@@ -135,6 +135,10 @@ export default {
   "delivery.join.description":
     "Usa el código de siete dígitos mostrado por el facilitador. No necesitas cuenta.",
   "delivery.join.nickname": "Nombre visible",
+  "delivery.join.nicknameOptional": "Apodo (opcional)",
+  "delivery.join.nicknameHelp": "Elige tu apodo o deja este campo en blanco para generar uno.",
+  "delivery.join.friendlyNicknameNotice":
+    "El anfitrión ha elegido apodos generados para esta ronda. Se te asignará uno al unirte.",
   "delivery.join.nicknamePlaceholder": "¿Cómo debe verte la sala?",
   "delivery.join.avatar": "Elige un avatar",
   "delivery.join.joining": "Uniéndose…",

@@ -289,6 +289,11 @@ describe("editor views", () => {
     expect(markup).toMatch(/<option lang="" value="22222222-2222-4222-8222-222222222222"[^>]*>/);
     expect(markup).toContain("Which model fits the new evidence?");
     expect(markup).not.toContain(`>${recheckQuestion.id}<`);
+    expect(markup).not.toContain('value="required"');
+    expect(markup).toMatch(
+      /<option lang="en-CA" value="optional" selected="">On \(optional\)<\/option>/,
+    );
+    expect(markup).toContain("You can answer without choosing a confidence level.");
   });
 
   it("keeps legacy diagnostic controls expanded when the beta is off", () => {
@@ -393,7 +398,7 @@ describe("editor views", () => {
     expect(previewMarkup).toContain('aria-label="Participant preview"');
     expect(previewMarkup).toContain('<span lang="">Which model fits?</span>');
     expect(previewMarkup).toContain('<span lang="">Model A</span>');
-    expect(previewMarkup).toContain("Confidence will be requested before Submit.");
+    expect(previewMarkup).toContain("You can answer without choosing a confidence level.");
     expect(previewMarkup).toContain("Submit answer");
   });
 });

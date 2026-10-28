@@ -278,7 +278,8 @@ classic walkthrough. See [Question Health](user-guide.md#review-question-health)
 3. Select **Create live session**.
 4. Leave the host tab open. It contains the session-scoped host credential.
 5. In another browser or private window, open <http://localhost:8080/join>.
-6. Enter the seven-digit code shown by the host. Enter a nickname when custom nicknames are enabled; education sessions assign a friendly alias.
+6. Enter the seven-digit code shown by the host. Choose a nickname, or leave it blank for a
+   generated one. If the host selected generated-only nicknames, the room assigns one when you join.
 7. Confirm the participant appears in the host lobby. In **Audience Pulse**, enable room chat for
    this test; it is off by default. Choose whether participant aliases are public, set slow mode,
    and choose the presenter feed mode.

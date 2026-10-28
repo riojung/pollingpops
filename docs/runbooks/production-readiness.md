@@ -7,7 +7,9 @@
   retention, deletion, access, incident, residency, and law-enforcement procedures are approved by
   qualified counsel for every selected launch market and captured in the
   [privacy/legal approval record](../evidence/privacy-legal-approval.md).
-- Education onboarding uses anonymous guest mode, private results, friendly aliases, and accuracy scoring by default.
+- Education onboarding uses accountless guest participation, private results, and accuracy scoring
+  by default. Participants can choose a session nickname or receive a generated one; facilitators
+  can require generated-only nicknames before creating a room.
 - US school self-service remains disabled until US counsel approves COPPA, FERPA, contracts, and notices.
 
 ## Platform

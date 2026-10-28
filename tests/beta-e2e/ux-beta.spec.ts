@@ -29,8 +29,11 @@ async function joinParticipant(browser: Browser, code: string) {
   const context = await browser.newContext({ baseURL: webUrl, reducedMotion: "reduce" });
   const page = await context.newPage();
   await page.goto(`/join?code=${code}`);
-  await expect(page.getByTestId("friendly-alias-notice")).toBeVisible();
-  await expect(page.getByLabel("Nickname")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Choose your avatar" })).toBeVisible();
+  // Both participant-choice and explicitly generated-name rooms support a blank-name join.
+  await expect(
+    page.getByTestId("friendly-alias-notice").or(page.getByRole("textbox", { name: /^Nickname/ })),
+  ).toBeVisible();
   const defaultAvatar = page.getByRole("radio", { name: "Comet", exact: true });
   await expect(defaultAvatar).toBeChecked();
   const target = await page.getByTestId("avatar-option-comet").boundingBox();
@@ -786,7 +789,10 @@ test("creator assigns immutable practice and manages accountless progress", asyn
     .toBeGreaterThan(sharedMetricBefore);
 });
 
-test("signed-in creator replaces one stale host credential and resumes", async ({ page }) => {
+test("signed-in creator replaces one stale host credential and resumes", async ({
+  browser,
+  page,
+}) => {
   await signIn(page, betaEmail);
 
   const starterResponse = await page.request.post(`${apiUrl}/v1/starters/misconception-check/use`, {
@@ -831,31 +837,56 @@ test("signed-in creator replaces one stale host credential and resumes", async (
       response.request().method() === "POST" &&
       new URL(response.url()).pathname === `/v1/sessions/${session.sessionId}/control-pass`,
   );
+  const initialAudienceSync = page.waitForResponse(
+    (response) =>
+      response.ok() &&
+      new URL(response.url()).pathname === `/v1/sessions/${session.sessionId}/interactions/sync`,
+  );
   await page.goto(`/host/${session.sessionId}`);
   expect((await controlPassResponse).status()).toBe(201);
   await expect(page.locator(".session-code")).toContainText(session.code);
+  expect((await initialAudienceSync).ok()).toBe(true);
 
-  const audienceTrigger = page.getByRole("button", { name: "Audience", exact: true });
-  await audienceTrigger.click();
-  const audienceDialog = page.getByRole("dialog", { name: "Participants and conversation" });
-  await expect(audienceDialog).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close audience tools" })).toBeFocused();
-  await expect(page.locator("header.live-topbar")).toHaveAttribute("inert", "");
-  await expect(page.locator("main#main")).toHaveAttribute("inert", "");
+  const participants: Array<{ context: BrowserContext; page: Page }> = [];
+  try {
+    // The hidden drawer already synchronized an empty lobby. New joins must refresh it
+    // before the first open, and continue to update while the drawer stays open.
+    participants.push(await joinParticipant(browser, session.code));
+    const participantRows = page.locator(".audience-drawer .participant-activity-table tbody tr");
+    await expect(participantRows).toHaveCount(1);
+    await expect(page.getByTestId("host-session")).toHaveAttribute("data-phase", "lobby");
+    const audienceTrigger = page.getByRole("button", { name: "Audience", exact: true });
+    await audienceTrigger.click();
+    const audienceDialog = page.getByRole("dialog", { name: "Participants and conversation" });
+    await expect(audienceDialog).toBeVisible();
+    await expect(audienceDialog.locator(".audience-panel-heading .status-pill")).toHaveText(
+      "Live · 1 connected",
+    );
+    participants.push(await joinParticipant(browser, session.code));
+    await expect(participantRows).toHaveCount(2);
+    await expect(audienceDialog.locator(".audience-panel-heading .status-pill")).toHaveText(
+      "Live · 2 connected",
+    );
+    await expect(page.getByRole("button", { name: "Close audience tools" })).toBeFocused();
+    await expect(page.locator("header.live-topbar")).toHaveAttribute("inert", "");
+    await expect(page.locator("main#main")).toHaveAttribute("inert", "");
 
-  await page.keyboard.press("Shift+Tab");
-  await expect
-    .poll(() => page.evaluate(() => document.activeElement?.closest("[role=dialog]")?.id ?? null))
-    .toBe("host-audience-drawer");
-  await page.keyboard.press("Escape");
-  await expect(audienceTrigger).toBeFocused();
-  await expect(page.locator("header.live-topbar")).not.toHaveAttribute("inert", "");
-  await expect(page.locator("main#main")).not.toHaveAttribute("inert", "");
+    await page.keyboard.press("Shift+Tab");
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.closest("[role=dialog]")?.id ?? null))
+      .toBe("host-audience-drawer");
+    await page.keyboard.press("Escape");
+    await expect(audienceTrigger).toBeFocused();
+    await expect(page.locator("header.live-topbar")).not.toHaveAttribute("inert", "");
+    await expect(page.locator("main#main")).not.toHaveAttribute("inert", "");
 
-  await expect
-    .poll(() => page.evaluate(({ key }) => sessionStorage.getItem(key), { key: storageKey }))
-    .not.toBe("stale-host-credential");
-  expect(controlPassRequests).toBe(1);
+    await expect
+      .poll(() => page.evaluate(({ key }) => sessionStorage.getItem(key), { key: storageKey }))
+      .not.toBe("stale-host-credential");
+    expect(controlPassRequests).toBe(1);
+  } finally {
+    for (const participant of participants) await participant.context.close();
+  }
 });
 
 test("creator and participants complete a beta Recovery loop through report", async ({
@@ -881,6 +912,7 @@ test("creator and participants complete a beta Recovery loop through report", as
         audienceLimit: 20,
         scoringMode: "accuracy",
         resultVisibility: "private",
+        confidenceEnabled: true,
         allowLateJoin: true,
         nicknamePolicy: "friendly_only",
       },

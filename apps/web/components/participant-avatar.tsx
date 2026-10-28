@@ -1,6 +1,7 @@
 "use client";
 
 import { AVATAR_IDS, type AvatarId } from "@openround/contracts";
+import { useId } from "react";
 import { useLocale } from "./locale-provider";
 
 export interface ParticipantAvatarDefinition {
@@ -19,6 +20,22 @@ const avatarDetails: Record<AvatarId, Omit<ParticipantAvatarDefinition, "id">> =
   robot: { label: "Robot", emoji: "🤖", tone: "sky" },
   rocket: { label: "Rocket", emoji: "🚀", tone: "indigo" },
   star: { label: "Star", emoji: "⭐", tone: "plum" },
+  bear: { label: "Bear", emoji: "🐻", tone: "gold" },
+  bunny: { label: "Bunny", emoji: "🐰", tone: "plum" },
+  cat: { label: "Cat", emoji: "🐱", tone: "coral" },
+  dog: { label: "Dog", emoji: "🐶", tone: "sky" },
+  koala: { label: "Koala", emoji: "🐨", tone: "violet" },
+  lion: { label: "Lion", emoji: "🦁", tone: "gold" },
+  penguin: { label: "Penguin", emoji: "🐧", tone: "indigo" },
+  tiger: { label: "Tiger", emoji: "🐯", tone: "coral" },
+  turtle: { label: "Turtle", emoji: "🐢", tone: "mint" },
+  dolphin: { label: "Dolphin", emoji: "🐬", tone: "sky" },
+  whale: { label: "Whale", emoji: "🐳", tone: "indigo" },
+  octopus: { label: "Octopus", emoji: "🐙", tone: "plum" },
+  butterfly: { label: "Butterfly", emoji: "🦋", tone: "violet" },
+  bee: { label: "Bee", emoji: "🐝", tone: "gold" },
+  frog: { label: "Frog", emoji: "🐸", tone: "mint" },
+  hedgehog: { label: "Hedgehog", emoji: "🦔", tone: "teal" },
 };
 
 export const PARTICIPANT_AVATARS: readonly ParticipantAvatarDefinition[] = AVATAR_IDS.map((id) => ({
@@ -94,11 +111,15 @@ export function AvatarPicker({
   disabled?: boolean;
 }) {
   const { t } = useLocale();
+  const helpId = useId();
   return (
-    <fieldset aria-describedby="avatar-picker-help" className="avatar-picker" disabled={disabled}>
+    <fieldset aria-describedby={helpId} className="avatar-picker" disabled={disabled}>
       <legend>{t("live.avatar.choose")}</legend>
-      <p className="muted" id="avatar-picker-help">
+      <p className="muted" id={helpId}>
         {t("live.avatar.help")}
+        <span className="avatar-picker-hint">
+          {t("live.avatar.browse", { count: PARTICIPANT_AVATARS.length })}
+        </span>
       </p>
       <div className="avatar-picker-grid">
         {PARTICIPANT_AVATARS.map((avatar) => (

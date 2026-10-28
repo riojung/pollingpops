@@ -130,6 +130,11 @@ export const deliveryAuthoringEnglishMessages = {
   "delivery.join.description":
     "Use the seven-digit code shown by your facilitator. You do not need an account.",
   "delivery.join.nickname": "Nickname",
+  "delivery.join.nicknameOptional": "Nickname (optional)",
+  "delivery.join.nicknameHelp":
+    "Choose your own nickname, or leave this blank to get a generated one.",
+  "delivery.join.friendlyNicknameNotice":
+    "The host has chosen generated nicknames for this round. Your nickname will be assigned when you join.",
   "delivery.join.nicknamePlaceholder": "How should the room know you?",
   "delivery.join.avatar": "Choose an avatar",
   "delivery.join.joining": "Joining…",

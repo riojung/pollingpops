@@ -4,6 +4,7 @@ import { BetaDisclosure } from "./beta-disclosure";
 import { responseTypeLabel } from "./question-labels";
 import type { QuestionUpdater } from "./types";
 import { useLocale } from "../locale-provider";
+import { confidenceControlCopy } from "../../lib/i18n/confidence-control-copy";
 
 export function DiagnosticDetails({
   question,
@@ -16,7 +17,8 @@ export function DiagnosticDetails({
   uxBeta: boolean;
   onUpdateQuestion: QuestionUpdater;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const confidenceCopy = confidenceControlCopy[locale];
   return (
     <BetaDisclosure
       className="editor-disclosure"
@@ -60,21 +62,21 @@ export function DiagnosticDetails({
             onChange={(event) =>
               onUpdateQuestion((item) => ({
                 ...item,
-                confidence: event.target.value as "off" | "optional" | "required",
+                confidence: event.target.value as "off" | "optional",
               }))
             }
-            value={question.confidence ?? "off"}
+            value={question.confidence && question.confidence !== "off" ? "optional" : "off"}
           >
-            <option lang="en-CA" value="off">
-              Off
+            <option lang={locale} value="off">
+              {confidenceCopy.off}
             </option>
-            <option lang="en-CA" value="optional">
-              Optional
-            </option>
-            <option lang="en-CA" value="required">
-              Required
+            <option lang={locale} value="optional">
+              {confidenceCopy.on}
             </option>
           </select>
+          <small className="muted" lang={locale}>
+            {confidenceCopy.participantHelp}
+          </small>
         </label>
         <label className="field" style={{ flex: "2 1 280px" }}>
           <span>{t("delivery.builder.concepts")}</span>

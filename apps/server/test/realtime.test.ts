@@ -329,65 +329,160 @@ describe("realtime authorization", () => {
     });
   });
 
-  it("reuses the participant projection without changing answer-free private snapshots", () => {
-    const participantIds = [crypto.randomUUID(), crypto.randomUUID()];
-    let state = createGameState({
-      sessionId: crypto.randomUUID(),
-      code: "7654321",
-      quiz: {
-        title: "Realtime projection",
-        description: "",
-        questions: [
-          {
-            id: crypto.randomUUID(),
-            type: "true_false",
-            prompt: "Projection remains role-safe.",
-            choices: [
-              { id: crypto.randomUUID(), label: "True", isCorrect: true },
-              { id: crypto.randomUUID(), label: "False", isCorrect: false },
-            ],
-            timeLimitSeconds: 20,
-            basePoints: 1_000,
-            explanation: "",
-            mediaId: null,
-            mediaAlt: null,
-          },
-        ],
-      },
-      settings: {
-        audienceLimit: 20,
-        scoringMode: "accuracy",
-        resultVisibility: "private",
-        allowLateJoin: true,
-        nicknamePolicy: "custom",
-      },
-    });
-    for (const [index, participantId] of participantIds.entries()) {
-      state = addParticipant(state, {
-        id: participantId,
-        nickname: `Private learner ${index + 1}`,
-        score: index * 100,
-        correctCount: index,
-        acceptedResponseMs: index * 1_000,
-        connected: true,
-        kicked: false,
+  it.each(["private", "leaderboard"] as const)(
+    "preserves only each participant's revealed summary in answer-free %s snapshots",
+    (resultVisibility) => {
+      const participantIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+      let state = createGameState({
+        sessionId: crypto.randomUUID(),
+        code: "7654321",
+        quiz: {
+          title: "Realtime projection",
+          description: "",
+          questions: [
+            {
+              id: crypto.randomUUID(),
+              type: "true_false",
+              prompt: "Projection remains role-safe.",
+              choices: [
+                { id: crypto.randomUUID(), label: "True", isCorrect: true },
+                { id: crypto.randomUUID(), label: "False", isCorrect: false },
+              ],
+              timeLimitSeconds: 20,
+              basePoints: 1_000,
+              explanation: "",
+              mediaId: null,
+              mediaAlt: null,
+            },
+          ],
+        },
+        settings: {
+          audienceLimit: 20,
+          scoringMode: "accuracy",
+          resultVisibility,
+          allowLateJoin: true,
+          nicknamePolicy: "custom",
+        },
+      });
+      state.quiz.questions.push({ ...state.quiz.questions[0]!, id: crypto.randomUUID() });
+      for (const [index, participantId] of participantIds.entries()) {
+        state = addParticipant(state, {
+          id: participantId,
+          nickname: `Private learner ${index + 1}`,
+          score: 0,
+          correctCount: 0,
+          acceptedResponseMs: 0,
+          connected: true,
+          kicked: false,
+        }).state;
+      }
+      state = applyHostCommand(state, {
+        action: "start",
+        commandId: crypto.randomUUID(),
+        expectedVersion: state.version,
+        nowMs: 1_000,
+        newRoundId: () => crypto.randomUUID(),
       }).state;
-    }
-    state = applyHostCommand(state, {
-      action: "start",
-      commandId: crypto.randomUUID(),
-      expectedVersion: state.version,
-      nowMs: 1_000,
-      newRoundId: () => crypto.randomUUID(),
-    }).state;
 
-    const selectSnapshot = snapshotSelector(state);
-    for (const participantId of participantIds) {
-      expect(selectSnapshot("participant", participantId)).toEqual(
-        snapshotForRole(state, { role: "participant", participantId }),
-      );
-    }
-  });
+      const assertOwnProjections = () => {
+        const selectSnapshot = snapshotSelector(state);
+        for (const participantId of participantIds) {
+          const snapshot = selectSnapshot("participant", participantId);
+          expect(snapshot).toEqual(snapshotForRole(state, { role: "participant", participantId }));
+          for (const participant of snapshot.participants) {
+            expect(participant).not.toHaveProperty("myScoredResponseSummary");
+            expect(participant).not.toHaveProperty("answeredCount");
+            expect(participant).not.toHaveProperty("lastResponseStatus");
+          }
+          for (const participant of snapshot.competitionStandings?.entries ?? []) {
+            expect(participant).not.toHaveProperty("answeredCount");
+            expect(participant).not.toHaveProperty("lastResponseStatus");
+          }
+        }
+        for (const role of ["host", "presenter", "participant"] as const) {
+          expect(selectSnapshot(role)).not.toHaveProperty("myScoredResponseSummary");
+        }
+        expect(selectSnapshot("participant", crypto.randomUUID())).not.toHaveProperty(
+          "myScoredResponseSummary",
+        );
+        return selectSnapshot;
+      };
+      assertOwnProjections();
+      const question = state.quiz.questions[0]!;
+      if (!("choices" in question)) throw new Error("Expected a choice checkpoint");
+      for (const [index, participantId] of participantIds.slice(0, 2).entries()) {
+        state = acceptAnswer(state, {
+          answerId: crypto.randomUUID(),
+          participantId,
+          roundId: state.roundId!,
+          choiceId: question.choices[index]!.id,
+          idempotencyKey: crypto.randomUUID(),
+          nowMs: 2_000,
+        }).state;
+      }
+      const beforeReveal = assertOwnProjections();
+      for (const participantId of participantIds) {
+        expect(beforeReveal("participant", participantId).myScoredResponseSummary).toEqual({
+          answeredScoredQuestions: 0,
+          correctScoredQuestions: 0,
+          revealedScoredQuestions: 0,
+        });
+      }
+      for (const action of ["lock", "reveal", "next"] as const) {
+        state = applyHostCommand(state, {
+          action,
+          commandId: crypto.randomUUID(),
+          expectedVersion: state.version,
+          nowMs: 3_000,
+          newRoundId: () => crypto.randomUUID(),
+        }).state;
+      }
+      expect(state.phase).toBe("question_open");
+      expect(state.answers).toEqual({});
+      const released = assertOwnProjections();
+      const expectedSummaries = [
+        {
+          answeredScoredQuestions: 1,
+          correctScoredQuestions: 1,
+          revealedScoredQuestions: 1,
+          lastResponseStatus: "correct",
+        },
+        {
+          answeredScoredQuestions: 1,
+          correctScoredQuestions: 0,
+          revealedScoredQuestions: 1,
+          lastResponseStatus: "incorrect",
+        },
+        {
+          answeredScoredQuestions: 0,
+          correctScoredQuestions: 0,
+          revealedScoredQuestions: 1,
+          lastResponseStatus: "unanswered",
+        },
+      ];
+      for (const [index, participantId] of participantIds.entries()) {
+        expect(released("participant", participantId).myScoredResponseSummary).toEqual(
+          expectedSummaries[index],
+        );
+      }
+      state = applyHostCommand(state, {
+        action: "end",
+        commandId: crypto.randomUUID(),
+        expectedVersion: state.version,
+        nowMs: 4_000,
+        newRoundId: () => crypto.randomUUID(),
+      }).state;
+      state = JSON.parse(JSON.stringify(state)) as typeof state;
+      expect(state.phase).toBe("finished");
+      expect(state.answers).toEqual({});
+      const final = assertOwnProjections();
+      for (const [index, participantId] of participantIds.entries()) {
+        expect(final("participant", participantId).myScoredResponseSummary).toEqual(
+          expectedSummaries[index],
+        );
+      }
+    },
+  );
 
   it("does not promote or subscribe a socket when host authentication fails", async () => {
     const sessionId = crypto.randomUUID();

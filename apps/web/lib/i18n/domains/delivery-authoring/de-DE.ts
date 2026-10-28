@@ -135,6 +135,11 @@ export default {
   "delivery.join.description":
     "Verwenden Sie den angezeigten siebenstelligen Code. Kein Konto nötig.",
   "delivery.join.nickname": "Anzeigename",
+  "delivery.join.nicknameOptional": "Spitzname (optional)",
+  "delivery.join.nicknameHelp":
+    "Wählen Sie einen Spitznamen oder lassen Sie das Feld leer, um einen generierten Namen zu erhalten.",
+  "delivery.join.friendlyNicknameNotice":
+    "Der Host hat für diese Runde generierte Spitznamen gewählt. Ihr Name wird beim Beitritt vergeben.",
   "delivery.join.nicknamePlaceholder": "Wie sollen Sie im Raum heißen?",
   "delivery.join.avatar": "Avatar auswählen",
   "delivery.join.joining": "Beitritt…",

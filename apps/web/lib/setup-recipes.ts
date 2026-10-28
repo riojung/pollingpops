@@ -8,6 +8,21 @@ export interface ResolvedSetupRecipe {
   presenterSoundEnabled: false;
 }
 
+export function defaultSetupSettings(
+  segment: "education" | "workplace",
+  maxParticipants: number,
+): SessionSettings {
+  return {
+    audienceLimit: Math.min(segment === "education" ? 20 : 100, maxParticipants),
+    scoringMode: segment === "education" ? "accuracy" : "speed",
+    timeMode: "timed",
+    resultVisibility: segment === "education" ? "private" : "leaderboard",
+    allowLateJoin: true,
+    nicknamePolicy: "custom",
+    confidenceEnabled: false,
+  };
+}
+
 export function resolveSetupRecipe(
   recipe: SetupRecipe,
   current: SessionSettings,
@@ -22,6 +37,8 @@ export function resolveSetupRecipe(
     audienceLimit,
     allowLateJoin: true,
     timeMode: current.timeMode ?? "timed",
+    nicknamePolicy: current.nicknamePolicy,
+    confidenceEnabled: current.confidenceEnabled ?? false,
   } as const;
 
   if (recipe === "competition") {
@@ -31,7 +48,6 @@ export function resolveSetupRecipe(
         timeMode: "timed",
         scoringMode: "speed",
         resultVisibility: "leaderboard",
-        nicknamePolicy: "friendly_only",
       },
       experiencePreset: options.roundExperiencesAvailable ? "spark" : "focus",
       presenterSoundEnabled: false,
@@ -44,7 +60,6 @@ export function resolveSetupRecipe(
         ...common,
         scoringMode: "accuracy",
         resultVisibility: "private",
-        nicknamePolicy: options.segment === "education" ? "friendly_only" : "custom",
       },
       experiencePreset: "focus",
       presenterSoundEnabled: false,
@@ -56,7 +71,6 @@ export function resolveSetupRecipe(
       ...common,
       scoringMode: "accuracy",
       resultVisibility: "private",
-      nicknamePolicy: "friendly_only",
     },
     experiencePreset: "focus",
     presenterSoundEnabled: false,

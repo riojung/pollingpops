@@ -45,6 +45,11 @@ function render(
 }
 
 describe("competition dashboard", () => {
+  it("provides the page heading when standings replace the question stage", () => {
+    const markup = render(fixture(), { headingLevel: 1 });
+    expect(markup).toMatch(/<h1[^>]*>Race to the top<\/h1>/);
+  });
+
   it("shows explicit top-three places and accessible expandable full standings", () => {
     const markup = render(fixture(), { compact: true });
     expect(markup).toContain("Race to the top");
@@ -59,6 +64,37 @@ describe("competition dashboard", () => {
     expect(markup).toContain("Fay");
     expect(markup).toContain("2 of 4 scored questions revealed");
     expect(markup).toContain("Standings include revealed questions only.");
+  });
+
+  it("keeps compact host standings on stage with a disclosed detailed view", () => {
+    const markup = render(fixture(), { compact: true, summary: true, variant: "host" });
+    expect(markup).toContain('data-summary="true"');
+    expect(markup).toContain("Race to the top");
+    expect(markup).toMatch(/<details[^>]*><summary>All standings/);
+    expect(markup).not.toMatch(/<details[^>]*open/);
+    // The expanded view preserves every participant and the actual score policy.
+    expect(markup).toContain("Ada");
+    expect(markup).toContain("Fay");
+    expect(markup).toContain("Standings include revealed questions only.");
+    expect(markup).toContain('data-testid="competition-race"');
+  });
+
+  it("discloses projector effects and score policy while keeping participant controls direct", () => {
+    const presenter = render(fixture(), { variant: "presenter", finished: true });
+    expect(presenter).toMatch(/<details[^>]*data-testid="competition-display-options"/);
+    expect(presenter).not.toMatch(
+      /<details[^>]*data-testid="competition-display-options"[^>]*open/,
+    );
+    expect(presenter).toContain('data-testid="competition-replay"');
+    expect(presenter).toContain("Standings include revealed questions only.");
+    const participant = render(fixture(), { variant: "participant", finished: true });
+    expect(participant).not.toContain('data-testid="competition-display-options"');
+    expect(participant).toContain('data-testid="competition-motion-toggle"');
+  });
+
+  it("supports a primary host results heading when standings occupy the stage", () => {
+    const markup = render(fixture(), { variant: "host", finished: true, headingLevel: 1 });
+    expect(markup).toMatch(/<h1[^>]*>Final standings<\/h1>/);
   });
 
   it("keeps final podium and personal chase context, including actual movement", () => {
@@ -171,7 +207,7 @@ describe("competition dashboard", () => {
     const markup = render(standings);
     expect(markup).toContain("&lt;img");
     expect(markup).not.toContain("<img src=x");
-    expect(markup).not.toContain("<details");
+    expect(markup).not.toContain("All standings");
   });
 
   it("shows real score comparisons, climb recognition and accessible view controls", () => {
@@ -206,7 +242,80 @@ describe("competition dashboard", () => {
     expect(markup).not.toContain("Biggest climb");
     expect(markup).toContain('style="width:0%"');
     expect(markup).not.toContain('style="width:100%"');
-    expect(markup).toContain("A finish worth sharing");
+    expect(markup).not.toContain("A finish worth sharing");
+    expect(markup).not.toContain('data-testid="competition-celebration"');
+    expect(markup).not.toContain('data-testid="competition-spotlight"');
+    expect(markup).not.toContain('data-testid="competition-replay"');
+    expect(markup).toContain('data-motion="off"');
+    expect(markup).not.toContain('data-testid="competition-podium"');
+    expect(markup).toContain('data-testid="competition-zero-points"');
+    expect(markup).toContain("No points earned from revealed scored questions.");
+    expect(markup).toContain("<table");
+    expect(markup).toContain("Final standings");
+  });
+
+  it("shows the participant's own saved-answer receipt without inferring it from points", () => {
+    const standings = fixture();
+    standings.entries[1]!.score = 0;
+    const markup = render(standings, {
+      participantId: "person-1",
+      responseSummary: {
+        answeredScoredQuestions: 1,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 2,
+      },
+    });
+    expect(markup).toContain('data-testid="scored-response-receipt"');
+    expect(markup).toContain("1 / 2");
+    expect(markup).toContain(
+      "Your saved answers to the revealed scored questions were not correct.",
+    );
+    expect(markup).toContain('data-testid="competition-podium"');
+    expect(markup).not.toContain('data-testid="competition-zero-points"');
+    expect(render(standings, { participantId: "person-1" })).not.toContain(
+      'data-testid="scored-response-receipt"',
+    );
+  });
+
+  it("keeps zero-response results neutral while preserving the actual standings", () => {
+    const standings = fixture();
+    standings.status = "final";
+    standings.entries = [
+      {
+        ...standings.entries[0]!,
+        score: 0,
+        previousRank: null,
+      },
+    ];
+    standings.totalParticipants = 1;
+    const markup = render(standings, {
+      participantId: "person-0",
+      responseSummary: {
+        answeredScoredQuestions: 0,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 2,
+      },
+    });
+    expect(markup).toContain("No answer was saved for the revealed scored questions.");
+    expect(markup).toContain("No points earned from revealed scored questions.");
+    expect(markup).toContain("Ada");
+    expect(markup).toContain('data-testid="competition-race"');
+    expect(markup).not.toContain('data-testid="competition-podium"');
+    expect(markup).not.toContain('data-testid="competition-celebration"');
+    expect(markup).not.toContain("Top finisher");
+  });
+
+  it("does not expose an own-answer receipt on a staff surface", () => {
+    const markup = render(fixture(), {
+      participantId: "person-0",
+      variant: "host",
+      responseSummary: {
+        answeredScoredQuestions: 0,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 2,
+      },
+    });
+    expect(markup).not.toContain('data-testid="scored-response-receipt"');
   });
 
   it("does not award a climb spotlight for a zero-gain or unknown-history rank change", () => {

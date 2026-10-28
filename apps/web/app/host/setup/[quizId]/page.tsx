@@ -28,7 +28,9 @@ import {
 import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { clientUuid } from "../../../../lib/uuid";
+import { confidenceControlCopy } from "../../../../lib/i18n/confidence-control-copy";
 import {
+  defaultSetupSettings,
   resolveSetupRecipe,
   setupRecipeStorageKey,
   type SetupRecipe,
@@ -59,20 +61,6 @@ interface ProductFeatures {
   workspaceShell: boolean;
 }
 
-function defaultsFor(creator: Creator, entitlements: Entitlements): SessionSettings {
-  return {
-    audienceLimit: Math.min(
-      creator.segment === "education" ? 20 : 100,
-      entitlements.maxParticipants,
-    ),
-    scoringMode: creator.segment === "education" ? "accuracy" : "speed",
-    timeMode: "timed",
-    resultVisibility: creator.segment === "education" ? "private" : "leaderboard",
-    allowLateJoin: true,
-    nicknamePolicy: creator.segment === "education" ? "friendly_only" : "custom",
-  };
-}
-
 function SetupReview({ uxBeta, children }: { uxBeta: boolean; children: ReactNode }) {
   const { t } = useLocale();
   if (!uxBeta) return <>{children}</>;
@@ -88,7 +76,8 @@ function SetupReview({ uxBeta, children }: { uxBeta: boolean; children: ReactNod
 export default function HostSetupPage() {
   const { quizId } = useParams<{ quizId: string }>();
   const router = useRouter();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const confidenceCopy = confidenceControlCopy[locale];
   const tRef = useRef(t);
   tRef.current = t;
   const preserveFlexPreferenceRef = useRef(false);
@@ -166,7 +155,10 @@ export default function HostSetupPage() {
             ? TEXT_RESPONSE_MAX_PER_ROUND
             : account.entitlements.maxParticipants,
         );
-        const defaults = defaultsFor(account.creator, account.entitlements);
+        const defaults = defaultSetupSettings(
+          account.creator.segment,
+          account.entitlements.maxParticipants,
+        );
         defaults.audienceLimit = Math.min(defaults.audienceLimit, maximumParticipants);
         if (!account.productFeatures.uxBeta) {
           preserveFlexPreferenceRef.current = false;
@@ -202,6 +194,7 @@ export default function HostSetupPage() {
               restoredSettings.timeMode === "flex" && !account.productFeatures.liveFlexMode;
             setSettings({
               ...restoredSettings,
+              confidenceEnabled: false,
               timeMode: account.productFeatures.liveFlexMode ? restoredSettings.timeMode : "timed",
               audienceLimit: Math.min(
                 Math.max(1, restoredSettings.audienceLimit),
@@ -247,9 +240,14 @@ export default function HostSetupPage() {
 
   useEffect(() => {
     if (!creator || !settings || !uxBeta) return;
-    const storedSettings = preserveFlexPreferenceRef.current
-      ? { ...settings, timeMode: "flex" as const, scoringMode: "accuracy" as const }
-      : settings;
+    // Confidence is a per-round opt-in, so the next setup must start with it off.
+    const storedSettings = {
+      ...settings,
+      ...(preserveFlexPreferenceRef.current
+        ? { timeMode: "flex" as const, scoringMode: "accuracy" as const }
+        : {}),
+      confidenceEnabled: false,
+    };
     localStorage.setItem(
       setupRecipeStorageKey(creator.workspaceId),
       JSON.stringify({ recipe, settings: storedSettings, experiencePreset, presenterSoundEnabled }),
@@ -431,6 +429,53 @@ export default function HostSetupPage() {
                 </div>
               </section>
             ) : null}
+            <section className="panel" style={{ marginBottom: 24 }}>
+              <label className="field" htmlFor="nickname-policy">
+                <span>{t("live.roundSetup.names")}</span>
+                <select
+                  aria-describedby="nickname-policy-help"
+                  className="select"
+                  disabled={busy}
+                  id="nickname-policy"
+                  onChange={(event) => {
+                    setRecipe("custom");
+                    setSettings({
+                      ...settings,
+                      nicknamePolicy: event.target.value as SessionSettings["nicknamePolicy"],
+                    });
+                  }}
+                  value={settings.nicknamePolicy}
+                >
+                  <option value="custom">{t("live.roundSetup.customNames")}</option>
+                  <option value="friendly_only">{t("live.roundSetup.friendlyNames")}</option>
+                </select>
+                <small className="muted" id="nickname-policy-help">
+                  {t(
+                    settings.nicknamePolicy === "custom"
+                      ? "live.roundSetup.customNamesHelp"
+                      : "live.roundSetup.friendlyNamesHelp",
+                  )}
+                </small>
+              </label>
+            </section>
+            <section className="panel" style={{ marginBottom: 24 }}>
+              <label className="checkbox-field">
+                <input
+                  aria-describedby="setup-confidence-help"
+                  checked={settings.confidenceEnabled === true}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setRecipe("custom");
+                    setSettings({ ...settings, confidenceEnabled: event.target.checked });
+                  }}
+                  type="checkbox"
+                />
+                {confidenceCopy.label}
+              </label>
+              <p className="muted" id="setup-confidence-help">
+                {confidenceCopy.help}
+              </p>
+            </section>
             <SetupReview uxBeta={uxBeta}>
               <EventCreditChoice
                 checked={useEventCredit}
@@ -600,24 +645,6 @@ export default function HostSetupPage() {
                     >
                       <option value="private">{t("live.roundSetup.privateResults")}</option>
                       <option value="leaderboard">{t("live.roundSetup.leaderboardResults")}</option>
-                    </select>
-                  </label>
-                  <label className="field" htmlFor="nickname-policy">
-                    <span>{t("live.roundSetup.names")}</span>
-                    <select
-                      className="select"
-                      id="nickname-policy"
-                      onChange={(event) => {
-                        setRecipe("custom");
-                        setSettings({
-                          ...settings,
-                          nicknamePolicy: event.target.value as SessionSettings["nicknamePolicy"],
-                        });
-                      }}
-                      value={settings.nicknamePolicy}
-                    >
-                      <option value="friendly_only">{t("live.roundSetup.friendlyNames")}</option>
-                      <option value="custom">{t("live.roundSetup.customNames")}</option>
                     </select>
                   </label>
                 </section>

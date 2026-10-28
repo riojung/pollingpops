@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import type { PublicFeatures } from "@openround/contracts";
 import { apiFetch } from "../lib/api";
+import { copyTextToClipboard } from "../lib/clipboard";
 import {
   buildJoinUrl,
   isLoopbackJoinBase,
@@ -30,7 +31,9 @@ export function JoinAccess({
   const [automaticBase, setAutomaticBase] = useState("");
   const [candidate, setCandidate] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [manualCopyUrl, setManualCopyUrl] = useState<string | null>(null);
   const [addressError, setAddressError] = useState("");
+  const manualCopyId = useId();
   const qrFrame = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,12 +70,9 @@ export function JoinAccess({
 
   async function copyJoinLink() {
     if (!joinUrl) return;
-    try {
-      await navigator.clipboard.writeText(joinUrl);
-      setCopyStatus(t("live.joinAccess.linkCopied"));
-    } catch {
-      setCopyStatus(t("live.joinAccess.copyBlocked"));
-    }
+    const copied = await copyTextToClipboard(joinUrl);
+    setManualCopyUrl(copied ? null : joinUrl);
+    setCopyStatus(t(copied ? "live.joinAccess.linkCopied" : "live.joinAccess.copyBlocked"));
   }
 
   function serializedQr() {
@@ -212,6 +212,21 @@ export function JoinAccess({
               </button>
             </div>
           ) : null}
+          {editable && manualCopyUrl === joinUrl ? (
+            <label className="field" htmlFor={manualCopyId}>
+              <span>{t("live.joinAccess.copyLink")}</span>
+              <input
+                aria-describedby={`${manualCopyId}-status`}
+                className="input"
+                id={manualCopyId}
+                onClick={(event) => event.currentTarget.select()}
+                onFocus={(event) => event.currentTarget.select()}
+                readOnly
+                type="text"
+                value={joinUrl}
+              />
+            </label>
+          ) : null}
         </>
       ) : (
         <p className="muted">{t("live.joinAccess.preparing")}</p>
@@ -254,7 +269,7 @@ export function JoinAccess({
         </details>
       ) : null}
       {copyStatus ? (
-        <p className="muted join-copy-status" role="status">
+        <p className="muted join-copy-status" id={`${manualCopyId}-status`} role="status">
           {copyStatus}
         </p>
       ) : null}

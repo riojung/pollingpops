@@ -148,6 +148,10 @@ export function JoinForm() {
         return;
       }
       if (resolvedArtifactType === "presentation") {
+        if (!nickname.trim()) {
+          setBusy(false);
+          return;
+        }
         const joined = await apiFetch<{
           participantToken: string;
           snapshot: { id: string };
@@ -236,24 +240,36 @@ export function JoinForm() {
         ) : null}
         {collectNickname ? (
           <div className="field">
-            <label htmlFor="nickname">{t("delivery.join.nickname")}</label>
+            <label htmlFor="nickname">
+              {t(
+                artifactType === "presentation"
+                  ? "delivery.join.nickname"
+                  : "delivery.join.nicknameOptional",
+              )}
+            </label>
             <input
+              aria-describedby={artifactType === "presentation" ? undefined : "nickname-help"}
               autoComplete="nickname"
               className="input"
               id="nickname"
               maxLength={32}
               onChange={(event) => setNickname(event.target.value)}
               placeholder={t("delivery.join.nicknamePlaceholder")}
-              required={artifactType !== "round"}
+              required={artifactType === "presentation"}
               disabled={busy}
               value={nickname}
             />
+            {artifactType !== "presentation" ? (
+              <small className="muted" id="nickname-help">
+                {t("delivery.join.nicknameHelp")}
+              </small>
+            ) : null}
           </div>
         ) : (
           <p className="notice" data-testid="friendly-alias-notice" role="status">
             {artifactType === "feedback_room"
               ? "No nickname or learning identity is collected. Organizers see question-level totals, not linked respondent answers."
-              : "A privacy-friendly nickname will be assigned when you join."}
+              : t("delivery.join.friendlyNicknameNotice")}
           </p>
         )}
         {artifactType === "round" ? (
@@ -280,7 +296,7 @@ export function JoinForm() {
             busy ||
             code.length !== 7 ||
             preflight.status === "checking" ||
-            (artifactType !== "round" && artifactType !== "feedback_room" && !nickname.trim())
+            (artifactType === "presentation" && !nickname.trim())
           }
           type="submit"
         >

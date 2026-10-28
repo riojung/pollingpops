@@ -13,6 +13,7 @@ import {
   type ChatReaction,
   type InteractionSettings,
   type InteractionSummary,
+  type ParticipantInteractionView,
 } from "@openround/contracts";
 import { apiFetch, humanError } from "../lib/api";
 import { clientUuid } from "../lib/uuid";
@@ -345,6 +346,134 @@ export function applyAudienceRealtimeEvent(
 
 function mutationHeaders() {
   return { "x-idempotency-key": clientUuid() };
+}
+
+export function AudienceParticipantTable({
+  participants,
+  busy,
+  muteDurationMinutes,
+  onModerate,
+  onKick,
+}: {
+  participants: ParticipantInteractionView[];
+  busy: boolean;
+  muteDurationMinutes: 5 | 15 | 60;
+  onModerate: (participantId: string, action: "mute" | "unmute" | "ban" | "unban") => void;
+  onKick?: (participantId: string) => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="participant-activity-wrap">
+      {/* Explicit roles preserve table navigation when compact rows use a CSS grid. */}
+      <table
+        aria-label={t("live.audience.participantActivity")}
+        className="participant-activity-table"
+        role="table"
+      >
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col">
+              {t("live.audience.alias")}
+            </th>
+            <th role="columnheader" scope="col">
+              {t("live.audience.status")}
+            </th>
+            <th role="columnheader" scope="col">
+              {t("live.audience.pulseShort")}
+            </th>
+            <th role="columnheader" scope="col">
+              {t("live.audience.chat")}
+            </th>
+            <th role="columnheader" scope="col">
+              {t("live.audience.moderation")}
+            </th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          {participants.map((participant) => (
+            <tr key={participant.participantId} role="row">
+              <th className="participant-alias" role="rowheader" scope="row">
+                <ParticipantIdentity
+                  avatarId={participant.avatarId}
+                  nickname={participant.nickname}
+                />
+              </th>
+              <td className="participant-status" role="cell">
+                <span aria-hidden="true" className="participant-cell-label">
+                  {t("live.audience.status")}
+                </span>
+                <span>
+                  {participant.connected
+                    ? t("live.audience.connectedStatus")
+                    : t("live.audience.offline")}{" "}
+                  ·{" "}
+                  {participant.answered ? t("live.audience.answered") : t("live.audience.waiting")}
+                </span>
+              </td>
+              <td role="cell">
+                <span aria-hidden="true" className="participant-cell-label">
+                  {t("live.audience.pulseShort")}
+                </span>
+                <span>
+                  {participant.currentSignal
+                    ? t(`live.audience.signal.${participant.currentSignal}`)
+                    : "—"}
+                </span>
+              </td>
+              <td role="cell">
+                <span aria-hidden="true" className="participant-cell-label">
+                  {t("live.audience.chat")}
+                </span>
+                <span>{participant.chatMessageCount}</span>
+              </td>
+              <td className="participant-moderation" role="cell">
+                <span aria-hidden="true" className="participant-cell-label">
+                  {t("live.audience.moderation")}
+                </span>
+                <div className="button-row">
+                  <button
+                    className="button-quiet tiny-button"
+                    disabled={busy}
+                    onClick={() =>
+                      onModerate(
+                        participant.participantId,
+                        participant.mutedUntil ? "unmute" : "mute",
+                      )
+                    }
+                    type="button"
+                  >
+                    {participant.mutedUntil
+                      ? t("live.audience.unmute")
+                      : t("live.audience.muteCompact", { count: muteDurationMinutes })}
+                  </button>
+                  <button
+                    className="button-danger tiny-button"
+                    disabled={busy}
+                    onClick={() =>
+                      onModerate(participant.participantId, participant.banned ? "unban" : "ban")
+                    }
+                    type="button"
+                  >
+                    {participant.banned ? t("live.audience.restore") : t("live.audience.ban")}
+                  </button>
+                  {onKick ? (
+                    <button
+                      className="button-danger tiny-button"
+                      disabled={busy}
+                      onClick={() => onKick(participant.participantId)}
+                      type="button"
+                    >
+                      {t("live.audience.kick")}
+                    </button>
+                  ) : null}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function AudiencePanel({
@@ -897,10 +1026,10 @@ export function AudiencePanel({
 
       {showParticipants && role === "moderator" && data.summary.participants ? (
         <div className="participant-pulse-table">
-          <div className="toolbar">
+          <div className="participant-activity-toolbar">
             <strong>{t("live.audience.participantActivity")}</strong>
             <label>
-              <span className="sr-only">{t("live.audience.filterParticipants")}</span>
+              <span>{t("live.audience.filterParticipants")}</span>
               <select
                 className="select compact-select"
                 onChange={(event) =>
@@ -916,7 +1045,7 @@ export function AudiencePanel({
               </select>
             </label>
             <label>
-              <span className="sr-only">{t("live.audience.muteDuration")}</span>
+              <span>{t("live.audience.muteDuration")}</span>
               <select
                 className="select compact-select"
                 onChange={(event) =>
@@ -930,86 +1059,13 @@ export function AudiencePanel({
               </select>
             </label>
           </div>
-          <div className="table-wrap" tabIndex={0}>
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("live.audience.alias")}</th>
-                  <th>{t("live.audience.status")}</th>
-                  <th>{t("live.audience.pulseShort")}</th>
-                  <th>{t("live.audience.chat")}</th>
-                  <th>{t("live.audience.moderation")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {participants.map((participant) => (
-                  <tr key={participant.participantId}>
-                    <td>
-                      <ParticipantIdentity
-                        avatarId={participant.avatarId}
-                        nickname={participant.nickname}
-                      />
-                    </td>
-                    <td>
-                      {participant.connected
-                        ? t("live.audience.connectedStatus")
-                        : t("live.audience.offline")}{" "}
-                      ·{" "}
-                      {participant.answered
-                        ? t("live.audience.answered")
-                        : t("live.audience.waiting")}
-                    </td>
-                    <td>
-                      {participant.currentSignal ? signalLabel(participant.currentSignal) : "—"}
-                    </td>
-                    <td>{participant.chatMessageCount}</td>
-                    <td>
-                      <div className="button-row">
-                        <button
-                          className="button-quiet tiny-button"
-                          disabled={busy}
-                          onClick={() =>
-                            void moderateParticipant(
-                              participant.participantId,
-                              participant.mutedUntil ? "unmute" : "mute",
-                            )
-                          }
-                          type="button"
-                        >
-                          {participant.mutedUntil
-                            ? t("live.audience.unmute")
-                            : t("live.audience.muteCompact", { count: muteDurationMinutes })}
-                        </button>
-                        <button
-                          className="button-danger tiny-button"
-                          disabled={busy}
-                          onClick={() =>
-                            void moderateParticipant(
-                              participant.participantId,
-                              participant.banned ? "unban" : "ban",
-                            )
-                          }
-                          type="button"
-                        >
-                          {participant.banned ? t("live.audience.restore") : t("live.audience.ban")}
-                        </button>
-                        {onKick ? (
-                          <button
-                            className="button-danger tiny-button"
-                            disabled={busy}
-                            onClick={() => onKick(participant.participantId)}
-                            type="button"
-                          >
-                            {t("live.audience.kick")}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AudienceParticipantTable
+            busy={busy}
+            muteDurationMinutes={muteDurationMinutes}
+            onKick={onKick}
+            onModerate={(participantId, action) => void moderateParticipant(participantId, action)}
+            participants={participants}
+          />
         </div>
       ) : null}
 

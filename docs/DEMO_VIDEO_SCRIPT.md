@@ -37,8 +37,8 @@ people can join from the device already in their hand.
 ## 3. Join and respond
 
 Now let's switch to Taylor's view. Taylor scans the QR code, or enters the code, and joins without
-creating an account. In education mode, Polling Pops can replace the typed nickname with a friendly
-private alias. Taylor also has a question. It goes into the facilitator's moderation queue, and
+creating an account. Taylor can choose a nickname or leave it blank for a generated one. The host
+can also require generated nicknames for the room. Taylor has a question. It goes into the facilitator's moderation queue, and
 the reply appears here without interrupting the round. When the checkpoint opens, Taylor chooses
 seventy percent and says, very sure. That confidence signal is important: a confident wrong answer
 usually calls for a different response than a hesitant guess. Polling Pops saves the response before

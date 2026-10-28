@@ -70,7 +70,9 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await expect(creator.getByLabel(/Allow participants to join/)).toBeChecked();
   await expect(creator.getByLabel("Scoring mode")).toHaveValue("accuracy");
   await expect(creator.getByLabel("Results during the round")).toHaveValue("private");
-  await expect(creator.getByLabel("Participant names")).toHaveValue("friendly_only");
+  await expect(creator.getByLabel("Participant names")).toHaveValue("custom");
+  // This journey deliberately exercises the host's generated-name restriction.
+  await creator.getByLabel("Participant names").selectOption("friendly_only");
   await expect(creator.getByLabel("Experience preset")).toHaveValue("campus");
   await creator.getByLabel("Experience preset").selectOption("blueprint");
   await creator.getByRole("button", { name: "Create live session" }).click();

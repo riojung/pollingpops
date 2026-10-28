@@ -167,6 +167,11 @@ export default function PresenterPage() {
     (snapshot.phase === "finished" ||
       (snapshot.phase !== "intervention" && snapshot.roundKind === "main")),
   );
+  const resultsStage = Boolean(
+    showCompetitionDashboard &&
+    snapshot?.competitionStandings?.status !== "unscored" &&
+    (snapshot?.phase === "leaderboard" || snapshot?.phase === "finished"),
+  );
 
   return (
     <div
@@ -195,7 +200,7 @@ export default function PresenterPage() {
           )}
         </div>
       </header>
-      <main className="shell live-stage">
+      <main className={`shell live-stage${resultsStage ? " presenter-results-stage" : ""}`}>
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {snapshot?.phase === "question_open" ? (
             snapshot.question?.prompt ? (
@@ -249,14 +254,7 @@ export default function PresenterPage() {
             </ul>
           </section>
         ) : null}
-        {snapshot?.question &&
-        snapshot.phase !== "finished" &&
-        !(
-          snapshot.phase === "leaderboard" &&
-          showCompetitionDashboard &&
-          snapshot.competitionStandings &&
-          snapshot.competitionStandings.status !== "unscored"
-        ) ? (
+        {snapshot?.question && snapshot.phase !== "finished" && !resultsStage ? (
           <section className="live-card">
             <div className="page-heading" style={{ alignItems: "center" }}>
               <span className="status-pill">
@@ -419,6 +417,7 @@ export default function PresenterPage() {
             standings={snapshot.competitionStandings}
             finished={snapshot.phase === "finished"}
             compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
+            headingLevel={resultsStage ? 1 : 2}
           />
         ) : null}
         {snapshot?.phase === "finished" && !snapshot.competitionStandings ? (
@@ -431,14 +430,28 @@ export default function PresenterPage() {
           </section>
         ) : null}
         {snapshot && snapshot.phase !== "finished" && mediaCredential ? (
-          <AudiencePanel
-            key={audiencePanelKey}
-            realtimeBatch={audienceRealtimeBatch}
-            role="presenter"
-            sessionId={sessionId}
-            syncRevision={audienceSyncRevision}
-            token={mediaCredential}
-          />
+          resultsStage ? (
+            <details className="presenter-audience-disclosure">
+              <summary lang="en-CA">Audience</summary>
+              <AudiencePanel
+                key={audiencePanelKey}
+                realtimeBatch={audienceRealtimeBatch}
+                role="presenter"
+                sessionId={sessionId}
+                syncRevision={audienceSyncRevision}
+                token={mediaCredential}
+              />
+            </details>
+          ) : (
+            <AudiencePanel
+              key={audiencePanelKey}
+              realtimeBatch={audienceRealtimeBatch}
+              role="presenter"
+              sessionId={sessionId}
+              syncRevision={audienceSyncRevision}
+              token={mediaCredential}
+            />
+          )
         ) : null}
       </main>
     </div>

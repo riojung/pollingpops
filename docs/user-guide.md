@@ -194,10 +194,11 @@ mean that public production or institutional readiness gates have passed.
 | Participant        | Join, answer, ask questions, and resume on one device          | Accountless, round-scoped credential          |
 | Community operator | Deploy, secure, back up, and support the service               | Deployment and runbooks                       |
 
-Education onboarding defaults to accuracy scoring, private results, generated aliases, calmer
+Education onboarding defaults to accuracy scoring, private results, calmer
 motion, Q&A premoderation, and participant replies off. Workplace onboarding defaults to speed
-scoring, a leaderboard, entered aliases, Q&A postmoderation, and participant replies on. A
-facilitator can change round settings before creating a room.
+scoring, a leaderboard, Q&A postmoderation, and participant replies on. Both let participants choose
+a nickname or leave it blank for a generated one. A facilitator can require generated-only
+nicknames or change other round settings before creating a room.
 
 For a scored Round with **Leaderboard** results, the competition dashboard shows the top three,
 current standings and each participant's own position and points gap. Scores update only after
@@ -208,6 +209,10 @@ show an unscored explanation without winners. See the [competition dashboard gui
 
 Switch between **Race view** and **Table view** to compare released scores. The dashboard highlights
 the biggest climb, the latest scored-question gain and correct streaks without bonus points.
+The host keeps a compact standings summary beside the question flow; **Show standings** and the
+final screen use the full main stage. Secondary recovery/staff tools are collapsed. On the host
+and projector, expand the scoring/motion disclosure for display controls. Audience tools use
+responsive participant cards in narrow drawers, with counts refreshed as participants join.
 At the finish, **Replay celebration** repeats only the visual effects. The **Motion effects** choice
 is saved for your browser; device and **Display & sound → Reduce motion** settings take precedence.
 
@@ -276,8 +281,11 @@ The editor supports:
 - Numeric responses with decimal normalization, absolute tolerance, and an optional unit
 - Unscored ratings and polls, plus gated live ranking, open text and word clouds
 
-For a diagnostic or practice checkpoint, choose whether confidence is off, optional, or required.
-Confidence uses **Not sure**, **Somewhat sure**, and **Very sure**. Add concept keys to connect
+For a diagnostic or practice checkpoint, turn confidence off or on with an optional response.
+Previously authored required settings remain readable for practice assignments. Confidence is always optional
+in a live Round, including older questions authored with required confidence. Live setup has a separate
+**Ask for confidence (optional)** switch, which starts off. Confidence uses **Not sure**,
+**Somewhat sure**, and **Very sure**. Add concept keys to connect
 evidence across a main checkpoint and its linked recheck. For wrong choices, optional private
 misconception keys and participant feedback turn the distribution into a more useful diagnosis.
 Ratings, polls, ranking and text are always opinion checkpoints, unscored, and confidence-free.
@@ -577,6 +585,14 @@ decides when to close each question. The choice is frozen when the session is cr
 Polling Pops then issues a seven-digit code, direct link, downloadable QR, and one-time host
 credential.
 
+**Ask for confidence (optional)** starts off for every new live Round, including when you reload
+setup. Turn it on to offer the
+three confidence choices on scored diagnostic and practice questions; participants can always
+skip them. Enabling it applies to that Round. You can also change it from the host
+screen during a live question. Turning it off hides the controls and clears confidence that has
+not been submitted. Answers already saved retain their recorded confidence and points. Opinion
+questions remain confidence-free.
+
 Keep the host tab open. Host, cohost, and presenter credentials are separate and stored only in
 the tab that received them. From the host screen you can issue revocable cohost or presenter
 access instead of sharing the host credential.
@@ -587,6 +603,8 @@ access instead of sharing the host credential.
   independent resume credential.
 - If a local QR contains `localhost`, use **Change join address** and enter the computer's
   reachable trusted-LAN address. A public event requires a deployed HTTPS domain.
+- **Copy join link** supports HTTPS and local HTTP browsers. If copying is blocked, use the
+  selectable link field to copy it manually.
 - Watch the roster, remove or ban abusive guests, and lock or unlock admission.
 - Open the presenter popout for a room-facing display. The dedicated embed route is read-only and
   works only for HTTPS origins on the workspace allowlist.
@@ -597,6 +615,9 @@ access instead of sharing the host credential.
    stay open until the host closes responses.
 2. Participants answer and optionally report confidence. An answer is complete only after
    **Answer received and saved**.
+   Recovery questions retain explicit submission. Once a participant starts a draft, the submit
+   control stays in view with an unsaved notice. Confidence is optional. If the
+   question closes without a saved response, an explicit notice explains that outcome.
 3. In a timed room, let the deadline close responses or select **Lock answers** early. In a flex
    room, select **Lock answers** when participants have had enough time.
 4. Review the measured participation, correctness, confidence, and misconception signals. Every
@@ -658,16 +679,30 @@ cursor pagination, sanitization, kick/ban integration, retention, export, and de
 
 Open the home join form, `/join`, a direct link, or the QR code.
 
-1. Enter the seven-digit code, choose a session avatar, and, when enabled, enter a nickname.
+1. Enter the seven-digit code and choose a session avatar. Choose a nickname or leave it blank
+   for a generated one. If the host requires generated-only nicknames, one is assigned when you join.
 2. Wait in the lobby until a checkpoint opens.
-3. Submit the displayed response format: one choice, an exact set of choices, a decimal value, a
-   rating, or a poll selection.
-4. If confidence is requested, choose one of the three confidence levels.
+3. If optional confidence is shown, choose a level or skip it. In competitive single-choice and
+   true/false main questions, confidence appears before the answers so you can choose it first.
+4. Answer the displayed response format: one choice, an exact set of choices, a decimal value, a
+   rating, or a poll selection. Selected choices and confidence show a checkmark and distinct
+   highlight. In competitive single-choice and true/false main questions, the professional
+   experience saves immediately when you choose an answer, with or without confidence. Other
+   formats, private rounds and rechecks use **Submit response** to save after review. Confidence
+   never blocks a live answer.
 5. Wait for the durable saved acknowledgement. Retrying the same submission cannot create a
    second score effect.
 6. After reveal, review private correctness, explanation, and choice feedback when available.
 
-Session avatars come from a fixed set: Comet, Fox, Owl, Otter, Panda, Robot, Rocket, and Star.
+Only accepted responses can earn points. Correct scored answers receive the authored base points
+in accuracy mode and 60–100% of them in speed mode. Time spent in a host pause does not reduce
+speed points. Unsaved selections cannot be reconstructed or scored after a question closes.
+The participant's standings show saved and correct response counts for revealed scored questions.
+The receipt distinguishes an unanswered question from a saved incorrect answer. When every score
+is zero, standings show a neutral points message without a winner podium.
+
+Choose from 24 session avatars, including animals, space characters and a robot. Scroll the
+avatar grid to see every option; the original eight choices remain available.
 They are cosmetic, contain no uploaded or free-form profile data, and are not learner accounts.
 Older clients and direct API callers may omit the avatar; the server then chooses a stable avatar
 from the participant's session ID. The resolved choice is saved with the live session, so refresh

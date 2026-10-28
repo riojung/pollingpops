@@ -84,7 +84,7 @@ function storedSession(input: {
   };
 }
 
-async function hostedRoundFixture() {
+async function hostedRoundFixture(authoredConfidence?: "off" | "optional" | "required") {
   const repository = new MemoryRepository();
   const cache = new MemorySessionCache();
   const service = new SessionService(repository, cache, config, new MetricsService());
@@ -102,6 +102,7 @@ async function hostedRoundFixture() {
   const creator = await repository.consumeMagicToken(tokenHash, now);
   if (!creator) throw new Error("Could not create deletion-race owner");
   const { quiz } = quizFixture();
+  if (authoredConfidence !== undefined) quiz.questions[0]!.confidence = authoredConfidence;
   const quizRecord = await repository.createQuiz({
     id: randomUUID(),
     workspaceId: creator.workspaceId,
@@ -125,7 +126,14 @@ async function hostedRoundFixture() {
   return { repository, cache, service, creator, quizId: quizRecord.id };
 }
 
-async function openQuestionFixture(participantCount: number) {
+async function openQuestionFixture(
+  participantCount: number,
+  options: {
+    confidence?: "off" | "optional" | "required";
+    confidenceEnabled?: boolean;
+    resultVisibility?: "private" | "leaderboard";
+  } = {},
+) {
   const repository = new MemoryRepository();
   const service = new SessionService(
     repository,
@@ -134,6 +142,7 @@ async function openQuestionFixture(participantCount: number) {
     new MetricsService(),
   );
   const { quiz, correctChoiceId } = quizFixture();
+  if (options.confidence !== undefined) quiz.questions[0]!.confidence = options.confidence;
   const sessionId = randomUUID();
   const hostToken = "host-answer-batch-token-long-enough";
   const participantInputs = Array.from({ length: participantCount }, (_, index) => ({
@@ -148,9 +157,12 @@ async function openQuestionFixture(participantCount: number) {
     settings: {
       audienceLimit: 20,
       scoringMode: "accuracy",
-      resultVisibility: "private",
+      resultVisibility: options.resultVisibility ?? "private",
       allowLateJoin: true,
       nicknamePolicy: "custom",
+      ...(options.confidenceEnabled === undefined
+        ? {}
+        : { confidenceEnabled: options.confidenceEnabled }),
     },
   });
   for (const participant of participantInputs) {
@@ -192,6 +204,286 @@ afterEach(() => {
 });
 
 describe("session service ordering", () => {
+  it.each([undefined, true] as const)(
+    "creates authored-required rounds with confidence off by default and honors explicit opt-in (%s)",
+    async (confidenceEnabled) => {
+      const { repository, service, creator, quizId } = await hostedRoundFixture("required");
+      try {
+        const hosted = await service.createSession(creator, quizId, {
+          audienceLimit: 20,
+          scoringMode: "accuracy",
+          resultVisibility: "private",
+          allowLateJoin: true,
+          nicknamePolicy: "custom",
+          ...(confidenceEnabled === undefined ? {} : { confidenceEnabled }),
+        });
+        expect(hosted.snapshot.settings.confidenceEnabled).toBe(confidenceEnabled ?? false);
+        const joined = await service.join({ code: hosted.code, nickname: "Optional confidence" });
+        const opened = await service.hostCommand({
+          sessionId: hosted.sessionId,
+          hostToken: hosted.hostToken,
+          action: "start",
+          commandId: randomUUID(),
+          expectedVersion: joined.snapshot.version,
+        });
+        expect(opened.question?.confidence).toBe(confidenceEnabled ? "optional" : "off");
+        const saved = await repository.getSessionById(hosted.sessionId);
+        expect(saved?.state.settings.confidenceEnabled).toBe(confidenceEnabled ?? false);
+        expect(saved?.state.quiz.questions[0]!.confidence).toBe("required");
+        const question = saved!.state.quiz.questions[0]!;
+        if (!("choices" in question)) throw new Error("Expected a choice checkpoint");
+        expect(
+          await service.answer({
+            sessionId: hosted.sessionId,
+            participantToken: joined.participantToken,
+            roundId: opened.roundId!,
+            choiceId: question.choices.find((choice) => choice.isCorrect)!.id,
+            idempotencyKey: randomUUID(),
+          }),
+        ).toMatchObject({ accepted: true });
+        const answered = await repository.getSessionById(hosted.sessionId);
+        expect(answered?.state.participants[joined.participantId]?.score).toBe(1_000);
+        expect(Object.values(answered!.state.answers)[0]?.confidence).toBeNull();
+      } finally {
+        service.close();
+      }
+    },
+  );
+
+  it.each(["private", "leaderboard"] as const)(
+    "persists optional confidence and live host/cohost toggles without disrupting answers (%s)",
+    async (resultVisibility) => {
+      const f = await openQuestionFixture(3, {
+        confidence: "required",
+        confidenceEnabled: true,
+        resultVisibility,
+      });
+      const updates = vi.fn();
+      const unsubscribe = f.service.subscribe(updates);
+      const stored = await f.repository.getSessionById(f.sessionId);
+      if (!stored) throw new Error("Expected a stored room");
+      const now = new Date();
+      const cohostToken = `confidence-cohost-${randomUUID()}`;
+      const presenterToken = `confidence-presenter-${randomUUID()}`;
+      for (const [role, token] of [
+        ["cohost", cohostToken],
+        ["presenter", presenterToken],
+      ] as const) {
+        await f.repository.createSessionStaffCredential({
+          id: randomUUID(),
+          workspaceId: stored.workspaceId,
+          sessionId: f.sessionId,
+          role,
+          label: role,
+          tokenHash: hashToken(token),
+          createdBy: stored.hostId,
+          expiresAt: new Date(now.getTime() + 60_000),
+          revokedAt: null,
+          createdAt: now,
+        });
+      }
+      let restoredService: SessionService | undefined;
+      try {
+        const missingConfidence = {
+          sessionId: f.sessionId,
+          participantToken: f.participantInputs[0]!.token,
+          roundId: f.state.roundId!,
+          choiceId: f.correctChoiceId,
+          idempotencyKey: randomUUID(),
+        };
+        expect(await f.service.answer(missingConfidence)).toMatchObject({ accepted: true });
+        let snapshot = await f.service.snapshot({
+          sessionId: f.sessionId,
+          hostToken: f.hostToken,
+          role: "host",
+        });
+        expect(snapshot.question?.confidence).toBe("optional");
+        expect(snapshot.settings.confidenceEnabled).toBe(true);
+        const originalRound = snapshot.roundId;
+        const originalDeadline = snapshot.deadline;
+        const offCommand = {
+          sessionId: f.sessionId,
+          hostToken: f.hostToken,
+          action: "confidence.set" as const,
+          confidenceEnabled: false,
+          commandId: randomUUID(),
+          expectedVersion: snapshot.version,
+        };
+        for (const hostToken of [
+          "not-an-authorized-host-token",
+          presenterToken,
+          f.participantInputs[0]!.token,
+        ]) {
+          await expect(f.service.hostCommand({ ...offCommand, hostToken })).rejects.toMatchObject({
+            code: "UNAUTHORIZED",
+          });
+        }
+        snapshot = await f.service.hostCommand(offCommand);
+        expect(snapshot).toMatchObject({
+          roundId: originalRound,
+          deadline: originalDeadline,
+          answerCount: 1,
+          settings: { confidenceEnabled: false },
+        });
+        expect(snapshot.question?.confidence).toBe("off");
+        expect((await f.service.hostCommand(offCommand)).version).toBe(snapshot.version);
+        await expect(
+          f.service.hostCommand({ ...offCommand, commandId: randomUUID() }),
+        ).rejects.toMatchObject({ code: "STALE_VERSION" });
+        expect(
+          updates.mock.calls.at(-1)?.[0].events.map((event: { type: string }) => event.type),
+        ).toEqual(["session.snapshot"]);
+        const staleConfidence = {
+          ...missingConfidence,
+          participantToken: f.participantInputs[1]!.token,
+          confidence: 3 as const,
+          idempotencyKey: randomUUID(),
+        };
+        const accepted = await f.service.answer(staleConfidence);
+        expect(accepted).toMatchObject({ accepted: true, duplicate: false });
+        expect(await f.service.answer(staleConfidence)).toMatchObject({
+          ...accepted,
+          duplicate: true,
+        });
+        snapshot = await f.service.snapshot({
+          sessionId: f.sessionId,
+          hostToken: f.hostToken,
+          role: "host",
+        });
+        snapshot = await f.service.hostCommand({
+          ...offCommand,
+          hostToken: cohostToken,
+          confidenceEnabled: true,
+          commandId: randomUUID(),
+          expectedVersion: snapshot.version,
+        });
+        expect(snapshot).toMatchObject({
+          roundId: originalRound,
+          deadline: originalDeadline,
+          answerCount: 2,
+          settings: { confidenceEnabled: true },
+        });
+        expect(snapshot.question?.confidence).toBe("optional");
+        expect(await f.service.answer(staleConfidence)).toMatchObject({
+          ...accepted,
+          duplicate: true,
+        });
+        expect(
+          await f.service.answer({
+            ...staleConfidence,
+            participantToken: f.participantInputs[2]!.token,
+            idempotencyKey: randomUUID(),
+          }),
+        ).toMatchObject({ accepted: true });
+        restoredService = new SessionService(
+          f.repository,
+          new MemorySessionCache(),
+          config,
+          new MetricsService(),
+        );
+        for (const role of ["host", "presenter", "participant"] as const) {
+          const restored = await restoredService.snapshot({
+            sessionId: f.sessionId,
+            role,
+            ...(role === "participant"
+              ? { participantToken: f.participantInputs[1]!.token }
+              : { hostToken: role === "host" ? f.hostToken : presenterToken }),
+          });
+          expect(restored).toMatchObject({
+            roundId: originalRound,
+            deadline: originalDeadline,
+            answerCount: 3,
+            settings: { confidenceEnabled: true },
+          });
+          expect(restored.question?.confidence).toBe("optional");
+          if (role === "participant") expect(restored.myConfidence).toBeNull();
+        }
+        const saved = await f.repository.getSessionById(f.sessionId);
+        expect(saved?.state.quiz.questions[0]!.confidence).toBe("required");
+        for (const participant of f.participantInputs) {
+          expect(saved?.state.participants[participant.id]?.score).toBe(1_000);
+        }
+        expect(
+          Object.values(saved!.state.answers)
+            .map((answer) => answer.confidence)
+            .sort(),
+        ).toEqual([3, null, null].sort());
+      } finally {
+        unsubscribe();
+        restoredService?.close();
+        f.service.close();
+      }
+    },
+  );
+
+  it("retains chosen nicknames through persistence and resume, with a generated fallback", async () => {
+    const { repository, service, creator, quizId } = await hostedRoundFixture();
+    try {
+      const hosted = await service.createSession(creator, quizId, {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      });
+      const chosen = await service.join({ code: hosted.code, nickname: "  My chosen name  " });
+      expect(chosen.snapshot.participants).toContainEqual(
+        expect.objectContaining({ id: chosen.participantId, nickname: "My chosen name" }),
+      );
+      const fallback = await service.join({ code: hosted.code });
+      const fallbackName = fallback.snapshot.participants.find(
+        (participant) => participant.id === fallback.participantId,
+      )?.nickname;
+      expect(fallbackName).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+      expect(await repository.getParticipants(hosted.sessionId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: chosen.participantId, nickname: "My chosen name" }),
+          expect.objectContaining({ id: fallback.participantId, nickname: fallbackName }),
+        ]),
+      );
+      const resumed = await service.join({
+        code: hosted.code,
+        resumeToken: chosen.participantToken,
+      });
+      expect(resumed.snapshot.participants).toContainEqual(
+        expect.objectContaining({ id: chosen.participantId, nickname: "My chosen name" }),
+      );
+      await expect(service.join({ code: hosted.code, nickname: "admin" })).rejects.toMatchObject({
+        code: "NICKNAME_REJECTED",
+      });
+      const duplicate = await service.join({ code: hosted.code, nickname: "My chosen name" });
+      expect(duplicate.snapshot.participants).toContainEqual(
+        expect.objectContaining({ id: duplicate.participantId, nickname: "My chosen name 2" }),
+      );
+    } finally {
+      service.close();
+    }
+  });
+
+  it("keeps an explicit friendly-only room restricted to generated nicknames", async () => {
+    const { repository, service, creator, quizId } = await hostedRoundFixture();
+    try {
+      const hosted = await service.createSession(creator, quizId, {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "friendly_only",
+      });
+      expect(await service.preflightJoin({ code: hosted.code })).toMatchObject({
+        nicknamePolicy: "friendly_only",
+      });
+      const joined = await service.join({ code: hosted.code, nickname: "Must not be used" });
+      const participant = (await repository.getParticipants(hosted.sessionId)).find(
+        (entry) => entry.id === joined.participantId,
+      );
+      expect(participant?.nickname).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+      expect(participant?.nickname).not.toBe("Must not be used");
+    } finally {
+      service.close();
+    }
+  });
+
   // Five real scrypt derivations exercise exact-password and resume boundaries on shared CI CPUs.
   it("gates protected creation and keeps password admission frozen across downgrade and resume", async () => {
     const { repository, service, creator, quizId } = await hostedRoundFixture();

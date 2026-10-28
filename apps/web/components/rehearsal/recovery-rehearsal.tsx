@@ -239,6 +239,7 @@ export function ActiveRehearsal({
         : t("reportRound.rehearsal.command.revote");
     }
     if (command.action === "response.moderate") return "Moderate response";
+    if (command.action === "confidence.set") return t("delivery.builder.confidence");
     return t(`reportRound.rehearsal.command.${command.action}`);
   };
   const displayPhaseLabel = t(`reportRound.rehearsal.phase.${step.id}`);

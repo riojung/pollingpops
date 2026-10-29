@@ -75,6 +75,9 @@ const english = {
   "customer.billing.statusUnavailable":
     "Billing details are unavailable. Reload billing to manage or recover your subscription.",
   "customer.billing.statusRetry": "Reload billing",
+  "customer.signin.pinRecoveryTitle": "Request a sign-in PIN",
+  "customer.signin.pinRecoveryDescription":
+    "Your sign-in request is saved. Send a new PIN when the retry timer is ready, or use another email.",
 } as const;
 
 const copy: Record<SupportedLocale, readonly string[]> = {
@@ -141,6 +144,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Chargement des informations de facturation…",
     "Les informations de facturation sont indisponibles. Rechargez-les pour gérer ou rétablir votre abonnement.",
     "Recharger la facturation",
+    "Demander un code de connexion",
+    "Votre demande de connexion est enregistrée. Envoyez un nouveau code à la fin du délai, ou utilisez une autre adresse e-mail.",
   ],
   "de-DE": [
     "Einstellungskategorien",
@@ -204,6 +209,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Abrechnungsdetails werden geladen…",
     "Die Abrechnungsdetails sind nicht verfügbar. Laden Sie sie erneut, um Ihr Abonnement zu verwalten oder wiederherzustellen.",
     "Abrechnung neu laden",
+    "Anmelde-PIN anfordern",
+    "Ihre Anmeldeanfrage ist gespeichert. Fordern Sie nach Ablauf der Wartezeit eine neue PIN an oder verwenden Sie eine andere E-Mail-Adresse.",
   ],
   "es-ES": [
     "Categorías de ajustes",
@@ -267,6 +274,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Cargando datos de facturación…",
     "Los datos de facturación no están disponibles. Vuelve a cargarlos para gestionar o recuperar tu suscripción.",
     "Recargar facturación",
+    "Solicitar un PIN de acceso",
+    "Tu solicitud de acceso está guardada. Envía un nuevo PIN cuando termine la espera o utiliza otro correo.",
   ],
   "it-IT": [
     "Categorie delle impostazioni",
@@ -330,6 +339,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Caricamento dei dettagli di fatturazione…",
     "I dettagli di fatturazione non sono disponibili. Ricaricali per gestire o ripristinare l’abbonamento.",
     "Ricarica la fatturazione",
+    "Richiedi un PIN di accesso",
+    "La richiesta di accesso è salvata. Invia un nuovo PIN al termine dell’attesa oppure usa un’altra email.",
   ],
   "pt-PT": [
     "Categorias de definições",
@@ -393,6 +404,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "A carregar os dados de faturação…",
     "Os dados de faturação não estão disponíveis. Recarregue-os para gerir ou recuperar a sua subscrição.",
     "Recarregar faturação",
+    "Pedir um PIN de início de sessão",
+    "O seu pedido de início de sessão está guardado. Envie um novo PIN quando terminar o tempo de espera ou utilize outro email.",
   ],
   "ja-JP": [
     "設定カテゴリ",
@@ -456,6 +469,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "請求情報を読み込み中…",
     "請求情報を取得できません。再読み込みして、サブスクリプションを管理または復旧してください。",
     "請求情報を再読み込み",
+    "サインイン用PINをリクエスト",
+    "サインインのリクエストは保存されています。待機時間が終了したら新しいPINを送信するか、別のメールアドレスを使用してください。",
   ],
   "ko-KR": [
     "설정 카테고리",
@@ -519,6 +534,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "결제 정보를 불러오는 중…",
     "결제 정보를 사용할 수 없습니다. 구독을 관리하거나 복구하려면 결제 정보를 다시 불러오세요.",
     "결제 정보 다시 불러오기",
+    "로그인 PIN 요청",
+    "로그인 요청이 저장되었습니다. 대기 시간이 끝나면 새 PIN을 보내거나 다른 이메일을 사용하세요.",
   ],
   "zh-CN": [
     "设置类别",
@@ -582,6 +599,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "正在加载账单信息…",
     "账单信息暂不可用。请重新加载账单，以管理或恢复订阅。",
     "重新加载账单",
+    "请求登录 PIN",
+    "登录请求已保存。请在倒计时结束后发送新 PIN，或使用其他邮箱。",
   ],
   "zh-TW": [
     "設定類別",
@@ -645,6 +664,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "正在載入帳單資訊…",
     "帳單資訊暫時無法取得。請重新載入帳單，以管理或恢復訂閱。",
     "重新載入帳單",
+    "要求登入 PIN",
+    "登入要求已儲存。請在倒數結束後傳送新 PIN，或使用其他電子郵件。",
   ],
 };
 

@@ -189,14 +189,15 @@ for (const backend of ["memory", "postgres"] as const) {
       it("serializes separate verification links for the same mailbox without duplicating the account", async () => {
         const email = `concurrent-verification-${randomUUID()}@example.test`;
         const tokens = [hash(randomUUID()), hash(randomUUID())];
+        const segments = ["workplace", "education"] as const;
         await Promise.all(
-          tokens.map((tokenHash) =>
+          tokens.map((tokenHash, index) =>
             repository.createMagicToken({
               id: randomUUID(),
               tokenHash,
-              email,
-              segment: "workplace",
-              policyVersion: "concurrent",
+              email: index === 0 ? email : ` ${email.toUpperCase()} `,
+              segment: segments[index]!,
+              policyVersion: `concurrent-${index}`,
               expiresAt: new Date(Date.now() + 60_000),
               consumedAt: null,
             }),
@@ -208,6 +209,62 @@ for (const backend of ["memory", "postgres"] as const) {
         expect(identities[0]?.user.userId).toBeDefined();
         expect(identities[1]?.user.userId).toBe(identities[0]!.user.userId);
         expect(identities[1]?.creator?.workspaceId).toBe(identities[0]!.creator!.workspaceId);
+        expect(identities.map((identity) => identity?.newlyVerified).sort()).toEqual([false, true]);
+        const initialIndex = identities.findIndex((identity) => identity?.newlyVerified);
+        const identity = identities[initialIndex]!;
+        expect(identity?.user.email).toBe(email);
+        expect(await repository.listWorkspaces(identity!.user.userId)).toEqual([
+          expect.objectContaining({
+            id: identity!.creator!.workspaceId,
+            segment: segments[initialIndex],
+            role: "owner",
+          }),
+        ]);
+        expect((await repository.exportAccount(identity!.user.userId)).consentRecords).toEqual([
+          expect.objectContaining({
+            [backend === "memory" ? "documentVersion" : "document_version"]:
+              `concurrent-${initialIndex}`,
+          }),
+          expect.objectContaining({
+            [backend === "memory" ? "documentVersion" : "document_version"]:
+              `concurrent-${initialIndex}`,
+          }),
+        ]);
+      });
+
+      it("acknowledges a verified mailbox without changing its workspace, locale, plan, verification marker or consent", async () => {
+        const platform = createPlatformRepository(repository);
+        await repository.setPlan(creator.workspaceId, "pro");
+        await repository.updateUserLocale(creator.userId, "ja-JP");
+        await platform.renameWorkspace(creator.workspaceId, creator.userId, "Configured workspace");
+        const before = await repository.exportAccount(creator.userId);
+        const tokenHash = hash(randomUUID());
+        await repository.createMagicToken({
+          id: randomUUID(),
+          tokenHash,
+          email: ` ${creator.email.toUpperCase()} `,
+          segment: "workplace",
+          policyVersion: "untrusted-repeat-policy",
+          expiresAt: new Date(Date.now() + 60000),
+          consumedAt: null,
+        });
+        const result = await repository.consumeMagicLinkIdentity(tokenHash, new Date());
+        expect(result).toMatchObject({
+          newlyVerified: false,
+          user: { userId: creator.userId, locale: "ja-JP", localePreferenceSet: true },
+          creator: {
+            workspaceId: creator.workspaceId,
+            segment: "education",
+            plan: "pro",
+            role: "owner",
+          },
+        });
+        const after = await repository.exportAccount(creator.userId);
+        expect(after.profile).toEqual(before.profile);
+        expect(after.workspaces).toEqual(before.workspaces);
+        expect(after.workspaceMemberships).toEqual(before.workspaceMemberships);
+        expect(after.consentRecords).toEqual(before.consentRecords);
+        expect(await repository.consumeMagicLinkIdentity(tokenHash, new Date())).toBeNull();
       });
 
       it.skipIf(backend !== "postgres").each(["deleteAccount", "deleteUserIdentity"] as const)(

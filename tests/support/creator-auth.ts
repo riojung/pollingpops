@@ -57,6 +57,12 @@ async function debugCredential(response: Response, field: "debugUrl" | "debugPin
   return result[field] as string;
 }
 
+async function waitForEmailAccess(page: Page) {
+  const address = page.getByRole("textbox", { name: "Email address", exact: true });
+  const anotherEmail = page.getByRole("button", { name: "Use another email", exact: true });
+  await expect(address.or(anotherEmail).first()).toBeEnabled();
+}
+
 export async function verifyCreatorEmail(
   page: Page,
   email: string,
@@ -64,7 +70,11 @@ export async function verifyCreatorEmail(
 ) {
   await page.context().clearCookies({ name: "openround_creator" });
   await page.goto(signinPath(options));
-  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await waitForEmailAccess(page);
+  const createAccount = page.getByRole("button", { name: "Create account", exact: true });
+  if (!(await createAccount.isVisible()))
+    await page.getByRole("button", { name: "Use another email", exact: true }).click();
+  await createAccount.click();
   const form = page.getByRole("form", { name: "Create account", exact: true });
   const segment = options.segment ?? "workplace";
   const segmentChoice = form.getByRole("button", {
@@ -117,8 +127,13 @@ export async function requestCreatorPin(
   const remainingCooldown = (pinCooldowns.get(key) ?? 0) - Date.now();
   if (remainingCooldown > 0) await waitForCooldown(remainingCooldown);
   // A verification redirect never submits this separate sign-in request.
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await waitForEmailAccess(page);
+  const emailAddress = page.getByRole("textbox", { name: "Email address", exact: true });
+  if (!(await emailAddress.isVisible()))
+    await page.getByRole("button", { name: "Use another email", exact: true }).click();
   const form = page.getByRole("form", { name: "Sign in by email", exact: true });
+  if (!(await form.isVisible()))
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await form.getByLabel("Email address").fill(email);
   await acceptCreatorPolicies(page);
   const sendPin = form.getByRole("button", { name: "Send sign-in PIN", exact: true });

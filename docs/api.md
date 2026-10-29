@@ -366,11 +366,14 @@ counts under the bounded `product_event` resource label.
 ## Authentication, workspaces, and account
 
 - `POST /v1/auth/email-verification` — `{email, segment, acceptPolicies: true, returnTo?}`;
-  sends a single-use 15-minute verification link. No account or session is created on request.
+  sends a single-use 15-minute verification link for an unverified address. Already verified
+  addresses receive the same hosted 202 response without another verification email, token, PIN,
+  or account change. No account or session is created on request.
 - `POST /v1/auth/magic-link` — compatibility alias for email verification; never signs in.
 - `GET /v1/auth/verify?token=...` — verifies/provisions the free identity, then redirects to
   `/signin?verified=1&returnTo=...` without setting a session cookie. Invalid, expired, and reused
-  verification links return 400.
+  verification links return 400. A different outstanding link for an already verified identity
+  acknowledges verification without changing its profile, workspace, plan, segment, or consent.
 - `POST /v1/auth/pin/request` — `{email, acceptPolicies: true, returnTo?, workspaceId?}`;
   returns 202 `{accepted, challengeId, expiresInSeconds: 600, resendAfterSeconds: 60}` with a
   server-issued challenge handle. Only verified active identities receive an email;
@@ -423,9 +426,12 @@ uses owner/admin `PATCH /v1/organizations/{id}` with `{name}`. Membership/seat r
 organization content and invalidates its selected content context until the user explicitly
 chooses an accessible workspace.
 
-Successful PIN sign-in defaults to `/home`. Verification without an explicit local `returnTo`
-forwards `/home?welcome=1` to the sign-in page. Safe explicit return paths are preserved, and
+Successful PIN sign-in defaults to `/home`. First verification without an explicit local `returnTo`
+forwards `/home?welcome=1` to the sign-in page; an already verified identity defaults to `/home`.
+Safe explicit return paths are preserved, and
 accepted invitations retain their selected workspace and use `/home?invitation=accepted`.
+Without an explicit return path, signup uses the account type selected at submission; switching
+from Organization to Personal does not retain the organization setup default.
 Principals without a workspace continue to `/organization`. Locale preferences may add the
 existing `/auth/locale` bridge before the destination.
 
@@ -447,6 +453,13 @@ server-issued handle only after its 202 response arrives. Accepted request metad
 the current tab so a refresh can restore PIN entry; PIN digits are never stored. A denied resend
 preserves the existing accepted request. If the first request's response is lost before its handle
 is received, wait for the cooldown and request a new PIN.
+
+Verified-email and PIN stages show only sign-in or recovery actions; account creation and mode
+switches are available only at the initial email stage. **Use another email** explicitly resets
+that stage without losing the safe destination. Separate, bounded tab-only presentation metadata
+keeps verified/recovery screens stable on refresh without storing a PIN or inventing an accepted
+challenge. Without an accepted or in-flight challenge, the recovery screen hides unusable PIN
+submission controls and offers the appropriate cooldown/resend action.
 
 Owners manage members, billing, and workspace deletion. Editors create and host. Viewers have
 read-only content/report access. Account export excludes bearer-token hashes and includes

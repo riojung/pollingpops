@@ -1,4 +1,4 @@
-import { verifyEmailAndSignIn } from "./support/email-auth.js";
+import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -471,23 +471,7 @@ describe("customer organization administration", () => {
         .statusCode,
     ).toBe(401);
     vi.advanceTimersByTime(61_000);
-    const freshMagic = await app.inject({
-      method: "POST",
-      url: "/v1/auth/magic-link",
-      payload: {
-        email: "organization-finance@example.com",
-        segment: "workplace",
-        acceptPolicies: true,
-      },
-    });
-    const freshToken = new URL(freshMagic.json<{ debugUrl: string }>().debugUrl).searchParams.get(
-      "token",
-    )!;
-    const freshVerified = await verifyEmailAndSignIn(
-      app,
-      `/v1/auth/verify?token=${freshToken}`,
-      "organization-finance@example.com",
-    );
+    const freshVerified = await requestPinAndSignIn(app, "organization-finance@example.com");
     expect(freshVerified.statusCode).toBe(200);
     expect(freshVerified.json().redirectTo).toBe("http://localhost:3000/organization");
     const freshCookies = freshVerified.headers["set-cookie"]!;

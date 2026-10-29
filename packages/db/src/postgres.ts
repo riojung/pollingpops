@@ -1353,7 +1353,14 @@ export class PostgresRepository implements Repository {
     await this.systemQuery(
       `INSERT INTO auth_magic_tokens (id, email, segment, token_hash, policy_version, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [input.id, input.email, input.segment, input.tokenHash, input.policyVersion, input.expiresAt],
+      [
+        input.id,
+        input.email.trim().toLowerCase(),
+        input.segment,
+        input.tokenHash,
+        input.policyVersion,
+        input.expiresAt,
+      ],
     );
   }
 
@@ -1370,7 +1377,7 @@ export class PostgresRepository implements Repository {
            WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > $2`,
           [tokenHash, now],
         );
-        const email = candidate.rows[0]?.email;
+        const email = candidate.rows[0]?.email.trim().toLowerCase();
         if (!email) return null;
 
         // Different verification links for one mailbox must provision only one identity.
@@ -1379,7 +1386,7 @@ export class PostgresRepository implements Repository {
         ]);
 
         let userResult = await client.query(
-          "SELECT id, email FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL FOR UPDATE",
+          "SELECT id, email, email_verified_at FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL FOR UPDATE",
           [email],
         );
         const tokenResult = await client.query(
@@ -1411,9 +1418,14 @@ export class PostgresRepository implements Repository {
 
         // A deletion that completed while we waited also removed the token above. Only a
         // still-valid credential may provision a new identity when no active user exists.
-        let user = userResult.rows[0] as { id: string; email: string } | undefined;
+        let user = userResult.rows[0] as
+          { id: string; email: string; email_verified_at?: Date | null } | undefined;
+        if (user?.email_verified_at) {
+          const identity = await this.verifiedEmailIdentityForClient(client, user.id);
+          return identity ? { ...identity, newlyVerified: false } : null;
+        }
         if (!user) {
-          user = { id: randomUUID(), email: token.email };
+          user = { id: randomUUID(), email };
           await client.query(
             "INSERT INTO users (id, email, email_verified_at) VALUES ($1, $2, $3)",
             [user.id, user.email, checkedAt],
@@ -1422,7 +1434,7 @@ export class PostgresRepository implements Repository {
           await client.query(
             `INSERT INTO workspaces (id, name, segment, owner_id, retention_days)
            VALUES ($1, $2, $3, $4, 30)`,
-            [workspaceId, `${token.email.split("@")[0]}'s workspace`, token.segment, user.id],
+            [workspaceId, `${email.split("@")[0]}'s workspace`, token.segment, user.id],
           );
           await client.query(
             "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
@@ -1493,6 +1505,7 @@ export class PostgresRepository implements Repository {
             localePreferenceSet: Boolean(principal.locale_explicit),
           },
           creator,
+          newlyVerified: true,
         };
       },
       { system: true },

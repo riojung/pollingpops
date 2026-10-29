@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PIN_RESUME_STORAGE_KEY,
+  SIGNIN_INTENT_STORAGE_KEY,
   clearPinEntry,
   readPinEntry,
   savePinEntry,
+  clearSignInIntent,
+  readSignInIntent,
+  saveSignInIntent,
   type PinEntry,
 } from "./signin-pin";
 
@@ -29,6 +33,87 @@ beforeEach(() => {
       setItem: (key: string, value: string) => values.set(key, value),
       removeItem: (key: string) => values.delete(key),
     },
+  });
+});
+
+describe("bounded sign-in presentation intent", () => {
+  it("keeps verification guidance independent from an accepted challenge", () => {
+    saveSignInIntent({ step: "verified", context }, now);
+    expect(readSignInIntent(context, now)).toEqual({ step: "verified", context });
+    expect(readPinEntry(context, now)).toBeNull();
+    expect(readSignInIntent(context, now + 900_001)).toBeNull();
+  });
+
+  it("restores a no-handle recovery countdown without storing a PIN, challenge, or session credential", () => {
+    const pending = {
+      ...entry(),
+      step: "pin" as const,
+      challenge: { challengeId: "secret-handle" },
+      delivery: "requesting" as const,
+      pin: "012345",
+      debugPin: "654321",
+      cookie: "secret-cookie",
+    };
+    saveSignInIntent(pending, now);
+    const raw = values.get(SIGNIN_INTENT_STORAGE_KEY)!;
+    expect(raw).not.toMatch(/012345|654321|secret-handle|secret-cookie|challenge|cookie|debugPin/);
+    expect(readSignInIntent(context, now + 30_000)).toEqual({
+      step: "pin",
+      email: pending.email,
+      context,
+      delivery: "uncertain",
+      resendAt: now + 60_000,
+    });
+    expect(readPinEntry(context, now)).toBeNull();
+  });
+
+  it("binds presentation intent to the API, safe return path and invitation workspace", () => {
+    for (const other of [
+      { ...context, apiUrl: "http://127.0.0.1:4200" },
+      { ...context, returnTo: "/account/setup?type=organization" },
+      { ...context, workspaceId: "00000000-0000-4000-8000-000000000002" },
+    ]) {
+      saveSignInIntent({ step: "verified", context }, now);
+      expect(readSignInIntent(other, now)).toBeNull();
+      expect(values.has(SIGNIN_INTENT_STORAGE_KEY)).toBe(false);
+    }
+    const unsafe = { ...context, returnTo: "//outside.example" };
+    saveSignInIntent({ step: "verified", context: unsafe }, now);
+    expect(readSignInIntent(unsafe, now)).toBeNull();
+  });
+
+  it("rejects malformed, expired and unbounded UI metadata", () => {
+    saveSignInIntent({ step: "pin", ...entry() }, now);
+    const original = JSON.parse(values.get(SIGNIN_INTENT_STORAGE_KEY)!);
+    for (const value of [
+      { ...original, expiresAt: now + 900_001 },
+      { ...original, expiresAt: now },
+      { ...original, resendAt: now + 900_001 },
+      { ...original, delivery: "invented" },
+      { ...original, email: "invalid" },
+    ]) {
+      values.set(SIGNIN_INTENT_STORAGE_KEY, JSON.stringify(value));
+      expect(readSignInIntent(context, now)).toBeNull();
+    }
+    values.set(SIGNIN_INTENT_STORAGE_KEY, "invalid-json");
+    expect(readSignInIntent(context, now)).toBeNull();
+  });
+
+  it("clears on explicit reset and tolerates unavailable session storage", () => {
+    saveSignInIntent({ step: "verified", context }, now);
+    clearSignInIntent();
+    expect(readSignInIntent(context, now)).toBeNull();
+    vi.stubGlobal("window", {
+      get sessionStorage() {
+        throw new Error("Blocked");
+      },
+    });
+    expect(() => saveSignInIntent({ step: "verified", context }, now)).not.toThrow();
+    expect(() => clearSignInIntent()).not.toThrow();
+    expect(readSignInIntent(context, now)).toBeNull();
+    vi.stubGlobal("window", undefined);
+    expect(readSignInIntent(context, now)).toBeNull();
+    expect(() => saveSignInIntent({ step: "verified", context }, now)).not.toThrow();
   });
 });
 afterEach(() => vi.unstubAllGlobals());

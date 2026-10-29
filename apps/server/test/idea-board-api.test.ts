@@ -1,4 +1,4 @@
-import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
+import { signInFromVerificationResponse, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,8 +27,7 @@ async function signIn(app: FastifyInstance, email = "board-owner@example.com") {
     url: "/v1/auth/magic-link",
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
-  const token = new URL(magic.json().debugUrl).searchParams.get("token");
-  const verified = await verifyEmailAndSignIn(app, `/v1/auth/verify?token=${token}`, email);
+  const verified = await signInFromVerificationResponse(app, magic, email);
   return { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
 }
 async function fixture(

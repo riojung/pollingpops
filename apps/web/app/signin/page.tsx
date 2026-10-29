@@ -12,7 +12,16 @@ import { Brand } from "../../components/brand";
 import { useLocale } from "../../components/locale-provider";
 import { LocalizedPolicyConsent } from "../../components/localized-policy-consent";
 import { API_URL, apiFetch, humanError, type ApiClientError } from "../../lib/api";
-import { clearPinEntry, readPinEntry, savePinEntry, type PinEntry } from "../../lib/signin-pin";
+import {
+  clearPinEntry,
+  clearSignInIntent,
+  readPinEntry,
+  readSignInIntent,
+  savePinEntry,
+  saveSignInIntent,
+  type PinContext,
+  type PinEntry,
+} from "../../lib/signin-pin";
 import { resolveSignInEnvironment, type SignInEnvironment } from "../../lib/signin-environment";
 import {
   LogoutWarningNotice,
@@ -27,6 +36,26 @@ interface PinRequestResponse {
   challengeId: string;
   expiresInSeconds: number;
   resendAfterSeconds: number;
+}
+
+function updateSignInLocation(
+  context: PinContext,
+  mode: "signin" | "signup",
+  consumeVerified = true,
+) {
+  const address = new URL(window.location.href);
+  if (mode === "signup") address.searchParams.set("mode", mode);
+  else address.searchParams.delete("mode");
+  if (consumeVerified) address.searchParams.delete("verified");
+  if (context.returnTo) address.searchParams.set("returnTo", context.returnTo);
+  else address.searchParams.delete("returnTo");
+  if (context.workspaceId) address.searchParams.set("workspaceId", context.workspaceId);
+  else address.searchParams.delete("workspaceId");
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${address.pathname}${address.search}${address.hash}`,
+  );
 }
 
 export default function SignInPage() {
@@ -53,6 +82,7 @@ export default function SignInPage() {
   const [now, setNow] = useState(0);
   const [pinInvalid, setPinInvalid] = useState(false);
   const requestVersion = useRef(0);
+  const stage = useRef<EmailFlow["step"] | "verified">("email");
   const emailInput = useRef<HTMLInputElement>(null);
   const pinInput = useRef<HTMLInputElement>(null);
   const verificationNotice = useRef<HTMLDivElement>(null);
@@ -69,33 +99,49 @@ export default function SignInPage() {
     setHydrated(true);
     const query = new URLSearchParams(window.location.search);
     const requestedSignup = query.get("mode") === "signup";
-    if (requestedSignup) {
-      setMode("signup");
-      setAccountType(query.get("accountType") === "organization" ? "organization" : "personal");
-    }
+    const requestedAccountType =
+      query.get("accountType") === "organization" ? "organization" : "personal";
+    setAccountType(requestedAccountType);
     const requestedWorkspace = OidcStartSchema.shape.workspaceId.safeParse(
       query.get("workspaceId"),
     );
     const requestedReturn = LocalReturnPathSchema.safeParse(query.get("returnTo"));
     const localReturn = requestedReturn.success ? requestedReturn.data : undefined;
-    if (localReturn) setReturnTo(localReturn);
+    const context: PinContext = {
+      apiUrl: API_URL,
+      ...(localReturn ? { returnTo: localReturn } : {}),
+      ...(requestedWorkspace.success ? { workspaceId: requestedWorkspace.data } : {}),
+    };
     const isVerificationLanding = query.get("verified") === "1";
-    if (isVerificationLanding || requestedSignup) clearPinEntry();
-    const restored =
-      isVerificationLanding || requestedSignup
-        ? null
-        : readPinEntry({
-            apiUrl: API_URL,
-            ...(localReturn ? { returnTo: localReturn } : {}),
-            ...(requestedWorkspace.success ? { workspaceId: requestedWorkspace.data } : {}),
-          });
+    if (isVerificationLanding) {
+      clearPinEntry();
+      clearSignInIntent();
+      saveSignInIntent({ step: "verified", context });
+    }
+    const restored = isVerificationLanding ? null : readPinEntry(context);
+    const intent = readSignInIntent(context);
+    const knownVerification = isVerificationLanding || intent?.step === "verified";
+    // Keep explicit destinations separate from the account choice's signup default.
+    setReturnTo(localReturn ?? null);
     if (restored) {
       setFlow({ step: "pin", ...restored });
       setEmail(restored.email);
       setAcceptPolicies(true);
       setNow(Date.now());
+    } else if (intent?.step === "pin") {
+      setFlow({ ...intent, challenge: null });
+      setEmail(intent.email);
+      setAcceptPolicies(true);
+      setNow(Date.now());
     }
-    setVerified(isVerificationLanding);
+    setMode(
+      restored || intent || knownVerification ? "signin" : requestedSignup ? "signup" : "signin",
+    );
+    setVerified(knownVerification);
+    stage.current =
+      restored || intent?.step === "pin" ? "pin" : knownVerification ? "verified" : "email";
+    if (restored || intent || knownVerification)
+      updateSignInLocation(context, "signin", !knownVerification);
     if (!requestedWorkspace.success) return;
     setWorkspaceId(requestedWorkspace.data);
     apiFetch<OidcStatus>(
@@ -128,15 +174,24 @@ export default function SignInPage() {
 
   useEffect(() => {
     if (!hydrated || verifyingPin || federatedBusy) return;
-    if (flow.step === "pin") pinInput.current?.focus();
-    else if (sending) return;
+    if (flow.step === "pin") {
+      if (flow.challenge || flow.delivery === "requesting") pinInput.current?.focus();
+      else verificationNotice.current?.focus();
+    } else if (sending) return;
     else if (flow.step === "verification-sent" || verified) verificationNotice.current?.focus();
     else emailInput.current?.focus();
   }, [flow, hydrated, mode, sending, verifyingPin, federatedBusy, verified, error]);
 
   function changeMode(nextMode: "signin" | "signup") {
+    if (stage.current !== "email" || verified || flow.step !== "email") return;
+    beginEmailStage(nextMode, false);
+  }
+
+  function beginEmailStage(nextMode: "signin" | "signup", anotherIdentity: boolean) {
     requestVersion.current += 1;
+    stage.current = "email";
     clearPinEntry();
+    clearSignInIntent();
     setSending(false);
     setMode(nextMode);
     setFlow({ step: "email" });
@@ -145,26 +200,33 @@ export default function SignInPage() {
     setError("");
     setAcceptPolicies(false);
     setVerified(false);
+    if (anotherIdentity) setEmail("");
+    updateSignInLocation(
+      {
+        apiUrl: API_URL,
+        ...(returnTo ? { returnTo } : {}),
+        ...(workspaceId ? { workspaceId } : {}),
+      },
+      nextMode,
+    );
   }
 
   function commitPinEntry(entry: PinEntry) {
+    stage.current = "pin";
     setFlow({ step: "pin", ...entry });
     savePinEntry(entry);
+    saveSignInIntent({
+      step: "pin",
+      email: entry.email,
+      context: entry.context,
+      delivery: entry.delivery,
+      resendAt: entry.resendAt,
+    });
   }
 
   async function requestPin(submittedEmail: string, previous?: PinEntry) {
-    // Consume this one-time notice before accepting a new challenge, so a later
-    // reload can resume that challenge instead of resetting it again.
-    const address = new URL(window.location.href);
-    if (address.searchParams.has("verified")) {
-      address.searchParams.delete("verified");
-      window.history.replaceState(
-        window.history.state,
-        "",
-        `${address.pathname}${address.search}${address.hash}`,
-      );
-    }
     setVerified(false);
+    setMode("signin");
     const startedAt = Date.now();
     const version = ++requestVersion.current;
     const oldChallenge =
@@ -181,6 +243,7 @@ export default function SignInPage() {
       delivery: "requesting",
       resendAt: startedAt + 60_000,
     };
+    updateSignInLocation(entry.context, "signin");
     setSending(true);
     setError("");
     setPinInvalid(false);
@@ -238,13 +301,22 @@ export default function SignInPage() {
 
   async function submitEmail(event: FormEvent) {
     event.preventDefault();
-    if (!hydrated || !acceptPolicies || pending) return;
+    if (
+      !hydrated ||
+      !acceptPolicies ||
+      pending ||
+      flow.step !== "email" ||
+      (stage.current !== "email" && stage.current !== "verified")
+    )
+      return;
     const submittedEmail = email.trim().toLowerCase();
     setError("");
-    if (mode === "signin") {
+    if (mode === "signin" || verified) {
       await requestPin(submittedEmail);
       return;
     }
+    const signupReturnTo =
+      returnTo ?? (accountType === "organization" ? "/account/setup?type=organization" : null);
     setSending(true);
     try {
       await apiFetch("/v1/auth/email-verification", {
@@ -253,11 +325,12 @@ export default function SignInPage() {
           email: submittedEmail,
           segment,
           acceptPolicies,
-          ...(returnTo || accountType === "organization"
-            ? { returnTo: returnTo ?? "/account/setup?type=organization" }
-            : {}),
+          ...(signupReturnTo ? { returnTo: signupReturnTo } : {}),
         }),
       });
+      // Sign-in continuation must keep the destination chosen for this signup.
+      setReturnTo(signupReturnTo);
+      stage.current = "verification-sent";
       setFlow({ step: "verification-sent", email: submittedEmail });
     } catch (caught) {
       setError(humanError(caught));
@@ -276,6 +349,7 @@ export default function SignInPage() {
     event.preventDefault();
     if (
       flow.step !== "pin" ||
+      stage.current !== "pin" ||
       !flow.challenge ||
       sending ||
       verifyingPin ||
@@ -293,6 +367,7 @@ export default function SignInPage() {
       });
       requestVersion.current += 1;
       clearPinEntry();
+      clearSignInIntent();
       window.location.replace(result.redirectTo);
     } catch (caught) {
       const invalid = (caught as { status?: number }).status === 401;
@@ -322,6 +397,7 @@ export default function SignInPage() {
   const resendSeconds =
     flow.step === "pin" ? Math.max(0, Math.ceil((flow.resendAt - now) / 1000)) : 0;
   const deliveryEmail = flow.step === "email" ? "" : flow.email;
+  const pinRecovery = flow.step === "pin" && !flow.challenge && flow.delivery !== "requesting";
   const pinNotice =
     flow.step !== "pin"
       ? "delivery.auth.pinSent"
@@ -335,7 +411,9 @@ export default function SignInPage() {
               : "delivery.auth.pinThrottled"
             : flow.delivery === "failed"
               ? "delivery.auth.pinDeliveryFailed"
-              : "delivery.auth.pinSent";
+              : !flow.challenge
+                ? "delivery.auth.pinExpired"
+                : "delivery.auth.pinSent";
 
   return (
     <>
@@ -349,18 +427,24 @@ export default function SignInPage() {
         <section className="join-card auth-card" aria-labelledby="signin-title">
           <p className="eyebrow">{t("delivery.auth.creatorAccess")}</p>
           <h1 id="signin-title" style={{ fontSize: "clamp(2.4rem, 8vw, 4rem)" }}>
-            {flow.step === "pin"
-              ? t("delivery.auth.pinTitle")
-              : mode === "signup"
-                ? t("delivery.auth.createAccount")
-                : t("delivery.auth.signInTitle")}
+            {pinRecovery
+              ? t("customer.signin.pinRecoveryTitle")
+              : flow.step === "pin"
+                ? t("delivery.auth.pinTitle")
+                : flow.step === "verification-sent"
+                  ? t("delivery.auth.verificationSent")
+                  : mode === "signup"
+                    ? t("delivery.auth.createAccount")
+                    : t("delivery.auth.signInTitle")}
           </h1>
           <p className="muted">
-            {flow.step === "pin"
-              ? t("delivery.auth.pinDescription")
-              : mode === "signup"
-                ? t("delivery.auth.createAccountDescription")
-                : t("delivery.auth.signInDescription")}
+            {pinRecovery
+              ? t("customer.signin.pinRecoveryDescription")
+              : flow.step === "pin"
+                ? t("delivery.auth.pinDescription")
+                : mode === "signup"
+                  ? t("delivery.auth.createAccountDescription")
+                  : t("delivery.auth.signInDescription")}
           </p>
           <LogoutWarningNotice navigation={management} />
           {verified ? (
@@ -385,29 +469,31 @@ export default function SignInPage() {
               </a>
             </div>
           ) : null}
-          <div
-            className="segmented auth-modes"
-            aria-label={t("delivery.auth.accessMode")}
-            role="group"
-          >
-            <button
-              aria-pressed={mode === "signin"}
-              disabled={!hydrated || pending}
-              onClick={() => changeMode("signin")}
-              type="button"
+          {hydrated && flow.step === "email" && !verified ? (
+            <div
+              className="segmented auth-modes"
+              aria-label={t("delivery.auth.accessMode")}
+              role="group"
             >
-              {t("delivery.auth.signInMode")}
-            </button>
-            <button
-              aria-pressed={mode === "signup"}
-              disabled={!hydrated || pending}
-              onClick={() => changeMode("signup")}
-              type="button"
-            >
-              {t("delivery.auth.createAccount")}
-            </button>
-          </div>
-          {oidcStatus?.enabled && mode === "signin" && flow.step === "email" ? (
+              <button
+                aria-pressed={mode === "signin"}
+                disabled={!hydrated || pending}
+                onClick={() => changeMode("signin")}
+                type="button"
+              >
+                {t("delivery.auth.signInMode")}
+              </button>
+              <button
+                aria-pressed={mode === "signup"}
+                disabled={!hydrated || pending}
+                onClick={() => changeMode("signup")}
+                type="button"
+              >
+                {t("delivery.auth.createAccount")}
+              </button>
+            </div>
+          ) : null}
+          {oidcStatus?.enabled && mode === "signin" && flow.step === "email" && !verified ? (
             <div className="institution-signin" lang="en-CA">
               <button
                 className="button full-width"
@@ -519,6 +605,16 @@ export default function SignInPage() {
                     ? t("delivery.auth.sendVerification")
                     : t("delivery.auth.sendPin")}
               </button>
+              {verified ? (
+                <button
+                  className="button-quiet full-width auth-status-action"
+                  disabled={pending}
+                  onClick={() => beginEmailStage("signin", true)}
+                  type="button"
+                >
+                  {t("delivery.auth.useAnotherEmail")}
+                </button>
+              ) : null}
             </form>
           ) : flow.step === "verification-sent" ? (
             <>
@@ -528,14 +624,14 @@ export default function SignInPage() {
               </div>
               <button
                 className="button full-width"
-                onClick={() => changeMode("signin")}
+                onClick={() => beginEmailStage("signin", false)}
                 type="button"
               >
                 {t("delivery.auth.signInMode")}
               </button>
               <button
                 className="button-quiet full-width auth-status-action"
-                onClick={() => changeMode("signup")}
+                onClick={() => beginEmailStage("signin", true)}
                 type="button"
               >
                 {t("delivery.auth.useAnotherEmail")}
@@ -546,91 +642,86 @@ export default function SignInPage() {
               <div
                 className={flow.delivery === "failed" ? "error" : "success"}
                 role={flow.delivery === "failed" ? "alert" : "status"}
+                ref={verificationNotice}
+                tabIndex={-1}
               >
                 {t(pinNotice, { email: flow.email, seconds: resendSeconds })}
               </div>
-              <form
-                aria-label={t("delivery.auth.verifyPinForm")}
-                aria-busy={pending}
-                onSubmit={verifyPin}
-              >
-                <div className="field">
-                  <label htmlFor="signin-pin">{t("delivery.auth.pinLabel")}</label>
-                  <input
-                    aria-describedby="signin-pin-help"
-                    aria-invalid={pinInvalid ? true : undefined}
-                    autoComplete="one-time-code"
-                    className="input auth-pin-input"
-                    disabled={verifyingPin}
-                    id="signin-pin"
-                    inputMode="numeric"
-                    maxLength={6}
-                    minLength={6}
-                    onChange={(event) => {
-                      setPin(event.target.value.replace(/\D/g, "").slice(0, 6));
-                      setPinInvalid(false);
-                    }}
-                    pattern="[0-9]{6}"
-                    ref={pinInput}
-                    required
-                    type="text"
-                    value={pin}
-                  />
-                  <p className="muted auth-pin-help" id="signin-pin-help">
-                    {t(
-                      !flow.challenge
-                        ? "delivery.auth.pinNoChallenge"
-                        : now >= flow.challenge.expiresAt
-                          ? "delivery.auth.pinExpired"
-                          : "delivery.auth.pinHelp",
-                    )}
-                  </p>
-                </div>
-                <button
-                  className="button full-width"
-                  disabled={
-                    sending ||
-                    verifyingPin ||
-                    !flow.challenge ||
-                    now >= flow.challenge.expiresAt ||
-                    !/^\d{6}$/.test(pin)
-                  }
-                  type="submit"
+              {!pinRecovery ? (
+                <form
+                  aria-label={t("delivery.auth.verifyPinForm")}
+                  aria-busy={pending}
+                  onSubmit={verifyPin}
                 >
-                  {verifyingPin ? t("delivery.auth.verifying") : t("delivery.auth.signInMode")}
+                  <div className="field">
+                    <label htmlFor="signin-pin">{t("delivery.auth.pinLabel")}</label>
+                    <input
+                      aria-describedby="signin-pin-help"
+                      aria-invalid={pinInvalid ? true : undefined}
+                      autoComplete="one-time-code"
+                      className="input auth-pin-input"
+                      disabled={verifyingPin}
+                      id="signin-pin"
+                      inputMode="numeric"
+                      maxLength={6}
+                      minLength={6}
+                      onChange={(event) => {
+                        setPin(event.target.value.replace(/\D/g, "").slice(0, 6));
+                        setPinInvalid(false);
+                      }}
+                      pattern="[0-9]{6}"
+                      ref={pinInput}
+                      required
+                      type="text"
+                      value={pin}
+                    />
+                    <p className="muted auth-pin-help" id="signin-pin-help">
+                      {t(
+                        !flow.challenge
+                          ? "delivery.auth.pinNoChallenge"
+                          : now >= flow.challenge.expiresAt
+                            ? "delivery.auth.pinExpired"
+                            : "delivery.auth.pinHelp",
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    className="button full-width"
+                    disabled={
+                      sending ||
+                      verifyingPin ||
+                      !flow.challenge ||
+                      now >= flow.challenge.expiresAt ||
+                      !/^\d{6}$/.test(pin)
+                    }
+                    type="submit"
+                  >
+                    {verifyingPin ? t("delivery.auth.verifying") : t("delivery.auth.signInMode")}
+                  </button>
+                </form>
+              ) : null}
+              <div className="button-row auth-pin-actions">
+                <button
+                  className="button-quiet"
+                  disabled={pending || resendSeconds > 0}
+                  onClick={() => void resendPin()}
+                  type="button"
+                >
+                  {sending
+                    ? t("delivery.auth.sending")
+                    : resendSeconds > 0
+                      ? t("delivery.auth.resendIn", { seconds: resendSeconds })
+                      : t("delivery.auth.resendPin")}
                 </button>
-                <div className="button-row auth-pin-actions">
-                  <button
-                    className="button-quiet"
-                    disabled={pending || resendSeconds > 0}
-                    onClick={() => void resendPin()}
-                    type="button"
-                  >
-                    {sending
-                      ? t("delivery.auth.sending")
-                      : resendSeconds > 0
-                        ? t("delivery.auth.resendIn", { seconds: resendSeconds })
-                        : t("delivery.auth.resendPin")}
-                  </button>
-                  <button
-                    className="button-quiet"
-                    disabled={verifyingPin}
-                    onClick={() => changeMode("signin")}
-                    type="button"
-                  >
-                    {t("delivery.auth.useAnotherEmail")}
-                  </button>
-                </div>
-              </form>
-              <p className="muted auth-account-help">{t("delivery.auth.needAccount")}</p>
-              <button
-                className="button-quiet full-width"
-                disabled={pending}
-                onClick={() => changeMode("signup")}
-                type="button"
-              >
-                {t("delivery.auth.createAccount")}
-              </button>
+                <button
+                  className="button-quiet"
+                  disabled={verifyingPin}
+                  onClick={() => beginEmailStage("signin", true)}
+                  type="button"
+                >
+                  {t("delivery.auth.useAnotherEmail")}
+                </button>
+              </div>
             </>
           )}
           {deliveryEmail && publicFeatures?.developmentEmailInboxUrl ? (

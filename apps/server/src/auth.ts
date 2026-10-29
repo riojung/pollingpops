@@ -45,10 +45,14 @@ export class AuthService {
   }
 
   async requestAccountVerification(email: string, segment: Segment, returnTo?: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    // Registration never restarts onboarding or issues a sign-in credential for an
+    // existing verified mailbox. The public response remains the same accepted result.
+    if (await this.repository.getVerifiedEmailIdentity(normalizedEmail)) return undefined;
     const token = opaqueToken();
     await this.repository.createMagicToken({
       id: randomUUID(),
-      email,
+      email: normalizedEmail,
       segment,
       tokenHash: hashToken(token),
       policyVersion: this.config.POLICY_VERSION,
@@ -58,7 +62,7 @@ export class AuthService {
     const verifyUrl = new URL("/v1/auth/verify", this.config.PUBLIC_API_URL);
     verifyUrl.searchParams.set("token", token);
     if (returnTo) verifyUrl.searchParams.set("returnTo", returnTo);
-    await this.mailer.sendAccountVerification(email, verifyUrl.href);
+    await this.mailer.sendAccountVerification(normalizedEmail, verifyUrl.href);
     return this.config.NODE_ENV !== "production" || this.config.AUTH_DEBUG_MAGIC_LINKS
       ? verifyUrl.href
       : undefined;

@@ -939,7 +939,9 @@ export async function registerRoutes(
     signIn.searchParams.set("verified", "1");
     signIn.searchParams.set(
       "returnTo",
-      verified.creator ? (returnTo ?? "/home?welcome=1") : "/organization",
+      verified.creator
+        ? (returnTo ?? (verified.newlyVerified ? "/home?welcome=1" : "/home"))
+        : "/organization",
     );
     return reply.redirect(signIn.href);
   });

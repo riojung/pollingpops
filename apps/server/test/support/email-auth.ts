@@ -1,6 +1,21 @@
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 
+/** Local fixtures verify new mailboxes once; verified registration requests are generic no-ops. */
+export async function signInFromVerificationResponse(
+  app: FastifyInstance,
+  registration: LightMyRequestResponse,
+  email: string,
+  headers?: InjectOptions["headers"],
+  returnTo?: string,
+): Promise<LightMyRequestResponse> {
+  expect(registration.statusCode, registration.body).toBe(202);
+  const { debugUrl } = registration.json<{ debugUrl?: string }>();
+  if (!debugUrl) return requestPinAndSignIn(app, email, returnTo, headers);
+  const url = new URL(debugUrl);
+  return verifyEmailAndSignIn(app, url.pathname + url.search, email, headers);
+}
+
 /** Exercise mailbox verification and the separate emailed PIN through public auth routes. */
 export async function verifyEmailAndSignIn(
   app: FastifyInstance,

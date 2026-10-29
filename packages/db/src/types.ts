@@ -100,6 +100,9 @@ export interface MagicLinkIdentity {
   user: UserPrincipal;
   creator: CreatorContext | null;
 }
+export interface EmailVerificationIdentity extends MagicLinkIdentity {
+  newlyVerified: boolean;
+}
 export interface EmailPinChallengeRecord {
   id: string;
   userId: string;
@@ -1109,7 +1112,7 @@ export interface Repository {
   ): Promise<OperationalFeaturesRecord>;
   createMagicToken(input: MagicTokenRecord): Promise<void>;
   consumeMagicToken(tokenHash: string, now: Date): Promise<CreatorContext | null>;
-  consumeMagicLinkIdentity(tokenHash: string, now: Date): Promise<MagicLinkIdentity | null>;
+  consumeMagicLinkIdentity(tokenHash: string, now: Date): Promise<EmailVerificationIdentity | null>;
   getVerifiedEmailIdentity(email: string): Promise<MagicLinkIdentity | null>;
   createEmailPinChallenge(input: EmailPinChallengeRecord): Promise<void>;
   consumeEmailPinChallenge(

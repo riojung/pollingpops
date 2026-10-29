@@ -1,4 +1,4 @@
-import { verifyEmailAndSignIn } from "./support/email-auth.js";
+import { requestPinAndSignIn } from "./support/email-auth.js";
 import { buildApp } from "../src/app.js";
 import { workspaceFeatureEnabled, roomFeatureEnabled } from "../src/feature-policy.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -149,17 +149,7 @@ describe("live event credit integration", () => {
       cache: new MemorySessionCache(),
     });
     try {
-      const magic = await built.app.inject({
-        method: "POST",
-        url: "/v1/auth/magic-link",
-        payload: { email: f.creator.email, segment: "workplace", acceptPolicies: true },
-      });
-      const token = new URL(magic.json().debugUrl).searchParams.get("token");
-      const verified = await verifyEmailAndSignIn(
-        built.app,
-        `/v1/auth/verify?token=${token}`,
-        f.creator.email,
-      );
+      const verified = await requestPinAndSignIn(built.app, f.creator.email);
       const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
       const account = await built.app.inject({
         method: "GET",
@@ -299,17 +289,7 @@ describe("live event credit integration", () => {
       cache: new MemorySessionCache(),
     });
     try {
-      const magic = await built.app.inject({
-        method: "POST",
-        url: "/v1/auth/magic-link",
-        payload: { email: f.creator.email, segment: "workplace", acceptPolicies: true },
-      });
-      const token = new URL(magic.json().debugUrl).searchParams.get("token");
-      const verified = await verifyEmailAndSignIn(
-        built.app,
-        `/v1/auth/verify?token=${token}`,
-        f.creator.email,
-      );
+      const verified = await requestPinAndSignIn(built.app, f.creator.email);
       const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
       const key = randomUUID();
       const create = () =>
@@ -792,17 +772,7 @@ describe("live event credit integration", () => {
         cache: new MemorySessionCache(),
       });
       try {
-        const magic = await built.app.inject({
-          method: "POST",
-          url: "/v1/auth/magic-link",
-          payload: { email: f.creator.email, segment: "workplace", acceptPolicies: true },
-        });
-        const token = new URL(magic.json().debugUrl).searchParams.get("token");
-        const verified = await verifyEmailAndSignIn(
-          built.app,
-          `/v1/auth/verify?token=${token}`,
-          f.creator.email,
-        );
+        const verified = await requestPinAndSignIn(built.app, f.creator.email);
         const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
         const service = built.presentationService;
         const create = () =>

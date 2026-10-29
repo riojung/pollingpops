@@ -1,8 +1,10 @@
+import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  ...customerAccountMessages("pt-PT"),
   "questionType.open_text.label": "Texto livre",
   "questionType.open_text.description": "Uma explicação moderada sem resposta correta.",
   "questionType.word_cloud.label": "Nuvem de palavras",

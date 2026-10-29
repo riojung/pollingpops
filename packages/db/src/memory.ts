@@ -4,6 +4,7 @@ import { upgradeGameState, type EngineAnswer } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
+import { PlatformError } from "./platform-types.js";
 import { reserveRoomCoverageInMemory, releaseRoomCoverageInMemory } from "./platform-memory.js";
 import {
   AudienceStoreError,
@@ -900,6 +901,18 @@ export class MemoryRepository implements Repository {
   }
 
   async createWorkspaceInvitation(input: WorkspaceInvitationRecord) {
+    const platform = getMemoryPlatformRepository(this);
+    const organization = await platform.getOrganizationForWorkspace(input.workspaceId);
+    if (
+      organization &&
+      ((await platform.getSubscription(organization.id)).licenseUnit ??
+        organization.licenseUnit ??
+        "workspace") === "user"
+    )
+      throw new PlatformError(
+        "ORGANIZATION_MEMBERSHIP_REQUIRED",
+        "Invite licensed users through the organization People settings",
+      );
     const duplicate = [...this.workspaceInvitations.values()].find(
       (invitation) =>
         invitation.workspaceId === input.workspaceId &&
@@ -941,6 +954,15 @@ export class MemoryRepository implements Repository {
         candidate.expiresAt > now,
     );
     if (!invitation) return null;
+    const platform = getMemoryPlatformRepository(this);
+    const organization = await platform.getOrganizationForWorkspace(invitation.workspaceId);
+    if (
+      organization &&
+      ((await platform.getSubscription(organization.id)).licenseUnit ??
+        organization.licenseUnit ??
+        "workspace") === "user"
+    )
+      return null;
     let user = [...this.users.values()].find(
       (candidate) => candidate.email === invitation.email && !candidate.deletedAt,
     );

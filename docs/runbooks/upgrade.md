@@ -47,9 +47,44 @@ Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`075_verified_email_pin_auth.sql`. Apply the complete ordered migration set with the restricted
+`078_customer_account_user_licenses.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
+
+### Personal and organization account compatibility
+
+Migration 078 adds explicit personal/organization account types and workspace/user license units.
+It classifies the same-ID personal billing boundaries created by migration 065 as personal,
+independently of their Free/Pro/Team entitlement level. Existing subscriptions, purchased offer
+snapshots, workspace licenses, content and accepted room coverage keep their original terms.
+New personal workspaces remain personal; organization setup creates a named account using user
+licenses and a separate organization-owned workspace for each licensed creator.
+
+Deploy matching web, server and jobs readers before accepting user-license organizations or
+publishing catalog entries with `licenseUnit: "user"`. Existing offers without that field retain
+workspace units. A published offer's licensed unit requires a new version and provider price;
+do not reinterpret an existing subscription or change the account's fixed unit in place.
+
+Once user-license accounts, assignments or invitations exist, retain a user-license-aware rollback
+target. An older binary does not enforce seat reservations, dedicated workspaces or the user-seat
+invitation boundary; its old catalog parser also rejects the new explicit unit. Pausing signups
+alone does not fence existing organization administrators or billing workers. Fence account
+administration and billing writers during a mixed-version cutover, or replace the single-VM
+application and workers together, then verify the exact serving versions before reopening setup.
+
+Exercise creator invitation reservation, verified acceptance, member role restrictions, billing-only
+access, unavailable-license rejection, and license/member release on staging. Active organization
+Round/Presentation controls must finish or expire before release. Revoked selected workspace
+contexts must fail authorization until the user explicitly chooses an accessible workspace;
+they must not silently redirect stale writes into a personal workspace. Finish with a personal
+Free/Pro and legacy workspace-license regression journey.
+
+Verify that republishing an offer ID with a new version, price or license unit does not change
+the captured terms of an existing subscription renewing its original provider price. Subscription
+records may carry an additive `offerSnapshot`; use matching billing/domain readers when reconciling
+these records. Also exercise personal payment recovery after grace expires and refusal of account
+deletion until provider cancellation or pending checkout reconciliation completes. A transferred
+legacy workspace owner without organization membership must still be able to rename the workspace.
 
 ### Verified-email and sign-in PIN compatibility
 

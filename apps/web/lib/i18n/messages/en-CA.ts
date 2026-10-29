@@ -1,6 +1,8 @@
+import { customerAccountMessages } from "../customer-account-messages";
 import { creationMessages } from "../creation-messages";
 
 export const englishMessages = {
+  ...customerAccountMessages("en-CA"),
   "questionType.open_text.label": "Open text",
   "questionType.open_text.description": "A moderated explanation with no right answer.",
   "questionType.word_cloud.label": "Word cloud",

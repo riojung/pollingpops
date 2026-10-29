@@ -1,8 +1,10 @@
+import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  ...customerAccountMessages("fr-FR"),
   "questionType.open_text.label": "Texte libre",
   "questionType.open_text.description": "Une explication modérée sans bonne réponse.",
   "questionType.word_cloud.label": "Nuage de mots",

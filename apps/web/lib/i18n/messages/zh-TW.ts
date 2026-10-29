@@ -1,8 +1,10 @@
+import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  ...customerAccountMessages("zh-TW"),
   "questionType.open_text.label": "開放文字",
   "questionType.open_text.description": "經主持人審核的解釋，沒有正確答案。",
   "questionType.word_cloud.label": "詞雲",

@@ -1,8 +1,8 @@
 import { randomUUID, randomInt } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { createGameState, addParticipant } from "@openround/game-engine";
+import { createGameState, addParticipant, applyHostCommand } from "@openround/game-engine";
 import type { Report } from "@openround/contracts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MemoryRepository,
   PostgresRepository,
@@ -101,8 +101,978 @@ for (const backend of ["memory", "postgres"] as const) {
         org = (await platform.getOrganizationForWorkspace(owner.workspaceId))!.id;
       });
       afterEach(async () => {
+        vi.useRealTimers();
         await repository?.close();
       });
+
+      async function userLicensedOrganization(quantity = 2) {
+        const organization = await platform.createOrganization({
+          name: "ABC Company",
+          actorId: owner.userId,
+          accountType: "organization",
+          licenseUnit: "user",
+        });
+        await platform.applySubscriptionSnapshot({
+          organizationId: organization.id,
+          customerId: null,
+          subscriptionId: null,
+          status: "active",
+          licenseQuantity: quantity,
+          licenseUnit: "user",
+          offerId: null,
+          paidThrough: null,
+          graceUntil: null,
+          legacyPlan: "team",
+        });
+        return organization;
+      }
+
+      it("keeps personal ownership independent of a historically assigned Team plan", async () => {
+        await repository.setPlan(owner.workspaceId, "team");
+        expect(await platform.getOrganizationForWorkspace(owner.workspaceId)).toMatchObject({
+          accountType: "personal",
+          licenseUnit: "workspace",
+        });
+        const organization = await platform.createOrganization({
+          name: "ABC Company",
+          actorId: owner.userId,
+          accountType: "organization",
+          licenseUnit: "user",
+        });
+        expect(organization).toMatchObject({ accountType: "organization", licenseUnit: "user" });
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ quantity: 0, assigned: 0, reserved: 0, available: 0 });
+      });
+
+      it("allocates user seats to distinct organization-owned workspaces rather than licensing every workspace", async () => {
+        const organization = await userLicensedOrganization(2);
+        const state = await platform.getOrganizationUserLicenses(organization.id, owner.userId);
+        expect(state).toMatchObject({
+          licenseUnit: "user",
+          quantity: 2,
+          assigned: 1,
+          reserved: 0,
+          available: 1,
+        });
+        const ownerWorkspace = state.assignments[0]!.workspaceId;
+        expect(ownerWorkspace).not.toBe(owner.workspaceId);
+        expect(await platform.getOrganizationForWorkspace(ownerWorkspace)).toMatchObject({
+          id: organization.id,
+        });
+        expect(await repository.getPlan(ownerWorkspace)).toBe("team");
+        expect(await repository.getPlan(owner.workspaceId)).toBe("free");
+        await expect(
+          platform.createOrganizationWorkspace({
+            organizationId: organization.id,
+            actorId: owner.userId,
+            name: "Unlicensed draft",
+            segment: "workplace",
+          }),
+        ).rejects.toMatchObject({ code: "LICENSE_LIMIT" });
+        await expect(
+          platform.assignWorkspaceLicense(organization.id, owner.userId, ownerWorkspace, true),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        await expect(
+          platform.assignOrganizationUserLicense(
+            organization.id,
+            owner.userId,
+            owner.userId,
+            true,
+            { workspaceId: owner.workspaceId },
+          ),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+      });
+
+      it("reserves the last creator seat atomically and provisions only the verified recipient's workspace", async () => {
+        const organization = await userLicensedOrganization(2);
+        const recipients = await Promise.all([creator(repository), creator(repository)]);
+        const tokens = [randomUUID(), randomUUID()];
+        const outcomes = await Promise.allSettled(
+          recipients.map((recipient, index) =>
+            platform.createOrganizationInvitation({
+              organizationId: organization.id,
+              actorId: owner.userId,
+              email: recipient.email,
+              role: "member",
+              workspaceName: `Sales ${index + 1}`,
+              tokenHash: tokens[index]!,
+              expiresAt: new Date(Date.now() + 60000),
+            }),
+          ),
+        );
+        expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+        expect(outcomes.filter((result) => result.status === "rejected")).toEqual([
+          expect.objectContaining({ reason: expect.objectContaining({ code: "LICENSE_LIMIT" }) }),
+        ]);
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, reserved: 1, available: 0 });
+        const acceptedIndex = outcomes.findIndex((result) => result.status === "fulfilled");
+        const recipient = recipients[acceptedIndex]!;
+        await expect(
+          platform.acceptOrganizationInvitation({
+            tokenHash: tokens[acceptedIndex]!,
+            actorId: recipients[1 - acceptedIndex]!.userId,
+          }),
+        ).rejects.toMatchObject({ code: "INVALID_INVITATION" });
+        const accepted = await platform.acceptOrganizationInvitation({
+          tokenHash: tokens[acceptedIndex]!,
+          actorId: recipient.userId,
+        });
+        expect(accepted).toMatchObject({ role: "member", workspaceId: expect.any(String) });
+        expect(
+          await repository.getCreatorByUserId(recipient.userId, accepted.workspaceId!),
+        ).toMatchObject({ role: "owner", plan: "team" });
+        expect(
+          (await repository.listWorkspaces(owner.userId)).some(
+            (workspace) => workspace.id === accepted.workspaceId,
+          ),
+        ).toBe(false);
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 2, reserved: 0, available: 0 });
+        await expect(
+          platform.createOrganizationInvitation({
+            organizationId: organization.id,
+            actorId: recipient.userId,
+            email: "another@example.test",
+            role: "member",
+            tokenHash: randomUUID(),
+            expiresAt: new Date(Date.now() + 60000),
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      });
+
+      it("releases revoked and expired reservations without losing occupied licenses", async () => {
+        const organization = await userLicensedOrganization(2);
+        const recipient = await creator(repository);
+        const now = new Date();
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(now);
+        const invitation = await platform.createOrganizationInvitation({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          email: recipient.email,
+          role: "member",
+          tokenHash: randomUUID(),
+          expiresAt: new Date(now.getTime() + 60000),
+        });
+        expect(
+          await platform.revokeOrganizationInvitation(organization.id, owner.userId, invitation.id),
+        ).toBe(true);
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, reserved: 0, available: 1 });
+        const tokenHash = randomUUID();
+        await platform.createOrganizationInvitation({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          email: recipient.email,
+          role: "member",
+          tokenHash,
+          expiresAt: new Date(now.getTime() + 60000),
+        });
+        vi.setSystemTime(new Date(now.getTime() + 60001));
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, reserved: 0, available: 1 });
+        await expect(
+          platform.acceptOrganizationInvitation({ tokenHash, actorId: recipient.userId }),
+        ).rejects.toMatchObject({ code: "INVALID_INVITATION" });
+      });
+
+      it("keeps billing access separate from creator capacity and content", async () => {
+        const organization = await userLicensedOrganization(1);
+        const finance = await creator(repository);
+        const tokenHash = randomUUID();
+        await platform.createOrganizationInvitation({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          email: finance.email,
+          role: "billing",
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+        });
+        const accepted = await platform.acceptOrganizationInvitation({
+          tokenHash,
+          actorId: finance.userId,
+        });
+        expect(accepted.role).toBe("billing");
+        expect(accepted.workspaceId).toBeUndefined();
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, reserved: 0 });
+        await expect(
+          platform.assignOrganizationUserLicense(
+            organization.id,
+            finance.userId,
+            finance.userId,
+            true,
+          ),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(
+          platform.createOrganizationInvitation({
+            organizationId: organization.id,
+            actorId: owner.userId,
+            email: "finance-two@example.test",
+            role: "billing",
+            workspaceName: "Forbidden",
+            tokenHash: randomUUID(),
+            expiresAt: new Date(Date.now() + 60000),
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        const newMember = await creator(repository);
+        await expect(
+          platform.setOrganizationMember({
+            organizationId: organization.id,
+            actorId: owner.userId,
+            userId: newMember.userId,
+            role: "member",
+          }),
+        ).rejects.toMatchObject({ code: "LICENSE_LIMIT" });
+        expect(await platform.listOrganizationMembers(organization.id, owner.userId)).toHaveLength(
+          2,
+        );
+      });
+
+      it("releases a creator license without rebinding stale sessions and retains organization content", async () => {
+        const organization = await userLicensedOrganization(2);
+        const recipient = await creator(repository);
+        await platform.setOrganizationMember({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          userId: recipient.userId,
+          role: "member",
+        });
+        const assignment = (
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId)
+        ).assignments.find((entry) => entry.userId === recipient.userId)!;
+        const tokenHash = randomUUID();
+        await repository.createCreatorSession({
+          id: randomUUID(),
+          userId: recipient.userId,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+          activeWorkspaceId: assignment.workspaceId,
+        });
+        expect(await repository.getCreatorBySession(tokenHash, new Date())).toMatchObject({
+          workspaceId: assignment.workspaceId,
+        });
+        await platform.assignOrganizationUserLicense(
+          organization.id,
+          owner.userId,
+          recipient.userId,
+          false,
+        );
+        expect(await repository.getCreatorBySession(tokenHash, new Date())).toBeNull();
+        expect(await repository.getUserPrincipalBySession(tokenHash, new Date())).toMatchObject({
+          userId: recipient.userId,
+        });
+        expect(
+          await repository.getCreatorByUserId(recipient.userId, assignment.workspaceId),
+        ).toBeNull();
+        expect(await platform.listOrganizationWorkspaces(organization.id, owner.userId)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: assignment.workspaceId,
+              organizationId: organization.id,
+            }),
+          ]),
+        );
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, available: 1 });
+        expect(
+          await platform.removeOrganizationMember(organization.id, owner.userId, recipient.userId),
+        ).toBe(true);
+        await expect(
+          platform.getOrganization(organization.id, recipient.userId),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(
+          platform.renameWorkspace(assignment.workspaceId, recipient.userId, "Hijacked"),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      });
+
+      it("rolls back the seat, dedicated workspace and accepted invitation together", async () => {
+        const organization = await userLicensedOrganization(2);
+        const recipient = await creator(repository);
+        const tokenHash = randomUUID();
+        await platform.createOrganizationInvitation({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          email: recipient.email,
+          role: "member",
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+        });
+        const before = await platform.listOrganizationWorkspaces(organization.id, owner.userId);
+        await expect(
+          platform.withTransaction(async (scoped) => {
+            await scoped.acceptOrganizationInvitation({ tokenHash, actorId: recipient.userId });
+            throw new Error("Injected commit failure");
+          }),
+        ).rejects.toThrow("Injected commit failure");
+        expect(await platform.listOrganizationWorkspaces(organization.id, owner.userId)).toEqual(
+          before,
+        );
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, reserved: 1 });
+        expect(
+          (await platform.listOrganizationInvitations(organization.id, owner.userId))[0]!
+            .acceptedAt,
+        ).toBeNull();
+        expect(
+          (await platform.acceptOrganizationInvitation({ tokenHash, actorId: recipient.userId }))
+            .workspaceId,
+        ).toBeTruthy();
+      });
+
+      it("transfers a retained creator workspace to an unassigned successor without widening account roles", async () => {
+        const organization = await userLicensedOrganization(2);
+        const departed = await creator(repository);
+        await platform.setOrganizationMember({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          userId: departed.userId,
+          role: "member",
+        });
+        const oldAssignment = (
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId)
+        ).assignments.find((assignment) => assignment.userId === departed.userId)!;
+        await platform.renameWorkspace(oldAssignment.workspaceId, departed.userId, "Sales archive");
+        await platform.removeOrganizationMember(organization.id, owner.userId, departed.userId);
+        const successor = await creator(repository);
+        await platform.setOrganizationMember({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          userId: successor.userId,
+          role: "member",
+        });
+        await expect(
+          platform.transferWorkspaceOwnership(
+            oldAssignment.workspaceId,
+            owner.userId,
+            successor.userId,
+          ),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        await platform.assignOrganizationUserLicense(
+          organization.id,
+          owner.userId,
+          successor.userId,
+          false,
+        );
+        await platform.transferWorkspaceOwnership(
+          oldAssignment.workspaceId,
+          owner.userId,
+          successor.userId,
+        );
+        expect(
+          await repository.getCreatorByUserId(successor.userId, oldAssignment.workspaceId),
+        ).toMatchObject({ role: "owner", plan: "team" });
+        expect(
+          await platform.requireOrganizationRole(organization.id, successor.userId, ["member"]),
+        ).toMatchObject({ role: "member" });
+        expect(
+          await platform.listOrganizationWorkspaces(organization.id, successor.userId),
+        ).toEqual([
+          expect.objectContaining({
+            id: oldAssignment.workspaceId,
+            name: "Sales archive",
+            organizationId: organization.id,
+          }),
+        ]);
+        expect(
+          await repository.getCreatorByUserId(departed.userId, oldAssignment.workspaceId),
+        ).toBeNull();
+      });
+
+      it("limits workspace metadata by user account role and keeps company renaming separate from content access", async () => {
+        const organization = await userLicensedOrganization(3);
+        const member = await creator(repository);
+        const admin = await creator(repository);
+        await platform.setOrganizationMember({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          userId: member.userId,
+          role: "member",
+        });
+        await platform.setOrganizationMember({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          userId: admin.userId,
+          role: "admin",
+        });
+        const memberWorkspaces = await platform.listOrganizationWorkspaces(
+          organization.id,
+          member.userId,
+        );
+        expect(memberWorkspaces).toHaveLength(1);
+        expect(
+          await platform.listOrganizationWorkspaces(organization.id, admin.userId),
+        ).toHaveLength(3);
+        expect(
+          await repository.getCreatorByUserId(admin.userId, memberWorkspaces[0]!.id),
+        ).toBeNull();
+        await expect(
+          platform.renameOrganization(organization.id, member.userId, "Hijacked"),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        expect(
+          await platform.renameOrganization(organization.id, admin.userId, "  ABC Sales  "),
+        ).toMatchObject({ name: "ABC Sales" });
+        await platform.updateOrganizationStatus(organization.id, "suspended");
+        await expect(
+          platform.renameOrganization(organization.id, owner.userId, "Blocked"),
+        ).rejects.toMatchObject({ code: "ORGANIZATION_SUSPENDED" });
+      });
+
+      it("requires new commercial terms before changing an offer's licensed unit", async () => {
+        const now = new Date();
+        const offer: PlatformOffer = {
+          id: randomUUID(),
+          name: "Workspace offer",
+          productKey: "pollingpops",
+          kind: "workspace_subscription",
+          status: "published",
+          version: 1,
+          stripePriceId: "price_workspace",
+          currency: "usd",
+          amountMinor: 1000,
+          interval: "month",
+          creditQuantity: 0,
+          entitlements: snapshot,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await platform.saveOffer(offer);
+        await expect(platform.saveOffer({ ...offer, licenseUnit: "user" })).rejects.toMatchObject({
+          code: "CONFLICT",
+        });
+        await expect(
+          platform.saveOffer({ ...offer, version: 2, licenseUnit: "user" }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(
+          await platform.saveOffer({
+            ...offer,
+            version: 2,
+            licenseUnit: "user",
+            stripePriceId: "price_user",
+          }),
+        ).toMatchObject({ licenseUnit: "user", version: 2 });
+        await expect(
+          platform.createPurchase({
+            organizationId: org,
+            actorId: owner.userId,
+            offerId: offer.id,
+            quantity: 1,
+            idempotencyKey: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+      });
+
+      it("retains captured subscription terms after catalog replacement and adopts only recognized new terms", async () => {
+        const now = new Date();
+        const offer: PlatformOffer = {
+          id: randomUUID(),
+          name: "Personal Pro",
+          productKey: "pollingpops",
+          kind: "workspace_subscription",
+          licenseUnit: "workspace",
+          status: "published",
+          version: 1,
+          stripePriceId: `price_original_${randomUUID()}`,
+          currency: "usd",
+          amountMinor: 1000,
+          interval: "month",
+          creditQuantity: 0,
+          entitlements: snapshot,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await platform.saveOffer(offer);
+        const purchase = await platform.createPurchase({
+          organizationId: org,
+          actorId: owner.userId,
+          offerId: offer.id,
+          quantity: 1,
+          idempotencyKey: randomUUID(),
+        });
+        const subscriptionId = `sub_${randomUUID()}`;
+        const initial = await platform.applySubscriptionSnapshot({
+          organizationId: org,
+          customerId: `cus_${randomUUID()}`,
+          subscriptionId,
+          licenseQuantity: 1,
+          licenseUnit: "workspace",
+          offerId: offer.id,
+          status: "active",
+          paidThrough: new Date(now.getTime() + 60000),
+          graceUntil: null,
+          purchaseId: purchase.id,
+          offerSnapshot: offer,
+        });
+        await platform.markSubscriptionPurchasePaid(purchase.id, subscriptionId);
+        await platform.assignWorkspaceLicense(org, owner.userId, owner.workspaceId, true);
+        const replacement: PlatformOffer = {
+          ...offer,
+          version: 2,
+          stripePriceId: `price_replacement_${randomUUID()}`,
+          amountMinor: 2000,
+          entitlements: { ...snapshot, plan: "team" },
+          updatedAt: new Date(now.getTime() + 1000),
+        };
+        await platform.saveOffer(replacement);
+        expect(await repository.getPlan(owner.workspaceId)).toBe("pro");
+        const renewed = await platform.applySubscriptionSnapshot({
+          ...initial,
+          offerSnapshot: offer,
+          paidThrough: new Date(now.getTime() + 120000),
+        });
+        expect(renewed.offerSnapshot).toEqual(offer);
+        expect(await platform.effectiveWorkspacePlan(owner.workspaceId)).toBe("pro");
+        const upgraded = await platform.applySubscriptionSnapshot({
+          ...renewed,
+          offerSnapshot: replacement,
+          paidThrough: new Date(now.getTime() + 180000),
+        });
+        expect(upgraded.offerSnapshot).toEqual(replacement);
+        expect(await repository.getPlan(owner.workspaceId)).toBe("team");
+        await expect(
+          platform.applySubscriptionSnapshot({
+            ...upgraded,
+            offerSnapshot: { ...replacement, stripePriceId: "price_unrecognized" },
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        const userOffer: PlatformOffer = {
+          ...replacement,
+          version: 3,
+          licenseUnit: "user",
+          stripePriceId: `price_user_${randomUUID()}`,
+        };
+        await platform.saveOffer(userOffer);
+        expect(await repository.getPlan(owner.workspaceId)).toBe("team");
+        await expect(
+          platform.applySubscriptionSnapshot({
+            ...upgraded,
+            licenseUnit: "user",
+            offerSnapshot: userOffer,
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(await platform.getSubscription(org)).toEqual(upgraded);
+      });
+
+      it("accepts a pending historical checkout's own terms while rejecting an unrelated purchase", async () => {
+        const now = new Date();
+        const offer: PlatformOffer = {
+          id: randomUUID(),
+          name: "Historical workspace plan",
+          productKey: "pollingpops",
+          kind: "workspace_subscription",
+          licenseUnit: "workspace",
+          status: "published",
+          version: 1,
+          stripePriceId: `price_original_${randomUUID()}`,
+          currency: "usd",
+          amountMinor: 1000,
+          interval: "month",
+          creditQuantity: 0,
+          entitlements: snapshot,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await platform.saveOffer(offer);
+        const purchase = await platform.createPurchase({
+          organizationId: org,
+          actorId: owner.userId,
+          offerId: offer.id,
+          quantity: 1,
+          idempotencyKey: randomUUID(),
+        });
+        await platform.saveOffer({
+          ...offer,
+          version: 2,
+          licenseUnit: "user",
+          stripePriceId: `price_user_${randomUUID()}`,
+          entitlements: { ...snapshot, plan: "team" },
+        });
+        const historical = {
+          organizationId: org,
+          customerId: `cus_${randomUUID()}`,
+          subscriptionId: `sub_${randomUUID()}`,
+          status: "active",
+          licenseQuantity: 1,
+          licenseUnit: "workspace" as const,
+          offerId: offer.id,
+          offerSnapshot: offer,
+          paidThrough: new Date(now.getTime() + 60000),
+          graceUntil: null,
+          purchaseId: purchase.id,
+        };
+        expect(await platform.applySubscriptionSnapshot(historical)).toMatchObject({
+          licenseUnit: "workspace",
+          offerSnapshot: offer,
+        });
+        const anotherOrganization = await platform.createOrganization({
+          actorId: owner.userId,
+          name: "Unrelated organization",
+        });
+        await expect(
+          platform.applySubscriptionSnapshot({
+            ...historical,
+            organizationId: anotherOrganization.id,
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect((await platform.getSubscription(anotherOrganization.id)).status).toBe("free");
+      });
+
+      it("lets a transferred legacy workspace owner rename without receiving an organization role", async () => {
+        const successor = await creator(repository);
+        const tokenHash = randomUUID();
+        await repository.createWorkspaceInvitation({
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          email: successor.email,
+          role: "editor",
+          tokenHash,
+          invitedBy: owner.userId,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 60000),
+          acceptedAt: null,
+          revokedAt: null,
+        });
+        await repository.acceptWorkspaceInvitation(tokenHash, new Date(), "test");
+        await expect(
+          platform.renameWorkspace(owner.workspaceId, successor.userId, "Not yet owner"),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await platform.transferWorkspaceOwnership(
+          owner.workspaceId,
+          owner.userId,
+          successor.userId,
+        );
+        expect(
+          (await platform.listOrganizations(successor.userId)).some((item) => item.id === org),
+        ).toBe(false);
+        expect(
+          await repository.getCreatorByUserId(successor.userId, owner.workspaceId),
+        ).toMatchObject({
+          role: "owner",
+        });
+        expect(
+          await platform.renameWorkspace(
+            owner.workspaceId,
+            successor.userId,
+            "  Successor's workspace  ",
+          ),
+        ).toMatchObject({ name: "Successor's workspace", ownerId: successor.userId });
+      });
+
+      it("does not downgrade an existing workspace owner when accepting a scoped legacy organization invitation", async () => {
+        const tokenHash = randomUUID();
+        await platform.createOrganizationInvitation({
+          organizationId: org,
+          actorId: owner.userId,
+          email: owner.email,
+          role: "member",
+          workspaceId: owner.workspaceId,
+          workspaceRole: "viewer",
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+        });
+        await platform.acceptOrganizationInvitation({ tokenHash, actorId: owner.userId });
+        expect(await repository.getCreatorByUserId(owner.userId, owner.workspaceId)).toMatchObject({
+          role: "owner",
+        });
+        expect(await platform.requireOrganizationRole(org, owner.userId, ["owner"])).toMatchObject({
+          role: "owner",
+        });
+      });
+
+      it("rejects ordinary workspace invitations and historical tokens for user-license organizations", async () => {
+        const organization = await userLicensedOrganization(2);
+        const workspace = (
+          await platform.listOrganizationWorkspaces(organization.id, owner.userId)
+        )[0]!;
+        const tokenHash = randomUUID();
+        const invitation = {
+          id: randomUUID(),
+          workspaceId: workspace.id,
+          email: "blocked@example.test",
+          role: "editor" as const,
+          tokenHash,
+          invitedBy: owner.userId,
+          expiresAt: new Date(Date.now() + 60000),
+          acceptedAt: null,
+          revokedAt: null,
+          createdAt: new Date(),
+        };
+        // Seed a historical token without bypassing the production invitation guard.
+        if (repository instanceof MemoryRepository)
+          repository.workspaceInvitations.set(invitation.id, invitation);
+        else {
+          const administrator = new PostgresRepository(isolatedAdminUrl!);
+          try {
+            await administrator.pool.query(
+              `INSERT INTO workspace_invitations(id,workspace_id,email,role,token_hash,invited_by,expires_at,created_at)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [
+                invitation.id,
+                invitation.workspaceId,
+                invitation.email,
+                invitation.role,
+                invitation.tokenHash,
+                invitation.invitedBy,
+                invitation.expiresAt,
+                invitation.createdAt,
+              ],
+            );
+          } finally {
+            await administrator.close();
+          }
+        }
+        expect(
+          await repository.acceptWorkspaceInvitation(tokenHash, new Date(), "test"),
+        ).toBeNull();
+        await expect(
+          repository.createWorkspaceInvitation({
+            ...invitation,
+            id: randomUUID(),
+            email: "another@example.test",
+            tokenHash: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ code: "ORGANIZATION_MEMBERSHIP_REQUIRED" });
+        expect((await repository.listWorkspaceInvitations(workspace.id))[0]!.acceptedAt).toBeNull();
+      });
+
+      it("rejects subscription and provider-offer licensed-unit changes atomically", async () => {
+        const organization = await userLicensedOrganization(2);
+        const before = await platform.getSubscription(organization.id);
+        await expect(
+          platform.applySubscriptionSnapshot({ ...before, licenseUnit: "workspace" }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        const now = new Date();
+        const offer: PlatformOffer = {
+          id: randomUUID(),
+          name: "Legacy workspace offer",
+          productKey: "pollingpops",
+          kind: "workspace_subscription",
+          status: "published",
+          version: 1,
+          stripePriceId: "price_fixed_workspace",
+          currency: "usd",
+          amountMinor: 1000,
+          interval: "month",
+          creditQuantity: 0,
+          entitlements: snapshot,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await platform.saveOffer(offer);
+        await expect(
+          platform.applySubscriptionSnapshot({ ...before, offerId: offer.id }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        expect(await platform.getSubscription(organization.id)).toEqual(before);
+        expect(
+          await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+        ).toMatchObject({ assigned: 1, available: 1 });
+      });
+
+      it.each(["round", "presentation"] as const)(
+        "blocks creator-seat release while %s controls remain active and preserves unrelated access",
+        async (artifactType) => {
+          const organization = await userLicensedOrganization(2);
+          const recipient = await creator(repository);
+          await platform.setOrganizationMember({
+            organizationId: organization.id,
+            actorId: owner.userId,
+            userId: recipient.userId,
+            role: "member",
+          });
+          const assignment = (
+            await platform.getOrganizationUserLicenses(organization.id, owner.userId)
+          ).assignments.find((entry) => entry.userId === recipient.userId)!;
+          const scopedCreator = (await repository.getCreatorByUserId(
+            recipient.userId,
+            assignment.workspaceId,
+          ))!;
+          const fixture = await createLibraryDeletionFixture(
+            repository,
+            scopedCreator,
+            recipient.userId,
+          );
+          const now = new Date();
+          const roomId = randomUUID();
+          const expiresAt = new Date(now.getTime() + 60000);
+          const retentionExpiresAt = new Date(now.getTime() + 86400000);
+          const code = String(randomInt(1000000, 10000000));
+          const credentialHash = () =>
+            randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", "");
+          const tokenHash = credentialHash();
+          const commercialCoverage = {
+            artifactType,
+            roomId,
+            workspaceId: assignment.workspaceId,
+            funding: "subscription" as const,
+            snapshot,
+            actorId: recipient.userId,
+            expiresAt,
+          };
+          const presentations = createPresentationSessionRepository(repository);
+          let finish: () => Promise<unknown>;
+          if (artifactType === "round") {
+            const state = createGameState({
+              sessionId: roomId,
+              code,
+              quiz: fixture.content,
+              settings: {
+                audienceLimit: 100,
+                scoringMode: "accuracy",
+                resultVisibility: "private",
+                allowLateJoin: true,
+                nicknamePolicy: "friendly_only",
+                trustMode: "learning",
+              },
+            });
+            const room = {
+              id: roomId,
+              workspaceId: assignment.workspaceId,
+              quizVersionId: fixture.roundVersion.id,
+              hostId: recipient.userId,
+              hostTokenHash: tokenHash,
+              state,
+              expiresAt,
+              retentionExpiresAt,
+              createdAt: now,
+              updatedAt: now,
+              commercialCoverage,
+            };
+            await repository.createSession(room);
+            await repository.createSessionStaffCredential({
+              id: randomUUID(),
+              workspaceId: assignment.workspaceId,
+              sessionId: roomId,
+              role: "cohost",
+              purpose: "creator_resume",
+              label: "Creator controls",
+              tokenHash: credentialHash(),
+              createdBy: recipient.userId,
+              expiresAt,
+              revokedAt: null,
+              createdAt: now,
+            });
+            finish = async () => {
+              const stored = (await repository.getSessionById(roomId))!;
+              const ended = applyHostCommand(stored.state, {
+                commandId: randomUUID(),
+                expectedVersion: stored.state.version,
+                action: "end",
+                nowMs: Date.now(),
+                newRoundId: randomUUID,
+              });
+              await repository.saveSession({ ...stored, state: ended.state }, stored.state.version);
+            };
+          } else {
+            await presentations.createSessionWithCredential(
+              {
+                id: roomId,
+                workspaceId: assignment.workspaceId,
+                presentationId: fixture.presentation.id,
+                presentationVersionId: fixture.presentationVersion.id,
+                title: fixture.presentationContent.title,
+                content: fixture.presentationContent,
+                code,
+                status: "active",
+                phase: "lobby",
+                currentBlockIndex: -1,
+                revision: 0,
+                createdBy: recipient.userId,
+                createdAt: now,
+                updatedAt: now,
+                finishedAt: null,
+                liveExpiresAt: expiresAt,
+                retentionExpiresAt,
+                commercialCoverage,
+              },
+              {
+                id: randomUUID(),
+                workspaceId: assignment.workspaceId,
+                sessionId: roomId,
+                role: "host",
+                tokenHash,
+                createdAt: now,
+                expiresAt,
+                revokedAt: null,
+              },
+            );
+            await presentations.createCredential({
+              id: randomUUID(),
+              workspaceId: assignment.workspaceId,
+              sessionId: roomId,
+              role: "companion",
+              tokenHash: credentialHash(),
+              createdAt: now,
+              expiresAt,
+              revokedAt: null,
+            });
+            finish = () =>
+              presentations.transitionSession({
+                workspaceId: assignment.workspaceId,
+                sessionId: roomId,
+                expectedRevision: 0,
+                status: "finished",
+                phase: "finished",
+                currentBlockIndex: -1,
+                event: { type: "presentation.finished", blockId: null, blockIndex: null },
+              });
+          }
+          const frozen = (await platform.getRoomCoverage(artifactType, roomId))!.snapshot;
+          await expect(
+            platform.assignOrganizationUserLicense(
+              organization.id,
+              owner.userId,
+              recipient.userId,
+              false,
+            ),
+          ).rejects.toMatchObject({ code: "WORKSPACE_BUSY" });
+          await expect(
+            platform.removeOrganizationMember(organization.id, owner.userId, recipient.userId),
+          ).rejects.toMatchObject({ code: "WORKSPACE_BUSY" });
+          expect(
+            await platform.getOrganizationUserLicenses(organization.id, owner.userId),
+          ).toMatchObject({ assigned: 2 });
+          expect(
+            await repository.getCreatorByUserId(recipient.userId, assignment.workspaceId),
+          ).not.toBeNull();
+          // A released registry code alone cannot bypass still-active durable control state.
+          await repository.releaseLiveRoomCode(artifactType, roomId);
+          await expect(
+            platform.assignOrganizationUserLicense(
+              organization.id,
+              owner.userId,
+              recipient.userId,
+              false,
+            ),
+          ).rejects.toMatchObject({ code: "WORKSPACE_BUSY" });
+          const personalCode = String(randomInt(1000000, 10000000));
+          await repository.claimLiveRoomCode({
+            code: personalCode,
+            workspaceId: recipient.workspaceId,
+            artifactType,
+            artifactId: randomUUID(),
+            expiresAt,
+            createdAt: now,
+          });
+          await finish();
+          await platform.removeOrganizationMember(organization.id, owner.userId, recipient.userId);
+          expect(await repository.getLiveRoomCode(personalCode)).not.toBeNull();
+          expect((await platform.getRoomCoverage(artifactType, roomId))!.snapshot).toEqual(frozen);
+          expect(
+            artifactType === "round"
+              ? await repository.getSessionById(roomId)
+              : await presentations.getSessionById(roomId),
+          ).not.toBeNull();
+        },
+      );
 
       it("persists global feature policies with revision conflicts and concurrent writer protection", async () => {
         expect(await platform.getFeaturePolicy()).toBeNull();
@@ -369,6 +1339,10 @@ for (const backend of ["memory", "postgres"] as const) {
             new URL("../migrations/065_business_platform.sql", import.meta.url),
             "utf8",
           );
+          const currentOwnershipMigration = await readFile(
+            new URL("../migrations/078_customer_account_user_licenses.sql", import.meta.url),
+            "utf8",
+          );
           const admin = new PostgresRepository(isolatedAdminUrl!);
           try {
             await admin.pool.query(migration);
@@ -403,7 +1377,13 @@ for (const backend of ["memory", "postgres"] as const) {
             expect(await platform.getCreditBalance(org)).toMatchObject({ balance: 0, reserved: 0 });
             expect(await platform.listCreditLedger(org, owner.userId)).toHaveLength(0);
           } finally {
-            await admin.close();
+            try {
+              // Replaying the historical migration replaces its provisioning trigger.
+              // Restore the current ownership model before later tests create users.
+              await admin.pool.query(currentOwnershipMigration);
+            } finally {
+              await admin.close();
+            }
           }
         },
       );
@@ -1657,7 +2637,231 @@ for (const backend of ["memory", "postgres"] as const) {
           verified: true,
         });
       });
+      it("deletes a personal sign-in without requiring closure of its automatic personal boundary", async () => {
+        await repository.setPlan(owner.workspaceId, "team");
+        expect(await platform.getOrganizationForWorkspace(owner.workspaceId)).toMatchObject({
+          accountType: "personal",
+        });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).resolves.toBeUndefined();
+        const tokenHash = randomUUID();
+        await repository.createCreatorSession({
+          id: randomUUID(),
+          userId: owner.userId,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+          activeWorkspaceId: owner.workspaceId,
+        });
+        await repository.deleteUserIdentity(owner.userId);
+        expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
+        expect(await repository.getUserPrincipalBySession(tokenHash, new Date())).toBeNull();
+        expect(await platform.listOrganizations(owner.userId)).toEqual([]);
+        // Hosted identity deletion intentionally retains workspace data; its deletion
+        // policy is separate from organization ownership-transfer protection.
+        expect(await platform.getOrganizationForWorkspace(owner.workspaceId)).toMatchObject({
+          accountType: "personal",
+        });
+      });
+
+      it("requires completed cancellation before deleting a personal payer even after paid access expires", async () => {
+        const external = {
+          organizationId: org,
+          customerId: `cus_${randomUUID()}`,
+          subscriptionId: `sub_${randomUUID()}`,
+          licenseQuantity: 1,
+          offerId: null,
+          paidThrough: new Date(Date.now() - 60000),
+          graceUntil: null,
+        };
+        for (const status of [
+          "active",
+          "trialing",
+          "past_due",
+          "unpaid",
+          "incomplete",
+          "paused",
+          "free",
+        ]) {
+          await platform.applySubscriptionSnapshot({ ...external, status });
+          await expect(platform.assertIdentityDeletionAllowed(owner.userId)).rejects.toMatchObject({
+            code: "BILLING_CANCELLATION_REQUIRED",
+          });
+          await expect(repository.deleteUserIdentity(owner.userId)).rejects.toMatchObject({
+            code: "BILLING_CANCELLATION_REQUIRED",
+          });
+          expect(await repository.getUserPrincipalById(owner.userId)).not.toBeNull();
+        }
+        await platform.applySubscriptionSnapshot({ ...external, status: "incomplete_expired" });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).resolves.toBeUndefined();
+        await platform.applySubscriptionSnapshot({ ...external, status: "canceled" });
+        await repository.deleteUserIdentity(owner.userId);
+        expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
+        expect(await platform.getSubscription(org)).toMatchObject({
+          status: "canceled",
+          subscriptionId: external.subscriptionId,
+        });
+      });
+
+      it("uses current legacy cancellation state until an authoritative business snapshot supersedes it", async () => {
+        const subscriptionId = `sub_legacy_${randomUUID()}`;
+        const customerId = `cus_legacy_${randomUUID()}`;
+        await repository.setPlan(owner.workspaceId, "pro", {
+          customerId,
+          subscriptionId,
+          status: "active",
+        });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).rejects.toMatchObject({
+          code: "BILLING_CANCELLATION_REQUIRED",
+        });
+        const imported = {
+          ...(await platform.applySubscriptionSnapshot({
+            organizationId: org,
+            customerId,
+            subscriptionId,
+            status: "active",
+            licenseQuantity: 1,
+            offerId: null,
+            paidThrough: null,
+            graceUntil: null,
+            legacyPlan: "pro",
+          })),
+          authoritative: false,
+        };
+        if (backend === "memory")
+          (platform as MemoryPlatformRepository).memoryStore.putSync(
+            "subscription",
+            org,
+            org,
+            imported,
+          );
+        else {
+          const administrator = new PostgresRepository(isolatedAdminUrl!);
+          try {
+            await administrator.pool.query(
+              "UPDATE platform_records SET data=$2::jsonb WHERE kind='subscription' AND id=$1",
+              [org, JSON.stringify(imported)],
+            );
+          } finally {
+            await administrator.close();
+          }
+        }
+        await repository.setPlan(owner.workspaceId, "free", { status: "canceled" });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).resolves.toBeUndefined();
+        await repository.setPlan(owner.workspaceId, "pro", { status: "active" });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).rejects.toMatchObject({
+          code: "BILLING_CANCELLATION_REQUIRED",
+        });
+        await platform.applySubscriptionSnapshot({ ...imported, status: "canceled" });
+        // Legacy webhooks no longer decide this same provider subscription after the
+        // business worker has reconciled its completed cancellation.
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).resolves.toBeUndefined();
+        await repository.deleteUserIdentity(owner.userId);
+        expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
+      });
+
+      it("protects personal subscription checkouts until their cancellation or expiry is reconciled", async () => {
+        const now = new Date();
+        const offer: PlatformOffer = {
+          id: randomUUID(),
+          name: "Personal subscription",
+          productKey: "pollingpops",
+          kind: "workspace_subscription",
+          status: "published",
+          version: 1,
+          stripePriceId: `price_${randomUUID()}`,
+          currency: "usd",
+          amountMinor: 1000,
+          interval: "month",
+          creditQuantity: 0,
+          entitlements: snapshot,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await platform.saveOffer(offer);
+        const purchase = await platform.createPurchase({
+          organizationId: org,
+          actorId: owner.userId,
+          offerId: offer.id,
+          quantity: 1,
+          idempotencyKey: randomUUID(),
+        });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).rejects.toMatchObject({
+          code: "BILLING_CANCELLATION_REQUIRED",
+        });
+        await platform.updatePurchaseCheckout(purchase.id, `cs_${randomUUID()}`);
+        await expect(repository.deleteUserIdentity(owner.userId)).rejects.toMatchObject({
+          code: "BILLING_CANCELLATION_REQUIRED",
+        });
+        // The billing worker marks expired/failed external checkouts canceled through
+        // this same operation, releasing the protection without deleting evidence.
+        await platform.cancelPurchase(purchase.id);
+        await repository.deleteUserIdentity(owner.userId);
+        expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
+        expect(await platform.getPurchase(purchase.id)).toMatchObject({ status: "canceled" });
+      });
+
+      it("still protects actual organization ownership and stewardship when a personal sign-in is deleted", async () => {
+        const organization = await platform.createOrganization({
+          name: "Real company",
+          actorId: owner.userId,
+        });
+        const workspace = await platform.createOrganizationWorkspace({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          name: "Company data",
+          segment: "workplace",
+        });
+        await expect(platform.assertIdentityDeletionAllowed(owner.userId)).rejects.toMatchObject({
+          code: "OWNERSHIP_TRANSFER_REQUIRED",
+        });
+        const successor = await creator(repository);
+        await platform.setOrganizationMember({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          userId: successor.userId,
+          role: "owner",
+        });
+        // Another company owner alone does not transfer stewardship of its content.
+        await expect(repository.deleteUserIdentity(owner.userId)).rejects.toMatchObject({
+          code: "OWNERSHIP_TRANSFER_REQUIRED",
+        });
+        const tokenHash = randomUUID();
+        await platform.createOrganizationInvitation({
+          organizationId: organization.id,
+          actorId: owner.userId,
+          email: successor.email,
+          role: "owner",
+          workspaceId: workspace.id,
+          workspaceRole: "editor",
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+        });
+        await platform.acceptOrganizationInvitation({ tokenHash, actorId: successor.userId });
+        await platform.transferWorkspaceOwnership(workspace.id, owner.userId, successor.userId);
+        await repository.deleteUserIdentity(owner.userId);
+        expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
+        expect(
+          await platform.requireOrganizationRole(organization.id, successor.userId, ["owner"]),
+        ).toMatchObject({ role: "owner" });
+        expect(await repository.getCreatorByUserId(successor.userId, workspace.id)).toMatchObject({
+          role: "owner",
+        });
+        expect(await platform.getOrganizationForWorkspace(workspace.id)).toMatchObject({
+          id: organization.id,
+          status: "active",
+          accountType: "organization",
+        });
+      });
+
       it("allows a closed organization owner's identity deletion without cascading business data", async () => {
+        org = (
+          await platform.createOrganization({ name: "Retained company", actorId: owner.userId })
+        ).id;
+        const commercialWorkspace = await platform.createOrganizationWorkspace({
+          organizationId: org,
+          actorId: owner.userId,
+          name: "Retained workspace",
+          segment: "workplace",
+        });
         await platform.grantCredits({
           organizationId: org,
           quantity: 2,
@@ -1671,7 +2875,7 @@ for (const backend of ["memory", "postgres"] as const) {
         await platform.updateOrganizationStatus(org, "closed");
         await repository.deleteUserIdentity(owner.userId);
         expect(await repository.getUserPrincipalById(owner.userId)).toBeNull();
-        expect(await platform.getOrganizationForWorkspace(owner.workspaceId)).toMatchObject({
+        expect(await platform.getOrganizationForWorkspace(commercialWorkspace.id)).toMatchObject({
           id: org,
           status: "closed",
         });
@@ -1681,6 +2885,9 @@ for (const backend of ["memory", "postgres"] as const) {
       it.each(["sole owner", "replacement owner", "multiple owners"] as const)(
         "cleans up Group memberships for a deleted identity with %s while preserving team content",
         async (scenario) => {
+          org = (
+            await platform.createOrganization({ name: "Retained company", actorId: owner.userId })
+          ).id;
           const teamOwner = await creator(repository);
           const earliestMember = await creator(repository);
           const now = new Date();

@@ -35,8 +35,28 @@ export interface WorkspaceCreator {
 
 export type WorkspaceProductFeatures = ContractWorkspaceProductFeatures;
 
+export interface WorkspaceAccountContext {
+  id: string;
+  name: string;
+  accountType: "personal" | "organization";
+  licenseUnit: "workspace" | "user";
+  planSource?: "community" | "subscription" | "free";
+  organization: {
+    id: string;
+    name: string;
+    role: "owner" | "admin" | "billing" | "member" | null;
+  } | null;
+  permissions: {
+    manageWorkspace: boolean;
+    managePeople: boolean;
+    manageBilling: boolean;
+    manageIntegrations: boolean;
+  };
+}
+
 interface WorkspaceAccountResponse {
   creator: WorkspaceCreator;
+  workspace?: WorkspaceAccountContext;
   entitlements: Entitlements;
   productFeatures: WorkspaceProductFeatures;
 }
@@ -44,6 +64,7 @@ interface WorkspaceAccountResponse {
 interface WorkspaceContextValue {
   management: ManagementNavigationState;
   creator: WorkspaceCreator | null;
+  workspace: WorkspaceAccountContext | null;
   entitlements: Entitlements | null;
   productFeatures: WorkspaceProductFeatures | null;
   loading: boolean;
@@ -66,6 +87,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
   localeRef.current = locale;
   localeLoadErrorRef.current = localeLoadError;
   const [creator, setCreator] = useState<WorkspaceCreator | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceAccountContext | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [productFeatures, setProductFeatures] = useState<WorkspaceProductFeatures | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +104,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
         throw new Error("Workspace access could not be loaded. Try again.");
       }
       setCreator(account.creator);
+      setWorkspace(account.workspace ?? null);
       setEntitlements(account.entitlements);
       setProductFeatures(features.data);
       try {
@@ -109,17 +132,14 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       }
     } catch (caught) {
       setCreator(null);
+      setWorkspace(null);
       setEntitlements(null);
       setProductFeatures(null);
       if ((caught as { status?: number }).status === 401) {
         // An authenticated billing-only user has no workspace context.
         const navigation = await fetchCustomerManagementNavigation().catch(() => null);
         redirecting = true;
-        router.replace(
-          navigation?.user && navigation.organizationManagementEnabled
-            ? "/organization"
-            : "/signin",
-        );
+        router.replace(navigation?.user ? "/account/setup" : "/signin");
         return;
       }
       setError(humanError(caught));
@@ -130,12 +150,16 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
 
   useEffect(() => {
     void refreshAccount();
+    const refresh = () => void refreshAccount();
+    window.addEventListener("polling-pops:workspace-updated", refresh);
+    return () => window.removeEventListener("polling-pops:workspace-updated", refresh);
   }, [refreshAccount]);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
       management,
       creator,
+      workspace,
       entitlements,
       productFeatures,
       loading,
@@ -148,11 +172,9 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
         router.replace("/");
       },
       startUpgrade: async () => {
-        const result = await apiFetch<{ url: string }>("/v1/billing/checkout", {
-          method: "POST",
-          body: "{}",
-        });
-        window.location.assign(result.url);
+        if (!confirmNavigation()) return;
+        if (window.location.pathname === "/account") window.location.hash = "plan";
+        else router.push("/account#plan");
       },
     }),
     [
@@ -165,6 +187,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       productFeatures,
       refreshAccount,
       router,
+      workspace,
     ],
   );
 

@@ -1,5 +1,11 @@
 import Link from "next/link";
-import type { BillingView, OrganizationAccessState, OrganizationRole } from "./organization-model";
+import type {
+  BillingView,
+  LicenseUnit,
+  OrganizationAccessState,
+  OrganizationRole,
+  UserLicenseSummary,
+} from "./organization-model";
 import {
   licenseOverflow,
   organizationPermissions,
@@ -65,54 +71,115 @@ export function OrganizationEntryState({
   );
 }
 
-export function FundingGuide({ billing }: { billing: BillingView }) {
-  const overflow = licenseOverflow(billing);
+export function OrganizationSeatSummary({ seats }: { seats: UserLicenseSummary | null }) {
+  if (!seats) return <p role="status">Loading user license availability…</p>;
+  return (
+    <div className={styles.seatSummary}>
+      <dl className={styles.seatCounts} aria-label="User license availability">
+        {[
+          ["Purchased", seats.quantity],
+          ["Assigned", seats.assigned],
+          ["Reserved invitations", seats.reserved],
+          ["Available", seats.available],
+        ].map(([label, count]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{count}</dd>
+          </div>
+        ))}
+      </dl>
+      <p>
+        Each licensed user gets a separate workspace owned by your organization. Pending user
+        invitations reserve a license until accepted, revoked, or expired. Guest participants do not
+        use user licenses.
+      </p>
+    </div>
+  );
+}
+
+export function FundingGuide({
+  billing,
+  licenseUnit = billing.subscription.licenseUnit ?? "workspace",
+  seats = null,
+}: {
+  billing: BillingView;
+  licenseUnit?: LicenseUnit;
+  seats?: UserLicenseSummary | null;
+}) {
+  const userLicenses = licenseUnit === "user";
+  const overflow = userLicenses
+    ? Math.max(0, (seats?.assigned ?? 0) - (seats?.quantity ?? 0))
+    : licenseOverflow(billing);
   return (
     <section className="panel" id="billing" aria-labelledby="funding-heading">
-      <h2 id="funding-heading">Licenses and event credits</h2>
+      <h2 id="funding-heading">
+        {billing.eventCreditsEnabled
+          ? "Licenses and event credits"
+          : userLicenses
+            ? "User licenses"
+            : "Workspace licenses"}
+      </h2>
       <p>
-        Workspace subscriptions cover the workspaces you license. Event credits are shared across
-        your organization and do not expire.
+        {userLicenses
+          ? "Your organization subscription licenses individual creators and their organization-owned workspaces."
+          : "Workspace subscriptions cover the workspaces you license."}
+        {billing.eventCreditsEnabled
+          ? " Event credits are shared across your organization and do not expire."
+          : ""}
       </p>
+      {userLicenses && <OrganizationSeatSummary seats={seats} />}
       <dl className="compact-definition-list">
-        <div>
-          <dt>Workspace licenses</dt>
-          <dd>
-            {billing.assignments.length} assigned / {billing.subscription.licenseQuantity} purchased
-          </dd>
-        </div>
-        <div>
-          <dt>Event credits available</dt>
-          <dd>{billing.balance.available}</dd>
-        </div>
-        <div>
-          <dt>Reserved for empty rooms</dt>
-          <dd>{billing.balance.reserved}</dd>
-        </div>
+        {!userLicenses && (
+          <div>
+            <dt>Workspace licenses</dt>
+            <dd>
+              {billing.assignments.length} assigned / {billing.subscription.licenseQuantity}{" "}
+              purchased
+            </dd>
+          </div>
+        )}
+        {billing.eventCreditsEnabled && (
+          <div>
+            <dt>Event credits available</dt>
+            <dd>{billing.balance.available}</dd>
+          </div>
+        )}
+        {billing.eventCreditsEnabled && (
+          <div>
+            <dt>Reserved for empty rooms</dt>
+            <dd>{billing.balance.reserved}</dd>
+          </div>
+        )}
         <div>
           <dt>Billing status</dt>
           <dd>{billing.subscription.status}</dd>
         </div>
       </dl>
-      <p>
-        Choose an event credit when creating a premium Round or Presentation room. One credit is
-        reserved for the room and used when its first audience member joins. Canceling an empty
-        room, or letting it expire, returns the reservation.
-      </p>
-      <p>
-        An event credit includes premium live delivery and that room’s reports. Library and AI
-        authoring allowances remain part of a workspace subscription.
-      </p>
+      {billing.eventCreditsEnabled && (
+        <p>
+          Choose an event credit when creating a premium Round or Presentation room. One credit is
+          reserved for the room and used when its first audience member joins. Canceling an empty
+          room, or letting it expire, returns the reservation.
+        </p>
+      )}
+      {billing.eventCreditsEnabled && (
+        <p>
+          An event credit includes premium live delivery and that room’s reports. Library and AI
+          authoring allowances remain part of{" "}
+          {userLicenses ? "your paid subscription" : "a workspace subscription"}.
+        </p>
+      )}
       {billing.subscription.graceUntil && (
         <p role="status">
-          Renewal payment needs attention. Paid workspace access is retained until{" "}
-          {new Date(billing.subscription.graceUntil).toLocaleString()}.
+          Renewal payment needs attention. Paid {userLicenses ? "user" : "workspace"} access is
+          retained until {new Date(billing.subscription.graceUntil).toLocaleString()}.
         </p>
       )}
       {overflow > 0 && (
         <p role="alert">
-          Your subscription has {overflow} fewer licenses than assigned workspaces. Review license
-          assignments; workspaces beyond the paid quantity no longer have subscription access.
+          {userLicenses
+            ? `Your subscription has ${overflow} fewer licenses than assigned users. Review user licenses before inviting more people.`
+            : `Your subscription has ${overflow} fewer licenses than assigned workspaces. Review license assignments; workspaces beyond the paid quantity no longer have subscription access.`}
         </p>
       )}
       {billing.commercialHold?.held && (
@@ -125,7 +192,13 @@ export function FundingGuide({ billing }: { billing: BillingView }) {
   );
 }
 
-export function OrganizationAccessGuide({ role }: { role: OrganizationRole }) {
+export function OrganizationAccessGuide({
+  role,
+  licenseUnit = "workspace",
+}: {
+  role: OrganizationRole;
+  licenseUnit?: LicenseUnit;
+}) {
   const permissions = organizationPermissions(role);
   return (
     <section className="panel" id="overview">
@@ -135,6 +208,13 @@ export function OrganizationAccessGuide({ role }: { role: OrganizationRole }) {
         Organization roles manage billing and administration. Workspace membership controls access
         to polls, presentations, and audience reports.
       </p>
+      {licenseUnit === "user" && (
+        <p>
+          Licensed users work in their own organization-owned workspace. Administrators manage the
+          organization and licenses; billing administrators manage payments without workspace
+          content access.
+        </p>
+      )}
       {!permissions.billing && (
         <p>
           Ask an organization owner, administrator, or billing administrator to manage licenses and

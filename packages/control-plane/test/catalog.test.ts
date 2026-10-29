@@ -2,6 +2,36 @@ import { describe, expect, it } from "vitest";
 import { parseCatalog, publicCatalog, requirePublishedOffer } from "../src/catalog.js";
 
 describe("configured business catalog", () => {
+  it("declares user licenses explicitly while preserving legacy workspace units", () => {
+    const base = {
+      version: 1,
+      title: "Team creators",
+      kind: "workspace_subscription",
+      interval: "month",
+    };
+    const offers = parseCatalog(
+      JSON.stringify([
+        { ...base, id: "legacy" },
+        { ...base, id: "creators", licenseUnit: "user" },
+      ]),
+    );
+    expect(offers[0]?.licenseUnit).toBeUndefined();
+    expect(offers[1]?.licenseUnit).toBe("user");
+    expect(() =>
+      parseCatalog(
+        JSON.stringify([
+          {
+            id: "credits",
+            version: 1,
+            title: "Credits",
+            kind: "event_credit_pack",
+            creditsPerUnit: 5,
+            licenseUnit: "user",
+          },
+        ]),
+      ),
+    ).toThrow();
+  });
   it("defaults to no purchasable offers and hides provider price identifiers", () => {
     expect(publicCatalog(parseCatalog())).toEqual([]);
     const offers = parseCatalog(

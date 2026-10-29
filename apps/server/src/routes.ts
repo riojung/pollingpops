@@ -136,6 +136,7 @@ import type { ProductEventDispatcher } from "./product-events.js";
 import { ROUND_DRAFT_BODY_LIMIT } from "./draft-limits.js";
 import { TextResponseReadError } from "./response-moderation.js";
 import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
+import { registerCustomerAccountRoutes, workspaceAccountContext } from "./customer-account.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const RoundHistoryParamsSchema = z.object({
@@ -521,6 +522,21 @@ export async function registerRoutes(
           403,
           "UNAUTHORIZED",
           "Your workspace role does not allow this action",
+          requestId,
+        );
+
+  const requireWorkspaceManagement = async (
+    creator: CreatorContext,
+    reply: FastifyReply,
+    requestId: string,
+  ) =>
+    (await workspaceAccountContext(repository, config, creator)).permissions.manageWorkspace
+      ? true
+      : apiError(
+          reply,
+          403,
+          "UNAUTHORIZED",
+          "Your role does not allow workspace configuration",
           requestId,
         );
 
@@ -1031,7 +1047,9 @@ export async function registerRoutes(
     return ManagementNavigationSchema.parse({
       user: user ? { userId: user.userId, email: user.email } : null,
       organizationManagementEnabled,
-      organizations: organizations.map(({ id, name, role }) => ({ id, name, role })),
+      organizations: organizations
+        .filter((organization) => organization.accountType !== "personal")
+        .map(({ id, name, role }) => ({ id, name, role })),
       operatorConsoleOrigin: null,
     });
   });
@@ -1049,6 +1067,7 @@ export async function registerRoutes(
   app.get("/v1/auth/me", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    reply.header("cache-control", "private, no-store");
     const entitlements = await workspaceEntitlements(
       repository,
       config,
@@ -1057,6 +1076,7 @@ export async function registerRoutes(
     );
     return {
       creator,
+      workspace: await workspaceAccountContext(repository, config, creator),
       businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
       entitlements,
       productFeatures: await workspaceProductFeatures(creator.workspaceId),
@@ -1065,6 +1085,8 @@ export async function registerRoutes(
         : null,
     };
   });
+
+  registerCustomerAccountRoutes(app, { repository, config, auth });
 
   app.put("/v1/account/locale", async (request, reply) => {
     const user = await auth.requireUser(request, reply);
@@ -1339,20 +1361,43 @@ export async function registerRoutes(
   });
 
   app.get("/v1/workspaces", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
-    const workspaces = await repository.listWorkspaces(creator.userId);
+    const user = await auth.requireUser(request, reply);
+    if (!user) return;
+    reply.header("cache-control", "private, no-store");
+    const creator = await auth.creatorFromRequest(request);
+    const platform = createPlatformRepository(repository);
+    const [workspaces, organizations] = await Promise.all([
+      repository.listWorkspaces(user.userId),
+      platform.listOrganizations(user.userId),
+    ]);
     return {
-      activeWorkspaceId: creator.workspaceId,
-      workspaces: workspaces.map((workspace) => WorkspaceSummarySchema.parse(workspace)),
+      activeWorkspaceId: creator?.workspaceId ?? null,
+      workspaces: await Promise.all(
+        workspaces.map(async (workspace) => {
+          const organization = await platform.getOrganizationForWorkspace(workspace.id);
+          const accountType = organization?.accountType ?? "personal";
+          return WorkspaceSummarySchema.parse({
+            ...workspace,
+            accountType,
+            ...(accountType === "organization" && organization
+              ? {
+                  organizationId: organization.id,
+                  organizationName: organization.name,
+                  organizationRole:
+                    organizations.find((item) => item.id === organization.id)?.role ?? null,
+                }
+              : {}),
+          });
+        }),
+      ),
     };
   });
 
   app.post("/v1/workspaces/:id/select", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
+    const user = await auth.requireUser(request, reply);
+    if (!user) return;
     const { id } = WorkspaceParamsSchema.parse(request.params);
-    const selected = await auth.switchWorkspace(request, creator, id);
+    const selected = await auth.switchWorkspace(request, user, id);
     if (!selected) {
       return apiError(reply, 404, "NOT_FOUND", "Workspace membership not found", request.id);
     }
@@ -1555,7 +1600,7 @@ export async function registerRoutes(
   app.put("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
+    if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
     const entitlements = await workspaceEntitlements(
       repository,
       config,
@@ -1592,7 +1637,7 @@ export async function registerRoutes(
   app.delete("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
+    if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
     await repository.updateBrandTheme(creator.workspaceId, null);
     await repository.recordAudit({
       workspaceId: creator.workspaceId,
@@ -1619,7 +1664,7 @@ export async function registerRoutes(
   app.put("/v1/account/embed-origins", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
+    if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
     const input = EmbedAllowedOriginsSchema.parse(request.body);
     const origins = await repository.updateEmbedAllowedOrigins(creator.workspaceId, input.origins);
     await repository.recordAudit({
@@ -3676,7 +3721,8 @@ export async function registerRoutes(
       const billing = await repository.getBillingProfile(creator.workspaceId);
       if (
         billing.plan !== "free" ||
-        !["free", "canceled", "incomplete_expired"].includes(billing.status)
+        !["free", "canceled", "incomplete_expired"].includes(billing.status) ||
+        (billing.status === "free" && billing.subscriptionId !== null)
       ) {
         return apiError(
           reply,
@@ -3895,23 +3941,34 @@ export async function registerRoutes(
   });
 
   app.delete("/v1/account", async (request, reply) => {
-    if (config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE) {
-      const user = await auth.requireUser(request, reply);
-      if (!user) return;
-      z.object({ confirmation: z.literal("DELETE") }).parse(request.body);
-      const platform = createPlatformRepository(repository);
-      await platform.assertIdentityDeletionAllowed(user.userId);
+    const user = await auth.requireUser(request, reply);
+    if (!user) return;
+    z.object({ confirmation: z.literal("DELETE") }).parse(request.body);
+    const platform = createPlatformRepository(repository);
+    const [organizations, memberships] = await Promise.all([
+      platform.listOrganizations(user.userId),
+      repository.listWorkspaces(user.userId),
+    ]);
+    const ownedWorkspaces = memberships.filter((workspace) => workspace.role === "owner");
+    const ownedOrganizations = await Promise.all(
+      ownedWorkspaces.map((workspace) => platform.getOrganizationForWorkspace(workspace.id)),
+    );
+    const retainsOrganizationContent =
+      organizations.some((organization) => organization.accountType !== "personal") ||
+      ownedOrganizations.some(
+        (organization) => organization !== null && organization.accountType !== "personal",
+      );
+    await platform.assertIdentityDeletionAllowed(user.userId);
+    if (
+      (config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE) ||
+      retainsOrganizationContent
+    ) {
       await repository.deleteUserIdentity(user.userId);
       auth.clearSessionCookie(reply);
       return reply.code(204).send();
     }
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    const { confirmation } = z.object({ confirmation: z.literal("DELETE") }).parse(request.body);
-    void confirmation;
-    const ownedWorkspaces = (await repository.listWorkspaces(creator.userId)).filter(
-      (workspace) => workspace.role === "owner",
-    );
     const ownedWorkspaceData = await Promise.all(
       ownedWorkspaces.map(async (workspace) => ({
         workspace,

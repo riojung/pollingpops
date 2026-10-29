@@ -145,3 +145,34 @@
 .quantity {
   width: 110px;
 }
+.seatSummary {
+  margin-block: 16px;
+}
+.seatCounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.seatCounts div {
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface-soft);
+}
+.seatCounts dt {
+  color: var(--ui-text-muted);
+  font-size: 0.875rem;
+}
+.seatCounts dd {
+  margin: 4px 0 0;
+  color: var(--ui-text-strong);
+  font-size: 1.5rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.dangerSection {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-danger-text);
+}

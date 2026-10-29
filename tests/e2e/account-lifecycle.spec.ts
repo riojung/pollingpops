@@ -79,6 +79,7 @@ test("creator can archive, restore, export, and delete their account", async ({
   await expect(archivedCard.getByText("draft", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Account", exact: true }).click();
+  await page.getByRole("tab", { name: "Privacy and data", exact: true }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download account export" }).click();
   const download = await downloadPromise;
@@ -109,6 +110,7 @@ test("workspace owner invites a viewer with read-only access", async ({ browser 
   // An existing account has its own workspace before accepting this invitation.
   // Verification leaves it anonymous, so its first PIN must select the invited one.
   await verifyCreatorEmail(viewer, viewerEmail);
+  await owner.getByRole("tab", { name: "People", exact: true }).click();
   await owner.getByLabel("Email address").fill(viewerEmail);
   await owner.getByLabel("Role").selectOption("viewer");
   await owner.getByRole("button", { name: "Invite member" }).click();

@@ -1,8 +1,10 @@
+import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
 import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
+  ...customerAccountMessages("ja-JP"),
   "questionType.open_text.label": "自由記述",
   "questionType.open_text.description": "正解のない、進行役が確認する説明です。",
   "questionType.word_cloud.label": "ワードクラウド",

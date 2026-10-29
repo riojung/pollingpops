@@ -91,7 +91,15 @@ describe("authenticated management discovery", () => {
     const { app, platform } = await fixture();
     const owner = await signIn(app);
     const other = await signIn(app);
-    const organization = (await platform.getOrganizationForWorkspace(owner.creator.workspaceId))!;
+    const personal = (await platform.getOrganizationForWorkspace(owner.creator.workspaceId))!;
+    const organization = await platform.createOrganization({
+      name: "Customer company",
+      actorId: owner.creator.userId,
+    });
+    const unrelated = await platform.createOrganization({
+      name: "Another company",
+      actorId: other.creator.userId,
+    });
     const response = await app.inject({
       method: "GET",
       url: "/v1/auth/navigation",
@@ -102,9 +110,8 @@ describe("authenticated management discovery", () => {
     expect(data.organizations).toEqual([
       { id: organization.id, name: organization.name, role: "owner" },
     ]);
-    expect(data.organizations).not.toContainEqual(
-      expect.objectContaining({ id: other.creator.workspaceId }),
-    );
+    expect(data.organizations).not.toContainEqual(expect.objectContaining({ id: unrelated.id }));
+    expect(data.organizations).not.toContainEqual(expect.objectContaining({ id: personal.id }));
     expect(response.json()).not.toHaveProperty("operator");
     expect(response.json()).not.toHaveProperty("capabilities");
     expect(data.operatorConsoleOrigin).toBeNull();
@@ -114,7 +121,10 @@ describe("authenticated management discovery", () => {
     const { app, repository, platform } = await fixture();
     const owner = await signIn(app);
     const finance = await signIn(app);
-    const organization = (await platform.getOrganizationForWorkspace(owner.creator.workspaceId))!;
+    const organization = await platform.createOrganization({
+      name: "Finance company",
+      actorId: owner.creator.userId,
+    });
     await platform.setOrganizationMember({
       organizationId: organization.id,
       actorId: owner.creator.userId,

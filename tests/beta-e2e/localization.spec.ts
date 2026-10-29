@@ -109,8 +109,9 @@ test("Korean localizes workspace settings without translating account data", asy
     await expect(page.locator("main#main")).toHaveAttribute("lang", "ko-KR");
     await expect(page.getByRole("heading", { name: "워크스페이스 설정", level: 1 })).toBeVisible();
     await expect(page.getByRole("heading", { name: "활성 워크스페이스" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "ID 및 연동 정책" })).toBeVisible();
+    await page.getByRole("tab", { name: "보안 및 연동", exact: true }).click();
     await expect(page.getByRole("heading", { name: "안전한 임베드 출처" })).toBeVisible();
+    await page.getByRole("tab", { name: "구성원", exact: true }).click();
     await expect(page.getByRole("heading", { name: "워크스페이스 구성원" })).toBeVisible();
     await expect(page.getByRole("cell", { name: betaEmail, exact: true })).toBeVisible();
 

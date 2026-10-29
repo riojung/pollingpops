@@ -12,6 +12,7 @@ import {
   PostgresPlatformRepository,
 } from "./platform-postgres.js";
 import { PlatformService } from "./platform-service.js";
+import { PlatformError } from "./platform-types.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
 import {
@@ -1872,6 +1873,18 @@ export class PostgresRepository implements Repository {
   }
 
   async createWorkspaceInvitation(input: WorkspaceInvitationRecord) {
+    const platform = new PostgresPlatformRepository(this);
+    const organization = await platform.getOrganizationForWorkspace(input.workspaceId);
+    if (
+      organization &&
+      ((await platform.getSubscription(organization.id)).licenseUnit ??
+        organization.licenseUnit ??
+        "workspace") === "user"
+    )
+      throw new PlatformError(
+        "ORGANIZATION_MEMBERSHIP_REQUIRED",
+        "Invite licensed users through the organization People settings",
+      );
     const result = await this.workspaceQuery(
       input.workspaceId,
       `INSERT INTO workspace_invitations
@@ -1919,9 +1932,12 @@ export class PostgresRepository implements Repository {
     return this.transaction(
       async (client) => {
         const invitationResult = await client.query(
-          `SELECT invitation.*, workspace.segment
+          `SELECT invitation.*, workspace.segment,
+                  COALESCE(subscription.data->>'licenseUnit',organization.license_unit) AS license_unit
            FROM workspace_invitations AS invitation
            JOIN workspaces AS workspace ON workspace.id = invitation.workspace_id
+           JOIN organizations organization ON organization.id=workspace.organization_id
+           LEFT JOIN platform_records subscription ON subscription.kind='subscription' AND subscription.id=organization.id::text
            WHERE invitation.token_hash = $1 AND invitation.accepted_at IS NULL
              AND invitation.revoked_at IS NULL AND invitation.expires_at > $2
            FOR UPDATE OF invitation`,
@@ -1929,6 +1945,7 @@ export class PostgresRepository implements Repository {
         );
         const invitation = invitationResult.rows[0];
         if (!invitation) return null;
+        if (invitation.license_unit === "user") return null;
 
         let userResult = await client.query(
           "SELECT id, email FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL",

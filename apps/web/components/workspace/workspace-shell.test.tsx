@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { WorkspaceAccountContext } from "./workspace-provider";
 import { LocaleProvider } from "../locale-provider";
 import { englishMessages } from "../../lib/i18n/catalog";
 import { workspacePageEnglishMessages } from "../../lib/i18n/domains/workspace-pages";
@@ -15,6 +16,8 @@ const fixtures = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   workspace: {
+    workspace: null as WorkspaceAccountContext | null,
+    entitlements: null as { plan: "free" | "pro" | "team" } | null,
     creator: {
       userId: "user-1",
       workspaceId: "workspace-1",
@@ -76,6 +79,8 @@ describe("professional workspace shell", () => {
     fixtures.effects = [];
     fixtures.pathname = "/library";
     fixtures.workspace.error = "";
+    fixtures.workspace.workspace = null;
+    fixtures.workspace.entitlements = null;
     fixtures.workspace.refreshAccount.mockClear();
     fixtures.workspace.canEdit = true;
     fixtures.workspace.productFeatures.uxBeta = true;
@@ -103,6 +108,60 @@ describe("professional workspace shell", () => {
     );
     const topbar = markup.match(/<header[^]*?<\/header>/)?.[0] ?? "";
     expect(topbar).toMatch(new RegExp(`aria-current="page"[^>]*href="${href}"`));
+  });
+
+  it("shows organization identity, the assigned user workspace and organization role", () => {
+    fixtures.workspace.workspace = {
+      id: "workspace-1",
+      name: "Sales - Alex",
+      accountType: "organization",
+      licenseUnit: "user",
+      planSource: "subscription",
+      organization: { id: "org-1", name: "ABC Company", role: "admin" },
+      permissions: {
+        manageWorkspace: true,
+        managePeople: true,
+        manageBilling: true,
+        manageIntegrations: true,
+      },
+    };
+    fixtures.workspace.entitlements = { plan: "team" };
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Content</p>
+      </WorkspaceShell>,
+    );
+    expect(markup).toContain("ABC Company");
+    expect(markup).toContain("Sales - Alex");
+    expect(markup).toContain("Administrator · Team plan");
+    expect(markup).not.toContain("Workplace workspace");
+  });
+
+  it("identifies personal community access without implying a paid team organization", () => {
+    fixtures.workspace.workspace = {
+      id: "workspace-1",
+      name: "Alex's workspace",
+      accountType: "personal",
+      licenseUnit: "workspace",
+      planSource: "community",
+      organization: null,
+      permissions: {
+        manageWorkspace: true,
+        managePeople: true,
+        manageBilling: true,
+        manageIntegrations: true,
+      },
+    };
+    fixtures.workspace.entitlements = { plan: "team" };
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Content</p>
+      </WorkspaceShell>,
+    );
+    expect(markup).toContain("Alex&#x27;s workspace");
+    expect(markup).toContain("Personal workspace");
+    expect(markup).toContain("Owner · Community access");
+    expect(markup).not.toContain("Team plan");
   });
 
   it("exposes the complete task navigation and marks Library current", () => {

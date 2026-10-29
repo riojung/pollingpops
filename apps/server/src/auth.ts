@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LocalReturnPathSchema } from "@openround/contracts";
+import { createPlatformRepository, PlatformError } from "@openround/db";
 import type {
   CreatorContext,
   MagicLinkIdentity,
@@ -27,6 +28,13 @@ export class AuthService {
 
   private async effectiveCreator(creator: CreatorContext): Promise<CreatorContext> {
     if (this.config.COMMUNITY_MODE) return { ...creator, plan: "team" };
+    const platform = createPlatformRepository(this.repository);
+    const organization = await platform.getOrganizationForWorkspace(creator.workspaceId);
+    if (
+      organization?.licenseUnit === "user" &&
+      !(await platform.workspaceHasLicense(creator.workspaceId))
+    )
+      return { ...creator, role: "viewer", plan: "free" };
     return this.config.BUSINESS_PLATFORM_ENABLED
       ? { ...creator, plan: await this.repository.getPlan(creator.workspaceId) }
       : creator;
@@ -149,6 +157,14 @@ export class AuthService {
   }
 
   async inviteWorkspace(creator: CreatorContext, email: string, role: "editor" | "viewer") {
+    const organization = await createPlatformRepository(
+      this.repository,
+    ).getOrganizationForWorkspace(creator.workspaceId);
+    if (organization?.licenseUnit === "user")
+      throw new PlatformError(
+        "ORGANIZATION_MEMBERSHIP_REQUIRED",
+        "Manage licensed users through organization People settings",
+      );
     const token = opaqueToken();
     const invitation = await this.repository.createWorkspaceInvitation({
       id: randomUUID(),
@@ -193,7 +209,11 @@ export class AuthService {
     return this.effectiveCreator(creator);
   }
 
-  async switchWorkspace(request: FastifyRequest, creator: CreatorContext, workspaceId: string) {
+  async switchWorkspace(
+    request: FastifyRequest,
+    creator: Pick<UserPrincipal, "userId">,
+    workspaceId: string,
+  ) {
     const token = request.cookies[this.config.COOKIE_NAME];
     if (!token) return false;
     return this.repository.setCreatorSessionWorkspace(

@@ -48,6 +48,8 @@ const organizationRow = (row: QueryResultRow) => ({
   id: row.id,
   name: row.name,
   status: row.status,
+  accountType: row.account_type ?? "organization",
+  licenseUnit: row.license_unit ?? "workspace",
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at),
 });
@@ -188,9 +190,17 @@ export class PostgresPlatformStore implements PlatformStore {
     const data = value as Record<string, unknown>;
     if (kind === "organization") {
       await this.client.query(
-        `INSERT INTO organizations(id,name,status,created_at,updated_at)
-        VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,status=EXCLUDED.status,updated_at=EXCLUDED.updated_at`,
-        [id, data.name, data.status, data.createdAt, data.updatedAt],
+        `INSERT INTO organizations(id,name,status,created_at,updated_at,account_type,license_unit)
+        VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,status=EXCLUDED.status,updated_at=EXCLUDED.updated_at,account_type=EXCLUDED.account_type,license_unit=EXCLUDED.license_unit`,
+        [
+          id,
+          data.name,
+          data.status,
+          data.createdAt,
+          data.updatedAt,
+          data.accountType ?? "organization",
+          data.licenseUnit ?? "workspace",
+        ],
       );
       await this.client.query(
         "INSERT INTO platform_credit_accounts(organization_id) VALUES($1) ON CONFLICT DO NOTHING",
@@ -357,10 +367,78 @@ export class PostgresPlatformStore implements PlatformStore {
       return this.transaction("identity", (store) => store.deleteUserMemberships(user));
     await this.client.query("DELETE FROM workspace_members WHERE user_id=$1", [user]);
   }
+  async grantWorkspaceMembership(
+    workspaceId: string,
+    userId: string,
+    role: "owner" | "editor" | "viewer",
+  ) {
+    if (!this.client)
+      return this.transaction(`workspace:${workspaceId}`, (store) =>
+        store.grantWorkspaceMembership(workspaceId, userId, role),
+      );
+    await this.client.query(
+      `INSERT INTO workspace_members(workspace_id,user_id,role) VALUES($1,$2,$3)
+       ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=
+         CASE WHEN EXCLUDED.role='owner' THEN 'owner' ELSE workspace_members.role END`,
+      [workspaceId, userId, role],
+    );
+  }
+  async revokeOrganizationWorkspaceMemberships(organizationId: string, userId: string) {
+    if (!this.client)
+      return this.transaction(`org:${organizationId}`, (store) =>
+        store.revokeOrganizationWorkspaceMemberships(organizationId, userId),
+      );
+    const active = await this.client.query(
+      `WITH controlled AS (
+      SELECT workspace.id FROM workspaces workspace WHERE workspace.organization_id=$1 AND (
+        workspace.owner_id=$2 OR EXISTS(SELECT 1 FROM workspace_members membership WHERE membership.workspace_id=workspace.id AND membership.user_id=$2)
+        OR EXISTS(SELECT 1 FROM session_staff_credentials credential WHERE credential.workspace_id=workspace.id AND credential.created_by=$2 AND credential.revoked_at IS NULL AND credential.expires_at>clock_timestamp())
+        OR EXISTS(SELECT 1 FROM game_sessions room WHERE room.workspace_id=workspace.id AND room.host_id=$2)
+        OR EXISTS(SELECT 1 FROM presentation_live_sessions room WHERE room.workspace_id=workspace.id AND room.created_by=$2)
+      )) SELECT 1 WHERE
+        EXISTS(SELECT 1 FROM live_room_codes room JOIN controlled ON controlled.id=room.workspace_id WHERE room.artifact_type IN ('round','presentation') AND room.released_at IS NULL AND room.expires_at>clock_timestamp())
+        OR EXISTS(SELECT 1 FROM game_sessions room JOIN controlled ON controlled.id=room.workspace_id WHERE room.state<>'finished' AND room.ended_at IS NULL AND room.deleted_at IS NULL AND room.expires_at>clock_timestamp())
+        OR EXISTS(SELECT 1 FROM presentation_live_sessions room JOIN controlled ON controlled.id=room.workspace_id WHERE room.status='active' AND room.live_expires_at>clock_timestamp())`,
+      [organizationId, userId],
+    );
+    if (active.rowCount)
+      throw new PlatformError(
+        "WORKSPACE_BUSY",
+        "Finish or expire active Round and Presentation rooms before removing this user's organization access",
+      );
+    await this.client.query(
+      `DELETE FROM workspace_members member USING workspaces workspace
+       WHERE member.workspace_id=workspace.id AND workspace.organization_id=$1 AND member.user_id=$2`,
+      [organizationId, userId],
+    );
+    // Retain the selected workspace so stale content/settings writes fail authorization.
+    // Identity-level workspace selection can explicitly choose a remaining membership.
+  }
   async workspaceOwnerIds(user: string): Promise<string[]> {
     if (!this.client) return this.transaction("read", (store) => store.workspaceOwnerIds(user));
-    const result = await this.client.query("SELECT id FROM workspaces WHERE owner_id=$1", [user]);
+    const result = await this.client.query(
+      `SELECT workspace.id FROM workspaces workspace JOIN workspace_members membership
+       ON membership.workspace_id=workspace.id AND membership.user_id=$1 AND membership.role='owner'
+       WHERE workspace.owner_id=$1`,
+      [user],
+    );
     return result.rows.map((row) => row.id);
+  }
+  async legacyWorkspaceSubscription(workspaceId: string): Promise<{
+    subscriptionId: string | null;
+    status: string;
+  } | null> {
+    if (!this.client)
+      return this.transaction("read", (store) => store.legacyWorkspaceSubscription(workspaceId));
+    const result = await this.client.query<{
+      subscriptionId: string | null;
+      status: string;
+    }>(
+      `SELECT provider_subscription_id AS "subscriptionId", status
+       FROM subscriptions WHERE workspace_id=$1`,
+      [workspaceId],
+    );
+    return result.rows[0] ?? null;
   }
   async hasActiveSubscriptionRoom(workspace: string): Promise<boolean> {
     if (!this.client)

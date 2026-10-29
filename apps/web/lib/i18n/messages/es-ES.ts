@@ -1,3 +1,5 @@
+import { sidebarMessages } from "../sidebar-messages";
+import { templateMessages } from "../template-messages";
 import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
@@ -5,6 +7,8 @@ import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
   ...customerAccountMessages("es-ES"),
+  ...sidebarMessages("es-ES"),
+  ...templateMessages("es-ES"),
   "questionType.open_text.label": "Texto abierto",
   "questionType.open_text.description": "Una explicación moderada sin respuesta correcta.",
   "questionType.word_cloud.label": "Nube de palabras",

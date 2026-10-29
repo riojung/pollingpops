@@ -3,72 +3,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import type { ContentSlideRegion, PresentationDraft } from "@openround/contracts";
 import { AuthoringAssistant } from "../../../components/authoring-assistant";
 import { useLocale } from "../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../lib/api";
-import type { MessageKey } from "../../../lib/i18n/catalog";
-import { clientUuid } from "../../../lib/uuid";
 import { WorkspaceProvider, useWorkspace } from "../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
-import {
-  recordAuthoringEvent,
-  recordCreationEvent,
-} from "../../../components/workspace/product-events";
+import { recordCreationEvent } from "../../../components/workspace/product-events";
+import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
 import styles from "../../../components/workspace/workspace-hub.module.css";
-
-type PresentationTemplateKind = "review" | "training" | "meeting";
-
-function templateContentSlide(
-  layout: "title_body" | "section" | "callout",
-  title: string,
-  body: string,
-  speakerNotes: string,
-) {
-  const id = clientUuid();
-  const titleRegion: ContentSlideRegion = layout === "callout" ? "top_center" : "middle_center";
-  const bodyRegion: ContentSlideRegion = layout === "section" ? "bottom_center" : "middle_center";
-  return {
-    id,
-    kind: "content" as const,
-    layout,
-    textElements: [
-      { id: `${id}:title`, role: "title" as const, text: title, region: titleRegion, order: 0 },
-      {
-        id: `${id}:body`,
-        role: "body" as const,
-        text: body,
-        region: bodyRegion,
-        order: titleRegion === bodyRegion ? 1 : 0,
-      },
-    ],
-    mediaId: null,
-    mediaAlt: null,
-    speakerNotes,
-  };
-}
-
-const presentationTemplates: Array<{
-  kind: PresentationTemplateKind;
-  titleKey: MessageKey;
-  descriptionKey: MessageKey;
-}> = [
-  {
-    kind: "review",
-    titleKey: "create.presentation.template.review.title",
-    descriptionKey: "create.presentation.template.review.description",
-  },
-  {
-    kind: "training",
-    titleKey: "create.presentation.template.training.title",
-    descriptionKey: "create.presentation.template.training.description",
-  },
-  {
-    kind: "meeting",
-    titleKey: "create.presentation.template.meeting.title",
-    descriptionKey: "create.presentation.template.meeting.description",
-  },
-];
 
 function PresentationLauncher() {
   const router = useRouter();
@@ -92,104 +34,6 @@ function PresentationLauncher() {
       });
       recordCreationEvent("creation_completed", "blank", "presentation");
       router.push(`/presentation/${response.presentation.id}`);
-    } catch (caught) {
-      setError(humanError(caught));
-      setCreating(false);
-    }
-  }
-
-  async function createTemplate(kind: PresentationTemplateKind) {
-    setCreating(true);
-    setError("");
-    recordCreationEvent("creation_started", "starter", "presentation");
-    try {
-      const labels = {
-        review: "Evidence review",
-        training: "Training and recovery",
-        meeting: "Team meeting",
-      };
-      const created = await apiFetch<{
-        presentation: { id: string; draftRevision: number };
-      }>("/v1/presentations", {
-        method: "POST",
-        body: JSON.stringify({ title: labels[kind], description: "" }),
-      });
-      const questionId = clientUuid();
-      const recheckId = clientUuid();
-      const mainQuestion = {
-        id: questionId,
-        type: kind === "meeting" ? ("poll" as const) : ("single_select" as const),
-        prompt:
-          kind === "meeting"
-            ? "Which topic should we discuss first?"
-            : "Which idea is best supported by the material?",
-        choices: [
-          { id: clientUuid(), label: "Option one", isCorrect: kind !== "meeting" },
-          { id: clientUuid(), label: "Option two", isCorrect: false },
-        ],
-        purpose: kind === "meeting" ? ("opinion" as const) : ("diagnostic" as const),
-        confidence: kind === "meeting" ? ("off" as const) : ("optional" as const),
-        delivery: "main" as const,
-        conceptKeys: kind === "meeting" ? [] : ["core-idea"],
-        linkedRecheckQuestionId: kind === "training" ? recheckId : null,
-        timeLimitSeconds: 30,
-        basePoints: kind === "meeting" ? 0 : 1_000,
-        explanation: "Replace this guidance with an evidence-based explanation.",
-        mediaId: null,
-        mediaAlt: null,
-      };
-      const draft: PresentationDraft = {
-        title: labels[kind],
-        description: "Adapt this structured template to the facilitation goal.",
-        experiencePreset: { id: "focus", version: 1 },
-        schemaVersion: 2,
-        blocks: [
-          templateContentSlide(
-            kind === "meeting" ? "section" : "title_body",
-            labels[kind],
-            "Set the context, desired outcome, and evidence participants need before responding.",
-            "Confirm the purpose and invite questions before advancing.",
-          ),
-          { id: clientUuid(), kind: "question", question: mainQuestion },
-          ...(kind === "training"
-            ? [
-                templateContentSlide(
-                  "callout",
-                  "Intervention",
-                  "Clarify the misconception using a worked example before the recheck.",
-                  "Do not reveal the recheck answer.",
-                ),
-                {
-                  id: clientUuid(),
-                  kind: "question" as const,
-                  question: {
-                    ...mainQuestion,
-                    id: recheckId,
-                    prompt: "Apply the clarified idea in a new situation.",
-                    choices: mainQuestion.choices.map((choice) => ({
-                      ...choice,
-                      id: clientUuid(),
-                    })),
-                    delivery: "recheck" as const,
-                    linkedRecheckQuestionId: null,
-                  },
-                },
-              ]
-            : []),
-        ],
-      };
-      await apiFetch(`/v1/presentations/${created.presentation.id}/draft`, {
-        method: "PUT",
-        body: JSON.stringify({
-          draft,
-          expectedRevision: created.presentation.draftRevision,
-          mutationId: clientUuid(),
-          schemaVersion: 2,
-        }),
-      });
-      recordCreationEvent("creation_completed", "starter", "presentation");
-      recordAuthoringEvent("first_block_created", "presentation");
-      router.push(`/presentation/${created.presentation.id}`);
     } catch (caught) {
       setError(humanError(caught));
       setCreating(false);
@@ -302,24 +146,7 @@ function PresentationLauncher() {
             <section className={styles.panel}>
               <p className="eyebrow">{t("create.presentation.templates.eyebrow")}</p>
               <h2>{t("create.presentation.templates.title")}</h2>
-              <div className={styles.methodGrid}>
-                {presentationTemplates.map(({ kind, titleKey, descriptionKey }) => (
-                  <button
-                    className={styles.methodCard}
-                    disabled={creating}
-                    key={kind}
-                    onClick={() => void createTemplate(kind)}
-                    type="button"
-                  >
-                    <small>{t("create.common.presentationTemplate")}</small>
-                    <h3>{t(titleKey)}</h3>
-                    <p>{t(descriptionKey)}</p>
-                    <span className={styles.cardLink}>
-                      {t("create.presentation.templates.use")}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <PresentationTemplateGallery />
             </section>
           ) : null}
 

@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("zh-TW"),
   "pages.folders.loadingFailed": "無法載入資料夾。請再試一次。",
   "pages.folders.description": "使用資料夾和子資料夾整理{type}。",
   "pages.folders.backToLibrary": "返回資料庫",

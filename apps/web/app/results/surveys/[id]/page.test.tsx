@@ -239,7 +239,11 @@ describe("Survey results detail", () => {
     expect(markup).toContain("Closing early does not change this deadline.");
     expect(markup).toContain('id="survey-counts-question-a">Response counts</caption>');
     expect(markup).toContain('scope="col">Response</th>');
-    expect(markup).toContain("Planning</th><td>6</td>");
+    expect(markup).toContain('scope="row" lang="">Planning');
+    expect(markup).toContain("</th><td>6</td>");
+    // Multi-select bars use each question's respondent count, not the sum of selections.
+    expect(markup).toContain("width:75%");
+    expect(markup).toContain("width:62.5%");
     expect(markup).toContain("Multiple selections allowed.");
     expect(markup).toContain('data-source="survey:survey-a"');
     expect(markup).toContain('href="/results?view=surveys"');
@@ -271,7 +275,8 @@ describe("Survey results detail", () => {
     );
     const markup = await reportHarness().settle();
     expect(markup).toContain(`id="survey-question-question-a" lang="">${prompt}</h3>`);
-    expect(markup).toContain(`scope="row" lang="">${label}</th>`);
+    expect(markup).toContain(`scope="row" lang="">${label}`);
+    expect(markup).toContain("width:100%");
     expect(markup).toContain('role="region"');
     expect(markup).toContain(`aria-label="Question 1 results: ${prompt}" tabindex="0"`);
     expect(markup).toContain('id="survey-counts-question-a">Response counts</caption>');

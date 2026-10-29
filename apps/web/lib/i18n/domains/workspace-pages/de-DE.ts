@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("de-DE"),
   "pages.folders.loadingFailed":
     "Die Ordner konnten nicht geladen werden. Versuchen Sie es erneut.",
   "pages.folders.description": "Organisieren Sie {type} mit Ordnern und Unterordnern.",

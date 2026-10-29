@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { SupportedLocale } from "@openround/contracts";
 
 export const workspacePageEnglishMessages = {
+  ...resultsOverviewMessages("en-CA"),
   "pages.folders.loadingFailed": "Folders could not be loaded. Try again.",
   "pages.folders.description": "Organize {type} with folders and nested folders.",
   "pages.folders.backToLibrary": "Back to Library",

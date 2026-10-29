@@ -15,6 +15,7 @@ import styles from "../../../../components/workspace/workspace-content.module.cs
 import { apiFetch } from "../../../../lib/api";
 import { formatDateTime, formatNumber } from "../../../../lib/i18n/format";
 import reportStyles from "./survey-results.module.css";
+import { evidencePercent } from "../../results-overview-model";
 
 interface SurveyRoom {
   title: string;
@@ -183,6 +184,15 @@ function SurveyResults() {
                               <tr key={row.label}>
                                 <th scope="row" lang="">
                                   {row.label}
+                                  {question.answeredCount !== null && question.answeredCount > 0 ? (
+                                    <span className={reportStyles.responseBar} aria-hidden="true">
+                                      <span
+                                        style={{
+                                          width: `${evidencePercent(row.count, question.answeredCount)}%`,
+                                        }}
+                                      />
+                                    </span>
+                                  ) : null}
                                 </th>
                                 <td>{formatNumber(locale, row.count)}</td>
                               </tr>

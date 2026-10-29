@@ -3172,6 +3172,18 @@ export const StarterIdSchema = z.enum([
   "customer-discovery",
   "this-or-that",
   "weekend-warmup",
+  "source-evaluation",
+  "experiment-design",
+  "probability-basics",
+  "feedback-skills",
+  "privacy-by-design",
+  "version-control",
+  "event-feedback",
+  "onboarding-experience",
+  "team-collaboration",
+  "service-experience",
+  "learning-needs",
+  "community-planning",
 ]);
 export type StarterId = z.infer<typeof StarterIdSchema>;
 
@@ -3183,6 +3195,7 @@ export const StarterSummarySchema = z.object({
   category: RoundCategorySchema,
   experiencePreset: ExperiencePresetRefSchema,
   questionCount: z.number().int().positive(),
+  previewPrompt: z.string().min(1).max(2_000).optional(),
   responseTypes: z.array(QuestionTypeSchema).min(1),
   version: z.literal(1),
   roundType: z.enum(["quiz", "poll", "custom"]).default("custom"),

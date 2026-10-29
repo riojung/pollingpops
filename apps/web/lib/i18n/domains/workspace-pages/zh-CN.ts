@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("zh-CN"),
   "pages.folders.loadingFailed": "无法加载文件夹。请重试。",
   "pages.folders.description": "使用文件夹和子文件夹整理{type}。",
   "pages.folders.backToLibrary": "返回资源库",

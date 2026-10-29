@@ -12,6 +12,8 @@ import { ColorModeMenu } from "./color-mode-menu";
 import { LanguageMenu } from "./language-menu";
 import { FeedbackButton } from "./feedback-button";
 import { ManagementNavigationLinks } from "../management-navigation";
+import { customerManagementLinks } from "../../lib/management-navigation";
+import type { ManagementNavigationState } from "../management-navigation";
 import {
   useWorkspace,
   WorkspaceProvider,
@@ -32,7 +34,34 @@ type IconName =
   | "plus"
   | "presentation"
   | "activity"
-  | "help";
+  | "help"
+  | "collapse"
+  | "expand"
+  | "signOut"
+  | "upgrade"
+  | "billing"
+  | "settings";
+
+export const SIDEBAR_PREFERENCE_KEY = "pollingpops:sidebar-collapsed:v1";
+
+export function readSidebarCollapsed() {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function saveSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(collapsed));
+  } catch {
+    // The current page still works when browser storage is unavailable.
+  }
+}
 
 const destinations: Array<{
   href: string;
@@ -205,6 +234,40 @@ function ShellIcon({ name }: { name: IconName }) {
           <path d="M9.8 9a2.4 2.4 0 0 1 4.6 1c0 2-2.4 2.2-2.4 4M12 18h.01" />
         </svg>
       );
+    case "collapse":
+    case "expand":
+      return (
+        <svg {...common}>
+          <rect height="16" rx="2" width="20" x="2" y="4" />
+          <path d="M8 4v16" />
+          <path d={name === "collapse" ? "m16 9-3 3 3 3" : "m13 9 3 3-3 3"} />
+        </svg>
+      );
+    case "signOut":
+      return (
+        <svg {...common}>
+          <path d="M10 4H5v16h5M9 12h12m-4-4 4 4-4 4" />
+        </svg>
+      );
+    case "upgrade":
+      return (
+        <svg {...common}>
+          <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" />
+        </svg>
+      );
+    case "billing":
+      return (
+        <svg {...common}>
+          <rect height="14" rx="2" width="20" x="2" y="5" />
+          <path d="M2 10h20M6 15h4" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}>
+          <path d="M4 7h16M4 17h16M8 4v6M16 14v6" />
+        </svg>
+      );
   }
 }
 
@@ -225,7 +288,13 @@ interface WorkspaceShellProps {
 export type WorkspaceRolloutFeature =
   "workspaceShell" | "builderV2" | "presentations" | "groups" | "discover";
 
-export function WorkspaceNav({ mobile = false }: { mobile?: boolean }) {
+export function WorkspaceNav({
+  mobile = false,
+  collapsed = false,
+}: {
+  mobile?: boolean;
+  collapsed?: boolean;
+}) {
   const pathname = usePathname();
   const { locale, t } = useLocale();
   const { productFeatures } = useWorkspace();
@@ -244,6 +313,9 @@ export function WorkspaceNav({ mobile = false }: { mobile?: boolean }) {
           return (
             <Link
               aria-current={active ? "page" : undefined}
+              aria-label={collapsed && !mobile ? t(destination.label) : undefined}
+              data-sidebar-hint={collapsed && !mobile ? t(destination.label) : undefined}
+              title={collapsed && !mobile ? t(destination.label) : undefined}
               className={
                 mobile
                   ? active
@@ -257,10 +329,52 @@ export function WorkspaceNav({ mobile = false }: { mobile?: boolean }) {
               key={destination.href}
             >
               {!mobile ? <ShellIcon name={destination.icon} /> : null}
-              {t(destination.label)}
+              {mobile ? (
+                t(destination.label)
+              ) : (
+                <span className={styles.sidebarLabel}>{t(destination.label)}</span>
+              )}
             </Link>
           );
         })}
+    </nav>
+  );
+}
+
+const managementRailItems: Record<string, { icon: IconName; label: MessageKey }> = {
+  organization: { icon: "workspace", label: "workspace.sidebar.organization" },
+  workspaces: { icon: "library", label: "workspace.sidebar.workspaces" },
+  members: { icon: "groups", label: "workspace.sidebar.members" },
+  billing: { icon: "billing", label: "workspace.sidebar.billing" },
+  credits: { icon: "upgrade", label: "workspace.sidebar.credits" },
+  settings: { icon: "settings", label: "workspace.sidebar.settings" },
+};
+
+export function WorkspaceManagementRail({ navigation }: { navigation: ManagementNavigationState }) {
+  const pathname = usePathname();
+  const { t } = useLocale();
+  const links = customerManagementLinks(navigation);
+  if (!links.length) return null;
+  return (
+    <nav className={styles.managementRail} aria-label={t("workspace.sidebar.management")}>
+      {links.map((link) => {
+        const item = managementRailItems[link.id];
+        const label = item ? t(item.label) : link.label;
+        return (
+          <Link
+            aria-current={link.href === pathname ? "page" : undefined}
+            aria-label={label}
+            className={styles.navLink}
+            data-sidebar-hint={label}
+            href={link.href}
+            key={link.id}
+            title={label}
+          >
+            <ShellIcon name={item?.icon ?? "workspace"} />
+            <span className={styles.srOnly}>{label}</span>
+          </Link>
+        );
+      })}
     </nav>
   );
 }
@@ -375,6 +489,8 @@ export function WorkspaceShell({
   } = useWorkspace();
   const [actionError, setActionError] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHint, setSidebarHint] = useState<{ label: string; top: number } | null>(null);
   const workspaceAccessUnavailable =
     Boolean(error) ||
     (requireBeta && productFeatures?.workspaceShell !== true) ||
@@ -390,6 +506,18 @@ export function WorkspaceShell({
       router.replace(resolvedFallbackHref);
     }
   }, [resolvedFallbackHref, router, shouldReturnToFallback]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setSidebarCollapsed(readSidebarCollapsed());
+    const syncPreference = (event: StorageEvent) => {
+      if (event.key !== SIDEBAR_PREFERENCE_KEY && event.key !== null) return;
+      setSidebarCollapsed(readSidebarCollapsed());
+      setSidebarHint(null);
+    };
+    window.addEventListener("storage", syncPreference);
+    return () => window.removeEventListener("storage", syncPreference);
+  }, []);
 
   if (loading || workspaceAccessUnavailable) {
     return <WorkspaceAccessState error={error} retry={refreshAccount} />;
@@ -412,60 +540,145 @@ export function WorkspaceShell({
         ? t(`role.${organizationRole ?? creator.role}`)
         : "";
   const accountInitial = creator?.email?.trim().charAt(0).toUpperCase() || "O";
+  const accountDescription =
+    creator && effectivePlan
+      ? workspace?.planSource === "community"
+        ? `${identityRole} · ${t("customer.plan.community")}`
+        : t("workspace.identity", { role: identityRole, plan: t(`plan.${effectivePlan}`) })
+      : "";
+  const sidebarAction = t(
+    sidebarCollapsed ? "workspace.sidebar.expand" : "workspace.sidebar.collapse",
+  );
+
+  function showSidebarHint(target: EventTarget | null) {
+    if (!sidebarCollapsed || !(target instanceof Element)) return;
+    const control = target.closest<HTMLElement>("[data-sidebar-hint]");
+    const label = control?.dataset.sidebarHint;
+    if (!control || !label) {
+      setSidebarHint(null);
+      return;
+    }
+    const bounds = control.getBoundingClientRect();
+    setSidebarHint({
+      label,
+      top: Math.max(24, Math.min(window.innerHeight - 24, bounds.top + bounds.height / 2)),
+    });
+  }
 
   return (
-    <div className={styles.workspace}>
+    <div className={styles.workspace} data-sidebar-collapsed={sidebarCollapsed}>
       <a className={styles.skipLink} href="#main" lang={locale}>
         {t("workspace.skipToMain")}
       </a>
-      <aside className={styles.sidebar} lang={locale}>
+      <aside
+        aria-label={t("workspace.sidebar.label")}
+        className={styles.sidebar}
+        data-collapsed={sidebarCollapsed}
+        lang={locale}
+        onFocusCapture={(event) => showSidebarHint(event.target)}
+        onBlurCapture={() => setSidebarHint(null)}
+        onMouseOver={(event) => showSidebarHint(event.target)}
+        onMouseLeave={() => setSidebarHint(null)}
+        onScrollCapture={() => setSidebarHint(null)}
+        onKeyDownCapture={(event) => {
+          if (event.key === "Escape") setSidebarHint(null);
+        }}
+      >
         <div className={styles.brandWrap}>
           <CreatorBrand productFeatures={productFeatures} />
+          <button
+            aria-controls="workspace-sidebar-navigation"
+            aria-expanded={!sidebarCollapsed}
+            aria-label={sidebarAction}
+            className={styles.sidebarToggle}
+            data-sidebar-hint={sidebarCollapsed ? sidebarAction : undefined}
+            onClick={() => {
+              const collapsed = !sidebarCollapsed;
+              setSidebarCollapsed(collapsed);
+              setSidebarHint(null);
+              saveSidebarCollapsed(collapsed);
+            }}
+            title={sidebarAction}
+            type="button"
+          >
+            <ShellIcon name={sidebarCollapsed ? "expand" : "collapse"} />
+          </button>
         </div>
-        <WorkspaceNav />
-        {management ? (
-          <ManagementNavigationLinks navigation={management} variant="sections" />
-        ) : null}
+        <div className={styles.sidebarNavigation} id="workspace-sidebar-navigation">
+          <WorkspaceNav collapsed={sidebarCollapsed} />
+          {management ? (
+            sidebarCollapsed ? (
+              <WorkspaceManagementRail navigation={management} />
+            ) : (
+              <ManagementNavigationLinks navigation={management} variant="sections" />
+            )
+          ) : null}
+        </div>
         <div className={styles.sidebarFooter}>
-          <p className={styles.identity} title={creator?.email}>
-            <strong>{creator?.email}</strong>
-            <span>
-              {creator && effectivePlan
-                ? workspace?.planSource === "community"
-                  ? `${identityRole} · ${t("customer.plan.community")}`
-                  : t("workspace.identity", {
-                      role: identityRole,
-                      plan: t(`plan.${effectivePlan}`),
-                    })
-                : null}
-            </span>
-          </p>
+          {sidebarCollapsed ? (
+            <Link
+              aria-describedby={
+                accountDescription ? "workspace-sidebar-account-description" : undefined
+              }
+              aria-label={`${t("workspace.accountSettings")}${creator?.email ? `: ${creator.email}` : ""}`}
+              className={styles.sidebarAccount}
+              data-sidebar-hint={
+                [creator?.email, accountDescription].filter(Boolean).join(" · ") ||
+                t("workspace.accountSettings")
+              }
+              href="/account"
+              title={creator?.email}
+            >
+              <span aria-hidden="true">{accountInitial}</span>
+              <span className={styles.srOnly} id="workspace-sidebar-account-description">
+                {accountDescription}
+              </span>
+            </Link>
+          ) : (
+            <p className={styles.identity} title={creator?.email}>
+              <strong>{creator?.email}</strong>
+              <span>{accountDescription}</span>
+            </p>
+          )}
           <div className={styles.accountActions}>
             {effectivePlan === "free" && !workspace?.organization ? (
               <button
                 className={styles.textButton}
+                aria-label={sidebarCollapsed ? t("workspace.explorePro") : undefined}
+                data-sidebar-hint={sidebarCollapsed ? t("workspace.explorePro") : undefined}
+                title={sidebarCollapsed ? t("workspace.explorePro") : undefined}
                 onClick={() => {
                   setActionError("");
                   void startUpgrade().catch((caught) => setActionError(humanError(caught)));
                 }}
                 type="button"
               >
-                {t("workspace.explorePro")}
+                <ShellIcon name="upgrade" />
+                <span className={styles.sidebarLabel}>{t("workspace.explorePro")}</span>
               </button>
             ) : null}
             <button
               className={styles.textButton}
+              aria-label={sidebarCollapsed ? t("workspace.signOut") : undefined}
+              data-sidebar-hint={sidebarCollapsed ? t("workspace.signOut") : undefined}
+              title={sidebarCollapsed ? t("workspace.signOut") : undefined}
               onClick={() => {
                 setActionError("");
                 void signOut().catch((caught) => setActionError(humanError(caught)));
               }}
               type="button"
             >
-              {t("workspace.signOut")}
+              <ShellIcon name="signOut" />
+              <span className={styles.sidebarLabel}>{t("workspace.signOut")}</span>
             </button>
           </div>
         </div>
       </aside>
+      {sidebarCollapsed && sidebarHint ? (
+        <span aria-hidden="true" className={styles.sidebarTooltip} style={{ top: sidebarHint.top }}>
+          {sidebarHint.label}
+        </span>
+      ) : null}
       <div className={styles.contentColumn}>
         <header className={styles.topHeader} lang={locale}>
           <div className={styles.mobileBrand}>

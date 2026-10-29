@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("ja-JP"),
   "pages.folders.loadingFailed": "フォルダーを読み込めませんでした。もう一度お試しください。",
   "pages.folders.description": "{type}をフォルダーとサブフォルダーで整理します。",
   "pages.folders.backToLibrary": "ライブラリに戻る",

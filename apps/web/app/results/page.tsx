@@ -7,8 +7,7 @@ import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
 import { buildHistoryQuery, type HistoryQueryFilters } from "../../lib/history-query";
 import type { SurveySessionSummary } from "../../lib/session-controls";
-import { formatPercent } from "../../components/workspace/workspace-model";
-import { formatDateTime, pluralCategory } from "../../lib/i18n/format";
+import { formatDateTime, formatNumber, pluralCategory } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { SessionPhaseLabel } from "../../components/workspace/session-phase-label";
@@ -22,6 +21,8 @@ import styles from "../../components/workspace/workspace-content.module.css";
 import controls from "../../components/workspace/workspace-history-controls.module.css";
 import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
+import { EvidenceMeter, ResultKindIcon, ResultsOverview } from "./results-overview";
+import { evidencePercent, type PresentationResultSummary } from "./results-overview-model";
 
 type ReportStatusFilter = "all" | ReportSummary["status"];
 type FollowupStatusFilter = "all" | FollowupSummary["status"];
@@ -337,6 +338,9 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         ]}
         toDate={toDate}
       />
+      {!loading && reports.length > 0 ? (
+        <ResultsOverview kind="rounds" items={reports} hasMore={Boolean(nextCursor)} />
+      ) : null}
       {error ? (
         <p className="error" lang="en-CA" role="alert">
           {error}
@@ -388,23 +392,27 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
               </span>
             </div>
             <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
-              <div className={styles.metric}>
-                <strong>
-                  {report.initialAccuracyPercent === null
-                    ? "—"
-                    : formatPercent(report.initialAccuracyPercent)}
-                </strong>
-                <span>{t("pages.common.initialAccuracy")}</span>
-              </div>
-              <div className={styles.metric}>
-                <strong>{formatPercent(report.recovery.percent)}</strong>
-                <span>
-                  {t("pages.results.recoveryMetric", {
-                    recovered: report.recovery.recovered,
-                    eligible: report.recovery.eligible,
-                  })}
-                </span>
-              </div>
+              <EvidenceMeter
+                label={t("pages.common.initialAccuracy")}
+                value={report.status === "ready" ? report.initialAccuracyPercent : null}
+              />
+              <EvidenceMeter
+                label={t("resultsOverview.recovery")}
+                value={
+                  report.status === "ready"
+                    ? evidencePercent(report.recovery.recovered, report.recovery.eligible)
+                    : null
+                }
+                detail={t("pages.results.recoveryMetric", {
+                  recovered: formatNumber(locale, report.recovery.recovered),
+                  eligible: formatNumber(locale, report.recovery.eligible),
+                })}
+                empty={
+                  report.status === "ready"
+                    ? t("resultsOverview.noRecovery")
+                    : t("resultsOverview.noEvidence")
+                }
+              />
               <div className={styles.metric}>
                 <strong>{report.unresolvedConceptCount}</strong>
                 <span>{t("pages.results.unresolvedConcepts")}</span>
@@ -496,6 +504,9 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
         ]}
         toDate={toDate}
       />
+      {!loading && followups.length > 0 ? (
+        <ResultsOverview kind="practice" items={followups} hasMore={Boolean(nextCursor)} />
+      ) : null}
       {error ? (
         <p className="error" lang="en-CA" role="alert">
           {error}
@@ -574,6 +585,17 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
                 <span>{t("pages.results.closes")}</span>
               </div>
             </div>
+            <div className={resultStyles.cardEvidence}>
+              <EvidenceMeter
+                label={t("resultsOverview.completion")}
+                value={evidencePercent(followup.completedAttemptCount, followup.attemptCount)}
+                detail={t("resultsOverview.attemptDetail", {
+                  completed: formatNumber(locale, followup.completedAttemptCount),
+                  total: formatNumber(locale, followup.attemptCount),
+                })}
+                empty={t("resultsOverview.noAttempts")}
+              />
+            </div>
             {followup.conceptKeys.length ? (
               <div
                 className={`${styles.conceptList} ${resultStyles.concepts}`}
@@ -611,19 +633,6 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
       ) : null}
     </>
   );
-}
-
-interface PresentationResultSummary {
-  id: string;
-  presentationId: string;
-  title: string;
-  status: "active" | "finished";
-  phase: string;
-  participantCount: number;
-  responseCount: number;
-  blockCount: number;
-  createdAt: string;
-  finishedAt?: string | null;
 }
 
 function PresentationResultList(listControls: ListControls) {
@@ -710,6 +719,9 @@ function PresentationResultList(listControls: ListControls) {
         onToDateChange={setToDate}
         onClear={clearFilters}
       />
+      {!loading && !error && visible.length > 0 ? (
+        <ResultsOverview kind="presentations" items={visible} />
+      ) : null}
       {loading ? <p className={styles.muted}>{t("pages.results.loadingPresentations")}</p> : null}
       {error ? (
         <p className="error" lang="en-CA" role="alert">
@@ -738,6 +750,7 @@ function PresentationResultList(listControls: ListControls) {
           <article className={`${styles.listCard} ${resultStyles.card}`} key={session.id}>
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
+                <ResultKindIcon kind="presentation" />
                 <p className="eyebrow">{t("pages.common.presentation")}</p>
                 <h2 lang="">{session.title}</h2>
                 <p className={styles.summaryLine}>
@@ -912,6 +925,9 @@ function SurveyResultList(listControls: ListControls) {
         onToDateChange={setToDate}
         onClear={clearFilters}
       />
+      {!loading && !error && visible.length > 0 ? (
+        <ResultsOverview kind="surveys" items={visible} hasMore={hasMore} />
+      ) : null}
       {loading ? (
         <p className={styles.muted} role="status">
           {t("pages.results.loadingSurveys")}
@@ -945,6 +961,7 @@ function SurveyResultList(listControls: ListControls) {
           >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
+                <ResultKindIcon kind="survey" />
                 <h2 lang="">{room.title}</h2>
                 <p className={styles.summaryLine}>
                   {t("pages.results.surveyRunCode", { code: room.code })}

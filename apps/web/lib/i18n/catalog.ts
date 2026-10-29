@@ -152,6 +152,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
       "/assignments",
       "/results",
       "/discover",
+      "/templates",
       "/groups",
       "/activity",
       "/help",

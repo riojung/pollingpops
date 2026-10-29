@@ -230,7 +230,11 @@ export async function registerSurveyRoutes(
     });
     scoped.get("/v1/surveys/templates", async (request, reply) => {
       if (!(await creator(request, reply))) return;
-      return { templates: starterSummaries.filter((s) => s.roundType === "poll") };
+      return {
+        templates: starterSummaries.filter((starter) =>
+          starter.responseTypes.every((type) => type === "poll" || type === "rating"),
+        ),
+      };
     });
     scoped.get("/v1/surveys/:id", async (request, reply) => {
       const actor = await creator(request, reply);

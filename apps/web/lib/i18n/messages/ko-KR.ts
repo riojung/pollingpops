@@ -1,3 +1,5 @@
+import { sidebarMessages } from "../sidebar-messages";
+import { templateMessages } from "../template-messages";
 import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
@@ -5,6 +7,8 @@ import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
   ...customerAccountMessages("ko-KR"),
+  ...sidebarMessages("ko-KR"),
+  ...templateMessages("ko-KR"),
   "questionType.open_text.label": "자유 응답",
   "questionType.open_text.description": "진행자가 검토하는 정답 없는 설명입니다.",
   "questionType.word_cloud.label": "워드 클라우드",

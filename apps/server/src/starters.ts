@@ -3,6 +3,7 @@ import {
   QuizContentSchema,
   QuizDraftSchema,
   StarterSummarySchema,
+  questionTypeDefinition,
   type ChoiceDraft,
   type QuestionDraft,
   type QuizDraft,
@@ -74,11 +75,17 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
     questions: [
       choiceQuestion(
         ids.q1,
-        "Which statement best captures today’s most important idea?",
-        ["Replace with the key idea", "Replace with a plausible misconception", "I am not sure"],
+        "Which action best shows that you have understood someone else's point?",
+        [
+          "Restate it in your own words and check with them",
+          "Wait for your turn to speak",
+          "Repeat your own position more loudly",
+        ],
         0,
         {
           confidence: "required",
+          explanation:
+            "Paraphrasing and checking gives the other person a chance to correct your interpretation.",
           conceptKeys: ["session.key-idea"],
           linkedRecheckQuestionId: ids.q2,
           misconception: {
@@ -90,15 +97,17 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
       ),
       choiceQuestion(
         ids.q2,
-        "Apply the same idea in a new example.",
+        "A teammate raises a concern you disagree with. What is a useful first response?",
         [
-          "Replace with the best application",
-          "Replace with a distractor",
-          "Replace with another distractor",
+          "Summarize the concern and ask whether you understood it",
+          "Explain why they should not feel concerned",
+          "Change the subject before they finish",
         ],
         0,
         {
           delivery: "recheck",
+          explanation:
+            "Check your understanding of the concern before evaluating it or proposing a solution.",
           purpose: "practice",
           confidence: "required",
           conceptKeys: ["session.key-idea"],
@@ -115,15 +124,17 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
     questions: [
       choiceQuestion(
         ids.q1,
-        "Which explanation is most accurate?",
+        "A project has taken months, but new evidence shows it will not meet the goal. What should guide the next decision?",
         [
-          "Replace with the accurate explanation",
-          "Replace with the common misconception",
-          "Replace with a less likely distractor",
+          "Expected future benefits, costs, and alternatives",
+          "The time already spent makes continuing mandatory",
+          "The original plan must never change",
         ],
         0,
         {
           confidence: "required",
+          explanation:
+            "Past effort cannot be recovered. Compare the future consequences of continuing, changing, or stopping.",
           conceptKeys: ["topic.core-model"],
           linkedRecheckQuestionId: ids.q2,
           misconception: {
@@ -135,11 +146,16 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
       ),
       choiceQuestion(
         ids.q2,
-        "Which new case follows the corrected model?",
-        ["Replace with the transfer case", "Replace with the misconception applied again"],
+        "A prepaid course no longer fits your goals. Which question is most useful when deciding whether to keep attending?",
+        [
+          "Is the remaining learning worth the time compared with my alternatives?",
+          "Would stopping make the past payment disappear?",
+        ],
         0,
         {
           delivery: "recheck",
+          explanation:
+            "Use the remaining costs and benefits to decide what to do next; the past payment is unchanged.",
           purpose: "practice",
           confidence: "required",
           conceptKeys: ["topic.core-model"],
@@ -155,15 +171,17 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
     questions: [
       choiceQuestion(
         ids.q1,
-        "Which option best satisfies the stated technical constraint?",
+        "A background task can be retried after network loss. What helps avoid processing the same task twice?",
         [
-          "Replace with the best option",
-          "Replace with a tempting trade-off",
-          "Replace with an unsafe option",
+          "Recognize the task using a stable operation identifier",
+          "Use a different identifier for every retry",
+          "Discard all records of completed work",
         ],
         0,
         {
           confidence: "required",
+          explanation:
+            "A stable operation identifier lets the receiver recognize attempts belonging to the same task.",
           conceptKeys: ["technical.constraint"],
           misconception: {
             index: 1,
@@ -175,18 +193,19 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
       {
         id: ids.q2,
         type: "numeric",
-        prompt: "Enter the expected result for the worked example.",
+        prompt:
+          "A worker completes 120 tasks in 30 seconds at a steady rate. How many tasks does it complete per second?",
         purpose: "practice",
         confidence: "optional",
         delivery: "main",
         conceptKeys: ["technical.calculation"],
         linkedRecheckQuestionId: null,
-        correctValue: "42",
+        correctValue: "4",
         tolerance: "0",
-        unit: null,
+        unit: "tasks per second",
         timeLimitSeconds: 45,
         basePoints: 1_000,
-        explanation: "Replace this with the calculation steps and assumptions.",
+        explanation: "Divide 120 tasks by 30 seconds to get an average rate of 4 tasks per second.",
         mediaId: null,
         mediaAlt: null,
       },
@@ -200,7 +219,7 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
     questions: [
       choiceQuestion(
         ids.q1,
-        "What is the safest first action in this scenario?",
+        "You discover a shared document that exposes client details to people who do not need access. What is the safest first action?",
         [
           "Pause and follow the approved escalation path",
           "Continue and document it later",
@@ -221,14 +240,18 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
       ),
       choiceQuestion(
         ids.q2,
-        "Who should receive the escalation next?",
+        "Who should receive the report through your organization's approved process?",
         [
-          "Replace with the approved role",
+          "The role responsible for privacy or security incidents",
           "A colleague who is not accountable",
           "Nobody unless harm occurs",
         ],
         0,
-        { conceptKeys: ["compliance.escalation"] },
+        {
+          conceptKeys: ["compliance.escalation"],
+          explanation:
+            "Use the designated incident contact so the issue reaches people authorized to assess and respond.",
+        },
       ),
     ],
   },
@@ -240,14 +263,18 @@ const starterDrafts: Partial<Record<StarterId, QuizDraft>> = {
     questions: [
       choiceQuestion(
         ids.q1,
-        "Where should you go first when you need help with this process?",
+        "A required work tool is not accessible with your account. What should you do first?",
         [
-          "Replace with the approved support channel",
+          "Use the approved support channel and describe the access issue",
           "Ask anyone who is available",
           "Wait until the next team meeting",
         ],
         0,
-        { conceptKeys: ["onboarding.support"] },
+        {
+          conceptKeys: ["onboarding.support"],
+          explanation:
+            "Describe the issue through the approved support route so the right person can help without sharing credentials.",
+        },
       ),
       choiceQuestion(
         ids.q2,
@@ -721,6 +748,398 @@ starterDrafts["accessibility-awareness"]!.questions.push({
   prompt: "How confident do you feel applying accessible design in your own work?",
 });
 
+addQuiz(
+  "source-evaluation",
+  "Evidence worth trusting",
+  "education",
+  "Two articles make opposite claims. What is the most useful first comparison?",
+  [
+    "Which headline is more confident",
+    "Their evidence, methods, and original sources",
+    "Which has more shares",
+  ],
+  1,
+  "Trace claims to evidence and examine how it was gathered before deciding how much weight to give them.",
+  {
+    prompt: "A chart is shared without a source or date. What should you do before relying on it?",
+    labels: [
+      "Find the original data and its context",
+      "Assume a polished chart is reliable",
+      "Use it if it matches your opinion",
+    ],
+    correct: 0,
+    explanation:
+      "The original source, collection date, and measurement definitions help establish what a chart supports.",
+  },
+);
+addQuiz(
+  "experiment-design",
+  "One change at a time",
+  "education",
+  "You test whether light affects seedling growth. Which comparison best isolates light?",
+  [
+    "Change light, water, and soil together",
+    "Keep water and soil alike while changing light",
+    "Compare different plants in different seasons",
+  ],
+  1,
+  "Hold other relevant conditions similar so differences in growth can be interpreted more clearly.",
+  {
+    prompt:
+      "You compare two study methods. Which design reduces an obvious alternative explanation?",
+    labels: [
+      "Give one group twice as much study time",
+      "Use different tests for each group",
+      "Give both groups the same time and assessment",
+    ],
+    correct: 2,
+    explanation: "Comparable time and assessment reduce confounding when comparing study methods.",
+  },
+);
+addQuiz(
+  "probability-basics",
+  "Independent events",
+  "education",
+  "A fair coin lands heads four times. What is the probability of heads on the next independent toss?",
+  ["One half", "Zero", "More than one half"],
+  0,
+  "Independent tosses do not remember earlier outcomes; the probability remains one half.",
+  {
+    prompt:
+      "A fair six-sided die has not shown a six recently. What is the chance of six on the next independent roll?",
+    labels: ["One half", "One in six", "Certain"],
+    correct: 1,
+    explanation: "Past independent rolls do not change the next roll's one-in-six probability.",
+  },
+);
+addQuiz(
+  "feedback-skills",
+  "Feedback people can use",
+  "business",
+  "Which feedback is easiest for a colleague to act on?",
+  [
+    "You are careless",
+    "In yesterday's handoff, the missing owner delayed the next step; please name an owner next time",
+    "Everyone thinks you should improve",
+  ],
+  1,
+  "Describe an observable situation, its impact, and a concrete next step instead of labeling a person.",
+  {
+    prompt: "A presentation was difficult to follow. Which follow-up is most useful?",
+    labels: [
+      "You are bad at presenting",
+      "Try harder next time",
+      "Put the decision first, then group the supporting evidence into three points",
+    ],
+    correct: 2,
+    explanation:
+      "A specific, achievable adjustment gives the recipient something they can try and evaluate.",
+  },
+);
+addQuiz(
+  "privacy-by-design",
+  "Collect only what you need",
+  "safety_compliance",
+  "A workshop needs a count of dietary preferences. Which approach best limits unnecessary personal data?",
+  [
+    "Collect everyone's home address",
+    "Ask for the relevant preferences without unrelated details",
+    "Request a copy of each person's identification",
+  ],
+  1,
+  "Collect information needed for the stated purpose and follow your organization's handling and retention rules.",
+  {
+    prompt:
+      "You need to understand which training topics are useful. Which question fits that purpose?",
+    labels: [
+      "Which topic helped your work?",
+      "What is your personal account password?",
+      "What is your complete medical history?",
+    ],
+    correct: 0,
+    explanation:
+      "Match the information requested to the purpose and avoid collecting unrelated sensitive details.",
+  },
+);
+addQuiz(
+  "version-control",
+  "Reviewable changes",
+  "technical",
+  "Which commit is easiest for a teammate to review?",
+  [
+    "An unrelated mix of formatting, features, and deletions",
+    "A focused change with its purpose explained",
+    "A generated file with no source change",
+  ],
+  1,
+  "Focused changes and a clear explanation help reviewers understand intent and assess consequences.",
+  {
+    prompt:
+      "A shared branch contains a change you need to undo. What best preserves an understandable history?",
+    labels: [
+      "Remove everyone's later commits",
+      "Hide the problem in an unrelated change",
+      "Create a reviewed revert that explains the reason",
+    ],
+    correct: 2,
+    explanation: "A revert records the reversal while preserving the context of shared work.",
+  },
+);
+
+type FeedbackItem =
+  { prompt: string; labels: string[] } | { prompt: string; low: string; high: string };
+
+function addFeedback(
+  id: StarterId,
+  title: string,
+  category: RoundCategory,
+  description: string,
+  items: FeedbackItem[],
+) {
+  starterDrafts[id] = {
+    title,
+    description,
+    category,
+    experiencePreset: { id: presetForCategory[category], version: 1 },
+    questions: items.map((item, index) => {
+      const questionId = `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+      if ("labels" in item)
+        return choiceQuestion(questionId, item.prompt, item.labels, null, {
+          type: "poll",
+          explanation: "Use the response distribution to choose a concrete next step.",
+        });
+      return {
+        id: questionId,
+        type: "rating" as const,
+        prompt: item.prompt,
+        purpose: "opinion" as const,
+        confidence: "off" as const,
+        delivery: "main" as const,
+        conceptKeys: [],
+        linkedRecheckQuestionId: null,
+        min: 1,
+        max: 5,
+        minLabel: item.low,
+        maxLabel: item.high,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation:
+          "Read the labeled scale alongside the other responses before choosing a next step.",
+        mediaId: null,
+        mediaAlt: null,
+      };
+    }),
+  };
+  metadata[id] = {
+    description,
+    segment: category === "education" ? "education" : category === "business" ? "workplace" : "all",
+  };
+}
+
+addFeedback(
+  "event-feedback",
+  "Event experience",
+  "general",
+  "Learn what was useful, how the format worked, and what attendees want next.",
+  [
+    { prompt: "How useful was this event for your goals?", low: "Not useful", high: "Very useful" },
+    {
+      prompt: "Which part gave you the most value?",
+      labels: [
+        "Talks and examples",
+        "Hands-on activities",
+        "Conversations",
+        "Resources to take away",
+      ],
+    },
+    {
+      prompt: "How easy was it to participate in the activities?",
+      low: "Very difficult",
+      high: "Very easy",
+    },
+    {
+      prompt: "What should we improve first for the next event?",
+      labels: [
+        "More practical examples",
+        "More time to participate",
+        "Clearer logistics",
+        "More depth on fewer topics",
+      ],
+    },
+  ],
+);
+addFeedback(
+  "onboarding-experience",
+  "First-month onboarding",
+  "business",
+  "Check role clarity, access to help, and the support new teammates need next.",
+  [
+    { prompt: "How clear are the priorities for your role?", low: "Not clear", high: "Very clear" },
+    {
+      prompt: "How easy is it to find the information needed for your work?",
+      low: "Very difficult",
+      high: "Very easy",
+    },
+    {
+      prompt: "Where would more support help most?",
+      labels: [
+        "Tools and access",
+        "Role expectations",
+        "Team connections",
+        "Workflows and examples",
+      ],
+    },
+    {
+      prompt: "What would be the most useful next step?",
+      labels: [
+        "A guided practice task",
+        "A role-specific checklist",
+        "A conversation with a teammate",
+        "Time to review the documentation",
+      ],
+    },
+  ],
+);
+addFeedback(
+  "team-collaboration",
+  "How we work together",
+  "business",
+  "Explore handoffs, decision clarity, and practical improvements to collaboration.",
+  [
+    {
+      prompt: "How clear is ownership when work moves between teammates?",
+      low: "Not clear",
+      high: "Very clear",
+    },
+    {
+      prompt: "What most often slows shared work?",
+      labels: ["Unclear decisions", "Missing context", "Too many handoffs", "Competing priorities"],
+    },
+    {
+      prompt: "How easy is it to get the context you need from another team?",
+      low: "Very difficult",
+      high: "Very easy",
+    },
+    {
+      prompt: "Which small experiment should we try next?",
+      labels: [
+        "Write down decisions",
+        "Name a handoff owner",
+        "Share context earlier",
+        "Set a regular focus period",
+      ],
+    },
+  ],
+);
+addFeedback(
+  "service-experience",
+  "Service follow-up",
+  "business",
+  "Find out whether a request was resolved and where the service journey needs attention.",
+  [
+    {
+      prompt: "How well was your original request resolved?",
+      low: "Not resolved",
+      high: "Fully resolved",
+    },
+    { prompt: "How easy was it to get help?", low: "Very difficult", high: "Very easy" },
+    {
+      prompt: "Which part of the experience needs the most attention?",
+      labels: [
+        "Finding the right contact",
+        "Understanding the next step",
+        "Waiting for an update",
+        "Reaching a resolution",
+      ],
+    },
+    {
+      prompt: "Which improvement would help you most next time?",
+      labels: [
+        "Clearer instructions",
+        "More timely updates",
+        "A simpler process",
+        "Better follow-up resources",
+      ],
+    },
+  ],
+);
+addFeedback(
+  "learning-needs",
+  "Plan the next lesson",
+  "education",
+  "Choose a useful starting point from learners' familiarity, goals, and preferred practice.",
+  [
+    {
+      prompt: "How familiar are you with the upcoming topic?",
+      low: "Completely new",
+      high: "Very familiar",
+    },
+    {
+      prompt: "Which learning goal matters most to you?",
+      labels: [
+        "Understand the core idea",
+        "Solve a practical problem",
+        "Explain my reasoning",
+        "Connect it to earlier learning",
+      ],
+    },
+    {
+      prompt: "Which activity would help you start?",
+      labels: [
+        "A worked example",
+        "A short demonstration",
+        "Guided practice",
+        "A discussion with a partner",
+      ],
+    },
+    {
+      prompt: "How comfortable do you feel trying a practice task now?",
+      low: "Need guidance",
+      high: "Ready to try",
+    },
+  ],
+);
+addFeedback(
+  "community-planning",
+  "Community next steps",
+  "general",
+  "Gather priorities, participation preferences, and accessible ways to contribute.",
+  [
+    {
+      prompt: "What should our next community gathering focus on?",
+      labels: [
+        "Sharing useful skills",
+        "Solving a shared problem",
+        "Meeting other members",
+        "Planning a small project",
+      ],
+    },
+    {
+      prompt: "Which format would make it easiest for you to take part?",
+      labels: [
+        "A short online session",
+        "An in-person discussion",
+        "A hands-on activity",
+        "An update I can read later",
+      ],
+    },
+    {
+      prompt: "How clear are the ways to contribute to this community?",
+      low: "Not clear",
+      high: "Very clear",
+    },
+    {
+      prompt: "What would help you take the next step?",
+      labels: [
+        "A specific invitation",
+        "A small, defined task",
+        "A person to ask",
+        "More information about the goal",
+      ],
+    },
+  ],
+);
+
 for (const [id, draft] of Object.entries(starterDrafts)) {
   starterDrafts[id as StarterId] = QuizContentSchema.parse(draft);
 }
@@ -735,11 +1154,12 @@ export const starterSummaries = (Object.keys(starterDrafts) as StarterId[]).map(
     category: draft.category,
     experiencePreset: draft.experiencePreset,
     questionCount: draft.questions.length,
+    previewPrompt: draft.questions[0]!.prompt,
     responseTypes: [...new Set(draft.questions.map((question) => question.type))],
     version: 1,
-    roundType: draft.questions.every((q) => q.type === "poll" || q.type === "rating")
+    roundType: draft.questions.every((q) => !questionTypeDefinition(q.type).scored)
       ? "poll"
-      : draft.questions.every((q) => q.type !== "poll" && q.type !== "rating")
+      : draft.questions.every((q) => questionTypeDefinition(q.type).scored)
         ? "quiz"
         : "custom",
   });

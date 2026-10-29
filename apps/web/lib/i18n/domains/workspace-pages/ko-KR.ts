@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("ko-KR"),
   "pages.folders.loadingFailed": "폴더를 불러오지 못했습니다. 다시 시도하세요.",
   "pages.folders.description": "폴더와 하위 폴더로 {type}을 정리하세요.",
   "pages.folders.backToLibrary": "라이브러리로 돌아가기",

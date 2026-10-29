@@ -197,6 +197,12 @@ for (const mobile of [false, true]) {
     ).toHaveAttribute("href", "/library?type=rounds");
     const collection = page.getByRole("region", { name: "Results", exact: true });
     await expect(collection.getByRole("article")).toHaveCount(25);
+    const overview = page.getByRole("region", { name: "At a glance", exact: true });
+    await expect(overview).toContainText("75 recovered of 100 eligible");
+    await expect(
+      overview.getByRole("meter", { name: "Recovery opportunities", exact: true }),
+    ).toHaveAttribute("aria-valuenow", "75");
+    await expect(overview).toContainText("More results are available.");
     await expect(
       page.getByText("25 results shown · More available", { exact: true }),
     ).toBeVisible();
@@ -204,8 +210,25 @@ for (const mobile of [false, true]) {
     await page.screenshot({
       path: `/tmp/pollingpops-results-${test.info().project.name}.png`,
     });
+    if (!mobile) {
+      await page.getByRole("button", { name: "Collapse navigation", exact: true }).click();
+      await expect(page.locator("aside[data-collapsed]")).toHaveAttribute("data-collapsed", "true");
+    }
+    for (const mode of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: mode, reducedMotion: "reduce" });
+      await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
+      expect(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        `Results overview in ${mode}`,
+      ).toEqual([]);
+      await page.screenshot({ path: test.info().outputPath(`results-overview-${mode}.png`) });
+    }
+    await page.emulateMedia({ colorScheme: "light" });
+    if (!mobile) await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
     await page.getByRole("button", { name: "Load More", exact: true }).click();
     await expect(collection.getByRole("article")).toHaveCount(28);
+    await expect(overview).toContainText("78 recovered of 104 eligible");
+    await expect(overview).not.toContainText("More results are available.");
     await expect(page.getByText("28 results shown", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Load More", exact: true })).toHaveCount(0);
     const ready = collection.getByRole("article").filter({
@@ -227,6 +250,8 @@ for (const mobile of [false, true]) {
     ]);
     await resultStatus.selectOption("pending");
     await expect(collection.getByRole("article")).toHaveCount(1);
+    await expect(overview).toContainText("No recovery opportunities recorded");
+    await expect(overview.getByRole("meter")).toHaveCount(0);
     await expect(
       collection.getByRole("heading", { name: "Synthetic processing evidence" }),
     ).toBeVisible();
@@ -274,6 +299,7 @@ for (const mobile of [false, true]) {
       exact: true,
     });
     await expect(practice.getByRole("article")).toHaveCount(25);
+    await expect(overview).toContainText("225 completed of 300 attempts");
     await expect(practice).toHaveAttribute("data-view", "list");
     await expect(
       page.getByText("25 practice items shown · More available", { exact: true }),
@@ -313,6 +339,8 @@ for (const mobile of [false, true]) {
     await expect(page).toHaveURL(/\/results\?view=presentations$/);
     const presentations = page.getByRole("region", { name: "Presentation Results", exact: true });
     await expect(presentations.getByRole("article")).toHaveCount(2);
+    await expect(overview).toContainText("Responses recorded");
+    await expect(overview.locator("dd").filter({ hasText: "48" })).toHaveCount(1);
     await expect(
       page.getByRole("link", { name: "Back to Presentation library", exact: true }),
     ).toHaveAttribute("href", "/library?type=presentations");
@@ -330,6 +358,7 @@ for (const mobile of [false, true]) {
       .getByRole("searchbox", { name: "Search Presentation results", exact: true })
       .fill("finished");
     await expect(presentations.getByRole("article")).toHaveCount(1);
+    await expect(overview.locator("dd").filter({ hasText: "24" })).toHaveCount(1);
     await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
     await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();

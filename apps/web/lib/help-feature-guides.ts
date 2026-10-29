@@ -217,7 +217,7 @@ export const helpFeatureGuides: readonly HelpFeatureGuide[] = [
     steps: [
       {
         title: "Browse starting patterns",
-        body: "Create → Round first offers Live quiz, Live poll, Survey and Custom Round. Search the 24 original templates, filter by category/type, and preview questions before making a copy. Live polls are host-paced; Surveys are self-paced.",
+        body: "Create → Round first offers Live quiz, Live poll, Survey and Custom Round. Templates groups 36 original Rounds, 9 Presentations and 17 Survey-compatible starting points into separate tabs. Search and preview before making a copy. Live polls are host-paced; Surveys are self-paced.",
       },
       {
         title: "Create your own draft",

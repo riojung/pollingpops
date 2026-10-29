@@ -42,3 +42,19 @@
   width: 5rem;
   text-align: right;
 }
+
+.responseBar {
+  display: block;
+  height: 9px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--ui-surface-soft);
+}
+
+.responseBar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-accent-ink);
+}

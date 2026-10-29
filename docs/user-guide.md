@@ -21,8 +21,11 @@ unscored host-paced opinions, **Survey** for independent responses over time, or
 mixed live questions. Older starting links still work as custom workflows. Formats can be changed
 later in the Round editor. A live poll is not a self-paced Survey.
 
-Search the 24 original templates and filter by category/type. **Preview questions** shows prompts
-and options without creating content. **Use starter** makes an independent draft with fresh IDs.
+Open **Templates** and choose **Rounds**, **Presentations**, or **Surveys**. Search original
+Round and Survey templates and filter by category/type. **Preview questions** shows prompts
+and options without creating content. **Use this starter** makes an independent draft with fresh IDs.
+Presentation templates provide ready-to-edit slides and interactions for meetings, training,
+reviews, and workshops. Survey templates contain opinion polls and ratings for self-paced feedback.
 Review every answer, explanation and recheck for your audience before publishing. Original template
 content is English; chooser/filter controls are localized.
 
@@ -172,6 +175,11 @@ This documentation does not enable beta, institution, provider, or paid capabili
 
 Guide content is maintained in `apps/web/lib/help-feature-guides.ts`; tests verify unique routes,
 required sections, search/filter behavior, feature/role-safe actions, and valid video chapter links.
+
+Use **Collapse navigation** at the top of the desktop sidebar to switch to an icon rail and gain
+more working space. Hover or focus an icon to see its destination. **Expand navigation** restores
+the labels. This preference is saved in your browser across workspace pages and reloads. On phones,
+the workspace continues to use its horizontal navigation.
 
 The default workspace opens at **Home**, with **Library**, **Sessions**, and **Results** on every
 plan. It does not require UX beta flags or pilot allowlist membership. An administrator can still
@@ -715,6 +723,14 @@ session storage. Refreshing the same tab can recover state; another browser norm
 new guest.
 
 ## Reports and recovery evidence
+
+The **Results** page includes an **At a glance** overview for the selected activity. Its widgets
+summarize the results currently shown with your filters; **Load More** expands that scope.
+Round recovery combines recovered and eligible opportunities from ready reports. Practice shows
+completed attempts out of all recorded attempts. Presentation response counts sum the sessions
+shown. These counts do not identify unique people across runs. Survey widgets show runs and
+the Surveys they represent; open an individual report for response counts and question results.
+No-evidence states remain separate from a measured zero.
 
 Reports are generated asynchronously from durable answers and should be ready within 60 seconds.
 Report v3 includes initial accuracy, confidence-versus-correctness, misconception distribution,

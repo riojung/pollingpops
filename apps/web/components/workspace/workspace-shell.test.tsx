@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceAccountContext } from "./workspace-provider";
+import type { ManagementNavigationState } from "../management-navigation";
 import { LocaleProvider } from "../locale-provider";
 import { englishMessages } from "../../lib/i18n/catalog";
 import { workspacePageEnglishMessages } from "../../lib/i18n/domains/workspace-pages";
@@ -12,10 +13,14 @@ import germanMessages from "../../lib/i18n/messages/de-DE";
 const fixtures = vi.hoisted(() => ({
   captureEffects: false,
   effects: [] as Array<() => void>,
+  collapsedOverride: undefined as boolean | undefined,
+  sidebarStateReads: 0,
+  setSidebarCollapsed: vi.fn(),
   pathname: "/library",
   push: vi.fn(),
   replace: vi.fn(),
   workspace: {
+    management: null as ManagementNavigationState | null,
     workspace: null as WorkspaceAccountContext | null,
     entitlements: null as { plan: "free" | "pro" | "team" } | null,
     creator: {
@@ -54,12 +59,24 @@ const fixtures = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("react", async (importOriginal) => ({
-  ...(await importOriginal<typeof ReactModule>()),
-  useEffect: (effect: () => void) => {
-    if (fixtures.captureEffects) fixtures.effects.push(effect);
-  },
-}));
+vi.mock("react", async (importOriginal) => {
+  const original = await importOriginal<typeof ReactModule>();
+  return {
+    ...original,
+    useState: (initial: unknown) => {
+      if (
+        fixtures.collapsedOverride !== undefined &&
+        initial === false &&
+        fixtures.sidebarStateReads++ === 0
+      )
+        return [fixtures.collapsedOverride, fixtures.setSidebarCollapsed];
+      return original.useState(initial);
+    },
+    useEffect: (effect: () => void) => {
+      if (fixtures.captureEffects) fixtures.effects.push(effect);
+    },
+  };
+});
 
 vi.mock("next/navigation", () => ({
   usePathname: () => fixtures.pathname,
@@ -71,12 +88,55 @@ vi.mock("./workspace-provider", () => ({
   useWorkspace: () => fixtures.workspace,
 }));
 
-import { WorkspaceFeatureGate, WorkspaceShell } from "./workspace-shell";
+import {
+  SIDEBAR_PREFERENCE_KEY,
+  readSidebarCollapsed,
+  saveSidebarCollapsed,
+  WorkspaceFeatureGate,
+  WorkspaceShell,
+  WorkspaceManagementRail,
+} from "./workspace-shell";
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("desktop sidebar preference", () => {
+  it("defaults to expanded and only restores the explicit collapsed value", () => {
+    expect(readSidebarCollapsed()).toBe(false);
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    });
+    expect(readSidebarCollapsed()).toBe(false);
+    saveSidebarCollapsed(true);
+    expect(values.get(SIDEBAR_PREFERENCE_KEY)).toBe("true");
+    expect(readSidebarCollapsed()).toBe(true);
+    saveSidebarCollapsed(false);
+    expect(readSidebarCollapsed()).toBe(false);
+    values.set(SIDEBAR_PREFERENCE_KEY, "invalid");
+    expect(readSidebarCollapsed()).toBe(false);
+  });
+
+  it("keeps navigation usable when browser storage is blocked", () => {
+    vi.stubGlobal("window", {
+      get localStorage() {
+        throw new Error("Blocked");
+      },
+    });
+    expect(readSidebarCollapsed()).toBe(false);
+    expect(() => saveSidebarCollapsed(true)).not.toThrow();
+  });
+});
 
 describe("professional workspace shell", () => {
   beforeEach(() => {
     fixtures.captureEffects = false;
     fixtures.effects = [];
+    fixtures.collapsedOverride = undefined;
+    fixtures.sidebarStateReads = 0;
+    fixtures.workspace.management = null;
     fixtures.pathname = "/library";
     fixtures.workspace.error = "";
     fixtures.workspace.workspace = null;
@@ -94,6 +154,77 @@ describe("professional workspace shell", () => {
     fixtures.push.mockClear();
     fixtures.replace.mockClear();
   });
+
+  it("exposes an expanded desktop sidebar with an explicitly named collapse control", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Library">
+        <p>Content</p>
+      </WorkspaceShell>,
+    );
+    const sidebar = markup.match(/<aside[^]*?<\/aside>/)?.[0] ?? "";
+    expect(sidebar).toContain('data-collapsed="false"');
+    expect(sidebar).toContain('aria-label="Workspace sidebar"');
+    expect(sidebar).toContain('aria-expanded="true"');
+    expect(sidebar).toContain('aria-label="Collapse navigation"');
+    expect(sidebar).toContain('aria-controls="workspace-sidebar-navigation"');
+    expect(sidebar).toContain('id="workspace-sidebar-navigation"');
+    expect(sidebar).toContain("owner@example.com");
+  });
+
+  it("keeps names, active destinations, account and sign-out reachable in the compact rail", () => {
+    fixtures.collapsedOverride = true;
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Library">
+        <p>Content</p>
+      </WorkspaceShell>,
+    );
+    const sidebar = markup.match(/<aside[^]*?<\/aside>/)?.[0] ?? "";
+    expect(sidebar).toContain('data-collapsed="true"');
+    expect(sidebar).toContain('aria-expanded="false"');
+    expect(sidebar).toContain('aria-label="Expand navigation"');
+    expect(sidebar).toMatch(/aria-current="page" aria-label="Library"[^>]*href="\/library"/);
+    expect(sidebar).toContain('data-sidebar-hint="Library"');
+    expect(sidebar).toContain('title="Library"');
+    expect(sidebar).toContain(
+      'aria-label="Open account and workspace settings: owner@example.com"',
+    );
+    expect(sidebar).toContain('aria-label="Sign out"');
+    // Mobile remains a separate text navigation, without compact-only labelling.
+    const mobile = markup.match(/<nav[^>]*aria-label="Workspace sections"[^]*?<\/nav>/)?.[0] ?? "";
+    expect(mobile).toContain(">Library</a>");
+    expect(mobile).not.toContain("data-sidebar-hint");
+  });
+
+  it.each(["owner", "admin", "billing", "member"] as const)(
+    "preserves %s management permissions in the compact rail",
+    (role) => {
+      const navigation: ManagementNavigationState = {
+        user: { userId: "user-1", email: "owner@example.com" },
+        organizationManagementEnabled: true,
+        organizations: [{ id: "company-1", name: "Company", role }],
+        operatorConsoleOrigin: null,
+        loading: false,
+        error: "",
+        refresh: async () => {},
+      };
+      const markup = renderToStaticMarkup(<WorkspaceManagementRail navigation={navigation} />);
+      expect(markup).toContain('aria-label="Organization management"');
+      expect(markup).toContain('aria-label="Organization"');
+      expect(markup.includes('aria-label="Members"')).toBe(role === "owner" || role === "admin");
+      expect(markup.includes('aria-label="Billing"')).toBe(role !== "member");
+      expect(markup.includes('aria-label="Event credits"')).toBe(role !== "member");
+      expect(markup.includes('aria-label="Organization settings"')).toBe(
+        role === "owner" || role === "admin",
+      );
+      expect(
+        renderToStaticMarkup(
+          <WorkspaceManagementRail
+            navigation={{ ...navigation, organizationManagementEnabled: false }}
+          />,
+        ),
+      ).toBe("");
+    },
+  );
 
   it.each([
     ["/activity", "/activity"],
@@ -272,11 +403,11 @@ describe("professional workspace shell", () => {
     expect(markup).toContain("Neu erstellen");
     expect(markup).toContain("Abmelden");
     expect(markup).toContain("Inhaber · Tarif Pro");
-    expect(markup).toContain(">Start</a>");
-    expect(markup).toContain(">Ergebnisse</a>");
-    expect(markup).toContain(">Arbeitsbereich</a>");
+    expect(markup).toContain(">Start</span></a>");
+    expect(markup).toContain(">Ergebnisse</span></a>");
+    expect(markup).toContain(">Arbeitsbereich</span></a>");
     expect(markup).toContain('aria-label="Darstellung: System"');
-    expect(markup).toMatch(/<aside class="[^"]+" lang="de-DE">/);
+    expect(markup).toMatch(/<aside[^>]*lang="de-DE">/);
     expect(markup).toMatch(/<main class="[^"]+" id="main" lang="en-CA">/);
     expect(markup).toMatch(/<header class="[^"]+" lang="de-DE">/);
   });

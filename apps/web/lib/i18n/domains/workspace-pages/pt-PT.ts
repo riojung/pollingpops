@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("pt-PT"),
   "pages.folders.loadingFailed": "Não foi possível carregar as pastas. Tente novamente.",
   "pages.folders.description": "Organize {type} com pastas e subpastas.",
   "pages.folders.backToLibrary": "Voltar à biblioteca",

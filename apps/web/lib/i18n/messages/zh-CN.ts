@@ -1,3 +1,5 @@
+import { sidebarMessages } from "../sidebar-messages";
+import { templateMessages } from "../template-messages";
 import { customerAccountMessages } from "../customer-account-messages";
 import type { MessageCatalog } from "./en-CA";
 import { creationMessages } from "../creation-messages";
@@ -5,6 +7,8 @@ import { feedbackMessages } from "../feedback-messages";
 
 const messages = {
   ...customerAccountMessages("zh-CN"),
+  ...sidebarMessages("zh-CN"),
+  ...templateMessages("zh-CN"),
   "questionType.open_text.label": "开放文本",
   "questionType.open_text.description": "经主持人审核的解释，没有正确答案。",
   "questionType.word_cloud.label": "词云",

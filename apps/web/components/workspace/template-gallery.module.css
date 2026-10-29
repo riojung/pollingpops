@@ -1,0 +1,149 @@
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid var(--ui-border);
+  padding-bottom: 0.75rem;
+}
+
+.tab {
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--ui-text-subtle);
+  font: inherit;
+  font-weight: 750;
+  padding: 0.65rem 0.95rem;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  border-color: var(--ui-border);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+.tab:focus-visible {
+  outline: 3px solid var(--ui-accent-ink);
+  outline-offset: 3px;
+}
+
+.sectionTitle {
+  font-size: 1.5rem;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.gallerySummary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.45rem 1rem;
+  margin: 1.2rem 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.82rem;
+}
+
+.gallerySummary strong {
+  color: var(--ui-text-strong);
+}
+
+.templateCard {
+  position: relative;
+  overflow: hidden;
+  border-top: 4px solid var(--ui-accent-ink);
+}
+
+.templateCard[data-category="education"] {
+  border-top-color: #8b7bc5;
+}
+
+.templateCard[data-category="business"] {
+  border-top-color: #6b9b91;
+}
+
+.templateCard[data-category="technical"] {
+  border-top-color: #7b99c5;
+}
+
+.templateCard[data-category="icebreaker"] {
+  border-top-color: #c58c7b;
+}
+
+.templateCard[data-category="safety_compliance"] {
+  border-top-color: #bf9b60;
+}
+
+.questionSample {
+  margin-top: 1rem;
+  border-radius: 0.6rem;
+  background: var(--ui-surface-soft);
+  padding: 0.8rem;
+}
+
+.questionSample small {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--ui-text-subtle);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.questionSample p {
+  color: var(--ui-text-strong);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.preview {
+  border-block: 1px solid var(--ui-border);
+  margin: 0.8rem 0 1.1rem;
+  padding: 0.8rem 0 0.8rem 1.2rem;
+  color: var(--ui-text-strong);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.preview > li + li {
+  margin-top: 0.8rem;
+}
+
+.preview ul {
+  margin-top: 0.4rem;
+  padding-left: 1rem;
+  color: var(--ui-text-subtle);
+}
+
+.preview p {
+  margin-top: 0.35rem;
+  color: var(--ui-text-subtle);
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.cardActions button {
+  margin-top: 0;
+}
+
+@media (max-width: 520px) {
+  .tabs {
+    gap: 0.3rem;
+  }
+
+  .tab {
+    flex: 1 1 auto;
+    padding-inline: 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .cardActions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

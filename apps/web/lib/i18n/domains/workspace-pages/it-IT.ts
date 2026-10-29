@@ -1,6 +1,8 @@
+import { resultsOverviewMessages } from "../../results-overview-messages";
 import type { WorkspacePageMessages } from "./index";
 
 const messages = {
+  ...resultsOverviewMessages("it-IT"),
   "pages.folders.loadingFailed": "Impossibile caricare le cartelle. Riprova.",
   "pages.folders.description": "Organizza {type} con cartelle e sottocartelle.",
   "pages.folders.backToLibrary": "Torna alla libreria",

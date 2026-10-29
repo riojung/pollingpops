@@ -74,6 +74,7 @@
 }
 
 .collection[data-view="list"] .actions,
+.collection[data-view="list"] .cardEvidence,
 .collection[data-view="list"] .concepts {
   grid-column: 1 / -1;
   margin-top: 0;

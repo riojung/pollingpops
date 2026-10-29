@@ -11,6 +11,7 @@ import { useWorkspace } from "./workspace-provider";
 import { prioritizeStartersForSegment } from "./workspace-model";
 import type { StarterSummary } from "./workspace-types";
 import styles from "./workspace-content.module.css";
+import galleryStyles from "./template-gallery.module.css";
 import { recordAuthoringEvent, recordCreationEvent } from "./product-events";
 import { surveyMutationKey } from "../../lib/survey-client";
 
@@ -46,7 +47,7 @@ export function StarterGallery({
 }) {
   const router = useRouter();
   const { locale, t } = useLocale();
-  const { creator, canEdit } = useWorkspace();
+  const { creator, canEdit, productFeatures } = useWorkspace();
   const [starters, setStarters] = useState<StarterSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
@@ -115,6 +116,7 @@ export function StarterGallery({
   const effectiveType = survey ? "poll" : roundType !== "all" ? roundType : type;
   const orderedStarters = prioritizeStartersForSegment(starters, creator?.segment).filter(
     (starter) =>
+      (!survey || starter.responseTypes.every((type) => type === "poll" || type === "rating")) &&
       (effectiveType === "all" || starter.roundType === effectiveType) &&
       (category === "all" || starter.category === category) &&
       `${starter.title} ${starter.description}`
@@ -124,6 +126,12 @@ export function StarterGallery({
 
   return (
     <div lang={locale}>
+      <div className={galleryStyles.gallerySummary}>
+        <strong>
+          {t("templateLibrary.count", { count: formatNumber(locale, orderedStarters.length) })}
+        </strong>
+        <span>{t("templateLibrary.englishContent")}</span>
+      </div>
       <div className={styles.templateFilters}>
         <label className="field">
           <span>{t("starter.search")}</span>
@@ -190,7 +198,11 @@ export function StarterGallery({
         {orderedStarters.map((starter) => {
           const recommended = starter.segment === "all" || starter.segment === creator?.segment;
           return (
-            <article className={styles.starterCard} key={starter.id}>
+            <article
+              className={`${styles.starterCard} ${galleryStyles.templateCard}`}
+              data-category={starter.category}
+              key={starter.id}
+            >
               <div className={styles.cardTopline}>
                 <span className={styles.category}>{t(categoryKeys[starter.category])}</span>
                 {recommended ? (
@@ -199,6 +211,12 @@ export function StarterGallery({
               </div>
               <h3 lang="en-CA">{starter.title}</h3>
               <p lang="en-CA">{starter.description}</p>
+              {starter.previewPrompt && preview?.id !== starter.id ? (
+                <div className={galleryStyles.questionSample}>
+                  <small>{t("templateLibrary.questionPreview")}</small>
+                  <p lang="en-CA">{starter.previewPrompt}</p>
+                </div>
+              ) : null}
               <div className={styles.metaLine}>
                 <span>{t(`create.kind.${survey ? "survey" : starter.roundType}`)}</span>
                 <span>
@@ -216,6 +234,10 @@ export function StarterGallery({
               <button
                 className="button-quiet small-button"
                 type="button"
+                aria-expanded={preview?.id === starter.id}
+                aria-controls={
+                  preview?.id === starter.id ? `starter-preview-${starter.id}` : undefined
+                }
                 onClick={async () => {
                   if (preview?.id === starter.id) {
                     setPreview(null);
@@ -235,7 +257,11 @@ export function StarterGallery({
                 {preview?.id === starter.id ? t("starter.closePreview") : t("starter.preview")}
               </button>
               {preview?.id === starter.id ? (
-                <ol lang="en-CA">
+                <ol
+                  className={galleryStyles.preview}
+                  id={`starter-preview-${starter.id}`}
+                  lang="en-CA"
+                >
                   {preview.draft.questions.map((question) => (
                     <li key={question.id}>
                       {question.prompt}
@@ -255,7 +281,7 @@ export function StarterGallery({
                   ))}
                 </ol>
               ) : null}
-              {canEdit ? (
+              {canEdit && (!survey || productFeatures?.surveys) ? (
                 <button
                   className="button small-button"
                   disabled={Boolean(busyId)}
@@ -264,9 +290,9 @@ export function StarterGallery({
                 >
                   {busyId === starter.id ? t("starter.creating") : t("starter.use")}
                 </button>
-              ) : (
+              ) : !canEdit ? (
                 <p className={styles.readOnlyNote}>{t("starter.readOnly")}</p>
-              )}
+              ) : null}
             </article>
           );
         })}

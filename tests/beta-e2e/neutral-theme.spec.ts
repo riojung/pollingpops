@@ -35,7 +35,7 @@ for (const surface of ["desktop", "phone @mobile"]) {
     await signInBeta(page);
     await page.goto("/templates");
     await expect(page.getByRole("heading", { name: "Templates", exact: true })).toBeVisible();
-    await expect(page.getByRole("article")).toHaveCount(24);
+    await expect(page.getByRole("article")).toHaveCount(36);
 
     for (const mode of ["light", "dark"] as const) {
       // Filtering replaces cards beneath the pointer; do not assert a hover color
@@ -95,7 +95,7 @@ for (const surface of ["desktop", "phone @mobile"]) {
       ).toBeVisible();
       await page.getByRole("button", { name: "Close preview" }).click();
       await search.fill("");
-      await expect(page.getByRole("article")).toHaveCount(24);
+      await expect(page.getByRole("article")).toHaveCount(36);
       await page.evaluate(() => window.scrollTo(0, 0));
     }
   });

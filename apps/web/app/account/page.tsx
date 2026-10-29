@@ -29,6 +29,7 @@ import { SettingsNavigation } from "./settings-navigation";
 import { PersonalInstitutionIdentities } from "./personal-institution-identities";
 import { PersonalSubscriptionOptions } from "./personal-subscription-options";
 import { PersonalBillingNotice } from "./personal-billing-notice";
+import { loadOwnerSettings } from "./load-owner-settings";
 import {
   accountPermissions,
   canManagePersonalBilling,
@@ -155,24 +156,15 @@ export default function AccountPage() {
             `/v1/auth/oidc/status?workspaceId=${encodeURIComponent(account.creator.workspaceId)}`,
           ),
         );
-        if (
-          account.creator.role === "owner" &&
-          !(
-            account.workspace?.accountType === "organization" &&
-            account.workspace.licenseUnit === "user"
-          )
-        ) {
-          const [collaboration, lti] = await Promise.all([
-            apiFetch<{
-              members: WorkspaceMember[];
-              invitations: WorkspaceInvitation[];
-            }>("/v1/workspace/members"),
-            apiFetch<{ registrations: LtiRegistration[] }>("/v1/workspace/lti-registrations"),
-          ]);
+        const { collaboration, registrations } = await loadOwnerSettings(
+          account.creator.role,
+          account.workspace ?? null,
+        );
+        if (collaboration) {
           setMembers(collaboration.members);
           setInvitations(collaboration.invitations);
-          setLtiRegistrations(lti.registrations);
         }
+        setLtiRegistrations(registrations);
       })
       .catch((caught) => {
         if ((caught as { status?: number }).status === 401) {

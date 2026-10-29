@@ -289,7 +289,8 @@ flowchart TB
 
         Collector["OpenTelemetry Collector<br/>Metrics and traces"]
         Logs["Separate host log shipper<br/>Application logs"]
-        Alerts["Prometheus → Alertmanager<br/>Evaluate and route alerts"]
+        Prometheus["Prometheus<br/>Scrape metrics and evaluate rules"]
+        Alertmanager["Alertmanager<br/>Route alert notifications"]
 
         DB[("PostgreSQL")]
         Media[("MinIO media")]
@@ -311,10 +312,13 @@ flowchart TB
     Responder["Named human responder"]
     Replacement["Clean replacement EC2 VM"]
 
-    API --> Collector --> Telemetry
+    API -->|"Push traces"| Collector
+    Collector -->|"Authenticated scrape /metrics"| API
+    Collector -->|"Export metrics and traces"| Telemetry
     API --> Logs --> Telemetry
-    API -->|"Protected metrics"| Alerts
-    Alerts -->|"Page, warning and ticket routes"| Incidents
+    Prometheus -->|"Authenticated scrape /metrics"| API
+    Prometheus -->|"Forward firing alerts"| Alertmanager
+    Alertmanager -->|"Page, warning and ticket routes"| Incidents
     Incidents -->|"External HTTPS checks"| API
     Incidents -->|"Notify"| Responder
 
@@ -324,11 +328,13 @@ flowchart TB
     S3 -->|"Controlled restore using recovery keys"| Replacement
 ```
 
-The API sends traces to the private OpenTelemetry Collector, which also scrapes protected metrics.
-A separately managed host log shipper sends application logs. The supplied telemetry overlay does
-not collect Docker logs itself. Prometheus evaluates alert rules, and Alertmanager routes page,
-warning and ticket alerts to distinct receiver integrations. Better Stack also checks the public
-HTTPS endpoint from outside the VM.
+The API pushes traces to the private OpenTelemetry Collector. The collector and Prometheus each
+initiate authenticated scrapes of the API's `/metrics` endpoint. The scrape arrows show request
+initiation; metric responses travel back over those connections. Prometheus evaluates alert rules
+and forwards firing alerts to Alertmanager, which routes page, warning and ticket notifications
+to distinct receiver integrations. A separately managed host log shipper sends application logs;
+the supplied telemetry overlay does not collect Docker logs itself. Better Stack also checks the
+public HTTPS endpoint from outside the VM.
 
 Better Stack supports the required [OpenTelemetry ingestion](https://betterstack.com/docs/logs/open-telemetry/)
 and [Alertmanager webhooks](https://betterstack.com/docs/uptime/prometheus/). Configuring these

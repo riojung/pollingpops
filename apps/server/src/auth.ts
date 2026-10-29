@@ -27,6 +27,7 @@ export class AuthService {
   ) {}
 
   private async effectiveCreator(creator: CreatorContext): Promise<CreatorContext> {
+    if (this.config.COMMUNITY_MODE) return { ...creator, plan: "team" };
     const platform = createPlatformRepository(this.repository);
     const organization = await platform.getOrganizationForWorkspace(creator.workspaceId);
     if (
@@ -34,7 +35,6 @@ export class AuthService {
       !(await platform.workspaceHasLicense(creator.workspaceId))
     )
       return { ...creator, role: "viewer", plan: "free" };
-    if (this.config.COMMUNITY_MODE) return { ...creator, plan: "team" };
     return this.config.BUSINESS_PLATFORM_ENABLED
       ? { ...creator, plan: await this.repository.getPlan(creator.workspaceId) }
       : creator;

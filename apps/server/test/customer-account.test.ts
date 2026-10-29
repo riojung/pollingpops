@@ -223,6 +223,109 @@ describe("customer account ownership and workspace setup", () => {
     expect(response.json()).toMatchObject({ entitlements: { plan: "team" } });
   });
 
+  it.each(["owner", "editor"] as const)(
+    "preserves an accessible %s role in Community after a user-license subscription ends, without restoring revoked membership",
+    async (role) => {
+      const f = await fixture({ COMMUNITY_MODE: "true" });
+      const admin = await signIn(f.app, `community-admin-${role}@example.com`);
+      const member = await signIn(f.app, `community-member-${role}@example.com`);
+      const organization = await f.platform.createOrganization({
+        name: "Existing licensed organization",
+        actorId: admin.creator.userId,
+        accountType: "organization",
+        licenseUnit: "user",
+      });
+      await activateUserLicenses(f, organization.id, 2);
+      await f.platform.setOrganizationMember({
+        organizationId: organization.id,
+        actorId: admin.creator.userId,
+        userId: member.creator.userId,
+        role: "member",
+      });
+      const workspaceId = (
+        await f.platform.getOrganizationUserLicenses(organization.id, admin.creator.userId)
+      ).assignments.find((assignment) => assignment.userId === member.creator.userId)!.workspaceId;
+      // Preserve the stored role of an already-accessible workspace. Community mode
+      // must not turn either an owner or an existing editor into a read-only viewer.
+      f.repository.workspaceMembers.get(`${workspaceId}:${member.creator.userId}`)!.role = role;
+      const selected = await f.app.inject({
+        method: "POST",
+        url: `/v1/workspaces/${workspaceId}/select`,
+        headers: { cookie: member.cookie },
+      });
+      expect(selected.statusCode, selected.body).toBe(200);
+      expect(await f.platform.workspaceHasLicense(workspaceId)).toBe(true);
+      await f.platform.applySubscriptionSnapshot({
+        ...(await f.platform.getSubscription(organization.id)),
+        status: "canceled",
+      });
+      expect(await f.platform.workspaceHasLicense(workspaceId)).toBe(false);
+
+      const community = await f.app.inject({
+        method: "GET",
+        url: "/v1/auth/me",
+        headers: { cookie: member.cookie },
+      });
+      expect(community.statusCode, community.body).toBe(200);
+      expect(community.json()).toMatchObject({
+        creator: { workspaceId, role, plan: "team" },
+        entitlements: { plan: "team", brandTheme: true },
+      });
+      const hosted = await buildApp(settings({ COMMUNITY_MODE: "false" }), {
+        repository: f.repository,
+        cache: new MemorySessionCache(),
+      });
+      apps.push(hosted.app);
+      const hostedContext = await hosted.app.inject({
+        method: "GET",
+        url: "/v1/auth/me",
+        headers: { cookie: member.cookie },
+      });
+      expect(hostedContext.statusCode, hostedContext.body).toBe(200);
+      expect(hostedContext.json()).toMatchObject({
+        creator: { workspaceId, role: "viewer", plan: "free" },
+        entitlements: { plan: "free" },
+      });
+      const blockedWrite = await hosted.app.inject({
+        method: "POST",
+        url: "/v1/folders",
+        headers: { cookie: member.cookie },
+        payload: { name: "Hosted requires a paid creator license" },
+      });
+      expect(blockedWrite.statusCode, blockedWrite.body).toBe(403);
+      const communityWrite = await f.app.inject({
+        method: "POST",
+        url: "/v1/folders",
+        headers: { cookie: member.cookie },
+        payload: { name: "Community authoring remains available" },
+      });
+      expect(communityWrite.statusCode, communityWrite.body).toBe(201);
+
+      await f.platform.assignOrganizationUserLicense(
+        organization.id,
+        admin.creator.userId,
+        member.creator.userId,
+        false,
+      );
+      for (const app of [f.app, hosted.app]) {
+        const revoked = await app.inject({
+          method: "GET",
+          url: "/v1/auth/me",
+          headers: { cookie: member.cookie },
+        });
+        expect(revoked.statusCode, revoked.body).toBe(401);
+      }
+      const revokedWrite = await f.app.inject({
+        method: "POST",
+        url: "/v1/folders",
+        headers: { cookie: member.cookie },
+        payload: { name: "Revoked Community membership" },
+      });
+      expect(revokedWrite.statusCode, revokedWrite.body).toBe(401);
+      expect(await f.repository.listFolders(workspaceId)).toHaveLength(1);
+    },
+  );
+
   it("allows personal sign-in deletion while protecting organization ownership", async () => {
     const f = await fixture();
     const personal = await signIn(f.app, "personal-delete@example.com");

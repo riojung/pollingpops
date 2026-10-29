@@ -382,10 +382,20 @@ counts under the bounded `product_event` resource label.
   Wrong, expired, exhausted, and reused credentials return 401; malformed input returns 400.
 - `GET /v1/auth/me` — creator/workspace context, entitlements (including `cohosting`), branding,
   and workspace-resolved `productFeatures` after Admin policy or inherited rollout configuration
-  is applied.
+  is applied. The `workspace` object carries the actual name, explicit personal/organization
+  account type, organization identity and assigned role, license unit, plan source, and settings
+  permissions. Community feature access is distinct from a paid organization subscription.
 - `POST /v1/auth/logout`
-- `GET /v1/workspaces`
-- `POST /v1/workspaces/{id}/select`
+- `GET /v1/workspaces` — authenticated identity's accessible workspaces with account/organization
+  metadata. `activeWorkspaceId` is null after selected workspace access has been revoked.
+- `POST /v1/workspaces/{id}/select` — explicit authenticated identity-level selection, including
+  when the previous selected workspace is no longer accessible.
+- `POST /v1/customer/setup` — requires `x-idempotency-key`; personal setup reuses an owned personal
+  workspace or creates one, while organization setup accepts `{accountType:"organization",name,
+workspaceName,segment}` and creates a user-license organization and its owner's setup workspace.
+  The selected session context changes only after successful setup. Organization setup requires
+  enabled hosted business management; it does not create a paid subscription.
+- `PATCH /v1/workspace/settings` — owner or authorized organization administrator updates `{name}`.
 - `GET /v1/workspace/members`
 - `POST /v1/workspace/invitations`
 - `POST /v1/invitations/accept` — returns `{creator, requiresSignIn, redirectTo}`. Anonymous invitees
@@ -398,7 +408,20 @@ counts under the bounded `product_event` resource label.
 - `GET /v1/account/export`
 - `GET /v1/workspace/audit-export?since=...` — contract-gated owner export, at most 10,000
   ordered events with explicit truncation metadata.
-- `DELETE /v1/account` with `{ "confirmation": "DELETE" }`
+- `DELETE /v1/account` with `{ "confirmation": "DELETE" }` — returns 409 while personal billing
+  still has a nonterminal provider subscription or pending subscription checkout. Complete
+  cancellation before deleting the billing sign-in; refusal preserves the session and content.
+
+User-license organizations manage people through `/v1/organizations/{id}`: `GET /seats` reports
+purchased, assigned, reserved and available creator licenses; owner/admin `PUT /members/{userId}/license`
+assigns or releases a license. `POST /invitations` accepts email, organization role and optional
+workspace name. Pending creator invitations reserve capacity; billing-only invitations grant no
+content workspace. Verified acceptance through `POST /v1/organization-invitations/accept` provisions
+and selects a separate organization-owned workspace and returns its `workspaceId`/`activeWorkspaceId`.
+Ordinary workspace invitations cannot bypass this organization license flow. Organization rename
+uses owner/admin `PATCH /v1/organizations/{id}` with `{name}`. Membership/seat removal retains
+organization content and invalidates its selected content context until the user explicitly
+chooses an accessible workspace.
 
 Successful PIN sign-in defaults to `/home`. Verification without an explicit local `returnTo`
 forwards `/home?welcome=1` to the sign-in page. Safe explicit return paths are preserved, and
@@ -916,8 +939,14 @@ that creation switch is later disabled.
 
 ## Billing APIs
 
-- `GET /v1/billing/status`
-- `POST /v1/billing/checkout`
+- `GET /v1/billing/status` — subscription/customer state remains authoritative for payment
+  recovery even when expired grace reduces effective feature access to Free.
+- `GET /v1/billing/catalog` — hosted business billing only; published subscription offers matching
+  the selected account's license unit and whether checkout is enabled. Provider price IDs and
+  internal entitlement snapshots are excluded.
+- `POST /v1/billing/checkout` — hosted business billing accepts optional `{offerId}`. An explicit
+  offer is required when multiple matching subscriptions are published; `{}` retains the
+  single-offer upgrade path.
 - `POST /v1/billing/portal`
 - `POST /v1/webhooks/stripe`
 

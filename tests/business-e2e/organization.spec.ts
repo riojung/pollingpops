@@ -8,6 +8,15 @@ async function signIn(page: Page, email: string) {
   await signInCreator(page, email);
 }
 
+async function createLegacyOrganization(page: Page, name: string) {
+  const response = await page.request.post(`${api}/v1/organizations`, {
+    headers: { "x-idempotency-key": randomUUID() },
+    data: { name },
+  });
+  expect(response.ok()).toBe(true);
+  return ((await response.json()) as { organization: { id: string } }).organization;
+}
+
 async function expectSectionAtTop(page: Page, section: string, maxTop = 60) {
   await expect
     .poll(async () =>
@@ -26,15 +35,9 @@ test("organization workspace links scroll to delayed sections and preserve later
   page,
 }, testInfo) => {
   await signIn(page, testEmail("business-section-scroll", testInfo));
-  const organizationList = (await (await page.request.get(`${api}/v1/organizations`)).json())
-    .organizations as Array<{ id: string }>;
-  const firstId = organizationList[0]!.id;
-  const created = await page.request.post(`${api}/v1/organizations`, {
-    headers: { "x-idempotency-key": randomUUID() },
-    data: { name: "Second scrolling organization" },
-  });
-  expect(created.ok()).toBe(true);
-  const secondId = ((await created.json()) as { organization: { id: string } }).organization.id;
+  const firstId = (await createLegacyOrganization(page, "First scrolling organization")).id;
+  const secondId = (await createLegacyOrganization(page, "Second scrolling organization")).id;
+  await page.reload();
 
   let releaseCollection!: () => void;
   const collectionGate = new Promise<void>((resolve) => {
@@ -126,6 +129,8 @@ test("organization owner invites billing-only administrator and funds a premium 
   const ownerIdentity = (await (await owner.request.get(`${api}/v1/auth/me`)).json()).creator as {
     userId: string;
   };
+  const organizationId = (await createLegacyOrganization(owner, "Browser business launch")).id;
+  await owner.reload();
   const organizationNavigation = owner
     .getByRole("complementary")
     .getByRole("region", { name: "Organization management", exact: true });
@@ -134,17 +139,15 @@ test("organization owner invites billing-only administrator and funds a premium 
   ).toBeVisible();
   await organizationNavigation.getByRole("link", { name: "Organization", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
-  await owner.getByLabel("Organization name", { exact: true }).fill("Browser business launch");
-  await owner.getByRole("button", { name: "Create organization", exact: true }).click();
   await expect(owner.getByRole("combobox", { name: "Organization", exact: true })).toHaveValue(
     /.+/,
   );
   await expect(
     owner.getByRole("combobox", { name: "Organization", exact: true }).locator("option:checked"),
   ).toHaveText("Browser business launch");
-  const organizationId = await owner
-    .getByRole("combobox", { name: "Organization", exact: true })
-    .inputValue();
+  await expect(owner.getByRole("combobox", { name: "Organization", exact: true })).toHaveValue(
+    organizationId,
+  );
   await owner.getByLabel("New workspace name", { exact: true }).fill("Training department");
   await owner.getByRole("button", { name: "Create workspace", exact: true }).click();
   await expect(owner.getByText("Training department", { exact: true })).toBeVisible();
@@ -218,6 +221,7 @@ test("organization owner invites billing-only administrator and funds a premium 
     finance.getByRole("heading", { name: "Personal account", exact: true }),
   ).toBeVisible();
   await expect(finance.getByRole("main").getByText(financeEmail, { exact: true })).toBeVisible();
+  await finance.getByRole("tab", { name: "Privacy and data", exact: true }).click();
   await expect(
     finance.getByRole("button", { name: "Delete personal account", exact: true }),
   ).toBeDisabled();
@@ -251,8 +255,10 @@ test("organization owner invites billing-only administrator and funds a premium 
   const audienceContext = await browser.newContext();
   const audience = await audienceContext.newPage();
   await audience.goto(`/join?code=${code}`);
-  await audience.getByLabel("Nickname", { exact: true }).fill("Audience member");
-  await audience.getByRole("button", { name: "Join Round", exact: true }).click();
+  await audience
+    .getByRole("textbox", { name: /^Nickname(?: \(optional\))?$/ })
+    .fill("Audience member");
+  await audience.getByRole("button", { name: /^Join round$/i }).click();
   await expect(audience).toHaveURL(/\/play\//);
   const consumed = await (
     await owner.request.get(`${api}/v1/organizations/${organizationId}/billing`)
@@ -294,4 +300,164 @@ test("organization entry explains sign-in and disabled deployments without creat
     0,
   );
   await expect(page.getByText("Request failed (404)", { exact: true })).toHaveCount(0);
+});
+
+test("organization users receive separate licensed workspaces and an administrator cannot overbook licenses", async ({
+  page: owner,
+  browser,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  const ownerEmail = testEmail("licensed-owner", testInfo);
+  const memberEmail = testEmail("licensed-member", testInfo);
+  const companyName = "ABC Sales Company";
+  await signIn(owner, ownerEmail);
+  const personal = await (await owner.request.get(`${api}/v1/auth/me`)).json();
+  expect(personal.workspace.accountType).toBe("personal");
+  expect(personal.entitlements.plan).toBe("free");
+
+  await owner.goto("/account/setup?type=organization");
+  await owner.getByLabel("Organization name", { exact: true }).fill(companyName);
+  await owner.getByLabel("Your workspace name", { exact: true }).fill("Sales administrator");
+  await owner
+    .getByRole("combobox", { name: "Workspace type", exact: true })
+    .selectOption("workplace");
+  const setupResponse = owner.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url().endsWith("/v1/customer/setup"),
+  );
+  await owner
+    .getByRole("button", { name: "Create organization and workspace", exact: true })
+    .click();
+  const setupResult = await setupResponse;
+  expect(setupResult.status()).toBe(201);
+  await expect(owner).toHaveURL(/\/account#overview$/);
+  const setup = await (await owner.request.get(`${api}/v1/auth/me`)).json();
+  const organizationId = setup.workspace.organization.id as string;
+  const ownerWorkspaceId = setup.creator.workspaceId as string;
+  expect(ownerWorkspaceId).not.toBe(personal.creator.workspaceId);
+
+  const seeded = await owner.request.post(`${api}/__test/business/seed`, {
+    data: { organizationId, actorId: personal.creator.userId, creatorLicenseQuantity: 2 },
+  });
+  expect(seeded.ok()).toBe(true);
+  await owner.goto(`/organization?organizationId=${organizationId}#members`);
+  const people = owner.locator("#members");
+  await expect(
+    people.getByRole("heading", { name: "Members and roles", exact: true }),
+  ).toBeVisible();
+  const availability = people.getByLabel("User license availability");
+  await expect(availability.getByText("Assigned", { exact: true }).locator("..")).toContainText(
+    "1",
+  );
+  await expect(availability.getByText("Available", { exact: true }).locator("..")).toContainText(
+    "1",
+  );
+  await expect(owner.getByRole("button", { name: "Assign license", exact: true })).toHaveCount(0);
+
+  const memberContext = await browser.newContext();
+  const member = await memberContext.newPage();
+  try {
+    await signIn(member, memberEmail);
+    const memberPersonal = await (await member.request.get(`${api}/v1/auth/me`)).json();
+    await people.getByLabel("Invite by email", { exact: true }).fill(memberEmail);
+    await people
+      .getByRole("combobox", { name: "Organization role", exact: true })
+      .selectOption("member");
+    await people.getByLabel("User workspace name", { exact: true }).fill("Sales user workspace");
+    const invitationResponse = owner.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().endsWith(`/organizations/${organizationId}/invitations`),
+    );
+    await people.getByRole("button", { name: "Send invitation", exact: true }).click();
+    const sentInvitation = await invitationResponse;
+    expect(sentInvitation.status()).toBe(201);
+    const invitation = await sentInvitation.json();
+    await expect(
+      availability.getByText("Reserved invitations", { exact: true }).locator(".."),
+    ).toContainText("1");
+    await expect(
+      people.getByRole("button", { name: "Send invitation", exact: true }),
+    ).toBeDisabled();
+    const excess = await owner.request.post(
+      `${api}/v1/organizations/${organizationId}/invitations`,
+      {
+        headers: { "x-idempotency-key": randomUUID() },
+        data: {
+          email: testEmail("licensed-overbook", testInfo),
+          role: "member",
+          workspaceName: "Overbooked workspace",
+        },
+      },
+    );
+    expect(excess.status()).toBe(409);
+    expect((await excess.json()).error.code).toBe("LICENSE_LIMIT");
+
+    await member.goto(invitation.inviteUrl);
+    const acceptanceResponse = member.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().endsWith("/v1/organization-invitations/accept"),
+    );
+    await member.getByRole("button", { name: "Accept invitation", exact: true }).click();
+    const acceptance = await acceptanceResponse;
+    expect(acceptance.status()).toBe(200);
+    const accepted = await acceptance.json();
+    const memberWorkspaceId = (accepted.workspaceId ?? accepted.activeWorkspaceId) as string;
+    expect(memberWorkspaceId).toBeTruthy();
+    expect(memberWorkspaceId).not.toBe(ownerWorkspaceId);
+    expect(memberWorkspaceId).not.toBe(memberPersonal.creator.workspaceId);
+    await member.getByRole("link", { name: "Open your workspace", exact: true }).click();
+    await expect(member).toHaveURL(/\/home$/);
+    const context = await (await member.request.get(`${api}/v1/auth/me`)).json();
+    expect(context.creator.workspaceId).toBe(memberWorkspaceId);
+    expect(context.workspace).toMatchObject({
+      accountType: "organization",
+      name: "Sales user workspace",
+      organization: { id: organizationId, name: companyName, role: "member" },
+    });
+    expect(context.entitlements.plan).toBe("team");
+    const workspaceChip = member
+      .locator('header a[href="/account"]')
+      .filter({ hasText: companyName });
+    await expect(workspaceChip).toContainText("Sales user workspace");
+    await expect(member.getByRole("complementary").getByText(/Member · Team/)).toBeVisible();
+    expect(
+      (await member.request.get(`${api}/v1/organizations/${organizationId}/members`)).status(),
+    ).toBe(403);
+    expect(
+      (
+        await member.request.post(`${api}/v1/workspaces/${ownerWorkspaceId}/select`, { data: {} })
+      ).status(),
+    ).toBe(404);
+
+    await owner.reload();
+    await expect(availability.getByText("Assigned", { exact: true }).locator("..")).toContainText(
+      "2",
+    );
+    await expect(
+      availability.getByText("Reserved invitations", { exact: true }).locator(".."),
+    ).toContainText("0");
+    const memberRow = people
+      .getByRole("listitem")
+      .filter({ has: owner.getByText(memberEmail, { exact: true }) });
+    owner.once("dialog", (dialog) => void dialog.accept());
+    await memberRow.getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(availability.getByText("Available", { exact: true }).locator("..")).toContainText(
+      "1",
+    );
+    expect(
+      (
+        await member.request.post(`${api}/v1/workspaces/${memberWorkspaceId}/select`, { data: {} })
+      ).status(),
+    ).toBe(404);
+    const retained = await (
+      await owner.request.get(`${api}/v1/organizations/${organizationId}/workspaces`)
+    ).json();
+    expect(
+      retained.workspaces.some((workspace: { id: string }) => workspace.id === memberWorkspaceId),
+    ).toBe(true);
+  } finally {
+    await memberContext.close();
+  }
 });

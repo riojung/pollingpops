@@ -3,12 +3,17 @@ import type { PoolClient } from "pg";
 import type { Segment, LiveRoomArtifactType } from "./types.js";
 
 export type OrganizationRole = "owner" | "admin" | "billing" | "member";
+export type CustomerAccountType = "personal" | "organization";
+export type LicenseUnit = "workspace" | "user";
 export type OrganizationStatus = "active" | "suspended" | "closed";
 export type PlatformRoomType = "round" | "presentation";
 export interface OrganizationRecord {
   id: string;
   name: string;
   status: OrganizationStatus;
+  accountType?: CustomerAccountType;
+  /** Absent values preserve historical workspace-license contracts. */
+  licenseUnit?: LicenseUnit;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,7 +38,10 @@ export interface PlatformSubscription {
   subscriptionId: string | null;
   status: string;
   licenseQuantity: number;
+  licenseUnit?: LicenseUnit;
   offerId: string | null;
+  /** Captured paid commercial terms; later catalog publication cannot reinterpret them. */
+  offerSnapshot?: PlatformOffer;
   paidThrough: Date | null;
   graceUntil: Date | null;
   updatedAt: Date;
@@ -47,11 +55,29 @@ export interface LicenseAssignment {
   assignedBy: string;
   assignedAt: Date;
 }
+export interface UserLicenseAssignment {
+  organizationId: string;
+  userId: string;
+  workspaceId: string;
+  assignedBy: string;
+  assignedAt: Date;
+}
+export interface OrganizationUserLicenseSummary {
+  organizationId: string;
+  licenseUnit: LicenseUnit;
+  quantity: number;
+  assigned: number;
+  reserved: number;
+  available: number;
+  assignments: UserLicenseAssignment[];
+  pendingInvitationIds: string[];
+}
 export interface PlatformOffer {
   id: string;
   name: string;
   productKey: "pollingpops";
   kind: "workspace_subscription" | "credit_pack";
+  licenseUnit?: LicenseUnit;
   status: "draft" | "published" | "archived";
   version: number;
   stripePriceId: string | null;
@@ -330,6 +356,9 @@ export interface OrganizationInvitationRecord {
   organizationId: string;
   email: string;
   role: OrganizationRole;
+  workspaceId?: string;
+  workspaceName?: string;
+  workspaceRole?: "editor" | "viewer";
   tokenHash: string;
   createdBy: string;
   expiresAt: Date;
@@ -396,10 +425,17 @@ export interface PlatformRepository {
     id?: string;
     name: string;
     actorId: string;
+    accountType?: CustomerAccountType;
+    licenseUnit?: LicenseUnit;
   }): Promise<OrganizationRecord>;
   updateOrganizationStatus(
     organizationId: string,
     status: OrganizationStatus,
+  ): Promise<OrganizationRecord>;
+  renameOrganization(
+    organizationId: string,
+    actorId: string,
+    name: string,
   ): Promise<OrganizationRecord>;
   closeOrganization(organizationId: string, actorId: string): Promise<OrganizationRecord>;
   requireOrganizationRole(
@@ -434,6 +470,9 @@ export interface PlatformRepository {
     actorId: string;
     email: string;
     role: OrganizationRole;
+    workspaceId?: string;
+    workspaceName?: string;
+    workspaceRole?: "editor" | "viewer";
     tokenHash: string;
     expiresAt: Date;
   }): Promise<OrganizationInvitationRecord>;
@@ -451,7 +490,23 @@ export interface PlatformRepository {
     actorId: string;
     userEmail?: string;
     now?: Date;
-  }): Promise<OrganizationMemberRecord>;
+  }): Promise<OrganizationMemberRecord & { workspaceId?: string }>;
+  getOrganizationUserLicenses(
+    organizationId: string,
+    actorId: string,
+  ): Promise<OrganizationUserLicenseSummary>;
+  assignOrganizationUserLicense(
+    organizationId: string,
+    actorId: string,
+    userId: string,
+    assigned: boolean,
+    options?: { workspaceId?: string; workspaceName?: string },
+  ): Promise<UserLicenseAssignment | null>;
+  renameWorkspace(
+    workspaceId: string,
+    actorId: string,
+    name: string,
+  ): Promise<OrganizationWorkspaceRecord>;
   listOrganizationWorkspaces(
     organizationId: string,
     userId: string,
@@ -467,7 +522,7 @@ export interface PlatformRepository {
   getSubscription(organizationId: string): Promise<PlatformSubscription>;
   listSubscriptions(): Promise<PlatformSubscription[]>;
   applySubscriptionSnapshot(
-    input: Omit<PlatformSubscription, "updatedAt"> & { now?: Date },
+    input: Omit<PlatformSubscription, "updatedAt"> & { now?: Date; purchaseId?: string },
   ): Promise<PlatformSubscription>;
   withOrganizationBillingLock<T>(
     organizationId: string,

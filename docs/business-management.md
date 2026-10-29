@@ -21,6 +21,28 @@ flowchart TB
 
 ## Customer and commercial boundaries
 
+Personal accounts have a personal workspace. Free and Pro are entitlement levels of that same
+account type. Organization accounts have a named company or team boundary and separate
+organization-owned workspaces for licensed creators. A paid plan never changes ownership type
+implicitly. Community installations display **Community access** because their Team feature
+assignment does not represent a paid organization subscription.
+
+```mermaid
+flowchart TB
+  subgraph Personal[Personal account]
+    Individual[Individual user] --> PersonalWorkspace[Personal workspace: Free or Pro limits]
+  end
+  subgraph Company[ABC Company: organization account]
+    Administrator[Owner or administrator] -->|manages| Licenses[Purchased creator licenses]
+    Licenses -->|one license| UserA[User A: assigned organization role]
+    Licenses -->|one license| UserB[User B: assigned organization role]
+    UserA -->|assigned content access| WorkspaceA[User A's organization-owned workspace]
+    UserB -->|assigned content access| WorkspaceB[User B's organization-owned workspace]
+  end
+  WorkspaceA -->|hosts| Room[Live session]
+  Guests[Guest participants: no account or creator license] -->|join| Room
+```
+
 An organization is the payer. A workspace remains the content and collaboration boundary.
 Organization owners and administrators manage membership and workspaces; billing members can
 manage purchases and licenses without gaining access to polls, reports, or another workspace's
@@ -30,12 +52,37 @@ Migration 065 gives each existing workspace a separate organization. It preserve
 provider-customer and subscription IDs rather than merging customers with a common human owner.
 Organization-aware identity deletion preserves team data and commercial records. A last owner
 must transfer ownership or explicitly close the organization first. Workspace transfer between
-organizations is outside this release.
+organizations is outside this release. Organization membership and workspace stewardship retain
+these safeguards even if hosted business management is later disabled or Community mode enabled;
+deployment flags never turn organization-owned workspaces into personal deletion targets.
+Personal billing owners must finish cancellation before deleting their sign-in while a provider
+subscription can still charge. Pending subscription checkouts also block deletion until canceled
+or reconciled, including checkout preparation before the provider returns its ID. The guard runs
+before media deletion and preserves the customer's billing access when deletion is refused.
 
-Subscriptions buy workspace licenses. Assignments cannot exceed purchased quantity; reassignment
-requires the previous workspace's subscription-funded rooms to have finished or expired. Renewal
+Existing subscriptions retain workspace licenses. New organization setup explicitly uses user
+licenses: each creator receives a separate workspace owned by the organization, with an assigned
+organization role. The initial paid user-license subscription assigns the first license to the
+organization owner and the owner's setup workspace. Owners and administrators invite additional
+creators by verified email and choose a workspace name; acceptance provisions the recipient's
+workspace and selects it after sign-in. An unexpired invitation reserves one available license.
+Revocation and expiry release that reservation. Billing-only invitations do not consume creator
+licenses or grant workspace access.
+
+License assignments and pending reservations cannot exceed purchased quantity. User-license
+release removes the creator's organization workspace access while retaining its content under
+organization ownership. A current browser session cannot silently switch to another workspace;
+the user must explicitly select an accessible personal or organization workspace. Administrators
+can transfer retained workspaces to another eligible organization member. Reassignment requires
+the previous workspace's subscription-funded rooms to have finished or expired. Renewal
 failure receives seven days from the recorded paid-through boundary, without extending grace on
 each retry. An initial unpaid purchase receives no grace.
+
+User-license release and membership removal also require the user's active organization Round
+and Presentation controls to have finished or expired. This prevents a removed creator retaining
+an independent live-control credential. Personal/other-organization rooms and guest participation
+are unaffected. An unlicensed or expired user-seat workspace is read-only for content until a
+valid creator license is restored; organization administrators can still manage the account.
 
 An organization shares its purchased and complimentary event credits across its workspaces.
 Purchased credits do not expire or transfer between organizations. A credit funds one Round or
@@ -59,6 +106,51 @@ Offers are versioned snapshots. Configure the catalog using `BUSINESS_CATALOG_JS
 offers cannot initiate checkout. See the catalog parser and its tests for subscription and pack
 examples. Stripe prices, currency, amount and recurring interval must agree with a published
 offer. Prices remain business configuration rather than hardcoded launch promises.
+
+Subscription offers use `licenseUnit: "user"` for the new organization model. An omitted unit
+retains the legacy `"workspace"` meaning. Credit packs have no license unit. Changing an existing
+offer's unit requires a new offer version and a distinct provider price; existing purchases retain
+their captured terms. User-license offers provide Team entitlements, while personal Pro and
+legacy workspace offers keep their existing behavior. Checkout rejects a license unit that does
+not match the account. Personal checkout and portal returns open **Account > Plan and usage**;
+personal customers choose among published subscription offers there, including monthly and annual
+options when configured. Organization billing returns to the selected organization's billing
+section.
+
+Subscription reconciliation retains the captured offer's version, license unit and entitlements
+when the provider renews its original price, even after that offer ID is republished. The stored
+subscription snapshot and immutable purchase terms are checked against the actual provider price.
+A recognized new price with the same license unit can adopt its corresponding published terms;
+an actual change to the account's fixed license unit remains invalid. Personal billing recovery
+uses subscription/customer status, so expired payment grace can remove paid features without
+removing access to payment updates and cancellation in the billing portal.
+
+### Customer setup and settings
+
+New customers choose personal or organization setup. **Account > Overview** also links to setup
+for an existing verified identity. Organization setup requires `BUSINESS_PLATFORM_ENABLED=true`
+and `COMMUNITY_MODE=false`; unpublished or unconfigured billing offers do not become purchasable
+through setup. The organization administrator still needs a reviewed, published user-license
+offer before inviting licensed creators. Guest participants remain accountless and do not use
+creator licenses.
+
+Account settings have selectable **Overview**, **People**, **Appearance**, **Plan and usage**,
+**Security and integrations**, and **Privacy and data** categories. Categories follow the
+authenticated workspace's permissions. Organization members see their assigned organization role
+separately from their workspace stewardship; administrators manage invitations and user licenses
+under Organization > Members. Appearance provides theme presets and optional custom colors;
+embedded websites use individually editable HTTPS origin rows. Personal export and account
+deletion remain separate from organization closure and retained commercial records.
+Transferred legacy workspace owners can rename their workspace without gaining organization
+membership or billing permission. User-license organizations retain their membership safeguards.
+The original payer's billing permission follows their account role, so transferring workspace
+stewardship does not remove access to payment recovery or cancellation.
+
+Migration 078 records explicit account types and license units, retains the existing personal
+workspace billing boundaries, and adds user-license assignments without reinterpreting existing
+workspace-license purchases. Apply the complete ordered migration set before the new application
+version. The workspace switcher uses the actual organization and workspace names, independently
+of the workplace/education content segment.
 
 `BUSINESS_STRIPE_AUTOMATIC_TAX_ENABLED` defaults to `false`. When enabled, new organization
 checkouts request Stripe automatic tax for both subscriptions and credit packs, collect a billing

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SiteFooter } from "../../components/site-footer";
 import { SiteHeader } from "../../components/site-header";
+import styles from "./pricing.module.css";
 
 export const metadata = { title: "Pricing" };
 
@@ -18,34 +19,47 @@ export default function PricingPage() {
             Self-hosting remains free under Apache 2.0. Hosted plans cover operations and support.
           </p>
         </div>
-        <div className="pricing-grid">
+        <div className={`pricing-grid ${styles.plans}`}>
           <article className="card">
-            <span className="status-pill">Free</span>
+            <span className="status-pill">Free · Personal</span>
             <h2 style={{ marginTop: 28 }}>$0</h2>
             <p>
-              Hosted Free: 20 participants, five published checkpoint sets, the complete Recovery
-              Loop and Q&A, aggregate 30-day reports, and three authoring jobs monthly when enabled.
+              Your own personal workspace. Hosted Free: 20 participants, five published checkpoint
+              sets, the complete Recovery Loop and Q&A, aggregate 30-day reports, and three
+              authoring jobs monthly when enabled.
             </p>
-            <Link className="button-quiet" href="/signin">
+            <Link className="button-quiet" href="/signin?mode=signup&accountType=personal">
               Create an account
             </Link>
           </article>
           <article className="card">
-            <span className="status-pill">Pro</span>
+            <span className="status-pill">Pro · Personal</span>
             <h2 style={{ marginTop: 28 }}>Pricing will be announced</h2>
             <p>
-              Hosted Pro: 100 participants, unlimited checkpoint sets, cohosting, CSV/JSON/QTI,
-              accountless follow-up, 100 authoring jobs, 365-day reports, and one contrast-checked
-              workspace theme.
+              A paid plan for your personal workspace. Hosted Pro: 100 participants, unlimited
+              checkpoint sets, cohosting, CSV/JSON/QTI, accountless follow-up, 100 authoring jobs,
+              365-day reports, and one contrast-checked workspace theme.
             </p>
-            <Link className="button" href="/organization">
-              Organization billing
+            <Link className="button" href="/account#plan">
+              Manage personal plan
+            </Link>
+          </article>
+          <article className="card">
+            <span className="status-pill">Team · Organization</span>
+            <h2 style={{ marginTop: 28 }}>Pricing will be announced</h2>
+            <p>
+              For companies and businesses. Organization administrators manage user licenses and
+              roles. Each licensed person receives a separate organization-owned workspace, with
+              organization billing and access management. Personal workspaces stay separate.
+            </p>
+            <Link className="button-quiet" href="/account/setup?type=organization">
+              Set up an organization
             </Link>
           </article>
         </div>
         <p className="notice" style={{ marginTop: 28 }}>
-          Hosted pricing will be announced after review. Signed-in organization billing
-          administrators can review offers when they are published.
+          Hosted pricing will be announced after review. Personal users manage Pro from Plan and
+          usage. Organization billing administrators can review organization offers when published.
         </p>
       </main>
       <SiteFooter />

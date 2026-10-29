@@ -7,6 +7,7 @@ export const CatalogOfferSchema = z
     version: z.number().int().positive(),
     title: z.string().trim().min(1).max(120),
     kind: z.enum(["workspace_subscription", "event_credit_pack"]),
+    licenseUnit: z.enum(["workspace", "user"]).optional(),
     published: z.boolean().default(false),
     stripePriceId: z
       .string()
@@ -53,6 +54,12 @@ export const CatalogOfferSchema = z
     }
     if (offer.kind === "event_credit_pack" && offer.interval !== undefined) {
       context.addIssue({ code: "custom", message: "Credit packs are one-time purchases" });
+    }
+    if (offer.kind === "event_credit_pack" && offer.licenseUnit !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Credit packs do not allocate user or workspace licenses",
+      });
     }
   });
 

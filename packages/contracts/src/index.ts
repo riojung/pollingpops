@@ -2592,8 +2592,58 @@ export const WorkspaceSummarySchema = z.object({
   segment: z.enum(["education", "workplace"]),
   role: WorkspaceRoleSchema,
   homeRegion: z.string(),
+  accountType: z.enum(["personal", "organization"]).optional(),
+  organizationId: z.string().uuid().optional(),
+  organizationName: z.string().optional(),
+  organizationRole: z.enum(["owner", "admin", "billing", "member"]).nullable().optional(),
 });
 export type WorkspaceSummary = z.infer<typeof WorkspaceSummarySchema>;
+
+export const WorkspaceAccountContextSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  accountType: z.enum(["personal", "organization"]),
+  licenseUnit: z.enum(["workspace", "user"]),
+  planSource: z.enum(["community", "subscription", "free"]),
+  organization: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string().min(1).max(120),
+      role: z.enum(["owner", "admin", "billing", "member"]).nullable(),
+    })
+    .nullable(),
+  permissions: z.object({
+    manageWorkspace: z.boolean(),
+    managePeople: z.boolean(),
+    manageBilling: z.boolean(),
+    manageIntegrations: z.boolean(),
+  }),
+});
+export type WorkspaceAccountContext = z.infer<typeof WorkspaceAccountContextSchema>;
+
+export const UpdateWorkspaceSettingsSchema = z
+  .object({ name: z.string().trim().min(1).max(120) })
+  .strict();
+
+export const CustomerOrganizationSetupSchema = z
+  .object({
+    accountType: z.literal("organization"),
+    name: z.string().trim().min(1).max(120),
+    workspaceName: z.string().trim().min(1).max(120),
+    segment: z.enum(["education", "workplace"]),
+  })
+  .strict();
+
+export const CustomerSetupSchema = z.discriminatedUnion("accountType", [
+  CustomerOrganizationSetupSchema,
+  z
+    .object({
+      accountType: z.literal("personal"),
+      workspaceName: z.string().trim().min(1).max(120).optional(),
+      segment: z.enum(["education", "workplace"]).default("workplace"),
+    })
+    .strict(),
+]);
 
 export const WorkspaceMemberSchema = z.object({
   userId: z.string().uuid(),

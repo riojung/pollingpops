@@ -162,6 +162,7 @@ describe("customer authentication stays separate from administrator authenticati
     const organization = (await platform.getOrganizationForWorkspace(
       me.json().creator.workspaceId,
     ))!;
+    expect(organization.accountType).toBe("personal");
     const navigation = await app.inject({
       method: "GET",
       url: "/v1/auth/navigation",
@@ -170,7 +171,7 @@ describe("customer authentication stays separate from administrator authenticati
     expect(navigation.json()).toEqual({
       user: { userId: me.json().creator.userId, email },
       organizationManagementEnabled: true,
-      organizations: [{ id: organization.id, name: organization.name, role: "owner" }],
+      organizations: [],
       operatorConsoleOrigin: null,
     });
     expect(await platform.listOperators()).toEqual([]);

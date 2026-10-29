@@ -155,17 +155,30 @@ export async function registerPlatformRoutes(
 
     routes.get("/v1/organizations", async (request, reply) => {
       const user = await auth.requireUser(request, reply);
-      return user ? { organizations: await platform.listOrganizations(user.userId) } : undefined;
+      return user
+        ? {
+            organizations: (await platform.listOrganizations(user.userId)).filter(
+              (organization) => organization.accountType !== "personal",
+            ),
+          }
+        : undefined;
     });
     routes.post("/v1/organizations", async (request, reply) => {
       const user = await auth.requireUser(request, reply);
       if (!user) return;
-      const input = z.object({ name: nameSchema }).strict().parse(request.body);
+      const input = z
+        .object({ name: nameSchema, licenseUnit: z.enum(["workspace", "user"]).optional() })
+        .strict()
+        .parse(request.body);
       const idempotencyKey = idempotencySchema.parse(
         request.headers["x-idempotency-key"] ?? randomUUID(),
       );
       const requestHash = digest(
-        JSON.stringify({ action: "organization.created", name: input.name }),
+        JSON.stringify({
+          action: "organization.created",
+          name: input.name,
+          licenseUnit: input.licenseUnit ?? "workspace",
+        }),
       );
       const result = await platform.withTransaction(async (scoped) => {
         const started = await scoped.beginCommand({
@@ -183,6 +196,8 @@ export async function registerPlatformRoutes(
         const organization = await scoped.createOrganization({
           name: input.name,
           actorId: user.userId,
+          accountType: "organization",
+          licenseUnit: input.licenseUnit ?? "workspace",
         });
         await scoped.enqueueIntegrationJob({
           integration: "hubspot",
@@ -218,6 +233,24 @@ export async function registerPlatformRoutes(
         organization: await platform.getOrganization(identity.organizationId, identity.user.userId),
         role: identity.member.role,
       };
+    });
+    routes.patch("/v1/organizations/:organizationId", async (request, reply) => {
+      const identity = await authorized(request, reply, adminRoles);
+      if (!identity) return;
+      const { name } = z.object({ name: nameSchema }).strict().parse(request.body);
+      return command(
+        request,
+        identity.organizationId,
+        identity.user.userId,
+        "organization.name_changed",
+        async (scoped) => ({
+          organization: await scoped.renameOrganization(
+            identity.organizationId,
+            identity.user.userId,
+            name,
+          ),
+        }),
+      );
     });
     routes.post("/v1/organizations/:organizationId/close", async (request, reply) => {
       const identity = await authorized(request, reply, ["owner"]);
@@ -255,14 +288,26 @@ export async function registerPlatformRoutes(
         identity.organizationId,
         identity.user.userId,
       );
+      const organization = await platform.getOrganization(
+        identity.organizationId,
+        identity.user.userId,
+      );
+      const eligibleOrganizationOwners =
+        adminRoles.includes(identity.member.role) && organization.licenseUnit === "user"
+          ? (await platform.listOrganizationMembers(identity.organizationId, identity.user.userId))
+              .filter((member) => member.role !== "billing")
+              .map((member) => member.userId)
+          : null;
       return {
         workspaces: adminRoles.includes(identity.member.role)
           ? await Promise.all(
               workspaces.map(async (workspace) => ({
                 ...workspace,
-                eligibleOwnerIds: (await repository.listWorkspaceMembers(workspace.id)).map(
-                  (member) => member.userId,
-                ),
+                eligibleOwnerIds:
+                  eligibleOrganizationOwners ??
+                  (await repository.listWorkspaceMembers(workspace.id)).map(
+                    (member) => member.userId,
+                  ),
               })),
             )
           : workspaces,
@@ -306,6 +351,34 @@ export async function registerPlatformRoutes(
         ),
       };
     });
+    routes.get("/v1/organizations/:organizationId/seats", async (request, reply) => {
+      const identity = await authorized(request, reply, billingRoles);
+      if (!identity) return;
+      return platform.getOrganizationUserLicenses(identity.organizationId, identity.user.userId);
+    });
+    routes.put(
+      "/v1/organizations/:organizationId/members/:userId/license",
+      async (request, reply) => {
+        const identity = await authorized(request, reply, adminRoles);
+        if (!identity) return;
+        const { userId } = memberParams.parse(request.params);
+        const { assigned } = z.object({ assigned: z.boolean() }).strict().parse(request.body);
+        return command(
+          request,
+          identity.organizationId,
+          identity.user.userId,
+          "organization.user_license_changed",
+          async (scoped) => ({
+            assignment: await scoped.assignOrganizationUserLicense(
+              identity.organizationId,
+              identity.user.userId,
+              userId,
+              assigned,
+            ),
+          }),
+        );
+      },
+    );
     routes.put("/v1/organizations/:organizationId/members/:userId", async (request, reply) => {
       const identity = await authorized(request, reply, adminRoles);
       if (!identity) return;
@@ -372,6 +445,7 @@ export async function registerPlatformRoutes(
             .max(254)
             .transform((email) => email.toLowerCase()),
           role: z.enum(["owner", "admin", "billing", "member"]),
+          workspaceName: nameSchema.optional(),
         })
         .strict()
         .parse(request.body);
@@ -388,6 +462,7 @@ export async function registerPlatformRoutes(
               actorId: identity.user.userId,
               email: input.email,
               role: input.role,
+              ...(input.workspaceName ? { workspaceName: input.workspaceName } : {}),
               tokenHash: digest(token),
               expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000),
             }),
@@ -435,7 +510,18 @@ export async function registerPlatformRoutes(
         tokenHash: digest(token),
         actorId: user.userId,
       });
-      return { organizationId: member.organizationId, role: member.role };
+      if (member.workspaceId && !(await auth.switchWorkspace(request, user, member.workspaceId)))
+        throw new PlatformError(
+          "CONFLICT",
+          "Invitation accepted. Select your organization workspace to continue.",
+        );
+      return {
+        organizationId: member.organizationId,
+        role: member.role,
+        ...(member.workspaceId
+          ? { workspaceId: member.workspaceId, activeWorkspaceId: member.workspaceId }
+          : {}),
+      };
     });
     routes.post(
       "/v1/organizations/:organizationId/workspaces/:workspaceId/ownership",
@@ -466,19 +552,22 @@ export async function registerPlatformRoutes(
     routes.get("/v1/organizations/:organizationId/billing", async (request, reply) => {
       const identity = await authorized(request, reply, billingRoles);
       if (!identity) return;
-      const [subscription, assignments, balance, purchases, commercialHold] = await Promise.all([
-        platform.getSubscription(identity.organizationId),
-        platform.listLicenseAssignments(identity.organizationId, identity.user.userId),
-        platform.getCreditBalance(identity.organizationId),
-        platform.listPurchases(identity.organizationId, identity.user.userId),
-        platform.getOrganizationCommercialHold(identity.organizationId),
-      ]);
+      const [subscription, assignments, balance, purchases, commercialHold, userLicenses] =
+        await Promise.all([
+          platform.getSubscription(identity.organizationId),
+          platform.listLicenseAssignments(identity.organizationId, identity.user.userId),
+          platform.getCreditBalance(identity.organizationId),
+          platform.listPurchases(identity.organizationId, identity.user.userId),
+          platform.getOrganizationCommercialHold(identity.organizationId),
+          platform.getOrganizationUserLicenses(identity.organizationId, identity.user.userId),
+        ]);
       return {
         subscription,
         assignments,
         balance,
         purchases,
         commercialHold,
+        userLicenses,
         mode: config.BILLING_MODE,
         eventCreditsEnabled: config.BUSINESS_EVENT_CREDITS_ENABLED && !config.COMMUNITY_MODE,
       };
@@ -544,12 +633,21 @@ export async function registerPlatformRoutes(
     });
     routes.get("/v1/organizations/:organizationId/catalog", async (request, reply) => {
       const identity = await authorized(request, reply, billingRoles);
-      return identity
-        ? {
-            offers: (await platform.listOffers()).map(publicOffer),
-            checkoutEnabled: Boolean(stripe) && !config.COMMUNITY_MODE,
-          }
-        : undefined;
+      if (!identity) return;
+      const organization = await platform.getOrganization(
+        identity.organizationId,
+        identity.user.userId,
+      );
+      return {
+        offers: (await platform.listOffers())
+          .filter(
+            (offer) =>
+              offer.kind === "credit_pack" ||
+              (offer.licenseUnit ?? "workspace") === (organization.licenseUnit ?? "workspace"),
+          )
+          .map(publicOffer),
+        checkoutEnabled: Boolean(stripe) && !config.COMMUNITY_MODE,
+      };
     });
 
     async function checkout(
@@ -578,11 +676,20 @@ export async function registerPlatformRoutes(
               );
             if (offer.kind === "credit_pack" && !config.BUSINESS_EVENT_CREDITS_ENABLED)
               throw new PlatformError("CONFLICT", "Event credit purchases are not enabled");
+            const organization = await scoped.getOrganization(organizationId, userId);
+            if (
+              offer.kind === "workspace_subscription" &&
+              (offer.licenseUnit ?? "workspace") !== (organization.licenseUnit ?? "workspace")
+            )
+              throw new PlatformError(
+                "CONFLICT",
+                "Choose a subscription matching this account's license type",
+              );
             const subscription = await scoped.getSubscription(organizationId);
             if (
               offer.kind === "workspace_subscription" &&
               subscription.subscriptionId &&
-              !["free", "canceled", "incomplete_expired"].includes(subscription.status)
+              !["canceled", "incomplete_expired"].includes(subscription.status)
             )
               throw new PlatformError(
                 "CONFLICT",
@@ -636,10 +743,21 @@ export async function registerPlatformRoutes(
                   "This code grants credits; redeem it from Event credits instead.",
                 );
             }
-            return { purchase, subscription, promotionId };
+            return { purchase, subscription, promotionId, accountType: organization.accountType };
           }),
         );
         const { purchase, subscription, promotionId } = prepared;
+        const checkoutReturn = (outcome: "success" | "cancelled") => {
+          const destination = new URL(
+            prepared.accountType === "personal" ? "/account" : "/organization",
+            config.WEB_ORIGIN,
+          );
+          destination.searchParams.set("checkout", outcome);
+          if (prepared.accountType !== "personal")
+            destination.searchParams.set("organizationId", organizationId);
+          destination.hash = prepared.accountType === "personal" ? "plan" : "billing";
+          return destination.href;
+        };
         const providerPrice = await stripe.prices.retrieve(purchase.offer.stripePriceId!);
         const correctPrice =
           providerPrice.active &&
@@ -689,8 +807,8 @@ export async function registerPlatformRoutes(
               ? { subscription_data: { metadata } }
               : { payment_intent_data: { metadata } }),
             ...(promotionId ? { discounts: [{ promotion_code: promotionId }] } : {}),
-            success_url: `${config.WEB_ORIGIN}/organization?checkout=success`,
-            cancel_url: `${config.WEB_ORIGIN}/organization?checkout=cancelled`,
+            success_url: checkoutReturn("success"),
+            cancel_url: checkoutReturn("cancelled"),
           },
           { idempotencyKey: `pollingpops-purchase-${purchase.id}` },
         );
@@ -729,7 +847,7 @@ export async function registerPlatformRoutes(
         url: (
           await stripe.billingPortal.sessions.create({
             customer: subscription.customerId,
-            return_url: `${config.WEB_ORIGIN}/organization`,
+            return_url: `${config.WEB_ORIGIN}/organization?organizationId=${identity.organizationId}#billing`,
           })
         ).url,
       };
@@ -763,14 +881,29 @@ export async function registerPlatformRoutes(
             const subscription = await scoped.getSubscription(identity.organizationId);
             if (!subscription.subscriptionId)
               throw new PlatformError("CONFLICT", "No subscription exists yet");
-            const assignments = await scoped.listLicenseAssignments(
+            const organization = await scoped.getOrganization(
               identity.organizationId,
               identity.user.userId,
             );
-            if (assignments.length > quantity)
+            const userLicenses =
+              (organization.licenseUnit ?? "workspace") === "user"
+                ? await scoped.getOrganizationUserLicenses(
+                    identity.organizationId,
+                    identity.user.userId,
+                  )
+                : null;
+            const assignments = userLicenses
+              ? []
+              : await scoped.listLicenseAssignments(identity.organizationId, identity.user.userId);
+            if (
+              (userLicenses ? userLicenses.assigned + userLicenses.reserved : assignments.length) >
+              quantity
+            )
               throw new PlatformError(
                 "CONFLICT",
-                "Unassign idle workspaces before reducing the license quantity",
+                userLicenses
+                  ? "Release user licenses and pending invitations before reducing the license quantity"
+                  : "Unassign idle workspaces before reducing the license quantity",
               );
             return {
               complete: false as const,
@@ -962,14 +1095,40 @@ export async function registerPlatformRoutes(
         organizationId: identity.organization.id,
       };
     });
+    const legacySubscriptionOffers = async (licenseUnit: PlatformOffer["licenseUnit"]) =>
+      (await platform.listOffers()).filter(
+        (offer) =>
+          offer.kind === "workspace_subscription" &&
+          (offer.licenseUnit ?? "workspace") === (licenseUnit ?? "workspace"),
+      );
+    routes.get("/v1/billing/catalog", async (request, reply) => {
+      const identity = await legacyIdentity(request, reply);
+      if (!identity) return;
+      return {
+        offers: (await legacySubscriptionOffers(identity.organization.licenseUnit)).map(
+          publicOffer,
+        ),
+        checkoutEnabled: Boolean(stripe) && !config.COMMUNITY_MODE,
+      };
+    });
     routes.post("/v1/billing/checkout", async (request, reply) => {
       const identity = await legacyIdentity(request, reply);
       if (!identity) return;
-      const offers = (await platform.listOffers()).filter(
-        (offer) => offer.kind === "workspace_subscription",
+      const input = z
+        .object({ offerId: z.string().min(1).max(80).optional() })
+        .strict()
+        .default({})
+        .parse(request.body);
+      const offers = (await legacySubscriptionOffers(identity.organization.licenseUnit)).filter(
+        (offer) => !input.offerId || offer.id === input.offerId,
       );
       if (offers.length !== 1)
-        throw new PlatformError("CONFLICT", "Choose a subscription in organization billing");
+        throw new PlatformError(
+          "CONFLICT",
+          identity.organization.accountType === "personal"
+            ? "Choose an available subscription in Account > Plan and usage"
+            : "Choose an available subscription in organization billing",
+        );
       return checkout(
         {
           ...request,
@@ -995,7 +1154,7 @@ export async function registerPlatformRoutes(
         url: (
           await stripe.billingPortal.sessions.create({
             customer: billing.customerId,
-            return_url: `${config.WEB_ORIGIN}/organization`,
+            return_url: `${config.WEB_ORIGIN}/account#plan`,
           })
         ).url,
       };

@@ -4,14 +4,20 @@ import {
   FundingGuide,
   OrganizationAccessGuide,
   OrganizationEntryState,
+  OrganizationSeatSummary,
   OrganizationSections,
 } from "./organization-panels";
 import {
   offerPrice,
+  canInviteOrganizationMember,
+  organizationInvitationDestination,
+  organizationInvitationInput,
+  organizationLicenseUnit,
   organizationAccessState,
   organizationFragmentTarget,
   organizationPermissions,
   type BillingView,
+  type UserLicenseSummary,
 } from "./organization-model";
 import OrganizationInvitePage from "./invite/page";
 import OrganizationPage from "./page";
@@ -47,6 +53,23 @@ const billing: BillingView = {
   balance: { balance: 5, reserved: 2, available: 3 },
   mode: "stripe",
   eventCreditsEnabled: true,
+};
+const seats: UserLicenseSummary = {
+  organizationId: "company",
+  licenseUnit: "user",
+  quantity: 3,
+  assigned: 1,
+  reserved: 1,
+  available: 1,
+  assignments: [
+    {
+      organizationId: "company",
+      userId: "creator",
+      assignedBy: "owner",
+      assignedAt: "2026-10-29T00:00:00Z",
+    },
+  ],
+  pendingInvitationIds: ["invitation"],
 };
 
 describe("organization administration", () => {
@@ -201,7 +224,99 @@ describe("organization administration", () => {
   it("requires an explicit invitation acceptance and explains email and content-access boundaries", () => {
     const markup = renderToStaticMarkup(<OrganizationInvitePage />);
     expect(markup).toContain("email address that received this invitation");
-    expect(markup).toContain("Workspace content access is managed separately");
+    expect(markup).toContain("your own organization-owned workspace");
+    expect(markup).toContain("Billing-only invitations provide payment administration");
+    expect(markup).toContain("Legacy workspace content access is managed separately");
     expect(markup).toContain("Accept invitation");
+  });
+  it("keeps legacy workspace prices distinct from explicitly licensed users", () => {
+    const offer = {
+      id: "team",
+      version: 2,
+      name: "Team",
+      kind: "workspace_subscription" as const,
+      currency: "cad",
+      amountMinor: 1500,
+      interval: "month",
+      creditQuantity: 0,
+    };
+    expect(offerPrice(offer)).toContain("/ month / workspace");
+    expect(offerPrice({ ...offer, licenseUnit: "user" })).toContain("/ month / user");
+    expect(organizationLicenseUnit({})).toBe("workspace");
+    expect(organizationLicenseUnit({ licenseUnit: "user" }, billing)).toBe("user");
+  });
+  it("requires server-confirmed license availability for creator invitations", () => {
+    const organization = { status: "active", licenseUnit: "user" as const };
+    expect(canInviteOrganizationMember(organization, null, "member")).toBe(false);
+    expect(canInviteOrganizationMember(organization, seats, "member")).toBe(true);
+    expect(canInviteOrganizationMember(organization, { ...seats, available: 0 }, "admin")).toBe(
+      false,
+    );
+    expect(canInviteOrganizationMember(organization, { ...seats, available: 0 }, "billing")).toBe(
+      true,
+    );
+    expect(
+      canInviteOrganizationMember({ ...organization, status: "suspended" }, seats, "billing"),
+    ).toBe(false);
+    expect(canInviteOrganizationMember({ status: "active" }, null, "member")).toBe(true);
+  });
+  it("provisions user workspace names only for creator-seat invitations", () => {
+    const input = {
+      email: "colleague@example.com",
+      role: "member" as const,
+      workspaceName: "  Sales workspace  ",
+    };
+    expect(organizationInvitationInput(input, "user")).toEqual({
+      email: input.email,
+      role: "member",
+      workspaceName: "Sales workspace",
+    });
+    expect(organizationInvitationInput({ ...input, role: "billing" }, "user")).toEqual({
+      email: input.email,
+      role: "billing",
+    });
+    expect(organizationInvitationInput(input, "workspace")).toEqual({
+      email: input.email,
+      role: "member",
+    });
+  });
+  it("routes accepted user invitations to the selected workspace and billing-only to management", () => {
+    expect(
+      organizationInvitationDestination({ organizationId: "company", workspaceId: "workspace" }),
+    ).toBe("/home");
+    expect(
+      organizationInvitationDestination({
+        organizationId: "company",
+        activeWorkspaceId: "workspace",
+      }),
+    ).toBe("/home");
+    expect(organizationInvitationDestination({ organizationId: "company" })).toBe(
+      "/organization?organizationId=company",
+    );
+  });
+  it("shows purchased, assigned and reserved user seats without inventing capacity while loading", () => {
+    const markup = renderToStaticMarkup(<OrganizationSeatSummary seats={seats} />);
+    expect(markup).toContain("Purchased");
+    expect(markup).toContain("Reserved invitations");
+    expect(markup).toContain("Available");
+    expect(markup).toContain("separate workspace owned by your organization");
+    expect(markup).toContain("Guest participants do not use user licenses");
+    const pending = renderToStaticMarkup(<OrganizationSeatSummary seats={null} />);
+    expect(pending).toContain("Loading user license availability");
+    expect(pending).not.toContain("Available");
+  });
+  it("uses user-license billing language and hides disabled event-credit controls", () => {
+    const markup = renderToStaticMarkup(
+      <FundingGuide
+        billing={{ ...billing, eventCreditsEnabled: false }}
+        licenseUnit="user"
+        seats={seats}
+      />,
+    );
+    expect(markup).toContain("User licenses");
+    expect(markup).toContain("individual creators");
+    expect(markup).not.toContain("Workspace licenses");
+    expect(markup).not.toContain("Event credits available");
+    expect(markup).not.toContain("reserved for the room");
   });
 });

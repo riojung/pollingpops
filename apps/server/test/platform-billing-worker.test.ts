@@ -67,8 +67,12 @@ const event = (
   completedAt: null,
 });
 
-function fixture(events: PlatformBillingEvent[], provider: Record<string, unknown>) {
-  let snapshot = { ...initial };
+function fixture(
+  events: PlatformBillingEvent[],
+  provider: Record<string, unknown>,
+  startingSnapshot = initial,
+) {
+  let snapshot = { ...startingSnapshot };
   const platform = {
     claimBillingEvent: vi.fn(async () => events.shift() ?? null),
     completeBillingEvent: vi.fn(async () => true),
@@ -78,6 +82,8 @@ function fixture(events: PlatformBillingEvent[], provider: Record<string, unknow
     listSubscriptions: vi.fn(async () => [snapshot]),
     listPendingPurchases: vi.fn(async () => []),
     getSubscription: vi.fn(async () => snapshot),
+    getPurchase: vi.fn(async (): Promise<PlatformPurchase | null> => null),
+    findPurchaseByPaymentId: vi.fn(async (): Promise<PlatformPurchase | null> => null),
     listOffers: vi.fn(async () => [offer]),
     getIntegrationConnection: vi.fn(async () => null),
     getWorkerControl: vi.fn(async () => null),
@@ -119,133 +125,220 @@ const subscription = (invoiceStatus: string, status = "active", quantity = 3) =>
 });
 
 describe("durable platform billing reconciliation", () => {
-  it("fulfills captured subscription offers after a catalog update and retains them through renewals", async () => {
-    const repository = new MemoryRepository();
-    const tokenHash = randomUUID();
-    await repository.createMagicToken({
-      id: randomUUID(),
-      tokenHash,
-      email: "captured-offer@example.test",
-      segment: "workplace",
-      policyVersion: "test",
-      expiresAt: new Date(Date.now() + 60_000),
-      consumedAt: null,
-    });
-    const owner = (await repository.consumeMagicToken(tokenHash, new Date()))!;
-    const platform = createPlatformRepository(repository);
-    const organization = (await platform.getOrganizationForWorkspace(owner.workspaceId))!;
-    const catalog = (version: number, stripePriceId: string) =>
-      ConfigSchema.parse({
-        NODE_ENV: "test",
-        ALLOW_IN_MEMORY: "true",
-        BUSINESS_PLATFORM_ENABLED: "true",
-        BUSINESS_CATALOG_JSON: JSON.stringify([
-          {
-            id: offer.id,
-            title: offer.name,
-            kind: "workspace_subscription",
-            published: true,
-            version,
-            stripePriceId,
-            currency: "cad",
-            unitAmount: 1000,
-            interval: "month",
-          },
-        ]),
+  it.each([
+    ["workspace", "price_prov2"],
+    ["user", "price_prov2"],
+    ["workspace", "price_pro"],
+  ] as const)(
+    "renews captured workspace terms after republishing %s licenses at %s",
+    async (republishedUnit, republishedPrice) => {
+      const repository = new MemoryRepository();
+      const tokenHash = randomUUID();
+      await repository.createMagicToken({
+        id: randomUUID(),
+        tokenHash,
+        email: "captured-offer@example.test",
+        segment: "workplace",
+        policyVersion: "test",
+        expiresAt: new Date(Date.now() + 60_000),
+        consumedAt: null,
       });
-    await bootstrapPlatformCatalog(platform, catalog(1, "price_pro"));
-    const purchase = await platform.createPurchase({
-      organizationId: organization.id,
-      actorId: owner.userId,
-      offerId: offer.id,
-      quantity: 3,
-      idempotencyKey: randomUUID(),
-    });
-    await platform.updatePurchaseCheckout(purchase.id, "cs_captured");
-    await bootstrapPlatformCatalog(platform, catalog(2, "price_prov2"));
-    expect((await platform.getOffer(offer.id))?.version).toBe(2);
+      const owner = (await repository.consumeMagicToken(tokenHash, new Date()))!;
+      const platform = createPlatformRepository(repository);
+      const organization = (await platform.getOrganizationForWorkspace(owner.workspaceId))!;
+      const catalog = (
+        version: number,
+        stripePriceId: string,
+        licenseUnit?: "workspace" | "user",
+      ) =>
+        ConfigSchema.parse({
+          NODE_ENV: "test",
+          ALLOW_IN_MEMORY: "true",
+          BUSINESS_PLATFORM_ENABLED: "true",
+          BUSINESS_CATALOG_JSON: JSON.stringify([
+            {
+              id: offer.id,
+              title: offer.name,
+              kind: "workspace_subscription",
+              published: true,
+              version,
+              stripePriceId,
+              ...(licenseUnit ? { licenseUnit } : {}),
+              currency: "cad",
+              unitAmount: 1000,
+              interval: "month",
+            },
+          ]),
+        });
+      await bootstrapPlatformCatalog(platform, catalog(1, "price_pro"));
+      const purchase = await platform.createPurchase({
+        organizationId: organization.id,
+        actorId: owner.userId,
+        offerId: offer.id,
+        quantity: 3,
+        idempotencyKey: randomUUID(),
+      });
+      await platform.updatePurchaseCheckout(purchase.id, "cs_captured");
+      await bootstrapPlatformCatalog(platform, catalog(2, republishedPrice, republishedUnit));
+      expect(await platform.getOffer(offer.id)).toMatchObject({
+        version: 2,
+        licenseUnit: republishedUnit,
+        entitlements: { plan: republishedUnit === "user" ? "team" : "pro" },
+      });
 
-    let paid = false;
-    let quantity = 3;
-    const metadata: Record<string, string> = {
-      organizationId: organization.id,
-      purchaseId: purchase.id,
-    };
-    const stripe = {
-      subscriptions: {
-        retrieve: vi.fn(async () => ({
-          ...subscription(paid ? "paid" : "open", paid ? "active" : "incomplete", quantity),
-          metadata,
-        })),
-      },
-      checkout: {
-        sessions: {
-          retrieve: vi.fn(async () => ({
-            id: "cs_captured",
-            mode: "subscription",
-            status: "complete",
-            payment_status: paid ? "paid" : "unpaid",
-            subscription: "sub_one",
-            customer: "cus_one",
-            metadata,
-            line_items: { data: [{ price: { id: "price_pro" }, quantity: 3 }] },
-          })),
+      let paid = false;
+      let quantity = 3;
+      let providerPriceId = "price_pro";
+      let periodEnd = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+      const metadata: Record<string, string> = {
+        organizationId: organization.id,
+        purchaseId: purchase.id,
+      };
+      const stripe = {
+        subscriptions: {
+          retrieve: vi.fn(async () => {
+            const current = subscription(
+              paid ? "paid" : "open",
+              paid ? "active" : "incomplete",
+              quantity,
+            );
+            return {
+              ...current,
+              metadata,
+              items: {
+                data: current.items.data.map((item) => ({
+                  ...item,
+                  price: { id: providerPriceId },
+                  current_period_end: periodEnd,
+                })),
+              },
+            };
+          }),
         },
-      },
-    } as unknown as Stripe;
-    const worker = new PlatformBillingWorker(platform, config, stripe);
-    const enqueue = async (id: string, eventType: string, payload: Record<string, unknown>) =>
-      platform.enqueueBillingEvent({
-        providerEventId: id,
-        eventType,
-        payload,
-        providerCreatedAt: new Date(),
+        checkout: {
+          sessions: {
+            retrieve: vi.fn(async () => ({
+              id: "cs_captured",
+              mode: "subscription",
+              status: "complete",
+              payment_status: paid ? "paid" : "unpaid",
+              subscription: "sub_one",
+              customer: "cus_one",
+              metadata,
+              line_items: { data: [{ price: { id: "price_pro" }, quantity: 3 }] },
+            })),
+          },
+        },
+      } as unknown as Stripe;
+      const worker = new PlatformBillingWorker(platform, config, stripe);
+      const enqueue = async (id: string, eventType: string, payload: Record<string, unknown>) =>
+        platform.enqueueBillingEvent({
+          providerEventId: id,
+          eventType,
+          payload,
+          providerCreatedAt: new Date(),
+        });
+      await enqueue("captured-unpaid", "checkout.session.completed", { id: "cs_captured" });
+      expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
+      expect(await platform.getSubscription(organization.id)).toMatchObject({
+        licenseQuantity: 0,
+        paidThrough: null,
+        graceUntil: null,
       });
-    await enqueue("captured-unpaid", "checkout.session.completed", { id: "cs_captured" });
-    expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
-    expect(await platform.getSubscription(organization.id)).toMatchObject({
-      licenseQuantity: 0,
-      paidThrough: null,
-      graceUntil: null,
-    });
-    expect((await platform.getPurchase(purchase.id))?.status).toBe("pending");
+      expect((await platform.getPurchase(purchase.id))?.status).toBe("pending");
 
-    paid = true;
-    await enqueue("captured-paid", "checkout.session.async_payment_succeeded", {
-      id: "cs_captured",
-    });
-    expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
-    expect(await platform.getSubscription(organization.id)).toMatchObject({
-      subscriptionId: "sub_one",
-      licenseQuantity: 3,
-      offerId: offer.id,
-    });
-    expect(await platform.getPurchase(purchase.id)).toMatchObject({
-      status: "paid",
-      paymentId: "sub_one",
-      offer: { version: 1, stripePriceId: "price_pro" },
-    });
-    await enqueue("captured-replay", "checkout.session.completed", { id: "cs_captured" });
-    expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
+      paid = true;
+      await enqueue("captured-paid", "checkout.session.async_payment_succeeded", {
+        id: "cs_captured",
+      });
+      expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
+      expect(await platform.getSubscription(organization.id)).toMatchObject({
+        subscriptionId: "sub_one",
+        licenseQuantity: 3,
+        licenseUnit: "workspace",
+        offerId: offer.id,
+        paidThrough: new Date(periodEnd * 1000),
+      });
+      expect(await platform.getPurchase(purchase.id)).toMatchObject({
+        status: "paid",
+        paymentId: "sub_one",
+        offer: { version: 1, stripePriceId: "price_pro", entitlements: { plan: "pro" } },
+      });
+      await platform.assignWorkspaceLicense(organization.id, owner.userId, owner.workspaceId, true);
+      expect(await platform.effectiveWorkspacePlan(owner.workspaceId)).toBe("pro");
+      expect(await repository.getPlan(owner.workspaceId)).toBe("pro");
+      await enqueue("captured-replay", "checkout.session.completed", { id: "cs_captured" });
+      expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
 
-    quantity = 4;
-    await enqueue("captured-renewal", "customer.subscription.updated", {
-      id: "sub_one",
-      metadata,
-    });
-    expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
-    expect((await platform.getSubscription(organization.id)).licenseQuantity).toBe(4);
+      quantity = 4;
+      periodEnd += 30 * 24 * 60 * 60;
+      await enqueue("captured-renewal", "customer.subscription.updated", {
+        id: "sub_one",
+        metadata,
+      });
+      expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
+      expect(await platform.getSubscription(organization.id)).toMatchObject({
+        licenseQuantity: 4,
+        licenseUnit: "workspace",
+        paidThrough: new Date(periodEnd * 1000),
+      });
+      expect(await platform.effectiveWorkspacePlan(owner.workspaceId)).toBe("pro");
 
-    // The durable provider link also identifies the captured offer if metadata is removed.
-    delete metadata.purchaseId;
-    quantity = 5;
-    await enqueue("captured-renewal-without-metadata", "customer.subscription.updated", {
-      id: "sub_one",
-      metadata,
-    });
-    expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
-    expect((await platform.getSubscription(organization.id)).licenseQuantity).toBe(5);
-  });
+      // The durable provider link also identifies the captured offer if metadata is removed.
+      delete metadata.purchaseId;
+      quantity = 5;
+      periodEnd += 30 * 24 * 60 * 60;
+      await enqueue("captured-renewal-without-metadata", "customer.subscription.updated", {
+        id: "sub_one",
+        metadata,
+      });
+      expect(await worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
+      expect(await platform.getSubscription(organization.id)).toMatchObject({
+        licenseQuantity: 5,
+        licenseUnit: "workspace",
+        paidThrough: new Date(periodEnd * 1000),
+        offerSnapshot: { version: 1, stripePriceId: "price_pro", entitlements: { plan: "pro" } },
+      });
+      expect((await platform.getSubscription(organization.id)).offerSnapshot?.entitlements).toEqual(
+        purchase.offer.entitlements,
+      );
+      expect(await repository.getPlan(owner.workspaceId)).toBe("pro");
+
+      const beforeMismatch = await platform.getSubscription(organization.id);
+      periodEnd += 30 * 24 * 60 * 60;
+      providerPriceId = republishedPrice;
+      if (republishedUnit === "user") {
+        await expect(worker.reconcileSubscription(organization.id, "sub_one")).rejects.toThrow(
+          /licensed unit/,
+        );
+        expect(await platform.getSubscription(organization.id)).toEqual(beforeMismatch);
+      } else if (republishedPrice !== "price_pro") {
+        await worker.reconcileSubscription(organization.id, "sub_one");
+        const updated = await platform.getSubscription(organization.id);
+        expect(updated).toMatchObject({
+          licenseUnit: "workspace",
+          paidThrough: new Date(periodEnd * 1000),
+          offerSnapshot: { version: 2, stripePriceId: "price_prov2" },
+        });
+        expect(updated.offerSnapshot).toEqual(await platform.getOffer(offer.id));
+      } else {
+        await worker.reconcileSubscription(organization.id, "sub_one");
+        expect(await platform.getSubscription(organization.id)).toMatchObject({
+          licenseUnit: "workspace",
+          paidThrough: new Date(periodEnd * 1000),
+          offerSnapshot: { version: 1, stripePriceId: "price_pro" },
+        });
+      }
+      const beforeUnknownPrice = await platform.getSubscription(organization.id);
+      periodEnd += 30 * 24 * 60 * 60;
+      providerPriceId = "price_unknown";
+      await expect(worker.reconcileSubscription(organization.id, "sub_one")).rejects.toThrow(
+        "Subscription uses an unrecognized offer",
+      );
+      expect(await platform.getSubscription(organization.id)).toEqual(beforeUnknownPrice);
+      expect(await repository.getPlan(owner.workspaceId)).toBe("pro");
+    },
+  );
   it.each(["organization", "subscription", "price"] as const)(
     "rejects a captured offer linked to a different %s",
     async (mismatch) => {
@@ -278,6 +371,49 @@ describe("durable platform billing reconciliation", () => {
       expect(built.platform.applySubscriptionSnapshot).not.toHaveBeenCalled();
     },
   );
+  it.each(["pro", "team"] as const)(
+    "renews a migrated %s subscription without catalog or purchase terms",
+    async (legacyPlan) => {
+      const provider = subscription("paid", "active", 99);
+      provider.items.data[0]!.price.id = "price_uncataloged_legacy";
+      const legacy: PlatformSubscription = {
+        ...initial,
+        licenseQuantity: 1,
+        offerId: null,
+        legacyPlan,
+      };
+      expect(legacy.authoritative).toBeUndefined();
+      expect(legacy.licenseUnit).toBeUndefined();
+      const built = fixture([event("legacy-paid-renewal")], provider, legacy);
+      expect(await built.worker.runUntilIdle()).toEqual({ processed: 1, failed: 0 });
+      expect(built.snapshot()).toMatchObject({
+        subscriptionId: legacy.subscriptionId,
+        customerId: legacy.customerId,
+        licenseQuantity: 1,
+        licenseUnit: "workspace",
+        legacyPlan,
+        offerId: null,
+        paidThrough: new Date("2026-11-01T00:00:00Z"),
+        graceUntil: null,
+      });
+      expect(built.snapshot().offerSnapshot).toBeUndefined();
+    },
+  );
+  it("does not continue an uncataloged legacy contract for a different provider customer", async () => {
+    const provider = subscription("paid");
+    provider.customer = "cus_other";
+    provider.items.data[0]!.price.id = "price_uncataloged_legacy";
+    const legacy: PlatformSubscription = {
+      ...initial,
+      licenseQuantity: 1,
+      offerId: null,
+      legacyPlan: "team",
+    };
+    const built = fixture([event("legacy-customer-mismatch")], provider, legacy);
+    expect(await built.worker.runUntilIdle()).toEqual({ processed: 0, failed: 1 });
+    expect(built.platform.applySubscriptionSnapshot).not.toHaveBeenCalled();
+    expect(built.snapshot()).toEqual(legacy);
+  });
   it("imports verified invoice payment amounts with stable provider references instead of deriving revenue from catalog prices", async () => {
     const provider = {
       ...subscription("paid"),

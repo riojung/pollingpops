@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brand } from "../../../components/brand";
 import { ApiClientError, apiFetch, humanError } from "../../../lib/api";
+import { organizationInvitationDestination } from "../organization-model";
 
 export default function OrganizationInvitePage() {
   const [token, setToken] = useState("");
@@ -12,6 +13,7 @@ export default function OrganizationInvitePage() {
   const [error, setError] = useState("");
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const [organizationId, setOrganizationId] = useState("");
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   useEffect(() => {
     const requested = new URL(window.location.href).searchParams.get("token") ?? "";
     if (/^[A-Za-z0-9_-]{43}$/.test(requested)) setToken(requested);
@@ -25,11 +27,16 @@ export default function OrganizationInvitePage() {
     setBusy(true);
     setError("");
     try {
-      const accepted = await apiFetch<{ organizationId: string }>(
-        "/v1/organization-invitations/accept",
-        { method: "POST", body: JSON.stringify({ token }) },
-      );
+      const accepted = await apiFetch<{
+        organizationId: string;
+        workspaceId?: string | null;
+        activeWorkspaceId?: string | null;
+      }>("/v1/organization-invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
       setOrganizationId(accepted.organizationId);
+      setWorkspaceId(accepted.workspaceId ?? accepted.activeWorkspaceId ?? null);
       window.history.replaceState(null, "", "/organization/invite");
     } catch (failure) {
       setNeedsSignIn(failure instanceof ApiClientError && failure.status === 401);
@@ -50,7 +57,9 @@ export default function OrganizationInvitePage() {
           <h1>Organization invitation</h1>
           <p>
             Sign in with the email address that received this invitation, then accept to join the
-            organization. Workspace content access is managed separately.
+            organization. A licensed user invitation provides your own organization-owned workspace.
+            Billing-only invitations provide payment administration without workspace content
+            access. Legacy workspace content access is managed separately.
           </p>
           {error && (
             <p className="error" role="alert">
@@ -62,9 +71,9 @@ export default function OrganizationInvitePage() {
               <p role="status">Invitation accepted.</p>
               <Link
                 className="button"
-                href={`/organization?organization=${encodeURIComponent(organizationId)}`}
+                href={organizationInvitationDestination({ organizationId, workspaceId })}
               >
-                Open organization
+                {workspaceId ? "Open your workspace" : "Open organization"}
               </Link>
             </>
           ) : (

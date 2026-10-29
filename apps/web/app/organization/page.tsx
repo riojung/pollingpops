@@ -14,10 +14,14 @@ import {
   FundingGuide,
   OrganizationAccessGuide,
   OrganizationEntryState,
+  OrganizationSeatSummary,
   OrganizationSections,
 } from "./organization-panels";
 import {
   offerPrice,
+  canInviteOrganizationMember,
+  organizationInvitationInput,
+  organizationLicenseUnit,
   organizationAccessState,
   organizationFragmentTarget,
   organizationPermissions,
@@ -28,6 +32,7 @@ import {
   type OrganizationMember,
   type OrganizationRole,
   type OrganizationWorkspace,
+  type UserLicenseSummary,
 } from "./organization-model";
 import styles from "./organization.module.css";
 
@@ -65,17 +70,19 @@ function OrganizationManagementPage() {
   const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
   const [inviteUrl, setInviteUrl] = useState("");
   const [billing, setBilling] = useState<BillingView | null>(null);
+  const [seats, setSeats] = useState<UserLicenseSummary | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [checkoutEnabled, setCheckoutEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [organizationName, setOrganizationName] = useState("");
+  const [organizationDisplayName, setOrganizationDisplayName] = useState("");
   const [closeConfirmation, setCloseConfirmation] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [segment, setSegment] = useState<"education" | "workplace">("workplace");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteWorkspaceName, setInviteWorkspaceName] = useState("");
   const [memberRole, setMemberRole] = useState<OrganizationRole>("member");
   const [promotion, setPromotion] = useState("");
   const [discount, setDiscount] = useState("");
@@ -95,6 +102,19 @@ function OrganizationManagementPage() {
     ? organizations.find((candidate) => candidate.id === selected)
     : undefined;
   const permissions = organization ? organizationPermissions(organization.role) : null;
+  const licenseUnit = organization ? organizationLicenseUnit(organization, billing) : "workspace";
+  const userLicenses = licenseUnit === "user";
+  const minimumLicenseQuantity = userLicenses
+    ? Math.max(1, (seats?.assigned ?? 0) + (seats?.reserved ?? 0))
+    : 1;
+  const detailsReady = Boolean(
+    organization && !loading && loadedOrganizationId === organization.id,
+  );
+  const canInvite = Boolean(
+    detailsReady &&
+    organization &&
+    canInviteOrganizationMember({ ...organization, licenseUnit }, seats, memberRole),
+  );
   const base = `/v1/organizations/${selected}`;
   const currentOrganizationId = organization?.id ?? "";
   const currentOrganizationRole = organization?.role ?? null;
@@ -122,37 +142,49 @@ function OrganizationManagementPage() {
       { signal },
     );
     if (signal?.aborted) return;
-    setOrganizations(organizationList.organizations);
-    const current = organizationList.organizations.find((candidate) => candidate.id === id);
+    const organizationAccounts = organizationList.organizations.filter(
+      (item) => item.accountType !== "personal",
+    );
+    setOrganizations(organizationAccounts);
+    const current = organizationAccounts.find((candidate) => candidate.id === id);
     if (!current) return;
     const access = organizationPermissions(current.role);
     const prefix = `/v1/organizations/${id}`;
-    const [workspaceList, memberList, billingData, catalog, invitationList] = await Promise.all([
-      apiFetch<{ workspaces: OrganizationWorkspace[] }>(`${prefix}/workspaces`, { signal }),
-      access.administer
-        ? apiFetch<{ members: OrganizationMember[] }>(`${prefix}/members`, { signal })
-        : Promise.resolve({ members: [] }),
-      access.billing
-        ? apiFetch<BillingView>(`${prefix}/billing`, { signal })
-        : Promise.resolve(null),
-      access.billing
-        ? apiFetch<{ offers: Offer[]; checkoutEnabled: boolean }>(`${prefix}/catalog`, { signal })
-        : Promise.resolve({ offers: [], checkoutEnabled: false }),
-      access.administer
-        ? apiFetch<{ invitations: OrganizationInvitation[] }>(`${prefix}/invitations`, { signal })
-        : Promise.resolve({ invitations: [] }),
-    ]);
+    const [workspaceList, memberList, billingData, catalog, invitationList, seatData] =
+      await Promise.all([
+        apiFetch<{ workspaces: OrganizationWorkspace[] }>(`${prefix}/workspaces`, { signal }),
+        access.administer
+          ? apiFetch<{ members: OrganizationMember[] }>(`${prefix}/members`, { signal })
+          : Promise.resolve({ members: [] }),
+        access.billing
+          ? apiFetch<BillingView>(`${prefix}/billing`, { signal })
+          : Promise.resolve(null),
+        access.billing
+          ? apiFetch<{ offers: Offer[]; checkoutEnabled: boolean }>(`${prefix}/catalog`, { signal })
+          : Promise.resolve({ offers: [], checkoutEnabled: false }),
+        access.administer
+          ? apiFetch<{ invitations: OrganizationInvitation[] }>(`${prefix}/invitations`, { signal })
+          : Promise.resolve({ invitations: [] }),
+        current.licenseUnit === "user" && access.billing
+          ? apiFetch<UserLicenseSummary>(`${prefix}/seats`, { signal })
+          : Promise.resolve(null),
+      ]);
     if (signal?.aborted) return;
     setWorkspaces(workspaceList.workspaces);
     setMembers(memberList.members);
     setInvitations(invitationList.invitations);
     setBilling(billingData);
+    setSeats(seatData);
     setOffers(
       catalog.offers.filter(
-        (offer) => offer.kind !== "credit_pack" || billingData?.eventCreditsEnabled,
+        (offer) =>
+          (offer.kind !== "credit_pack" || billingData?.eventCreditsEnabled) &&
+          (offer.kind !== "workspace_subscription" ||
+            (offer.licenseUnit ?? "workspace") === organizationLicenseUnit(current, billingData)),
       ),
     );
     setCheckoutEnabled(catalog.checkoutEnabled);
+    setOrganizationDisplayName(current.name);
     setLicenseQuantity(billingData?.subscription.licenseQuantity || 1);
     setLoadedOrganizationId(id);
   }, []);
@@ -175,10 +207,13 @@ function OrganizationManagementPage() {
     apiFetch<{ organizations: Organization[] }>("/v1/organizations", { signal: controller.signal })
       .then(({ organizations: list }) => {
         if (controller.signal.aborted) return;
-        setOrganizations(list);
+        const organizationAccounts = list.filter((item) => item.accountType !== "personal");
+        setOrganizations(organizationAccounts);
         setCollectionUserId(userId);
         setSelected(
-          list.find((item) => item.id === requestedOrganization)?.id ?? list[0]?.id ?? "",
+          organizationAccounts.find((item) => item.id === requestedOrganization)?.id ??
+            organizationAccounts[0]?.id ??
+            "",
         );
       })
       .catch((failure: unknown) => {
@@ -203,6 +238,7 @@ function OrganizationManagementPage() {
     const controller = new AbortController();
     setLoading(true);
     setBilling(null);
+    setSeats(null);
     setMembers([]);
     setInvitations([]);
     setInviteUrl("");
@@ -297,11 +333,11 @@ function OrganizationManagementPage() {
       if (result.inviteUrl) {
         setInviteUrl(result.inviteUrl);
         setInviteEmail("");
+        setInviteWorkspaceName("");
       }
       if (result.organization) {
         await refresh(result.organization.id);
         selectOrganization(result.organization.id);
-        setOrganizationName("");
       } else await refresh(selected);
       setMessage("Changes saved.");
     } catch (failure) {
@@ -361,7 +397,7 @@ function OrganizationManagementPage() {
         <div>
           <p className="eyebrow">PollingPops management</p>
           <h1>Organization</h1>
-          <p>Manage independent workspaces, shared billing, and event credits.</p>
+          <p>Manage your organization, user roles, workspaces, and subscription.</p>
         </div>
         {canManage && organizations.length > 0 && (
           <label className="field">
@@ -422,15 +458,18 @@ function OrganizationManagementPage() {
       )}
       <div className={styles.stack}>
         {!loading && organizations.length === 0 && !error && (
-          <p>Create an organization to bring your workspaces and billing together.</p>
+          <p>
+            Set up an organization to provide a separate company-owned workspace for each licensed
+            user.
+          </p>
         )}
-        {organization && (
+        {detailsReady && organization && (
           <>
             <OrganizationSections role={organization.role} />
-            <OrganizationAccessGuide role={organization.role} />
+            <OrganizationAccessGuide role={organization.role} licenseUnit={licenseUnit} />
           </>
         )}
-        {organization && (
+        {detailsReady && organization && (
           <div className={styles.grid}>
             {organization && permissions?.administer && (
               <section className="panel" id="settings">
@@ -439,10 +478,49 @@ function OrganizationManagementPage() {
                   Workspace access and organization membership are managed in their sections above.
                   Organization owners control closure.
                 </p>
+                <form
+                  className={styles.form}
+                  onSubmit={(event) =>
+                    submit(
+                      event,
+                      () =>
+                        void mutate(
+                          "organization-name",
+                          base,
+                          { name: organizationDisplayName.trim() },
+                          "PATCH",
+                        ),
+                    )
+                  }
+                >
+                  <label>
+                    <span>Organization name</span>
+                    <input
+                      className="input"
+                      required
+                      maxLength={120}
+                      value={organizationDisplayName}
+                      onChange={(event) => setOrganizationDisplayName(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="button"
+                    disabled={
+                      Boolean(busy) ||
+                      !organizationDisplayName.trim() ||
+                      organizationDisplayName.trim() === organization.name
+                    }
+                  >
+                    Save organization name
+                  </button>
+                </form>
+                <p className="muted">
+                  Shown in the workspace switcher and organization management.
+                </p>
                 {!permissions.appointOwner ? (
                   <p>Ask an organization owner to close this organization.</p>
                 ) : (
-                  <>
+                  <div className={styles.dangerSection}>
                     <h3>Close organization</h3>
                     {organization.status === "closed" ? (
                       <p>
@@ -485,17 +563,30 @@ function OrganizationManagementPage() {
                         </form>
                       </>
                     )}
-                  </>
+                  </div>
                 )}
               </section>
             )}
             <section className="panel" id="workspaces">
               <h2>Workspaces</h2>
-              <p>Each workspace keeps its content and audience data separate.</p>
+              <p>
+                {userLicenses
+                  ? "Each licensed user has a separate workspace owned by this organization. Their content and audience data stay within that workspace."
+                  : "Each workspace keeps its content and audience data separate."}
+              </p>
               <ul className={styles.list}>
                 {workspaces.map((workspace) => {
-                  const assigned = billing?.assignments.some(
-                    (assignment) => assignment.workspaceId === workspace.id,
+                  const assigned = userLicenses
+                    ? seats?.assignments.some((assignment) =>
+                        assignment.workspaceId
+                          ? assignment.workspaceId === workspace.id
+                          : assignment.userId === workspace.ownerId,
+                      )
+                    : billing?.assignments.some(
+                        (assignment) => assignment.workspaceId === workspace.id,
+                      );
+                  const workspaceOwner = members.find(
+                    (member) => member.userId === workspace.ownerId,
                   );
                   return (
                     <li key={workspace.id}>
@@ -504,10 +595,17 @@ function OrganizationManagementPage() {
                           <strong>{workspace.name}</strong>
                           <small>
                             {workspace.segment} · {workspace.status}
-                            {assigned ? " · license assigned" : ""}
+                            {assigned
+                              ? userLicenses
+                                ? " · user licensed"
+                                : " · license assigned"
+                              : ""}
                           </small>
+                          {userLicenses && workspaceOwner?.email && (
+                            <small>Assigned to {workspaceOwner.email}</small>
+                          )}
                         </div>
-                        {permissions?.billing && billing && (
+                        {!userLicenses && permissions?.billing && billing && (
                           <button
                             className="button button-quiet"
                             disabled={Boolean(busy)}
@@ -524,54 +622,56 @@ function OrganizationManagementPage() {
                           </button>
                         )}
                       </div>
-                      {permissions?.administer && (
-                        <div className={styles.actions}>
-                          <label className="field">
-                            <span>Transfer workspace ownership</span>
-                            <select
-                              className="select"
-                              value={ownershipTargets[workspace.id] ?? ""}
-                              onChange={(event) =>
-                                setOwnershipTargets((previous) => ({
-                                  ...previous,
-                                  [workspace.id]: event.target.value,
-                                }))
+                      {permissions?.administer &&
+                        (!userLicenses ||
+                          workspace.eligibleOwnerIds?.some((id) => id !== workspace.ownerId)) && (
+                          <div className={styles.actions}>
+                            <label className="field">
+                              <span>Transfer workspace ownership</span>
+                              <select
+                                className="select"
+                                value={ownershipTargets[workspace.id] ?? ""}
+                                onChange={(event) =>
+                                  setOwnershipTargets((previous) => ({
+                                    ...previous,
+                                    [workspace.id]: event.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">Choose existing workspace member</option>
+                                {members
+                                  .filter(
+                                    (member) =>
+                                      member.userId !== workspace.ownerId &&
+                                      workspace.eligibleOwnerIds?.includes(member.userId),
+                                  )
+                                  .map((member) => (
+                                    <option key={member.userId} value={member.userId}>
+                                      {member.email ?? "Organization member"}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                            <button
+                              className="button button-quiet"
+                              disabled={Boolean(busy) || !ownershipTargets[workspace.id]}
+                              onClick={() =>
+                                void mutate(
+                                  `ownership-${workspace.id}`,
+                                  `${base}/workspaces/${workspace.id}/ownership`,
+                                  { userId: ownershipTargets[workspace.id] },
+                                )
                               }
                             >
-                              <option value="">Choose existing workspace member</option>
-                              {members
-                                .filter(
-                                  (member) =>
-                                    member.userId !== workspace.ownerId &&
-                                    workspace.eligibleOwnerIds?.includes(member.userId),
-                                )
-                                .map((member) => (
-                                  <option key={member.userId} value={member.userId}>
-                                    {member.email ?? "Organization member"}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <button
-                            className="button button-quiet"
-                            disabled={Boolean(busy) || !ownershipTargets[workspace.id]}
-                            onClick={() =>
-                              void mutate(
-                                `ownership-${workspace.id}`,
-                                `${base}/workspaces/${workspace.id}/ownership`,
-                                { userId: ownershipTargets[workspace.id] },
-                              )
-                            }
-                          >
-                            Transfer ownership
-                          </button>
-                        </div>
-                      )}
+                              Transfer ownership
+                            </button>
+                          </div>
+                        )}
                     </li>
                   );
                 })}
               </ul>
-              {permissions?.administer && (
+              {permissions?.administer && !userLicenses && (
                 <form
                   className={styles.form}
                   onSubmit={(event) =>
@@ -617,13 +717,27 @@ function OrganizationManagementPage() {
             {permissions?.administer && (
               <section className="panel" id="members">
                 <h2>Members and roles</h2>
-                <p>Adding a member here does not give them access to workspace content.</p>
+                <p>
+                  {userLicenses
+                    ? "Invite a user with an organization role. Accepting a user invitation creates their own organization-owned workspace."
+                    : "Adding a member here does not give them access to workspace content."}
+                </p>
+                {userLicenses && <OrganizationSeatSummary seats={seats} />}
                 <ul className={styles.list}>
                   {members.map((member) => (
                     <li key={member.userId}>
                       <div className={styles.row}>
                         <div>
                           <strong>{member.email ?? "Organization member"}</strong>
+                          {userLicenses && (
+                            <small>
+                              {seats?.assignments.some(
+                                (assignment) => assignment.userId === member.userId,
+                              )
+                                ? "User license assigned"
+                                : "No user license assigned"}
+                            </small>
+                          )}
                         </div>
                         <div className={styles.actions}>
                           <label>
@@ -654,20 +768,70 @@ function OrganizationManagementPage() {
                               )}
                             </select>
                           </label>
+                          {userLicenses &&
+                            (member.role !== "billing" ||
+                              seats?.assignments.some(
+                                (assignment) => assignment.userId === member.userId,
+                              )) && (
+                              <button
+                                className="button button-quiet"
+                                disabled={
+                                  Boolean(busy) ||
+                                  organization.status !== "active" ||
+                                  !seats ||
+                                  (!seats.assignments.some(
+                                    (assignment) => assignment.userId === member.userId,
+                                  ) &&
+                                    seats.available <= 0)
+                                }
+                                onClick={() => {
+                                  const assigned = seats?.assignments.some(
+                                    (assignment) => assignment.userId === member.userId,
+                                  );
+                                  if (
+                                    assigned &&
+                                    !window.confirm(
+                                      "Release this user's paid license? Their organization workspace and saved content will be retained.",
+                                    )
+                                  )
+                                    return;
+                                  void mutate(
+                                    `user-license-${member.userId}`,
+                                    `${base}/members/${member.userId}/license`,
+                                    { assigned: !assigned },
+                                    "PUT",
+                                  );
+                                }}
+                              >
+                                {seats?.assignments.some(
+                                  (assignment) => assignment.userId === member.userId,
+                                )
+                                  ? "Release user license"
+                                  : "Assign user license"}
+                              </button>
+                            )}
                           <button
                             className="button button-quiet"
                             disabled={
                               Boolean(busy) ||
                               (member.role === "owner" && !permissions.appointOwner)
                             }
-                            onClick={() =>
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  userLicenses
+                                    ? "Remove this member and revoke their organization workspace access? The organization keeps their workspace and saved content."
+                                    : "Remove this member from the organization?",
+                                )
+                              )
+                                return;
                               void mutate(
                                 `remove-${member.userId}`,
                                 `${base}/members/${member.userId}`,
                                 undefined,
                                 "DELETE",
-                              )
-                            }
+                              );
+                            }}
                           >
                             Remove
                           </button>
@@ -676,16 +840,31 @@ function OrganizationManagementPage() {
                     </li>
                   ))}
                 </ul>
+                {userLicenses && (
+                  <p>
+                    Removing a member revokes their organization workspace access and releases their
+                    user license. Their workspace and records remain owned by the organization.
+                  </p>
+                )}
                 <form
                   className={styles.form}
                   onSubmit={(event) =>
                     submit(
                       event,
                       () =>
-                        void mutate("invitation", `${base}/invitations`, {
-                          email: inviteEmail,
-                          role: memberRole,
-                        }),
+                        canInvite &&
+                        void mutate(
+                          "invitation",
+                          `${base}/invitations`,
+                          organizationInvitationInput(
+                            {
+                              email: inviteEmail,
+                              role: memberRole,
+                              workspaceName: inviteWorkspaceName,
+                            },
+                            licenseUnit,
+                          ),
+                        ),
                     )
                   }
                 >
@@ -714,10 +893,37 @@ function OrganizationManagementPage() {
                       {permissions.appointOwner && <option value="owner">Owner</option>}
                     </select>
                   </label>
-                  <button className="button" disabled={Boolean(busy)}>
+                  {userLicenses && memberRole !== "billing" && (
+                    <label>
+                      <span>User workspace name</span>
+                      <input
+                        className="input"
+                        maxLength={120}
+                        value={inviteWorkspaceName}
+                        onChange={(event) => setInviteWorkspaceName(event.target.value)}
+                        placeholder="For example, Alex's workspace"
+                      />
+                    </label>
+                  )}
+                  <button className="button" disabled={Boolean(busy) || !canInvite}>
                     Send invitation
                   </button>
                 </form>
+                {userLicenses && memberRole === "billing" && (
+                  <p>
+                    Billing administrators manage payments without a content workspace or user
+                    license.
+                  </p>
+                )}
+                {userLicenses && memberRole !== "billing" && !canInvite && (
+                  <p role="status">
+                    {organization.status !== "active"
+                      ? "This organization is not active. New invitations are unavailable."
+                      : seats
+                        ? "No user licenses are available. Release an unused license, revoke an unused invitation, or increase your subscription quantity before inviting another user."
+                        : "License availability must finish loading before you can invite a user."}
+                  </p>
+                )}
                 {inviteUrl && (
                   <p>
                     Invitation sent.{" "}
@@ -748,6 +954,9 @@ function OrganizationManagementPage() {
                                 ? "expired"
                                 : `expires ${new Date(invitation.expiresAt).toLocaleDateString()}`}
                             </small>
+                            {userLicenses && invitation.workspaceName && (
+                              <small>Workspace: {invitation.workspaceName}</small>
+                            )}
                           </div>
                           <button
                             className="button button-quiet"
@@ -771,11 +980,15 @@ function OrganizationManagementPage() {
             )}
           </div>
         )}
-        {permissions?.billing && billing && (
+        {detailsReady && permissions?.billing && billing && (
           <>
-            <FundingGuide billing={billing} />
+            <FundingGuide billing={billing} licenseUnit={licenseUnit} seats={seats} />
             <section className="panel" id="event-credits">
-              <h2>Billing and event credits</h2>
+              <h2>
+                {billing.eventCreditsEnabled
+                  ? "Billing and event credits"
+                  : "Subscription and payment"}
+              </h2>
               {billing.purchases?.some((purchase) => purchase.status === "pending") && (
                 <ul className={styles.list} aria-label="Unfinished purchases">
                   {billing.purchases
@@ -844,23 +1057,31 @@ function OrganizationManagementPage() {
                   }
                 >
                   <label>
-                    <span>Paid workspace quantity</span>
+                    <span>{userLicenses ? "Paid user licenses" : "Paid workspace quantity"}</span>
                     <input
                       className={`input ${styles.quantity}`}
                       type="number"
                       required
-                      min={1}
+                      min={minimumLicenseQuantity}
                       max={1000}
                       value={licenseQuantity}
                       onChange={(event) => setLicenseQuantity(Number(event.target.value))}
                     />
                   </label>
-                  <button className="button" disabled={Boolean(busy)}>
+                  <button
+                    className="button"
+                    disabled={
+                      Boolean(busy) ||
+                      !Number.isInteger(licenseQuantity) ||
+                      licenseQuantity < minimumLicenseQuantity
+                    }
+                  >
                     Update subscription quantity
                   </button>
                   <p>
-                    Unassign idle workspaces before reducing quantity. Additional licenses become
-                    available when payment succeeds.
+                    {userLicenses
+                      ? "Remove unused user licenses and pending invitations before reducing quantity. Additional licenses become available when payment succeeds."
+                      : "Unassign idle workspaces before reducing quantity. Additional licenses become available when payment succeeds."}
                   </p>
                 </form>
               )}
@@ -910,7 +1131,9 @@ function OrganizationManagementPage() {
                         <p>
                           {offer.kind === "credit_pack"
                             ? `${offer.creditQuantity} event credits per pack`
-                            : "Premium features for each licensed workspace"}
+                            : offer.licenseUnit === "user"
+                              ? "One organization-owned workspace for each licensed user"
+                              : "Premium features for each licensed workspace"}
                         </p>
                       </label>
                     ))}
@@ -984,30 +1207,14 @@ function OrganizationManagementPage() {
           </>
         )}
         <section className="panel">
-          <h2>Create organization</h2>
-          <form
-            className={styles.form}
-            onSubmit={(event) =>
-              submit(
-                event,
-                () => void mutate("organization", "/v1/organizations", { name: organizationName }),
-              )
-            }
-          >
-            <label>
-              <span>Organization name</span>
-              <input
-                className="input"
-                required
-                maxLength={120}
-                value={organizationName}
-                onChange={(event) => setOrganizationName(event.target.value)}
-              />
-            </label>
-            <button className="button" disabled={Boolean(busy) || loading}>
-              Create organization
-            </button>
-          </form>
+          <h2>Set up an organization</h2>
+          <p>
+            Choose a company or team name, then create its first user workspace. Personal Free and
+            paid workspaces stay separate from organization workspaces.
+          </p>
+          <Link className="button" href="/account/setup?type=organization">
+            Set up organization
+          </Link>
         </section>
       </div>
     </main>

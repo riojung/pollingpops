@@ -16,9 +16,11 @@ import {
   type PlatformRoomCoverage,
   type PlatformRoomCoverageInput,
   type OrganizationRecord,
+  type OrganizationMemberRecord,
   type OrganizationWorkspaceRecord,
   type PlatformSubscription,
   type LicenseAssignment,
+  type UserLicenseAssignment,
   type CreditLedgerEntry,
   type PlatformRoomType,
   type ProductQueueKind,
@@ -56,7 +58,15 @@ export class MemoryPlatformStore implements PlatformStore {
       const now = new Date();
       root.records.set(this.key("organization", org), {
         organizationId: org,
-        value: { id: org, name: workspace.name, status: "active", createdAt: now, updatedAt: now },
+        value: {
+          id: org,
+          name: workspace.name,
+          status: "active",
+          accountType: "personal",
+          licenseUnit: "workspace",
+          createdAt: now,
+          updatedAt: now,
+        },
       });
       root.records.set(this.key("member", platformMemberKey(org, owner.userId)), {
         organizationId: org,
@@ -65,6 +75,10 @@ export class MemoryPlatformStore implements PlatformStore {
       root.records.set(this.key("workspace_link", workspace.id), {
         organizationId: org,
         value: org,
+      });
+      root.records.set(this.key("workspace_owner", workspace.id), {
+        organizationId: org,
+        value: owner.userId,
       });
       const plan = this.repository.plans.get(workspace.id) ?? "free";
       if (plan !== "free") {
@@ -106,9 +120,12 @@ export class MemoryPlatformStore implements PlatformStore {
       const owner = [...this.repository.workspaceMembers.values()].find(
         (m) => m.workspaceId === id && m.role === "owner",
       );
-      if (!organizationId || !owner) return null;
+      const ownerId =
+        (this.root().records.get(this.key("workspace_owner", id))?.value as string | undefined) ??
+        owner?.userId;
+      if (!organizationId || !ownerId) return null;
       const status = this.root().records.get(this.key("workspace_status", id))?.value ?? "active";
-      return structuredClone({ ...workspace, organizationId, ownerId: owner.userId, status }) as T;
+      return structuredClone({ ...workspace, organizationId, ownerId, status }) as T;
     }
     const value = this.root().records.get(this.key(kind, id));
     return value ? (structuredClone(value.value) as T) : null;
@@ -217,6 +234,10 @@ export class MemoryPlatformStore implements PlatformStore {
       organizationId: input.organizationId,
       value: input.organizationId,
     });
+    this.root().records.set(this.key("workspace_owner", input.id), {
+      organizationId: input.organizationId,
+      value: input.ownerId,
+    });
   }
   async transferWorkspaceOwner(id: string, userId: string) {
     const successor = this.repository.workspaceMembers.get(`${id}:${userId}`);
@@ -232,11 +253,103 @@ export class MemoryPlatformStore implements PlatformStore {
     successor.role = "owner";
     const nextUser = this.repository.users.get(userId);
     if (nextUser?.workspaceId === id) nextUser.role = "owner";
+    this.root().records.set(this.key("workspace_owner", id), {
+      organizationId: await this.organizationIdForWorkspace(id),
+      value: userId,
+    });
+  }
+  async grantWorkspaceMembership(
+    workspaceId: string,
+    userId: string,
+    role: "owner" | "editor" | "viewer",
+  ) {
+    const current = this.repository.workspaceMembers.get(`${workspaceId}:${userId}`);
+    if (current && role !== "owner") return;
+    this.repository.workspaceMembers.set(`${workspaceId}:${userId}`, {
+      workspaceId,
+      userId,
+      role,
+      joinedAt: new Date(),
+    });
+  }
+  async revokeOrganizationWorkspaceMemberships(organizationId: string, userId: string) {
+    const now = new Date();
+    const scoped = this.listSync<OrganizationWorkspaceRecord>("workspace", organizationId);
+    const controlled = new Set(
+      scoped
+        .filter(
+          (workspace) =>
+            workspace.ownerId === userId ||
+            this.repository.workspaceMembers.has(`${workspace.id}:${userId}`) ||
+            [...this.repository.sessionStaff.values()].some(
+              (credential) =>
+                credential.workspaceId === workspace.id &&
+                credential.createdBy === userId &&
+                !credential.revokedAt &&
+                credential.expiresAt > now,
+            ),
+        )
+        .map((workspace) => workspace.id),
+    );
+    for (const room of this.repository.sessions.values()) {
+      if (scoped.some((workspace) => workspace.id === room.workspaceId) && room.hostId === userId)
+        controlled.add(room.workspaceId);
+      if (
+        controlled.has(room.workspaceId) &&
+        room.expiresAt > now &&
+        room.state.phase !== "finished"
+      )
+        throw new PlatformError(
+          "WORKSPACE_BUSY",
+          "Finish or expire active Round and Presentation rooms before removing this user's organization access",
+        );
+    }
+    for (const workspace of scoped) {
+      const rooms = await createPresentationSessionRepository(this.repository).listSessions(
+        workspace.id,
+      );
+      if (rooms.some((room) => room.createdBy === userId)) controlled.add(workspace.id);
+      if (
+        controlled.has(workspace.id) &&
+        rooms.some((room) => room.status === "active" && room.liveExpiresAt > now)
+      )
+        throw new PlatformError(
+          "WORKSPACE_BUSY",
+          "Finish or expire active Round and Presentation rooms before removing this user's organization access",
+        );
+    }
+    if (
+      [...this.repository.liveRoomCodes.values()].some(
+        (room) =>
+          controlled.has(room.workspaceId) &&
+          (room.artifactType === "round" || room.artifactType === "presentation") &&
+          !room.releasedAt &&
+          room.expiresAt > now,
+      )
+    )
+      throw new PlatformError(
+        "WORKSPACE_BUSY",
+        "Finish or expire active Round and Presentation rooms before removing this user's organization access",
+      );
+    const affected = new Set(
+      this.listSync<OrganizationWorkspaceRecord>("workspace", organizationId).map(
+        (workspace) => workspace.id,
+      ),
+    );
+    for (const [key, membership] of this.repository.workspaceMembers) {
+      if (membership.userId === userId && affected.has(membership.workspaceId))
+        this.repository.workspaceMembers.delete(key);
+    }
+    // Keep the selected workspace pinned. Missing membership makes creator authorization
+    // fail until the user explicitly selects another workspace; never redirect stale writes.
   }
   async workspaceOwnerIds(user: string) {
     return [...this.repository.workspaceMembers.values()]
       .filter((m) => m.userId === user && m.role === "owner")
       .map((m) => m.workspaceId);
+  }
+  async legacyWorkspaceSubscription(workspaceId: string) {
+    return this.repository.billingProfiles.get(workspaceId) ?? null;
   }
   async hasActiveSubscriptionRoom(workspace: string) {
     const now = new Date();
@@ -491,6 +604,7 @@ export class MemoryPlatformStore implements PlatformStore {
     const memberships = structuredClone(this.repository.workspaceMembers);
     const plans = structuredClone(this.repository.plans);
     const users = structuredClone(this.repository.users);
+    const sessions = structuredClone(this.repository.creatorSessions);
     root.busy = true;
     root.rollbackActions = [];
     try {
@@ -508,6 +622,8 @@ export class MemoryPlatformStore implements PlatformStore {
       for (const [key, value] of plans) this.repository.plans.set(key, value);
       this.repository.users.clear();
       for (const [key, value] of users) this.repository.users.set(key, value);
+      this.repository.creatorSessions.clear();
+      for (const [key, value] of sessions) this.repository.creatorSessions.set(key, value);
       throw error;
     } finally {
       root.rollbackActions = [];
@@ -575,6 +691,39 @@ export function assertAudienceAdmissionInMemory(repository: MemoryRepository, wo
     );
 }
 
+function licensedWorkspaceSync(
+  store: MemoryPlatformStore,
+  organization: OrganizationRecord,
+  subscription: PlatformSubscription,
+  workspaceId: string,
+) {
+  if ((subscription.licenseUnit ?? organization.licenseUnit ?? "workspace") === "user") {
+    const assignment = store
+      .listSync<UserLicenseAssignment>("user_license", organization.id)
+      .sort(
+        (a, b) =>
+          a.assignedAt.getTime() - b.assignedAt.getTime() || a.userId.localeCompare(b.userId),
+      )
+      .slice(0, subscription.licenseQuantity)
+      .find((candidate) => candidate.workspaceId === workspaceId);
+    if (!assignment) return false;
+    const member = store.getSync<OrganizationMemberRecord>(
+      "member",
+      platformMemberKey(organization.id, assignment.userId),
+    );
+    return Boolean(member && member.role !== "billing");
+  }
+  return store
+    .listSync<LicenseAssignment>("license", organization.id)
+    .sort(
+      (a, b) =>
+        a.assignedAt.getTime() - b.assignedAt.getTime() ||
+        a.workspaceId.localeCompare(b.workspaceId),
+    )
+    .slice(0, subscription.licenseQuantity)
+    .some((assignment) => assignment.workspaceId === workspaceId);
+}
+
 export class MemoryPlatformRepository extends PlatformService {
   readonly memoryStore: MemoryPlatformStore;
   constructor(repository: MemoryRepository) {
@@ -611,23 +760,15 @@ export class MemoryPlatformRepository extends PlatformService {
     if (this.memoryStore.getSync<{ held: boolean }>("commercial_hold", record.organizationId)?.held)
       return "free";
     if (org?.status !== "active" || !activeSubscription(subscription)) return "free";
-    const assignments = this.memoryStore
-      .listSync<LicenseAssignment>("license", record.organizationId)
-      .sort(
-        (a, b) =>
-          a.assignedAt.getTime() - b.assignedAt.getTime() ||
-          a.workspaceId.localeCompare(b.workspaceId),
-      );
-    if (
-      !assignments.slice(0, subscription.licenseQuantity).some((a) => a.workspaceId === workspace)
-    )
-      return "free";
-    const offer = subscription.offerId
-      ? this.memoryStore.getSync<{ entitlements: { plan: "free" | "pro" | "team" } }>(
-          "offer",
-          subscription.offerId,
-        )
-      : null;
+    if (!licensedWorkspaceSync(this.memoryStore, org, subscription, workspace)) return "free";
+    const offer =
+      subscription.offerSnapshot ??
+      (subscription.offerId
+        ? this.memoryStore.getSync<{ entitlements: { plan: "free" | "pro" | "team" } }>(
+            "offer",
+            subscription.offerId,
+          )
+        : null);
     return offer?.entitlements.plan === "team" || (!offer && subscription.legacyPlan === "team")
       ? "team"
       : "pro";
@@ -659,19 +800,10 @@ export class MemoryPlatformRepository extends PlatformService {
       if (input.expiresAt <= now)
         throw new PlatformError("VALIDATION_ERROR", "Room coverage must expire in the future");
       const subscription = store.getSync<PlatformSubscription>("subscription", org.id);
-      const assignments = store
-        .listSync<LicenseAssignment>("license", org.id)
-        .sort(
-          (a, b) =>
-            a.assignedAt.getTime() - b.assignedAt.getTime() ||
-            a.workspaceId.localeCompare(b.workspaceId),
-        );
       const licensed =
         subscription &&
         activeSubscription(subscription, now) &&
-        assignments
-          .slice(0, subscription.licenseQuantity)
-          .some((a) => a.workspaceId === input.workspaceId);
+        licensedWorkspaceSync(store, org, subscription, input.workspaceId);
       const funding =
         input.funding === "auto" ? (licensed ? "subscription" : "credit") : input.funding;
       if (

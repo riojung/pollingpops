@@ -19,9 +19,18 @@ export interface PlatformStore {
   userEmail(userId: string): Promise<string | null>;
   createWorkspace(input: P.OrganizationWorkspaceRecord): Promise<void>;
   transferWorkspaceOwner(workspaceId: string, userId: string): Promise<void>;
+  grantWorkspaceMembership(
+    workspaceId: string,
+    userId: string,
+    role: "owner" | "editor" | "viewer",
+  ): Promise<void>;
+  revokeOrganizationWorkspaceMemberships(organizationId: string, userId: string): Promise<void>;
   deleteUserMemberships(userId: string): Promise<void>;
   organizationIdForWorkspace(workspaceId: string): Promise<string | null>;
   workspaceOwnerIds(userId: string): Promise<string[]>;
+  legacyWorkspaceSubscription(
+    workspaceId: string,
+  ): Promise<{ subscriptionId: string | null; status: string } | null>;
   hasActiveSubscriptionRoom(workspaceId: string): Promise<boolean>;
   hasActiveOrganizationRoom(organizationId: string): Promise<boolean>;
   lockWorkspace(workspaceId: string): Promise<void>;
@@ -256,13 +265,28 @@ export class PlatformService implements P.PlatformRepository {
     const org = await this.store.organizationIdForWorkspace(workspaceId);
     return org ? this.store.get<P.OrganizationRecord>("organization", org) : null;
   }
-  async createOrganization(input: { id?: string; name: string; actorId: string }) {
+  async createOrganization(input: {
+    id?: string;
+    name: string;
+    actorId: string;
+    accountType?: P.CustomerAccountType;
+    licenseUnit?: P.LicenseUnit;
+  }) {
     return this.run("identity", async (store) => {
       if (!(await store.userExists(input.actorId)))
         throw new PlatformError("NOT_FOUND", "User not found");
       const name = input.name.trim();
       if (!name || name.length > 120)
         throw new PlatformError("VALIDATION_ERROR", "Organization name is required");
+      if (input.accountType && !["personal", "organization"].includes(input.accountType))
+        throw new PlatformError("VALIDATION_ERROR", "Invalid customer account type");
+      if (input.licenseUnit && !["workspace", "user"].includes(input.licenseUnit))
+        throw new PlatformError("VALIDATION_ERROR", "Invalid license unit");
+      if (input.accountType === "personal" && input.licenseUnit === "user")
+        throw new PlatformError(
+          "VALIDATION_ERROR",
+          "Personal accounts cannot allocate organization user licenses",
+        );
       const id = input.id ?? randomUUID();
       if (await store.get("organization", id))
         throw new PlatformError("CONFLICT", "Organization already exists");
@@ -271,6 +295,8 @@ export class PlatformService implements P.PlatformRepository {
         id,
         name,
         status: "active",
+        accountType: input.accountType ?? "organization",
+        licenseUnit: input.licenseUnit ?? "workspace",
         createdAt: now,
         updatedAt: now,
       };
@@ -290,6 +316,22 @@ export class PlatformService implements P.PlatformRepository {
       if (org.status === "closed" && status !== "closed")
         throw new PlatformError("ORGANIZATION_CLOSED", "Closed organizations cannot be reopened");
       const updated = { ...org, status, updatedAt: new Date() };
+      await store.put("organization", id, id, updated);
+      return updated;
+    });
+  }
+  async renameOrganization(id: string, actorId: string, name: string) {
+    return this.run(`org:${id}`, async (store) => {
+      await this.member(store, id, actorId, ["owner", "admin"]);
+      const organization = await this.organization(store, id);
+      if (organization.status !== "active")
+        throw new PlatformError("ORGANIZATION_SUSPENDED", "Organization is not active");
+      if (!name.trim() || name.trim().length > 120)
+        throw new PlatformError(
+          "VALIDATION_ERROR",
+          "Organization name is required and must be at most 120 characters",
+        );
+      const updated = { ...organization, name: name.trim(), updatedAt: new Date() };
       await store.put("organization", id, id, updated);
       return updated;
     });
@@ -349,12 +391,213 @@ export class PlatformService implements P.PlatformRepository {
       (contact): contact is { userId: string; email: string } => contact !== null,
     );
   }
+  private async userLicenseState(
+    store: PlatformStore,
+    org: string,
+    now = new Date(),
+    excludeEmail?: string,
+  ): Promise<P.OrganizationUserLicenseSummary> {
+    const organization = await this.organization(store, org);
+    const subscription = await store.get<P.PlatformSubscription>("subscription", org);
+    const licenseUnit = subscription?.licenseUnit ?? organization.licenseUnit ?? "workspace";
+    const assignments = (await store.list<P.UserLicenseAssignment>("user_license", org)).sort(
+      (a, b) => a.assignedAt.getTime() - b.assignedAt.getTime() || a.userId.localeCompare(b.userId),
+    );
+    const occupiedEmails = new Set(
+      (await Promise.all(assignments.map((assignment) => store.userEmail(assignment.userId))))
+        .filter((email): email is string => Boolean(email))
+        .map((email) => email.toLowerCase()),
+    );
+    const pending = new Map<string, string>();
+    for (const invitation of await store.list<P.OrganizationInvitationRecord>("invitation", org)) {
+      if (
+        invitation.role === "billing" ||
+        invitation.acceptedAt ||
+        invitation.revokedAt ||
+        invitation.expiresAt <= now ||
+        occupiedEmails.has(invitation.email) ||
+        invitation.email === excludeEmail
+      )
+        continue;
+      if (!pending.has(invitation.email)) pending.set(invitation.email, invitation.id);
+    }
+    const hold = await store.get<P.OrganizationCommercialHold>("commercial_hold", org);
+    const quantity =
+      subscription &&
+      activeSubscription(subscription, now) &&
+      organization.status === "active" &&
+      !hold?.held
+        ? subscription.licenseQuantity
+        : 0;
+    return {
+      organizationId: org,
+      licenseUnit,
+      quantity,
+      assigned: assignments.length,
+      reserved: licenseUnit === "user" ? pending.size : 0,
+      available: Math.max(
+        0,
+        quantity - assignments.length - (licenseUnit === "user" ? pending.size : 0),
+      ),
+      assignments,
+      pendingInvitationIds: licenseUnit === "user" ? [...pending.values()] : [],
+    };
+  }
+  async getOrganizationUserLicenses(org: string, actorId: string) {
+    return this.run(`org:${org}`, async (store) => {
+      await this.member(store, org, actorId, ["owner", "admin", "billing"]);
+      return this.userLicenseState(store, org);
+    });
+  }
+  private async provisionUserLicense(
+    store: PlatformStore,
+    org: string,
+    actorId: string,
+    userId: string,
+    options: { workspaceId?: string; workspaceName?: string } = {},
+  ) {
+    const state = await this.userLicenseState(
+      store,
+      org,
+      new Date(),
+      (await store.userEmail(userId))?.toLowerCase(),
+    );
+    if (state.licenseUnit !== "user")
+      throw new PlatformError(
+        "CONFLICT",
+        "This subscription licenses workspaces rather than users",
+      );
+    const previous = state.assignments.find((assignment) => assignment.userId === userId);
+    if (previous) {
+      if (options.workspaceId && options.workspaceId !== previous.workspaceId)
+        throw new PlatformError(
+          "CONFLICT",
+          "This user already has a designated organization workspace",
+        );
+      return previous;
+    }
+    const member = await this.member(store, org, userId, ["owner", "admin", "member"]);
+    if (member.role === "billing")
+      throw new PlatformError("FORBIDDEN", "Billing access does not grant a creator workspace");
+    if (state.available < 1)
+      throw new PlatformError("LICENSE_LIMIT", "No organization user license is available");
+    const workspaces = await store.list<P.OrganizationWorkspaceRecord>("workspace", org);
+    let workspace = options.workspaceId
+      ? workspaces.find((candidate) => candidate.id === options.workspaceId)
+      : workspaces.find(
+          (candidate) =>
+            candidate.ownerId === userId &&
+            !state.assignments.some((assignment) => assignment.workspaceId === candidate.id),
+        );
+    if (options.workspaceId && (!workspace || workspace.ownerId !== userId))
+      throw new PlatformError(
+        "FORBIDDEN",
+        "A user license can only cover that user's designated organization workspace",
+      );
+    const designatedWorkspaceId = workspace?.id;
+    if (
+      designatedWorkspaceId &&
+      state.assignments.some(
+        (assignment) =>
+          assignment.workspaceId === designatedWorkspaceId && assignment.userId !== userId,
+      )
+    )
+      throw new PlatformError(
+        "CONFLICT",
+        "This organization workspace already has another licensed user",
+      );
+    const email = await store.userEmail(userId);
+    if (!email) throw new PlatformError("NOT_FOUND", "User not found");
+    if (
+      options.workspaceName !== undefined &&
+      (!options.workspaceName.trim() || options.workspaceName.trim().length > 120)
+    )
+      throw new PlatformError(
+        "VALIDATION_ERROR",
+        "Workspace name is required and must be at most 120 characters",
+      );
+    if (!workspace) {
+      workspace = {
+        id: randomUUID(),
+        organizationId: org,
+        ownerId: userId,
+        name: options.workspaceName?.trim() ?? `${email.split("@")[0]}'s workspace`.slice(0, 120),
+        segment: workspaces[0]?.segment ?? "workplace",
+        homeRegion: workspaces[0]?.homeRegion ?? "ca-central-1",
+        status: "active",
+      };
+      await store.createWorkspace(workspace);
+    } else {
+      await store.grantWorkspaceMembership(workspace.id, userId, "owner");
+    }
+    const assignment: P.UserLicenseAssignment = {
+      organizationId: org,
+      userId,
+      workspaceId: workspace.id,
+      assignedBy: actorId,
+      assignedAt: new Date(),
+    };
+    await store.put("user_license", platformMemberKey(org, userId), org, assignment);
+    return assignment;
+  }
+  async assignOrganizationUserLicense(
+    org: string,
+    actorId: string,
+    userId: string,
+    assigned: boolean,
+    options?: { workspaceId?: string; workspaceName?: string },
+  ) {
+    return this.run("identity", (store) =>
+      store.transaction(`org:${org}`, async (store) => {
+        await this.member(store, org, actorId, ["owner", "admin"]);
+        if (assigned) return this.provisionUserLicense(store, org, actorId, userId, options);
+        if ((await this.userLicenseState(store, org)).licenseUnit !== "user")
+          throw new PlatformError(
+            "CONFLICT",
+            "This subscription licenses workspaces rather than users",
+          );
+        await store.remove("user_license", platformMemberKey(org, userId));
+        await store.revokeOrganizationWorkspaceMemberships(org, userId);
+        return null;
+      }),
+    );
+  }
+  async renameWorkspace(workspaceId: string, actorId: string, name: string) {
+    const organizationId = await this.store.organizationIdForWorkspace(workspaceId);
+    if (!organizationId) throw new PlatformError("NOT_FOUND", "Workspace not found");
+    return this.run(`org:${organizationId}`, async (store) => {
+      const workspace = await store.get<P.OrganizationWorkspaceRecord>("workspace", workspaceId);
+      if (!workspace) throw new PlatformError("NOT_FOUND", "Workspace not found");
+      const organization = await this.organization(store, organizationId);
+      if (organization.status !== "active")
+        throw new PlatformError("ORGANIZATION_SUSPENDED", "Organization is not active");
+      if (
+        workspace.ownerId === actorId &&
+        (organization.licenseUnit ?? "workspace") === "workspace"
+      ) {
+        if (!(await store.workspaceOwnerIds(actorId)).includes(workspaceId))
+          throw new PlatformError("FORBIDDEN", "Workspace ownership is required");
+      } else if (workspace.ownerId === actorId)
+        await this.member(store, organizationId, actorId, ["owner", "admin", "member"]);
+      else await this.member(store, organizationId, actorId, ["owner", "admin"]);
+      if (!name.trim() || name.trim().length > 120)
+        throw new PlatformError(
+          "VALIDATION_ERROR",
+          "Workspace name is required and must be at most 120 characters",
+        );
+      const updated = { ...workspace, name: name.trim() };
+      await store.put("workspace", workspaceId, organizationId, updated);
+      return updated;
+    });
+  }
   async setOrganizationMember(input: {
     organizationId: string;
     actorId: string;
     userId: string;
     role: P.OrganizationRole;
   }) {
+    if (!["owner", "admin", "billing", "member"].includes(input.role))
+      throw new PlatformError("VALIDATION_ERROR", "Invalid organization role");
     return this.run("identity", async (store) =>
       store.transaction(`org:${input.organizationId}`, async (store) => {
         const actor = await this.member(store, input.organizationId, input.actorId, [
@@ -376,6 +619,23 @@ export class PlatformService implements P.PlatformRepository {
           createdAt: previous?.createdAt ?? new Date(),
         };
         await store.put("member", id, input.organizationId, member);
+        const unit =
+          (await store.get<P.PlatformSubscription>("subscription", input.organizationId))
+            ?.licenseUnit ??
+          (await this.organization(store, input.organizationId)).licenseUnit ??
+          "workspace";
+        if (unit === "user") {
+          if (input.role === "billing") {
+            await store.remove("user_license", id);
+            await store.revokeOrganizationWorkspaceMemberships(input.organizationId, input.userId);
+          } else
+            await this.provisionUserLicense(
+              store,
+              input.organizationId,
+              input.actorId,
+              input.userId,
+            );
+        }
         return member;
       }),
     );
@@ -404,6 +664,8 @@ export class PlatformService implements P.PlatformRepository {
             throw new PlatformError("FORBIDDEN", "Only owners can remove owners");
           await this.ensureAnotherOwner(store, org, userId);
         }
+        await store.remove("user_license", platformMemberKey(org, userId));
+        await store.revokeOrganizationWorkspaceMemberships(org, userId);
         return store.remove("member", platformMemberKey(org, userId));
       }),
     );
@@ -413,9 +675,17 @@ export class PlatformService implements P.PlatformRepository {
     actorId: string;
     email: string;
     role: P.OrganizationRole;
+    workspaceId?: string;
+    workspaceName?: string;
+    workspaceRole?: "editor" | "viewer";
     tokenHash: string;
     expiresAt: Date;
   }) {
+    if (
+      !["owner", "admin", "billing", "member"].includes(input.role) ||
+      (input.workspaceRole && !["editor", "viewer"].includes(input.workspaceRole))
+    )
+      throw new PlatformError("VALIDATION_ERROR", "Invalid invitation role");
     return this.run(`org:${input.organizationId}`, async (store) => {
       const actor = await this.member(store, input.organizationId, input.actorId, [
         "owner",
@@ -425,6 +695,33 @@ export class PlatformService implements P.PlatformRepository {
         throw new PlatformError("FORBIDDEN", "Only an owner can invite another owner");
       const email = input.email.trim().toLowerCase();
       const now = new Date();
+      const organization = await this.organization(store, input.organizationId);
+      if (organization.status !== "active")
+        throw new PlatformError("ORGANIZATION_SUSPENDED", "Organization is not active");
+      const state = await this.userLicenseState(store, input.organizationId, now, email);
+      if (
+        input.role === "billing" &&
+        (input.workspaceId || input.workspaceName || input.workspaceRole)
+      )
+        throw new PlatformError("FORBIDDEN", "Billing invitations cannot grant workspace access");
+      if (
+        input.workspaceName !== undefined &&
+        (!input.workspaceName.trim() || input.workspaceName.trim().length > 120)
+      )
+        throw new PlatformError(
+          "VALIDATION_ERROR",
+          "Workspace name is required and must be at most 120 characters",
+        );
+      if (state.licenseUnit === "user" && input.role !== "billing") {
+        const assignedEmails = await Promise.all(
+          state.assignments.map((assignment) => store.userEmail(assignment.userId)),
+        );
+        if (
+          !assignedEmails.some((assignedEmail) => assignedEmail?.toLowerCase() === email) &&
+          state.available < 1
+        )
+          throw new PlatformError("LICENSE_LIMIT", "No organization user license is available");
+      }
       if (
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
         email.length > 320 ||
@@ -448,6 +745,9 @@ export class PlatformService implements P.PlatformRepository {
         organizationId: input.organizationId,
         email,
         role: input.role,
+        ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+        ...(input.workspaceName ? { workspaceName: input.workspaceName.trim() } : {}),
+        ...(input.workspaceRole ? { workspaceRole: input.workspaceRole } : {}),
         tokenHash: input.tokenHash,
         createdBy: input.actorId,
         expiresAt: input.expiresAt,
@@ -512,17 +812,64 @@ export class PlatformService implements P.PlatformRepository {
           createdAt: now,
         };
         if (!previous) await store.put("member", key, invitation.organizationId, member);
+        let workspaceId: string | undefined;
+        const unit =
+          (await store.get<P.PlatformSubscription>("subscription", invitation.organizationId))
+            ?.licenseUnit ??
+          (await this.organization(store, invitation.organizationId)).licenseUnit ??
+          "workspace";
+        if (unit === "user" && member.role !== "billing") {
+          const assignment = await this.provisionUserLicense(
+            store,
+            invitation.organizationId,
+            invitation.createdBy,
+            input.actorId,
+            { workspaceId: invitation.workspaceId, workspaceName: invitation.workspaceName },
+          );
+          workspaceId = assignment.workspaceId;
+        } else if (unit !== "user" && invitation.workspaceId && member.role !== "billing") {
+          if (
+            (await store.organizationIdForWorkspace(invitation.workspaceId)) !==
+            invitation.organizationId
+          )
+            throw new PlatformError("NOT_FOUND", "Workspace not found");
+          await store.grantWorkspaceMembership(
+            invitation.workspaceId,
+            input.actorId,
+            invitation.workspaceRole ?? "editor",
+          );
+          workspaceId = invitation.workspaceId;
+        }
         await store.put("invitation", invitation.id, invitation.organizationId, {
           ...invitation,
           acceptedAt: now,
         });
-        return member;
+        return { ...member, ...(workspaceId ? { workspaceId } : {}) };
       }),
     );
   }
   async listOrganizationWorkspaces(org: string, user: string) {
-    await this.member(this.store, org, user, ["owner", "admin", "billing", "member"]);
-    return this.store.list<P.OrganizationWorkspaceRecord>("workspace", org);
+    const membership = await this.member(this.store, org, user, [
+      "owner",
+      "admin",
+      "billing",
+      "member",
+    ]);
+    const workspaces = await this.store.list<P.OrganizationWorkspaceRecord>("workspace", org);
+    if (
+      (await this.userLicenseState(this.store, org)).licenseUnit !== "user" ||
+      membership.role === "owner" ||
+      membership.role === "admin"
+    )
+      return workspaces;
+    if (membership.role === "billing") return [];
+    const assignment = await this.store.get<P.UserLicenseAssignment>(
+      "user_license",
+      platformMemberKey(org, user),
+    );
+    return assignment
+      ? workspaces.filter((workspace) => workspace.id === assignment.workspaceId)
+      : [];
   }
   async listOrganizationWorkspacesForOperator(org: string) {
     return this.store.list<P.OrganizationWorkspaceRecord>("workspace", org);
@@ -535,10 +882,34 @@ export class PlatformService implements P.PlatformRepository {
     id?: string;
   }) {
     return this.run(`org:${input.organizationId}`, async (store) => {
-      await this.member(store, input.organizationId, input.actorId, ["owner", "admin"]);
+      const actor = await this.member(store, input.organizationId, input.actorId, [
+        "owner",
+        "admin",
+      ]);
       const org = await this.organization(store, input.organizationId);
       if (org.status !== "active")
         throw new PlatformError("ORGANIZATION_SUSPENDED", "Organization is not active");
+      const subscription = await store.get<P.PlatformSubscription>(
+        "subscription",
+        input.organizationId,
+      );
+      if ((subscription?.licenseUnit ?? org.licenseUnit ?? "workspace") === "user") {
+        const workspaces = await store.list<P.OrganizationWorkspaceRecord>(
+          "workspace",
+          input.organizationId,
+        );
+        // The first unpaid owner workspace is configuration-only onboarding. Subsequent
+        // creator workspaces are provisioned with purchased user seats, never free bypasses.
+        if (
+          actor.role !== "owner" ||
+          workspaces.length > 0 ||
+          (subscription && activeSubscription(subscription))
+        )
+          throw new PlatformError(
+            "LICENSE_LIMIT",
+            "Invite licensed users to provision their organization workspaces",
+          );
+      }
       const name = input.name.trim();
       if (!name || name.length > 120)
         throw new PlatformError("VALIDATION_ERROR", "Workspace name is required");
@@ -560,9 +931,31 @@ export class PlatformService implements P.PlatformRepository {
     if (!org) throw new PlatformError("NOT_FOUND", "Workspace not found");
     return this.run("identity", async (store) =>
       store.transaction(`workspace:${workspace}`, async (store) => {
-        await this.member(store, org, actor, ["owner", "admin"]);
-        if (!(await store.userExists(user))) throw new PlatformError("NOT_FOUND", "User not found");
-        await store.transferWorkspaceOwner(workspace, user);
+        return store.transaction(`org:${org}`, async (store) => {
+          await this.member(store, org, actor, ["owner", "admin"]);
+          if (!(await store.userExists(user)))
+            throw new PlatformError("NOT_FOUND", "User not found");
+          const state = await this.userLicenseState(store, org);
+          if (state.licenseUnit !== "user") return store.transferWorkspaceOwner(workspace, user);
+          await this.member(store, org, user, ["owner", "admin", "member"]);
+          const targetAssignment = state.assignments.find(
+            (assignment) => assignment.userId === user,
+          );
+          if (targetAssignment && targetAssignment.workspaceId !== workspace)
+            throw new PlatformError(
+              "CONFLICT",
+              "Release the successor's existing creator license before transferring another workspace",
+            );
+          for (const assignment of state.assignments.filter(
+            (entry) => entry.workspaceId === workspace && entry.userId !== user,
+          )) {
+            await store.remove("user_license", platformMemberKey(org, assignment.userId));
+            await store.revokeOrganizationWorkspaceMemberships(org, assignment.userId);
+          }
+          await store.grantWorkspaceMembership(workspace, user, "owner");
+          await store.transferWorkspaceOwner(workspace, user);
+          await this.provisionUserLicense(store, org, actor, user, { workspaceId: workspace });
+        });
       }),
     );
   }
@@ -581,31 +974,91 @@ export class PlatformService implements P.PlatformRepository {
     });
   }
   async getSubscription(org: string) {
-    return (
-      (await this.store.get<P.PlatformSubscription>("subscription", org)) ?? emptySubscription(org)
-    );
+    const existing = await this.store.get<P.PlatformSubscription>("subscription", org);
+    if (existing) return existing;
+    const organization = await this.organization(this.store, org);
+    return { ...emptySubscription(org), licenseUnit: organization.licenseUnit ?? "workspace" };
   }
   async listSubscriptions() {
     return this.store.list<P.PlatformSubscription>("subscription");
   }
   async applySubscriptionSnapshot(
-    input: Omit<P.PlatformSubscription, "updatedAt"> & { now?: Date },
+    input: Omit<P.PlatformSubscription, "updatedAt"> & { now?: Date; purchaseId?: string },
   ) {
     return this.run(`org:${input.organizationId}`, async (store) => {
-      await this.organization(store, input.organizationId);
+      const organization = await this.organization(store, input.organizationId);
       if (
         !Number.isSafeInteger(input.licenseQuantity) ||
         input.licenseQuantity < 0 ||
         input.licenseQuantity > 10000
       )
         throw new PlatformError("VALIDATION_ERROR", "Invalid license quantity");
-      const { now, ...snapshot } = input;
+      if (input.licenseUnit && !["workspace", "user"].includes(input.licenseUnit))
+        throw new PlatformError("VALIDATION_ERROR", "Invalid license unit");
+      const { now, purchaseId, offerSnapshot: incomingOffer, ...snapshot } = input;
       const previous = await store.get<P.PlatformSubscription>(
         "subscription",
         input.organizationId,
       );
+      const licenseUnit =
+        input.licenseUnit ?? previous?.licenseUnit ?? organization.licenseUnit ?? "workspace";
+      if (licenseUnit !== (organization.licenseUnit ?? "workspace"))
+        throw new PlatformError(
+          "CONFLICT",
+          "A subscription cannot change the organization's licensed unit",
+        );
+      const purchases = await store.list<P.PlatformPurchase>("purchase", input.organizationId);
+      const purchase = purchaseId
+        ? purchases.find((candidate) => candidate.id === purchaseId)
+        : purchases.find(
+            (candidate) =>
+              input.subscriptionId &&
+              candidate.paymentId === input.subscriptionId &&
+              candidate.status === "paid" &&
+              candidate.offer.id === input.offerId,
+          );
+      if (
+        purchaseId &&
+        (!purchase ||
+          !input.subscriptionId ||
+          purchase.offer.id !== input.offerId ||
+          !["pending", "paid"].includes(purchase.status) ||
+          (purchase.paymentId && purchase.paymentId !== input.subscriptionId))
+      )
+        throw new PlatformError("CONFLICT", "The purchase does not match this subscription");
+      const retainedOffer =
+        previous?.subscriptionId === input.subscriptionId && previous?.offerId === input.offerId
+          ? previous?.offerSnapshot
+          : null;
+      const currentOffer = input.offerId
+        ? await store.get<P.PlatformOffer>("offer", input.offerId)
+        : null;
+      const recognizedOffers = [purchase?.offer, retainedOffer, currentOffer].filter(
+        (offer) => offer !== null && offer !== undefined,
+      );
+      // A worker supplies the exact provider-price offer it verified. Resolve back to
+      // retained evidence rather than trusting the caller's copy of commercial terms.
+      const offer = incomingOffer
+        ? recognizedOffers.find(
+            (candidate) => stablePlatformJson(candidate) === stablePlatformJson(incomingOffer),
+          )
+        : recognizedOffers[0];
+      if (incomingOffer && !offer)
+        throw new PlatformError("CONFLICT", "The subscription offer has no matching paid terms");
+      if (
+        offer &&
+        (offer.id !== input.offerId ||
+          offer.kind !== "workspace_subscription" ||
+          (offer.licenseUnit ?? "workspace") !== licenseUnit)
+      )
+        throw new PlatformError(
+          "CONFLICT",
+          "The subscription offer does not match the organization's licensed unit",
+        );
       const subscription: P.PlatformSubscription = {
         ...snapshot,
+        licenseUnit,
+        ...(offer ? { offerSnapshot: offer } : {}),
         ...((input.legacyPlan ?? previous?.legacyPlan)
           ? { legacyPlan: input.legacyPlan ?? previous?.legacyPlan }
           : {}),
@@ -613,6 +1066,24 @@ export class PlatformService implements P.PlatformRepository {
         updatedAt: now ?? new Date(),
       };
       await store.put("subscription", input.organizationId, input.organizationId, subscription);
+      if (
+        subscription.licenseUnit === "user" &&
+        activeSubscription(subscription, now) &&
+        (!previous ||
+          (previous.licenseUnit ?? organization.licenseUnit) !== "user" ||
+          !activeSubscription(previous, now))
+      ) {
+        const state = await this.userLicenseState(store, input.organizationId, now);
+        const owner = (
+          await store.list<P.OrganizationMemberRecord>("member", input.organizationId)
+        ).find(
+          (member) =>
+            member.role === "owner" &&
+            !state.assignments.some((assignment) => assignment.userId === member.userId),
+        );
+        if (owner && state.available > 0)
+          await this.provisionUserLicense(store, input.organizationId, owner.userId, owner.userId);
+      }
       return subscription;
     });
   }
@@ -623,6 +1094,11 @@ export class PlatformService implements P.PlatformRepository {
   async assignWorkspaceLicense(org: string, actor: string, workspace: string, assigned: boolean) {
     return this.run(`org:${org}`, async (store) => {
       await this.member(store, org, actor, ["owner", "admin", "billing"]);
+      if ((await this.userLicenseState(store, org)).licenseUnit === "user")
+        throw new PlatformError(
+          "CONFLICT",
+          "Assign a creator license to a user rather than a workspace",
+        );
       if ((await store.organizationIdForWorkspace(workspace)) !== org)
         throw new PlatformError("NOT_FOUND", "Workspace does not belong to organization");
       const previous = await store.get<P.LicenseAssignment>("license", workspace);
@@ -667,7 +1143,9 @@ export class PlatformService implements P.PlatformRepository {
     const subscription = await this.store.get<P.PlatformSubscription>("subscription", org);
     if (!subscription?.authoritative) return null;
     if (!(await this.hasLicense(this.store, workspace, now))) return "free";
-    const offer = subscription.offerId ? await this.getOffer(subscription.offerId) : null;
+    const offer =
+      subscription.offerSnapshot ??
+      (subscription.offerId ? await this.getOffer(subscription.offerId) : null);
     return offer?.entitlements.plan === "team" || (!offer && subscription.legacyPlan === "team")
       ? "team"
       : "pro";
@@ -690,17 +1168,33 @@ export class PlatformService implements P.PlatformRepository {
     if (!org) return false;
     const organization = await store.get<P.OrganizationRecord>("organization", org);
     const subscription = await store.get<P.PlatformSubscription>("subscription", org);
-    const assignment = await store.get<P.LicenseAssignment>("license", workspace);
     const hold = await store.get<P.OrganizationCommercialHold>("commercial_hold", org);
     if (hold?.held) return false;
     if (
       !organization ||
       organization.status !== "active" ||
       !subscription ||
-      !assignment ||
       !activeSubscription(subscription, now)
     )
       return false;
+    if ((subscription.licenseUnit ?? organization.licenseUnit ?? "workspace") === "user") {
+      const assignments = (await store.list<P.UserLicenseAssignment>("user_license", org)).sort(
+        (a, b) =>
+          a.assignedAt.getTime() - b.assignedAt.getTime() || a.userId.localeCompare(b.userId),
+      );
+      const assignment = assignments
+        .slice(0, subscription.licenseQuantity)
+        .find((candidate) => candidate.workspaceId === workspace);
+      if (!assignment) return false;
+      const member = await store.get<P.OrganizationMemberRecord>(
+        "member",
+        platformMemberKey(org, assignment.userId),
+      );
+      // Room transactions have organization/workspace RLS scope, not system identity
+      // scope. Identity deletion removes membership and its seat atomically; creator
+      // authentication separately checks user liveness.
+      return Boolean(member && member.role !== "billing");
+    }
     const assignments = (await store.list<P.LicenseAssignment>("license", org)).sort(
       (a, b) =>
         a.assignedAt.getTime() - b.assignedAt.getTime() ||
@@ -727,6 +1221,8 @@ export class PlatformService implements P.PlatformRepository {
         offer.version < 1
       )
         throw new PlatformError("VALIDATION_ERROR", "Invalid offer");
+      if (offer.licenseUnit && !["workspace", "user"].includes(offer.licenseUnit))
+        throw new PlatformError("VALIDATION_ERROR", "Invalid license unit");
       if (offer.kind === "credit_pack") integer(offer.creditQuantity);
       if (
         offer.status === "published" &&
@@ -739,6 +1235,25 @@ export class PlatformService implements P.PlatformRepository {
       const previous = await store.get<P.PlatformOffer>("offer", offer.id);
       if (previous && offer.version < previous.version)
         throw new PlatformError("CONFLICT", "Offer version cannot decrease");
+      if (
+        previous &&
+        offer.version === previous.version &&
+        (previous.licenseUnit ?? "workspace") !== (offer.licenseUnit ?? "workspace")
+      )
+        throw new PlatformError(
+          "CONFLICT",
+          "Changing the licensed unit requires a new offer version",
+        );
+      if (
+        previous &&
+        (previous.licenseUnit ?? "workspace") !== (offer.licenseUnit ?? "workspace") &&
+        previous.stripePriceId &&
+        offer.stripePriceId === previous.stripePriceId
+      )
+        throw new PlatformError(
+          "CONFLICT",
+          "Changing the licensed unit requires a new provider price",
+        );
       await store.put("offer", offer.id, null, offer);
       return offer;
     });
@@ -768,6 +1283,17 @@ export class PlatformService implements P.PlatformRepository {
       const offer = await store.get<P.PlatformOffer>("offer", input.offerId);
       if (!offer || offer.status !== "published" || !offer.stripePriceId)
         throw new PlatformError("UNPUBLISHED_PRICE", "Offer is not available for purchase");
+      const organization = await this.organization(store, input.organizationId);
+      const subscription = await store.get<P.PlatformSubscription>(
+        "subscription",
+        input.organizationId,
+      );
+      if (
+        offer.kind === "workspace_subscription" &&
+        (offer.licenseUnit ?? "workspace") !==
+          (subscription?.licenseUnit ?? organization.licenseUnit ?? "workspace")
+      )
+        throw new PlatformError("CONFLICT", "Choose an offer with this account's licensed unit");
       if (offer.kind === "credit_pack") integer(offer.creditQuantity * input.quantity);
       if (offer.amountMinor === null || !Number.isSafeInteger(offer.amountMinor * input.quantity))
         throw new PlatformError("VALIDATION_ERROR", "Purchase total exceeds supported amount");
@@ -2224,27 +2750,75 @@ export class PlatformService implements P.PlatformRepository {
     await this.store.put("worker_control", id, null, control);
     return control;
   }
+  private async assertPersonalBillingCanceled(store: PlatformStore, organizationId: string) {
+    const subscription = await store.get<P.PlatformSubscription>("subscription", organizationId);
+    const legacy = (
+      await Promise.all(
+        (await store.list<P.OrganizationWorkspaceRecord>("workspace", organizationId)).map(
+          (workspace) => store.legacyWorkspaceSubscription(workspace.id),
+        ),
+      )
+    ).filter((profile) => profile !== null);
+    const canCharge = (profile: { subscriptionId: string | null; status: string }) =>
+      profile.subscriptionId && !["canceled", "incomplete_expired"].includes(profile.status);
+    // Authoritative business reconciliation supersedes an old legacy row for the same
+    // provider subscription. Imported migration snapshots defer to the current legacy row.
+    const linkedLegacy = legacy.find(
+      (profile) => profile.subscriptionId === subscription?.subscriptionId,
+    );
+    const currentSubscription =
+      subscription?.authoritative || !linkedLegacy ? subscription : linkedLegacy;
+    const openCheckout = (await store.list<P.PlatformPurchase>("purchase", organizationId)).some(
+      (purchase) =>
+        purchase.offer.kind === "workspace_subscription" && purchase.status === "pending",
+    );
+    if (
+      (currentSubscription && canCharge(currentSubscription)) ||
+      legacy.some(
+        (profile) =>
+          (!subscription?.authoritative ||
+            profile.subscriptionId !== subscription.subscriptionId) &&
+          canCharge(profile),
+      ) ||
+      openCheckout
+    )
+      throw new PlatformError(
+        "BILLING_CANCELLATION_REQUIRED",
+        "Cancel the personal subscription before deleting your sign-in",
+      );
+  }
   async assertIdentityDeletionAllowed(userId: string) {
     return this.run("identity", async (store) => {
       const members = (await store.list<P.OrganizationMemberRecord>("member")).filter(
-        (m) => m.userId === userId && m.role === "owner",
+        (m) => m.userId === userId,
       );
+      const personalOrganizations = new Set<string>();
       for (const member of members) {
         const org = await store.get<P.OrganizationRecord>("organization", member.organizationId);
-        if (org?.status !== "closed")
+        if (org?.accountType === "personal" && member.role !== "member")
+          personalOrganizations.add(org.id);
+        else if (member.role === "owner" && org?.status !== "closed")
           await this.ensureAnotherOwner(store, member.organizationId, userId);
       }
       for (const workspaceId of await store.workspaceOwnerIds(userId)) {
         const org = await store.organizationIdForWorkspace(workspaceId);
+        const organization = org
+          ? await store.get<P.OrganizationRecord>("organization", org)
+          : null;
+        if (organization?.accountType === "personal") personalOrganizations.add(organization.id);
         if (
-          !org ||
-          (await store.get<P.OrganizationRecord>("organization", org))?.status !== "closed"
+          organization?.accountType !== "personal" &&
+          (!organization || organization.status !== "closed")
         )
           throw new PlatformError(
             "OWNERSHIP_TRANSFER_REQUIRED",
             "Transfer workspace stewardship before deleting your identity",
           );
       }
+      for (const organizationId of [...personalOrganizations].sort())
+        await store.transaction(`org:${organizationId}`, (store) =>
+          this.assertPersonalBillingCanceled(store, organizationId),
+        );
     });
   }
   async deleteIdentityMemberships(userId: string) {
@@ -2253,6 +2827,11 @@ export class PlatformService implements P.PlatformRepository {
       for (const member of await store.list<P.OrganizationMemberRecord>("member"))
         if (member.userId === userId)
           await store.remove("member", platformMemberKey(member.organizationId, userId));
+      for (const assignment of await store.list<P.UserLicenseAssignment>("user_license"))
+        if (assignment.userId === userId)
+          await store.transaction(`org:${assignment.organizationId}`, (store) =>
+            store.remove("user_license", platformMemberKey(assignment.organizationId, userId)),
+          );
       await store.deleteUserMemberships(userId);
     });
   }

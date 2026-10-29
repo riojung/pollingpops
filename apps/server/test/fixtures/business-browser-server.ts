@@ -20,6 +20,7 @@ import {
 } from "@openround/control-plane";
 import { buildApp } from "../../src/app.js";
 import { ConfigSchema } from "../../src/config.js";
+import { entitlementsFor } from "../../src/entitlements.js";
 import { ConsoleMailer } from "../../src/mailer.js";
 import { attachRealtime } from "../../src/realtime.js";
 
@@ -61,17 +62,57 @@ const realtime = await attachRealtime(
   },
   built.audienceScopeService,
 );
-built.app.post("/__test/business/seed", async (request) => {
+built.app.post("/__test/business/seed", async (request, reply) => {
+  if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
+    return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
   const input = z
     .object({
       organizationId: z.string().uuid(),
       actorId: z.string().uuid(),
       credits: z.number().int().min(0).max(10).optional(),
       billingOnlyUserId: z.string().uuid().optional(),
+      creatorLicenseQuantity: z.number().int().min(1).max(10).optional(),
     })
     .strict()
     .parse(request.body);
   await platform.requireOrganizationRole(input.organizationId, input.actorId, ["owner"]);
+  if (input.creatorLicenseQuantity !== undefined) {
+    const organization = await platform.getOrganization(input.organizationId, input.actorId);
+    if (organization.licenseUnit !== "user")
+      return reply.code(400).send({
+        error: { message: "Creator license fixture requires a user-license organization" },
+      });
+    const now = new Date();
+    const offer = await platform.saveOffer({
+      id: randomUUID(),
+      name: "Synthetic creator license subscription",
+      productKey: "pollingpops",
+      kind: "workspace_subscription",
+      licenseUnit: "user",
+      status: "published",
+      version: 1,
+      stripePriceId: `price_fixture_users_${input.organizationId}`,
+      currency: "cad",
+      amountMinor: 1500,
+      interval: "month",
+      creditQuantity: 0,
+      entitlements: entitlementsFor("team", config),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await platform.applySubscriptionSnapshot({
+      organizationId: input.organizationId,
+      customerId: `cus_fixture_${input.organizationId}`,
+      subscriptionId: `sub_fixture_${input.organizationId}`,
+      status: "active",
+      licenseQuantity: input.creatorLicenseQuantity,
+      licenseUnit: "user",
+      offerId: offer.id,
+      paidThrough: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      graceUntil: null,
+      legacyPlan: "team",
+    });
+  }
   if (input.credits)
     await platform.grantCredits({
       organizationId: input.organizationId,

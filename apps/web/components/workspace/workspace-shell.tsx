@@ -362,6 +362,8 @@ export function WorkspaceShell({
   const { locale, t } = useLocale();
   const {
     creator,
+    workspace,
+    entitlements,
     productFeatures,
     loading,
     error,
@@ -399,13 +401,16 @@ export function WorkspaceShell({
     router.push(librarySearchHref(globalSearch, window.location.pathname, window.location.search));
   }
 
-  const workspaceLabel = creator
-    ? t(
-        creator.segment === "workplace"
-          ? "workspace.switcher.workplace"
-          : "workspace.switcher.education",
-      )
-    : t("workspace.switcher.current");
+  const workspaceLabel =
+    workspace?.organization?.name ?? workspace?.name ?? t("workspace.switcher.current");
+  const effectivePlan = entitlements?.plan ?? creator?.plan;
+  const organizationRole = workspace?.organization?.role;
+  const identityRole =
+    organizationRole === "admin" || organizationRole === "billing" || organizationRole === "member"
+      ? t(`customer.role.${organizationRole}`)
+      : creator
+        ? t(`role.${organizationRole ?? creator.role}`)
+        : "";
   const accountInitial = creator?.email?.trim().charAt(0).toUpperCase() || "O";
 
   return (
@@ -425,16 +430,18 @@ export function WorkspaceShell({
           <p className={styles.identity} title={creator?.email}>
             <strong>{creator?.email}</strong>
             <span>
-              {creator
-                ? t("workspace.identity", {
-                    role: t(`role.${creator.role}`),
-                    plan: t(`plan.${creator.plan}`),
-                  })
+              {creator && effectivePlan
+                ? workspace?.planSource === "community"
+                  ? `${identityRole} · ${t("customer.plan.community")}`
+                  : t("workspace.identity", {
+                      role: identityRole,
+                      plan: t(`plan.${effectivePlan}`),
+                    })
                 : null}
             </span>
           </p>
           <div className={styles.accountActions}>
-            {creator?.plan === "free" ? (
+            {effectivePlan === "free" && !workspace?.organization ? (
               <button
                 className={styles.textButton}
                 onClick={() => {
@@ -471,8 +478,19 @@ export function WorkspaceShell({
           >
             <ShellIcon name="workspace" />
             <span>
-              <small>{t("workspace.switcher.label")}</small>
+              <small>
+                {t(
+                  workspace?.organization
+                    ? "customer.organization.label"
+                    : "workspace.switcher.label",
+                )}
+              </small>
               <strong>{workspaceLabel}</strong>
+              {workspace ? (
+                <em className={styles.workspaceDetail}>
+                  {workspace.organization ? workspace.name : t("customer.personal")}
+                </em>
+              ) : null}
             </span>
           </Link>
           <form className={styles.globalSearch} onSubmit={submitSearch} role="search">

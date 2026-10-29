@@ -21,7 +21,26 @@ import {
   useManagementNavigation,
 } from "../../components/management-navigation";
 import { useLocale } from "../../components/locale-provider";
-import { WorkspaceProvider } from "../../components/workspace/workspace-provider";
+import {
+  WorkspaceProvider,
+  type WorkspaceAccountContext,
+} from "../../components/workspace/workspace-provider";
+import { SettingsNavigation } from "./settings-navigation";
+import { PersonalInstitutionIdentities } from "./personal-institution-identities";
+import { PersonalSubscriptionOptions } from "./personal-subscription-options";
+import { PersonalBillingNotice } from "./personal-billing-notice";
+import {
+  accountPermissions,
+  canManagePersonalBilling,
+  personalBillingAction,
+  visibleSettingsSections,
+  selectedSettingsSection,
+  organizationSettingsHref,
+  workspaceThemePresets,
+  type SettingsSection,
+  type PersonalBillingProfile,
+  type PersonalBillingState,
+} from "./account-settings-model";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../lib/api";
 import { formatDate, formatList, formatNumber } from "../../lib/i18n/format";
@@ -43,9 +62,17 @@ export default function AccountPage() {
   const tRef = useRef(t);
   const router = useRouter();
   const [creator, setCreator] = useState<Creator | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceAccountContext | null>(null);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [requestedSection, setRequestedSection] = useState("");
+  const [originRows, setOriginRows] = useState<string[]>([]);
   const [userIdentity, setUserIdentity] = useState<{ userId: string; email: string } | null>(null);
   const [billingOnly, setBillingOnly] = useState(false);
   const [businessManagementEnabled, setBusinessManagementEnabled] = useState(false);
+  const [personalBillingStatus, setPersonalBillingStatus] = useState<PersonalBillingState>({
+    state: "loading",
+  });
+  const [billingStatusAttempt, setBillingStatusAttempt] = useState(0);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [theme, setTheme] = useState<BrandTheme>(() => ({
     organizationName: t("account.theme.defaultOrganizationName"),
@@ -55,7 +82,7 @@ export default function AccountPage() {
   const [savedTheme, setSavedTheme] = useState<BrandTheme | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState<
-    "" | "audit" | "billing" | "export" | "theme" | "embed" | "federation" | "delete"
+    "" | "audit" | "billing" | "export" | "theme" | "embed" | "federation" | "delete" | "workspace"
   >("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -66,7 +93,6 @@ export default function AccountPage() {
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
   const [inviteUrl, setInviteUrl] = useState("");
   const [collaborationBusy, setCollaborationBusy] = useState("");
-  const [embedOrigins, setEmbedOrigins] = useState("");
   const [institutionPolicy, setInstitutionPolicy] = useState<WorkspaceInstitutionPolicy | null>(
     null,
   );
@@ -83,6 +109,7 @@ export default function AccountPage() {
     Promise.all([
       apiFetch<{
         creator: Creator;
+        workspace?: WorkspaceAccountContext;
         entitlements: Entitlements;
         businessManagementEnabled?: boolean;
         productFeatures?: { uxBeta?: boolean; workspaceShell?: boolean };
@@ -95,19 +122,32 @@ export default function AccountPage() {
     ])
       .then(async ([account, branding, workspaceList, embedPolicy, policy, identities]) => {
         setCreator(account.creator);
+        setWorkspace(account.workspace ?? null);
+        setWorkspaceName(
+          account.workspace?.name ??
+            workspaceList.workspaces.find((item) => item.id === account.creator.workspaceId)
+              ?.name ??
+            "",
+        );
         setBusinessManagementEnabled(account.businessManagementEnabled === true);
         setEntitlements(account.entitlements);
         setProductFeatures({ workspaceShell: account.productFeatures?.workspaceShell === true });
         setSavedTheme(branding.theme);
         setTheme(
           branding.theme ?? {
-            organizationName: tRef.current("account.theme.defaultOrganizationName"),
+            organizationName: (
+              account.workspace?.organization?.name ??
+              account.workspace?.name ??
+              workspaceList.workspaces.find((item) => item.id === account.creator.workspaceId)
+                ?.name ??
+              tRef.current("account.theme.defaultOrganizationName")
+            ).slice(0, 80),
             primaryColor: "#39243C",
             accentColor: "#AC2855",
           },
         );
         setWorkspaces(workspaceList.workspaces);
-        setEmbedOrigins(embedPolicy.origins.join("\n"));
+        setOriginRows(embedPolicy.origins);
         setInstitutionPolicy(policy);
         setFederatedIdentities(identities.identities);
         setOidcStatus(
@@ -115,7 +155,13 @@ export default function AccountPage() {
             `/v1/auth/oidc/status?workspaceId=${encodeURIComponent(account.creator.workspaceId)}`,
           ),
         );
-        if (account.creator.role === "owner") {
+        if (
+          account.creator.role === "owner" &&
+          !(
+            account.workspace?.accountType === "organization" &&
+            account.workspace.licenseUnit === "user"
+          )
+        ) {
           const [collaboration, lti] = await Promise.all([
             apiFetch<{
               members: WorkspaceMember[];
@@ -135,15 +181,15 @@ export default function AccountPage() {
             businessManagementEnabled: boolean;
           }>("/v1/auth/user")
             .then((identity) => {
-              if (!identity.businessManagementEnabled) {
-                router.replace("/signin");
-                return;
-              }
               setUserIdentity(identity.user);
-              setBusinessManagementEnabled(true);
+              setBusinessManagementEnabled(identity.businessManagementEnabled);
               setBillingOnly(true);
             })
-            .catch(() => router.replace("/signin"));
+            .catch(() =>
+              router.replace(
+                `/signin?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`,
+              ),
+            );
         } else setError(humanError(caught));
       });
   }, [router]);
@@ -240,7 +286,7 @@ export default function AccountPage() {
 
   async function saveTheme(event: FormEvent) {
     event.preventDefault();
-    if (!entitlements?.brandTheme) return;
+    if (!entitlements?.brandTheme || !permissions.manageWorkspace) return;
     setBusy("theme");
     setError("");
     setMessage("");
@@ -260,7 +306,7 @@ export default function AccountPage() {
   }
 
   async function resetTheme() {
-    if (!savedTheme) return;
+    if (!savedTheme || !permissions.manageWorkspace) return;
     setBusy("theme");
     setError("");
     setMessage("");
@@ -268,7 +314,12 @@ export default function AccountPage() {
       await apiFetch("/v1/account/theme", { method: "DELETE" });
       setSavedTheme(null);
       setTheme({
-        organizationName: t("account.theme.defaultOrganizationName"),
+        organizationName: (
+          workspace?.organization?.name ??
+          workspace?.name ??
+          workspaceName ??
+          t("account.theme.defaultOrganizationName")
+        ).slice(0, 80),
         primaryColor: "#39243C",
         accentColor: "#AC2855",
       });
@@ -282,7 +333,7 @@ export default function AccountPage() {
 
   async function saveEmbedOrigins(event: FormEvent) {
     event.preventDefault();
-    if (creator?.role !== "owner") return;
+    if (!permissions.manageIntegrations) return;
     setBusy("embed");
     setError("");
     setMessage("");
@@ -290,13 +341,10 @@ export default function AccountPage() {
       const response = await apiFetch<{ origins: string[] }>("/v1/account/embed-origins", {
         method: "PUT",
         body: JSON.stringify({
-          origins: embedOrigins
-            .split("\n")
-            .map((origin) => origin.trim())
-            .filter(Boolean),
+          origins: originRows.map((origin) => origin.trim()).filter(Boolean),
         }),
       });
-      setEmbedOrigins(response.origins.join("\n"));
+      setOriginRows(response.origins);
       setMessage(t("account.feedback.embedSaved"));
     } catch (caught) {
       setError(humanError(caught));
@@ -387,12 +435,29 @@ export default function AccountPage() {
   }
 
   async function openBillingPortal() {
+    if (personalBilling !== "portal") return;
     setBusy("billing");
     setError("");
     try {
       const result = await apiFetch<{ url: string }>("/v1/billing/portal", {
         method: "POST",
         body: "{}",
+      });
+      window.location.assign(result.url);
+    } catch (caught) {
+      setError(humanError(caught));
+      setBusy("");
+    }
+  }
+
+  async function openPersonalCheckout(offerId?: string) {
+    if (personalBilling !== "checkout" || (businessManagementEnabled && !offerId)) return;
+    setBusy("billing");
+    setError("");
+    try {
+      const result = await apiFetch<{ url: string }>("/v1/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify(offerId ? { offerId } : {}),
       });
       window.location.assign(result.url);
     } catch (caught) {
@@ -418,9 +483,103 @@ export default function AccountPage() {
     }
   }
 
+  const permissions = accountPermissions(workspace, creator?.role);
+  const sections = visibleSettingsSections(workspace, creator?.role);
+  const selectedSection = selectedSettingsSection(requestedSection, sections);
+  const organizationUserWorkspace =
+    workspace?.accountType === "organization" && workspace.licenseUnit === "user";
+  const hasInstitutionAccess = Boolean(
+    oidcStatus?.enabled ||
+    federatedIdentities.length ||
+    (institutionPolicy &&
+      (institutionPolicy.contractStatus !== "disabled" ||
+        Object.values(institutionPolicy.capabilities).some(Boolean))),
+  );
+
+  useEffect(() => {
+    const selectFromHash = () => setRequestedSection(window.location.hash);
+    selectFromHash();
+    window.addEventListener("hashchange", selectFromHash);
+    return () => window.removeEventListener("hashchange", selectFromHash);
+  }, []);
+
+  function selectSection(section: SettingsSection) {
+    setRequestedSection(section);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}#${section}`,
+    );
+  }
+
+  async function saveWorkspaceName(event: FormEvent) {
+    event.preventDefault();
+    if (!permissions.manageWorkspace || !workspaceName.trim()) return;
+    setBusy("workspace");
+    setError("");
+    setMessage("");
+    try {
+      const result = await apiFetch<{ workspace: WorkspaceAccountContext }>(
+        "/v1/workspace/settings",
+        { method: "PATCH", body: JSON.stringify({ name: workspaceName.trim() }) },
+      );
+      setWorkspace(result.workspace);
+      setWorkspaceName(result.workspace.name);
+      setWorkspaces((items) =>
+        items.map((item) =>
+          item.id === result.workspace.id ? { ...item, name: result.workspace.name } : item,
+        ),
+      );
+      window.dispatchEvent(new Event("polling-pops:workspace-updated"));
+      setMessage(t("customer.workspace.saved"));
+    } catch (caught) {
+      setError(humanError(caught));
+    } finally {
+      setBusy("");
+    }
+  }
+
   const effectivePlan = entitlements?.plan ?? creator?.plan;
-  const roleLabel = (role: Creator["role"] | WorkspaceMember["role"] | WorkspaceSummary["role"]) =>
-    role === "owner" ? t("role.owner") : role === "editor" ? t("role.editor") : t("role.viewer");
+  const personalBillingOwner = canManagePersonalBilling(workspace, creator?.role);
+  const personalBilling = personalBillingAction(
+    workspace,
+    creator?.role,
+    effectivePlan,
+    personalBillingStatus,
+  );
+
+  useEffect(() => {
+    if (!personalBillingOwner || !creator?.workspaceId) return;
+    let active = true;
+    void apiFetch<{ billing: PersonalBillingProfile }>("/v1/billing/status")
+      .then(({ billing }) => {
+        if (!billing || typeof billing.status !== "string")
+          throw new Error("Invalid billing status");
+        if (active) setPersonalBillingStatus({ state: "ready", billing });
+      })
+      .catch(() => {
+        if (active) setPersonalBillingStatus({ state: "error" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [personalBillingOwner, creator?.workspaceId, billingStatusAttempt]);
+  const roleLabel = (
+    role:
+      | Creator["role"]
+      | WorkspaceMember["role"]
+      | WorkspaceSummary["role"]
+      | "admin"
+      | "billing"
+      | "member",
+  ) =>
+    role === "admin" || role === "billing" || role === "member"
+      ? t(`customer.role.${role}`)
+      : role === "owner"
+        ? t("role.owner")
+        : role === "editor"
+          ? t("role.editor")
+          : t("role.viewer");
   const planLabel = (plan: Creator["plan"]) =>
     plan === "free" ? t("plan.free") : plan === "pro" ? t("plan.pro") : t("plan.team");
   const contractStatusLabel = institutionPolicy
@@ -458,58 +617,76 @@ export default function AccountPage() {
       <>
         <SiteHeader />
         <main className="shell" lang="en-CA">
-          <section className="panel">
-            <h1>Personal account</h1>
-            <p>{userIdentity.email}</p>
-            <Link className="button button-quiet" href="/organization">
-              Organizations and billing
-            </Link>
-            <p className="muted">
-              Your sign-in is active. Workspace membership is required to open polls and reports.
-              Organization permissions determine billing access.
-            </p>
-            <button
-              className="button-quiet"
-              disabled={busy !== ""}
-              onClick={() =>
-                void apiFetch("/v1/auth/logout", { method: "POST" })
-                  .then(() => router.replace("/"))
-                  .catch((caught) => setError(humanError(caught)))
-              }
-            >
-              Sign out
-            </button>
-          </section>
-          <section className="panel danger-panel">
-            <h2>Delete personal account</h2>
-            <p>
-              Organization content and financial records are retained. Transfer ownership or close
-              any organization you own before deleting your sign-in.
-            </p>
-            {error ? (
-              <p className="error" role="alert">
-                {error}
+          <SettingsNavigation
+            sections={["overview", "data"]}
+            selected={selectedSection === "data" ? "data" : "overview"}
+            onSelect={selectSection}
+          />
+          <div
+            id="settings-panel"
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${selectedSection === "data" ? "data" : "overview"}`}
+          >
+            <section className="panel">
+              <h1>Personal account</h1>
+              <p>{userIdentity.email}</p>
+              <div className="actions">
+                <Link className="button button-quiet" href="/organization">
+                  Organizations and billing
+                </Link>
+                <Link className="button button-quiet" href="/account/setup">
+                  {t("customer.setup.title")}
+                </Link>
+              </div>
+              <p className="muted">
+                Your sign-in is active. Workspace membership is required to open polls and reports.
+                Organization permissions determine billing access.
               </p>
-            ) : null}
-            <form onSubmit={deleteAccount}>
-              <label className="field">
-                Type DELETE to confirm
-                <input
-                  className="input"
-                  autoComplete="off"
-                  value={confirmation}
-                  onChange={(event) => setConfirmation(event.target.value)}
-                />
-              </label>
               <button
-                className="button-danger"
-                disabled={confirmation !== "DELETE" || busy !== ""}
-                type="submit"
+                className="button-quiet"
+                disabled={busy !== ""}
+                onClick={() =>
+                  void apiFetch("/v1/auth/logout", { method: "POST" })
+                    .then(() => router.replace("/"))
+                    .catch((caught) => setError(humanError(caught)))
+                }
               >
-                {busy === "delete" ? "Deleting…" : "Delete personal account"}
+                Sign out
               </button>
-            </form>
-          </section>
+            </section>
+            {selectedSection === "data" ? (
+              <section className="panel danger-panel">
+                <h2>Delete personal account</h2>
+                <p>
+                  Organization content and financial records are retained. Transfer ownership or
+                  close any organization you own before deleting your sign-in.
+                </p>
+                {error ? (
+                  <p className="error" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+                <form onSubmit={deleteAccount}>
+                  <label className="field">
+                    Type DELETE to confirm
+                    <input
+                      className="input"
+                      autoComplete="off"
+                      value={confirmation}
+                      onChange={(event) => setConfirmation(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="button-danger"
+                    disabled={confirmation !== "DELETE" || busy !== ""}
+                    type="submit"
+                  >
+                    {busy === "delete" ? "Deleting…" : "Delete personal account"}
+                  </button>
+                </form>
+              </section>
+            ) : null}
+          </div>
         </main>
       </>
     );
@@ -526,502 +703,683 @@ export default function AccountPage() {
           {message}
         </p>
       ) : null}
-      <div className="settings-grid">
-        {businessManagementEnabled ? (
-          <section className="panel" lang="en-CA">
-            <h2>Organization management</h2>
-            <p className="muted">
-              Manage organization roles, workspace licenses, billing, and shared event credits.
-            </p>
-            <div className="actions">
-              <Link className="button button-quiet" href="/organization">
-                Organization and billing
-              </Link>
-              <Link className="button button-quiet" href="/organization#event-credits">
-                Event credits
-              </Link>
-            </div>
-          </section>
-        ) : null}
-        <section className="panel">
-          <p className="eyebrow">{t("account.workspace.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>{t("account.workspace.title")}</h2>
-          <p className="muted">
-            {t("account.workspace.roleDescription", {
-              role: creator ? roleLabel(creator.role) : t("common.loading"),
-            })}
-          </p>
-          <p className="notice">
-            {t("account.workspace.homeRegion", {
-              region:
-                workspaces.find((workspace) => workspace.id === creator?.workspaceId)?.homeRegion ??
-                t("common.loading"),
-            })}
-          </p>
-          <label className="field" htmlFor="active-workspace">
-            <span>{t("account.workspace.field")}</span>
-            <select
-              className="select"
-              disabled={!creator || collaborationBusy === "switch" || workspaces.length < 2}
-              id="active-workspace"
-              onChange={(event) => void switchWorkspace(event.target.value)}
-              value={creator?.workspaceId ?? ""}
-            >
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name} · {roleLabel(workspace.role)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-        <section className="panel">
-          <p className="eyebrow">{t("account.institution.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>{t("account.institution.title")}</h2>
-          <p className="muted">{t("account.institution.description")}</p>
-          {institutionPolicy ? (
-            <dl className="definition-list compact-definition-list">
-              <div>
-                <dt>{t("account.institution.contract")}</dt>
-                <dd>{contractStatusLabel}</dd>
+      <SettingsNavigation sections={sections} selected={selectedSection} onSelect={selectSection} />
+      <div
+        className={styles.settingsContent}
+        role="tabpanel"
+        id="settings-panel"
+        aria-labelledby={`settings-tab-${selectedSection}`}
+      >
+        <div className="settings-grid">
+          {selectedSection === "overview" &&
+          businessManagementEnabled &&
+          workspace?.organization ? (
+            <section className="panel" lang="en-CA">
+              <h2>{t("customer.organization.label")}</h2>
+              <p className="muted">{t("customer.setup.organizationDescription")}</p>
+              <div className="actions">
+                <Link className="button button-quiet" href="/organization">
+                  Organization and billing
+                </Link>
+                <Link className="button button-quiet" href="/organization#event-credits">
+                  Event credits
+                </Link>
               </div>
-              <div>
-                <dt>{t("account.institution.participantIdentity")}</dt>
-                <dd>{identityRequirementLabel}</dd>
-              </div>
-              <div>
-                <dt>{t("account.institution.approvedCapabilities")}</dt>
-                <dd>
-                  {enabledCapabilities.length
-                    ? formatList(locale, enabledCapabilities)
-                    : t("account.common.none")}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("account.institution.k12Mode")}</dt>
-                <dd>{t("account.status.disabled")}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="muted">{t("account.institution.loading")}</p>
-          )}
-          {oidcStatus?.enabled ? (
-            <div className="stack-sm">
-              <p className="notice">{t("account.institution.linkGuidance")}</p>
-              {federatedIdentities.map((identity) => (
-                <div className="identity-row" key={identity.id}>
-                  <span>
-                    <strong>{oidcStatus.providerName}</strong>
-                    <small>
-                      {identity.emailHint ?? identity.issuer} ·{" "}
-                      {t("account.institution.linked", {
-                        date: formatDate(locale, identity.linkedAt),
-                      })}
-                    </small>
-                  </span>
-                  <button
-                    className="button-danger small-button"
-                    disabled={busy !== ""}
-                    onClick={() => void unlinkInstitutionIdentity(identity.id)}
-                    type="button"
-                  >
-                    {t("account.institution.unlink")}
-                  </button>
-                </div>
-              ))}
-              {federatedIdentities.length === 0 ? (
-                <button
-                  className="button-quiet"
-                  disabled={busy !== ""}
-                  onClick={() => void linkInstitutionIdentity()}
-                  type="button"
-                >
-                  {busy === "federation"
-                    ? t("account.institution.openingSignIn")
-                    : t("account.institution.linkProvider", {
-                        provider: oidcStatus.providerName ?? "",
-                      })}
-                </button>
-              ) : (
-                <p className="muted">
-                  {t("account.institution.signInUrl")}:{" "}
-                  <code>/signin?workspaceId={creator?.workspaceId}</code>
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="notice">{t("account.institution.notEnabled")}</p>
-          )}
-          {institutionPolicy?.capabilities.lti && creator?.role === "owner" ? (
-            <div className="stack-sm institution-registration-list">
-              <h3>{t("account.institution.ltiTitle")}</h3>
-              {ltiRegistrations.length ? (
-                <ul>
-                  {ltiRegistrations.map((registration) => (
-                    <li key={registration.id}>
-                      <strong>{registration.name}</strong>
-                      <span>
-                        {registration.issuer} · {registration.deploymentId} ·{" "}
-                        {registration.status === "active"
-                          ? t("account.status.active")
-                          : t("account.status.disabled")}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="notice">{t("account.institution.ltiEmpty")}</p>
-              )}
-            </div>
+            </section>
           ) : null}
-          {institutionPolicy?.capabilities.auditExports && creator?.role === "owner" ? (
-            <div className="stack-sm">
-              <h3>{t("account.institution.auditTitle")}</h3>
-              <p className="muted">{t("account.institution.auditDescription")}</p>
-              <button
-                className="button-quiet"
-                disabled={busy !== ""}
-                onClick={() => void downloadAuditExport()}
-                type="button"
-              >
-                {busy === "audit"
-                  ? t("account.institution.preparingAudit")
-                  : t("account.institution.downloadAudit")}
-              </button>
-            </div>
-          ) : null}
-        </section>
-        <section className="panel">
-          <p className="eyebrow">{t("account.embed.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>{t("account.embed.title")}</h2>
-          <p className="muted">{t("account.embed.description")}</p>
-          <form onSubmit={saveEmbedOrigins}>
-            <label className="field" htmlFor="embed-origins">
-              <span>{t("account.embed.allowedOrigins")}</span>
-              <textarea
-                className="textarea"
-                disabled={creator?.role !== "owner" || busy !== ""}
-                id="embed-origins"
-                onChange={(event) => setEmbedOrigins(event.target.value)}
-                placeholder={"https://lms.example.edu\nhttps://slides.example.org"}
-                rows={5}
-                value={embedOrigins}
-              />
-            </label>
-            {creator?.role === "owner" ? (
-              <button className="button-quiet" disabled={busy !== ""} type="submit">
-                {busy === "embed" ? t("account.common.saving") : t("account.embed.save")}
-              </button>
-            ) : (
-              <p className="notice">{t("account.embed.ownerOnly")}</p>
-            )}
-          </form>
-        </section>
-        <section className="panel">
-          <p className="eyebrow">{t("account.subscription.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>
-            {creator && effectivePlan
-              ? t("account.subscription.plan", { plan: planLabel(effectivePlan) })
-              : t("account.subscription.loading")}
-          </h2>
-          <p className="muted">{t("account.subscription.description")}</p>
-          {entitlements ? (
-            <p className="muted">
-              {formatList(locale, [
-                t("account.subscription.participants", {
-                  count: formatNumber(locale, entitlements.maxParticipants),
-                }),
-                entitlements.maxPublishedQuizzes === null
-                  ? t("account.subscription.unlimitedPublished")
-                  : t("account.subscription.published", {
-                      count: formatNumber(locale, entitlements.maxPublishedQuizzes),
-                    }),
-                t("account.subscription.retention", {
-                  count: formatNumber(locale, entitlements.reportRetentionDays),
-                }),
-                entitlements.csvExport
-                  ? t("account.subscription.csvIncluded")
-                  : t("account.subscription.csvRequiresPro"),
-              ])}
-            </p>
-          ) : null}
-          {effectivePlan === "pro" ? (
-            <button
-              className="button-quiet"
-              disabled={busy !== ""}
-              onClick={() => void openBillingPortal()}
-              type="button"
-            >
-              {busy === "billing"
-                ? t("account.subscription.openingPortal")
-                : t("account.subscription.manageBilling")}
-            </button>
-          ) : effectivePlan === "free" ? (
-            <Link className="button-quiet" href="/pricing">
-              {t("account.subscription.comparePlans")}
-            </Link>
-          ) : (
-            <p className="muted">{t("account.subscription.operatorLimits")}</p>
-          )}
-        </section>
-        {creator?.role === "owner" ? (
-          <section className="panel workspace-members-panel">
-            <p className="eyebrow">{t("account.members.eyebrow")}</p>
-            <h2 style={{ fontSize: "1.8rem" }}>{t("account.members.title")}</h2>
-            <p className="muted">{t("account.members.description")}</p>
-            <form className="toolbar" onSubmit={(event) => void inviteMember(event)}>
-              <label className="field workspace-invite-email">
-                <span>{t("account.members.email")}</span>
-                <input
-                  className="input"
-                  maxLength={320}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  required
-                  type="email"
-                  value={inviteEmail}
-                />
-              </label>
-              <label className="field">
-                <span>{t("account.members.role")}</span>
+          {selectedSection === "overview" ? (
+            <section className="panel">
+              <p className="eyebrow">{t("account.workspace.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("account.workspace.title")}</h2>
+              <p className="muted">
+                {workspace?.organization && creator
+                  ? `${roleLabel(workspace.organization.role ?? creator.role)} · ${workspace.organization.name}`
+                  : t("account.workspace.roleDescription", {
+                      role: creator ? roleLabel(creator.role) : t("common.loading"),
+                    })}
+              </p>
+              <p className="notice">
+                {t("account.workspace.homeRegion", {
+                  region:
+                    workspaces.find((workspace) => workspace.id === creator?.workspaceId)
+                      ?.homeRegion ?? t("common.loading"),
+                })}
+              </p>
+              <label className="field" htmlFor="active-workspace">
+                <span>{t("account.workspace.field")}</span>
                 <select
                   className="select"
-                  onChange={(event) => setInviteRole(event.target.value as "editor" | "viewer")}
-                  value={inviteRole}
+                  disabled={!creator || collaborationBusy === "switch" || workspaces.length < 2}
+                  id="active-workspace"
+                  onChange={(event) => void switchWorkspace(event.target.value)}
+                  value={creator?.workspaceId ?? ""}
                 >
-                  <option value="editor">{t("role.editor")}</option>
-                  <option value="viewer">{t("role.viewer")}</option>
+                  {workspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name} · {roleLabel(workspace.role)}
+                    </option>
+                  ))}
                 </select>
               </label>
-              <button
-                className="button"
-                disabled={collaborationBusy !== ""}
-                style={{ alignSelf: "end" }}
-                type="submit"
-              >
-                {collaborationBusy === "invite"
-                  ? t("account.members.sending")
-                  : t("account.members.invite")}
-              </button>
-            </form>
-            {inviteUrl ? (
-              <p className="notice">
-                {t("account.members.localInvitationLink")}:{" "}
-                <a href={inviteUrl}>{t("account.members.openInvitation")}</a>
-              </p>
-            ) : null}
-            <div
-              className="table-scroll"
-              role="region"
-              aria-label={t("account.members.tableLabel")}
-              tabIndex={0}
-            >
-              <table className="report-table">
-                <thead>
-                  <tr>
-                    <th>{t("account.members.email")}</th>
-                    <th>{t("account.members.role")}</th>
-                    <th>{t("account.members.action")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((member) => (
-                    <tr key={member.userId}>
-                      <td>{member.email}</td>
-                      <td>
-                        {member.role === "owner" ? (
-                          t("role.owner")
-                        ) : (
-                          <select
-                            aria-label={t("account.members.roleFor", { email: member.email })}
-                            className="select compact-select"
-                            disabled={collaborationBusy === `member:${member.userId}`}
-                            onChange={(event) =>
-                              void updateMemberRole(
-                                member.userId,
-                                event.target.value as "editor" | "viewer",
-                              )
-                            }
-                            value={member.role}
-                          >
-                            <option value="editor">{t("role.editor")}</option>
-                            <option value="viewer">{t("role.viewer")}</option>
-                          </select>
-                        )}
-                      </td>
-                      <td>
-                        {member.role !== "owner" ? (
-                          <button
-                            className="button-danger small-button"
-                            disabled={collaborationBusy === `member:${member.userId}`}
-                            onClick={() => void removeMember(member.userId)}
-                            type="button"
-                          >
-                            {t("account.members.remove")}
-                          </button>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {invitations.some((invitation) => !invitation.acceptedAt && !invitation.revokedAt) ? (
-              <div className="workspace-invitations">
-                <h3>{t("account.members.pendingInvitations")}</h3>
-                <ul>
-                  {invitations
-                    .filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)
-                    .map((invitation) => (
-                      <li key={invitation.id}>
-                        <span>
-                          {invitation.email} · {roleLabel(invitation.role)} ·{" "}
-                          {t("account.members.expires", {
-                            date: formatDate(locale, invitation.expiresAt),
-                          })}
-                        </span>
-                        <button
-                          className="button-danger small-button"
-                          disabled={collaborationBusy === `invitation:${invitation.id}`}
-                          onClick={() => void revokeInvitation(invitation.id)}
-                          type="button"
-                        >
-                          {t("account.members.revoke")}
-                        </button>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-        <section className="panel">
-          <p className="eyebrow">{t("account.theme.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>{t("account.theme.title")}</h2>
-          <p className="muted">{t("account.theme.description")}</p>
-          {entitlements && !entitlements.brandTheme ? (
-            <p className="notice">{t("account.theme.requiresPro")}</p>
+              <dl className="compact-definition-list">
+                <div>
+                  <dt>{t("customer.accountType")}</dt>
+                  <dd>
+                    {t(
+                      workspace?.accountType === "organization"
+                        ? "customer.organization"
+                        : "customer.personal",
+                    )}
+                  </dd>
+                </div>
+                {workspace?.organization ? (
+                  <div>
+                    <dt>{t("customer.organization.label")}</dt>
+                    <dd>{workspace.organization.name}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {permissions.manageWorkspace ? (
+                <form className={styles.renameForm} onSubmit={saveWorkspaceName}>
+                  <label className="field" htmlFor="workspace-name">
+                    <span>{t("customer.workspace.name")}</span>
+                    <input
+                      className="input"
+                      id="workspace-name"
+                      value={workspaceName}
+                      maxLength={120}
+                      required
+                      onChange={(event) => setWorkspaceName(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="button-quiet"
+                    disabled={busy !== "" || !workspaceName.trim()}
+                    type="submit"
+                  >
+                    {busy === "workspace"
+                      ? t("account.common.saving")
+                      : t("customer.workspace.save")}
+                  </button>
+                </form>
+              ) : null}
+              {businessManagementEnabled && !workspace?.organization ? (
+                <Link className="button-quiet" href="/account/setup">
+                  {t("customer.setup.title")}
+                </Link>
+              ) : null}
+            </section>
           ) : null}
-          <div
-            className="live-shell theme-preview"
-            data-branded="true"
-            style={liveThemeStyle(theme)}
-          >
-            <CreatorBrand
-              inverted
-              name={theme.organizationName || t("account.theme.defaultOrganizationName")}
-              productFeatures={productFeatures}
-            />
-            <p className="theme-preview-copy">{t("account.theme.preview")}</p>
-          </div>
-          <form onSubmit={saveTheme}>
-            <label className="field" htmlFor="theme-name">
-              <span>{t("account.theme.organizationName")}</span>
-              <input
-                className="input"
-                disabled={!entitlements?.brandTheme || busy !== ""}
-                id="theme-name"
-                maxLength={80}
-                onChange={(event) => setTheme({ ...theme, organizationName: event.target.value })}
-                required
-                value={theme.organizationName}
-              />
-            </label>
-            <div className="settings-grid">
-              <label className="field" htmlFor="theme-primary">
-                <span>
-                  {t("account.theme.backgroundColour")} · {theme.primaryColor}
-                </span>
-                <input
-                  className="color-input"
-                  disabled={!entitlements?.brandTheme || busy !== ""}
-                  id="theme-primary"
-                  onChange={(event) => setTheme({ ...theme, primaryColor: event.target.value })}
-                  type="color"
-                  value={theme.primaryColor}
-                />
-              </label>
-              <label className="field" htmlFor="theme-accent">
-                <span>
-                  {t("account.theme.actionColour")} · {theme.accentColor}
-                </span>
-                <input
-                  className="color-input"
-                  disabled={!entitlements?.brandTheme || busy !== ""}
-                  id="theme-accent"
-                  onChange={(event) => setTheme({ ...theme, accentColor: event.target.value })}
-                  type="color"
-                  value={theme.accentColor}
-                />
-              </label>
-            </div>
-            <p className="muted">{t("account.theme.contrastHelp")}</p>
-            <div className="button-row">
-              <button
-                className="button"
-                disabled={!entitlements?.brandTheme || busy !== ""}
-                type="submit"
-              >
-                {busy === "theme" ? t("account.common.saving") : t("account.theme.save")}
-              </button>
-              {savedTheme ? (
+          {selectedSection === "security" && hasInstitutionAccess ? (
+            <section className="panel">
+              <p className="eyebrow">{t("account.institution.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("account.institution.title")}</h2>
+              <p className="muted">{t("account.institution.description")}</p>
+              {institutionPolicy ? (
+                <dl className="definition-list compact-definition-list">
+                  <div>
+                    <dt>{t("account.institution.contract")}</dt>
+                    <dd>{contractStatusLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("account.institution.participantIdentity")}</dt>
+                    <dd>{identityRequirementLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("account.institution.approvedCapabilities")}</dt>
+                    <dd>
+                      {enabledCapabilities.length
+                        ? formatList(locale, enabledCapabilities)
+                        : t("account.common.none")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t("account.institution.k12Mode")}</dt>
+                    <dd>{t("account.status.disabled")}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="muted">{t("account.institution.loading")}</p>
+              )}
+              {institutionPolicy?.capabilities.lti && creator?.role === "owner" ? (
+                <div className="stack-sm institution-registration-list">
+                  <h3>{t("account.institution.ltiTitle")}</h3>
+                  {ltiRegistrations.length ? (
+                    <ul>
+                      {ltiRegistrations.map((registration) => (
+                        <li key={registration.id}>
+                          <strong>{registration.name}</strong>
+                          <span>
+                            {registration.issuer} · {registration.deploymentId} ·{" "}
+                            {registration.status === "active"
+                              ? t("account.status.active")
+                              : t("account.status.disabled")}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="notice">{t("account.institution.ltiEmpty")}</p>
+                  )}
+                </div>
+              ) : null}
+              {institutionPolicy?.capabilities.auditExports && creator?.role === "owner" ? (
+                <div className="stack-sm">
+                  <h3>{t("account.institution.auditTitle")}</h3>
+                  <p className="muted">{t("account.institution.auditDescription")}</p>
+                  <button
+                    className="button-quiet"
+                    disabled={busy !== ""}
+                    onClick={() => void downloadAuditExport()}
+                    type="button"
+                  >
+                    {busy === "audit"
+                      ? t("account.institution.preparingAudit")
+                      : t("account.institution.downloadAudit")}
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+          {selectedSection === "security" ? (
+            <section className="panel">
+              <p className="eyebrow">{t("account.embed.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("account.embed.title")}</h2>
+              <p className="muted">{t("customer.origins.description")}</p>
+              <form onSubmit={saveEmbedOrigins}>
+                {!originRows.length ? <p className="muted">{t("customer.origins.empty")}</p> : null}
+                <div className={styles.originRows}>
+                  {originRows.map((origin, index) => (
+                    <div className={styles.originRow} key={index}>
+                      <label className="field" htmlFor={`embed-origin-${index}`}>
+                        <span>{t("customer.origins.origin", { number: index + 1 })}</span>
+                        <input
+                          className="input"
+                          id={`embed-origin-${index}`}
+                          type="url"
+                          placeholder="https://slides.example.org"
+                          disabled={!permissions.manageIntegrations || busy !== ""}
+                          value={origin}
+                          onChange={(event) =>
+                            setOriginRows((items) =>
+                              items.map((item, itemIndex) =>
+                                itemIndex === index ? event.target.value : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                      <button
+                        className="button-quiet"
+                        type="button"
+                        aria-label={t("customer.origins.remove", { number: index + 1 })}
+                        disabled={!permissions.manageIntegrations || busy !== ""}
+                        onClick={() =>
+                          setOriginRows((items) =>
+                            items.filter((_, itemIndex) => itemIndex !== index),
+                          )
+                        }
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="button-quiet"
+                  type="button"
+                  disabled={
+                    !permissions.manageIntegrations || busy !== "" || originRows.length >= 10
+                  }
+                  onClick={() => setOriginRows((items) => [...items, ""])}
+                >
+                  {t("customer.origins.add")}
+                </button>
+                {permissions.manageIntegrations ? (
+                  <button className="button-quiet" disabled={busy !== ""} type="submit">
+                    {busy === "embed" ? t("account.common.saving") : t("account.embed.save")}
+                  </button>
+                ) : (
+                  <p className="notice">{t("account.embed.ownerOnly")}</p>
+                )}
+              </form>
+            </section>
+          ) : null}
+          {selectedSection === "plan" ? (
+            <section className="panel">
+              <p className="eyebrow">{t("account.subscription.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>
+                {workspace?.planSource === "community"
+                  ? t("customer.plan.community")
+                  : creator && effectivePlan
+                    ? t("account.subscription.plan", { plan: planLabel(effectivePlan) })
+                    : t("account.subscription.loading")}
+              </h2>
+              <p className="muted">
+                {t(
+                  workspace?.planSource === "community"
+                    ? "customer.plan.communityDescription"
+                    : workspace?.organization
+                      ? "customer.organization.plan"
+                      : "account.subscription.description",
+                )}
+              </p>
+              {entitlements ? (
+                <p className="muted">
+                  {formatList(locale, [
+                    t("account.subscription.participants", {
+                      count: formatNumber(locale, entitlements.maxParticipants),
+                    }),
+                    entitlements.maxPublishedQuizzes === null
+                      ? t("account.subscription.unlimitedPublished")
+                      : t("account.subscription.published", {
+                          count: formatNumber(locale, entitlements.maxPublishedQuizzes),
+                        }),
+                    t("account.subscription.retention", {
+                      count: formatNumber(locale, entitlements.reportRetentionDays),
+                    }),
+                    entitlements.csvExport
+                      ? t("account.subscription.csvIncluded")
+                      : t("account.subscription.csvRequiresPro"),
+                  ])}
+                </p>
+              ) : null}
+              {workspace?.organization ? (
+                permissions.manageBilling ? (
+                  <Link
+                    className="button-quiet"
+                    href={organizationSettingsHref(workspace, "billing")}
+                  >
+                    {t("customer.organization.billing")}
+                  </Link>
+                ) : null
+              ) : personalBilling === "portal" ? (
                 <button
                   className="button-quiet"
                   disabled={busy !== ""}
-                  onClick={() => void resetTheme()}
+                  onClick={() => void openBillingPortal()}
                   type="button"
                 >
-                  {t("account.theme.useOpenRound")}
+                  {busy === "billing"
+                    ? t("account.subscription.openingPortal")
+                    : t("account.subscription.manageBilling")}
                 </button>
+              ) : personalBilling === "checkout" ? (
+                <div className={styles.subscriptionChoices}>
+                  {businessManagementEnabled ? (
+                    <PersonalSubscriptionOptions
+                      key={creator?.workspaceId}
+                      busy={busy !== ""}
+                      onCheckout={(offerId) => void openPersonalCheckout(offerId)}
+                    />
+                  ) : (
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={busy !== ""}
+                      onClick={() => void openPersonalCheckout()}
+                    >
+                      {busy === "billing"
+                        ? t("account.subscription.openingPortal")
+                        : t("workspace.explorePro")}
+                    </button>
+                  )}
+                  <Link className="button-quiet" href="/pricing">
+                    {t("account.subscription.comparePlans")}
+                  </Link>
+                </div>
+              ) : personalBillingOwner ? (
+                <PersonalBillingNotice
+                  status={personalBillingStatus}
+                  onRetry={() => {
+                    setPersonalBillingStatus({ state: "loading" });
+                    setBillingStatusAttempt((current) => current + 1);
+                  }}
+                />
+              ) : (
+                <p className="muted">{t("account.subscription.operatorLimits")}</p>
+              )}
+            </section>
+          ) : null}
+          {selectedSection === "people" && organizationUserWorkspace ? (
+            <section className="panel">
+              <h2>{t("customer.section.people")}</h2>
+              <p>{t("customer.organization.people")}</p>
+              <Link className="button" href={organizationSettingsHref(workspace, "members")}>
+                {t("customer.organization.manage")}
+              </Link>
+            </section>
+          ) : null}
+          {selectedSection === "people" &&
+          permissions.managePeople &&
+          !organizationUserWorkspace ? (
+            <section className="panel workspace-members-panel">
+              <p className="eyebrow">{t("account.members.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("account.members.title")}</h2>
+              <p className="muted">{t("account.members.description")}</p>
+              <form className="toolbar" onSubmit={(event) => void inviteMember(event)}>
+                <label className="field workspace-invite-email">
+                  <span>{t("account.members.email")}</span>
+                  <input
+                    className="input"
+                    maxLength={320}
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    required
+                    type="email"
+                    value={inviteEmail}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t("account.members.role")}</span>
+                  <select
+                    className="select"
+                    onChange={(event) => setInviteRole(event.target.value as "editor" | "viewer")}
+                    value={inviteRole}
+                  >
+                    <option value="editor">{t("role.editor")}</option>
+                    <option value="viewer">{t("role.viewer")}</option>
+                  </select>
+                </label>
+                <button
+                  className="button"
+                  disabled={collaborationBusy !== ""}
+                  style={{ alignSelf: "end" }}
+                  type="submit"
+                >
+                  {collaborationBusy === "invite"
+                    ? t("account.members.sending")
+                    : t("account.members.invite")}
+                </button>
+              </form>
+              {inviteUrl ? (
+                <p className="notice">
+                  {t("account.members.localInvitationLink")}:{" "}
+                  <a href={inviteUrl}>{t("account.members.openInvitation")}</a>
+                </p>
               ) : null}
-            </div>
-          </form>
-        </section>
-        <section className="panel">
-          <p className="eyebrow">{t("account.export.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>{t("account.export.title")}</h2>
-          <p className="muted">{t("account.export.description")}</p>
-          <button
-            className="button-quiet"
-            disabled={!creator || busy !== ""}
-            onClick={() => void downloadExport()}
-            type="button"
-          >
-            {busy === "export" ? t("account.export.preparing") : t("account.export.download")}
-          </button>
-        </section>
-        <section className="panel danger-panel">
-          <p className="eyebrow">{t("account.delete.eyebrow")}</p>
-          <h2 style={{ fontSize: "1.8rem" }}>{t("account.delete.title")}</h2>
-          {businessManagementEnabled ? (
-            <p className="muted" lang="en-CA">
-              Delete your personal sign-in. Organization content and financial records are retained.
-              Transfer ownership or close your organizations first.
-            </p>
-          ) : (
-            <p className="muted">{t("account.delete.description")}</p>
-          )}
-          <form onSubmit={deleteAccount}>
-            <label className="field" htmlFor="delete-confirmation">
-              <span>{t("account.delete.confirm", { confirmation: "DELETE" })}</span>
-              <input
-                autoComplete="off"
-                className="input"
-                id="delete-confirmation"
-                onChange={(event) => setConfirmation(event.target.value)}
-                value={confirmation}
-              />
-            </label>
-            <button
-              className="button-danger"
-              disabled={!creator || confirmation !== "DELETE" || busy !== ""}
-              type="submit"
-            >
-              {busy === "delete" ? t("account.delete.deleting") : t("account.delete.action")}
-            </button>
-          </form>
-        </section>
+              <div
+                className="table-scroll"
+                role="region"
+                aria-label={t("account.members.tableLabel")}
+                tabIndex={0}
+              >
+                <table className="report-table">
+                  <thead>
+                    <tr>
+                      <th>{t("account.members.email")}</th>
+                      <th>{t("account.members.role")}</th>
+                      <th>{t("account.members.action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {members.map((member) => (
+                      <tr key={member.userId}>
+                        <td>{member.email}</td>
+                        <td>
+                          {member.role === "owner" ? (
+                            t("role.owner")
+                          ) : (
+                            <select
+                              aria-label={t("account.members.roleFor", { email: member.email })}
+                              className="select compact-select"
+                              disabled={collaborationBusy === `member:${member.userId}`}
+                              onChange={(event) =>
+                                void updateMemberRole(
+                                  member.userId,
+                                  event.target.value as "editor" | "viewer",
+                                )
+                              }
+                              value={member.role}
+                            >
+                              <option value="editor">{t("role.editor")}</option>
+                              <option value="viewer">{t("role.viewer")}</option>
+                            </select>
+                          )}
+                        </td>
+                        <td>
+                          {member.role !== "owner" ? (
+                            <button
+                              className="button-danger small-button"
+                              disabled={collaborationBusy === `member:${member.userId}`}
+                              onClick={() => void removeMember(member.userId)}
+                              type="button"
+                            >
+                              {t("account.members.remove")}
+                            </button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {invitations.some((invitation) => !invitation.acceptedAt && !invitation.revokedAt) ? (
+                <div className="workspace-invitations">
+                  <h3>{t("account.members.pendingInvitations")}</h3>
+                  <ul>
+                    {invitations
+                      .filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)
+                      .map((invitation) => (
+                        <li key={invitation.id}>
+                          <span>
+                            {invitation.email} · {roleLabel(invitation.role)} ·{" "}
+                            {t("account.members.expires", {
+                              date: formatDate(locale, invitation.expiresAt),
+                            })}
+                          </span>
+                          <button
+                            className="button-danger small-button"
+                            disabled={collaborationBusy === `invitation:${invitation.id}`}
+                            onClick={() => void revokeInvitation(invitation.id)}
+                            type="button"
+                          >
+                            {t("account.members.revoke")}
+                          </button>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+          {selectedSection === "appearance" ? (
+            <section className="panel">
+              <p className="eyebrow">{t("account.theme.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("account.theme.title")}</h2>
+              <p className="muted">{t("account.theme.description")}</p>
+              {entitlements && !entitlements.brandTheme ? (
+                <p className="notice">{t("account.theme.requiresPro")}</p>
+              ) : null}
+              <div
+                className="live-shell theme-preview"
+                data-branded="true"
+                style={liveThemeStyle(theme)}
+              >
+                <CreatorBrand
+                  inverted
+                  name={theme.organizationName || t("account.theme.defaultOrganizationName")}
+                  productFeatures={productFeatures}
+                />
+                <p className="theme-preview-copy">{t("account.theme.preview")}</p>
+              </div>
+              <form onSubmit={saveTheme}>
+                <label className="field" htmlFor="theme-name">
+                  <span>{t("customer.theme.brandName")}</span>
+                  <input
+                    className="input"
+                    disabled={
+                      !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
+                    }
+                    id="theme-name"
+                    maxLength={80}
+                    onChange={(event) =>
+                      setTheme({ ...theme, organizationName: event.target.value })
+                    }
+                    required
+                    value={theme.organizationName}
+                  />
+                </label>
+                <fieldset className={styles.themePresets}>
+                  <legend>{t("customer.theme.presets")}</legend>
+                  <div className={styles.presetChoices}>
+                    {workspaceThemePresets.map((preset) => (
+                      <button
+                        className="button-quiet"
+                        key={preset.id}
+                        type="button"
+                        aria-pressed={
+                          theme.primaryColor === preset.primaryColor &&
+                          theme.accentColor === preset.accentColor
+                        }
+                        disabled={
+                          !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
+                        }
+                        onClick={() =>
+                          setTheme((value) => ({
+                            ...value,
+                            primaryColor: preset.primaryColor,
+                            accentColor: preset.accentColor,
+                          }))
+                        }
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={styles.themeSwatch}
+                          style={{ background: preset.primaryColor }}
+                        />
+                        {t(`customer.theme.${preset.id}`)}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <details className={styles.advanced}>
+                  <summary>{t("customer.theme.advanced")}</summary>
+                  <div className="settings-grid">
+                    <label className="field" htmlFor="theme-primary">
+                      <span>
+                        {t("account.theme.backgroundColour")} · {theme.primaryColor}
+                      </span>
+                      <input
+                        className="color-input"
+                        disabled={
+                          !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
+                        }
+                        id="theme-primary"
+                        onChange={(event) =>
+                          setTheme({ ...theme, primaryColor: event.target.value })
+                        }
+                        type="color"
+                        value={theme.primaryColor}
+                      />
+                    </label>
+                    <label className="field" htmlFor="theme-accent">
+                      <span>
+                        {t("account.theme.actionColour")} · {theme.accentColor}
+                      </span>
+                      <input
+                        className="color-input"
+                        disabled={
+                          !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
+                        }
+                        id="theme-accent"
+                        onChange={(event) =>
+                          setTheme({ ...theme, accentColor: event.target.value })
+                        }
+                        type="color"
+                        value={theme.accentColor}
+                      />
+                    </label>
+                  </div>
+                </details>
+                <p className="muted">{t("account.theme.contrastHelp")}</p>
+                <div className="button-row">
+                  <button
+                    className="button"
+                    disabled={
+                      !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
+                    }
+                    type="submit"
+                  >
+                    {busy === "theme" ? t("account.common.saving") : t("account.theme.save")}
+                  </button>
+                  {savedTheme ? (
+                    <button
+                      className="button-quiet"
+                      disabled={busy !== ""}
+                      onClick={() => void resetTheme()}
+                      type="button"
+                    >
+                      {t("account.theme.useOpenRound")}
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+            </section>
+          ) : null}
+          {selectedSection === "data" ? (
+            <PersonalInstitutionIdentities
+              status={oidcStatus}
+              identities={federatedIdentities}
+              workspaceId={creator?.workspaceId}
+              busy={busy !== ""}
+              onLink={() => void linkInstitutionIdentity()}
+              onUnlink={(id) => void unlinkInstitutionIdentity(id)}
+            />
+          ) : null}
+          {selectedSection === "data" ? (
+            <section className="panel">
+              <p className="eyebrow">{t("account.export.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("customer.data.personal")}</h2>
+              {workspace?.organization ? (
+                <p className="notice">{t("customer.data.organization")}</p>
+              ) : null}
+              <p className="muted">{t("account.export.description")}</p>
+              <button
+                className="button-quiet"
+                disabled={!creator || busy !== ""}
+                onClick={() => void downloadExport()}
+                type="button"
+              >
+                {busy === "export" ? t("account.export.preparing") : t("account.export.download")}
+              </button>
+            </section>
+          ) : null}
+          {selectedSection === "data" ? (
+            <section className="panel danger-panel">
+              <p className="eyebrow">{t("account.delete.eyebrow")}</p>
+              <h2 style={{ fontSize: "1.8rem" }}>{t("account.delete.title")}</h2>
+              {businessManagementEnabled || workspace?.organization ? (
+                <p className="muted" lang="en-CA">
+                  Delete your personal sign-in. Organization content and financial records are
+                  retained. Transfer ownership or close your organizations first.
+                </p>
+              ) : (
+                <p className="muted">{t("account.delete.description")}</p>
+              )}
+              <form onSubmit={deleteAccount}>
+                <label className="field" htmlFor="delete-confirmation">
+                  <span>{t("account.delete.confirm", { confirmation: "DELETE" })}</span>
+                  <input
+                    autoComplete="off"
+                    className="input"
+                    id="delete-confirmation"
+                    onChange={(event) => setConfirmation(event.target.value)}
+                    value={confirmation}
+                  />
+                </label>
+                <button
+                  className="button-danger"
+                  disabled={!creator || confirmation !== "DELETE" || busy !== ""}
+                  type="submit"
+                >
+                  {busy === "delete" ? t("account.delete.deleting") : t("account.delete.action")}
+                </button>
+              </form>
+            </section>
+          ) : null}
+        </div>
       </div>
     </div>
   );

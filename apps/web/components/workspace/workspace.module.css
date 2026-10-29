@@ -209,6 +209,15 @@
   white-space: nowrap;
 }
 
+.workspaceDetail {
+  color: var(--ui-text-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .globalSearch {
   position: relative;
   display: flex;

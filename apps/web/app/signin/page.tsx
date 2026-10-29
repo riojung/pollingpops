@@ -35,6 +35,7 @@ export default function SignInPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [segment, setSegment] = useState<"education" | "workplace">("workplace");
+  const [accountType, setAccountType] = useState<"personal" | "organization">("personal");
   const [flow, setFlow] = useState<EmailFlow>({ step: "email" });
   const [sending, setSending] = useState(false);
   const [verifyingPin, setVerifyingPin] = useState(false);
@@ -67,6 +68,11 @@ export default function SignInPage() {
   useEffect(() => {
     setHydrated(true);
     const query = new URLSearchParams(window.location.search);
+    const requestedSignup = query.get("mode") === "signup";
+    if (requestedSignup) {
+      setMode("signup");
+      setAccountType(query.get("accountType") === "organization" ? "organization" : "personal");
+    }
     const requestedWorkspace = OidcStartSchema.shape.workspaceId.safeParse(
       query.get("workspaceId"),
     );
@@ -74,14 +80,15 @@ export default function SignInPage() {
     const localReturn = requestedReturn.success ? requestedReturn.data : undefined;
     if (localReturn) setReturnTo(localReturn);
     const isVerificationLanding = query.get("verified") === "1";
-    if (isVerificationLanding) clearPinEntry();
-    const restored = isVerificationLanding
-      ? null
-      : readPinEntry({
-          apiUrl: API_URL,
-          ...(localReturn ? { returnTo: localReturn } : {}),
-          ...(requestedWorkspace.success ? { workspaceId: requestedWorkspace.data } : {}),
-        });
+    if (isVerificationLanding || requestedSignup) clearPinEntry();
+    const restored =
+      isVerificationLanding || requestedSignup
+        ? null
+        : readPinEntry({
+            apiUrl: API_URL,
+            ...(localReturn ? { returnTo: localReturn } : {}),
+            ...(requestedWorkspace.success ? { workspaceId: requestedWorkspace.data } : {}),
+          });
     if (restored) {
       setFlow({ step: "pin", ...restored });
       setEmail(restored.email);
@@ -246,7 +253,9 @@ export default function SignInPage() {
           email: submittedEmail,
           segment,
           acceptPolicies,
-          ...(returnTo ? { returnTo } : {}),
+          ...(returnTo || accountType === "organization"
+            ? { returnTo: returnTo ?? "/account/setup?type=organization" }
+            : {}),
         }),
       });
       setFlow({ step: "verification-sent", email: submittedEmail });
@@ -434,6 +443,24 @@ export default function SignInPage() {
               aria-busy={pending}
               onSubmit={submitEmail}
             >
+              {mode === "signup" ? (
+                <fieldset className="field auth-segment">
+                  <legend className="field-label">{t("customer.accountType")}</legend>
+                  <div className="segmented">
+                    {(["personal", "organization"] as const).map((type) => (
+                      <button
+                        key={type}
+                        aria-pressed={accountType === type}
+                        disabled={!hydrated || pending}
+                        onClick={() => setAccountType(type)}
+                        type="button"
+                      >
+                        {t(`customer.${type}`)}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
               {mode === "signup" ? (
                 <fieldset className="field auth-segment">
                   <legend className="field-label">{t("delivery.auth.facilitate")}</legend>

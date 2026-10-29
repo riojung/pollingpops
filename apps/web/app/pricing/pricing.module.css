@@ -1,0 +1,27 @@
+.plans {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.plans :global(.card) {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  min-width: 0;
+}
+
+.plans p {
+  flex: 1;
+}
+
+.plans :global(.button),
+.plans :global(.button-quiet) {
+  margin-top: auto;
+  white-space: normal;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .plans {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

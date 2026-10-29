@@ -47,7 +47,7 @@ interface QuizRecord {
 
 function LegacyDashboardPage() {
   const router = useRouter();
-  const { management, productFeatures: workspaceFeatures } = useWorkspace();
+  const { management, productFeatures: workspaceFeatures, startUpgrade } = useWorkspace();
   const { t } = useLocale();
   const [creator, setCreator] = useState<Creator | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
@@ -193,15 +193,7 @@ function LegacyDashboardPage() {
   }
 
   async function upgrade() {
-    try {
-      const result = await apiFetch<{ url: string }>("/v1/billing/checkout", {
-        method: "POST",
-        body: "{}",
-      });
-      window.location.assign(result.url);
-    } catch (caught) {
-      setError(humanError(caught));
-    }
+    await startUpgrade();
   }
 
   async function downloadCheckpointSet(quizId: string, format: "json" | "csv" | "qti.zip") {

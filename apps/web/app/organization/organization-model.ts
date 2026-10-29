@@ -1,9 +1,12 @@
 export type OrganizationRole = "owner" | "admin" | "billing" | "member";
+export type LicenseUnit = "workspace" | "user";
 export interface Organization {
   id: string;
   name: string;
   status: string;
   role: OrganizationRole;
+  accountType?: "personal" | "organization";
+  licenseUnit?: LicenseUnit;
 }
 export interface OrganizationWorkspace {
   id: string;
@@ -25,6 +28,8 @@ export interface OrganizationInvitation {
   expiresAt: string;
   acceptedAt: string | null;
   revokedAt: string | null;
+  workspaceName?: string;
+  workspaceId?: string;
 }
 export interface Subscription {
   status: string;
@@ -33,6 +38,23 @@ export interface Subscription {
   subscriptionId: string | null;
   paidThrough: string | null;
   graceUntil: string | null;
+  licenseUnit?: LicenseUnit;
+}
+export interface UserLicenseSummary {
+  organizationId: string;
+  licenseUnit: LicenseUnit;
+  quantity: number;
+  assigned: number;
+  reserved: number;
+  available: number;
+  assignments: Array<{
+    organizationId: string;
+    userId: string;
+    workspaceId?: string;
+    assignedBy: string;
+    assignedAt: string;
+  }>;
+  pendingInvitationIds: string[];
 }
 export interface LicenseAssignment {
   workspaceId: string;
@@ -66,6 +88,7 @@ export interface Offer {
   amountMinor: number | null;
   interval: string | null;
   creditQuantity: number;
+  licenseUnit?: LicenseUnit;
 }
 
 export function organizationPermissions(role: OrganizationRole) {
@@ -130,9 +153,49 @@ export function offerPrice(offer: Offer): string {
     style: "currency",
     currency: offer.currency,
   }).format(offer.amountMinor / 10 ** digits);
-  return `${price}${offer.interval ? ` / ${offer.interval} / workspace` : " / pack"}`;
+  return `${price}${offer.interval ? ` / ${offer.interval} / ${offer.licenseUnit === "user" ? "user" : "workspace"}` : " / pack"}`;
 }
 
 export function licenseOverflow(billing: BillingView): number {
   return Math.max(0, billing.assignments.length - billing.subscription.licenseQuantity);
+}
+
+export function organizationLicenseUnit(
+  organization: Pick<Organization, "licenseUnit">,
+  billing?: Pick<BillingView, "subscription"> | null,
+): LicenseUnit {
+  return organization.licenseUnit ?? billing?.subscription.licenseUnit ?? "workspace";
+}
+
+export function canInviteOrganizationMember(
+  organization: Pick<Organization, "licenseUnit" | "status">,
+  seats: UserLicenseSummary | null,
+  role: OrganizationRole,
+): boolean {
+  if (organization.status !== "active") return false;
+  if (organization.licenseUnit !== "user" || role === "billing") return true;
+  return seats?.licenseUnit === "user" && seats.available > 0;
+}
+
+export function organizationInvitationInput(
+  input: { email: string; role: OrganizationRole; workspaceName: string },
+  licenseUnit: LicenseUnit,
+) {
+  return {
+    email: input.email,
+    role: input.role,
+    ...(licenseUnit === "user" && input.role !== "billing" && input.workspaceName.trim()
+      ? { workspaceName: input.workspaceName.trim() }
+      : {}),
+  };
+}
+
+export function organizationInvitationDestination(accepted: {
+  organizationId: string;
+  workspaceId?: string | null;
+  activeWorkspaceId?: string | null;
+}): string {
+  return accepted.workspaceId || accepted.activeWorkspaceId
+    ? "/home"
+    : `/organization?organizationId=${encodeURIComponent(accepted.organizationId)}`;
 }

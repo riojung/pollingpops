@@ -22,6 +22,7 @@ export async function bootstrapPlatformCatalog(platform: PlatformRepository, con
           previous.amountMinor !== (offer.unitAmount ?? null) ||
           previous.creditQuantity !== (offer.creditsPerUnit ?? 0) ||
           previous.interval !== (offer.interval ?? null) ||
+          (previous.licenseUnit ?? "workspace") !== (offer.licenseUnit ?? "workspace") ||
           previous.kind !==
             (offer.kind === "event_credit_pack" ? "credit_pack" : "workspace_subscription"))
       ) {
@@ -35,6 +36,7 @@ export async function bootstrapPlatformCatalog(platform: PlatformRepository, con
         name: offer.title,
         productKey: "pollingpops",
         kind: offer.kind === "event_credit_pack" ? "credit_pack" : "workspace_subscription",
+        ...(offer.licenseUnit ? { licenseUnit: offer.licenseUnit } : {}),
         status: offer.published ? "published" : "draft",
         version: offer.version,
         stripePriceId: offer.stripePriceId ?? null,
@@ -42,7 +44,7 @@ export async function bootstrapPlatformCatalog(platform: PlatformRepository, con
         amountMinor: offer.unitAmount ?? null,
         interval: offer.interval ?? null,
         creditQuantity: offer.creditsPerUnit ?? 0,
-        entitlements: entitlementsFor("pro", config),
+        entitlements: entitlementsFor(offer.licenseUnit === "user" ? "team" : "pro", config),
         createdAt: previous?.createdAt ?? now,
         updatedAt: now,
       });

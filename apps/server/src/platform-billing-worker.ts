@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Stripe from "stripe";
 import type {
   PlatformBillingEvent,
+  PlatformOffer,
   PlatformPurchase,
   PlatformRepository,
   PlatformSubscription,
@@ -537,39 +538,67 @@ export class PlatformBillingWorker {
           return;
         const items = subscription.items.data;
         const offers = await scoped.listOffers(true);
-        let offer =
-          items.length === 1
-            ? offers.find(
-                (candidate) =>
-                  candidate.kind === "workspace_subscription" &&
-                  candidate.stripePriceId === items[0]!.price.id,
-              )
-            : undefined;
+        let capturedPurchaseId: string | undefined;
+        let hasPurchaseEvidence = false;
+        let offer: PlatformOffer | undefined;
+        if (
+          items.length === 1 &&
+          prior.subscriptionId === subscriptionId &&
+          prior.offerSnapshot?.id === prior.offerId &&
+          prior.offerSnapshot?.kind === "workspace_subscription" &&
+          prior.offerSnapshot.stripePriceId === items[0]!.price.id
+        )
+          offer = prior.offerSnapshot;
         if (!offer && items.length === 1) {
           // Catalog publication replaces the current offer, but outstanding checkouts and
           // renewals still use their immutable purchase terms and original provider price.
           const purchase = subscription.metadata.purchaseId
             ? await scoped.getPurchase(subscription.metadata.purchaseId)
             : await scoped.findPurchaseByPaymentId(subscriptionId);
+          hasPurchaseEvidence = Boolean(purchase);
           if (
             purchase?.organizationId === organizationId &&
             purchase.offer.kind === "workspace_subscription" &&
             purchase.offer.stripePriceId === items[0]!.price.id &&
             ["pending", "paid"].includes(purchase.status) &&
             (!purchase.paymentId || purchase.paymentId === subscriptionId)
-          )
+          ) {
             offer = purchase.offer;
+            capturedPurchaseId = purchase.id;
+          }
         }
+        if (!offer && items.length === 1)
+          offer = offers.find(
+            (candidate) =>
+              candidate.kind === "workspace_subscription" &&
+              candidate.stripePriceId === items[0]!.price.id,
+          );
         // Existing licensed subscriptions retain their paid capacity while an invoice is unpaid.
         const invoice =
           subscription.latest_invoice && typeof subscription.latest_invoice === "object"
             ? subscription.latest_invoice
             : null;
         const paid = invoice?.status === "paid";
-        if (!offer && prior.subscriptionId !== subscriptionId)
+        // Migration 065 retained linked subscriptions before the versioned catalog existed.
+        // Renew only that exact legacy contract; an unknown price cannot change its tier or seats.
+        const legacyContinuation =
+          !offer &&
+          items.length === 1 &&
+          prior.organizationId === organizationId &&
+          prior.subscriptionId === subscriptionId &&
+          subscription.id === subscriptionId &&
+          (prior.customerId === null || prior.customerId === identifier(subscription.customer)) &&
+          prior.offerId === null &&
+          !prior.offerSnapshot &&
+          !hasPurchaseEvidence &&
+          !subscription.metadata.purchaseId &&
+          (prior.licenseUnit ?? "workspace") === "workspace" &&
+          (prior.legacyPlan === "pro" || prior.legacyPlan === "team") &&
+          prior.licenseQuantity > 0;
+        if (!offer && !legacyContinuation && (paid || prior.subscriptionId !== subscriptionId))
           throw new Error("Subscription uses an unrecognized offer");
         if (paid && items.length !== 1)
-          throw new Error("Subscription must contain exactly one licensed-workspace item");
+          throw new Error("Subscription must contain exactly one licensed item");
         const paidThrough = paid
           ? new Date(items[0]!.current_period_end * 1_000)
           : prior.paidThrough;
@@ -584,11 +613,17 @@ export class PlatformBillingWorker {
           subscriptionId: subscription.id,
           status: subscription.status,
           licenseQuantity: paid && offer ? (items[0]!.quantity ?? 1) : prior.licenseQuantity,
+          licenseUnit: offer?.licenseUnit ?? prior.licenseUnit ?? "workspace",
           offerId: offer?.id ?? prior.offerId,
+          ...(offer ? { offerSnapshot: offer } : {}),
+          ...(legacyContinuation ? { legacyPlan: prior.legacyPlan } : {}),
           paidThrough,
           graceUntil,
         };
-        await scoped.applySubscriptionSnapshot(next);
+        await scoped.applySubscriptionSnapshot({
+          ...next,
+          ...(capturedPurchaseId ? { purchaseId: capturedPurchaseId } : {}),
+        });
         for (const transaction of transactions) await scoped.recordStripeTransaction(transaction);
         const changed =
           prior.status !== next.status ||
@@ -609,7 +644,9 @@ export class PlatformBillingWorker {
                 name: organization.name,
                 designatedContacts: [],
                 commercialStatus: next.status,
-                licensedWorkspaces: next.licenseQuantity,
+                ...(next.licenseUnit === "user"
+                  ? {}
+                  : { licensedWorkspaces: next.licenseQuantity }),
               },
             });
         }

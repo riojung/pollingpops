@@ -95,6 +95,91 @@ function wrongPin(pin: string) {
 }
 
 describe("verified email followed by a separate sign-in PIN", () => {
+  it("treats repeated signup of a verified mailbox as a generic no-op and leaves its requested PIN usable", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const f = await fixture({ production: true });
+    const initial = await f.register();
+    expect(initial.statusCode).toBe(202);
+    await f.verify();
+    const identity = (await f.repository.getVerifiedEmailIdentity("creator@example.com"))!;
+    f.repository.workspaces.get(identity.creator!.workspaceId)!.name = "Configured workspace";
+    await f.repository.updateUserLocale(identity.user.userId, "ja-JP");
+    const pin = await f.requestPin();
+    const pending = structuredClone(
+      f.repository.emailPinChallenges.get(hashToken(pin.json().challengeId)),
+    );
+    const profile = structuredClone(f.repository.users.get(identity.user.userId));
+    const workspace = structuredClone(f.repository.workspaces.get(identity.creator!.workspaceId));
+    const consent = structuredClone(f.repository.consents);
+    const tokens = structuredClone(f.repository.magicTokens);
+    for (const endpoint of ["/v1/auth/email-verification", "/v1/auth/magic-link"]) {
+      vi.setSystemTime(Date.now() + 61000);
+      const repeated = await f.post(endpoint, {
+        email: " Creator@Example.com ",
+        segment: "workplace",
+        acceptPolicies: true,
+        returnTo: "/customer/setup?accountType=organization",
+      });
+      expect(repeated.statusCode).toBe(202);
+      expect(repeated.json()).toEqual(initial.json());
+      expect(repeated.headers["set-cookie"]).toBeUndefined();
+    }
+    expect(f.mailer.verifications).toHaveLength(1);
+    expect(f.mailer.pins).toHaveLength(1);
+    expect(f.repository.magicTokens).toEqual(tokens);
+    expect(f.repository.users.size).toBe(1);
+    expect(f.repository.workspaces.size).toBe(1);
+    expect(f.repository.users.get(identity.user.userId)).toEqual(profile);
+    expect(f.repository.workspaces.get(identity.creator!.workspaceId)).toEqual(workspace);
+    expect(f.repository.consents).toEqual(consent);
+    expect(f.repository.emailPinChallenges.get(hashToken(pin.json().challengeId))).toEqual(pending);
+    expect(f.repository.creatorSessions.size).toBe(0);
+    expect((await f.complete(pin.json().challengeId)).statusCode).toBe(200);
+  });
+
+  it.each([undefined, "/organization?setup=team"])(
+    "keeps unverified resends usable while acknowledging a later link without repeating onboarding (returnTo=%s)",
+    async (returnTo) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const f = await fixture();
+      expect((await f.register()).statusCode).toBe(202);
+      const limited = await f.register();
+      expect(limited.statusCode).toBe(429);
+      expect(f.mailer.verifications).toHaveLength(1);
+      vi.setSystemTime(Date.now() + 61000);
+      const resent = await f.post("/v1/auth/email-verification", {
+        email: " CREATOR@EXAMPLE.COM ",
+        segment: "workplace",
+        acceptPolicies: true,
+        ...(returnTo ? { returnTo } : {}),
+      });
+      expect(resent.statusCode).toBe(202);
+      expect(f.mailer.verifications).toHaveLength(2);
+      const verified = await f.verify(0);
+      expect(verified.statusCode).toBe(302);
+      expect(new URL(verified.headers.location!).searchParams.get("returnTo")).toBe(
+        "/home?welcome=1",
+      );
+      const profile = structuredClone([...f.repository.users.values()][0]!);
+      const workspace = structuredClone([...f.repository.workspaces.values()][0]!);
+      const consent = structuredClone(f.repository.consents);
+      const acknowledged = await f.verify(1);
+      expect(acknowledged.statusCode).toBe(302);
+      expect(acknowledged.headers["set-cookie"]).toBeUndefined();
+      const landing = new URL(acknowledged.headers.location!);
+      expect(landing.pathname).toBe("/signin");
+      expect(landing.searchParams.get("verified")).toBe("1");
+      expect(landing.searchParams.get("returnTo")).toBe(returnTo ?? "/home");
+      expect([...f.repository.users.values()]).toEqual([profile]);
+      expect([...f.repository.workspaces.values()]).toEqual([workspace]);
+      expect(f.repository.consents).toEqual(consent);
+      expect(f.repository.creatorSessions.size).toBe(0);
+      expect(f.repository.emailPinChallenges.size).toBe(0);
+      expect(f.mailer.pins).toEqual([]);
+      expect((await f.verify(1)).statusCode).toBe(400);
+    },
+  );
+
   it("creates no identity before verification and no session until the independently requested PIN succeeds", async () => {
     const f = await fixture();
     expect((await f.register(" Creator@Example.com ", "/library")).statusCode).toBe(202);
@@ -316,7 +401,7 @@ describe("verified email followed by a separate sign-in PIN", () => {
     expect((await f.requestPin()).statusCode).toBe(202);
     expect((await f.register()).statusCode).toBe(202);
     expect(f.mailer.pins).toHaveLength(1);
-    expect(f.mailer.verifications).toHaveLength(2);
+    expect(f.mailer.verifications).toHaveLength(1);
   });
 
   it("requires explicit policy acceptance and rejects external return destinations", async () => {

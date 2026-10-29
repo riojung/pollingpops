@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ManagementNavigationModule from "../../components/management-navigation";
 import type * as ApiModule from "../../lib/api";
 import { ApiClientError, LOGOUT_REVOCATION_WARNING } from "../../lib/api";
-import { PIN_RESUME_STORAGE_KEY } from "../../lib/signin-pin";
+import { PIN_RESUME_STORAGE_KEY, SIGNIN_INTENT_STORAGE_KEY } from "../../lib/signin-pin";
 
 type EffectSlot = { dependencies?: unknown[]; cleanup?: () => void };
 
@@ -211,6 +211,12 @@ function expectPinRequest(expected: Record<string, unknown>) {
   return { challengeId: fixtures.issued.at(-1)! };
 }
 
+function expectNoSignup(markup: string) {
+  expect(markup).not.toContain("Account access");
+  expect(markup).not.toContain("Create account");
+  expect(markup).not.toContain("Need an account?");
+}
+
 function remount() {
   fixtures.slots.forEach((slot) => (slot as EffectSlot | null)?.cleanup?.());
   fixtures.slots = [];
@@ -343,6 +349,150 @@ describe("public product sign-in", () => {
     expect(find(node, (element) => element.props.id === "email").props.value).toBe("");
     expect(fixtures.api).toHaveBeenCalledTimes(1);
     expect(fixtures.replace).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["organization", "Personal workspace", undefined, undefined],
+    ["personal", "Organization workspace", undefined, "/account/setup?type=organization"],
+    [
+      "organization",
+      "Personal workspace",
+      "/organization/invite?token=invitation",
+      "/organization/invite?token=invitation",
+    ],
+    ["personal", "Organization workspace", "/account#plan", "/account#plan"],
+  ] as const)(
+    "uses the selected account type after %s signup switches to %s, preserving an explicit %s destination",
+    async (initialType, choice, explicitReturnTo, expectedReturnTo) => {
+      const query = new URLSearchParams({ mode: "signup", accountType: initialType });
+      if (explicitReturnTo) query.set("returnTo", explicitReturnTo);
+      let page = await hydratedPage(`?${query}`);
+      click(button(page.node, choice));
+      page = renderPage();
+      enterEmail(page.node);
+      page = renderPage();
+      await submit(page.node);
+      page = renderPage();
+      expect(fixtures.api).toHaveBeenLastCalledWith("/v1/auth/email-verification", {
+        method: "POST",
+        body: JSON.stringify({
+          email: "creator@example.com",
+          segment: "workplace",
+          acceptPolicies: true,
+          ...(expectedReturnTo ? { returnTo: expectedReturnTo } : {}),
+        }),
+      });
+      // A user who verifies in another tab can continue in this tab too.
+      click(button(page.node, "Sign in"));
+      page = renderPage();
+      enterEmail(page.node);
+      page = renderPage();
+      await submit(page.node);
+      expectPinRequest({
+        email: "creator@example.com",
+        acceptPolicies: true,
+        ...(expectedReturnTo ? { returnTo: expectedReturnTo } : {}),
+      });
+    },
+  );
+
+  it("gives verified intent precedence over a stale signup URL and only requests a PIN explicitly", async () => {
+    const query =
+      "?verified=1&mode=signup&accountType=organization&returnTo=%2Faccount%2Fsetup%3Ftype%3Dorganization";
+    let page = await hydratedPage(query);
+    expectNoSignup(page.markup);
+    expect(page.markup).toContain("Email verified. Sign in to request a PIN.");
+    expect(page.markup).not.toContain("I mainly facilitate");
+    expect(page.markup).toContain("Send sign-in PIN");
+    expect(pinRequests()).toHaveLength(0);
+    remount();
+    page = await hydratedPage(window.location.search);
+    expectNoSignup(page.markup);
+    expect(pinRequests()).toHaveLength(0);
+    enterEmail(page.node);
+    page = renderPage();
+    await submit(page.node);
+    page = renderPage();
+    expectNoSignup(page.markup);
+    expectPinRequest({
+      email: "creator@example.com",
+      acceptPolicies: true,
+      returnTo: "/account/setup?type=organization",
+    });
+    expect(
+      fixtures.api.mock.calls.filter(([path]) => path === "/v1/auth/email-verification"),
+    ).toHaveLength(0);
+    expect(window.location.search).not.toContain("mode=signup");
+  });
+
+  it("resumes an accepted PIN instead of resetting onboarding when signup mode is added to the URL", async () => {
+    await requestPin("?returnTo=%2Faccount%2Fsetup%3Ftype%3Dorganization");
+    const challengeId = fixtures.issued.at(-1)!;
+    remount();
+    const page = await hydratedPage(
+      "?mode=signup&accountType=organization&returnTo=%2Faccount%2Fsetup%3Ftype%3Dorganization",
+    );
+    expectNoSignup(page.markup);
+    expect(page.markup).toContain('id="signin-pin"');
+    expect(pinRequests()).toHaveLength(1);
+    expect(JSON.parse(fixtures.storage.get(PIN_RESUME_STORAGE_KEY)!).challenge.challengeId).toBe(
+      challengeId,
+    );
+    expect(window.location.search).not.toContain("mode=signup");
+  });
+
+  it("does not invent an organization redirect when stale signup options are added to a personal PIN flow", async () => {
+    await requestPin();
+    remount();
+    const page = await hydratedPage("?mode=signup&accountType=organization");
+    expectNoSignup(page.markup);
+    expect(page.markup).toContain('id="signin-pin"');
+    expect(pinRequests()).toEqual([{ email: "creator@example.com", acceptPolicies: true }]);
+    expect(window.location.search).not.toContain("returnTo");
+  });
+
+  it("requires an explicit new identity reset after verification and keeps its safe destination", async () => {
+    const workspaceId = "00000000-0000-4000-8000-000000000002";
+    await hydratedPage(`?verified=1&mode=signup&workspaceId=${workspaceId}&returnTo=%2Faccount`);
+    remount();
+    let page = await hydratedPage(`?mode=signup&workspaceId=${workspaceId}&returnTo=%2Faccount`);
+    expectNoSignup(page.markup);
+    enterEmail(page.node);
+    page = renderPage();
+    await click(button(page.node, "Use another email"));
+    page = renderPage();
+    expect(page.markup).toContain("Create account");
+    expect(page.markup).toContain("Send sign-in PIN");
+    expect(page.markup).not.toContain("Email verified");
+    expect(find(page.node, (element) => element.props.id === "email").props.value).toBe("");
+    expect(find(page.node, (element) => element.props.type === "checkbox").props.checked).toBe(
+      false,
+    );
+    expect(fixtures.storage.has(SIGNIN_INTENT_STORAGE_KEY)).toBe(false);
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
+    expect(new URLSearchParams(window.location.search).get("returnTo")).toBe("/account");
+    expect(new URLSearchParams(window.location.search).get("workspaceId")).toBe(workspaceId);
+    expect(window.location.search).not.toContain("verified=");
+    remount();
+    page = await hydratedPage(window.location.search);
+    expect(page.markup).toContain("Create account");
+    expect(pinRequests()).toHaveLength(0);
+  });
+
+  it("ignores stale mode and email-submit handlers after PIN entry has begun", async () => {
+    let page = await hydratedPage("?returnTo=%2Faccount");
+    enterEmail(page.node);
+    page = renderPage();
+    const oldCreate = button(page.node, "Create account");
+    const oldForm = page.node;
+    await submit(page.node);
+    await click(oldCreate);
+    await submit(oldForm);
+    page = renderPage();
+    expectNoSignup(page.markup);
+    expect(page.markup).toContain('id="signin-pin"');
+    expect(pinRequests()).toHaveLength(1);
+    expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(true);
   });
 
   it("requests a generic PIN challenge and keeps leading zeros until explicit verification succeeds", async () => {
@@ -603,25 +753,30 @@ describe("public product sign-in", () => {
     );
   });
 
-  it("keeps initial throttling on the PIN screen with a real countdown and no invented handle", async () => {
+  it("keeps initial throttling in recovery with a real countdown across reload and no invented handle", async () => {
     let page = await hydratedPage();
     enterEmail(page.node);
     page = renderPage();
     fixtures.api.mockRejectedValueOnce(new ApiClientError("Wait", "RATE_LIMITED", 429, 90));
     await submit(page.node);
     page = renderPage();
-    expect(page.markup).toContain('id="signin-pin"');
+    expect(page.markup).not.toContain('id="signin-pin"');
+    expect(page.markup).not.toContain("Create account");
+    expect(page.markup).not.toContain("Need an account?");
+    expect(page.markup).toContain("Request a sign-in PIN");
     expect(page.markup).toContain("Wait 90s before requesting a PIN");
     expect(button(page.node, "Resend in 90s").props.disabled).toBe(true);
     expect(fixtures.storage.has(PIN_RESUME_STORAGE_KEY)).toBe(false);
-    enterPin(page.node, "012345");
-    page = renderPage();
-    expect(
-      find(page.node, (element) => element.type === "button" && element.props.type === "submit")
-        .props.disabled,
-    ).toBe(true);
+    vi.advanceTimersByTime(30_000);
+    remount();
+    page = await hydratedPage(window.location.search);
+    expect(button(page.node, "Resend in 60s").props.disabled).toBe(true);
+    expect(page.markup).not.toContain('id="signin-pin"');
+    expect(pinRequests()).toHaveLength(1);
+    await click(button(page.node, "Resend in 60s"));
+    expect(pinRequests()).toHaveLength(1);
     expect(fixtures.replace).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(90_000);
+    vi.advanceTimersByTime(60_000);
     page = renderPage();
     await click(button(page.node, "Send a new PIN"));
     expect(pinRequests()).toHaveLength(2);

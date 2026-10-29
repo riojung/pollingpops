@@ -6,6 +6,7 @@ import {
 } from "@openround/contracts";
 
 export const PIN_RESUME_STORAGE_KEY = "pollingpops:signin-pin:v1";
+export const SIGNIN_INTENT_STORAGE_KEY = "pollingpops:signin-intent:v1";
 const pinLifetime = 10 * 60_000;
 const maximumRetryDelay = 15 * 60_000;
 
@@ -28,6 +29,84 @@ export interface PinEntry {
   challenge: PinChallenge | null;
   delivery: PinDelivery;
   resendAt: number;
+}
+
+export type SignInIntent =
+  { step: "verified"; context: PinContext } | ({ step: "pin" } & Omit<PinEntry, "challenge">);
+
+// This is presentation intent only. It cannot authorize verification or invent
+// an accepted challenge when a delivery response was lost or rejected.
+export function saveSignInIntent(intent: SignInIntent, now = Date.now()) {
+  if (typeof window === "undefined") return;
+  const stored = {
+    version: 1,
+    step: intent.step,
+    context: {
+      apiUrl: intent.context.apiUrl,
+      ...(intent.context.returnTo ? { returnTo: intent.context.returnTo } : {}),
+      ...(intent.context.workspaceId ? { workspaceId: intent.context.workspaceId } : {}),
+    },
+    expiresAt: now + maximumRetryDelay,
+    ...(intent.step === "pin"
+      ? { email: intent.email, delivery: intent.delivery, resendAt: intent.resendAt }
+      : {}),
+  };
+  try {
+    window.sessionStorage.setItem(SIGNIN_INTENT_STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    /* Keep the current page usable without storage. */
+  }
+}
+
+export function clearSignInIntent() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(SIGNIN_INTENT_STORAGE_KEY);
+  } catch {
+    /* Storage may be unavailable. */
+  }
+}
+
+export function readSignInIntent(context: PinContext, now = Date.now()): SignInIntent | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SIGNIN_INTENT_STORAGE_KEY);
+    const value: unknown = raw && raw.length <= 8192 ? JSON.parse(raw) : null;
+    if (
+      !record(value) ||
+      value.version !== 1 ||
+      !sameContext(value.context, context) ||
+      typeof value.expiresAt !== "number" ||
+      !Number.isFinite(value.expiresAt) ||
+      value.expiresAt <= now ||
+      value.expiresAt > now + maximumRetryDelay
+    )
+      throw new Error("Invalid sign-in intent");
+    if (value.step === "verified") return { step: "verified", context };
+    const email = EmailPinRequestSchema.shape.email.safeParse(value.email);
+    if (
+      value.step !== "pin" ||
+      !email.success ||
+      typeof value.resendAt !== "number" ||
+      !Number.isFinite(value.resendAt) ||
+      value.resendAt < 0 ||
+      value.resendAt > now + maximumRetryDelay ||
+      !["requesting", "requested", "uncertain", "throttled", "failed"].includes(
+        String(value.delivery),
+      )
+    )
+      throw new Error("Invalid PIN recovery intent");
+    return {
+      step: "pin",
+      email: email.data,
+      context,
+      delivery: value.delivery === "requesting" ? "uncertain" : (value.delivery as PinDelivery),
+      resendAt: value.resendAt,
+    };
+  } catch {
+    clearSignInIntent();
+    return null;
+  }
 }
 
 function record(value: unknown): value is Record<string, unknown> {

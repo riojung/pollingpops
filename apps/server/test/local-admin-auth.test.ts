@@ -12,7 +12,7 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema, isLocalProductAdminDevelopment } from "../src/config.js";
 import { ConsoleMailer } from "../src/mailer.js";
-import { verifyEmailAndSignIn } from "./support/email-auth.js";
+import { verifyEmailAndSignIn, signInFromVerificationResponse } from "./support/email-auth.js";
 
 const email = "admin@pollingpops.local";
 const local = {
@@ -91,13 +91,17 @@ async function verify(
   requestHeaders = headers,
 ) {
   const magic = await requestLink(target, address, requestHeaders);
-  expect(magic.statusCode).toBe(202);
-  const url = new URL(magic.json().debugUrl);
-  return verifyEmailAndSignIn(target, `${url.pathname}${url.search}`, address, {
-    ...requestHeaders,
-    "x-request-id": "verified-local-login",
-    ...(priorCookies ? { cookie: priorCookies } : {}),
-  });
+  return signInFromVerificationResponse(
+    target,
+    magic,
+    address,
+    {
+      ...requestHeaders,
+      "x-request-id": "verified-local-login",
+      ...(priorCookies ? { cookie: priorCookies } : {}),
+    },
+    "/account?via=signin#profile",
+  );
 }
 
 async function legacyOperatorSession(

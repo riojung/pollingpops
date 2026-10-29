@@ -579,7 +579,10 @@ export class MemoryRepository implements Repository {
   }
 
   async createMagicToken(input: MagicTokenRecord) {
-    this.magicTokens.set(input.tokenHash, structuredClone(input));
+    this.magicTokens.set(
+      input.tokenHash,
+      structuredClone({ ...input, email: input.email.trim().toLowerCase() }),
+    );
   }
 
   async consumeMagicToken(tokenHash: string, now: Date) {
@@ -589,9 +592,12 @@ export class MemoryRepository implements Repository {
     const token = this.magicTokens.get(tokenHash);
     if (!token || token.consumedAt || token.expiresAt <= now) return null;
     token.consumedAt = now;
+    const email = token.email.trim().toLowerCase();
     let user = [...this.users.values()].find(
-      (candidate) => candidate.email === token.email && !candidate.deletedAt,
+      (candidate) => candidate.email.toLowerCase() === email && !candidate.deletedAt,
     );
+    if (user?.emailVerifiedAt)
+      return { ...this.verifiedEmailIdentityFor(user)!, newlyVerified: false };
     if (!user) {
       const userId = crypto.randomUUID();
       const usesInitialWorkspace = Boolean(
@@ -604,7 +610,7 @@ export class MemoryRepository implements Repository {
       user = {
         userId,
         workspaceId,
-        email: token.email,
+        email,
         locale: "en-CA",
         localePreferenceSet: false,
         segment: token.segment,
@@ -617,7 +623,7 @@ export class MemoryRepository implements Repository {
       this.plans.set(user.workspaceId, plan);
       this.workspaces.set(user.workspaceId, {
         id: user.workspaceId,
-        name: `${token.email.split("@")[0]}'s workspace`,
+        name: `${email.split("@")[0]}'s workspace`,
         segment: token.segment,
         homeRegion: "ca-central-1",
         embedAllowedOrigins: [],
@@ -657,6 +663,7 @@ export class MemoryRepository implements Repository {
         localePreferenceSet: user.localePreferenceSet ?? false,
       },
       creator: this.contextFor(user),
+      newlyVerified: true,
     };
   }
 

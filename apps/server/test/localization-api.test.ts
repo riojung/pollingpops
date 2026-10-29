@@ -1,4 +1,4 @@
-import { verifyEmailAndSignIn } from "./support/email-auth.js";
+import { signInFromVerificationResponse } from "./support/email-auth.js";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRepository, type CreatorContext } from "@openround/db";
@@ -14,8 +14,7 @@ async function verifySignIn(target: FastifyInstance, email: string) {
     url: "/v1/auth/magic-link",
     payload: { email, segment: "workplace", acceptPolicies: true },
   });
-  const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  return verifyEmailAndSignIn(target, `/v1/auth/verify?token=${token}`, email);
+  return signInFromVerificationResponse(target, magic, email);
 }
 
 async function signIn(target: FastifyInstance, email: string) {
@@ -113,7 +112,7 @@ describe("account locale preference API", () => {
     const localeBridge = new URL(returningVerification.json().redirectTo);
     expect(localeBridge.pathname).toBe("/auth/locale");
     expect(localeBridge.searchParams.get("locale")).toBe("ja-JP");
-    expect(localeBridge.searchParams.get("returnTo")).toBe("/home?welcome=1");
+    expect(localeBridge.searchParams.get("returnTo")).toBe("/home");
 
     const otherUser = await app.inject({
       method: "GET",

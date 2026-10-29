@@ -100,6 +100,14 @@ Only a separate, single-use six-digit PIN for a verified active identity creates
 session. Previously issued unused magic links and the legacy `POST /v1/auth/magic-link` alias now
 perform verification only. They must never regain session-issuing behavior.
 
+Verified identities cannot restart account creation through another signup request: the request
+keeps its generic accepted response but sends no fresh verification email or PIN. Consuming a
+different, still-unused verification link is idempotent for an already verified identity and
+does not repeat welcome onboarding or consent recording. Reused or expired credentials remain
+invalid, and sign-in still requires an independently requested PIN. Exercise verified and PIN
+screens after refresh, including cooldown/interrupted-delivery recovery, and verify that signup
+controls remain hidden until the user explicitly chooses another email.
+
 Before applying migration 075 to a pre-PIN deployment, fence public email-authentication traffic
 at ingress with a reviewed maintenance rule, or take every pre-PIN API instance out of service.
 Include `/v1/auth/magic-link` and `/v1/auth/verify`; verify that neither can reach an old handler.

@@ -6,6 +6,7 @@ type Read = {
   boardId: string;
   mediaId: string;
   guest?: { sourceBoardId: string; token: string };
+  versionId?: string;
   controller: AbortController;
   consumers: number;
   attempts: number;
@@ -25,7 +26,13 @@ function pump() {
     if (read.controller.signal.aborted || !read.consumers) continue;
     running++;
     read.attempts++;
-    void fetchCanvasImage(read.boardId, read.mediaId, read.controller.signal, read.guest)
+    void fetchCanvasImage(
+      read.boardId,
+      read.mediaId,
+      read.controller.signal,
+      read.guest,
+      read.versionId,
+    )
       .then((blob) => {
         if (!read.controller.signal.aborted) read.resolve(blob);
       })
@@ -64,12 +71,14 @@ export function readCanvasImage(
   boardId: string,
   mediaId: string,
   guest?: { sourceBoardId: string; token: string },
+  versionId?: string,
 ) {
   const key = JSON.stringify([
     boardId,
     mediaId,
     guest?.sourceBoardId ?? null,
     guest?.token ?? null,
+    versionId ?? null,
   ]);
   let read = reads.get(key);
   if (!read) {
@@ -84,6 +93,7 @@ export function readCanvasImage(
       boardId,
       mediaId,
       guest,
+      versionId,
       controller: new AbortController(),
       consumers: 0,
       attempts: 0,

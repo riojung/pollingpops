@@ -13,6 +13,7 @@ export function CanvasImage({
   height,
   sourceBoardId,
   guestToken,
+  versionId,
 }: {
   canvasId: string;
   mediaId: string;
@@ -21,6 +22,7 @@ export function CanvasImage({
   height: number;
   sourceBoardId?: string;
   guestToken?: string;
+  versionId?: string;
 }) {
   const { t } = useLocale();
   const element = useRef<SVGGElement>(null);
@@ -31,7 +33,7 @@ export function CanvasImage({
     url: null,
     failed: false,
   });
-  const key = JSON.stringify([canvasId, mediaId, sourceBoardId, guestToken, epoch]);
+  const key = JSON.stringify([canvasId, mediaId, sourceBoardId, guestToken, versionId, epoch]);
   useEffect(() => {
     if (!element.current || typeof IntersectionObserver === "undefined") {
       setVisible(true);
@@ -59,6 +61,7 @@ export function CanvasImage({
       canvasId,
       mediaId,
       guestToken && sourceBoardId ? { sourceBoardId, token: guestToken } : undefined,
+      versionId,
     );
     let active = true,
       url: string | null = null;
@@ -76,7 +79,7 @@ export function CanvasImage({
       read.release();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [visible, key, canvasId, mediaId, sourceBoardId, guestToken]);
+  }, [visible, key, canvasId, mediaId, sourceBoardId, guestToken, versionId]);
   const current = state.key === key ? state : null;
   return (
     <g ref={element} role="img" aria-label={altText}>

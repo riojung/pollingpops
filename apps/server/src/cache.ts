@@ -1,5 +1,22 @@
 import Redis from "ioredis";
 import type { GameState } from "@openround/game-engine";
+import {
+  CanvasPresenterRecordSchema,
+  CANVAS_PRESENTER_TTL_MS,
+  type CanvasPresenterRecord,
+} from "./canvas-presenter-state.js";
+
+function sameCanvasPresenter(
+  current: CanvasPresenterRecord | null,
+  expected: CanvasPresenterRecord | null,
+) {
+  return current === null || expected === null
+    ? current === expected
+    : current.sessionId === expected.sessionId &&
+        current.revision === expected.revision &&
+        current.userId === expected.userId &&
+        current.operationId === expected.operationId;
+}
 
 export interface CachedSessionEvent {
   seq: number;
@@ -54,11 +71,20 @@ export interface SessionCache {
   listCanvasPresence?(boardId: string): Promise<CanvasPresenceRecord[]>;
   removeCanvasPresence?(boardId: string, userId: string): Promise<void>;
   clearCanvasPresence?(boardId: string): Promise<void>;
+  getCanvasPresenter?(boardId: string): Promise<CanvasPresenterRecord | null>;
+  setCanvasPresenter?(
+    boardId: string,
+    record: CanvasPresenterRecord,
+    expected: CanvasPresenterRecord | null,
+  ): Promise<boolean>;
+  clearCanvasPresenter?(boardId: string): Promise<void>;
   delete(sessionId: string): Promise<void>;
   close(): Promise<void>;
 }
 
 export class MemorySessionCache implements SessionCache {
+  private readonly canvasPresenters = new Map<string, CanvasPresenterRecord>();
+  private presenterTimer: ReturnType<typeof setInterval> | undefined;
   private readonly canvasPresence = new Map<string, Map<string, CanvasPresenceRecord>>();
   private presenceTimer: ReturnType<typeof setInterval> | undefined;
   private readonly states = new Map<string, GameState>();
@@ -122,6 +148,45 @@ export class MemorySessionCache implements SessionCache {
 
   async clearCanvasPresence(boardId: string) {
     this.canvasPresence.delete(boardId);
+  }
+
+  async getCanvasPresenter(boardId: string) {
+    const record = this.canvasPresenters.get(boardId);
+    if (!record || record.expiresAt <= Date.now()) {
+      this.canvasPresenters.delete(boardId);
+      return null;
+    }
+    return structuredClone(record);
+  }
+
+  async setCanvasPresenter(
+    boardId: string,
+    value: CanvasPresenterRecord,
+    expected: CanvasPresenterRecord | null,
+  ) {
+    const record = CanvasPresenterRecordSchema.parse(value);
+    record.expiresAt = Math.min(record.expiresAt, Date.now() + CANVAS_PRESENTER_TTL_MS);
+    const stored = this.canvasPresenters.get(boardId);
+    const current = stored && stored.expiresAt > Date.now() ? stored : null;
+    if (!sameCanvasPresenter(current, expected)) return false;
+    if (!this.presenterTimer) {
+      this.presenterTimer = setInterval(() => {
+        for (const [id, entry] of this.canvasPresenters)
+          if (entry.expiresAt <= Date.now()) this.canvasPresenters.delete(id);
+      }, 1_000);
+      this.presenterTimer.unref();
+    }
+    if (!this.canvasPresenters.has(boardId) && this.canvasPresenters.size >= 1_000) {
+      for (const [id, entry] of this.canvasPresenters)
+        if (entry.expiresAt <= Date.now()) this.canvasPresenters.delete(id);
+      if (this.canvasPresenters.size >= 1_000) throw new Error("Presentation capacity reached");
+    }
+    this.canvasPresenters.set(boardId, structuredClone(record));
+    return true;
+  }
+
+  async clearCanvasPresenter(boardId: string) {
+    this.canvasPresenters.delete(boardId);
   }
 
   async set(state: GameState, _ttlSeconds: number) {
@@ -259,6 +324,8 @@ export class MemorySessionCache implements SessionCache {
 
   async close() {
     if (this.presenceTimer) clearInterval(this.presenceTimer);
+    if (this.presenterTimer) clearInterval(this.presenterTimer);
+    this.canvasPresenters.clear();
     this.canvasPresence.clear();
     this.codeReservations.clear();
     this.leases.clear();
@@ -269,6 +336,55 @@ export class MemorySessionCache implements SessionCache {
 
 export class RedisSessionCache implements SessionCache {
   private readonly redis: Redis;
+
+  async getCanvasPresenter(boardId: string) {
+    const key = `openround:canvas-presenter:${boardId}`;
+    const serialized = await this.redis.get(key);
+    if (!serialized) return null;
+    try {
+      const parsed = CanvasPresenterRecordSchema.safeParse(JSON.parse(serialized));
+      if (parsed.success && parsed.data.expiresAt > Date.now()) return parsed.data;
+    } catch {
+      // Corrupt ephemeral data never becomes an authorization or presentation decision.
+    }
+    return null;
+  }
+
+  async setCanvasPresenter(
+    boardId: string,
+    record: CanvasPresenterRecord,
+    expected: CanvasPresenterRecord | null,
+  ) {
+    CanvasPresenterRecordSchema.parse(record);
+    const accepted = await this.redis.eval(
+      `local raw = redis.call('GET', KEYS[1])
+       local current = nil
+       if raw then
+         local ok, decoded = pcall(cjson.decode, raw)
+         if ok and type(decoded) == 'table' and (tonumber(decoded.expiresAt) or 0) > tonumber(ARGV[4]) then current = decoded end
+       end
+       if ARGV[1] == '' then
+         if current then return 0 end
+       else
+         local expected = cjson.decode(ARGV[1])
+         if not current or current.sessionId ~= expected.sessionId or current.revision ~= expected.revision
+           or current.userId ~= expected.userId or current.operationId ~= expected.operationId then return 0 end
+       end
+       redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+       return 1`,
+      1,
+      `openround:canvas-presenter:${boardId}`,
+      expected ? JSON.stringify(expected) : "",
+      JSON.stringify(record),
+      Math.max(1, Math.min(CANVAS_PRESENTER_TTL_MS, record.expiresAt - Date.now())),
+      Date.now(),
+    );
+    return accepted === 1;
+  }
+
+  async clearCanvasPresenter(boardId: string) {
+    await this.redis.del(`openround:canvas-presenter:${boardId}`);
+  }
 
   constructor(url: string) {
     this.redis = new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 2 });

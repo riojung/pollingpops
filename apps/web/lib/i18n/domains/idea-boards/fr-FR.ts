@@ -1,4 +1,7 @@
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
+import { canvasExportMessages } from "../../canvas-export-messages";
+import { canvasPresenterMessages } from "../../canvas-presenter-messages";
 import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
@@ -7,6 +10,9 @@ import type { IdeaBoardMessages } from "./en-CA";
 const messages: IdeaBoardMessages = {
   ...canvasMessages("fr-FR"),
   ...canvasAssetsMessages("fr-FR"),
+  ...canvasFacilitationMessages("fr-FR"),
+  ...canvasExportMessages("fr-FR"),
+  ...canvasPresenterMessages("fr-FR"),
   ...canvasProductivityMessages("fr-FR"),
   ...canvasWorkshopMessages("fr-FR"),
   "boards.more": "Charger plus de tableaux",

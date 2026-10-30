@@ -1,0 +1,53 @@
+.dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+.dialog::backdrop {
+  background: rgb(15 23 42 / 48%);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.header h2 {
+  margin: 0;
+}
+.boardTitle {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.options {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  padding: 0;
+  border: 0;
+}
+.options label {
+  display: grid;
+  gap: 0.4rem;
+}
+.options select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  color: inherit;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 0.5rem;
+}
+.footer {
+  display: flex;
+  justify-content: flex-end;
+}
+.status {
+  margin-bottom: 0;
+}

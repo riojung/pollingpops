@@ -4,7 +4,7 @@ Updated: October 30, 2026
 
 Source baseline: `e1d86c48639cb5fba904351efe657abaec5f7856`
 
-Status: Orders 0–5 implemented as an opt-in pilot; orders 6–7 remain planned
+Status: Orders 0–6 implemented as an opt-in pilot; Order 6 locally verified; Order 7 planned
 
 Idea Boards should become a shared spatial workspace for team members and a guided workshop
 experience for accountless guests. The first customer release should support both, as selected
@@ -26,7 +26,9 @@ workshop workflow. The [architecture decision](decisions/002-idea-board-canvas.m
 original SVG/DOM renderer and its limits. This document's baseline analysis below describes
 the pre-implementation code. Order 5 now adds frames, geometric groups, multiselect and atomic
 layout, locks, freehand drawing, private scanned image/link assets and seven original starter
-layouts. The later facilitation/history and capacity scope in orders 6–7 remains deferred.
+layouts. Order 6 adds anchored team comments, a server-clock timer, optional presenter following,
+permission-safe region exports and manual bounded version history. Order 7's capacity and further
+diagram/integration scope remains deferred.
 
 The productivity increment introduces explicit Canvas V2 contracts and migration 080. Retained
 V1 data and inverse history are upcast deterministically without changing accepted retry hashes.
@@ -34,9 +36,12 @@ Image ownership is board-scoped, including current/inverse-history references an
 checks. Guided starter setup checkpoints both creation keys and binds resumed requests to the
 expected account/workspace. Existing object, batch and participant limits are unchanged.
 
-Order 5 has focused contract, memory/restricted-PostgreSQL, HTTP and frontend verification.
-Final full repository and browser results are tracked in the
-[implementation status](implementation-status.md#canvas-productivity-order-5-october-30-2026). Browser
+Order 6 uses an independent facilitation V1 protocol and migration 081, preserving strict Canvas
+V1/V2 fingerprints. Saved versions extend media references and require matching facilitation-aware
+server and jobs writers; keeping the migration alone cannot make an older writer safe.
+Its contract, restricted-PostgreSQL, HTTP, frontend, export and real-Valkey verification passes,
+along with the full repository check and all 17 configured canvas browser cases, tracked in the
+[implementation status](implementation-status.md#canvas-facilitation-order-6-october-30-2026). Browser
 image tests substitute storage and scanning; they do not verify a deployed media pipeline.
 Physical touch hardware and production load have not been measured for this increment.
 
@@ -58,7 +63,7 @@ offline editing or character-level text coauthoring are introduced.
 ## Baseline capabilities and gaps
 
 Before the canvas pilot, the implementation was a moderated idea collection and prioritization
-system. This table records that historical baseline, not the current Order 5 feature inventory.
+system. This table records that historical baseline, not the current Order 6 feature inventory.
 
 | Area          | Current implementation                                                                                                      | Enhancement needed                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -181,6 +186,32 @@ For phones and tablets, use compact top controls and bottom sheets for tools, ou
 inspection. Pan should be the safe default; drawing requires an explicit tool selection. Provide
 pinch zoom, reliable two-finger navigation, 44px touch targets, and a list alternative at 320px.
 Test real pen/touch input and CJK text composition, not just mouse emulation and static markup.
+
+The **Facilitation** drawer now separates Comments, Timer and Saved versions. Comments attach to a
+selected current object and retain failed local proposals in memory for exact retry or explicit
+conflict review. Viewers can read but cannot comment; guests receive no threads or history.
+Owners/facilitators resolve and moderate, while eligible editors edit only their own messages.
+The timer follows server time, supports start/pause/resume/reset from 5 seconds to 2 hours, and
+never changes a workshop phase automatically.
+
+Presentation following is optional. An owner/facilitator may share a team viewport or deliberately
+present a selected published frame to guests. Guests receive no team viewport or presenter
+identity. Pan, zoom, Escape, explicit stop, access loss or the 15-second lease expiry ends
+following. Presenter leases are transient Memory/Redis compare-and-set records; their delivery
+requires the existing live-update policy.
+
+Exports offer whole-board, current-view and selected-frame-area SVG or local PNG downloads.
+They use a fresh authorized projection and a closed SVG subset with embedded authorized bytes,
+without external URL fetching, executable content, credentials, pending ideas or system identity
+metadata. They are bounded to 25 image placements, 10 MiB per image, 20 MiB total and 4,096 pixels
+per output side, with 15-second server-render and local-conversion budgets.
+
+Saved versions are manual checkpoints, capped at ten versions, 2 MiB per scene and 4 MiB total.
+Preview uses current authorization, guest moderation and historical-image access. **Restore
+layout** can update only existing current objects in one version-fenced batch of at most 50;
+it preserves content, visibility and media identity and cannot revive deleted guest cards.
+Locked/protected objects, missing parents, cycles and inconsistent frame/group translations
+are checked before applying a plan. An incompatible restore is rejected without partial writes.
 
 ### Guided guest journey
 
@@ -378,8 +409,9 @@ requests, not unrestricted offline coauthoring or automatic storage of guest tex
 ### Workshop integrity and media
 
 At voting start, freeze the workshop scene and its approved idea/group set under the same
-source-board lifecycle fence. The retained scene stays fixed throughout voting; a browsable
-version history remains deferred. Moving a card,
+source-board lifecycle fence. The retained scene stays fixed throughout voting. Order 6 adds
+read-only manual checkpoint browsing with current moderation, not a way to rewrite frozen ballots.
+Moving a card,
 changing a connector or frame, or rewriting surrounding instructions can change ballot meaning
 even if the idea IDs stay fixed. Legacy phase commands must also enforce this freeze when a
 canvas is attached; it cannot depend only on a new UI button.
@@ -437,8 +469,9 @@ rules are agreed, with design and QA involved from the first slice.
 | 6     | Anchored comments, timer, optional presenter follow, permission-safe region exports and bounded version history                                                                                       | Async discussion and facilitation work without exposing pending content or restoring removed data                                  | L    |
 | 7     | Higher object/editor caps, richer manual diagrams and optional snapshot links to Rounds/Presentations                                                                                                 | Target-load evidence and explicit integration/privacy contracts before raising limits or linking artifacts                         | L    |
 
-Orders 1–4 formed the initial customer pilot; Order 5 is its implemented productivity increment.
-Orders 6–7 remain deferred. An internal single-editor prototype at order 3 is
+Orders 1–4 formed the initial customer pilot; Order 5 is its productivity increment and Order 6
+its locally verified facilitation increment. Order 7 remains deferred.
+An internal single-editor prototype at order 3 is
 useful engineering progress but does not satisfy the collaborative product promise. Accessibility,
 localization, permission checks and failure states belong in every order, not a final cleanup pass.
 
@@ -469,6 +502,18 @@ external integrations, or full presentation/diagramming parity.
 6. Extend deletion, retention, account export, organization stewardship and media cleanup to all
    new rows and derived data before customer enablement.
 
+The new facilitation/history/export endpoints depend on the Canvas boards policy, and presenter
+delivery depends on Canvas board live updates. These are existing policies, not an independent
+checkpoint-admission gate; pausing them may pause those extra tools without stopping old writers.
+
+For Order 6, use coordinated maintenance: drain and stop every old API writer and cleanup jobs
+process, apply `081_canvas_facilitation.sql`, and restart only matching facilitation-aware
+server/jobs/web images before reopening traffic and admitting checkpoints. There is no independent
+checkpoint-admission flag. A Canvas boards creation-policy pause does not stop existing 080 scene
+commands or cleanup jobs. Once checkpoints exist, never roll back to 080 writers: they can remove
+checkpoint-only media references despite 081 remaining installed. Keep the migrations and use a
+compatible image set or reviewed forward repair.
+
 ## Acceptance and performance gates
 
 ### Required customer scenarios
@@ -495,6 +540,16 @@ external integrations, or full presentation/diagramming parity.
   accident. Test 320px, 200% browser zoom, light/dark, reduced motion and CJK composition.
 - **Lifecycle:** Deleting a collaborator preserves organization-owned board content; deleting or
   expiring the board removes objects, grants, receipts, snapshots, presence, outbox and assets.
+- **Discussion and timer:** A viewer reads but cannot post; an editor edits only their own comment.
+  A conflict retains the proposal without silently changing its fence. Guests see only the timer;
+  pause/resume and zero remaining time do not advance the workshop phase.
+- **Optional presentation:** Two simultaneous presenters produce one lease winner. A stale session
+  cannot replace a new lease. Following starts only after opt-in and stops on manual navigation
+  or expiry. A guest receives only the published frame and cannot discover team coordinates.
+- **Export and history:** A delayed image read loses access before delivery and produces no export.
+  Saved previews apply current moderation and preserve checkpoint-only image references. Layout
+  restore respects current versions, locks, protected cards, coherent frame/groups and 50-object
+  bounds, without restoring old text, visibility or deleted objects.
 
 ### Proposed pilot budgets
 
@@ -526,8 +581,9 @@ before each release.
 ## First implementation milestone
 
 The original first milestone was orders 0–4: an engine ADR, original wireframes, capability and
-storage contracts, and a working shared team/guest pilot. Order 5 now extends that foundation;
-final validation and rollout remain separate from the implementation checkpoint above.
+storage contracts, and a working shared team/guest pilot. Orders 5 and 6 extend that foundation;
+Order 6 passes the full repository check and desktop/mobile browser acceptance; rollout and
+production performance acceptance remain separate from the implementation checkpoint above.
 
 The existing implementation and its verified boundaries remain documented in
 [IDEA 006 brainstorming and prioritization boards](idea-006-brainstorming-boards-plan.md).

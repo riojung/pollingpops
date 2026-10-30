@@ -1,0 +1,102 @@
+.panel {
+  color: var(--ui-text);
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+.panel h2,
+.panel h3,
+.panel p {
+  margin: 0;
+}
+.tabs,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tabs button,
+.actions button {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.tabs button[aria-pressed="true"] {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+.form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.form input,
+.form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  font: inherit;
+}
+.form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+.thread,
+.version,
+.notice {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.message {
+  display: grid;
+  gap: 7px;
+  white-space: pre-wrap;
+  border-top: 1px solid var(--ui-border);
+  padding-top: 10px;
+}
+.muted {
+  color: var(--ui-text-subtle);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.timer {
+  display: grid;
+  gap: 6px;
+}
+.timer output {
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+.preview {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.preview > div {
+  min-width: 0;
+}

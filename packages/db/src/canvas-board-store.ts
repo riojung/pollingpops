@@ -1,6 +1,9 @@
 import type { PoolClient } from "pg";
 import {
   CanvasObjectSchema,
+  CanvasCommentThreadSchema,
+  CanvasTimerSchema,
+  CanvasVersionMetadataSchema,
   type CanvasBoardEvent,
   type IdeaBoardStored,
 } from "@openround/contracts";
@@ -19,6 +22,11 @@ import type {
   CanvasMediaUpload,
 } from "./canvas-board-types.js";
 import { CanvasBoardError } from "./canvas-board-error.js";
+import {
+  canvasDefaultTimer,
+  canvasFacilitation,
+  sanitizeCanvasFacilitation,
+} from "./canvas-facilitation.js";
 
 export function canvasMediaIds(state: CanvasState) {
   return [
@@ -28,6 +36,7 @@ export function canvasMediaIds(state: CanvasState) {
         ...state.receipts
           .filter((receipt) => receipt.undoable)
           .flatMap((receipt) => [...receipt.before, ...receipt.after]),
+        ...(state.facilitation?.versions.flatMap((saved) => saved.objects) ?? []),
       ].flatMap((object) => (object.type === "image" ? [object.mediaId] : [])),
     ),
   ];
@@ -47,6 +56,19 @@ function normalizedCanvasState(state: CanvasState): CanvasState {
       before: receipt.before.map((object) => CanvasObjectSchema.parse(object)),
       after: receipt.after.map((object) => CanvasObjectSchema.parse(object)),
     })),
+    facilitation: {
+      threads: (state.facilitation?.threads ?? []).map((thread) =>
+        CanvasCommentThreadSchema.parse(thread),
+      ),
+      timer: CanvasTimerSchema.parse(canvasFacilitation(state).timer),
+      versions: (state.facilitation?.versions ?? []).map((saved) => ({
+        metadata: CanvasVersionMetadataSchema.parse(saved.metadata),
+        objects: saved.objects.map(({ idea: _idea, ...object }) => {
+          void _idea;
+          return CanvasObjectSchema.parse(object);
+        }),
+      })),
+    },
   };
 }
 import type {
@@ -94,6 +116,8 @@ export class MemoryCanvasBoards {
             ({ board }) =>
               board.workspaceId === workspaceId && Date.parse(board.expiresAt) > now.getTime(),
           ).length,
+        timer: async (id) =>
+          structuredClone(current(id)?.facilitation?.timer ?? canvasDefaultTimer()),
         grant: async (id, userId) =>
           structuredClone(current(id)?.grants.find((grant) => grant.userId === userId) ?? null),
         sourceMetadata: async (id, guestHash) => {
@@ -315,11 +339,31 @@ export class MemoryCanvasBoards {
           ({ board }) =>
             ownedWorkspaceIds.has(board.workspaceId) && Date.parse(board.expiresAt) > now,
         )
-        .map(({ board, objects }) => {
+        .map(({ board, objects, facilitation }) => {
           const { creationKey, creationHash, ...metadata } = board;
           void creationKey;
           void creationHash;
-          return { ...metadata, objects: objects.filter((object) => object.type !== "idea_ref") };
+          const ordinaryIds = new Set(
+            objects.filter((object) => object.type !== "idea_ref").map((object) => object.id),
+          );
+          return {
+            ...metadata,
+            objects: objects.filter((object) => object.type !== "idea_ref"),
+            ...(facilitation
+              ? {
+                  facilitation: {
+                    timer: structuredClone(facilitation.timer),
+                    threads: structuredClone(
+                      facilitation.threads.filter((thread) => ordinaryIds.has(thread.objectId)),
+                    ),
+                    versions: facilitation.versions.map((saved) => ({
+                      ...saved.metadata,
+                      objects: saved.objects.filter((object) => object.type !== "idea_ref"),
+                    })),
+                  },
+                }
+              : {}),
+          };
         }),
     };
   }
@@ -338,6 +382,15 @@ export class MemoryCanvasBoards {
         state.invitations = state.invitations.filter(
           (invite) => invite.email !== this.repository.users.get(userId)?.email,
         );
+        if (state.facilitation) {
+          for (const thread of state.facilitation.threads)
+            thread.messages = thread.messages.filter((message) => message.authorId !== userId);
+          state.facilitation.threads = state.facilitation.threads.filter(
+            (thread) => thread.messages.length,
+          );
+          for (const saved of state.facilitation.versions)
+            if (saved.metadata.createdBy === userId) saved.metadata.createdBy = null;
+        }
       }
     }
     for (let i = this.events.length - 1; i >= 0; i--)
@@ -382,6 +435,11 @@ export class MemoryCanvasBoards {
     }
     for (let index = this.events.length - 1; index >= 0; index--)
       if (ids.has(this.events[index]!.boardId)) this.events.splice(index, 1);
+  }
+  updateIdeaBoardMetadata(sourceBoardId: string) {
+    const source = memoryIdeaBoardCanvasSource(this.repository, sourceBoardId);
+    for (const state of this.rows.values())
+      if (state.board.sourceBoardId === sourceBoardId) sanitizeCanvasFacilitation(state, source);
   }
 }
 
@@ -452,6 +510,27 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
       }
       const platform = new PostgresPlatformStore(null, client);
       const tx: CanvasTransaction = {
+        timer: async (id, lock = false) => {
+          if (lock) {
+            const board = selectedBoards.get(id);
+            if (!board)
+              throw new CanvasBoardError("NOT_FOUND", "Canvas board is no longer available");
+            await client.query("SELECT id FROM workspaces WHERE id=$1 FOR SHARE", [
+              board.workspaceId,
+            ]);
+            const current = await client.query(
+              "SELECT id FROM canvas_boards WHERE id=$1 FOR SHARE",
+              [id],
+            );
+            if (!current.rows[0])
+              throw new CanvasBoardError("NOT_FOUND", "Canvas board is no longer available");
+          }
+          const result = await client.query(
+            "SELECT data FROM canvas_board_timers WHERE board_id=$1",
+            [id],
+          );
+          return result.rows[0]?.data ?? canvasDefaultTimer();
+        },
         metadata: async (id) => {
           const result = await client.query("SELECT * FROM canvas_boards WHERE id=$1", [id]);
           return result.rows[0] ? boardRow(result.rows[0]) : null;
@@ -490,9 +569,9 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               }
             : null;
         },
-        sourceMetadata: async (id, guestHash) => {
+        sourceMetadata: async (id, guestHash, lock = false) => {
           const result = await client.query(
-            "SELECT id,workspace_id,data->>'revision' AS revision,data->>'status' AS status,data->>'closesAt' AS closes_at,data->>'expiresAt' AS expires_at,EXISTS(SELECT 1 FROM jsonb_array_elements(data->'guests') guest WHERE guest->>'tokenHash'=$2) AS guest_present FROM idea_boards WHERE id=$1",
+            `SELECT id,workspace_id,data->>'revision' AS revision,data->>'status' AS status,data->>'closesAt' AS closes_at,data->>'expiresAt' AS expires_at,EXISTS(SELECT 1 FROM jsonb_array_elements(data->'guests') guest WHERE guest->>'tokenHash'=$2) AS guest_present FROM idea_boards WHERE id=$1${lock ? " FOR SHARE" : ""}`,
             [id, guestHash ?? null],
           );
           const row = result.rows[0];
@@ -560,7 +639,38 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               [id],
             )
           ).rows.map((entry) => entry.data);
-          const state = normalizedCanvasState({ board, objects, grants, invitations, receipts });
+          const threadRows = await client.query(
+            "SELECT data FROM canvas_board_comment_threads WHERE board_id=$1 ORDER BY created_at,id",
+            [id],
+          );
+          const messageRows = await client.query(
+            "SELECT thread_id,author_id,data FROM canvas_board_comment_messages WHERE board_id=$1 ORDER BY created_at,id",
+            [id],
+          );
+          const timer = await tx.timer(id);
+          const versions = (
+            await client.query(
+              "SELECT created_by,data,objects FROM canvas_board_versions WHERE board_id=$1 ORDER BY created_at DESC,id",
+              [id],
+            )
+          ).rows.map((entry) => ({
+            metadata: { ...entry.data, createdBy: entry.created_by },
+            objects: entry.objects,
+          }));
+          const threads = threadRows.rows.map((entry) => ({
+            ...entry.data,
+            messages: messageRows.rows
+              .filter((message) => message.thread_id === entry.data.id)
+              .map((message) => ({ ...message.data, authorId: message.author_id })),
+          }));
+          const state = normalizedCanvasState({
+            board,
+            objects,
+            grants,
+            invitations,
+            receipts,
+            facilitation: { threads, timer, versions },
+          });
           originals.set(id, structuredClone(state));
           return state;
         },
@@ -657,6 +767,78 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               await client.query(
                 "INSERT INTO canvas_board_invitations(id,board_id,workspace_id,user_id,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
                 [invitation.id, board.id, board.workspaceId, user.userId, invitation],
+              );
+            }
+          const facilitation = canvasFacilitation(state);
+          await client.query(
+            "DELETE FROM canvas_board_comment_threads WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
+            [board.id, facilitation.threads.map((thread) => thread.id)],
+          );
+          for (const thread of facilitation.threads) {
+            const old = previous?.facilitation?.threads.find((entry) => entry.id === thread.id);
+            if (JSON.stringify(old) === JSON.stringify(thread)) continue;
+            const { messages, ...data } = thread;
+            if (
+              JSON.stringify(old ? { ...old, messages: undefined } : undefined) !==
+              JSON.stringify({ ...thread, messages: undefined })
+            )
+              await client.query(
+                "INSERT INTO canvas_board_comment_threads(board_id,workspace_id,id,object_id,created_at,data) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(board_id,id) DO UPDATE SET data=EXCLUDED.data",
+                [board.id, board.workspaceId, thread.id, thread.objectId, thread.createdAt, data],
+              );
+            await client.query(
+              "DELETE FROM canvas_board_comment_messages WHERE board_id=$1 AND thread_id=$2 AND NOT(id=ANY($3::uuid[]))",
+              [board.id, thread.id, messages.map((message) => message.id)],
+            );
+            for (const message of messages)
+              if (
+                JSON.stringify(old?.messages.find((entry) => entry.id === message.id)) !==
+                JSON.stringify(message)
+              ) {
+                const { authorId, ...messageData } = message;
+                await client.query(
+                  "INSERT INTO canvas_board_comment_messages(board_id,workspace_id,id,thread_id,author_id,created_at,data) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(board_id,id) DO UPDATE SET data=EXCLUDED.data",
+                  [
+                    board.id,
+                    board.workspaceId,
+                    message.id,
+                    thread.id,
+                    authorId,
+                    message.createdAt,
+                    messageData,
+                  ],
+                );
+              }
+          }
+          if (JSON.stringify(previous?.facilitation?.timer) !== JSON.stringify(facilitation.timer))
+            await client.query(
+              "INSERT INTO canvas_board_timers(board_id,workspace_id,data) VALUES($1,$2,$3) ON CONFLICT(board_id) DO UPDATE SET data=EXCLUDED.data",
+              [board.id, board.workspaceId, facilitation.timer],
+            );
+          await client.query(
+            "DELETE FROM canvas_board_versions WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
+            [board.id, facilitation.versions.map((saved) => saved.metadata.id)],
+          );
+          for (const saved of facilitation.versions)
+            if (
+              JSON.stringify(
+                previous?.facilitation?.versions.find(
+                  (entry) => entry.metadata.id === saved.metadata.id,
+                ),
+              ) !== JSON.stringify(saved)
+            ) {
+              const { createdBy, ...data } = saved.metadata;
+              await client.query(
+                "INSERT INTO canvas_board_versions(board_id,workspace_id,id,created_by,created_at,data,objects) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(board_id,id) DO UPDATE SET data=EXCLUDED.data,objects=EXCLUDED.objects,created_by=EXCLUDED.created_by",
+                [
+                  board.id,
+                  board.workspaceId,
+                  saved.metadata.id,
+                  createdBy,
+                  saved.metadata.createdAt,
+                  data,
+                  JSON.stringify(saved.objects),
+                ],
               );
             }
           if (state.board.uploadCount || canvasMediaIds(state).length) await tx.syncMedia(state);

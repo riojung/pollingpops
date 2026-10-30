@@ -47,7 +47,7 @@ Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`078_customer_account_user_licenses.sql`. Apply the complete ordered migration set with the restricted
+`081_canvas_facilitation.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
 
@@ -552,4 +552,69 @@ Run the targeted contract, memory/restricted-PostgreSQL, HTTP and browser suites
 `pnpm check` before rollout. The canvas browser fixture substitutes in-memory object storage and
 scanning; verify the deployed private-storage/scanner pipeline separately. Physical touch hardware,
 production load and post-commit peer/render performance have not been measured for Order 5.
-Earlier pilot repository acknowledgement timings do not accept those gates. Orders 6–7 remain deferred.
+Earlier pilot repository acknowledgement timings do not accept those gates. Order 6 is described below;
+Order 7 remains deferred.
+
+### Canvas facilitation, exports and saved versions
+
+Use a coordinated maintenance cutover for additive `081_canvas_facilitation.sql`. There is no
+independent checkpoint-admission switch, and pausing the Canvas boards creation policy does not
+stop existing 080 scene writes or cleanup jobs. Drain and stop **all old API writer processes and
+cleanup jobs**, apply migration 081 with migration credentials, then deploy and restart only the
+matching facilitation-aware **server and jobs** images and web image. Reopen traffic and admit
+checkpoints only after verifying that every writer and cleanup process uses that image set.
+
+The migration adds board-scoped comment threads/messages, timers and manual saved versions with forced
+RLS, board/source/author lifecycle cleanup and retained-version media references. Facilitation
+uses an independent schema-version-1 command protocol and operation receipts; frozen Canvas V1
+and V2 input shapes and accepted retry hashes are unchanged. This is not a scene-format downgrade
+or a replacement for migration 080.
+
+Once saved versions are admitted, **do not roll back to an 080-era server or jobs writer**, even
+while migration 081 remains installed. An older writer rebuilds media references without
+checkpoint-only images and can release bytes still needed by a saved version. The migration
+alone cannot make that writer safe. Keep migrations 079–081 and use an 081-aware image set or a
+reviewed forward repair. Do not run an old writer beside checkpoint-aware processes after the
+maintenance cutover; retaining 081 or pausing new board creation does not make that writer safe.
+
+The existing **Canvas boards** policy gates the new facilitation, history and export endpoints.
+Presenter reads and writes require **Canvas board live updates**. No new public capacity is
+enabled: the 500-object, 20-editor pilot and workshop allowance of 300 ordinary objects remain
+unchanged. Existing canvas and legacy workshop reads retain their established policies; do not
+assume that a paused Canvas boards policy leaves the new history or timer endpoints available.
+
+Rehearse these boundaries before promotion:
+
+- Team comments are plain text and anchored to current objects. Viewers cannot comment; editors
+  edit/delete their own messages, while owners/facilitators resolve and moderate. Guest facilitation endpoints
+  expose the timer only, with no comment threads or version history. Conflicts retain local text
+  without automatically replacing the concurrency fence. Bounds remain 100 threads, 20 messages
+  per thread, 500 messages and 512 KiB retained discussion data per board.
+- Timers use server time with a 5-second to 2-hour countdown, revision-fenced start/pause/resume/reset
+  and no automatic workshop phase changes. Verify pause, expiry and reconnect without relying on
+  the browser's wall clock.
+- Presenter state is a 15-second transient lease in Memory/Redis, with atomic compare-and-set
+  fencing for starts, heartbeats and stops. Multi-node deployments require the shared Redis cache.
+  Following is opt-in and ends on pan, zoom, Escape, revocation or lease expiry. Team viewers may
+  receive a viewport; guests receive only an explicitly published frame reference, without team
+  coordinates or presenter identity. Exercise concurrent starts and a stale old-session write.
+- Exports render only a fresh authorized projection to a closed SVG document; PNG conversion
+  happens locally from that validated SVG. Whole/current/selected-frame-area choices contain no
+  remote URLs, executable markup, credentials, pending ideas or system identity metadata. The
+  limits are 25 image placements, 10 MiB per image, 20 MiB per export, 15-second server-render and
+  local PNG-conversion budgets, and at most 4,096 pixels on either output side. Recheck access after storage waits, and exercise
+  removal/revocation while bytes are loading.
+- Saved versions are manual: at most ten checkpoints, 2 MiB per scene and 4 MiB in aggregate.
+  Current authorization and guest moderation govern previews and historical-image reads; removed
+  guest bodies are not frozen in checkpoints. Verify media retained only by a checkpoint remains
+  readable, then becomes cleanup-eligible after the last reference is released. **Restore layout**
+  updates only existing objects against their current versions, within 50 affected objects and
+  current locks/protected-card/group/frame rules. It must never recreate deleted objects or
+  restore old text, media identity or visibility.
+
+Contract, restricted-PostgreSQL, HTTP, export, frontend and real-Valkey checks have passed
+locally, along with the full repository check and all 17 configured canvas browser cases. Three
+follow-up export/mobile checks also verify the corrected Download touch target. See the
+[Order 6 status](../implementation-status.md#canvas-facilitation-order-6-october-30-2026).
+No deployed production media, physical-device, load, peer-latency or rendering-performance result
+is established by these checks. Order 7 and all AI functionality remain outside this increment.

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { CanvasBoardGuestView, IdeaBoardView } from "@openround/contracts";
+import type { CanvasBoardGuestView, IdeaBoardView, CanvasExportRegion } from "@openround/contracts";
 import { ApiClientError } from "../../lib/api";
 import { clientUuid } from "../../lib/uuid";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
 import { createCanvas } from "./canvas-client";
 import { CanvasReadOnlySurface } from "./canvas-surface";
+import { CanvasGuestFacilitation } from "./canvas-guest-facilitation";
 import {
   readGuestWorkshopCanvas,
   readWorkshopCanvas,
@@ -123,6 +124,8 @@ export function PublishedWorkshopCanvas({
   token: string;
 }) {
   const { t } = useLocale();
+  const [followRegion, setFollowRegion] = useState<CanvasExportRegion | null>(null);
+  const [navigation, setNavigation] = useState(0);
   const [snapshot, setSnapshot] = useState<{
     sourceId: string;
     board: CanvasBoardGuestView;
@@ -222,6 +225,15 @@ export function PublishedWorkshopCanvas({
   return (
     <div>
       <h2>{t("canvas.workshop.published")}</h2>
+      <CanvasGuestFacilitation
+        boardId={board.id}
+        sourceBoardId={sourceBoardId}
+        token={token}
+        canvasSeq={board.canvasSeq}
+        objects={board.objects}
+        cancelKey={navigation}
+        onFollow={setFollowRegion}
+      />
       <CanvasReadOnlySurface
         objects={board.objects}
         canvasId={board.id}
@@ -229,6 +241,11 @@ export function PublishedWorkshopCanvas({
         sourceBoard={board.sourceBoard}
         guestToken={token}
         label={t("canvas.workshop.published")}
+        followRegion={followRegion}
+        onInteract={() => {
+          setFollowRegion(null);
+          setNavigation((value) => value + 1);
+        }}
       />
     </div>
   );

@@ -6,12 +6,15 @@ import {
   CanvasBoardMutationV1Schema,
   CanvasBoardCreateV1Schema,
   IdeaBoardCreateSchema,
+  CanvasFacilitationMutationSchema,
+  type CanvasFacilitationCommand,
   type CanvasBoardCommand,
 } from "@openround/contracts";
 import {
   MemoryRepository,
   PostgresRepository,
   createCanvasBoardRepository,
+  CanvasBoardRepository,
   createIdeaBoardRepository,
   createPlatformRepository,
   type Repository,
@@ -19,7 +22,7 @@ import {
   type MediaAssetCreateInput,
 } from "../src/index.js";
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
-import { MemoryCanvasBoards } from "../src/canvas-board-store.js";
+import { MemoryCanvasBoards, postgresCanvasRun } from "../src/canvas-board-store.js";
 import type { CanvasState } from "../src/canvas-board-types.js";
 import { stablePlatformJson } from "../src/platform-service.js";
 
@@ -135,6 +138,27 @@ for (const backend of ["memory", "postgres"] as const)
         command: CanvasBoardCommand,
         operationId: string = randomUUID(),
       ) => canvases.command(actor, id, { schemaVersion: 2, operationId, command });
+      const facilitate = (
+        actor: CreatorContext,
+        id: string,
+        command: CanvasFacilitationCommand,
+        operationId = randomUUID(),
+        clock?: Date | (() => Date),
+      ) =>
+        canvases.facilitate(
+          actor,
+          id,
+          CanvasFacilitationMutationSchema.parse({ schemaVersion: 1, operationId, command }),
+          clock,
+        );
+      async function lastOutboxCursor() {
+        let cursor = 0;
+        for (;;) {
+          const page = await canvases.listOutbox(cursor, 500);
+          if (!page.events.length) return cursor;
+          cursor = page.cursor;
+        }
+      }
       async function share(id: string, role: "facilitator" | "editor" | "viewer" = "editor") {
         const invitation = await canvases.invite(owner, id, {
           email: editor.email,
@@ -2173,6 +2197,764 @@ for (const backend of ["memory", "postgres"] as const)
         expect((await repository.getMediaAsset(workspaceId, media.id))!.scanStatus).toBe(
           "deleting",
         );
+      });
+      it("fences anchored discussion, ownership, exact retries and collaborator removal", async () => {
+        const board = await create(),
+          object = note(),
+          threadId = randomUUID(),
+          messageId = randomUUID(),
+          operationId = randomUUID();
+        await change(owner, board.id, { type: "batch", operations: [{ type: "create", object }] });
+        await share(board.id);
+        const command = {
+          type: "comment_thread_create" as const,
+          threadId,
+          messageId,
+          objectId: object.id,
+          text: "Owner's original discussion",
+        };
+        const created = await facilitate(owner, board.id, command, operationId);
+        expect(created.facilitation.threads[0]).toMatchObject({
+          version: 1,
+          messages: [{ authorId: owner.userId, text: command.text }],
+        });
+        const replyId = randomUUID();
+        await facilitate(editor, board.id, {
+          type: "comment_reply",
+          threadId,
+          expectedVersion: 1,
+          messageId: replyId,
+          text: "An editor reply",
+        });
+        await expect(
+          facilitate(editor, board.id, {
+            type: "comment_edit",
+            threadId,
+            expectedVersion: 2,
+            messageId,
+            text: "Not my message",
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(
+          facilitate(owner, board.id, {
+            type: "comment_resolve",
+            threadId,
+            expectedVersion: 1,
+            resolved: true,
+          }),
+        ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+        const deleted = await facilitate(owner, board.id, {
+          type: "comment_delete",
+          threadId,
+          expectedVersion: 2,
+          messageId: replyId,
+        });
+        expect(deleted.facilitation.threads[0]!.messages[1]).toMatchObject({
+          text: "",
+          deleted: true,
+        });
+        const cursor = await lastOutboxCursor();
+        const replay = await facilitate(owner, board.id, command, operationId);
+        expect(replay.receipt).toEqual(created.receipt);
+        expect(replay.facilitation.threads[0]!.version).toBe(3);
+        expect((await canvases.listOutbox(cursor)).events).toEqual([]);
+        await expect(
+          facilitate(owner, board.id, { ...command, text: "Different retry" }, operationId),
+        ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+        const results = await Promise.allSettled(
+          [owner, editor].map((actor) =>
+            facilitate(actor, board.id, {
+              type: "comment_reply",
+              threadId,
+              expectedVersion: 3,
+              messageId: randomUUID(),
+              text: "Version-fenced reply",
+            }),
+          ),
+        );
+        expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+        expect(results.find((result) => result.status === "rejected")).toMatchObject({
+          reason: { code: "STALE_DRAFT" },
+        });
+        await change(owner, board.id, { type: "grant", userId: editor.userId, role: "viewer" });
+        expect((await canvases.getFacilitation(editor, board.id)).capabilities.comment).toBe(false);
+        await expect(
+          facilitate(editor, board.id, {
+            type: "comment_reply",
+            threadId,
+            expectedVersion: 4,
+            messageId: randomUUID(),
+            text: "Viewer write",
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(canvases.getFacilitation(outsider, board.id)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await canvases.revokeGrant(owner, board.id, editor.userId);
+        await expect(canvases.getFacilitation(editor, board.id)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "delete", id: object.id, expectedVersion: 1 }],
+        });
+        expect((await canvases.getFacilitation(owner, board.id)).threads).toEqual([]);
+      });
+      it("keeps a server timer revision-fenced without writing on elapsed time", async () => {
+        const board = await create();
+        await share(board.id);
+        let milliseconds = Date.now();
+        const clock = () => new Date(milliseconds);
+        const operationId = randomUUID(),
+          command = { type: "timer_start" as const, expectedRevision: 0, durationSeconds: 5 };
+        await expect(facilitate(editor, board.id, command)).rejects.toMatchObject({
+          code: "FORBIDDEN",
+        });
+        const started = await facilitate(owner, board.id, command, operationId, clock);
+        milliseconds += 1500;
+        expect((await canvases.getFacilitation(owner, board.id, clock)).timer).toMatchObject({
+          status: "running",
+          remainingMs: 3500,
+          revision: 1,
+        });
+        const paused = await facilitate(
+          owner,
+          board.id,
+          { type: "timer_pause", expectedRevision: 1 },
+          randomUUID(),
+          clock,
+        );
+        milliseconds += 30_000;
+        expect((await canvases.getFacilitation(owner, board.id, clock)).timer).toMatchObject({
+          status: "paused",
+          remainingMs: 3500,
+        });
+        await expect(
+          facilitate(
+            owner,
+            board.id,
+            { type: "timer_resume", expectedRevision: 1 },
+            randomUUID(),
+            clock,
+          ),
+        ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+        const resumed = await facilitate(
+          owner,
+          board.id,
+          { type: "timer_resume", expectedRevision: 2 },
+          randomUUID(),
+          clock,
+        );
+        milliseconds += 4000;
+        const finished = await canvases.getFacilitation(owner, board.id, clock);
+        expect(finished.timer).toMatchObject({ status: "finished", remainingMs: 0, revision: 3 });
+        expect(finished.canvasSeq).toBe(resumed.facilitation.canvasSeq);
+        expect((await facilitate(owner, board.id, command, operationId, clock)).receipt).toEqual(
+          started.receipt,
+        );
+        expect(paused.facilitation.timer.deadlineAt).toBeNull();
+        await facilitate(
+          owner,
+          board.id,
+          { type: "timer_reset", expectedRevision: 3 },
+          randomUUID(),
+          clock,
+        );
+        expect((await canvases.getFacilitation(owner, board.id, clock)).timer).toMatchObject({
+          status: "idle",
+          revision: 4,
+        });
+      });
+      it("bounds manual history and rechecks current reader and checkpoint-deletion permissions", async () => {
+        const board = await create(),
+          object = note("Saved authored text");
+        await share(board.id);
+        await change(owner, board.id, { type: "batch", operations: [{ type: "create", object }] });
+        const firstId = randomUUID(),
+          operationId = randomUUID();
+        const first = await facilitate(
+          editor,
+          board.id,
+          { type: "version_create", versionId: firstId, name: "First named checkpoint" },
+          operationId,
+        );
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: object.id,
+              expectedVersion: 1,
+              patch: { x: 200, text: "Current text" },
+            },
+          ],
+        });
+        const preview = await canvases.getVersion(editor, board.id, firstId);
+        expect(preview.objects[0]).toMatchObject({ x: 10, text: "Saved authored text" });
+        for (let index = 1; index < 10; index++)
+          await facilitate(owner, board.id, {
+            type: "version_create",
+            versionId: randomUUID(),
+            name: `Checkpoint ${index + 1}`,
+          });
+        await expect(
+          facilitate(owner, board.id, {
+            type: "version_create",
+            versionId: randomUUID(),
+            name: "Too many",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(
+          (
+            await facilitate(
+              editor,
+              board.id,
+              { type: "version_create", versionId: firstId, name: "First named checkpoint" },
+              operationId,
+            )
+          ).receipt,
+        ).toEqual(first.receipt);
+        await expect(
+          facilitate(editor, board.id, {
+            type: "version_delete",
+            versionId: firstId,
+            expectedVersion: 1,
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(
+          facilitate(owner, board.id, {
+            type: "version_delete",
+            versionId: firstId,
+            expectedVersion: 0,
+          }),
+        ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+        await facilitate(editor, board.id, {
+          type: "comment_thread_create",
+          threadId: randomUUID(),
+          messageId: randomUUID(),
+          objectId: object.id,
+          text: "Delete my account discussion",
+        });
+        await repository.deleteAccount(editor.userId);
+        expect((await canvases.getFacilitation(owner, board.id)).threads).toEqual([]);
+        expect(
+          (await canvases.getFacilitation(owner, board.id)).versions.find(
+            (version) => version.id === firstId,
+          )!.createdBy,
+        ).toBeNull();
+        await facilitate(owner, board.id, {
+          type: "version_delete",
+          versionId: firstId,
+          expectedVersion: 1,
+        });
+        await expect(canvases.getVersion(owner, board.id, firstId)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await expect(
+          facilitate(owner, board.id, {
+            type: "version_create",
+            versionId: firstId,
+            name: "Reusing a retired ID",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(canvases.getVersion(outsider, board.id, firstId)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+      });
+      it("retains checkpoint-only native images and releases them when history is deleted", async () => {
+        const board = await create(),
+          asset = await cleanImage(board.id);
+        const object = CanvasObjectCreateSchema.parse({
+          ...note(),
+          type: "image",
+          mediaId: asset.id,
+          altText: "Retained checkpoint diagram",
+        });
+        await change(owner, board.id, { type: "batch", operations: [{ type: "create", object }] });
+        const versionId = randomUUID();
+        await facilitate(owner, board.id, {
+          type: "version_create",
+          versionId,
+          name: "Diagram checkpoint",
+        });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "delete", id: object.id, expectedVersion: 1 }],
+        });
+        // Model already-pruned inverse history so only the saved checkpoint retains this asset.
+        if (repository instanceof MemoryRepository) {
+          const state = repository
+            .getOrCreateLifecycleExtension(
+              "canvasBoards",
+              () => new MemoryCanvasBoards(repository as MemoryRepository),
+            )
+            .rows.get(board.id)!;
+          for (const receipt of state.receipts) {
+            receipt.before = [];
+            receipt.after = [];
+            receipt.undoable = false;
+          }
+        } else {
+          const client = await (repository as PostgresRepository).pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query(
+              "SELECT set_config('app.workspace_id',$1,true),set_config('app.canvas_board_id',$2,true)",
+              [workspaceId, board.id],
+            );
+            await client.query(
+              'UPDATE canvas_board_receipts SET data=data||\'{"before":[],"after":[],"undoable":false}\'::jsonb WHERE board_id=$1',
+              [board.id],
+            );
+            await client.query("COMMIT");
+          } finally {
+            client.release();
+          }
+        }
+        const later = new Date(Date.now() + 20 * 60_000);
+        await repository.purgeExpired(later);
+        expect(await repository.claimMediaAssetDeletion(workspaceId, asset.id)).toBeNull();
+        expect(
+          (await repository.listUnattachedMedia(later)).map((entry) => entry.id),
+        ).not.toContain(asset.id);
+        expect(await canvases.authorizeVersionMedia(owner, board.id, versionId, asset.id)).toEqual({
+          workspaceId,
+        });
+        await expect(canvases.authorizeMedia(owner, board.id, asset.id)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await expect(
+          canvases.authorizeVersionMedia(outsider, board.id, versionId, asset.id),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        await facilitate(owner, board.id, {
+          type: "version_delete",
+          versionId,
+          expectedVersion: 1,
+        });
+        await repository.purgeExpired(later);
+        expect(await repository.listMediaReferences(workspaceId, asset.id)).toEqual([]);
+        expect(await repository.claimMediaAssetDeletion(workspaceId, asset.id)).not.toBeNull();
+        await expect(
+          canvases.authorizeVersionMedia(owner, board.id, versionId, asset.id),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      });
+      it("bounds message counts, multibyte discussion bytes and aggregate checkpoint bytes atomically", async () => {
+        const board = await create(),
+          object = note(),
+          threadId = randomUUID();
+        await change(owner, board.id, { type: "batch", operations: [{ type: "create", object }] });
+        await facilitate(owner, board.id, {
+          type: "comment_thread_create",
+          threadId,
+          messageId: randomUUID(),
+          objectId: object.id,
+          text: "Message 1",
+        });
+        for (let index = 1; index < 20; index++)
+          await facilitate(owner, board.id, {
+            type: "comment_reply",
+            threadId,
+            expectedVersion: index,
+            messageId: randomUUID(),
+            text: `Message ${index + 1}`,
+          });
+        const fullThread = await canvases.getFacilitation(owner, board.id);
+        await expect(
+          facilitate(owner, board.id, {
+            type: "comment_reply",
+            threadId,
+            expectedVersion: 20,
+            messageId: randomUUID(),
+            text: "Too many messages",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect({
+          ...(await canvases.getFacilitation(owner, board.id)),
+          serverNow: fullThread.serverNow,
+        }).toEqual(fullThread);
+        let hitCommentBytes = false;
+        for (let index = 0; index < 100; index++) {
+          try {
+            await facilitate(owner, board.id, {
+              type: "comment_thread_create",
+              threadId: randomUUID(),
+              messageId: randomUUID(),
+              objectId: object.id,
+              text: "木".repeat(2000),
+            });
+          } catch (error) {
+            expect(error).toMatchObject({ code: "VALIDATION_ERROR" });
+            hitCommentBytes = true;
+            break;
+          }
+        }
+        const bounded = await canvases.getFacilitation(owner, board.id);
+        expect(hitCommentBytes).toBe(true);
+        expect(bounded.threads.length).toBeLessThan(100);
+        expect(Buffer.byteLength(JSON.stringify(bounded.threads))).toBeLessThanOrEqual(512 * 1024);
+        const history = await create();
+        for (let index = 0; index < 16; index++)
+          await change(owner, history.id, {
+            type: "batch",
+            operations: Array.from({ length: 20 }, () => ({
+              type: "create" as const,
+              object: note("x".repeat(2000)),
+            })),
+          });
+        let saved = 0;
+        for (let index = 0; index < 10; index++) {
+          try {
+            await facilitate(owner, history.id, {
+              type: "version_create",
+              versionId: randomUUID(),
+              name: `Large checkpoint ${index}`,
+            });
+            saved++;
+          } catch (error) {
+            expect(error).toMatchObject({ code: "VALIDATION_ERROR" });
+            break;
+          }
+        }
+        expect(saved).toBeGreaterThan(1);
+        expect(saved).toBeLessThan(10);
+        expect((await canvases.getFacilitation(owner, history.id)).versions).toHaveLength(saved);
+      }, 30000);
+      it("rolls back facilitation state, receipt, sequence and outbox when retention expires during storage", async () => {
+        const board = await create(),
+          before = await canvases.getFacilitation(owner, board.id),
+          cursor = await lastOutboxCursor();
+        let milliseconds = Date.now();
+        const store =
+          repository instanceof MemoryRepository
+            ? repository.getOrCreateLifecycleExtension(
+                "canvasBoards",
+                () => new MemoryCanvasBoards(repository as MemoryRepository),
+              )
+            : (repository as PostgresRepository);
+        const run = store instanceof MemoryCanvasBoards ? store.run : postgresCanvasRun(store);
+        const late = new CanvasBoardRepository(
+          (actor, scope, work) =>
+            run(actor, scope, (tx) =>
+              work({
+                ...tx,
+                put: async (state, insert) => {
+                  await tx.put(state, insert);
+                  milliseconds = Date.parse(board.expiresAt);
+                },
+              }),
+            ),
+          store,
+        );
+        await expect(
+          late.facilitate(
+            owner,
+            board.id,
+            {
+              schemaVersion: 1,
+              operationId: randomUUID(),
+              command: { type: "timer_start", expectedRevision: 0, durationSeconds: 60 },
+            },
+            () => new Date(milliseconds),
+          ),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        const after = await canvases.getFacilitation(owner, board.id);
+        expect({ ...after, serverNow: before.serverNow }).toEqual(before);
+        expect((await canvases.listOutbox(cursor)).events).toEqual([]);
+      });
+      it("forces normalized facilitation RLS and rejects checkpoint guest bodies", async () => {
+        if (!(repository instanceof PostgresRepository)) return;
+        const board = await create(),
+          object = note(),
+          versionId = randomUUID();
+        await change(owner, board.id, { type: "batch", operations: [{ type: "create", object }] });
+        await facilitate(owner, board.id, {
+          type: "comment_thread_create",
+          threadId: randomUUID(),
+          messageId: randomUUID(),
+          objectId: object.id,
+          text: "Scoped discussion",
+        });
+        await facilitate(owner, board.id, {
+          type: "version_create",
+          versionId,
+          name: "Scoped history",
+        });
+        const tables = [
+          "canvas_board_comment_threads",
+          "canvas_board_comment_messages",
+          "canvas_board_timers",
+          "canvas_board_versions",
+        ];
+        for (const table of tables)
+          expect((await repository.pool.query(`SELECT * FROM ${table}`)).rows).toEqual([]);
+        const forced = await repository.pool.query(
+          "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[])",
+          [tables],
+        );
+        expect(forced.rows).toHaveLength(4);
+        expect(forced.rows.every((row) => row.relrowsecurity && row.relforcerowsecurity)).toBe(
+          true,
+        );
+        const client = await repository.pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query(
+            "SELECT set_config('app.workspace_id',$1,true),set_config('app.canvas_board_id',$2,true)",
+            [workspaceId, board.id],
+          );
+          expect(
+            (
+              await client.query(
+                "SELECT data FROM canvas_board_comment_messages WHERE board_id=$1",
+                [board.id],
+              )
+            ).rows,
+          ).toHaveLength(1);
+          await expect(
+            client.query(
+              "UPDATE canvas_board_versions SET objects=jsonb_set(objects,'{0,idea}','{\"body\":\"DO NOT RETAIN A GUEST BODY\"}') WHERE board_id=$1 AND id=$2",
+              [board.id, versionId],
+            ),
+          ).rejects.toMatchObject({ code: "23514" });
+          await client.query("ROLLBACK");
+          await client.query("BEGIN");
+          await client.query(
+            "SELECT set_config('app.workspace_id',$1,true),set_config('app.canvas_board_id',$2,true)",
+            [editor.workspaceId, board.id],
+          );
+          for (const table of tables)
+            expect((await client.query(`SELECT * FROM ${table}`)).rows).toEqual([]);
+        } finally {
+          await client.query("ROLLBACK");
+          client.release();
+        }
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT current_setting('app.canvas_lifecycle',true) AS lifecycle",
+            )
+          ).rows[0].lifecycle,
+        ).not.toBe("on");
+      });
+      it("reprojects historical guest references, purges removed-anchor discussions and exposes only a guest timer", async () => {
+        const ideas = createIdeaBoardRepository(repository),
+          now = new Date();
+        const source = await ideas.create(
+          workspaceId,
+          randomUUID(),
+          IdeaBoardCreateSchema.parse({
+            title: "Facilitation privacy",
+            ideasVisible: true,
+            moderationEnabled: false,
+          }),
+          randomUUID(),
+          {
+            participantLimit: 10,
+            closesAt: new Date(now.getTime() + 86400000).toISOString(),
+            expiresAt: new Date(now.getTime() + 2 * 86400000).toISOString(),
+          },
+          now,
+        );
+        await ideas.hostCommand(workspaceId, source.id, { type: "collect" }, 0, randomUUID(), now);
+        const token = createHash("sha256").update(randomUUID()).digest("hex");
+        await ideas.join(source.id, token, null, now);
+        const submitted = await ideas.submitIdea(
+          source.id,
+          token,
+          "REMOVE HISTORICAL GUEST BODY",
+          randomUUID(),
+          now,
+        );
+        const refId = submitted.ownIdeas[0]!.id;
+        const board = await canvases.create(
+          owner,
+          CanvasBoardCreateSchema.parse({
+            workspaceId,
+            title: "Facilitation workshop",
+            boardType: "workshop",
+            sourceBoardId: source.id,
+            operationId: randomUUID(),
+          }),
+        );
+        const threadId = randomUUID(),
+          versionId = randomUUID(),
+          anchorOperationId = randomUUID(),
+          anchorMessageId = randomUUID();
+        const connector = CanvasObjectCreateSchema.parse({
+          ...note(),
+          type: "connector",
+          from: { objectId: refId, x: 0, y: 0 },
+          to: { objectId: null, x: 200, y: 200 },
+        });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "create", object: connector }],
+        });
+        await facilitate(
+          owner,
+          board.id,
+          {
+            type: "comment_thread_create",
+            threadId,
+            messageId: anchorMessageId,
+            objectId: refId,
+            text: "REMOVE ANCHORED COMMENT",
+          },
+          anchorOperationId,
+        );
+        await facilitate(owner, board.id, {
+          type: "comment_thread_create",
+          threadId: randomUUID(),
+          messageId: randomUUID(),
+          objectId: connector.id,
+          text: "REMOVE DANGLING CONNECTOR DISCUSSION",
+        });
+        await facilitate(owner, board.id, {
+          type: "version_create",
+          versionId,
+          name: "Guest layout",
+        });
+        expect(JSON.stringify(await canvases.getVersion(owner, board.id, versionId))).toContain(
+          "REMOVE HISTORICAL GUEST BODY",
+        );
+        await facilitate(owner, board.id, {
+          type: "timer_start",
+          expectedRevision: 0,
+          durationSeconds: 60,
+        });
+        const guest = await canvases.getGuestFacilitation(source.id, token);
+        expect(guest!.timer.status).toBe("running");
+        for (const field of ["threads", "versions", "actorId", "authorId", "REMOVE HISTORICAL"])
+          expect(JSON.stringify(guest)).not.toContain(field);
+        await expect(
+          canvases.getGuestFacilitation(source.id, "f".repeat(64)),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        const current = await ideas.getModerator(workspaceId, source.id);
+        await ideas.hostCommand(
+          workspaceId,
+          source.id,
+          { type: "moderate", ideaId: refId, status: "removed" },
+          current.revision,
+          randomUUID(),
+          now,
+        );
+        expect((await canvases.getFacilitation(owner, board.id)).threads).toEqual([]);
+        expect(
+          (
+            await facilitate(
+              owner,
+              board.id,
+              {
+                type: "comment_thread_create",
+                threadId,
+                messageId: anchorMessageId,
+                objectId: refId,
+                text: "REMOVE ANCHORED COMMENT",
+              },
+              anchorOperationId,
+            )
+          ).facilitation.threads,
+        ).toEqual([]);
+        const history = await canvases.getVersion(owner, board.id, versionId);
+        expect(history.objects).toEqual([]);
+        expect(JSON.stringify(history)).not.toContain("REMOVE HISTORICAL GUEST BODY");
+        if (repository instanceof PostgresRepository) {
+          const client = await repository.pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query(
+              "SELECT set_config('app.workspace_id',$1,true),set_config('app.canvas_board_id',$2,true)",
+              [workspaceId, board.id],
+            );
+            expect(
+              (
+                await client.query(
+                  "SELECT data FROM canvas_board_comment_messages WHERE board_id=$1",
+                  [board.id],
+                )
+              ).rows,
+            ).toEqual([]);
+            expect(
+              JSON.stringify(
+                (
+                  await client.query(
+                    "SELECT objects FROM canvas_board_versions WHERE board_id=$1",
+                    [board.id],
+                  )
+                ).rows,
+              ),
+            ).not.toContain("REMOVE HISTORICAL GUEST BODY");
+          } finally {
+            await client.query("ROLLBACK");
+            client.release();
+          }
+        } else if (repository instanceof MemoryRepository) {
+          const state = repository
+            .getOrCreateLifecycleExtension(
+              "canvasBoards",
+              () => new MemoryCanvasBoards(repository as MemoryRepository),
+            )
+            .rows.get(board.id)!;
+          expect(state.facilitation!.threads).toEqual([]);
+        }
+        const independent = note("Independent surviving note");
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "create", object: independent }],
+        });
+        await expect(
+          facilitate(owner, board.id, {
+            type: "comment_thread_create",
+            threadId,
+            messageId: randomUUID(),
+            objectId: independent.id,
+            text: "Retired discussion ID",
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await ideas.submitIdea(
+          source.id,
+          token,
+          "Visible surviving source idea",
+          randomUUID(),
+          now,
+        );
+        expect((await canvases.getVersion(owner, board.id, versionId)).objects).toEqual([]);
+        const latest = await ideas.getModerator(workspaceId, source.id);
+        const frozen = await change(owner, board.id, {
+          type: "workshop",
+          expectedRevision: latest.revision,
+          command: { type: "start_voting" },
+        });
+        expect((await canvases.getFacilitation(owner, board.id)).capabilities).toMatchObject({
+          comment: false,
+          saveVersion: false,
+          controlTimer: true,
+        });
+        await facilitate(owner, board.id, { type: "timer_pause", expectedRevision: 1 });
+        await expect(
+          facilitate(owner, board.id, {
+            type: "version_create",
+            versionId: randomUUID(),
+            name: "Frozen",
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await change(owner, board.id, {
+          type: "workshop",
+          expectedRevision: frozen.board.sourceBoard!.revision,
+          command: { type: "close" },
+        });
+        await expect(
+          facilitate(owner, board.id, { type: "timer_resume", expectedRevision: 2 }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await facilitate(owner, board.id, {
+          type: "version_delete",
+          versionId,
+          expectedVersion: 1,
+        });
+        await ideas.delete(workspaceId, source.id);
+        await expect(canvases.getFacilitation(owner, board.id)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
       });
       it("hard-bounds retained documents and typed objects in serialized transactions", async () => {
         const board = await create();

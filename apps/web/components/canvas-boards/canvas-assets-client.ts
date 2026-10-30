@@ -61,8 +61,14 @@ export async function fetchCanvasImage(
   mediaId: string,
   signal?: AbortSignal,
   guest?: { sourceBoardId: string; token: string },
+  versionId?: string,
 ): Promise<Blob> {
   let path = canvasMediaPath(boardId, mediaId);
+  if (versionId !== undefined) {
+    canvasPath(versionId);
+    if (guest) throw new Error("Saved versions require team access");
+    path = `${canvasPath(boardId)}/versions/${versionId}/media/${mediaId}`;
+  }
   if (guest) {
     canvasPath(guest.sourceBoardId);
     if (!/^[a-f0-9]{64}$/.test(guest.token)) throw new Error("Invalid workshop credential");

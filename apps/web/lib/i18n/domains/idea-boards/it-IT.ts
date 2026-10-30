@@ -1,9 +1,13 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
   ...canvasMessages("it-IT"),
+  ...canvasAssetsMessages("it-IT"),
+  ...canvasProductivityMessages("it-IT"),
   ...canvasWorkshopMessages("it-IT"),
   "boards.more": "Carica altre bacheche",
   "boards.title": "Bacheche delle idee",

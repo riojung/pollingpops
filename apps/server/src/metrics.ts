@@ -49,6 +49,8 @@ const canvasActions = new Set([
   "delete",
   "presence",
   "media",
+  "media_upload",
+  "media_finalize",
 ]);
 const canvasStreamEvents = new Set([
   "opened",

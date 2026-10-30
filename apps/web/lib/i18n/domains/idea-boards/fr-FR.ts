@@ -1,9 +1,13 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
   ...canvasMessages("fr-FR"),
+  ...canvasAssetsMessages("fr-FR"),
+  ...canvasProductivityMessages("fr-FR"),
   ...canvasWorkshopMessages("fr-FR"),
   "boards.more": "Charger plus de tableaux",
   "boards.title": "Tableaux d’idées",

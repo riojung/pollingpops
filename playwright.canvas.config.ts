@@ -32,7 +32,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "NODE_ENV=test CANVAS_BROWSER_FIXTURE=true PORT=4400 WEB_ORIGIN=http://127.0.0.1:3400 PUBLIC_API_URL=http://127.0.0.1:4400 pnpm exec tsx apps/server/test/fixtures/business-browser-server.ts",
+        "NODE_ENV=test CANVAS_BROWSER_FIXTURE=true CANVAS_BROWSER_IMAGES=true PORT=4400 WEB_ORIGIN=http://127.0.0.1:3400 PUBLIC_API_URL=http://127.0.0.1:4400 pnpm exec tsx apps/server/test/fixtures/business-browser-server.ts",
       port: 4400,
       reuseExistingServer: false,
       timeout: 120_000,

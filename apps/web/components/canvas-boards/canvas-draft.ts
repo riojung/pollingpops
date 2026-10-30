@@ -15,6 +15,8 @@ export interface CanvasObjectDraft {
   rotation: number;
   fromId?: string;
   toId?: string;
+  altText?: string;
+  url?: string;
 }
 export type CanvasDraftRecoveryReason = "missing" | "unavailable" | "readOnly";
 export function canvasObjectDraft(object: CanvasObject): CanvasObjectDraft {
@@ -32,6 +34,8 @@ export function canvasObjectDraft(object: CanvasObject): CanvasObjectDraft {
     ...(object.type === "connector"
       ? { fromId: object.from.objectId ?? "", toId: object.to.objectId ?? "" }
       : {}),
+    ...(object.type === "image" ? { altText: object.altText } : {}),
+    ...(object.type === "link" ? { url: object.url } : {}),
   };
 }
 export function resolveCanvasDraft(

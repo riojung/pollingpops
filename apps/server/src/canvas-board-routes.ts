@@ -1,9 +1,10 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import {
   CanvasBoardCreateSchema,
   CanvasBoardInviteSchema,
   CanvasBoardMutationSchema,
+  MediaUploadRequestSchema,
   type ProductFeatureKey,
 } from "@openround/contracts";
 import {
@@ -18,7 +19,8 @@ import type { SessionCache } from "./cache.js";
 import type { StorageService } from "./storage.js";
 import type { MetricsService } from "./metrics.js";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
-import { hashToken } from "./security.js";
+import { cleanPlainText, hashToken } from "./security.js";
+import { completeMediaFinalization, MediaFinalizationConflictError } from "./media-finalization.js";
 import { CanvasBoardLive } from "./canvas-board-live.js";
 
 const clock = () => new Date();
@@ -28,6 +30,15 @@ const InvitationId = z.object({ invitationId: z.string().uuid() }).strict();
 const GrantParams = Id.extend({ userId: z.string().uuid() });
 const InvitationParams = Id.extend({ invitationId: z.string().uuid() });
 const MediaParams = Id.extend({ mediaId: z.string().uuid() });
+const GuestMediaParams = SourceId.extend({ mediaId: z.string().uuid() });
+const CreateEnvelope = z
+  .object({
+    setupContext: z
+      .object({ userId: z.string().uuid(), workspaceId: z.string().uuid() })
+      .strict()
+      .optional(),
+  })
+  .passthrough();
 const Page = z
   .object({
     scope: z.enum(["all", "owned", "shared", "archived"]).default("all"),
@@ -54,6 +65,8 @@ function metricAction(request: FastifyRequest) {
   if (route.endsWith("/commands")) return "command";
   if (route.endsWith("/presence")) return "presence";
   if (route.endsWith("/media/:mediaId")) return "media";
+  if (route.endsWith("/media/:mediaId/complete")) return "media_finalize";
+  if (route.endsWith("/media")) return "media_upload";
   if (route.endsWith("/accept")) return "accept";
   if (route.endsWith("/grants/:userId")) return "revoke";
   if (route.endsWith("/invitations/:invitationId")) return "revoke_invitation";
@@ -210,12 +223,25 @@ export async function registerCanvasBoardRoutes(
         );
       return tokenHash;
     };
+    const uploadsAvailable = async () =>
+      deps.storage.mediaUploadsEnabled &&
+      (await deps.repository.getOperationalFeatures()).mediaUploads;
+    const uploadUnavailable = (request: FastifyRequest, reply: FastifyReply) =>
+      reply.code(503).send({
+        error: {
+          code: "DEPENDENCY_UNAVAILABLE",
+          message:
+            "Image uploads are unavailable. The operator must enable media storage and malware scanning.",
+          requestId: request.id,
+        },
+      });
     const freshBoard = async (request: FastifyRequest, userId: string, boardId: string) => {
+      const imageUploadsAvailable = await uploadsAvailable();
       const actor = await sameUser(request, userId);
       const board = await deps.canvases.get(actor, boardId, clock);
       if (Date.parse(board.expiresAt) <= Date.now())
         throw new CanvasBoardError("NOT_FOUND", "This canvas has expired");
-      return board;
+      return { ...board, imageUploadsAvailable: imageUploadsAvailable && board.capabilities.edit };
     };
     const clearPresence = async (boardId: string, userId?: string) => {
       try {
@@ -252,7 +278,20 @@ export async function registerCanvasBoardRoutes(
       { ...routeOptions, bodyLimit: 8 * 1024 },
       async (request, reply) => {
         const actor = await user(request);
-        const input = CanvasBoardCreateSchema.parse(request.body);
+        const { setupContext, ...body } = CreateEnvelope.parse(request.body);
+        const input = CanvasBoardCreateSchema.parse(body);
+        if (
+          setupContext &&
+          (setupContext.userId !== actor.userId || setupContext.workspaceId !== input.workspaceId)
+        )
+          return reply.code(409).send({
+            error: {
+              code: "SETUP_CONTEXT_CHANGED",
+              message:
+                "Your account or workspace changed. Return to the account and workspace where this setup began, then retry.",
+              requestId: request.id,
+            },
+          });
         if (
           !(await deps.cache.consumeIdempotentRateLimit(
             `canvas-create:${actor.userId}`,
@@ -518,11 +557,113 @@ export async function registerCanvasBoardRoutes(
       return reply.code(204).send();
     });
 
-    routes.get("/v1/canvas-boards/:id/media/:mediaId", routeOptions, async (request, reply) => {
-      const actor = await user(request);
-      const { id, mediaId } = MediaParams.parse(request.params);
-      const authorize = async () =>
-        deps.canvases.authorizeMedia(await sameUser(request, actor.userId), id, mediaId, clock);
+    routes.post(
+      "/v1/canvas-boards/:id/media",
+      { ...routeOptions, bodyLimit: 2048 },
+      async (request, reply) => {
+        const actor = await user(request);
+        const { id } = Id.parse(request.params);
+        const context = await deps.canvases.getUploadContext(actor, id, clock);
+        if (!(await uploadsAvailable())) return uploadUnavailable(request, reply);
+        if (!(await deps.cache.consumeRateLimit(`canvas-media-create:${actor.userId}`, 20, 60_000)))
+          throw new CanvasBoardError(
+            "RATE_LIMITED",
+            "Too many image uploads. Wait a minute and retry",
+          );
+        const supplied = MediaUploadRequestSchema.strict().parse(request.body);
+        const input = MediaUploadRequestSchema.parse({
+          ...supplied,
+          altText: cleanPlainText(supplied.altText.normalize("NFC"), 300),
+        });
+        const upload = await deps.storage.createUpload({
+          workspaceId: context.workspaceId,
+          ...input,
+        });
+        await deps.canvases.reserveMedia(
+          await sameUser(request, actor.userId),
+          id,
+          upload.media,
+          clock,
+        );
+        await deps.repository.recordAudit({
+          workspaceId: context.workspaceId,
+          actorId: actor.userId,
+          action: "canvas_board.media_upload_requested",
+          targetType: "canvas_board",
+          targetId: id,
+          requestId: request.id,
+          metadata: {
+            mediaId: upload.media.id,
+            mimeType: upload.media.mimeType,
+            sizeBytes: upload.media.sizeBytes,
+          },
+        });
+        await deps.canvases.getUpload(
+          await sameUser(request, actor.userId),
+          id,
+          upload.media.id,
+          clock,
+        );
+        return reply.code(201).send({
+          mediaId: upload.media.id,
+          uploadUrl: upload.uploadUrl,
+          expiresInSeconds: upload.expiresInSeconds,
+          scanStatus: upload.media.scanStatus,
+        });
+      },
+    );
+    routes.post(
+      "/v1/canvas-boards/:id/media/:mediaId/complete",
+      { ...routeOptions, bodyLimit: 1024 },
+      async (request, reply) => {
+        const actor = await user(request);
+        const { id, mediaId } = MediaParams.parse(request.params);
+        z.object({})
+          .strict()
+          .parse(request.body ?? {});
+        const access = async () =>
+          deps.canvases.getUpload(await sameUser(request, actor.userId), id, mediaId, clock);
+        const asset = await access();
+        if (asset.scanStatus === "clean" || asset.scanStatus === "rejected")
+          return { media: { id: asset.id, scanStatus: asset.scanStatus, altText: asset.altText } };
+        if (!(await uploadsAvailable())) return uploadUnavailable(request, reply);
+        try {
+          return await completeMediaFinalization(
+            {
+              workspaceId: asset.workspaceId,
+              asset,
+              actorId: actor.userId,
+              requestId: request.id,
+              log: request.log,
+              repository: deps.repository,
+              storage: deps.storage,
+              metrics: deps.metrics,
+            },
+            async (updated) => {
+              const current = await access();
+              if (
+                current.scanStatus !== updated.scanStatus ||
+                current.objectKey !== updated.objectKey
+              )
+                throw new CanvasBoardError("NOT_FOUND", "Image not found");
+              return {
+                media: { id: updated.id, scanStatus: updated.scanStatus, altText: updated.altText },
+              };
+            },
+          );
+        } catch (error) {
+          if (!(error instanceof MediaFinalizationConflictError)) throw error;
+          return reply
+            .code(409)
+            .send({ error: { code: "CONFLICT", message: error.message, requestId: request.id } });
+        }
+      },
+    );
+    async function imageBytes(
+      mediaId: string,
+      authorize: () => Promise<{ workspaceId: string }>,
+      reply: FastifyReply,
+    ) {
       const access = await authorize();
       const asset = await deps.repository.getMediaAsset(access.workspaceId, mediaId);
       if (!asset || asset.scanStatus !== "clean")
@@ -550,6 +691,26 @@ export async function registerCanvasBoardRoutes(
         .header("x-content-type-options", "nosniff")
         .type(asset.mimeType)
         .send(content);
+    }
+    routes.get(
+      "/v1/canvas-boards/workshop/:sourceBoardId/guest/media/:mediaId",
+      routeOptions,
+      async (request, reply) => {
+        const tokenHash = await guestToken(request);
+        const { sourceBoardId, mediaId } = GuestMediaParams.parse(request.params);
+        return imageBytes(
+          mediaId,
+          () => deps.canvases.authorizeGuestMedia(sourceBoardId, tokenHash, mediaId, clock),
+          reply,
+        );
+      },
+    );
+    routes.get("/v1/canvas-boards/:id/media/:mediaId", routeOptions, async (request, reply) => {
+      const actor = await user(request);
+      const { id, mediaId } = MediaParams.parse(request.params);
+      const authorize = async () =>
+        deps.canvases.authorizeMedia(await sameUser(request, actor.userId), id, mediaId, clock);
+      return imageBytes(mediaId, authorize, reply);
     });
   });
   return live;

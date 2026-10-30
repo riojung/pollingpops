@@ -1,9 +1,13 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
   ...canvasMessages("ja-JP"),
+  ...canvasAssetsMessages("ja-JP"),
+  ...canvasProductivityMessages("ja-JP"),
   ...canvasWorkshopMessages("ja-JP"),
   "boards.more": "さらにボードを読み込む",
   "boards.title": "アイデアボード",

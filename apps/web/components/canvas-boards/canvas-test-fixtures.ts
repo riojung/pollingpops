@@ -12,7 +12,7 @@ export const canvasObject = CanvasObjectSchema.parse({
   text: "Synthetic canvas note",
 });
 export const canvasBoard = CanvasBoardViewSchema.parse({
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: canvasId,
   workspaceId: "00000000-0000-4000-8000-000000000093",
   organizationId: "00000000-0000-4000-8000-000000000094",

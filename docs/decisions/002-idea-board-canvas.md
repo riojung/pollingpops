@@ -1,11 +1,12 @@
 # Idea Board canvas architecture
 
-Date: October 29, 2026
+Date: October 29, 2026; productivity extension October 30, 2026
 
 ## Decision
 
-Implement the first customer release in orders 0–4 of the
-[canvas implementation plan](../idea-board-canvas-implementation-plan.md). Use a separately
+The initial customer pilot implements orders 0–4 of the
+[canvas implementation plan](../idea-board-canvas-implementation-plan.md); Order 5 extends it
+with the productivity tools described below. Orders 6–7 remain deferred. Use a separately
 versioned, typed canvas domain with server-authoritative object operations, board-scoped sharing,
 and metadata-only live notifications. Preserve the existing Idea Board workshop state machine,
 guest credentials, moderation, voting, and scanned media.
@@ -17,14 +18,15 @@ is introduced for this release.
 
 ## Renderer boundary
 
-The editor adapter accepts normalized sticky notes, text, rectangles, ellipses, connectors, and
-protected idea references. Viewport state and selection stay local. Objects have stable IDs,
+The editor adapter accepts normalized sticky notes, text, rectangles, ellipses, connectors,
+protected idea references, frames, pen strokes, images and HTTP(S) links. Viewport state and
+selection stay local. Objects have stable IDs,
 versions, finite geometry, a bounded color palette, and explicit visibility. Input fields handle
 text composition; the visual surface and numeric inspector provide pointer and keyboard editing.
 
-This deliberately limits the first editor to the primitives needed by the selected release.
-More advanced layout, drawing and asset tools remain separate increments. Maintaining interaction
-and accessibility behavior is our responsibility; replacing the renderer later must preserve the
+Order 5 adds geometric groups, multiselect layout, inherited locking, freehand and private scanned
+image assets alongside the frame and link tools. Maintaining interaction and accessibility
+behavior is our responsibility; replacing the renderer later must preserve the
 document schema, board permissions, operation receipts and guest-card protections.
 
 The [Excalidraw integration API](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/integration)
@@ -40,6 +42,36 @@ of a commercially licensed SDK avoids introducing that deployment requirement be
 selected. The existing repository license continues to cover the original renderer code.
 
 ## Storage and concurrent operations
+
+The productivity increment uses explicit V2 snapshots and objects with a frozen V1 reader and
+deterministic scene/history upcasts. Original V1 input fingerprints remain unchanged. Migration
+080 records schema versions and board-image provenance; no applied migration is rewritten.
+
+Children retain world coordinates. Frame movement updates the complete descendant closure;
+resizing changes the frame boundary. Geometric groups bind same-parent objects independently of
+the source workshop's semantic groups. A shared affected-object planner and repository checks
+enforce permissions, ancestry, lock-only toggles, expected related versions and a 50-object atomic
+budget. Privacy removals stay terminal even when removing their dependent scene relationships.
+
+Native images use board authorization, private scanned bytes and explicit media references that
+include retained undo history. Generic media/content routes cannot attach or serve those assets.
+Guest image delivery requires a currently published object and a fresh source-board credential.
+Public children are flattened from omitted private frames; private children and connector
+endpoints are never promoted. The original manually authored template factory runs inside canvas
+creation, remaps all IDs and contains neither guest responses nor cloned media. Seven English
+starters have localized chooser controls and previews. Workshop starters deliberately seed
+published authored scaffolding; ordinary new objects retain their private default.
+
+Image reservations are bounded to 100 per board lifetime and 200 MiB in total, with JPEG, PNG or
+WebP files of at most 10 MiB and required alternative text. Scanning and authorized private byte
+delivery reuse the existing media pipeline. Unattached reservations become cleanup-eligible after
+15 minutes; current objects and retained inverse history protect referenced images from pruning.
+
+Guided starter creation checkpoints source and canvas retry keys plus the acknowledged source ID
+in bounded account/workspace-scoped tab storage. HTTP setup context is a mismatch guard against
+fresh authenticated identity and the intended workspace, never a source of authority. Retrying
+after partial success resumes the unfinished step; keeping the source without a canvas never
+deletes it. Successful product logout clears saved setup and invalidates late checkpoints.
 
 Store canvas metadata, objects, grants, invitations, receipts and outbox records separately from
 the existing bounded Idea Board aggregate. The first release supports at most 500 objects and
@@ -124,3 +156,10 @@ Ship only after contract tests, memory/PostgreSQL conformance, HTTP authorizatio
 delivery, legacy workshop regressions and desktop/mobile browser acceptance pass. Benchmark
 claims require their own measured evidence; the plan's editor-count, latency and frame-rate
 targets are not implied by a passing functional suite.
+
+Order 5's focused verification passes; final full repository and browser results are tracked in
+the [implementation status](../implementation-status.md#canvas-productivity-order-5-october-30-2026).
+The browser fixture substitutes in-memory object storage and
+scanning. Physical touch hardware, production media operation, production load, post-commit peer
+latency and rendering performance remain unmeasured for this increment. The October 29 repository
+acknowledgement measurements belong to the earlier pilot and do not accept these gates.

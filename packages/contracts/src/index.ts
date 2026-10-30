@@ -10,6 +10,8 @@ export * from "./qna-policy";
 export * from "./text-opinions";
 export * from "./session-summaries";
 export * from "./canvas-boards";
+export * from "./canvas-template-catalog";
+export * from "./canvas-template-factory";
 import {
   hasTextOpinionQuestions,
   isTextOpinionQuestion,

@@ -103,10 +103,11 @@ export function ideaBoardCreateIntent(input: IdeaBoardCreate) {
 export async function createIdeaBoard(
   input: ReturnType<typeof ideaBoardCreateIntent>,
   signal?: AbortSignal,
+  setupContext?: { userId: string; workspaceId: string },
 ) {
   const result = await apiFetch<{ board: unknown }>("/v1/idea-boards", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, ...(setupContext ? { setupContext } : {}) }),
     signal,
   });
   return IdeaBoardViewSchema.parse(result.board);

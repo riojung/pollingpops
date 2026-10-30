@@ -1,7 +1,11 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 const messages = {
   ...canvasMessages("en-CA"),
+  ...canvasAssetsMessages("en-CA"),
+  ...canvasProductivityMessages("en-CA"),
   ...canvasWorkshopMessages("en-CA"),
   "boards.title": "Idea boards",
   "boards.description": "Collect ideas, group them together, and choose shared priorities.",

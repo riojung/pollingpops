@@ -1,9 +1,13 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
   ...canvasMessages("ko-KR"),
+  ...canvasAssetsMessages("ko-KR"),
+  ...canvasProductivityMessages("ko-KR"),
   ...canvasWorkshopMessages("ko-KR"),
   "boards.more": "보드 더 불러오기",
   "boards.title": "아이디어 보드",

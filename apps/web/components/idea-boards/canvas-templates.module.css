@@ -1,0 +1,89 @@
+.chooser h3,
+.preview h3 {
+  margin-block: 0 0.5rem;
+  font-size: 1rem;
+}
+.chooser p,
+.preview p {
+  margin-block: 0.5rem;
+}
+.options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-block: 1rem;
+}
+.options button {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  min-height: 4.5rem;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 0.65rem;
+  text-align: start;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.options button[aria-pressed="true"] {
+  border-color: var(--ui-accent);
+  box-shadow: inset 0 0 0 2px var(--ui-accent);
+}
+.options button:disabled {
+  cursor: default;
+}
+.options span {
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.options small {
+  font-size: 0.75rem;
+  color: var(--ui-text-subtle);
+}
+.preview {
+  padding: 0.9rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 0.65rem;
+  background: var(--ui-surface-raised);
+}
+.preview svg {
+  display: block;
+  width: 100%;
+  max-height: 16rem;
+  margin-block: 0.75rem;
+}
+.previewContent {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.previewContent h4 {
+  margin-block: 0.75rem 0.5rem;
+}
+.previewContent ol,
+.previewContent ul {
+  padding-inline-start: 1.4rem;
+}
+.previewContent ol > li + li {
+  margin-top: 0.75rem;
+}
+.recovery {
+  padding: 0.9rem;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 0.65rem;
+  background: var(--ui-surface-raised);
+}
+.recovery a,
+.recovery button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-inline-end: 0.5rem;
+}
+@media (max-width: 440px) {
+  .options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

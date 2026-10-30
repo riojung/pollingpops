@@ -21,6 +21,7 @@ import { useLocale } from "../locale-provider";
 import { useConfirmNavigation } from "../navigation-guard";
 import { useManagementNavigation, type ManagementNavigationState } from "../management-navigation";
 import { fetchCustomerManagementNavigation } from "../../lib/management-navigation";
+import { clearOtherCanvasCreationSetups } from "../../lib/canvas-creation-storage";
 
 export interface WorkspaceCreator {
   userId: string;
@@ -104,6 +105,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
         throw new Error("Workspace access could not be loaded. Try again.");
       }
       setCreator(account.creator);
+      clearOtherCanvasCreationSetups(account.creator.userId);
       setWorkspace(account.workspace ?? null);
       setEntitlements(account.entitlements);
       setProductFeatures(features.data);

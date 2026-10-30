@@ -130,6 +130,73 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
 }
 
 describe("independent idea board APIs", () => {
+  it.each(["userId", "workspaceId"] as const)(
+    "rejects stale guided setup %s before looking up receipts or creating workshops",
+    async (field) => {
+      const { app, headers } = await fixture();
+      const account = await app.inject({ method: "GET", url: "/v1/auth/me", headers });
+      expect(account.statusCode, account.body).toBe(200);
+      const current = account.json().creator as { userId: string; workspaceId: string };
+      const setupContext = { userId: current.userId, workspaceId: current.workspaceId };
+      const payload = {
+        schemaVersion: 1,
+        title: "Original starter workshop",
+        description: "Edited setup prompt",
+        idempotencyKey: randomUUID(),
+      };
+      const receipt = vi.spyOn(IdeaBoardRepository.prototype, "getCreation");
+      const create = vi.spyOn(IdeaBoardRepository.prototype, "create");
+      const stale = await app.inject({
+        method: "POST",
+        url: "/v1/idea-boards",
+        headers,
+        payload: { ...payload, setupContext: { ...setupContext, [field]: randomUUID() } },
+      });
+      expect(stale.statusCode, stale.body).toBe(409);
+      expect(stale.json().error.code).toBe("SETUP_CONTEXT_CHANGED");
+      expect(receipt).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+      const restored = await app.inject({
+        method: "POST",
+        url: "/v1/idea-boards",
+        headers,
+        payload: { ...payload, setupContext },
+      });
+      expect(restored.statusCode, restored.body).toBe(201);
+      const id = restored.json().board.id;
+      const legacyReplay = await app.inject({
+        method: "POST",
+        url: "/v1/idea-boards",
+        headers,
+        payload,
+      });
+      expect(legacyReplay.statusCode, legacyReplay.body).toBe(201);
+      expect(legacyReplay.json().board.id).toBe(id);
+      const guardedReplay = await app.inject({
+        method: "POST",
+        url: "/v1/idea-boards",
+        headers,
+        payload: { ...payload, setupContext },
+      });
+      expect(guardedReplay.statusCode, guardedReplay.body).toBe(201);
+      expect(guardedReplay.json().board.id).toBe(id);
+      const listed = await app.inject({ method: "GET", url: "/v1/idea-boards", headers });
+      expect(listed.json().boards.map((board: { id: string }) => board.id)).toEqual([id]);
+      const calls = receipt.mock.calls.length;
+      const other = await signIn(app, `other-setup-${randomUUID()}@example.com`);
+      const anotherIdentity = await app.inject({
+        method: "POST",
+        url: "/v1/idea-boards",
+        headers: other,
+        payload: { ...payload, setupContext },
+      });
+      expect(anotherIdentity.statusCode, anotherIdentity.body).toBe(409);
+      expect(anotherIdentity.json().error.code).toBe("SETUP_CONTEXT_CHANGED");
+      expect(receipt.mock.calls).toHaveLength(calls);
+      expect(create.mock.calls).toHaveLength(3);
+    },
+  );
+
   it("searches retained titles before pagination, including boards beyond the initial page", async () => {
     const { app, headers } = await fixture();
     const created: Array<{ id: string; title: string }> = [];

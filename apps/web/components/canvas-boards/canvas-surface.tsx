@@ -11,6 +11,7 @@ import {
 import type { CanvasObject, CanvasObjectPatchSchema, IdeaBoardView } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import { IdeaContent } from "../idea-boards/idea-content";
+import { CanvasImage } from "./canvas-image";
 import {
   connectorPoint,
   fitViewport,
@@ -19,12 +20,20 @@ import {
   zoomAt,
   type CanvasPoint,
   type CanvasViewport,
+  type CanvasBounds,
 } from "./canvas-geometry";
 import styles from "./canvas.module.css";
-import { moveCanvasPatch } from "./canvas-model";
+import {
+  canvasDragRect,
+  canvasObjectsInRect,
+  canvasTransformPatches,
+  sampleCanvasStroke,
+  type CanvasTransform,
+} from "./canvas-productivity";
+import { canvasObjectBounds, canvasSelectionBounds } from "./canvas-hierarchy";
 
 export type CanvasPatch = ReturnType<typeof CanvasObjectPatchSchema.parse>;
-export type CanvasTool = "select" | "hand" | "connector";
+export type CanvasTool = "select" | "hand" | "connector" | "marquee" | "pen";
 export function editableCanvasObject(object: CanvasObject, edit: boolean, facilitate: boolean) {
   return edit && !object.locked && (object.type !== "idea_ref" || facilitate);
 }
@@ -42,7 +51,12 @@ export function CanvasSurface({
   viewport,
   onViewport,
   selectedId,
+  selectedIds,
   onSelect,
+  onSelectMany,
+  onTransform,
+  onCreatePen,
+  onGestureActive,
   tool = "hand",
   canEdit = false,
   canFacilitate = false,
@@ -60,7 +74,16 @@ export function CanvasSurface({
   viewport: CanvasViewport;
   onViewport: (viewport: CanvasViewport) => void;
   selectedId?: string | null;
-  onSelect?: (id: string | null) => void;
+  selectedIds?: string[];
+  onSelect?: (id: string | null, additive?: boolean, revealInspector?: boolean) => void;
+  onSelectMany?: (ids: string[], additive: boolean) => void;
+  onTransform?: (
+    ids: string[],
+    transform: CanvasTransform,
+    originalObjects: CanvasObject[],
+  ) => Promise<boolean>;
+  onCreatePen?: (points: [number, number][]) => Promise<boolean>;
+  onGestureActive?: (active: boolean) => void;
   tool?: CanvasTool;
   canEdit?: boolean;
   canFacilitate?: boolean;
@@ -78,27 +101,38 @@ export function CanvasSurface({
   const surface = useRef<SVGSVGElement>(null);
   const patternId = useId();
   const arrowId = useId();
+  const gestureObserver = useRef(onGestureActive);
+  gestureObserver.current = onGestureActive;
+  useEffect(() => () => gestureObserver.current?.(false), []);
   const pointers = useRef(new Map<number, CanvasPoint>());
   const gesture = useRef<{
-    kind: "pan" | "move" | "resize";
+    kind: "pan" | "move" | "resize" | "marquee" | "pen";
     start: CanvasPoint;
     viewport: CanvasViewport;
-    object?: CanvasObject;
+    ids: string[];
+    objects: CanvasObject[];
+    additive: boolean;
+    bounds?: CanvasBounds;
   } | null>(null);
   const pinch = useRef<{
     distance: number;
     midpoint: CanvasPoint;
     viewport: CanvasViewport;
   } | null>(null);
-  const [preview, updatePreview] = useState<{ id: string; patch: CanvasPatch } | null>(null);
+  const [preview, updatePreview] = useState<Map<string, CanvasPatch>>(new Map());
   const previewRef = useRef(preview);
-  function setPreview(value: typeof preview) {
+  const [area, setArea] = useState<CanvasBounds | null>(null);
+  const [stroke, setStroke] = useState<[number, number][]>([]);
+  const strokeRef = useRef<[number, number][]>([]);
+  const finalTransform = useRef<CanvasTransform | null>(null);
+  function setPreview(value: Map<string, CanvasPatch>) {
     previewRef.current = value;
     updatePreview(value);
   }
+  const selection = selectedIds ?? (selectedId ? [selectedId] : []);
   const renderObjects = objects
     .map((object) =>
-      preview?.id === object.id ? ({ ...object, ...preview.patch } as CanvasObject) : object,
+      preview.has(object.id) ? ({ ...object, ...preview.get(object.id) } as CanvasObject) : object,
     )
     .filter(
       (object) =>
@@ -106,9 +140,14 @@ export function CanvasSurface({
         (object.idea ?? sourceBoard?.ideas.find((idea) => idea.id === object.ideaId))?.status ===
           "approved",
     )
-    .sort((left, right) => left.zIndex - right.zIndex || left.id.localeCompare(right.id));
-
-  function point(event: { clientX: number; clientY: number }): CanvasPoint {
+    .sort(
+      (a, b) =>
+        a.zIndex - b.zIndex ||
+        (a.type === "frame" ? -1 : 0) - (b.type === "frame" ? -1 : 0) ||
+        a.id.localeCompare(b.id),
+    );
+  const selectionBounds = canvasSelectionBounds(renderObjects, selection);
+  function point(event: { clientX: number; clientY: number }) {
     const box = surface.current?.getBoundingClientRect();
     return { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) };
   }
@@ -121,56 +160,80 @@ export function CanvasSurface({
         }
       : null;
   }
+  function clearPreview() {
+    gesture.current = null;
+    finalTransform.current = null;
+    setPreview(new Map());
+    setArea(null);
+    strokeRef.current = [];
+    setStroke([]);
+    onGestureActive?.(false);
+  }
   function start(event: ReactPointerEvent<SVGSVGElement>) {
     if (
       event.button !== 0 ||
       (event.target instanceof Element && event.target.closest("button,a,input,textarea,select"))
     )
       return;
-    const start = point(event);
-    pointers.current.set(event.pointerId, start);
+    const position = point(event);
+    pointers.current.set(event.pointerId, position);
     event.currentTarget.setPointerCapture(event.pointerId);
     const two = pair();
     if (two) {
+      clearPreview();
       pinch.current = { ...two, viewport };
-      gesture.current = null;
-      setPreview(null);
       event.preventDefault();
       return;
     }
-    const target =
+    const element =
       event.target instanceof Element ? event.target.closest("[data-canvas-object]") : null;
-    const object = objects.find((item) => item.id === target?.getAttribute("data-canvas-object"));
-    if (tool === "connector" && object && canEdit) {
+    const object = objects.find((item) => item.id === element?.getAttribute("data-canvas-object"));
+    const common = {
+      start: position,
+      viewport,
+      ids: [] as string[],
+      objects,
+      additive: event.shiftKey || event.metaKey || event.ctrlKey,
+    };
+    if (tool === "pen" && canEdit && onCreatePen) {
+      const world = worldPoint(position, viewport);
+      strokeRef.current = [[world.x, world.y]];
+      setStroke(strokeRef.current);
+      gesture.current = { ...common, kind: "pen" };
+      onGestureActive?.(true);
+    } else if (tool === "connector" && object && canEdit) {
       onConnect?.(object.id);
-      return;
-    }
-    if (tool === "hand" || !object) {
-      gesture.current = { kind: "pan", start, viewport };
-      if (tool !== "hand") onSelect?.(null);
+    } else if (tool === "hand") gesture.current = { ...common, kind: "pan" };
+    else if (tool === "marquee" || !object) {
+      gesture.current = { ...common, kind: "marquee" };
+      setArea(canvasDragRect(worldPoint(position, viewport), worldPoint(position, viewport)));
     } else {
-      onSelect?.(object.id);
+      if (!selection.includes(object.id) || common.additive)
+        onSelect?.(object.id, common.additive, event.pointerType !== "touch");
       if (
+        !common.additive &&
         editableCanvasObject(object, canEdit, canFacilitate) &&
         (!isObjectEditable || isObjectEditable(object)) &&
         object.type !== "connector"
-      )
+      ) {
+        const ids = selection.includes(object.id) ? selection : [object.id];
+        const resize =
+          event.target instanceof Element && event.target.hasAttribute("data-canvas-resize");
         gesture.current = {
-          kind:
-            event.target instanceof Element && event.target.hasAttribute("data-canvas-resize")
-              ? "resize"
-              : "move",
-          start,
-          viewport,
-          object,
+          ...common,
+          ids,
+          kind: resize ? "resize" : "move",
+          bounds: resize ? canvasObjectBounds(object, objects) : undefined,
         };
+        onGestureActive?.(true);
+      }
     }
     event.preventDefault();
   }
   function move(event: ReactPointerEvent<SVGSVGElement>) {
-    onCursor?.(worldPoint(point(event), viewport));
-    if (!pointers.current.has(event.pointerId)) return;
     const current = point(event);
+    onCursor?.(worldPoint(current, viewport));
+    if (!pointers.current.has(event.pointerId)) return;
     pointers.current.set(event.pointerId, current);
     const two = pair();
     if (pinch.current && two) {
@@ -189,26 +252,41 @@ export function CanvasSurface({
     }
     const active = gesture.current;
     if (!active) return;
-    if (active.kind === "pan")
+    if (active.kind === "pan") {
       onViewport({
         ...active.viewport,
         x: active.viewport.x + current.x - active.start.x,
         y: active.viewport.y + current.y - active.start.y,
       });
-    else if (active.object) {
-      const dx = (current.x - active.start.x) / active.viewport.zoom;
-      const dy = (current.y - active.start.y) / active.viewport.zoom;
-      setPreview({
-        id: active.object.id,
-        patch:
-          active.kind === "resize"
-            ? {
-                width: Math.max(40, Math.min(10000, Math.round(active.object.width + dx))),
-                height: Math.max(30, Math.min(10000, Math.round(active.object.height + dy))),
-              }
-            : moveCanvasPatch(active.object, dx, dy),
-      });
+      return;
     }
+    const world = worldPoint(current, active.viewport);
+    if (active.kind === "pen") {
+      const last = strokeRef.current.at(-1)!;
+      if (Math.hypot(world.x - last[0], world.y - last[1]) < 2) return;
+      strokeRef.current = sampleCanvasStroke([...strokeRef.current, [world.x, world.y]]);
+      setStroke(strokeRef.current);
+      return;
+    }
+    if (active.kind === "marquee") {
+      setArea(canvasDragRect(worldPoint(active.start, active.viewport), world));
+      return;
+    }
+    const dx = (current.x - active.start.x) / active.viewport.zoom,
+      dy = (current.y - active.start.y) / active.viewport.zoom;
+    const transform: CanvasTransform =
+      active.kind === "resize" && active.bounds
+        ? {
+            type: "resize",
+            bounds: {
+              ...active.bounds,
+              width: Math.max(10, active.bounds.width + dx),
+              height: Math.max(10, active.bounds.height + dy),
+            },
+          }
+        : { type: "move", dx, dy };
+    finalTransform.current = transform;
+    setPreview(canvasTransformPatches(active.objects, active.ids, transform));
   }
   async function end(event: ReactPointerEvent<SVGSVGElement>) {
     const active = gesture.current;
@@ -216,23 +294,59 @@ export function CanvasSurface({
     gesture.current = null;
     if (pinch.current) {
       pinch.current = null;
-      setPreview(null);
+      clearPreview();
       return;
     }
-    const finalPreview = previewRef.current;
-    if (active?.object && finalPreview?.id === active.object.id && onPatch) {
-      try {
-        await onPatch(active.object, finalPreview.patch);
-      } finally {
-        setPreview(null);
+    if (!active) return;
+    try {
+      if (active.kind === "pen") {
+        const last = strokeRef.current.at(-1),
+          end = worldPoint(point(event), active.viewport);
+        if (last && Math.hypot(last[0] - end.x, last[1] - end.y) > 0.5)
+          strokeRef.current = sampleCanvasStroke([...strokeRef.current, [end.x, end.y]]);
+        if (strokeRef.current.length >= 2) await onCreatePen?.(strokeRef.current);
+      } else if (active.kind === "marquee") {
+        const rect = canvasDragRect(
+          worldPoint(active.start, active.viewport),
+          worldPoint(point(event), active.viewport),
+        );
+        onSelectMany?.(
+          rect.width < 3 && rect.height < 3 ? [] : canvasObjectsInRect(active.objects, rect),
+          active.additive,
+        );
+      } else if (active.ids.length && (active.kind === "move" || active.kind === "resize")) {
+        const current = point(event),
+          dx = (current.x - active.start.x) / active.viewport.zoom,
+          dy = (current.y - active.start.y) / active.viewport.zoom;
+        if (dx || dy)
+          finalTransform.current =
+            active.kind === "resize" && active.bounds
+              ? {
+                  type: "resize",
+                  bounds: {
+                    ...active.bounds,
+                    width: Math.max(10, active.bounds.width + dx),
+                    height: Math.max(10, active.bounds.height + dy),
+                  },
+                }
+              : { type: "move", dx, dy };
+        if (!finalTransform.current) return;
+        setPreview(canvasTransformPatches(active.objects, active.ids, finalTransform.current));
+        if (onTransform) await onTransform(active.ids, finalTransform.current, active.objects);
+        else if (active.ids.length === 1 && onPatch) {
+          const object = active.objects.find((item) => item.id === active.ids[0]);
+          const patch = object ? previewRef.current.get(object.id) : null;
+          if (object && patch) await onPatch(object, patch);
+        }
       }
-    } else setPreview(null);
+    } finally {
+      clearPreview();
+    }
   }
   function cancel() {
     pointers.current.clear();
-    gesture.current = null;
     pinch.current = null;
-    setPreview(null);
+    clearPreview();
   }
   function wheel(event: WheelEvent<SVGSVGElement>) {
     if (event.ctrlKey || event.metaKey || gesture.current || pinch.current) return;
@@ -289,7 +403,7 @@ export function CanvasSurface({
       <rect width="100%" height="100%" fill={`url(#${patternId})`} />
       <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
         {renderObjects.map((object) => {
-          const selected = object.id === selectedId;
+          const selected = selection.includes(object.id);
           if (object.type === "connector") {
             const from = connectorPoint(object.from, renderObjects),
               to = connectorPoint(object.to, renderObjects);
@@ -329,9 +443,41 @@ export function CanvasSurface({
                 <polyline
                   points={object.points.map((pair) => pair.join(",")).join(" ")}
                   fill="none"
-                  stroke={selected ? "var(--ui-accent-ink)" : "var(--ui-text)"}
+                  stroke={
+                    selected
+                      ? "var(--ui-accent-ink)"
+                      : `var(--canvas-pen-${object.color}, var(--ui-text))`
+                  }
                   strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
+                {selected ? (
+                  <rect
+                    x={object.x}
+                    y={object.y}
+                    width={object.width}
+                    height={object.height}
+                    fill="none"
+                    stroke="var(--ui-accent-ink)"
+                    strokeDasharray="4 4"
+                    pointerEvents="none"
+                  />
+                ) : null}
+                {selected &&
+                selection.length === 1 &&
+                editableCanvasObject(object, canEdit, canFacilitate) &&
+                (!isObjectEditable || isObjectEditable(object)) ? (
+                  <rect
+                    data-canvas-resize="true"
+                    x={object.x + object.width - 8}
+                    y={object.y + object.height - 8}
+                    width={16}
+                    height={16}
+                    fill="var(--ui-accent-ink)"
+                    className={styles.resizeHandle}
+                  />
+                ) : null}
               </g>
             );
           const idea =
@@ -361,9 +507,11 @@ export function CanvasSurface({
                   height={object.height}
                   rx={object.type === "sticky" ? 3 : 10}
                   fill={
-                    object.type === "text" || object.type === "frame" || object.type === "idea_ref"
+                    object.type === "text" || object.type === "idea_ref"
                       ? "var(--ui-surface-raised)"
-                      : colorValues[object.color]
+                      : object.type === "frame"
+                        ? "transparent"
+                        : colorValues[object.color]
                   }
                   stroke={
                     selected
@@ -376,40 +524,54 @@ export function CanvasSurface({
                   strokeDasharray={object.type === "frame" ? "7 5" : undefined}
                 />
               )}
-              <foreignObject
-                x={10}
-                y={10}
-                width={Math.max(1, object.width - 20)}
-                height={Math.max(1, object.height - 20)}
-              >
-                <div className={styles.objectContent} data-type={object.type}>
-                  {idea && sourceBoardId ? (
-                    <>
-                      <small>{t("canvas.protected")}</small>
-                      <IdeaContent
-                        boardId={sourceBoardId}
-                        canvasId={guestToken ? undefined : canvasId}
-                        guestToken={guestToken}
-                        idea={idea}
-                      />
-                    </>
-                  ) : object.type === "link" ? (
-                    <a
-                      href={object.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      referrerPolicy="no-referrer"
-                    >
-                      {object.text || new URL(object.url).hostname}
-                    </a>
-                  ) : (
-                    <span dir="auto" lang="">
-                      {object.text}
-                    </span>
-                  )}
-                </div>
-              </foreignObject>
+              {object.type === "image" && canvasId ? (
+                <CanvasImage
+                  canvasId={canvasId}
+                  mediaId={object.mediaId}
+                  altText={object.altText}
+                  width={object.width}
+                  height={object.height}
+                  sourceBoardId={sourceBoardId}
+                  guestToken={guestToken}
+                />
+              ) : (
+                <foreignObject
+                  x={10}
+                  y={10}
+                  width={Math.max(1, object.width - 20)}
+                  height={object.type === "frame" ? 28 : Math.max(1, object.height - 20)}
+                >
+                  <div className={styles.objectContent} data-type={object.type}>
+                    {idea && sourceBoardId ? (
+                      <>
+                        <small>{t("canvas.protected")}</small>
+                        <IdeaContent
+                          boardId={sourceBoardId}
+                          canvasId={guestToken ? undefined : canvasId}
+                          guestToken={guestToken}
+                          idea={idea}
+                        />
+                      </>
+                    ) : object.type === "link" ? (
+                      <a
+                        href={object.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        referrerPolicy="no-referrer"
+                      >
+                        {object.text || new URL(object.url).hostname}
+                        <small>{new URL(object.url).hostname}</small>
+                      </a>
+                    ) : (
+                      <span dir="auto" lang="">
+                        {object.text}
+                      </span>
+                    )}
+                  </div>
+                </foreignObject>
+              )}
               {selected &&
+              selection.length === 1 &&
               editableCanvasObject(object, canEdit, canFacilitate) &&
               (!isObjectEditable || isObjectEditable(object)) ? (
                 <rect
@@ -426,6 +588,36 @@ export function CanvasSurface({
             </g>
           );
         })}
+        {selection.length > 1 && selectionBounds ? (
+          <rect
+            {...selectionBounds}
+            fill="none"
+            stroke="var(--ui-accent-ink)"
+            strokeWidth={1.5 / viewport.zoom}
+            strokeDasharray="6 4"
+            pointerEvents="none"
+          />
+        ) : null}
+        {area ? (
+          <rect
+            {...area}
+            fill="var(--ui-accent-soft)"
+            fillOpacity={0.35}
+            stroke="var(--ui-accent-ink)"
+            strokeWidth={1 / viewport.zoom}
+            pointerEvents="none"
+          />
+        ) : null}
+        {stroke.length > 1 ? (
+          <polyline
+            points={stroke.map((point) => point.join(",")).join(" ")}
+            fill="none"
+            stroke="var(--ui-accent-ink)"
+            strokeWidth={3}
+            strokeLinecap="round"
+            pointerEvents="none"
+          />
+        ) : null}
         {members
           .filter((member) => member.cursor)
           .map((member) => (
@@ -531,7 +723,23 @@ export function CanvasReadOnlySurface({
                 />
               ) : (
                 <p dir="auto" lang="">
-                  {object.text}
+                  {object.type === "link" ? (
+                    <>
+                      <a
+                        href={object.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        referrerPolicy="no-referrer"
+                      >
+                        {object.text || new URL(object.url).hostname}
+                      </a>
+                      {object.text ? <small> ({new URL(object.url).hostname})</small> : null}
+                    </>
+                  ) : object.type === "image" ? (
+                    object.altText
+                  ) : (
+                    object.text
+                  )}
                 </p>
               )}
             </li>

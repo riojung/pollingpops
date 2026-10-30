@@ -158,6 +158,38 @@ function publishableRound(title: string): QuizDraft {
 }
 
 describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
+  it("bootstraps the original untracked baseline before applying forward-only canvas migrations", async () => {
+    const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
+    const baselineDirectory = await mkdtemp(join(tmpdir(), "openround-baseline-"));
+    const schema = `baseline_${randomUUID().replaceAll("-", "")}`;
+    const adminPool = new Pool({ connectionString: adminUrl });
+    let pool: Pool | undefined;
+    try {
+      const migrations = await discoverMigrations(directory);
+      await writeFile(join(baselineDirectory, migrations[0]!.fileName), migrations[0]!.sql);
+      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      const url = new URL(adminUrl!);
+      url.searchParams.set("options", `-csearch_path=${schema},public`);
+      pool = new Pool({ connectionString: url.toString(), max: 1 });
+      await runMigrations(pool, baselineDirectory);
+      await pool.query("DROP TABLE _openround_migrations");
+      await runMigrations(pool, directory);
+      await runMigrations(pool, directory);
+      expect(
+        (await pool.query("SELECT count(*)::integer AS count FROM _openround_migrations")).rows[0]
+          .count,
+      ).toBe(migrations.length);
+      const constraint = await pool.query(
+        "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='media_references'::regclass AND conname='media_references_owner_type_check'",
+      );
+      expect(constraint.rows[0].definition).toContain("canvas_board");
+    } finally {
+      await pool?.end();
+      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.end();
+      await rm(baselineDirectory, { recursive: true, force: true });
+    }
+  });
   it("splits legacy shared folders by content type while retaining Round IDs and frozen versions", async () => {
     const schema = `openround_folder_upgrade_${randomUUID().replaceAll("-", "")}`;
     const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
@@ -1243,16 +1275,16 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 76, name: "rich_idea_boards" },
       { version: 77, name: "presentation_reveal_rosters" },
       { version: 78, name: "customer_account_user_licenses" },
+      { version: 79, name: "canvas_boards" },
+      { version: 80, name: "canvas_productivity" },
     ]);
 
-    // An existing P0 database has the full schema but no ledger. Replaying the
-    // idempotent baseline must safely bootstrap tracking before later migrations.
-    await migrationRepository.pool.query("DROP TABLE _openround_migrations");
-    await migrationRepository.migrate();
-    const bootstrapped = await migrationRepository.pool.query<{ count: string }>(
-      "SELECT count(*) FROM _openround_migrations",
+    // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
+    // Never erase forward migration receipts from a modern populated schema.
+    const mediaOwnerConstraint = await migrationRepository.pool.query<{ definition: string }>(
+      "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='media_references'::regclass AND conname='media_references_owner_type_check'",
     );
-    expect(bootstrapped.rows[0]?.count).toBe(String(migrations.rows.length));
+    expect(mediaOwnerConstraint.rows[0]!.definition).toContain("canvas_board");
 
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const alteredDirectory = await mkdtemp(join(tmpdir(), "openround-altered-migrations-"));
@@ -9210,12 +9242,13 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
 
   it("rejects an otherwise restricted runtime principal with an unexpected role grant", async () => {
     const roleName = `openround_test_extra_${randomUUID().replaceAll("-", "")}`;
+    const runtimeLogin = decodeURIComponent(new URL(runtimeUrl!).username).replaceAll('"', '""');
     const adminPool = new Pool({ connectionString: adminUrl });
     let roleCreated = false;
     try {
       await adminPool.query(`CREATE ROLE "${roleName}" NOLOGIN`);
       roleCreated = true;
-      await adminPool.query(`GRANT "${roleName}" TO openround_test_app`);
+      await adminPool.query(`GRANT "${roleName}" TO "${runtimeLogin}"`);
 
       const principal = await repository.inspectRuntimeDatabasePrincipal();
       expect(principal).toMatchObject({
@@ -9233,7 +9266,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       ).rejects.toThrow("restricted, non-owner openround_runtime database principal");
     } finally {
       if (roleCreated) {
-        await adminPool.query(`REVOKE "${roleName}" FROM openround_test_app`);
+        await adminPool.query(`REVOKE "${roleName}" FROM "${runtimeLogin}"`);
         await adminPool.query(`DROP ROLE "${roleName}"`);
       }
       await adminPool.end();

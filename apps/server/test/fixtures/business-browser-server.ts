@@ -25,6 +25,7 @@ import { entitlementsFor } from "../../src/entitlements.js";
 import { ConsoleMailer } from "../../src/mailer.js";
 import { attachRealtime } from "../../src/realtime.js";
 import { hashToken } from "../../src/security.js";
+import { installCanvasBrowserImages } from "./canvas-browser-images.js";
 
 // This executable is a loopback-only browser fixture, never a production server entrypoint.
 if (process.env.NODE_ENV !== "test")
@@ -41,6 +42,14 @@ const config = ConfigSchema.parse({
   BUSINESS_EVENT_CREDITS_ENABLED: "true",
   BILLING_MODE: "disabled",
   LOG_LEVEL: "silent",
+  ...(process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_IMAGES === "true"
+    ? {
+        FEATURE_MEDIA_UPLOADS: "true",
+        S3_ENDPOINT: "http://127.0.0.1:9000",
+        S3_ACCESS_KEY_ID: "canvas-browser-test",
+        S3_SECRET_ACCESS_KEY: "canvas-browser-test",
+      }
+    : {}),
 });
 if (process.env.CONTROL_AUTH_MODE === "password" || process.env.CANVAS_BROWSER_FIXTURE === "true") {
   // The test UI receives real development links from the HTTP response. Keep
@@ -52,7 +61,16 @@ if (process.env.CONTROL_AUTH_MODE === "password" || process.env.CANVAS_BROWSER_F
   ConsoleMailer.prototype.sendOrganizationInvitation = async () => {};
 }
 const repository = new MemoryRepository();
-const built = await buildApp(config, { repository });
+const built = await buildApp(config, {
+  repository,
+  ...(process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_IMAGES === "true"
+    ? {
+        scanner: { scan: async () => ({ clean: true as const, signature: null }) },
+      }
+    : {}),
+});
+if (process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_IMAGES === "true")
+  installCanvasBrowserImages(built.app, built.storage, config.PUBLIC_API_URL);
 const platform = createPlatformRepository(repository);
 if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
   await platform.saveFeaturePolicy({

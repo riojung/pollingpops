@@ -3,12 +3,13 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import type { CanvasObject } from "@openround/contracts";
+import type { CanvasObject, CanvasObjectCreate } from "@openround/contracts";
 import { Brand } from "../brand";
 import { useLocale } from "../locale-provider";
 import { GuardedLink, NavigationGuardProvider, useNavigationBlocker } from "../navigation-guard";
@@ -20,13 +21,13 @@ import {
   INITIAL_VIEWPORT,
   worldPoint,
   zoomAt,
+  revealCanvasBounds,
   type CanvasPoint,
 } from "./canvas-geometry";
 import {
+  canvasObjectLabel,
   canChangeObject,
   canPublishCanvasObject,
-  duplicateCanvasObject,
-  moveCanvasPatch,
   newCanvasObject,
   nextCanvasPosition,
   reviewedCanvasCommand,
@@ -37,6 +38,23 @@ import { CanvasShareDialog } from "./canvas-share-dialog";
 import { CanvasWorkshopControls } from "./workshop-controls";
 import { useCanvasDraft } from "./use-canvas-draft";
 import { CanvasDraftRecovery } from "./canvas-draft-recovery";
+import { CanvasSelectionTools, canvasPlanMessage } from "./canvas-selection-tools";
+import {
+  canvasObjectBounds,
+  canvasSelectionBounds,
+  canvasSelectionPeers,
+} from "./canvas-hierarchy";
+import {
+  newCanvasPen,
+  canvasCreationFull,
+  planCanvasDuplicate,
+  planCanvasDelete,
+  planCanvasTransform,
+  resizeCanvasPatch,
+  type CanvasPlan,
+  type CanvasTransform,
+} from "./canvas-productivity";
+import { CanvasAssetTools } from "./canvas-asset-tools";
 import styles from "./canvas.module.css";
 
 function CanvasEditorContent({ id }: { id: string }) {
@@ -55,12 +73,23 @@ function CanvasEditorContent({ id }: { id: string }) {
                 ? "canvas.connector"
                 : object.type === "idea_ref"
                   ? "canvas.protected"
-                  : "boards.elementSettings",
+                  : object.type === "frame"
+                    ? "canvas.productivity.frame"
+                    : object.type === "pen"
+                      ? "canvas.productivity.pen"
+                      : object.type === "image"
+                        ? "canvas.assets.image"
+                        : "boards.elementSettings",
     );
-    return object.text.trim().slice(0, 80) || `${name} ${formatNumber(locale, index + 1)}`;
+    return canvasObjectLabel(object, `${name} ${formatNumber(locale, index + 1)}`);
   }
   const state = useCanvasBoard(id);
   const board = state.board;
+  const creationFull = Boolean(board && canvasCreationFull(board));
+  const [selectionIds, setSelectionIds] = useState<string[]>([]);
+  const [gestureActive, setGestureActive] = useState(false);
+  const [planError, setPlanError] = useState<CanvasPlan["reason"]>(null);
+  const [revealIds, setRevealIds] = useState<string[]>([]);
   const [tool, setTool] = useState<CanvasTool>("select");
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT);
   const [sharing, setSharing] = useState(false);
@@ -87,20 +116,50 @@ function CanvasEditorContent({ id }: { id: string }) {
     draft,
     recovery,
     setDraft,
-    select,
-    acceptSelection,
+    acceptSelection: acceptPrimarySelection,
   } = useCanvasDraft(id, board, {
     locked: state.saving || deleting,
     pending: state.failure !== null,
     confirmDiscard: () => window.confirm(t("canvas.discard")),
     onDiscardPending: state.discard,
   });
+  const selectedIds = board
+    ? selectionIds.includes(selectedId ?? "")
+      ? selectionIds.filter((id) => board.objects.some((object) => object.id === id))
+      : selected
+        ? [selected.id]
+        : []
+    : [];
+  function acceptMany(ids: string[]) {
+    acceptPrimarySelection(ids[0] ?? null);
+    setSelectionIds(ids);
+  }
+  function acceptSelection(id: string | null) {
+    acceptMany(id ? [id] : []);
+  }
+  useLayoutEffect(() => {
+    if (!board || !revealIds.length) return;
+    const bounds = canvasSelectionBounds(board.objects, revealIds);
+    if (bounds && stage.current)
+      setViewport((current) =>
+        revealCanvasBounds(
+          current,
+          bounds,
+          stage.current!.clientWidth,
+          stage.current!.clientHeight,
+        ),
+      );
+    setRevealIds([]);
+  }, [board, revealIds]);
   const blocked = useCallback(
-    () => !deleted.current && (dirty || state.saving || state.failure !== null || deleting),
-    [dirty, state.saving, state.failure, deleting],
+    () =>
+      !deleted.current &&
+      (dirty || state.saving || state.failure !== null || deleting || gestureActive),
+    [dirty, state.saving, state.failure, deleting, gestureActive],
   );
   useNavigationBlocker(blocked);
   const busy = state.saving || state.failure !== null || deleting;
+  const uiBusy = busy || gestureActive;
   const editable = Boolean(board && selected && canChangeObject(board, selected));
   useEffect(() => {
     active.current = true;
@@ -113,6 +172,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     if (window.innerWidth < 760) setOutline(false);
   }, []);
   useEffect(() => {
+    setSelectionIds([]);
     setSharing(false);
     setViewport(INITIAL_VIEWPORT);
   }, [id]);
@@ -156,30 +216,118 @@ function CanvasEditorContent({ id }: { id: string }) {
     };
   }, [id, presence, Boolean(board)]);
 
-  function changeSelection(next: string | null) {
-    if (next === selectedId) return;
-    if (select(next)) setOutline(true);
+  function selectMany(ids: string[], additive = false, reveal = true) {
+    if (!board || state.saving || deleting) return;
+    const peers = canvasSelectionPeers(board.objects, ids);
+    const next = additive ? [...new Set([...selectedIds, ...peers])] : peers;
+    if (next.length === selectedIds.length && next.every((id) => selectedIds.includes(id))) return;
+    if ((dirty || state.failure) && !window.confirm(t("canvas.discard"))) return;
+    if (state.failure) state.discard();
+    acceptMany(next);
+    if (reveal) setOutline(true);
   }
-  async function patch(object: CanvasObject, value: CanvasPatch) {
-    return state.execute({
-      type: "batch",
-      operations: [
-        { type: "update", id: object.id, expectedVersion: object.version, patch: value },
-      ],
-    });
+  function changeSelection(next: string | null, additive = false, revealInspector = true) {
+    if (!board) return;
+    if (additive && next) {
+      const peers = canvasSelectionPeers(board.objects, [next]);
+      if (peers.every((id) => selectedIds.includes(id)))
+        selectMany(
+          selectedIds.filter((id) => !peers.includes(id)),
+          false,
+          revealInspector,
+        );
+      else selectMany(peers, true, revealInspector);
+    } else selectMany(next ? [next] : [], false, revealInspector && next !== selectedId);
+  }
+  async function perform(plan: CanvasPlan) {
+    if (busy || dirty) return false;
+    if (!plan.command) {
+      setPlanError(plan.reason);
+      return false;
+    }
+    setPlanError(null);
+    if (await state.execute(plan.command)) {
+      acceptMany(plan.selection);
+      if (plan.command.operations.some((operation) => operation.type === "create"))
+        setRevealIds(plan.selection);
+      return true;
+    }
+    return false;
+  }
+  async function transform(
+    ids: string[],
+    value: CanvasTransform,
+    originalObjects = board?.objects,
+  ) {
+    if (!board || !originalObjects) return false;
+    return perform(planCanvasTransform({ ...board, objects: originalObjects }, ids, value));
+  }
+  async function createObject(object: CanvasObjectCreate) {
+    if (!board?.capabilities.edit || busy || dirty) return false;
+    if (creationFull) {
+      setPlanError("objects");
+      return false;
+    }
+    const preferred = worldPoint(
+      {
+        x: (stage.current?.clientWidth ?? 900) / 2 - object.width / 2,
+        y: (stage.current?.clientHeight ?? 650) / 2 - object.height / 2,
+      },
+      viewport,
+    );
+    const created = {
+      ...object,
+      ...nextCanvasPosition(board.objects, preferred, object.width, object.height),
+      parentId: null,
+      geometricGroupId: null,
+      visibility: "team" as const,
+    };
+    if (await state.execute({ type: "batch", operations: [{ type: "create", object: created }] })) {
+      acceptSelection(created.id);
+      setRevealIds([created.id]);
+      setOutline(true);
+      return true;
+    }
+    return false;
+  }
+  async function createPen(points: [number, number][]) {
+    if (!board?.capabilities.edit || busy || dirty) return false;
+    if (creationFull) {
+      setPlanError("objects");
+      return false;
+    }
+    try {
+      const object = newCanvasPen(points);
+      if (!object) return false;
+      if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
+        acceptSelection(object.id);
+        setRevealIds([object.id]);
+        return true;
+      }
+    } catch {
+      setPlanError("bounds");
+    }
+    return false;
   }
   function fit(selection = false) {
     if (!board) return;
     setViewport(
       fitViewport(
-        selection && selected ? [selected] : board.objects,
+        selection && selectedIds.length
+          ? [canvasSelectionBounds(board.objects, selectedIds)!]
+          : board.objects.map((object) => canvasObjectBounds(object, board.objects)),
         stage.current?.clientWidth ?? 1000,
         stage.current?.clientHeight ?? 650,
       ),
     );
   }
-  async function add(type: "sticky" | "text" | "rect" | "ellipse") {
-    if (!board?.capabilities.edit || busy || (dirty && !window.confirm(t("canvas.discard"))))
+  async function add(type: "sticky" | "text" | "rect" | "ellipse" | "frame") {
+    if (
+      !board?.capabilities.edit ||
+      busy ||
+      creationFull ||
+      (dirty && !window.confirm(t("canvas.discard")))
+    )
       return;
     const point = worldPoint(
       {
@@ -196,40 +344,29 @@ function CanvasEditorContent({ id }: { id: string }) {
         type === "text" ? 280 : 220,
         type === "text" ? 100 : 160,
       ),
-      type === "text" ? t("boards.newText") : "",
+      type === "text"
+        ? t("boards.newText")
+        : type === "frame"
+          ? t("canvas.productivity.frame")
+          : "",
     );
+    if (type === "frame") {
+      object.width = 440;
+      object.height = 300;
+      object.zIndex = -1;
+    }
     if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
       acceptSelection(object.id);
+      setRevealIds([object.id]);
       setTool("select");
       setOutline(true);
     }
   }
   async function duplicate() {
-    if (!board || !selected || !canChangeObject(board, selected) || busy || dirty) return;
-    const object = duplicateCanvasObject(selected);
-    if (!object) return;
-    if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
-      acceptSelection(object.id);
-    }
+    if (board) await perform(planCanvasDuplicate(board, selectedIds));
   }
   async function remove() {
-    if (
-      !board ||
-      !selected ||
-      !canChangeObject(board, selected) ||
-      selected.type === "idea_ref" ||
-      busy ||
-      dirty
-    )
-      return;
-    if (
-      await state.execute({
-        type: "batch",
-        operations: [{ type: "delete", id: selected.id, expectedVersion: selected.version }],
-      })
-    ) {
-      acceptSelection(null);
-    }
+    if (board) await perform(planCanvasDelete(board, selectedIds));
   }
   async function deleteBoard() {
     if (
@@ -261,7 +398,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     if (!board?.capabilities.edit || busy || dirty) return;
     if (!connectorFrom) {
       setConnectorFrom(next);
-      select(next);
+      changeSelection(next);
       return;
     }
     if (connectorFrom === next) return;
@@ -284,6 +421,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     };
     if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
       acceptSelection(object.id);
+      setRevealIds([object.id]);
       setConnectorFrom(null);
       setTool("select");
     }
@@ -292,12 +430,12 @@ function CanvasEditorContent({ id }: { id: string }) {
     event.preventDefault();
     if (!board || !selected || !localDraft || !editable || busy) return;
     const value = localDraft;
-    const patchValue: CanvasPatch = {
+    const patchValue: CanvasPatch = resizeCanvasPatch(selected, {
       x: value.x,
       y: value.y,
       width: value.width,
       height: value.height,
-    };
+    });
     if (selected.type !== "idea_ref") {
       patchValue.text = value.text;
       patchValue.color = value.color;
@@ -308,7 +446,37 @@ function CanvasEditorContent({ id }: { id: string }) {
       patchValue.from = { ...selected.from, objectId: value.fromId || null };
       patchValue.to = { ...selected.to, objectId: value.toId || null };
     }
-    if (await patch({ ...selected, version: value.version }, patchValue)) setDraft(null);
+    if (selected.type === "image") patchValue.altText = value.altText ?? selected.altText;
+    if (selected.type === "link") patchValue.url = value.url ?? selected.url;
+    const moved = planCanvasTransform(board, [selected.id], {
+      type: "move",
+      dx: value.x - selected.x,
+      dy: value.y - selected.y,
+    });
+    const geometryChanged = value.x !== selected.x || value.y !== selected.y;
+    if (geometryChanged && !moved.command) {
+      setPlanError(moved.reason);
+      return;
+    }
+    const operations = geometryChanged && moved.command ? moved.command.operations : [];
+    const own = operations.find(
+      (operation) => operation.type === "update" && operation.id === selected.id,
+    );
+    if (own?.type === "update") {
+      own.expectedVersion = value.version;
+      own.patch = { ...own.patch, ...patchValue };
+    } else
+      operations.push({
+        type: "update",
+        id: selected.id,
+        expectedVersion: value.version,
+        patch: patchValue,
+      });
+    try {
+      if (await state.execute({ type: "batch", operations })) setDraft(null);
+    } catch {
+      setPlanError("bounds");
+    }
   }
   function keyboard(event: KeyboardEvent<HTMLElement>) {
     if (
@@ -317,6 +485,7 @@ function CanvasEditorContent({ id }: { id: string }) {
         (event.target.matches("input,textarea,select") || event.target.isContentEditable))
     )
       return;
+    if (gestureActive) return;
     if (event.code === "Space" && !event.repeat && event.target instanceof SVGElement) {
       event.preventDefault();
       restoredTool.current = tool;
@@ -324,7 +493,14 @@ function CanvasEditorContent({ id }: { id: string }) {
       return;
     }
     if (!board || busy) return;
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.key.toLowerCase() === "a" &&
+      event.target instanceof SVGElement
+    ) {
+      event.preventDefault();
+      selectMany(board.objects.map((object) => object.id));
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
       const targetOperationId = event.shiftKey ? board.redoOperationId : board.undoOperationId;
       if (targetOperationId && board.capabilities.edit && !dirty) {
         event.preventDefault();
@@ -341,14 +517,11 @@ function CanvasEditorContent({ id }: { id: string }) {
     ) {
       event.preventDefault();
       const step = event.shiftKey ? 10 : 1;
-      void patch(
-        selected,
-        moveCanvasPatch(
-          selected,
-          event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
-          event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0,
-        ),
-      );
+      void transform(selectedIds, {
+        type: "move",
+        dx: event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
+        dy: event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0,
+      });
     } else if (
       (event.key === "Delete" || event.key === "Backspace") &&
       selected &&
@@ -432,6 +605,7 @@ function CanvasEditorContent({ id }: { id: string }) {
       className={styles.editor}
       onKeyDown={keyboard}
       onKeyUp={(event) => {
+        if (gestureActive) return;
         if (event.code === "Space" && restoredTool.current) {
           setTool(restoredTool.current);
           restoredTool.current = null;
@@ -456,7 +630,7 @@ function CanvasEditorContent({ id }: { id: string }) {
           </p>
         </div>
         <p className={styles.saveStatus} role="status">
-          {state.saving
+          {state.saving || gestureActive
             ? t("canvas.saving")
             : state.failure
               ? t("canvas.conflict")
@@ -467,7 +641,7 @@ function CanvasEditorContent({ id }: { id: string }) {
             type="button"
             className="button"
             onClick={() => setSharing(true)}
-            disabled={busy || dirty}
+            disabled={uiBusy || dirty}
           >
             {t("canvas.share")}
           </button>
@@ -491,12 +665,12 @@ function CanvasEditorContent({ id }: { id: string }) {
           {t("canvas.hand")}
         </button>
         <span className={styles.divider} />
-        {(["sticky", "text", "rect", "ellipse"] as const).map((type) => (
+        {(["sticky", "text", "rect", "ellipse", "frame"] as const).map((type) => (
           <button
             type="button"
             className="button-quiet"
             key={type}
-            disabled={frozen || busy || board.objects.length >= 500}
+            disabled={frozen || uiBusy || creationFull}
             onClick={() => void add(type)}
           >
             {t(
@@ -506,7 +680,9 @@ function CanvasEditorContent({ id }: { id: string }) {
                   ? "boards.textTool"
                   : type === "rect"
                     ? "boards.rectangleTool"
-                    : "boards.ellipseTool",
+                    : type === "ellipse"
+                      ? "boards.ellipseTool"
+                      : "canvas.productivity.frame",
             )}
           </button>
         ))}
@@ -514,7 +690,7 @@ function CanvasEditorContent({ id }: { id: string }) {
           type="button"
           className="button-quiet"
           aria-pressed={tool === "connector"}
-          disabled={frozen || busy || dirty}
+          disabled={frozen || uiBusy || dirty}
           onClick={() => {
             setTool("connector");
             setConnectorFrom(selectedId);
@@ -522,11 +698,33 @@ function CanvasEditorContent({ id }: { id: string }) {
         >
           {t("canvas.connector")}
         </button>
+        <button
+          type="button"
+          className="button-quiet"
+          aria-pressed={tool === "marquee"}
+          onClick={() => setTool("marquee")}
+        >
+          {t("canvas.productivity.area")}
+        </button>
+        <button
+          type="button"
+          className="button-quiet"
+          disabled={frozen || uiBusy || dirty || creationFull}
+          aria-pressed={tool === "pen"}
+          onClick={() => setTool("pen")}
+        >
+          {t("canvas.productivity.pen")}
+        </button>
+        <CanvasAssetTools
+          board={board}
+          disabled={frozen || uiBusy || dirty || gestureActive || creationFull}
+          onCreate={createObject}
+        />
         <span className={styles.divider} />
         <button
           type="button"
           className="button-quiet"
-          disabled={frozen || busy || dirty || !board.undoOperationId}
+          disabled={frozen || uiBusy || dirty || !board.undoOperationId}
           onClick={() =>
             board.undoOperationId &&
             void state.execute({ type: "undo", targetOperationId: board.undoOperationId })
@@ -537,7 +735,7 @@ function CanvasEditorContent({ id }: { id: string }) {
         <button
           type="button"
           className="button-quiet"
-          disabled={frozen || busy || dirty || !board.redoOperationId}
+          disabled={frozen || uiBusy || dirty || !board.redoOperationId}
           onClick={() =>
             board.redoOperationId &&
             void state.execute({ type: "redo", targetOperationId: board.redoOperationId })
@@ -609,6 +807,14 @@ function CanvasEditorContent({ id }: { id: string }) {
           </div>
         </section>
       ) : null}
+      {planError ? (
+        <p className={styles.readOnlyNotice} role="alert">
+          {t(canvasPlanMessage(planError))}
+        </p>
+      ) : null}
+      {tool === "pen" ? (
+        <p className={styles.readOnlyNotice}>{t("canvas.productivity.penHelp")}</p>
+      ) : null}
       {state.error ? (
         <p className={styles.readOnlyNotice} role="alert" lang="en-CA">
           {state.error}
@@ -629,12 +835,18 @@ function CanvasEditorContent({ id }: { id: string }) {
             viewport={viewport}
             onViewport={setViewport}
             selectedId={selectedId}
+            selectedIds={selectedIds}
+            onSelectMany={(ids, additive) => selectMany(ids, additive, false)}
+            onTransform={transform}
+            onCreatePen={createPen}
+            onGestureActive={setGestureActive}
             onSelect={changeSelection}
             tool={tool}
-            canEdit={board.capabilities.edit && !busy && !dirty}
+            canEdit={
+              board.capabilities.edit && !uiBusy && !dirty && (tool !== "pen" || !creationFull)
+            }
             canFacilitate={board.capabilities.facilitate}
             isObjectEditable={(object) => canChangeObject(board, object)}
-            onPatch={patch}
             onConnect={(next) => void connect(next)}
             onCursor={(point) => {
               cursor.current = point;
@@ -702,11 +914,21 @@ function CanvasEditorContent({ id }: { id: string }) {
         </div>
         {outline || workshop ? (
           <aside className={styles.sidebar}>
+            {selectedIds.length ? (
+              <CanvasSelectionTools
+                board={board}
+                ids={selectedIds}
+                disabled={uiBusy || dirty || gestureActive}
+                onPlan={perform}
+                onAll={() => selectMany(board.objects.map((object) => object.id))}
+                onClear={() => selectMany([])}
+              />
+            ) : null}
             {workshop ? (
               <CanvasWorkshopControls
                 board={board}
                 onRefresh={() => void state.refresh()}
-                disabled={busy || dirty}
+                disabled={uiBusy || dirty}
               />
             ) : null}
             {outline ? (
@@ -717,10 +939,19 @@ function CanvasEditorContent({ id }: { id: string }) {
                   </summary>
                   <ol className={styles.outline}>
                     {board.objects.map((object, index) => (
-                      <li key={object.id}>
+                      <li key={object.id} className={styles.outlineRow}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(object.id)}
+                          disabled={state.saving || deleting}
+                          aria-label={t("canvas.productivity.select", {
+                            label: objectLabel(object, index),
+                          })}
+                          onChange={() => changeSelection(object.id, true)}
+                        />
                         <button
                           type="button"
-                          aria-pressed={selectedId === object.id}
+                          aria-pressed={selectedIds.includes(object.id)}
                           onClick={() =>
                             tool === "connector"
                               ? void connect(object.id)
@@ -743,16 +974,24 @@ function CanvasEditorContent({ id }: { id: string }) {
                     className={styles.inspector}
                     onSubmit={(event) => void saveProperties(event)}
                   >
-                    <h2>{t("boards.elementSettings")}</h2>
+                    <h2>
+                      {t("boards.elementSettings")} ·{" "}
+                      <span lang="" dir="auto">
+                        {objectLabel(
+                          selected,
+                          board.objects.findIndex((object) => object.id === selected.id),
+                        )}
+                      </span>
+                    </h2>
                     {selected.type === "idea_ref" ? (
                       <p className={styles.protected}>{t("canvas.protected")}</p>
-                    ) : (
+                    ) : selected.type === "image" ? null : (
                       <label>
                         {t("boards.textTool")}
                         <textarea
                           maxLength={2000}
                           value={localDraft.text}
-                          disabled={!editable || busy}
+                          disabled={!editable || uiBusy}
                           dir="auto"
                           lang=""
                           onChange={(event) =>
@@ -761,6 +1000,34 @@ function CanvasEditorContent({ id }: { id: string }) {
                         />
                       </label>
                     )}
+                    {selected.type === "image" ? (
+                      <label>
+                        {t("canvas.assets.altText")}
+                        <input
+                          required
+                          maxLength={300}
+                          value={localDraft.altText ?? selected.altText}
+                          disabled={!editable || uiBusy}
+                          onChange={(event) =>
+                            setDraft({ ...localDraft, altText: event.target.value })
+                          }
+                        />
+                      </label>
+                    ) : null}
+                    {selected.type === "link" ? (
+                      <label>
+                        {t("canvas.assets.url")}
+                        <input
+                          type="url"
+                          pattern={"https?://[^\\s/@]+(?:[/?#][^\\s]*)?"}
+                          required
+                          maxLength={2048}
+                          value={localDraft.url ?? selected.url}
+                          disabled={!editable || uiBusy}
+                          onChange={(event) => setDraft({ ...localDraft, url: event.target.value })}
+                        />
+                      </label>
+                    ) : null}
                     {dirty && draft!.version !== selected.version ? (
                       <div className={styles.draftConflict}>
                         <strong>{t("canvas.currentVersion")}</strong>
@@ -784,11 +1051,11 @@ function CanvasEditorContent({ id }: { id: string }) {
                           )}
                           <input
                             type="number"
-                            step={1}
+                            step="any"
                             min={field === "width" || field === "height" ? 1 : -100000}
                             max={field === "width" || field === "height" ? 10000 : 100000}
                             value={localDraft[field]}
-                            disabled={!editable || busy}
+                            disabled={!editable || uiBusy}
                             onChange={(event) => {
                               if (Number.isFinite(event.currentTarget.valueAsNumber))
                                 setDraft({
@@ -804,7 +1071,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                       <label>
                         {t("boards.strokeColor")}
                         <select
-                          disabled={!editable || busy}
+                          disabled={!editable || uiBusy}
                           value={localDraft.color}
                           onChange={(event) =>
                             setDraft({
@@ -838,7 +1105,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                           <select
                             aria-describedby="canvas-visibility-help"
                             value={localDraft.visibility}
-                            disabled={busy}
+                            disabled={uiBusy}
                             onChange={(event) =>
                               setDraft({
                                 ...localDraft,
@@ -861,7 +1128,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                           <label key={key}>
                             {t(key === "fromId" ? "canvas.connectorFrom" : "canvas.connectorTo")}
                             <select
-                              disabled={!editable || busy}
+                              disabled={!editable || uiBusy}
                               value={localDraft[key] ?? ""}
                               onChange={(event) =>
                                 setDraft({ ...localDraft, [key]: event.target.value })
@@ -882,7 +1149,11 @@ function CanvasEditorContent({ id }: { id: string }) {
                           </label>
                         ))
                       : null}
-                    <button type="submit" className="button" disabled={!editable || busy || !dirty}>
+                    <button
+                      type="submit"
+                      className="button"
+                      disabled={!editable || uiBusy || !dirty}
+                    >
                       {t("canvas.saveChanges")}
                     </button>
                     {dirty ? (
@@ -894,26 +1165,6 @@ function CanvasEditorContent({ id }: { id: string }) {
                       >
                         {t("canvas.discard")}
                       </button>
-                    ) : null}
-                    {selected.type !== "idea_ref" ? (
-                      <div className={styles.actions}>
-                        <button
-                          type="button"
-                          className="button-quiet"
-                          disabled={!editable || busy || dirty}
-                          onClick={() => void duplicate()}
-                        >
-                          {t("canvas.duplicate")}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-quiet"
-                          disabled={!editable || busy || dirty}
-                          onClick={() => void remove()}
-                        >
-                          {t("boards.deleteElement")}
-                        </button>
-                      </div>
                     ) : null}
                   </form>
                 ) : (
@@ -927,7 +1178,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                   <button
                     type="button"
                     className="button-quiet"
-                    disabled={busy || dirty}
+                    disabled={uiBusy || dirty}
                     onClick={() =>
                       void state.execute({
                         type: board.status === "archived" ? "restore" : "archive",
@@ -941,7 +1192,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                   <button
                     type="button"
                     className="button-quiet"
-                    disabled={busy || dirty}
+                    disabled={uiBusy || dirty}
                     onClick={() => void deleteBoard()}
                   >
                     {t("canvas.delete")}

@@ -28,7 +28,14 @@ import { completeMediaFinalization, MediaFinalizationConflictError } from "./med
 
 const Id = z.object({ id: z.string().uuid() }).strict();
 const MediaParams = z.object({ id: z.string().uuid(), mediaId: z.string().uuid() }).strict();
-const CreateMutation = IdeaBoardCreateSchema.extend({ idempotencyKey: z.string().uuid() });
+const CreateMutation = IdeaBoardCreateSchema.extend({
+  idempotencyKey: z.string().uuid(),
+  // An optional stale-tab guard. These caller values never grant authority.
+  setupContext: z
+    .object({ userId: z.string().uuid(), workspaceId: z.string().uuid() })
+    .strict()
+    .optional(),
+});
 // A full board may poll behind one shared office/school IP. Match the shared
 // budget instead of applying Fastify's 300/minute production default here.
 const routeOptions = { config: { rateLimit: { max: 10_000, timeWindow: 60_000 } } };
@@ -208,7 +215,19 @@ export async function registerIdeaBoardRoutes(
       async (request, reply) => {
         const actor = await creator(request, reply, true);
         if (!actor) return;
-        const { idempotencyKey, ...parsed } = CreateMutation.parse(request.body);
+        const { idempotencyKey, setupContext, ...parsed } = CreateMutation.parse(request.body);
+        if (
+          setupContext &&
+          (setupContext.userId !== actor.userId || setupContext.workspaceId !== actor.workspaceId)
+        )
+          return reply.code(409).send({
+            error: {
+              code: "SETUP_CONTEXT_CHANGED",
+              message:
+                "Restore the account and active workspace used for this saved setup before retrying",
+              requestId: request.id,
+            },
+          });
         const input = {
           ...parsed,
           title: plainText(parsed.title, 160),

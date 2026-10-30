@@ -77,6 +77,10 @@ export function canvasSelectionClosure(objects: readonly CanvasObject[], ids: re
   }
   return objects.filter((object) => wanted.has(object.id));
 }
+/** Stored geometry for resizing; rotated visual bounds are used for layout and navigation. */
+export function canvasModelBounds(object: CanvasObject): CanvasBounds {
+  return { x: object.x, y: object.y, width: object.width, height: object.height };
+}
 export function canvasObjectBounds(
   object: CanvasObject,
   objects: readonly CanvasObject[],

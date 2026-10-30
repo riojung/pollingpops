@@ -34,6 +34,90 @@ function patchOf(plan: ReturnType<typeof planCanvasTransform>, target: string) {
   return operation.patch;
 }
 describe("atomic canvas productivity planning", () => {
+  it.each([30, 45, 90, -45])(
+    "resizes one %s-degree object to the requested model dimensions without changing its position or rotation",
+    (rotation) => {
+      const rotated = object(1, {
+        x: 120,
+        y: 80,
+        width: 240,
+        height: 90,
+        rotation,
+        version: 7,
+      });
+      const initial = board([rotated]);
+      const plan = planCanvasTransform(initial, [rotated.id], {
+        type: "resize",
+        bounds: { x: 120, y: 80, width: 280, height: 120 },
+      });
+      expect(plan.reason).toBeNull();
+      expect(plan.command?.operations).toEqual([
+        {
+          type: "update",
+          id: rotated.id,
+          expectedVersion: 7,
+          patch: { x: 120, y: 80, width: 280, height: 120 },
+        },
+      ]);
+      expect({ ...rotated, ...patchOf(plan, rotated.id) }.rotation).toBe(rotation);
+      expect(initial.objects).toEqual([rotated]);
+    },
+  );
+  it("scales a rotated pen's world points using its model width and height", () => {
+    const pen = object(1, {
+      type: "pen",
+      x: 50,
+      y: 60,
+      width: 120,
+      height: 40,
+      rotation: 45,
+      points: [
+        [50, 60],
+        [110, 80],
+        [170, 100],
+      ],
+    });
+    const plan = planCanvasTransform(board([pen]), [pen.id], {
+      type: "resize",
+      bounds: { x: 50, y: 60, width: 240, height: 120 },
+    });
+    expect(patchOf(plan, pen.id)).toEqual({
+      x: 50,
+      y: 60,
+      width: 240,
+      height: 120,
+      points: [
+        [50, 60],
+        [170, 120],
+        [290, 180],
+      ],
+    });
+  });
+  it("resizes only the rotated frame border and leaves child world coordinates untouched", () => {
+    const frame = object(1, {
+      type: "frame",
+      x: 100,
+      y: 200,
+      width: 300,
+      height: 100,
+      rotation: 90,
+    });
+    const child = object(2, { parentId: frame.id, x: 140, y: 220, width: 20, height: 20 });
+    const initial = board([frame, child]);
+    const plan = planCanvasTransform(initial, [frame.id], {
+      type: "resize",
+      bounds: { x: 100, y: 200, width: 600, height: 200 },
+    });
+    expect(plan.command?.operations).toEqual([
+      {
+        type: "update",
+        id: frame.id,
+        expectedVersion: frame.version,
+        patch: { x: 100, y: 200, width: 600, height: 200 },
+      },
+    ]);
+    expect(initial.objects[1]).toEqual(child);
+  });
   it.each([
     { axis: "horizontal", x: 99_980, y: 100 },
     { axis: "vertical", x: 100, y: 99_980 },

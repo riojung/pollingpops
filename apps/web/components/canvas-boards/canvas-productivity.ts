@@ -19,6 +19,7 @@ import {
   canvasAncestors,
   canvasDescendants,
   canvasGroupId,
+  canvasModelBounds,
   canvasObjectBounds,
   canvasSelectionBounds,
   canvasSelectionClosure,
@@ -169,7 +170,7 @@ export function canvasTransformPatches(
     patches = new Map<string, CanvasPatch>();
   const bounds =
     transform.type === "resize" && affected.length === 1
-      ? canvasObjectBounds(affected[0]!, objects)
+      ? canvasModelBounds(affected[0]!)
       : canvasSelectionBounds(objects, ids);
   if (!bounds) return patches;
   for (const object of affected) {

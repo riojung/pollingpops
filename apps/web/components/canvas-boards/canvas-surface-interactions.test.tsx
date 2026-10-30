@@ -195,6 +195,70 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("canvas productivity pointer paths", () => {
+  it.each([30, 45, 90, -45])(
+    "previews and finishes a non-square %s-degree resize from its model bounds",
+    async (rotation) => {
+      const rotated = CanvasObjectSchema.parse({
+        ...canvasObject,
+        x: 120,
+        y: 80,
+        width: 240,
+        height: 90,
+        rotation,
+        version: 7,
+      });
+      const view = harness({
+        objects: [rotated],
+        viewport: { x: 40, y: 60, zoom: 2 },
+      });
+      view.render();
+      const handle = new Target(rotated.id, true);
+      view.event("onPointerDown", 600, 400, handle);
+      view.event("onPointerMove", 660, 420, handle);
+      view.render();
+      const preview = view.find((element) => element.props["data-canvas-object"] === rotated.id)!;
+      expect(preview.props.transform).toBe(`translate(120 80) rotate(${rotation} 135 50)`);
+      const rectangle = findElement(
+        preview,
+        (element) => element.type === "rect" && !element.props["data-canvas-resize"],
+      )!;
+      expect(rectangle.props).toMatchObject({ width: 270, height: 100 });
+      // The final pointer-up may arrive beyond the most recent pointer-move frame.
+      view.event("onPointerUp", 700, 440, handle);
+      await settle();
+      expect(view.onTransform).toHaveBeenCalledExactlyOnceWith(
+        [rotated.id],
+        { type: "resize", bounds: { x: 120, y: 80, width: 290, height: 110 } },
+        [rotated],
+      );
+      expect(view.onGestureActive).toHaveBeenLastCalledWith(false);
+    },
+  );
+  it("does not jump a rotated object on a stationary resize contact", () => {
+    const rotated = CanvasObjectSchema.parse({
+      ...canvasObject,
+      x: 120,
+      y: 80,
+      width: 240,
+      height: 90,
+      rotation: -30,
+    });
+    const view = harness({ objects: [rotated] });
+    view.render();
+    const handle = new Target(rotated.id, true);
+    view.event("onPointerDown", 300, 200, handle);
+    view.event("onPointerMove", 300, 200, handle);
+    view.render();
+    const preview = view.find((element) => element.props["data-canvas-object"] === rotated.id)!;
+    expect(preview.props.transform).toBe("translate(120 80) rotate(-30 120 45)");
+    const rectangle = findElement(
+      preview,
+      (element) => element.type === "rect" && !element.props["data-canvas-resize"],
+    )!;
+    expect(rectangle.props).toMatchObject({ width: 240, height: 90 });
+    view.event("onPointerCancel", 300, 200, handle);
+    expect(view.onTransform).not.toHaveBeenCalled();
+  });
   it("keeps an existing selection unchanged on first contact and allows a second contact to pinch", async () => {
     const view = harness();
     view.render();

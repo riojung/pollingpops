@@ -30,7 +30,7 @@ import {
   sampleCanvasStroke,
   type CanvasTransform,
 } from "./canvas-productivity";
-import { canvasObjectBounds, canvasSelectionBounds } from "./canvas-hierarchy";
+import { canvasModelBounds, canvasSelectionBounds } from "./canvas-hierarchy";
 
 export type CanvasPatch = ReturnType<typeof CanvasObjectPatchSchema.parse>;
 export type CanvasTool = "select" | "hand" | "connector" | "marquee" | "pen";
@@ -223,7 +223,7 @@ export function CanvasSurface({
           ...common,
           ids,
           kind: resize ? "resize" : "move",
-          bounds: resize ? canvasObjectBounds(object, objects) : undefined,
+          bounds: resize ? canvasModelBounds(object) : undefined,
         };
         onGestureActive?.(true);
       }

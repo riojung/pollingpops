@@ -1,10 +1,10 @@
 # Idea Board canvas analysis and implementation plan
 
-Updated: October 29, 2026
+Updated: October 30, 2026
 
 Source baseline: `e1d86c48639cb5fba904351efe657abaec5f7856`
 
-Status: Orders 0–4 implemented as an opt-in pilot; orders 5–7 remain planned
+Status: Orders 0–5 implemented as an opt-in pilot; orders 6–7 remain planned
 
 Idea Boards should become a shared spatial workspace for team members and a guided workshop
 experience for accountless guests. The first customer release should support both, as selected
@@ -24,10 +24,24 @@ canvas repository and migration 079, typed object editing, actor-scoped undo/red
 updates and optional presence, plus a published guest canvas around the original moderated
 workshop workflow. The [architecture decision](decisions/002-idea-board-canvas.md) records the
 original SVG/DOM renderer and its limits. This document's baseline analysis below describes
-the pre-implementation code; the later productivity scope in orders 5–7 remains deferred.
+the pre-implementation code. Order 5 now adds frames, geometric groups, multiselect and atomic
+layout, locks, freehand drawing, private scanned image/link assets and seven original starter
+layouts. The later facilitation/history and capacity scope in orders 6–7 remains deferred.
 
-Memory and restricted PostgreSQL conformance, real two-node HTTP streams, legacy workshop
-regressions and desktop/mobile browser journeys cover the functional boundaries. The opt-in
+The productivity increment introduces explicit Canvas V2 contracts and migration 080. Retained
+V1 data and inverse history are upcast deterministically without changing accepted retry hashes.
+Image ownership is board-scoped, including current/inverse-history references and publication
+checks. Guided starter setup checkpoints both creation keys and binds resumed requests to the
+expected account/workspace. Existing object, batch and participant limits are unchanged.
+
+Order 5 has focused contract, memory/restricted-PostgreSQL, HTTP and frontend verification.
+Final full repository and browser results are tracked in the
+[implementation status](implementation-status.md#canvas-productivity-order-5-october-30-2026). Browser
+image tests substitute storage and scanning; they do not verify a deployed media pipeline.
+Physical touch hardware and production load have not been measured for this increment.
+
+The earlier orders 0–4 validation includes real two-node HTTP streams, legacy workshop
+regressions and desktop/mobile browser journeys. The opt-in
 capacity harness is `tests/load/canvas-load.mts`. On a local PostgreSQL 17 instance on October
 29, 2026, 500 objects and 20 licensed editors committing 200 independent updates passed
 correctness, RLS, durable retry and revocation checks. Durable acknowledgement measured
@@ -43,8 +57,8 @@ offline editing or character-level text coauthoring are introduced.
 
 ## Baseline capabilities and gaps
 
-The current implementation is a moderated idea collection and prioritization system. Its
-strengths are useful foundations rather than features to replace.
+Before the canvas pilot, the implementation was a moderated idea collection and prioritization
+system. This table records that historical baseline, not the current Order 5 feature inventory.
 
 | Area          | Current implementation                                                                                                      | Enhancement needed                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -116,27 +130,34 @@ Choose the type at creation and make its consequences visible. Avoid switching a
 and lifecycle in place. A future team-canvas-to-workshop action should create a separate workshop
 with a defined snapshot, rather than reinterpret an active document or a completed ballot.
 
-Team canvases need a separate retention policy from a workshop's 1–30 day collection window.
-Recommend keeping active team documents available while the owning account's policy permits,
-with explicit storage limits and an archive policy. Final durations and quotas must be set before
-the customer pilot; existing workshop deadlines and retention remain unchanged.
+Team retention is recorded at creation: 30 days for Free, the paid offer's report retention
+(365 days when absent), or the Community operator's configured retention. An attached workshop
+canvas keeps its source's original expiry. Archiving does not extend those deadlines.
 
 ### Library and creation
 
-Replace the permanent two-column list/form layout with a board library:
+The shipped library has All boards, Owned, Shared with me and Archived views, debounced
+server-side title search, pagination and a grid of generic decorative thumbnails. Content
+thumbnails, a separate Recent view, type filters and grid/list switching are future refinements.
 
-The pilot starts with blank boards, owned/shared discovery, and search. Templates and richer
-thumbnails are later productivity increments in order 5; the steps below describe the target flow.
+Creation offers a team canvas or guided workshop, a blank start or seven original starter
+previews, and an editable title. The English starters cover possibility mapping, retrospectives,
+project kickoff, decisions, evidence review, learning reflection and next steps. Picker controls
+cover all ten locales and explicitly identify the starter language. Workshop prompts and all
+existing settings remain editable before creation, with anonymous identity and moderation as
+defaults. Each starter contains 13–17 authored frame/text/prompt-note objects with fresh IDs,
+without guest responses or assets. Its workshop scaffolding is deliberately published.
 
-1. Show Recent, Owned, Shared with me, and Archived views, with search, status/type filters, and
-   accessible grid/list choices. A thumbnail contains only content that viewer may access.
-2. Create board opens a short flow: board type, title, and blank/template choice. Start with
-   original brainstorming, retrospective, affinity grouping, impact/effort, and planning patterns.
-3. A workshop setup panel explains who can join, whether ideas need review, when ideas become
-   visible, the vote budget, and the collection deadline. Anonymous identity and moderation remain
-   safe defaults. Explain immutable choices before creation.
-4. Show owner organization/workspace, the visitor's board role, save/connection state, and
-   retention information where relevant. Sharing a board never changes the active workspace.
+Team starters use one atomic canvas creation request. Guided starters checkpoint separate source
+and canvas creation keys plus the acknowledged source ID in bounded user/workspace-scoped tab
+storage. Retries resume only the unfinished step. Optional HTTP setup context is compared with
+fresh authenticated identity and the intended workspace before receipt lookup or creation; it
+cannot authorize access and does not change the canonical content fingerprint. A failed canvas
+step retains a direct source link and an explicit keep-workshop-without-canvas action. Logout
+clears the setup namespace; unavailable tab storage leaves blank guided creation available.
+
+Boards show their owning organization/workspace and the visitor's board role. The editor shows
+save/connection state and recorded expiry. Board sharing never changes the active workspace.
 
 ### Team canvas workspace
 
@@ -258,7 +279,7 @@ flowchart TB
   Outbox --> Relay
   Access --> Assets
   Assets --> Media
-  Relay -->|Team Socket.IO updates| Team
+  Relay -->|Authenticated team fetch stream| Team
   Relay -->|Guest authorized fetch stream or polling| Guest
   Team <-->|Transient presence| Presence
 ```
@@ -271,8 +292,9 @@ The HTTP `/v1` prefix does not determine a stored document's schema version.
 - **Document:** stable ID, owning workspace/organization, board type, lifecycle, schema version,
   canvas sequence, and optional link to an existing workshop aggregate.
 - **Object:** stable ID, type, version, finite coordinates, dimensions, stacking order, bounded
-  styles, visibility, and typed content. Initial types: sticky/text, basic shape, connector and
-  approved `idea_ref`; add stroke, frame, team image and link types in later increments.
+  styles, visibility, and typed content. Current types: sticky/text, rectangle/ellipse, connector,
+  approved `idea_ref`, bounded pen stroke, frame, native image and HTTP(S) link. V2 adds geometric
+  group IDs and native images while frozen strict V1 requests retain their prior shape.
 - **Relationships:** geometric groups/frames are separate from the existing idea `groupId`,
   which describes a semantic category. Validate cycles, missing parents, connector anchors,
   and deleted endpoints. Invisible endpoints must not leak private object IDs or text.
@@ -286,8 +308,9 @@ lifecycle cleanup. Avoid adding a frequently rewritten scene blob to the legacy 
 Private intake remains outside the published scene. Pending objects must not be sent to guests
 and hidden with CSS, coordinates, a collapsed frame, or the minimap.
 
-Ordinary workshop notes, shapes and instructions default to `team_only`. Only a facilitator can
-deliberately publish them into the guest-visible scene. Connectors, frames, outline entries,
+Ordinary workshop notes, shapes and instructions default to `team` visibility. Only a facilitator can
+deliberately publish them into the guest-visible scene; selecting a starter deliberately seeds
+published authored scaffolding. Connectors, frames, outline entries,
 thumbnails and exports inherit that visibility policy; publishing a frame does not automatically
 publish private children. The voting freeze covers every published object and its relationships.
 
@@ -307,9 +330,9 @@ versions, and a bounded payload. Derive the actor and capabilities from authenti
    snapshot when history has been pruned or visibility has changed.
 
 Different-object edits can succeed concurrently. Same-object conflicts must preserve the local
-proposal and show a recoverable conflict rather than silently overwrite text. Start with an
-editing indicator/short lease and optimistic version checks for text. Concurrent character-level
-coauthoring is a later capability, not an implicit promise of the first release.
+proposal and show a recoverable conflict rather than silently overwrite text. The editor uses
+explicit text saves and optimistic version checks. Editing leases are not implemented.
+Concurrent character-level coauthoring remains a later capability.
 
 Undo and redo create authorized inverse operations for that actor. They must not rewind another
 person's edits, resurrect removed guest content, bypass a new role, or alter frozen voting
@@ -318,10 +341,9 @@ position is a bounded committed operation.
 
 ### Live updates and connection recovery
 
-Reuse the existing [Socket.IO and Redis Streams infrastructure](../apps/server/src/realtime.ts#L134)
-with a separate board event family and authorization. Reuse the outbox pattern from
-[scoped audience delivery](../apps/server/src/scoped-audience-outbox-worker.ts#L4), not Round or
-Presentation gameplay contracts.
+The shipped pilot uses metadata-only HTTP fetch streams for both team and guest notifications,
+with a durable canvas outbox and independent per-node replay cursors. Existing
+[Socket.IO gameplay infrastructure](../apps/server/src/realtime.ts#L134) remains unchanged.
 
 For the first scope, use metadata-only notifications followed by current authorized object
 reads; batch requests and coalesce changes. Add filtered deltas only after removal and replay
@@ -334,7 +356,7 @@ nicknames, stable public identifiers, or a participant directory through the pre
 Admitted guest count is not an online-presence count.
 
 Browser WebSockets do not offer the same `credentials: "omit"` control as guest HTTP fetches.
-Use team sockets for authenticated collaborators. Keep guest writes on the current cookie-omitted
+Use authenticated team fetch streams. Keep guest writes on the current cookie-omitted
 HTTP path; use an authorized `fetch` stream with cookie omission for live invalidations and retain
 polling as fallback. Do not assume native EventSource or a same-origin WebSocket preserves that
 promise. A guest WebSocket can be considered after a cookie-less audience host and cookie-scope
@@ -355,8 +377,9 @@ requests, not unrestricted offline coauthoring or automatic storage of guest tex
 
 ### Workshop integrity and media
 
-At voting start, freeze the workshop scene and its approved idea/group set in the same
-transaction. Record the canvas sequence and a ballot-presentation snapshot. Moving a card,
+At voting start, freeze the workshop scene and its approved idea/group set under the same
+source-board lifecycle fence. The retained scene stays fixed throughout voting; a browsable
+version history remains deferred. Moving a card,
 changing a connector or frame, or rewriting surrounding instructions can change ballot meaning
 even if the idea IDs stay fixed. Legacy phase commands must also enforce this freeze when a
 canvas is attached; it cannot depend only on a new UI button.
@@ -374,9 +397,10 @@ recalled, so export and clipboard actions need explicit content visibility rules
 
 ## Canvas engine decision
 
-Keep Polling Pops' domain model and permissions independent from the rendering library. Run a
-short SDK integration spike before committing to an engine. Prefer adapting an established editor
-where it supports our protected idea cards and accessibility requirements without a long-lived fork.
+The implemented renderer is original SVG geometry with DOM editing and an accessible outline,
+as recorded in the [architecture decision](decisions/002-idea-board-canvas.md). No editor SDK was
+added. The following researched alternatives remain future adapter options; they describe neither
+the current architecture nor an accepted replacement.
 
 | Approach                              | Useful capabilities                                                                | Decision constraint                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -384,9 +408,7 @@ where it supports our protected idea cards and accessibility requirements withou
 | tldraw SDK                            | Extensible shapes, editor interactions, accessibility support and a sync package   | Source available; production requires an applicable license key. Validate hosted and community/self-host deployment terms before selection. [Official license](https://tldraw.dev/community/license), [shapes](https://tldraw.dev/docs/shapes), [sync](https://tldraw.dev/docs/sync)                                                                               |
 | Custom editor using Konva/react-konva | Control over domain-specific cards and interactions                                | [Konva is MIT](https://github.com/konvajs/konva/blob/master/LICENSE), but selection policy, history, text editing, collaboration and accessible DOM controls remain our workload. [Official overview](https://konvajs.org/docs/), [text editing](https://konvajs.org/docs/sandbox/Editable_Text.html)                                                              |
 
-Start the permissive-license spike with Excalidraw, compare tldraw if its licensing fits the
-distribution model, and retain Konva as a controlled fallback. This is a candidate order, not a
-dependency selection. No library should be added until it passes the following shared scenarios:
+Any future library selection requires current license verification and the following shared scenarios:
 
 - Render a protected, accessible guest idea card beside freely editable team notes.
 - Round-trip stable typed IDs, positions and connectors without storing arbitrary SDK payloads.
@@ -415,7 +437,8 @@ rules are agreed, with design and QA involved from the first slice.
 | 6     | Anchored comments, timer, optional presenter follow, permission-safe region exports and bounded version history                                                                                       | Async discussion and facilitation work without exposing pending content or restoring removed data                                  | L    |
 | 7     | Higher object/editor caps, richer manual diagrams and optional snapshot links to Rounds/Presentations                                                                                                 | Target-load evidence and explicit integration/privacy contracts before raising limits or linking artifacts                         | L    |
 
-Orders 1–4 form the first customer release. An internal single-editor prototype at order 3 is
+Orders 1–4 formed the initial customer pilot; Order 5 is its implemented productivity increment.
+Orders 6–7 remain deferred. An internal single-editor prototype at order 3 is
 useful engineering progress but does not satisfy the collaborative product promise. Accessibility,
 localization, permission checks and failure states belong in every order, not a final cleanup pass.
 
@@ -502,10 +525,9 @@ before each release.
 
 ## First implementation milestone
 
-Start with order 0 and the board-sharing authorization design. Produce the engine ADR, original
-wireframes, board capability matrix, and contract/storage proposal before implementing the canvas
-surface. Then ship orders 1–4 as small reviewable changes, with a working dual-experience pilot
-as the first customer outcome.
+The original first milestone was orders 0–4: an engine ADR, original wireframes, capability and
+storage contracts, and a working shared team/guest pilot. Order 5 now extends that foundation;
+final validation and rollout remain separate from the implementation checkpoint above.
 
 The existing implementation and its verified boundaries remain documented in
 [IDEA 006 brainstorming and prioritization boards](idea-006-brainstorming-boards-plan.md).

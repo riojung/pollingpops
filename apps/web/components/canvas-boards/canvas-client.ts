@@ -18,7 +18,7 @@ export function canvasPath(id: string) {
   return `/v1/canvas-boards/${id}`;
 }
 export function canvasIntent(command: CanvasBoardCommand): CanvasBoardMutation {
-  return CanvasBoardMutationSchema.parse({ schemaVersion: 1, operationId: clientUuid(), command });
+  return CanvasBoardMutationSchema.parse({ schemaVersion: 2, operationId: clientUuid(), command });
 }
 export async function readCanvas(id: string, signal?: AbortSignal) {
   const result = await apiFetch<{ board: unknown }>(canvasPath(id), { signal, cache: "no-store" });
@@ -68,11 +68,18 @@ export async function listCanvases(
   if (nextCursor) canvasPath(nextCursor);
   return { boards: result.boards.map((board) => CanvasBoardViewSchema.parse(board)), nextCursor };
 }
-export async function createCanvas(input: CanvasBoardCreate, signal?: AbortSignal) {
+export async function createCanvas(
+  input: CanvasBoardCreate,
+  signal?: AbortSignal,
+  setupContext?: { userId: string; workspaceId: string },
+) {
   const result = await apiFetch<{ board: unknown }>("/v1/canvas-boards", {
     method: "POST",
     signal,
-    body: JSON.stringify(CanvasBoardCreateSchema.parse(input)),
+    body: JSON.stringify({
+      ...CanvasBoardCreateSchema.parse(input),
+      ...(setupContext ? { setupContext } : {}),
+    }),
   });
   return CanvasBoardViewSchema.parse(result.board);
 }

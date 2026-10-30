@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CanvasBoardViewSchema,
+  CanvasObjectCreateSchema,
   type CanvasBoardCommand,
   type CanvasBoardView,
   type ProductFeatureRules,
@@ -168,11 +169,326 @@ async function command(
     method: "POST",
     url: `/v1/canvas-boards/${board.id}/commands`,
     headers,
-    payload: { schemaVersion: 1, operationId, command: value },
+    payload: { schemaVersion: 2, operationId, command: value },
   });
 }
 
 describe("board-scoped canvas HTTP boundaries", () => {
+  it("binds recovered canvas setup to its original actor without changing the canonical creation key", async () => {
+    const f = await fixture();
+    const payload = {
+      schemaVersion: 2,
+      workspaceId: f.workspaceId,
+      boardType: "team",
+      title: "Bound setup",
+      operationId: randomUUID(),
+    };
+    for (const setupContext of [
+      { userId: f.editor.userId, workspaceId: f.workspaceId },
+      { userId: f.owner.userId, workspaceId: f.owner.workspaceId },
+    ]) {
+      const denied = await f.app.inject({
+        method: "POST",
+        url: "/v1/canvas-boards",
+        headers: f.owner.headers,
+        payload: { ...payload, setupContext },
+      });
+      expect(denied.statusCode, denied.body).toBe(409);
+      expect(denied.json().error.code).toBe("SETUP_CONTEXT_CHANGED");
+    }
+    const empty = await f.app.inject({ url: "/v1/canvas-boards", headers: f.owner.headers });
+    expect(empty.json().boards).toEqual([]);
+    const accepted = await f.app.inject({
+      method: "POST",
+      url: "/v1/canvas-boards",
+      headers: f.owner.headers,
+      payload: { ...payload, setupContext: { userId: f.owner.userId, workspaceId: f.workspaceId } },
+    });
+    expect(accepted.statusCode, accepted.body).toBe(201);
+    const replayed = await f.app.inject({
+      method: "POST",
+      url: "/v1/canvas-boards",
+      headers: f.owner.headers,
+      payload,
+    });
+    expect(replayed.statusCode, replayed.body).toBe(201);
+    expect(replayed.json().board.id).toBe(accepted.json().board.id);
+  });
+
+  it("reserves and scans board-native images for a shared editor without granting workspace access", async () => {
+    const f = await fixture(true);
+    const board = await create(f, { schemaVersion: 2 });
+    const grant = await invite(f, board, f.editor.email, "editor");
+    expect((await accept(f, grant.id, f.editor.headers)).statusCode).toBe(200);
+    vi.spyOn(f.storage, "finalize").mockImplementation(async (asset, token) => ({
+      scanStatus: "clean",
+      objectKey: mediaFinalizationObjectKey(asset, token),
+    }));
+    vi.spyOn(f.storage, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(f.storage, "cleanupFinalization").mockResolvedValue();
+    vi.spyOn(f.storage, "readImage").mockResolvedValue(Buffer.from("scanned canvas image"));
+    const requested = await f.app.inject({
+      method: "POST",
+      url: `/v1/canvas-boards/${board.id}/media`,
+      headers: f.editor.headers,
+      payload: {
+        fileName: "diagram.png",
+        mimeType: "image/png",
+        sizeBytes: 128,
+        altText: "<b>A process</b>",
+      },
+    });
+    expect(requested.statusCode, requested.body).toBe(201);
+    const mediaId = requested.json().mediaId as string;
+    expect(await f.repository.getMediaAsset(f.workspaceId, mediaId)).not.toBeNull();
+    expect(await f.repository.getMediaAsset(f.editor.workspaceId, mediaId)).toBeNull();
+    const completed = await f.app.inject({
+      method: "POST",
+      url: `/v1/canvas-boards/${board.id}/media/${mediaId}/complete`,
+      headers: f.editor.headers,
+      payload: {},
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json().media).toMatchObject({
+      id: mediaId,
+      scanStatus: "clean",
+      altText: "A process",
+    });
+    expect(completed.body).not.toContain("downloadUrl");
+    const added = await command(
+      f,
+      board,
+      {
+        type: "batch",
+        operations: [
+          {
+            type: "create",
+            object: CanvasObjectCreateSchema.parse({
+              type: "image",
+              id: randomUUID(),
+              mediaId,
+              altText: "A process",
+              x: 10,
+              y: 20,
+              width: 240,
+              height: 180,
+            }),
+          },
+        ],
+      },
+      f.editor.headers,
+    );
+    expect(added.statusCode, added.body).toBe(200);
+    const bytes = await f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/media/${mediaId}`,
+      headers: f.editor.headers,
+    });
+    expect(bytes.statusCode, bytes.body).toBe(200);
+    expect(bytes.body).toBe("scanned canvas image");
+    expect(bytes.headers["cache-control"]).toBe("private, no-store");
+    await f.app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${f.workspaceId}/select`,
+      headers: f.owner.headers,
+    });
+    for (const method of ["GET", "POST"] as const) {
+      const generic = await f.app.inject({
+        method,
+        url: `/v1/media/${mediaId}${method === "POST" ? "/complete" : ""}`,
+        headers: f.owner.headers,
+      });
+      expect(generic.statusCode, generic.body).toBe(404);
+    }
+    const unrelated = await create(f, { schemaVersion: 2 });
+    const reused = await command(f, unrelated, {
+      type: "batch",
+      operations: [
+        {
+          type: "create",
+          object: CanvasObjectCreateSchema.parse({
+            type: "image",
+            id: randomUUID(),
+            mediaId,
+            altText: "A process",
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 180,
+          }),
+        },
+      ],
+    });
+    expect(reused.statusCode).not.toBe(200);
+    const viewer = await invite(f, board, f.billing.email, "viewer");
+    expect((await accept(f, viewer.id, f.billing.headers)).statusCode).toBe(200);
+    const refused = await f.app.inject({
+      method: "POST",
+      url: `/v1/canvas-boards/${board.id}/media`,
+      headers: f.billing.headers,
+      payload: {
+        fileName: "other.png",
+        mimeType: "image/png",
+        sizeBytes: 128,
+        altText: "Another diagram",
+      },
+    });
+    expect(refused.statusCode).toBe(403);
+  });
+
+  it("keeps native guest images private until their image object is deliberately published", async () => {
+    const f = await fixture(true);
+    await f.app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${f.workspaceId}/select`,
+      headers: f.owner.headers,
+    });
+    const source = await f.app.inject({
+      method: "POST",
+      url: "/v1/idea-boards",
+      headers: f.owner.headers,
+      payload: {
+        title: "Published image workshop",
+        ideasVisible: false,
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(source.statusCode, source.body).toBe(201);
+    const sourceId = source.json().board.id as string;
+    const board = await create(f, {
+      schemaVersion: 2,
+      boardType: "workshop",
+      sourceBoardId: sourceId,
+    });
+    const opening = await command(f, board, {
+      type: "workshop",
+      expectedRevision: source.json().board.revision,
+      command: { type: "collect" },
+    });
+    expect(opening.statusCode, opening.body).toBe(200);
+    const guest = { authorization: `Bearer ${randomBytes(32).toString("hex")}` };
+    expect(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: `/v1/idea-boards/${sourceId}/join`,
+          headers: guest,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(200);
+    vi.spyOn(f.storage, "finalize").mockImplementation(async (asset, token) => ({
+      scanStatus: "clean",
+      objectKey: mediaFinalizationObjectKey(asset, token),
+    }));
+    vi.spyOn(f.storage, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(f.storage, "cleanupFinalization").mockResolvedValue();
+    vi.spyOn(f.storage, "readImage").mockResolvedValue(Buffer.from("published scanned image"));
+    const requested = await f.app.inject({
+      method: "POST",
+      url: `/v1/canvas-boards/${board.id}/media`,
+      headers: f.owner.headers,
+      payload: {
+        fileName: "instructions.png",
+        mimeType: "image/png",
+        sizeBytes: 128,
+        altText: "Workshop instructions",
+      },
+    });
+    expect(requested.statusCode, requested.body).toBe(201);
+    const mediaId = requested.json().mediaId as string;
+    expect(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: `/v1/canvas-boards/${board.id}/media/${mediaId}/complete`,
+          headers: f.owner.headers,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(200);
+    const imageId = randomUUID();
+    const inserted = await command(f, board, {
+      type: "batch",
+      operations: [
+        {
+          type: "create",
+          object: CanvasObjectCreateSchema.parse({
+            id: imageId,
+            type: "image",
+            mediaId,
+            altText: "Workshop instructions",
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 180,
+          }),
+        },
+      ],
+    });
+    expect(inserted.statusCode, inserted.body).toBe(200);
+    const path = `/v1/canvas-boards/workshop/${sourceId}/guest/media/${mediaId}`;
+    expect(
+      (await f.app.inject({ url: path, headers: { ...guest, ...f.owner.headers } })).statusCode,
+    ).toBe(404);
+    const image = inserted
+      .json()
+      .board.objects.find((object: { id: string }) => object.id === imageId);
+    const published = await command(f, board, {
+      type: "batch",
+      operations: [
+        {
+          type: "update",
+          id: imageId,
+          expectedVersion: image.version,
+          patch: { visibility: "published" },
+        },
+      ],
+    });
+    expect(published.statusCode, published.body).toBe(200);
+    const bytes = await f.app.inject({ url: path, headers: { ...guest, ...f.owner.headers } });
+    expect(bytes.statusCode, bytes.body).toBe(200);
+    expect(bytes.body).toBe("published scanned image");
+    expect((await f.app.inject({ url: path, headers: f.owner.headers })).statusCode).toBe(401);
+  });
+
+  it("does not acknowledge an image finalization after its uploader loses board access", async () => {
+    const f = await fixture(true);
+    const board = await create(f, { schemaVersion: 2 });
+    const grant = await invite(f, board, f.editor.email, "editor");
+    expect((await accept(f, grant.id, f.editor.headers)).statusCode).toBe(200);
+    vi.spyOn(f.storage, "commitFinalizationCandidate").mockResolvedValue();
+    vi.spyOn(f.storage, "cleanupFinalization").mockResolvedValue();
+    vi.spyOn(f.storage, "finalize").mockImplementation(async (asset, token) => {
+      const revoked = await f.app.inject({
+        method: "DELETE",
+        url: `/v1/canvas-boards/${board.id}/grants/${f.editor.userId}`,
+        headers: f.owner.headers,
+      });
+      expect(revoked.statusCode, revoked.body).toBe(204);
+      return { scanStatus: "clean", objectKey: mediaFinalizationObjectKey(asset, token) };
+    });
+    const requested = await f.app.inject({
+      method: "POST",
+      url: `/v1/canvas-boards/${board.id}/media`,
+      headers: f.editor.headers,
+      payload: {
+        fileName: "draft.png",
+        mimeType: "image/png",
+        sizeBytes: 128,
+        altText: "Draft diagram",
+      },
+    });
+    expect(requested.statusCode, requested.body).toBe(201);
+    const completed = await f.app.inject({
+      method: "POST",
+      url: `/v1/canvas-boards/${board.id}/media/${requested.json().mediaId}/complete`,
+      headers: f.editor.headers,
+      payload: {},
+    });
+    expect(completed.statusCode).not.toBe(200);
+    expect(completed.body).not.toContain('"scanStatus":"clean"');
+  });
+
   it.each(["canvas-policy", "session-creation"] as const)(
     "replays an accepted creation after a %s pause while rejecting new or changed requests",
     async (pause) => {
@@ -428,6 +744,7 @@ describe("board-scoped canvas HTTP boundaries", () => {
             visibility: "team",
             locked: false,
             parentId: null,
+            geometricGroupId: null,
           },
         },
       ],

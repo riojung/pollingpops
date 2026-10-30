@@ -1,12 +1,20 @@
 import {
   CanvasObjectCreateSchema,
+  CanvasBoardCommandSchema,
   type CanvasBoardCommand,
+  type CanvasBoardMutation,
   type CanvasBoardView,
   type CanvasObject,
   type CanvasObjectCreate,
 } from "@openround/contracts";
 import { clientUuid } from "../../lib/uuid";
 import type { CanvasPoint } from "./canvas-geometry";
+import { canvasAncestors, canvasDescendants } from "./canvas-hierarchy";
+
+export function canvasObjectLabel(object: CanvasObject, fallback: string) {
+  const description = object.type === "image" ? object.altText : object.text;
+  return description.trim().slice(0, 80) || fallback;
+}
 
 /** Prefer a nearby free cell so repeated toolbar creation does not hide the prior object. */
 export function nextCanvasPosition(
@@ -29,6 +37,7 @@ export function nextCanvasPosition(
       objects.every(
         (object) =>
           object.type === "connector" ||
+          object.type === "frame" ||
           point.x + width + 12 <= object.x ||
           point.x >= object.x + object.width + 12 ||
           point.y + height + 12 <= object.y ||
@@ -67,24 +76,34 @@ export function duplicateCanvasObject(object: CanvasObject): CanvasObjectCreate 
   const content = Object.fromEntries(
     Object.entries(object).filter(([key]) => key !== "version" && key !== "idea"),
   );
-  return CanvasObjectCreateSchema.parse({
+  const copy = CanvasObjectCreateSchema.safeParse({
     ...content,
     id: clientUuid(),
     x: object.x + 28,
     y: object.y + 28,
     ...(object.type === "pen" ? { points: object.points.map(([x, y]) => [x + 28, y + 28]) } : {}),
   });
+  return copy.success ? copy.data : null;
 }
 
-export function canChangeObject(board: CanvasBoardView, object: CanvasObject) {
+export function canControlCanvasObject(board: CanvasBoardView, object: CanvasObject) {
   return (
     board.capabilities.edit &&
-    !object.locked &&
     (object.type !== "idea_ref" || board.capabilities.facilitate) &&
     (board.boardType !== "workshop" ||
       board.capabilities.facilitate ||
       (object.visibility !== "published" &&
-        !board.objects.some((child) => child.type === "idea_ref" && child.parentId === object.id)))
+        !canvasDescendants(board.objects, [object.id]).some(
+          (child) => child.type === "idea_ref" || child.visibility === "published",
+        )))
+  );
+}
+export function canChangeObject(board: CanvasBoardView, object: CanvasObject) {
+  return (
+    canControlCanvasObject(board, object) &&
+    !object.locked &&
+    !canvasAncestors(board.objects, object).some((parent) => parent.locked) &&
+    !canvasDescendants(board.objects, [object.id]).some((child) => child.locked)
   );
 }
 export function canPublishCanvasObject(board: CanvasBoardView, object: CanvasObject) {
@@ -92,14 +111,13 @@ export function canPublishCanvasObject(board: CanvasBoardView, object: CanvasObj
     board.boardType === "workshop" &&
     board.capabilities.facilitate &&
     canChangeObject(board, object) &&
-    object.type !== "idea_ref" &&
-    object.type !== "frame"
+    object.type !== "idea_ref"
   );
 }
 
 export function moveCanvasPatch(object: CanvasObject, dx: number, dy: number) {
-  const x = Math.round(Math.max(-100000, Math.min(100000, object.x + dx)));
-  const y = Math.round(Math.max(-100000, Math.min(100000, object.y + dy)));
+  const x = object.x + dx;
+  const y = object.y + dy;
   const movedX = x - object.x,
     movedY = y - object.y;
   if (object.type === "pen")
@@ -119,7 +137,10 @@ export function moveCanvasPatch(object: CanvasObject, dx: number, dy: number) {
 }
 
 /** A conflict is only rebased after an explicit review action; missing targets are never recreated. */
-export function reviewedCanvasCommand(board: CanvasBoardView, command: CanvasBoardCommand) {
+export function reviewedCanvasCommand(
+  board: CanvasBoardView,
+  command: CanvasBoardMutation["command"],
+): Extract<CanvasBoardCommand, { type: "batch" }> | null {
   if (command.type !== "batch") return null;
   if (command.operations.some((operation) => operation.type === "create")) return null;
   const operations = [];
@@ -129,5 +150,6 @@ export function reviewedCanvasCommand(board: CanvasBoardView, command: CanvasBoa
     if (!object || !canChangeObject(board, object)) return null;
     operations.push({ ...operation, expectedVersion: object.version });
   }
-  return { type: "batch" as const, operations };
+  const result = CanvasBoardCommandSchema.parse({ type: "batch", operations });
+  return result.type === "batch" ? result : null;
 }

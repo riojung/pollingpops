@@ -2,7 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import Stripe from "stripe";
-import { createIdeaBoardRepository, createPlatformRepository, PlatformError } from "@openround/db";
+import {
+  createCanvasBoardRepository,
+  createIdeaBoardRepository,
+  createPlatformRepository,
+  PlatformError,
+} from "@openround/db";
 import { roomEntitlements } from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
@@ -466,6 +471,7 @@ export async function registerRoutes(
     productEvents,
   } = dependencies;
   const ideaBoards = createIdeaBoardRepository(repository);
+  const canvasBoards = createCanvasBoardRepository(repository);
   const stripe =
     dependencies.stripeClient !== undefined
       ? dependencies.stripeClient
@@ -3511,6 +3517,8 @@ export async function registerRoutes(
 
   app.get("/v1/followups/:id/media/:mediaId", async (request, reply) => {
     const { id, mediaId } = FollowupMediaParamsSchema.parse(request.params);
+    if ((await ideaBoards.isBoardMedia(mediaId)) || (await canvasBoards.isCanvasMedia(mediaId)))
+      return apiError(reply, 404, "NOT_FOUND", "Media not found", request.id);
     const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
     if (!token) return apiError(reply, 401, "UNAUTHORIZED", "Attempt token required", request.id);
     const workspaceId = await followups.authorizeMedia(id, token, mediaId);
@@ -3574,7 +3582,7 @@ export async function registerRoutes(
     // Board images must keep board visibility and expiry checks on every read.
     // Check provenance before fetching the asset: deleting a board cascades its
     // provenance and atomically tombstones the asset, which the next read rejects.
-    if (await ideaBoards.isBoardMedia(id))
+    if ((await ideaBoards.isBoardMedia(id)) || (await canvasBoards.isCanvasMedia(id)))
       return apiError(reply, 404, "NOT_FOUND", "Media not found", request.id);
     const asset = await repository.getMediaAsset(creator.workspaceId, id);
     if (!asset || asset.scanStatus === "deleting") {
@@ -3617,7 +3625,7 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     const { id } = IdParamsSchema.parse(request.params);
-    if (await ideaBoards.isBoardMedia(id))
+    if ((await ideaBoards.isBoardMedia(id)) || (await canvasBoards.isCanvasMedia(id)))
       return apiError(reply, 404, "NOT_FOUND", "Media not found", request.id);
     const asset = await repository.getMediaAsset(creator.workspaceId, id);
     if (!asset || asset.scanStatus === "deleting") {
@@ -3685,6 +3693,8 @@ export async function registerRoutes(
 
   app.get("/v1/sessions/:id/media/:mediaId", async (request, reply) => {
     const { id, mediaId } = SessionMediaParamsSchema.parse(request.params);
+    if ((await ideaBoards.isBoardMedia(mediaId)) || (await canvasBoards.isCanvasMedia(mediaId)))
+      return apiError(reply, 404, "NOT_FOUND", "Media not found", request.id);
     const credential = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
     const workspaceId = await sessions.authorizeMedia(id, mediaId, credential);
     const asset = await repository.getMediaAsset(workspaceId, mediaId);

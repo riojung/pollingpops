@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  canvasCreationSetupEpoch,
+  readCanvasCreationSetup,
+  saveCanvasCreationSetup,
+} from "./canvas-creation-storage";
+import {
   apiFetch,
   ApiClientError,
   AUTH_CHANGE_EVENT,
@@ -34,6 +39,10 @@ describe("product logout and admin session revocation", () => {
   function memoryStorage() {
     const values = new Map<string, string>();
     return {
+      get length() {
+        return values.size;
+      },
+      key: (index: number) => [...values.keys()][index] ?? null,
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => {
         values.set(key, value);
@@ -69,6 +78,32 @@ describe("product logout and admin session revocation", () => {
         "Product sign-out completed, but admin session revocation could not be confirmed. Check the management service before leaving this device.",
     });
     expect(listener).toHaveBeenCalledOnce();
+  });
+  it("clears only canvas setup on successful product logout before an admin-revocation warning", async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal("window", Object.assign(new EventTarget(), { sessionStorage: storage }));
+    saveCanvasCreationSetup("owner", "workspace", {
+      sourceBoardId: "setup-only-source",
+      canvasOperationId: "setup-only-key",
+    });
+    storage.setItem("unrelated", "keep unrelated preferences");
+    storage.setItem("pollingpops:idea-board:guest", "guest credential stays untouched");
+    storage.setItem("auth-state", "auth cleanup belongs to its own owner");
+    const epoch = canvasCreationSetupEpoch();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true, operatorSessionRevoked: false })),
+    );
+    await expect(apiFetch("/v1/auth/logout", { method: "POST" })).rejects.toMatchObject({
+      code: "OPERATOR_SESSION_REVOCATION_UNCONFIRMED",
+    });
+    expect(readCanvasCreationSetup("owner", "workspace")).toBeNull();
+    expect(canvasCreationSetupEpoch()).toBeGreaterThan(epoch);
+    expect(storage.getItem("unrelated")).toBe("keep unrelated preferences");
+    expect(storage.getItem("pollingpops:idea-board:guest")).toBe(
+      "guest credential stays untouched",
+    );
+    expect(storage.getItem("auth-state")).toBe("auth cleanup belongs to its own owner");
   });
 
   it("preserves normal logout responses without competing with the caller's redirect", async () => {

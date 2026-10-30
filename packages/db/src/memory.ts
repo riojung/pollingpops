@@ -351,6 +351,7 @@ export class MemoryRepository implements Repository {
   readonly audienceRestrictions = new Map<string, AudienceRestrictionRecord>();
   readonly audienceOutbox = new Map<string, AudienceOutboxRecord>();
   readonly mediaAssets = new Map<string, MediaAssetRecord>();
+  readonly canvasBoardMediaOwners = new Map<string, { workspaceId: string; boardId: string }>();
   /** Private upload provenance. Board images cannot be attached to other authoring content. */
   readonly ideaBoardMediaOwners = new Map<
     string,
@@ -3715,6 +3716,7 @@ export class MemoryRepository implements Repository {
     const invalidMediaId = [...new Set(mediaIds)].find((mediaId) => {
       const asset = this.mediaAssets.get(mediaId);
       const upload = this.ideaBoardMediaOwners.get(mediaId);
+      const canvas = this.canvasBoardMediaOwners.get(mediaId);
       return (
         !asset ||
         asset.workspaceId !== workspaceId ||
@@ -3723,7 +3725,10 @@ export class MemoryRepository implements Repository {
           (owner?.ownerType !== "idea_board" ||
             owner.ownerId !== upload.boardId ||
             !upload.retained)) ||
-        (owner?.ownerType === "idea_board" && !upload)
+        (owner?.ownerType === "idea_board" && !upload) ||
+        (canvas !== undefined &&
+          (owner?.ownerType !== "canvas_board" || owner.ownerId !== canvas.boardId)) ||
+        (owner?.ownerType === "canvas_board" && !canvas)
       );
     });
     if (invalidMediaId) {
@@ -4071,6 +4076,7 @@ export class MemoryRepository implements Repository {
     this.mediaFinalizationLeases.delete(mediaId);
     this.mediaObjectCleanup.delete(mediaId);
     this.ideaBoardMediaOwners.delete(mediaId);
+    this.canvasBoardMediaOwners.delete(mediaId);
     return this.mediaAssets.delete(mediaId);
   }
 

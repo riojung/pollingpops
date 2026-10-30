@@ -21,6 +21,13 @@ export function CanvasDraftRecovery({
   const [notice, setNotice] = useState<"copied" | "manual" | null>(null);
   const text = useRef<HTMLTextAreaElement>(null);
   const active = useRef(true);
+  const recoveredText = [
+    draft.text,
+    draft.altText !== undefined ? `${t("canvas.assets.altText")}: ${draft.altText}` : "",
+    draft.url !== undefined ? `${t("canvas.assets.url")}: ${draft.url}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   useEffect(() => {
     active.current = true;
     return () => {
@@ -36,7 +43,7 @@ export function CanvasDraftRecovery({
   );
   async function copy() {
     try {
-      await navigator.clipboard.writeText(draft.text);
+      await navigator.clipboard.writeText(recoveredText);
       if (active.current) setNotice("copied");
     } catch {
       if (!active.current) return;
@@ -61,7 +68,7 @@ export function CanvasDraftRecovery({
       </p>
       <label>
         {t("canvas.yourDraft")}
-        <textarea ref={text} value={draft.text} readOnly dir="auto" lang="" />
+        <textarea ref={text} value={recoveredText} readOnly dir="auto" lang="" />
       </label>
       <dl>
         {(["x", "y", "width", "height"] as const).map((field) => (
@@ -82,7 +89,12 @@ export function CanvasDraftRecovery({
         ))}
       </dl>
       <div className={styles.actions}>
-        <button type="button" className="button" disabled={!draft.text} onClick={() => void copy()}>
+        <button
+          type="button"
+          className="button"
+          disabled={!recoveredText}
+          onClick={() => void copy()}
+        >
           {t("canvas.copyDraft")}
         </button>
         <button type="button" className="button-quiet" disabled={disabled} onClick={onDiscard}>

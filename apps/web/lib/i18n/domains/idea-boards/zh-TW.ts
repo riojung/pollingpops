@@ -1,9 +1,13 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
   ...canvasMessages("zh-TW"),
+  ...canvasAssetsMessages("zh-TW"),
+  ...canvasProductivityMessages("zh-TW"),
   ...canvasWorkshopMessages("zh-TW"),
   "boards.more": "載入更多看板",
   "boards.title": "創意看板",

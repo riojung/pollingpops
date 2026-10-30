@@ -3,21 +3,44 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { type CanvasBoardCreate, type IdeaBoardCreate } from "@openround/contracts";
+import {
+  getCanvasTemplate,
+  type CanvasBoardCreate,
+  type CanvasTemplateId,
+  type IdeaBoardCreate,
+} from "@openround/contracts";
 import { ApiClientError } from "../../lib/api";
 import { createIdeaBoard, ideaBoardCreateIntent } from "../../lib/idea-board-client";
 import { clientUuid } from "../../lib/uuid";
 import { createCanvas } from "../canvas-boards/canvas-client";
+import {
+  readCanvasCreationSetup,
+  removeCanvasCreationSetup,
+  saveCanvasCreationSetup,
+  CanvasCreationStorageError,
+  canvasCreationSetupEpoch,
+} from "../../lib/canvas-creation-storage";
+import { canvasTemplateMessages } from "../../lib/i18n/canvas-template-messages";
+import {
+  finishWorkshopTemplate,
+  parseWorkshopTemplateIntent,
+  workshopTemplateIntent,
+  type WorkshopTemplateIntent,
+} from "./canvas-template-creation";
+import { CanvasTemplateChooser } from "./canvas-template-chooser";
 import { useBoardLibrary, type BoardLibraryScope } from "./use-board-library";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
 import { WorkspaceShell } from "../workspace/workspace-shell";
 import styles from "./boards.module.css";
 import canvasStyles from "../canvas-boards/canvas.module.css";
+import templateStyles from "./canvas-templates.module.css";
 
 type Intent =
   | { kind: "team"; value: CanvasBoardCreate }
-  | { kind: "workshop"; value: ReturnType<typeof ideaBoardCreateIntent> };
+  | { kind: "workshop"; value: ReturnType<typeof ideaBoardCreateIntent> }
+  | { kind: "template"; value: WorkshopTemplateIntent };
+class SetupStorageError extends Error {}
 const defaults: IdeaBoardCreate = {
   schemaVersion: 1,
   title: "",
@@ -30,14 +53,20 @@ const defaults: IdeaBoardCreate = {
 };
 
 export function BoardLibrary() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = canvasTemplateMessages(locale);
   const router = useRouter();
   const { creator, canEdit, productFeatures } = useWorkspace();
   const workspaceId = creator?.workspaceId;
+  const userId = creator?.userId;
+  const contextKey = `${userId ?? ""}:${workspaceId ?? ""}`;
   const [scope, setScope] = useState<BoardLibraryScope>("all");
   const [search, setSearch] = useState("");
   const [input, setInput] = useState<IdeaBoardCreate>(defaults);
   const [kind, setKind] = useState<"team" | "workshop">("team");
+  const [templateId, setTemplateId] = useState<CanvasTemplateId | null>(null);
+  const [setupError, setSetupError] = useState<"storage" | "invalid" | "context" | null>(null);
+  const [formContext, setFormContext] = useState(contextKey);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -45,8 +74,8 @@ export function BoardLibrary() {
   const pending = useRef<Intent | null>(null);
   const controller = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
-  const currentWorkspace = useRef(workspaceId);
-  currentWorkspace.current = workspaceId;
+  const currentContext = useRef(contextKey);
+  currentContext.current = contextKey;
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLInputElement>(null);
   const canCreate = canEdit && (productFeatures?.canvasBoards || productFeatures?.ideaBoards);
@@ -61,7 +90,7 @@ export function BoardLibrary() {
     const active = new AbortController();
     controller.current = active;
     return () => active.abort();
-  }, [workspaceId]);
+  }, [contextKey]);
   useEffect(() => {
     pending.current = null;
     inFlight.current = false;
@@ -69,9 +98,38 @@ export function BoardLibrary() {
     setError(false);
     setCreating(false);
     setInput(defaults);
-  }, [workspaceId]);
+    setTemplateId(null);
+    setSetupError(null);
+    setFormContext(contextKey);
+    if (!userId || !workspaceId) return;
+    try {
+      const saved = readCanvasCreationSetup(userId, workspaceId);
+      if (!saved) return;
+      const value = parseWorkshopTemplateIntent(saved, userId, workspaceId);
+      pending.current = { kind: "template", value };
+      setInput({
+        schemaVersion: 1,
+        title: value.source.title,
+        description: value.source.description,
+        identityMode: value.source.identityMode,
+        moderationEnabled: value.source.moderationEnabled,
+        ideasVisible: value.source.ideasVisible,
+        voteBudget: value.source.voteBudget,
+        windowDays: value.source.windowDays,
+      });
+      setTemplateId(value.templateId);
+      setKind("workshop");
+      setCreating(true);
+    } catch (caught) {
+      // Block malformed stored inputs; unavailable storage still permits the blank workflow.
+      if (!(caught instanceof CanvasCreationStorageError)) {
+        setSetupError("invalid");
+        setCreating(true);
+      }
+    }
+  }, [contextKey, userId, workspaceId]);
   useEffect(() => {
-    if (!creating) return;
+    if (!creating || formContext !== contextKey) return;
     const previous = document.activeElement;
     const node = dialog.current;
     node?.showModal();
@@ -80,56 +138,156 @@ export function BoardLibrary() {
       node?.close();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
-  }, [creating]);
+  }, [creating, formContext, contextKey]);
   const current = library.data;
   const canvases = current?.canvases ?? [];
   const attachedSources = new Set(canvases.map((board) => board.sourceBoardId).filter(Boolean));
   const boards = current?.boards.filter((board) => !attachedSources.has(board.id)) ?? [];
+  const templatePending =
+    pending.current?.kind === "template" &&
+    pending.current.value.userId === userId &&
+    pending.current.value.workspaceId === workspaceId
+      ? pending.current.value
+      : null;
+
+  function chooseTemplate(id: CanvasTemplateId | null) {
+    setTemplateId(id);
+    setSetupError(null);
+    if (!id) {
+      setInput(defaults);
+      return;
+    }
+    const template = getCanvasTemplate(id);
+    setInput({
+      schemaVersion: 1,
+      title: template.title,
+      description: template.prompt,
+      ...template.workshop,
+    });
+  }
+
+  function keepWorkshop() {
+    if (!userId || !workspaceId || !templatePending?.sourceBoardId || busy) return;
+    try {
+      removeCanvasCreationSetup(userId, workspaceId);
+      const sourceId = templatePending.sourceBoardId;
+      pending.current = null;
+      setCreating(false);
+      router.push(`/boards/${sourceId}`);
+    } catch {
+      setSetupError("storage");
+    }
+  }
 
   async function create(event: FormEvent) {
     event.preventDefault();
     if (
       inFlight.current ||
       !workspaceId ||
-      !canCreate ||
-      (kind === "team" ? !productFeatures?.canvasBoards : !productFeatures?.ideaBoards)
+      !userId ||
+      setupError === "invalid" ||
+      (!pending.current &&
+        (!canCreate ||
+          (kind === "team" ? !productFeatures?.canvasBoards : !productFeatures?.ideaBoards) ||
+          (kind === "workshop" && templateId && !productFeatures?.canvasBoards)))
     )
       return;
+    const newlyPrepared = pending.current === null;
     try {
       pending.current ??=
         kind === "team"
           ? {
               kind,
               value: {
-                schemaVersion: 1,
+                schemaVersion: templateId ? 2 : 1,
                 workspaceId,
                 title: input.title.trim(),
                 boardType: "team",
                 operationId: clientUuid(),
+                ...(templateId ? { templateId } : {}),
               },
             }
-          : { kind, value: ideaBoardCreateIntent(input) };
+          : templateId
+            ? {
+                kind: "template",
+                value: workshopTemplateIntent(userId, workspaceId, input, templateId),
+              }
+            : { kind, value: ideaBoardCreateIntent(input) };
     } catch {
       setError(true);
       return;
     }
     const active = controller.current;
+    const setupEpoch = canvasCreationSetupEpoch();
     inFlight.current = true;
     setBusy(true);
     setError(false);
+    setSetupError(null);
     try {
       const intent = pending.current;
       const board =
         intent.kind === "team"
-          ? await createCanvas(intent.value, active?.signal)
-          : await createIdeaBoard(intent.value, active?.signal);
-      if (currentWorkspace.current === workspaceId && !active?.signal.aborted) {
+          ? await createCanvas(intent.value, active?.signal, { userId, workspaceId })
+          : intent.kind === "template"
+            ? await finishWorkshopTemplate(
+                intent.value,
+                (checkpoint) => {
+                  if (
+                    currentContext.current !== contextKey ||
+                    active?.signal.aborted ||
+                    setupEpoch !== canvasCreationSetupEpoch()
+                  )
+                    throw new DOMException("Creation interrupted", "AbortError");
+                  try {
+                    saveCanvasCreationSetup(userId, workspaceId, checkpoint);
+                  } catch {
+                    throw new SetupStorageError();
+                  }
+                },
+                active?.signal,
+              )
+            : await createIdeaBoard(intent.value, active?.signal, { userId, workspaceId });
+      if (
+        currentContext.current === contextKey &&
+        !active?.signal.aborted &&
+        setupEpoch === canvasCreationSetupEpoch()
+      ) {
+        if (intent.kind === "template") {
+          try {
+            removeCanvasCreationSetup(userId, workspaceId);
+          } catch {
+            /* Exact retry stays safe. */
+          }
+        }
         pending.current = null;
-        router.push((intent.kind === "team" ? "/canvas/" : "/boards/") + board.id);
+        router.push((intent.kind === "workshop" ? "/boards/" : "/canvas/") + board.id);
       }
     } catch (caught) {
-      if (!active?.signal.aborted && currentWorkspace.current === workspaceId) {
-        if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
+      if (
+        !active?.signal.aborted &&
+        currentContext.current === contextKey &&
+        setupEpoch === canvasCreationSetupEpoch()
+      ) {
+        if (caught instanceof SetupStorageError) {
+          setSetupError("storage");
+          // The first checkpoint failed before any POST; blank creation remains available.
+          if (
+            newlyPrepared &&
+            pending.current?.kind === "template" &&
+            !pending.current.value.sourceBoardId
+          )
+            pending.current = null;
+        } else if (
+          caught instanceof ApiClientError &&
+          (caught.code === "SETUP_CONTEXT_CHANGED" || caught.status === 401)
+        ) {
+          setSetupError("context");
+        } else if (
+          pending.current?.kind !== "template" &&
+          caught instanceof ApiClientError &&
+          caught.status < 500 &&
+          caught.status !== 429
+        )
           pending.current = null;
         setError(true);
       }
@@ -162,7 +320,7 @@ export function BoardLibrary() {
             type="button"
             className="button"
             onClick={() => {
-              setKind(productFeatures?.canvasBoards ? "team" : "workshop");
+              if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
               setCreating(true);
             }}
           >
@@ -170,6 +328,17 @@ export function BoardLibrary() {
           </button>
         ) : null}
       </div>
+      {templatePending && !creating ? (
+        <aside className={templateStyles.recovery} role="status">
+          <p>{templatePending.sourceBoardId ? copy.sourceCreated : copy.pending}</p>
+          <button type="button" className="button-quiet" onClick={() => setCreating(true)}>
+            {copy.retry}
+          </button>
+          {templatePending.sourceBoardId ? (
+            <Link href={`/boards/${templatePending.sourceBoardId}`}>{copy.openSource}</Link>
+          ) : null}
+        </aside>
+      ) : null}
       <div className={canvasStyles.filters} role="group" aria-label={t("boards.title")}>
         {(["all", "owned", "shared", "archived"] as const).map((value) => (
           <button
@@ -264,14 +433,14 @@ export function BoardLibrary() {
       {!productFeatures?.canvasBoards ? (
         <p className={styles.muted}>{t("canvas.creationPaused")}</p>
       ) : null}
-      {creating ? (
+      {creating && formContext === contextKey ? (
         <dialog
           ref={dialog}
           className={canvasStyles.dialog}
           aria-labelledby="new-board-heading"
           onCancel={(event) => {
             event.preventDefault();
-            if (!busy && !pending.current) setCreating(false);
+            if (!busy) setCreating(false);
           }}
         >
           <header className={canvasStyles.dialogHeader}>
@@ -279,10 +448,10 @@ export function BoardLibrary() {
             <button
               type="button"
               className="button-quiet"
-              disabled={busy || pending.current !== null}
+              disabled={busy}
               onClick={() => setCreating(false)}
             >
-              {t("boards.cancel")}
+              {pending.current ? copy.closePending : t("boards.cancel")}
             </button>
           </header>
           {error ? (
@@ -290,8 +459,69 @@ export function BoardLibrary() {
               {t("boards.error")}
             </p>
           ) : null}
+          {setupError ? (
+            <div className={templateStyles.recovery} role="alert">
+              <p>
+                {
+                  copy[
+                    setupError === "storage"
+                      ? "storageError"
+                      : setupError === "context"
+                        ? "contextError"
+                        : "recoveryError"
+                  ]
+                }
+              </p>
+              {setupError === "invalid" ? (
+                <button
+                  type="button"
+                  className="button-quiet"
+                  onClick={() => {
+                    if (!userId || !workspaceId) return;
+                    try {
+                      removeCanvasCreationSetup(userId, workspaceId);
+                      setSetupError(null);
+                    } catch {
+                      setError(true);
+                    }
+                  }}
+                >
+                  {copy.discardSetup}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {templatePending ? (
+            <aside className={templateStyles.recovery} role="status">
+              <p>{templatePending.sourceBoardId ? copy.sourceCreated : copy.pending}</p>
+              {templatePending.sourceBoardId ? (
+                <>
+                  <Link href={`/boards/${templatePending.sourceBoardId}`}>{copy.openSource}</Link>
+                  <button
+                    type="button"
+                    className="button-quiet"
+                    disabled={busy}
+                    onClick={keepWorkshop}
+                  >
+                    {copy.keepSource}
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="button-quiet"
+                disabled={busy}
+                onClick={() => setCreating(false)}
+              >
+                {copy.closePending}
+              </button>
+            </aside>
+          ) : null}
           <form className={styles.form} onSubmit={(event) => void create(event)}>
-            <fieldset className={styles.form} disabled={busy || pending.current !== null}>
+            <fieldset
+              className={styles.form}
+              disabled={busy || pending.current !== null || setupError === "invalid"}
+            >
               <div
                 className={canvasStyles.typeChoices}
                 role="group"
@@ -316,6 +546,9 @@ export function BoardLibrary() {
                   {t("canvas.workshop")}
                 </button>
               </div>
+              {productFeatures?.canvasBoards ? (
+                <CanvasTemplateChooser value={templateId} onChange={chooseTemplate} />
+              ) : null}
               <label>
                 {t("boards.boardTitle")}
                 <input
@@ -408,7 +641,11 @@ export function BoardLibrary() {
                 <p>{t("canvas.shareScope")}</p>
               )}
             </fieldset>
-            <button className="button" type="submit" disabled={busy || !input.title.trim()}>
+            <button
+              className="button"
+              type="submit"
+              disabled={busy || !input.title.trim() || setupError === "invalid"}
+            >
               {t(pending.current ? "boards.retry" : "boards.create")}
             </button>
           </form>

@@ -7651,7 +7651,7 @@ export class PostgresRepository implements Repository {
         );
         await client.query("SELECT set_config('app.canvas_lifecycle','on',true)");
         const canvasBoards = await queryWorkspaceData(
-          `SELECT board.id, board.workspace_id AS "workspaceId", board.organization_id AS "organizationId",
+          `SELECT board.id, board.schema_version AS "schemaVersion", board.workspace_id AS "workspaceId", board.organization_id AS "organizationId",
             board.title, board.board_type AS "boardType", board.source_board_id AS "sourceBoardId",
             board.status, board.created_at AS "createdAt", board.updated_at AS "updatedAt", board.expires_at AS "expiresAt",
             COALESCE((SELECT jsonb_agg(object.data ORDER BY object.id) FROM canvas_board_objects object
@@ -8356,6 +8356,10 @@ export class PostgresRepository implements Repository {
         );
         await client.query("SELECT set_config('app.canvas_lifecycle','on',true)");
         await client.query("SELECT set_config('app.canvas_relay','on',true)");
+        await client.query(
+          "DELETE FROM media_references reference USING canvas_board_uploads upload,media_assets asset WHERE reference.owner_type='canvas_board' AND reference.owner_id=upload.board_id AND reference.media_id=upload.media_id AND asset.workspace_id=upload.workspace_id AND asset.id=upload.media_id AND asset.created_at<=$1::timestamptz-interval '15 minutes' AND NOT EXISTS(SELECT 1 FROM canvas_retained_media_ids(upload.board_id) retained WHERE retained.media_id=upload.media_id)",
+          [now],
+        );
         const canvasBoardResult = await client.query(
           "DELETE FROM canvas_boards WHERE expires_at<=$1 RETURNING id",
           [now],

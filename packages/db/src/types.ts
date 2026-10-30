@@ -1048,6 +1048,7 @@ export type MediaReferenceOwnerType =
   | "recovery_pack_history"
   | "recovery_pack_mutation"
   | "idea_board"
+  | "canvas_board"
   | "followup";
 
 /**

@@ -1,9 +1,13 @@
+import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
   ...canvasMessages("pt-PT"),
+  ...canvasAssetsMessages("pt-PT"),
+  ...canvasProductivityMessages("pt-PT"),
   ...canvasWorkshopMessages("pt-PT"),
   "boards.more": "Carregar mais quadros",
   "boards.title": "Quadros de ideias",

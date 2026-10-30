@@ -91,6 +91,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     );
   }
   const loggedOut = path === "/v1/auth/logout" && init.method?.toUpperCase() === "POST";
+  if (loggedOut) clearAllCanvasCreationSetups();
   if (response.status === 204) {
     return undefined as T;
   }
@@ -131,3 +132,4 @@ export function isRetryableReadError(error: unknown): boolean {
     ? error.status === 429 || error.status >= 500
     : error instanceof TypeError;
 }
+import { clearAllCanvasCreationSetups } from "./canvas-creation-storage";

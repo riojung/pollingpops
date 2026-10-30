@@ -1,4 +1,29 @@
 import { z } from "zod";
+import { CANVAS_TEMPLATE_IDS } from "./canvas-template-catalog";
+import {
+  CanvasBoardCreateV1Schema,
+  CanvasBoardMutationV1Schema,
+  CanvasBoardViewV1Schema,
+  CanvasBoardGuestViewV1Schema,
+} from "./canvas-boards-v1";
+export {
+  CanvasObjectCreateV1Schema,
+  CanvasObjectV1Schema,
+  CanvasObjectPatchV1Schema,
+  CanvasBoardCommandV1Schema,
+  CanvasBoardMutationV1Schema,
+  CanvasBoardCreateV1Schema,
+  CanvasBoardViewV1Schema,
+  CanvasBoardGuestViewV1Schema,
+} from "./canvas-boards-v1";
+export type {
+  CanvasObjectCreateV1,
+  CanvasObjectV1,
+  CanvasBoardCreateV1,
+  CanvasBoardMutationV1,
+  CanvasBoardViewV1,
+  CanvasBoardGuestViewV1,
+} from "./canvas-boards-v1";
 import {
   IdeaBoardHostCommandSchema,
   IdeaBoardIdeaSchema,
@@ -47,6 +72,7 @@ const common = {
   color: CanvasColorSchema.default("yellow"),
   text: text(2_000).default(""),
   parentId: id.nullable().default(null),
+  geometricGroupId: id.nullable().default(null),
   locked: z.boolean().default(false),
   visibility: z.enum(["team", "published"]).default("team"),
 };
@@ -99,8 +125,18 @@ export const CanvasObjectCreateSchema = z.discriminatedUnion("type", [
   z
     .object({ ...common, type: z.literal("idea_ref"), text: z.literal("").default(""), ideaId: id })
     .strict(),
+  z
+    .object({
+      ...common,
+      type: z.literal("image"),
+      mediaId: id,
+      altText: text(300).pipe(z.string().trim().min(1)),
+    })
+    .strict(),
 ]);
 export type CanvasObjectCreate = z.infer<typeof CanvasObjectCreateSchema>;
+export const CanvasObjectCreateV2Schema = CanvasObjectCreateSchema;
+export type CanvasObjectCreateV2 = CanvasObjectCreate;
 const versioned = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
   schema.extend({ version: z.number().int().positive(), idea: IdeaBoardIdeaSchema.optional() });
 export const CanvasObjectSchema = z.discriminatedUnion("type", [
@@ -113,8 +149,11 @@ export const CanvasObjectSchema = z.discriminatedUnion("type", [
   versioned(CanvasObjectCreateSchema.options[6]),
   versioned(CanvasObjectCreateSchema.options[7]),
   versioned(CanvasObjectCreateSchema.options[8]),
+  versioned(CanvasObjectCreateSchema.options[9]),
 ]);
 export type CanvasObject = z.infer<typeof CanvasObjectSchema>;
+export const CanvasObjectV2Schema = CanvasObjectSchema;
+export type CanvasObjectV2 = CanvasObject;
 export const CanvasObjectPatchSchema = z
   .object({
     x: coordinate.optional(),
@@ -126,6 +165,7 @@ export const CanvasObjectPatchSchema = z
     color: CanvasColorSchema.optional(),
     text: text(2_000).optional(),
     parentId: id.nullable().optional(),
+    geometricGroupId: id.nullable().optional(),
     locked: z.boolean().optional(),
     visibility: common.visibility.unwrap().optional(),
     from: CanvasEndpointSchema.optional(),
@@ -136,9 +176,11 @@ export const CanvasObjectPatchSchema = z
       .max(128)
       .optional(),
     url: url.optional(),
+    altText: text(300).pipe(z.string().trim().min(1)).optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "Change at least one field");
+export const CanvasObjectPatchV2Schema = CanvasObjectPatchSchema;
 export const CanvasObjectOperationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create"), object: CanvasObjectCreateSchema }).strict(),
   z
@@ -158,6 +200,10 @@ export const CanvasBoardCommandSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("batch"),
       operations: z.array(CanvasObjectOperationSchema).min(1).max(CANVAS_MAX_OPERATIONS),
+      expectedRelated: z
+        .array(z.object({ id, expectedVersion: z.number().int().positive() }).strict())
+        .max(CANVAS_MAX_OPERATIONS)
+        .optional(),
     })
     .strict(),
   z.object({ type: z.literal("undo"), targetOperationId: id }).strict(),
@@ -175,21 +221,27 @@ export const CanvasBoardCommandSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 export type CanvasBoardCommand = z.infer<typeof CanvasBoardCommandSchema>;
-export const CanvasBoardMutationSchema = z
-  .object({ schemaVersion: z.literal(1), operationId: id, command: CanvasBoardCommandSchema })
+export const CanvasBoardCommandV2Schema = CanvasBoardCommandSchema;
+export const CanvasBoardMutationV2Schema = z
+  .object({ schemaVersion: z.literal(2), operationId: id, command: CanvasBoardCommandSchema })
   .strict()
   .superRefine((value, ctx) => {
     if (new TextEncoder().encode(JSON.stringify(value)).byteLength > CANVAS_MAX_OPERATION_BYTES)
       ctx.addIssue({ code: "custom", message: "Canvas operation is too large" });
   });
+export const CanvasBoardMutationSchema = z.union([
+  CanvasBoardMutationV1Schema,
+  CanvasBoardMutationV2Schema,
+]);
 export type CanvasBoardMutation = z.infer<typeof CanvasBoardMutationSchema>;
-export const CanvasBoardCreateSchema = z
+export const CanvasBoardCreateV2Schema = z
   .object({
-    schemaVersion: z.literal(1).default(1),
+    schemaVersion: z.literal(2),
     workspaceId: id,
     title: text(160).pipe(z.string().trim().min(1)),
     boardType: z.enum(["team", "workshop"]),
     sourceBoardId: id.optional(),
+    templateId: z.enum(CANVAS_TEMPLATE_IDS).optional(),
     operationId: id,
   })
   .strict()
@@ -197,6 +249,10 @@ export const CanvasBoardCreateSchema = z
     (value) => (value.boardType === "workshop") === Boolean(value.sourceBoardId),
     "Workshops require a source board; team canvases have no source board",
   );
+export const CanvasBoardCreateSchema = z.union([
+  CanvasBoardCreateV1Schema,
+  CanvasBoardCreateV2Schema,
+]);
 export type CanvasBoardCreate = z.infer<typeof CanvasBoardCreateSchema>;
 export const CanvasBoardCapabilitiesSchema = z
   .object({
@@ -231,9 +287,9 @@ export const CanvasBoardInviteSchema = z
   .object({ email: z.string().email().max(320), role: CanvasBoardGrantRoleSchema, operationId: id })
   .strict();
 export type CanvasBoardInvitation = z.infer<typeof CanvasBoardInvitationSchema>;
-export const CanvasBoardViewSchema = z
+export const CanvasBoardViewV2Schema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     id,
     workspaceId: id,
     organizationId: id,
@@ -250,6 +306,7 @@ export const CanvasBoardViewSchema = z
     expiresAt: z.string().datetime(),
     role: CanvasBoardRoleSchema,
     capabilities: CanvasBoardCapabilitiesSchema,
+    imageUploadsAvailable: z.boolean().optional(),
     objects: z.array(CanvasObjectSchema).max(CANVAS_MAX_OBJECTS),
     grants: z.array(CanvasBoardGrantSchema).max(100),
     invitations: z.array(CanvasBoardInvitationSchema).max(100),
@@ -258,10 +315,20 @@ export const CanvasBoardViewSchema = z
     redoOperationId: id.nullable(),
   })
   .strict();
-export type CanvasBoardView = z.infer<typeof CanvasBoardViewSchema>;
-export const CanvasBoardGuestViewSchema = z
+export const CanvasBoardViewSchema = z.union([
+  CanvasBoardViewV2Schema,
+  CanvasBoardViewV1Schema.transform((value) =>
+    CanvasBoardViewV2Schema.parse({
+      ...value,
+      schemaVersion: 2,
+      objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
+    }),
+  ),
+]);
+export type CanvasBoardView = z.infer<typeof CanvasBoardViewV2Schema>;
+export const CanvasBoardGuestViewV2Schema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     id,
     sourceBoardId: id,
     canvasSeq: z.number().int().nonnegative(),
@@ -270,7 +337,17 @@ export const CanvasBoardGuestViewSchema = z
     sourceBoard: IdeaBoardViewSchema,
   })
   .strict();
-export type CanvasBoardGuestView = z.infer<typeof CanvasBoardGuestViewSchema>;
+export const CanvasBoardGuestViewSchema = z.union([
+  CanvasBoardGuestViewV2Schema,
+  CanvasBoardGuestViewV1Schema.transform((value) =>
+    CanvasBoardGuestViewV2Schema.parse({
+      ...value,
+      schemaVersion: 2,
+      objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
+    }),
+  ),
+]);
+export type CanvasBoardGuestView = z.infer<typeof CanvasBoardGuestViewV2Schema>;
 export const CanvasBoardReceiptSchema = z
   .object({ operationId: id, canvasSeq: z.number().int().nonnegative(), type: z.string().max(40) })
   .strict();

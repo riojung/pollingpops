@@ -220,7 +220,7 @@ export function PublishedWorkshopCanvas({
       </p>
     ) : null;
   return (
-    <section aria-label={t("canvas.workshop.published")}>
+    <div>
       <h2>{t("canvas.workshop.published")}</h2>
       <CanvasReadOnlySurface
         objects={board.objects}
@@ -230,6 +230,6 @@ export function PublishedWorkshopCanvas({
         guestToken={token}
         label={t("canvas.workshop.published")}
       />
-    </section>
+    </div>
   );
 }

@@ -16,6 +16,7 @@ import type {
   PlatformSubscription,
   UserLicenseAssignment,
 } from "./platform-types.js";
+import type { MediaAssetCreateInput, MediaAssetRecord } from "./types.js";
 
 export type CanvasClock = Date | (() => Date);
 export interface CanvasActor {
@@ -31,6 +32,7 @@ export interface CanvasBoardAuthorization {
   expiresAt: string;
 }
 export interface CanvasBoardStored {
+  schemaVersion: 1 | 2;
   id: string;
   workspaceId: string;
   organizationId: string;
@@ -45,6 +47,8 @@ export interface CanvasBoardStored {
   expiresAt: string;
   creationKey: string;
   creationHash: string;
+  uploadCount: number;
+  uploadBytes: number;
 }
 export interface CanvasReceipt {
   operationId: string;
@@ -71,6 +75,11 @@ export interface CanvasState {
   }>;
   invitations: CanvasBoardInvitation[];
   receipts: CanvasReceipt[];
+}
+export interface CanvasMediaUpload {
+  boardId: string;
+  uploaderUserId: string;
+  asset: MediaAssetRecord;
 }
 export interface CanvasAccessContext {
   workspace: {
@@ -119,6 +128,13 @@ export interface CanvasTransaction {
   putSource(row: IdeaBoardStored): Promise<void>;
   emit(event: CanvasBoardEvent, expiresAt: string): Promise<void>;
   invitation(id: string): Promise<{ boardId: string } | null>;
+  media(boardId: string, mediaId: string): Promise<CanvasMediaUpload | null>;
+  reserveMedia(
+    board: CanvasBoardStored,
+    userId: string,
+    input: MediaAssetCreateInput,
+  ): Promise<MediaAssetRecord>;
+  syncMedia(state: CanvasState): Promise<void>;
 }
 export type CanvasRun = <T>(
   actor: CanvasActor | null,

@@ -3,6 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import {
   CanvasBoardCreateSchema,
   CanvasObjectCreateSchema,
+  CanvasBoardMutationV1Schema,
+  CanvasBoardCreateV1Schema,
   IdeaBoardCreateSchema,
   type CanvasBoardCommand,
 } from "@openround/contracts";
@@ -14,8 +16,12 @@ import {
   createPlatformRepository,
   type Repository,
   type CreatorContext,
+  type MediaAssetCreateInput,
 } from "../src/index.js";
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
+import { MemoryCanvasBoards } from "../src/canvas-board-store.js";
+import type { CanvasState } from "../src/canvas-board-types.js";
+import { stablePlatformJson } from "../src/platform-service.js";
 
 async function creator(repository: Repository) {
   const tokenHash = randomUUID(),
@@ -128,7 +134,7 @@ for (const backend of ["memory", "postgres"] as const)
         id: string,
         command: CanvasBoardCommand,
         operationId: string = randomUUID(),
-      ) => canvases.command(actor, id, { schemaVersion: 1, operationId, command });
+      ) => canvases.command(actor, id, { schemaVersion: 2, operationId, command });
       async function share(id: string, role: "facilitator" | "editor" | "viewer" = "editor") {
         const invitation = await canvases.invite(owner, id, {
           email: editor.email,
@@ -147,6 +153,33 @@ for (const backend of ["memory", "postgres"] as const)
           height: 160,
           text,
         });
+      const pendingImage = (): MediaAssetCreateInput => {
+        const id = randomUUID();
+        return {
+          id,
+          workspaceId,
+          objectKey: `quarantine/${workspaceId}/${id}.png`,
+          mimeType: "image/png",
+          sizeBytes: 8,
+          scanStatus: "pending",
+          altText: "A workshop diagram",
+          createdAt: new Date(),
+        };
+      };
+      async function cleanImage(boardId: string, actor = owner) {
+        const input = pendingImage();
+        await canvases.reserveMedia(actor, boardId, input);
+        const token = randomUUID();
+        expect(
+          await repository.claimMediaAssetFinalization(workspaceId, input.id, token),
+        ).not.toBeNull();
+        return (await repository.updateMediaAsset(workspaceId, input.id, {
+          scanStatus: "clean",
+          objectKey: `media/${workspaceId}/${input.id}/${token}.png`,
+          finalizationToken: token,
+          finalizedAt: new Date(),
+        }))!;
+      }
 
       it("preserves owner workspace and grants only an accepted same-organization board", async () => {
         const board = await create();
@@ -492,6 +525,7 @@ for (const backend of ["memory", "postgres"] as const)
         let latest = await change(owner, board.id, {
           type: "batch",
           operations: [{ type: "delete", id: b.id, expectedVersion: 2 }],
+          expectedRelated: [{ id: connector.id, expectedVersion: 1 }],
         });
         const deleted = latest;
         expect(latest.board.objects.map((object) => object.id)).toEqual([a.id]);
@@ -1082,6 +1116,1063 @@ for (const backend of ["memory", "postgres"] as const)
         expect(closed.board.status).toBe("closed");
         await ideas.delete(workspaceId, source.id);
         await expect(canvases.get(owner, board.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+      });
+      it("upcasts actual stored V1 scenes and inverse history without rewriting accepted fingerprints", async () => {
+        const id = randomUUID(),
+          objectId = randomUUID(),
+          now = new Date().toISOString();
+        const hash = (value: unknown) =>
+          createHash("sha256").update(stablePlatformJson(value)).digest("hex");
+        const input = CanvasBoardCreateV1Schema.parse({
+          workspaceId,
+          title: "An actual V1 document",
+          boardType: "team",
+          operationId: randomUUID(),
+        });
+        const creation = CanvasBoardMutationV1Schema.parse({
+          schemaVersion: 1,
+          operationId: randomUUID(),
+          command: {
+            type: "batch",
+            operations: [
+              {
+                type: "create",
+                object: {
+                  id: objectId,
+                  type: "sticky",
+                  x: 10,
+                  y: 20,
+                  width: 240,
+                  height: 160,
+                  text: "Original V1 text",
+                },
+              },
+            ],
+          },
+        });
+        const edit = CanvasBoardMutationV1Schema.parse({
+          schemaVersion: 1,
+          operationId: randomUUID(),
+          command: {
+            type: "batch",
+            operations: [
+              {
+                type: "update",
+                id: objectId,
+                expectedVersion: 1,
+                patch: { text: "Edited V1 text" },
+              },
+            ],
+          },
+        });
+        const operation = creation.command.type === "batch" ? creation.command.operations[0] : null;
+        if (operation?.type !== "create") throw new Error("Expected legacy creation fixture");
+        const original = { ...operation.object, version: 1 },
+          edited = { ...original, text: "Edited V1 text", version: 2 };
+        const board = {
+          id,
+          schemaVersion: 1,
+          workspaceId,
+          organizationId: org,
+          ownerUserId: owner.userId,
+          title: input.title,
+          boardType: "team",
+          sourceBoardId: null,
+          status: "active",
+          canvasSeq: 2,
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
+          creationKey: input.operationId,
+          creationHash: hash(input),
+          uploadCount: 0,
+          uploadBytes: 0,
+        };
+        const receipts = [
+          {
+            operationId: creation.operationId,
+            actorId: owner.userId,
+            hash: hash(creation),
+            canvasSeq: 1,
+            type: "batch",
+            before: [],
+            after: [original],
+            undone: false,
+            undoable: true,
+            objectVersions: { [objectId]: 1 },
+          },
+          {
+            operationId: edit.operationId,
+            actorId: owner.userId,
+            hash: hash(edit),
+            canvasSeq: 2,
+            type: "batch",
+            before: [original],
+            after: [edited],
+            undone: false,
+            undoable: true,
+            objectVersions: { [objectId]: 2 },
+          },
+        ];
+        expect(original).not.toHaveProperty("geometricGroupId");
+        if (repository instanceof MemoryRepository) {
+          repository
+            .getOrCreateLifecycleExtension(
+              "canvasBoards",
+              () => new MemoryCanvasBoards(repository as MemoryRepository),
+            )
+            .rows.set(
+              id,
+              structuredClone({
+                board,
+                objects: [edited],
+                grants: [],
+                invitations: [],
+                receipts,
+              }) as unknown as CanvasState,
+            );
+        } else if (repository instanceof PostgresRepository) {
+          const client = await repository.pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query(
+              "SELECT set_config('app.workspace_id',$1,true),set_config('app.canvas_board_id',$2,true),set_config('app.canvas_user_id',$3,true)",
+              [workspaceId, id, owner.userId],
+            );
+            await client.query(
+              "INSERT INTO canvas_boards(id,workspace_id,organization_id,owner_user_id,board_type,title,status,canvas_seq,creation_key,creation_hash,created_at,updated_at,expires_at,schema_version) VALUES($1,$2,$3,$4,'team',$5,'active',2,$6,$7,$8,$8,$9,1)",
+              [
+                id,
+                workspaceId,
+                org,
+                owner.userId,
+                input.title,
+                input.operationId,
+                hash(input),
+                now,
+                board.expiresAt,
+              ],
+            );
+            await client.query(
+              "INSERT INTO canvas_board_objects(board_id,workspace_id,id,version,data) VALUES($1,$2,$3,2,$4)",
+              [id, workspaceId, objectId, edited],
+            );
+            for (const receipt of receipts)
+              await client.query(
+                "INSERT INTO canvas_board_receipts(board_id,workspace_id,actor_id,operation_id,data) VALUES($1,$2,$3,$4,$5)",
+                [id, workspaceId, owner.userId, receipt.operationId, receipt],
+              );
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+          } finally {
+            client.release();
+          }
+        }
+        const read = await canvases.get(owner, id);
+        expect(read).toMatchObject({
+          schemaVersion: 2,
+          objects: [{ id: objectId, geometricGroupId: null, version: 2 }],
+        });
+        expect(await canvases.getCreation(owner, input)).toEqual({ id, workspaceId });
+        expect((await canvases.command(owner, id, edit)).receipt).toEqual({
+          operationId: edit.operationId,
+          canvasSeq: 2,
+          type: "batch",
+        });
+        await change(owner, id, { type: "undo", targetOperationId: edit.operationId });
+        const empty = await change(owner, id, {
+          type: "undo",
+          targetOperationId: creation.operationId,
+        });
+        expect(empty.board.objects).toEqual([]);
+        await change(owner, id, { type: "redo", targetOperationId: creation.operationId });
+        const restored = await change(owner, id, {
+          type: "redo",
+          targetOperationId: edit.operationId,
+        });
+        expect(restored.board.objects[0]).toMatchObject({
+          text: "Edited V1 text",
+          geometricGroupId: null,
+        });
+        expect((await canvases.command(owner, id, creation)).receipt.canvasSeq).toBe(1);
+        expect((await canvases.create(owner, input)).id).toBe(id);
+        if (repository instanceof MemoryRepository) {
+          const retained = repository
+            .getOrCreateLifecycleExtension(
+              "canvasBoards",
+              () => new MemoryCanvasBoards(repository as MemoryRepository),
+            )
+            .rows.get(id)!;
+          expect(retained.board).toMatchObject({ schemaVersion: 2, creationHash: hash(input) });
+          for (const receipt of receipts)
+            expect(
+              retained.receipts.find((entry) => entry.operationId === receipt.operationId)!.hash,
+            ).toBe(receipt.hash);
+        } else if (repository instanceof PostgresRepository) {
+          const client = await repository.pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query(
+              "SELECT set_config('app.workspace_id',$1,true),set_config('app.canvas_board_id',$2,true),set_config('app.canvas_user_id',$3,true)",
+              [workspaceId, id, owner.userId],
+            );
+            expect(
+              (
+                await client.query(
+                  "SELECT schema_version,creation_hash FROM canvas_boards WHERE id=$1",
+                  [id],
+                )
+              ).rows[0],
+            ).toEqual({ schema_version: 2, creation_hash: hash(input) });
+            for (const receipt of receipts)
+              expect(
+                (
+                  await client.query(
+                    "SELECT data->>'hash' AS hash FROM canvas_board_receipts WHERE board_id=$1 AND operation_id=$2",
+                    [id, receipt.operationId],
+                  )
+                ).rows[0].hash,
+              ).toBe(receipt.hash);
+          } finally {
+            await client.query("ROLLBACK");
+            client.release();
+          }
+        }
+      });
+      it("keeps accepted V1 fingerprints while creating and replaying atomic V2 templates", async () => {
+        const board = await create();
+        const mutation = CanvasBoardMutationV1Schema.parse({
+          schemaVersion: 1,
+          operationId: randomUUID(),
+          command: {
+            type: "batch",
+            operations: [
+              {
+                type: "create",
+                object: {
+                  id: randomUUID(),
+                  type: "sticky",
+                  x: 10,
+                  y: 20,
+                  width: 240,
+                  height: 160,
+                  text: "A V1 operation",
+                },
+              },
+            ],
+          },
+        });
+        const first = await canvases.command(owner, board.id, mutation);
+        expect(first.board.schemaVersion).toBe(2);
+        const object = first.board.objects[0]!;
+        const next = await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: object.id,
+              expectedVersion: object.version,
+              patch: { geometricGroupId: randomUUID(), text: "V2 content" },
+            },
+          ],
+        });
+        const replay = await canvases.command(owner, board.id, mutation);
+        expect(replay.receipt).toEqual(first.receipt);
+        expect(replay.board.objects).toEqual(next.board.objects);
+        const input = CanvasBoardCreateSchema.parse({
+          schemaVersion: 2,
+          workspaceId,
+          title: "Original experience retrospective",
+          boardType: "team",
+          templateId: "experience-retro",
+          operationId: randomUUID(),
+        });
+        const templated = await canvases.create(owner, input);
+        expect(templated.objects.length).toBeGreaterThan(10);
+        expect(templated.objects.length).toBeLessThanOrEqual(40);
+        expect(templated.objects.some((entry) => entry.type === "frame")).toBe(true);
+        expect(await canvases.create(owner, input)).toEqual(templated);
+        expect(await canvases.getCreation(owner, input)).toEqual({ id: templated.id, workspaceId });
+        await expect(
+          canvases.getCreation(owner, {
+            ...input,
+            schemaVersion: 2,
+            templateId: "project-kickoff",
+          }),
+        ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+      });
+      it("moves complete fractional frame descendants and geometric groups with one undoable batch", async () => {
+        const board = await create(),
+          group = randomUUID();
+        const frame = CanvasObjectCreateSchema.parse({
+            ...note(),
+            type: "frame",
+            x: 0.1,
+            y: 0.2,
+            width: 800,
+            height: 600,
+          }),
+          nested = CanvasObjectCreateSchema.parse({
+            ...note(),
+            type: "frame",
+            x: 20.3,
+            y: 30.4,
+            parentId: frame.id,
+          }),
+          child = CanvasObjectCreateSchema.parse({
+            ...note(),
+            x: 32.7,
+            y: 45.9,
+            parentId: nested.id,
+          }),
+          a = CanvasObjectCreateSchema.parse({
+            ...note(),
+            x: 310.1,
+            y: 240.2,
+            parentId: frame.id,
+            geometricGroupId: group,
+          }),
+          b = CanvasObjectCreateSchema.parse({
+            ...note(),
+            x: 550.4,
+            y: 240.2,
+            parentId: frame.id,
+            geometricGroupId: group,
+          });
+        const objects = [frame, nested, child, a, b];
+        await change(owner, board.id, {
+          type: "batch",
+          operations: objects.map((object) => ({ type: "create", object })),
+        });
+        await expect(
+          change(owner, board.id, {
+            type: "batch",
+            operations: [
+              { type: "update", id: frame.id, expectedVersion: 1, patch: { x: frame.x + 0.3 } },
+            ],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          change(owner, board.id, {
+            type: "batch",
+            operations: [{ type: "update", id: a.id, expectedVersion: 1, patch: { x: a.x + 0.3 } }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        const moved = await change(owner, board.id, {
+          type: "batch",
+          operations: objects.map((object) => ({
+            type: "update",
+            id: object.id,
+            expectedVersion: 1,
+            patch: { x: object.x + 0.3, y: object.y + 0.7 },
+          })),
+        });
+        for (const original of objects)
+          expect(moved.board.objects.find((entry) => entry.id === original.id)).toMatchObject({
+            x: original.x + 0.3,
+            y: original.y + 0.7,
+            version: 2,
+          });
+        const undone = await change(owner, board.id, {
+          type: "undo",
+          targetOperationId: moved.receipt.operationId,
+        });
+        for (const original of objects)
+          expect(undone.board.objects.find((entry) => entry.id === original.id)).toMatchObject({
+            x: original.x,
+            y: original.y,
+          });
+        const currentFrame = undone.board.objects.find((entry) => entry.id === frame.id)!;
+        const resized = await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: frame.id,
+              expectedVersion: currentFrame.version,
+              patch: { width: 900 },
+            },
+          ],
+        });
+        expect(resized.board.objects.find((entry) => entry.id === child.id)).toEqual(
+          undone.board.objects.find((entry) => entry.id === child.id),
+        );
+        await expect(
+          change(owner, board.id, {
+            type: "batch",
+            operations: [
+              {
+                type: "update",
+                id: frame.id,
+                expectedVersion: resized.board.objects.find((entry) => entry.id === frame.id)!
+                  .version,
+                patch: { parentId: nested.id },
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      });
+      it("requires exact lock-only changes from every role and respects locked ancestors", async () => {
+        const board = await create();
+        await share(board.id);
+        const frame = CanvasObjectCreateSchema.parse({ ...note(), type: "frame" }),
+          child = CanvasObjectCreateSchema.parse({ ...note(), parentId: frame.id });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [frame, child].map((object) => ({ type: "create", object })),
+        });
+        const locked = await change(editor, board.id, {
+          type: "batch",
+          operations: [
+            { type: "update", id: frame.id, expectedVersion: 1, patch: { locked: true } },
+          ],
+        });
+        for (const actor of [owner, editor]) {
+          await expect(
+            change(actor, board.id, {
+              type: "batch",
+              operations: [
+                {
+                  type: "update",
+                  id: frame.id,
+                  expectedVersion: 2,
+                  patch: { locked: false, text: "A disguised edit" },
+                },
+              ],
+            }),
+          ).rejects.toMatchObject({ code: "FORBIDDEN" });
+          await expect(
+            change(actor, board.id, {
+              type: "batch",
+              operations: [
+                {
+                  type: "update",
+                  id: child.id,
+                  expectedVersion: 1,
+                  patch: { text: "Edit under a locked parent" },
+                },
+              ],
+            }),
+          ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        }
+        const undo = await change(editor, board.id, {
+          type: "undo",
+          targetOperationId: locked.receipt.operationId,
+        });
+        expect(undo.board.objects.find((entry) => entry.id === frame.id)!.locked).toBe(false);
+        const relocked = await change(editor, board.id, {
+          type: "redo",
+          targetOperationId: locked.receipt.operationId,
+        });
+        await change(editor, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: frame.id,
+              expectedVersion: relocked.board.objects.find((entry) => entry.id === frame.id)!
+                .version,
+              patch: { locked: false },
+            },
+          ],
+        });
+        const edited = await change(editor, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: child.id,
+              expectedVersion: 1,
+              patch: { text: "An authorized edit" },
+            },
+          ],
+        });
+        expect(edited.board.objects.find((entry) => entry.id === child.id)!.text).toBe(
+          "An authorized edit",
+        );
+      });
+      it("fences implicit child and connector cleanup, including affected-object limits", async () => {
+        const board = await create(),
+          frame = CanvasObjectCreateSchema.parse({ ...note(), type: "frame" }),
+          child = CanvasObjectCreateSchema.parse({ ...note(), parentId: frame.id }),
+          connector = CanvasObjectCreateSchema.parse({
+            ...note(),
+            type: "connector",
+            from: { objectId: frame.id, x: 10, y: 20 },
+            to: { objectId: child.id, x: 30, y: 40 },
+          });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [frame, child, connector].map((object) => ({ type: "create", object })),
+        });
+        await expect(
+          change(owner, board.id, {
+            type: "batch",
+            operations: [{ type: "delete", id: frame.id, expectedVersion: 1 }],
+          }),
+        ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+        const removed = await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "delete", id: frame.id, expectedVersion: 1 }],
+          expectedRelated: [child, connector].map((object) => ({
+            id: object.id,
+            expectedVersion: 1,
+          })),
+        });
+        expect(removed.board.objects).toHaveLength(1);
+        expect(removed.board.objects[0]).toMatchObject({
+          id: child.id,
+          parentId: null,
+          version: 2,
+        });
+        const restored = await change(owner, board.id, {
+          type: "undo",
+          targetOperationId: removed.receipt.operationId,
+        });
+        expect(restored.board.objects).toHaveLength(3);
+        const large = await create(),
+          parent = CanvasObjectCreateSchema.parse({ ...note(), type: "frame" });
+        const children = Array.from({ length: 50 }, () =>
+          CanvasObjectCreateSchema.parse({ ...note(), parentId: parent.id }),
+        );
+        await change(owner, large.id, {
+          type: "batch",
+          operations: [parent, ...children.slice(0, 49)].map((object) => ({
+            type: "create",
+            object,
+          })),
+        });
+        await change(owner, large.id, {
+          type: "batch",
+          operations: [{ type: "create", object: children[49]! }],
+        });
+        const before = await canvases.get(owner, large.id);
+        await expect(
+          change(owner, large.id, {
+            type: "batch",
+            operations: [{ type: "delete", id: parent.id, expectedVersion: 1 }],
+            expectedRelated: children.map((object) => ({ id: object.id, expectedVersion: 1 })),
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        expect(await canvases.get(owner, large.id)).toEqual(before);
+      });
+      it.each(["object", "ancestor"] as const)(
+        "rejects same-batch unlock and implicit deletion using original %s locks",
+        async (lock) => {
+          const board = await create();
+          await share(board.id);
+          const frame = CanvasObjectCreateSchema.parse({
+              ...note(),
+              type: "frame",
+            }),
+            endpoint = note("An unlocked endpoint"),
+            connector = CanvasObjectCreateSchema.parse({
+              ...note(),
+              type: "connector",
+              locked: lock === "object",
+              parentId: lock === "ancestor" ? frame.id : null,
+              from: { objectId: endpoint.id, x: 10, y: 20 },
+              to: { objectId: null, x: 100, y: 100 },
+            });
+          await change(owner, board.id, {
+            type: "batch",
+            operations: [frame, endpoint, connector].map((object) => ({ type: "create", object })),
+          });
+          if (lock === "ancestor")
+            await change(owner, board.id, {
+              type: "batch",
+              operations: [
+                { type: "update", id: frame.id, expectedVersion: 1, patch: { locked: true } },
+              ],
+            });
+          const lockId = lock === "object" ? connector.id : frame.id;
+          const lockVersion = lock === "object" ? 1 : 2;
+          const before = await canvases.get(owner, board.id),
+            events = await canvases.listOutbox(0, 500);
+          for (const actor of [owner, editor]) {
+            await expect(
+              change(actor, board.id, {
+                type: "batch",
+                operations: [
+                  { type: "delete", id: endpoint.id, expectedVersion: 1 },
+                  {
+                    type: "update",
+                    id: lockId,
+                    expectedVersion: lockVersion,
+                    patch: { locked: false },
+                  },
+                ],
+                expectedRelated:
+                  lock === "ancestor" ? [{ id: connector.id, expectedVersion: 1 }] : undefined,
+              }),
+            ).rejects.toMatchObject({ code: "FORBIDDEN" });
+            expect(await canvases.get(owner, board.id)).toEqual(before);
+            expect(await canvases.listOutbox(events.cursor, 500)).toEqual({
+              cursor: events.cursor,
+              events: [],
+            });
+          }
+          const unlocked = await change(editor, board.id, {
+            type: "batch",
+            operations: [
+              {
+                type: "update",
+                id: lockId,
+                expectedVersion: lockVersion,
+                patch: { locked: false },
+              },
+            ],
+          });
+          const removed = await change(editor, board.id, {
+            type: "batch",
+            operations: [{ type: "delete", id: endpoint.id, expectedVersion: 1 }],
+            expectedRelated: [
+              {
+                id: connector.id,
+                expectedVersion: unlocked.board.objects.find(
+                  (object) => object.id === connector.id,
+                )!.version,
+              },
+            ],
+          });
+          expect(removed.board.objects.map((object) => object.id)).toEqual([frame.id]);
+        },
+      );
+      it("keeps freehand transforms bounded and tied to their world-coordinate points", async () => {
+        const board = await create(),
+          pen = CanvasObjectCreateSchema.parse({
+            ...note(),
+            type: "pen",
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 80,
+            points: [
+              [10, 20],
+              [50, 60],
+              [110, 100],
+            ],
+          });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "create", object: pen }],
+        });
+        await expect(
+          change(owner, board.id, {
+            type: "batch",
+            operations: [{ type: "update", id: pen.id, expectedVersion: 1, patch: { x: 20 } }],
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        const moved = await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: pen.id,
+              expectedVersion: 1,
+              patch: {
+                x: 20,
+                y: 30,
+                points: [
+                  [20, 30],
+                  [60, 70],
+                  [120, 110],
+                ],
+              },
+            },
+          ],
+        });
+        expect(moved.board.objects[0]).toMatchObject({ x: 20, y: 30, version: 2 });
+        const resized = await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: pen.id,
+              expectedVersion: 2,
+              patch: {
+                width: 200,
+                height: 160,
+                points: [
+                  [20, 30],
+                  [100, 110],
+                  [220, 190],
+                ],
+              },
+            },
+          ],
+        });
+        expect(resized.board.objects[0]).toMatchObject({ width: 200, height: 160 });
+      });
+      it("retains clean board-owned images across undo and rejects workspace/content laundering", async () => {
+        const board = await create();
+        await share(board.id);
+        expect(await canvases.getUploadContext(editor, board.id)).toEqual({ workspaceId });
+        const pending = pendingImage();
+        await canvases.reserveMedia(editor, board.id, pending);
+        const image = CanvasObjectCreateSchema.parse({
+          ...note(),
+          type: "image",
+          mediaId: pending.id,
+          altText: pending.altText,
+        });
+        await expect(
+          change(editor, board.id, {
+            type: "batch",
+            operations: [{ type: "create", object: image }],
+          }),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        const token = randomUUID();
+        await repository.claimMediaAssetFinalization(workspaceId, pending.id, token);
+        await repository.updateMediaAsset(workspaceId, pending.id, {
+          scanStatus: "clean",
+          objectKey: `media/${workspaceId}/${pending.id}/${token}.png`,
+          finalizationToken: token,
+          finalizedAt: new Date(),
+        });
+        expect(await canvases.isCanvasMedia(pending.id)).toBe(true);
+        if (repository instanceof PostgresRepository) {
+          expect(
+            (
+              await repository.pool.query(
+                "SELECT media_id FROM canvas_board_uploads WHERE media_id=$1",
+                [pending.id],
+              )
+            ).rows,
+          ).toEqual([]);
+          expect(
+            (
+              await repository.pool.query(
+                "SELECT current_setting('app.canvas_media_probe',true) AS probe",
+              )
+            ).rows[0].probe,
+          ).not.toBe("on");
+        }
+        const placed = await change(editor, board.id, {
+          type: "batch",
+          operations: [{ type: "create", object: image }],
+        });
+        expect(await canvases.authorizeMedia(editor, board.id, pending.id)).toMatchObject({
+          workspaceId,
+          sourceBoardId: null,
+        });
+        const other = await create();
+        await expect(
+          change(owner, other.id, {
+            type: "batch",
+            operations: [{ type: "create", object: { ...image, id: randomUUID() } }],
+          }),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        await expect(
+          repository.replaceMediaReferences(workspaceId, "quiz_draft", randomUUID(), [pending.id]),
+        ).rejects.toThrow();
+        await change(editor, board.id, {
+          type: "batch",
+          operations: [{ type: "delete", id: image.id, expectedVersion: 1 }],
+        });
+        const later = new Date(Date.now() + 20 * 60_000);
+        await repository.purgeExpired(later);
+        expect(
+          (await repository.listUnattachedMedia(later)).map((asset) => asset.id),
+        ).not.toContain(pending.id);
+        expect(await repository.claimMediaAssetDeletion(workspaceId, pending.id)).toBeNull();
+        const latest = await canvases.get(editor, board.id);
+        const undone = await change(editor, board.id, {
+          type: "undo",
+          targetOperationId: latest.undoOperationId!,
+        });
+        expect(undone.board.objects[0]).toMatchObject({ type: "image", mediaId: pending.id });
+        expect(
+          JSON.stringify((await repository.exportAccount(owner.userId)).canvasBoards),
+        ).toContain(pending.id);
+        await canvases.revokeGrant(owner, board.id, editor.userId);
+        await expect(canvases.getUpload(editor, board.id, pending.id)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await canvases.delete(owner, board.id);
+        expect((await repository.getMediaAsset(workspaceId, pending.id))!.scanStatus).toBe(
+          "deleting",
+        );
+        expect(await repository.listMediaReferences(workspaceId, pending.id)).toEqual([]);
+        expect(placed.board.objects[0]!.type).toBe("image");
+      });
+      it("releases abandoned reservations without resetting lifetime upload quotas", async () => {
+        const board = await create(),
+          pending = pendingImage();
+        await canvases.reserveMedia(owner, board.id, pending);
+        expect(await repository.listMediaReferences(workspaceId, pending.id)).toHaveLength(1);
+        const later = new Date(Date.now() + 20 * 60_000);
+        await repository.purgeExpired(later);
+        expect((await repository.listUnattachedMedia(later)).map((asset) => asset.id)).toContain(
+          pending.id,
+        );
+        await expect(canvases.getUpload(owner, board.id, pending.id, later)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await expect(
+          canvases.reserveMedia(owner, board.id, {
+            ...pendingImage(),
+            workspaceId: editor.workspaceId,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          canvases.reserveMedia(owner, board.id, {
+            ...pendingImage(),
+            sizeBytes: 10 * 1024 * 1024 + 1,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      });
+      it("enforces durable image count and byte budgets after reservation references expire", async () => {
+        const board = await create();
+        for (let index = 0; index < 100; index++)
+          await canvases.reserveMedia(owner, board.id, pendingImage());
+        const before = await canvases.get(owner, board.id);
+        await expect(canvases.reserveMedia(owner, board.id, pendingImage())).rejects.toMatchObject({
+          code: "ENTITLEMENT_LIMIT",
+        });
+        await repository.purgeExpired(new Date(Date.now() + 20 * 60_000));
+        await expect(canvases.reserveMedia(owner, board.id, pendingImage())).rejects.toMatchObject({
+          code: "ENTITLEMENT_LIMIT",
+        });
+        expect(await canvases.get(owner, board.id)).toEqual(before);
+        const large = await create();
+        for (let index = 0; index < 20; index++)
+          await canvases.reserveMedia(owner, large.id, {
+            ...pendingImage(),
+            sizeBytes: 10 * 1024 * 1024,
+          });
+        await expect(canvases.reserveMedia(owner, large.id, pendingImage())).rejects.toMatchObject({
+          code: "ENTITLEMENT_LIMIT",
+        });
+      }, 20000);
+      it("allows terminal moderation to remove locked guest refs and more than 50 dependent connectors", async () => {
+        const ideas = createIdeaBoardRepository(repository),
+          now = new Date();
+        const source = await ideas.create(
+          workspaceId,
+          randomUUID(),
+          IdeaBoardCreateSchema.parse({
+            title: "Terminal removal",
+            moderationEnabled: false,
+            ideasVisible: true,
+          }),
+          randomUUID(),
+          {
+            participantLimit: 10,
+            closesAt: new Date(now.getTime() + 86400000).toISOString(),
+            expiresAt: new Date(now.getTime() + 2 * 86400000).toISOString(),
+          },
+          now,
+        );
+        await ideas.hostCommand(workspaceId, source.id, { type: "collect" }, 0, randomUUID(), now);
+        const token = createHash("sha256").update(randomUUID()).digest("hex");
+        await ideas.join(source.id, token, null, now);
+        const submitted = await ideas.submitIdea(
+          source.id,
+          token,
+          "Terminal private content",
+          randomUUID(),
+          now,
+        );
+        const board = await canvases.create(
+          owner,
+          CanvasBoardCreateSchema.parse({
+            schemaVersion: 2,
+            workspaceId,
+            title: "Terminal scene",
+            boardType: "workshop",
+            sourceBoardId: source.id,
+            operationId: randomUUID(),
+          }),
+        );
+        const ref = board.objects.find((object) => object.type === "idea_ref")!;
+        const connectors = Array.from({ length: 51 }, () =>
+          CanvasObjectCreateSchema.parse({
+            ...note(),
+            type: "connector",
+            from: { objectId: ref.id, x: 10, y: 20 },
+            to: { objectId: null, x: 100, y: 100 },
+          }),
+        );
+        await change(owner, board.id, {
+          type: "batch",
+          operations: connectors.slice(0, 50).map((object) => ({ type: "create", object })),
+        });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            { type: "create", object: connectors[50]! },
+            { type: "update", id: ref.id, expectedVersion: 1, patch: { locked: true } },
+          ],
+        });
+        const removed = await change(owner, board.id, {
+          type: "workshop",
+          expectedRevision: submitted.board.revision,
+          command: { type: "moderate", ideaId: ref.id, status: "removed" },
+        });
+        expect(removed.board.objects).toEqual([]);
+        expect(JSON.stringify(removed.board)).not.toContain("Terminal private content");
+        expect((await canvases.getGuest(source.id, token))!.objects).toEqual([]);
+      });
+      it("flattens private frame IDs for published images, fences nested protected refs and freezes uploads", async () => {
+        const ideas = createIdeaBoardRepository(repository),
+          now = new Date();
+        const source = await ideas.create(
+          workspaceId,
+          randomUUID(),
+          IdeaBoardCreateSchema.parse({
+            title: "Image workshop",
+            moderationEnabled: false,
+            ideasVisible: false,
+          }),
+          randomUUID(),
+          {
+            participantLimit: 10,
+            closesAt: new Date(now.getTime() + 86400000).toISOString(),
+            expiresAt: new Date(now.getTime() + 2 * 86400000).toISOString(),
+          },
+          now,
+        );
+        await ideas.hostCommand(workspaceId, source.id, { type: "collect" }, 0, randomUUID(), now);
+        const board = await canvases.create(
+          owner,
+          CanvasBoardCreateSchema.parse({
+            schemaVersion: 2,
+            workspaceId,
+            title: "Image scene",
+            boardType: "workshop",
+            sourceBoardId: source.id,
+            operationId: randomUUID(),
+          }),
+        );
+        await share(board.id);
+        const media = await cleanImage(board.id);
+        const frame = CanvasObjectCreateSchema.parse({ ...note(), type: "frame" }),
+          nested = CanvasObjectCreateSchema.parse({ ...note(), type: "frame", parentId: frame.id }),
+          image = CanvasObjectCreateSchema.parse({
+            ...note(),
+            type: "image",
+            mediaId: media.id,
+            altText: media.altText,
+            parentId: frame.id,
+            visibility: "published",
+          }),
+          instruction = CanvasObjectCreateSchema.parse({
+            ...note("Published workshop instruction"),
+            type: "text",
+            parentId: nested.id,
+            visibility: "published",
+          }),
+          publicFrame = CanvasObjectCreateSchema.parse({
+            ...note("Published region"),
+            type: "frame",
+            visibility: "published",
+          }),
+          privateChild = CanvasObjectCreateSchema.parse({
+            ...note("Never publish this private child"),
+            parentId: publicFrame.id,
+          });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [frame, nested, image, instruction, publicFrame, privateChild].map(
+            (object) => ({ type: "create", object }),
+          ),
+        });
+        const token = createHash("sha256").update(randomUUID()).digest("hex");
+        await ideas.join(source.id, token, null, now);
+        const guest = await canvases.getGuest(source.id, token);
+        expect(guest!.objects).toHaveLength(3);
+        expect(guest!.objects.find((object) => object.id === image.id)).toMatchObject({
+          id: image.id,
+          parentId: null,
+        });
+        expect(JSON.stringify(guest)).toContain("Published workshop instruction");
+        expect(JSON.stringify(guest)).not.toContain("Never publish this private child");
+        expect(JSON.stringify(guest)).not.toContain(frame.id);
+        expect(await canvases.authorizeGuestMedia(source.id, token, media.id)).toEqual({
+          workspaceId,
+          boardId: board.id,
+        });
+        await expect(
+          canvases.authorizeGuestMedia(
+            source.id,
+            createHash("sha256").update("unjoined").digest("hex"),
+            media.id,
+          ),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        const submitted = await ideas.submitIdea(
+          source.id,
+          token,
+          "A protected guest idea",
+          randomUUID(),
+          now,
+        );
+        const ref = (await canvases.get(owner, board.id)).objects.find(
+          (object) => object.type === "idea_ref",
+        )!;
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: ref.id,
+              expectedVersion: ref.version,
+              patch: { parentId: nested.id },
+            },
+          ],
+        });
+        await expect(
+          change(editor, board.id, {
+            type: "batch",
+            operations: [
+              {
+                type: "update",
+                id: frame.id,
+                expectedVersion: 1,
+                patch: { text: "Change protected ancestor" },
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "update", id: ref.id, expectedVersion: 2, patch: { locked: true } }],
+        });
+        const hidden = await change(owner, board.id, {
+          type: "workshop",
+          expectedRevision: submitted.board.revision,
+          command: { type: "visibility", visible: false },
+        });
+        expect(await canvases.authorizeGuestMedia(source.id, token, media.id)).toMatchObject({
+          workspaceId,
+        });
+        const collecting = await canvases.getGuest(source.id, token);
+        expect(JSON.stringify(collecting)).not.toContain("A protected guest idea");
+        expect(JSON.stringify(collecting)).not.toContain(ref.id);
+        expect(collecting!.objects.map((object) => object.id).sort()).toEqual(
+          [image.id, instruction.id, publicFrame.id].sort(),
+        );
+        const frozen = await change(owner, board.id, {
+          type: "workshop",
+          expectedRevision: hidden.board.sourceBoard!.revision,
+          command: { type: "start_voting" },
+        });
+        expect(frozen.board.status).toBe("frozen");
+        await expect(canvases.getUpload(owner, board.id, media.id)).rejects.toMatchObject({
+          code: "FORBIDDEN",
+        });
+        await expect(canvases.reserveMedia(owner, board.id, pendingImage())).rejects.toMatchObject({
+          code: "FORBIDDEN",
+        });
+        expect(await canvases.authorizeGuestMedia(source.id, token, media.id)).toMatchObject({
+          workspaceId,
+        });
+        await ideas.delete(workspaceId, source.id);
+        expect((await repository.getMediaAsset(workspaceId, media.id))!.scanStatus).toBe(
+          "deleting",
+        );
       });
       it("hard-bounds retained documents and typed objects in serialized transactions", async () => {
         const board = await create();

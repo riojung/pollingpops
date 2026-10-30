@@ -215,10 +215,41 @@ metrics use bounded labels without content or principal identifiers.
 The 500-object/20-editor restricted PostgreSQL smoke passes correctness, retries, RLS and
 durability; durable acknowledgement p95 measured 821ms on the local test instance. This does
 not measure post-commit peer delivery, rendering, physical touch hardware or production capacity.
-Orders 5–7, AI, full offline editing and character-level coauthoring remain outside this increment.
+These October 29 timings precede Order 5 and do not establish its capacity. Orders 5–7 were
+outside that initial increment; Order 5 is described below. AI, full offline editing and
+character-level coauthoring remain outside the selected scope.
 See the [architecture decision](decisions/002-idea-board-canvas.md),
 [user guide](user-guide.md#idea-boards-and-shared-canvases) and
 [upgrade instructions](runbooks/upgrade.md#shared-idea-board-canvases).
+
+### Canvas productivity Order 5 October 30 2026
+
+Implemented frames and geometric groups, multiselect and bounded atomic layout, inherited locks,
+freehand drawing, private scanned images and HTTP(S) link cards. The outline and numeric controls
+provide alternatives to dragging; all new controls cover ten locales. Workshop moderation,
+publication, protected guest ideas and the voting freeze continue to govern these tools.
+
+Migration 080 adds Canvas V2 metadata and board-image provenance. Strict V1 requests retain their
+original retry fingerprints; matching readers upcast retained scenes and undo history. Private
+JPEG/PNG/WebP uploads require scanning and alternative text, with 10 MiB per file, 100 lifetime
+reservations and 200 MiB reserved per board. Current objects and retained inverse history keep
+media referenced; deletion, expiry and pruning use the existing cleanup pipeline.
+
+Seven original English-content starters have localized previews and editable setup. Guided
+creation checkpoints separate source/canvas keys and the acknowledged workshop ID in bounded,
+user/workspace-scoped tab storage. Retries resume the unfinished step, stale account/workspace
+context is rejected before creation, and an existing workshop can be kept without its canvas.
+Successful product logout clears saved setup, including the administrator-revocation warning path.
+
+Validation passes full `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, 64 canvas
+memory/restricted-PostgreSQL cases, 116 legacy PostgreSQL cases and 16 canvas HTTP cases. Ten
+canvas browser journeys and two legacy workshop journeys pass, including Chromium/WebKit mobile,
+320px layouts, reduced motion and light/dark accessibility checks. Image descriptions and link
+actions remain available in Object outline. Browser image tests use mocked object storage and
+scanning; this increment does not
+establish a production media-pipeline result, physical-touch acceptance or production load,
+commit-to-peer latency or rendering performance. Orders 6–7, including comments, timers,
+presenter follow, exports, version browsing and higher capacity, remain deferred.
 
 ### Standalone administrator authentication October 15 2026
 

@@ -2,6 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   CANVAS_MAX_DOCUMENT_BYTES,
   CANVAS_MAX_OBJECTS,
+  CANVAS_MAX_OPERATIONS,
   CanvasBoardCreateSchema,
   CanvasBoardCommandSchema,
   CanvasBoardGuestViewSchema,
@@ -10,6 +11,7 @@ import {
   CanvasBoardViewSchema,
   CanvasObjectSchema,
   ideaBoardProjection,
+  instantiateCanvasTemplate,
   type CanvasBoardCreate,
   type CanvasBoardEvent,
   type CanvasBoardGuestView,
@@ -30,7 +32,7 @@ import {
   postgresCanvasEvents,
   postgresCanvasRun,
 } from "./canvas-board-store.js";
-import type { Repository } from "./types.js";
+import type { Repository, MediaAssetCreateInput } from "./types.js";
 import type {
   CanvasAccessContext,
   CanvasActor,
@@ -43,23 +45,9 @@ import type {
   CanvasTransaction,
 } from "./canvas-board-types.js";
 
-export class CanvasBoardError extends Error {
-  constructor(
-    public readonly code:
-      | "NOT_FOUND"
-      | "UNAUTHORIZED"
-      | "FORBIDDEN"
-      | "STALE_DRAFT"
-      | "IDEMPOTENCY_CONFLICT"
-      | "ROOM_CLOSED"
-      | "VALIDATION_ERROR"
-      | "ENTITLEMENT_LIMIT"
-      | "RATE_LIMITED",
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { CanvasBoardError } from "./canvas-board-error.js";
+export { CanvasBoardError } from "./canvas-board-error.js";
+
 const instant = (clock: CanvasClock) => (typeof clock === "function" ? clock() : clock);
 const fingerprint = (value: unknown) =>
   createHash("sha256").update(stablePlatformJson(value)).digest("hex");
@@ -177,11 +165,6 @@ function projectedObjects(
   moderator = false,
 ) {
   const published = source ? ideaBoardProjection(source, now, moderator && !guest).ideas : [];
-  const canSee =
-    !source ||
-    source.ideasVisible ||
-    ["voting", "closed"].includes(ideaBoardProjection(source, now).status);
-  if (guest && !canSee) return [];
   let projected = sourceObjects(state.objects, source)
     .filter((object) => !guest || object.visibility === "published")
     .flatMap((object) => {
@@ -195,12 +178,15 @@ function projectedObjects(
     const ids = new Set(projected.map((object) => object.id));
     const next = projected.filter(
       (object) =>
-        (!object.parentId || ids.has(object.parentId)) &&
-        (object.type !== "connector" ||
-          ((!object.from.objectId || ids.has(object.from.objectId)) &&
-            (!object.to.objectId || ids.has(object.to.objectId)))),
+        object.type !== "connector" ||
+        ((!object.from.objectId || ids.has(object.from.objectId)) &&
+          (!object.to.objectId || ids.has(object.to.objectId))),
     );
-    if (next.length === projected.length) return projected;
+    if (next.length === projected.length)
+      return projected.map((object) => ({
+        ...object,
+        parentId: object.parentId && !ids.has(object.parentId) ? null : object.parentId,
+      }));
     projected = next;
   }
   return projected;
@@ -216,8 +202,17 @@ function validateObjects(objects: CanvasObject[]) {
     "This canvas has reached its retained content limit",
   );
   const map = new Map(objects.map((object) => [object.id, object]));
+  const groups = new Map<string, string | null>();
   for (const object of objects) {
     CanvasObjectSchema.parse(object);
+    if (object.geometricGroupId) {
+      assert(
+        !groups.has(object.geometricGroupId) ||
+          groups.get(object.geometricGroupId) === object.parentId,
+        "Group objects within the same frame",
+      );
+      groups.set(object.geometricGroupId, object.parentId);
+    }
     if (object.parentId) {
       const parent = map.get(object.parentId);
       assert(
@@ -246,6 +241,55 @@ function stripProjected(objects: CanvasObject[]) {
     void idea;
     return object as CanvasObject;
   });
+}
+function descendants(objects: CanvasObject[], id: string): CanvasObject[] {
+  const ids = new Set([id]);
+  for (let pass = 0; pass < objects.length; pass++) {
+    const added = objects.filter(
+      (object) => object.parentId && ids.has(object.parentId) && !ids.has(object.id),
+    );
+    if (!added.length) break;
+    for (const object of added) ids.add(object.id);
+  }
+  return objects.filter((object) => object.id !== id && ids.has(object.id));
+}
+function ancestors(objects: CanvasObject[], object: CanvasObject): CanvasObject[] {
+  const result: CanvasObject[] = [],
+    seen = new Set([object.id]);
+  let parentId = object.parentId;
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId);
+    const parent = objects.find((entry) => entry.id === parentId);
+    if (!parent) break;
+    result.push(parent);
+    parentId = parent.parentId;
+  }
+  return result;
+}
+function lockOnly(patch: Record<string, unknown>) {
+  return Object.keys(patch).length === 1 && typeof patch.locked === "boolean";
+}
+const closeCoordinate = (a: number, b: number) => Math.abs(a - b) <= 0.000001;
+function translatedPoints(actual: unknown, expected: number[][]) {
+  return (
+    Array.isArray(actual) &&
+    actual.length === expected.length &&
+    actual.every(
+      (point, index) =>
+        Array.isArray(point) &&
+        point.length === 2 &&
+        closeCoordinate(point[0], expected[index]![0]!) &&
+        closeCoordinate(point[1], expected[index]![1]!),
+    )
+  );
+}
+function sameExceptLock(a: CanvasObject, b: CanvasObject) {
+  const omit = ({ locked, version, ...value }: CanvasObject) => {
+    void locked;
+    void version;
+    return value;
+  };
+  return stablePlatformJson(omit(a)) === stablePlatformJson(omit(b));
 }
 
 export class CanvasBoardRepository {
@@ -308,12 +352,14 @@ export class CanvasBoardRepository {
       .sort((a, b) => (a.historySeq ?? a.canvasSeq) - (b.historySeq ?? b.canvasSeq));
     const undo = own.filter((receipt) => !receipt.undone).at(-1);
     const redo = own.filter((receipt) => receipt.undone).at(-1);
-    const { creationKey, creationHash, ...metadata } = state.board;
+    const { creationKey, creationHash, uploadCount, uploadBytes, ...metadata } = state.board;
     void creationKey;
     void creationHash;
+    void uploadCount;
+    void uploadBytes;
     return CanvasBoardViewSchema.parse({
-      schemaVersion: 1,
       ...metadata,
+      schemaVersion: 2,
       workspaceName: access.workspace.name,
       organizationName: access.organization?.name,
       status: status(state.board, source, now),
@@ -416,6 +462,7 @@ export class CanvasBoardRepository {
           : 30;
       const state: CanvasState = {
         board: {
+          schemaVersion: 2,
           id,
           workspaceId: parsed.workspaceId,
           organizationId: access.workspace.organizationId,
@@ -431,8 +478,17 @@ export class CanvasBoardRepository {
             source?.expiresAt ?? new Date(now.getTime() + retentionDays * 86400000).toISOString(),
           creationKey: parsed.operationId,
           creationHash: fingerprint(parsed),
+          uploadCount: 0,
+          uploadBytes: 0,
         },
-        objects: sourceObjects([], source),
+        objects: sourceObjects(
+          parsed.schemaVersion === 2 && parsed.templateId
+            ? instantiateCanvasTemplate(parsed.templateId, randomUUID).map((object) =>
+                CanvasObjectSchema.parse({ ...object, version: 1 }),
+              )
+            : [],
+          source,
+        ),
         grants: [],
         invitations: [],
         receipts: [],
@@ -466,14 +522,17 @@ export class CanvasBoardRepository {
             (scope !== "archived" && row.status === "archived")
           )
             continue;
-          const { creationKey, creationHash, ...metadata } = checked.board;
+          const { creationKey, creationHash, uploadCount, uploadBytes, ...metadata } =
+            checked.board;
           void creationKey;
           void creationHash;
+          void uploadCount;
+          void uploadBytes;
           notExpired(checked.board, instant(clock));
           result.push(
             CanvasBoardViewSchema.parse({
-              schemaVersion: 1,
               ...metadata,
+              schemaVersion: 2,
               workspaceName: checked.access.workspace.name,
               organizationName: checked.access.organization?.name,
               status: status(checked.board, checked.source, instant(clock)),
@@ -608,7 +667,7 @@ export class CanvasBoardRepository {
       const value = await this.guest(tx, sourceBoardId, tokenHash, clock);
       if (!value) return null;
       return CanvasBoardGuestViewSchema.parse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         id: value.state.board.id,
         sourceBoardId,
         canvasSeq: value.state.board.canvasSeq,
@@ -643,6 +702,25 @@ export class CanvasBoardRepository {
   ) {
     return this.run(actor, { boardId: id }, async (tx) => {
       const value = await this.checked(tx, actor, id, clock);
+      if (
+        projectedObjects(
+          value.state,
+          value.source,
+          false,
+          instant(clock),
+          value.capabilities.facilitate,
+        ).some((object) => object.type === "image" && object.mediaId === mediaId)
+      ) {
+        const upload = await tx.media(id, mediaId);
+        if (!upload || upload.asset.scanStatus !== "clean") fail();
+        notExpired(value.state.board, instant(clock));
+        if (value.source) sourceCurrent(value.source, instant(clock));
+        return {
+          workspaceId: value.state.board.workspaceId,
+          sourceBoardId: value.source?.id ?? null,
+          moderator: value.capabilities.facilitate,
+        };
+      }
       if (!value.source) fail();
       const view = ideaBoardProjection(value.source, instant(clock), value.capabilities.facilitate);
       if (
@@ -657,6 +735,118 @@ export class CanvasBoardRepository {
         moderator: value.capabilities.facilitate,
       };
     });
+  }
+  authorizeGuestMedia(
+    sourceBoardId: string,
+    tokenHash: string,
+    mediaId: string,
+    clock: CanvasClock = () => new Date(),
+  ) {
+    return this.run(null, { sourceBoardId, guestHash: tokenHash }, async (tx) => {
+      const value = await this.guest(tx, sourceBoardId, tokenHash, clock);
+      if (
+        !value ||
+        !projectedObjects(value.state, value.source, true, instant(clock)).some(
+          (object) => object.type === "image" && object.mediaId === mediaId,
+        )
+      )
+        fail();
+      const upload = await tx.media(value.state.board.id, mediaId);
+      if (!upload || upload.asset.scanStatus !== "clean") fail();
+      notExpired(value.state.board, instant(clock));
+      sourceCurrent(value.source, instant(clock));
+      return { workspaceId: value.state.board.workspaceId, boardId: value.state.board.id };
+    });
+  }
+  getUploadContext(actor: CanvasActor, id: string, clock: CanvasClock = () => new Date()) {
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const value = await this.checked(tx, actor, id, clock, true);
+      if (!value.capabilities.edit)
+        throw new CanvasBoardError("FORBIDDEN", "An editable canvas is required to upload images");
+      return { workspaceId: value.state.board.workspaceId };
+    });
+  }
+  reserveMedia(
+    actor: CanvasActor,
+    id: string,
+    input: MediaAssetCreateInput,
+    clock: CanvasClock = () => new Date(),
+  ) {
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const value = await this.checked(tx, actor, id, clock, true),
+        board = value.state.board;
+      if (!value.capabilities.edit)
+        throw new CanvasBoardError("FORBIDDEN", "An editable canvas is required to upload images");
+      const extension = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[
+        input.mimeType
+      ];
+      assert(
+        input.workspaceId === board.workspaceId &&
+          input.scanStatus === "pending" &&
+          extension &&
+          input.objectKey === `quarantine/${board.workspaceId}/${input.id}.${extension}` &&
+          CanvasBoardCommandSchema.safeParse({ type: "revoke", userId: input.id }).success &&
+          Number.isSafeInteger(input.sizeBytes) &&
+          input.sizeBytes > 0 &&
+          input.sizeBytes <= 10 * 1024 * 1024 &&
+          input.altText.trim().length > 0 &&
+          input.altText.length <= 300 &&
+          Number.isFinite(input.createdAt.getTime()),
+        "Choose a JPEG, PNG or WebP image up to 10 MiB with alternative text",
+      );
+      if (board.uploadCount >= 100 || board.uploadBytes + input.sizeBytes > 200 * 1024 * 1024)
+        throw new CanvasBoardError(
+          "ENTITLEMENT_LIMIT",
+          "This canvas has reached its image upload limit",
+        );
+      const asset = await tx.reserveMedia(board, actor.userId, input);
+      board.uploadCount++;
+      board.uploadBytes += input.sizeBytes;
+      board.schemaVersion = 2;
+      notExpired(board, instant(clock));
+      if (value.source && status(board, value.source, instant(clock)) !== "active")
+        throw new CanvasBoardError("ROOM_CLOSED", "The workshop collection window has ended");
+      await tx.put(value.state);
+      notExpired(board, instant(clock));
+      if (value.source && status(board, value.source, instant(clock)) !== "active")
+        throw new CanvasBoardError("ROOM_CLOSED", "The workshop collection window has ended");
+      return asset;
+    });
+  }
+  getUpload(
+    actor: CanvasActor,
+    id: string,
+    mediaId: string,
+    clock: CanvasClock = () => new Date(),
+  ) {
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const value = await this.checked(tx, actor, id, clock);
+      if (!value.capabilities.edit)
+        throw new CanvasBoardError(
+          "FORBIDDEN",
+          "An editable canvas is required to complete images",
+        );
+      const upload = await tx.media(id, mediaId);
+      if (
+        !upload ||
+        upload.asset.scanStatus === "deleting" ||
+        upload.asset.createdAt.getTime() + 15 * 60_000 <= instant(clock).getTime() ||
+        (upload.uploaderUserId !== actor.userId && !value.capabilities.facilitate)
+      )
+        fail();
+      notExpired(value.state.board, instant(clock));
+      if (value.source && status(value.state.board, value.source, instant(clock)) !== "active")
+        throw new CanvasBoardError("FORBIDDEN", "The workshop collection window has ended");
+      return upload.asset;
+    });
+  }
+  async isCanvasMedia(mediaId: string) {
+    if (this.store instanceof MemoryCanvasBoards)
+      return this.store.repository.canvasBoardMediaOwners.has(mediaId);
+    return Boolean(
+      (await this.store.pool.query("SELECT is_canvas_media($1) AS present", [mediaId])).rows[0]
+        ?.present,
+    );
   }
   private async emit(
     tx: CanvasTransaction,
@@ -701,6 +891,7 @@ export class CanvasBoardRepository {
     return access.user;
   }
   private async commit(tx: CanvasTransaction, state: CanvasState, clock: CanvasClock) {
+    state.board.schemaVersion = 2;
     state.board.canvasSeq++;
     state.board.updatedAt = instant(clock).toISOString();
     validateObjects(state.objects);
@@ -709,6 +900,17 @@ export class CanvasBoardRepository {
         state.objects.filter((object) => object.type !== "idea_ref").length <= 300,
         "Workshop canvases reserve 200 of 500 object slots for approved guest ideas",
       );
+    notExpired(state.board, instant(clock));
+    for (const object of state.objects) {
+      if (object.type !== "image") continue;
+      const upload = await tx.media(state.board.id, object.mediaId);
+      if (
+        !upload ||
+        upload.asset.workspaceId !== state.board.workspaceId ||
+        upload.asset.scanStatus !== "clean"
+      )
+        fail("Choose a clean image uploaded to this canvas");
+    }
     notExpired(state.board, instant(clock));
     await tx.put(state);
     await this.emit(tx, state, "canvas.changed", instant(clock));
@@ -753,6 +955,30 @@ export class CanvasBoardRepository {
         (command.type === "workshop" && source && ["draft", "collecting"].includes(source.status))
       )
         state.objects = stripProjected(sourceObjects(state.objects, source));
+      const originalObjects = structuredClone(state.objects);
+      const assertMutable = (object: CanvasObject, patch: Record<string, unknown> = {}) => {
+        if ("locked" in patch && !lockOnly(patch))
+          throw new CanvasBoardError(
+            "FORBIDDEN",
+            "Change locking separately from content and geometry",
+          );
+        const related = descendants(originalObjects, object.id);
+        if (
+          source &&
+          !capabilities.facilitate &&
+          [object, ...related].some(
+            (entry) => entry.type === "idea_ref" || entry.visibility === "published",
+          )
+        )
+          throw new CanvasBoardError(
+            "FORBIDDEN",
+            "Only facilitators can change published objects or their frames",
+          );
+        if (ancestors(originalObjects, object).some((parent) => parent.locked))
+          throw new CanvasBoardError("FORBIDDEN", "Unlock the containing frame first");
+        if (!lockOnly(patch) && (object.locked || related.some((child) => child.locked)))
+          throw new CanvasBoardError("FORBIDDEN", "Unlock affected objects before editing them");
+      };
       if (command.type === "grant" || command.type === "revoke") {
         if (!capabilities.share)
           throw new CanvasBoardError("FORBIDDEN", "Only a board owner can manage sharing");
@@ -828,6 +1054,113 @@ export class CanvasBoardRepository {
           throw new CanvasBoardError("ROOM_CLOSED", "Workshop content is frozen");
         if (command.type === "batch") {
           const touched = new Set<string>();
+          const expected = new Map<string, number>();
+          for (const operation of command.operations)
+            if (operation.type !== "create") expected.set(operation.id, operation.expectedVersion);
+          for (const related of ("expectedRelated" in command
+            ? command.expectedRelated
+            : undefined) ?? []) {
+            assert(
+              !expected.has(related.id) || expected.get(related.id) === related.expectedVersion,
+              "Use one expected version per object",
+            );
+            expected.set(related.id, related.expectedVersion);
+            const object = originalObjects.find((entry) => entry.id === related.id);
+            if (!object || object.version !== related.expectedVersion)
+              throw new CanvasBoardError(
+                "STALE_DRAFT",
+                "A related object changed; refresh before continuing",
+              );
+          }
+          const fenceRelated = (object: CanvasObject) => {
+            const original = originalObjects.find((entry) => entry.id === object.id);
+            assert(original, "Choose an existing related object");
+            if (expected.get(object.id) !== original.version)
+              throw new CanvasBoardError(
+                "STALE_DRAFT",
+                "Include the current version of every affected object",
+              );
+            // Earlier operations may already have unlocked or reparented this object.
+            // Implicit cleanup must remain fenced by the state at batch admission.
+            assertMutable(original);
+          };
+          for (const operation of command.operations) {
+            if (operation.type !== "update") continue;
+            const object = originalObjects.find((entry) => entry.id === operation.id);
+            if (!object) continue;
+            const dx = (operation.patch.x ?? object.x) - object.x,
+              dy = (operation.patch.y ?? object.y) - object.y;
+            if (
+              object.type === "pen" &&
+              (dx ||
+                dy ||
+                operation.patch.width !== undefined ||
+                operation.patch.height !== undefined)
+            ) {
+              const sx = (operation.patch.width ?? object.width) / object.width,
+                sy = (operation.patch.height ?? object.height) / object.height;
+              assert(
+                "points" in operation.patch &&
+                  translatedPoints(
+                    operation.patch.points,
+                    object.points.map(([x, y]) => [
+                      (operation.patch.x ?? object.x) + (x - object.x) * sx,
+                      (operation.patch.y ?? object.y) + (y - object.y) * sy,
+                    ]),
+                  ),
+                "Transform drawing points with their bounds",
+              );
+            }
+            const group = object.geometricGroupId
+              ? originalObjects.filter(
+                  (entry) =>
+                    entry.geometricGroupId === object.geometricGroupId && entry.id !== object.id,
+                )
+              : [];
+            if (dx || dy) {
+              const closure = new Map(
+                [
+                  ...descendants(originalObjects, object.id),
+                  ...group.flatMap((entry) => [entry, ...descendants(originalObjects, entry.id)]),
+                ].map((entry) => [entry.id, entry]),
+              );
+              closure.delete(object.id);
+              for (const child of closure.values()) {
+                const move = command.operations.find(
+                  (entry) => entry.type === "update" && entry.id === child.id,
+                );
+                assert(
+                  move?.type === "update" &&
+                    closeCoordinate(move.patch.x ?? child.x, child.x + dx) &&
+                    closeCoordinate(move.patch.y ?? child.y, child.y + dy),
+                  "Move every group member and frame descendant together",
+                );
+                if (child.type === "pen")
+                  assert(
+                    "points" in move.patch &&
+                      translatedPoints(
+                        move.patch.points,
+                        child.points.map(([x, y]) => [x + dx, y + dy]),
+                      ),
+                    "Translate every drawing point with its frame",
+                  );
+              }
+            }
+            if (
+              "geometricGroupId" in operation.patch &&
+              operation.patch.geometricGroupId !== object.geometricGroupId
+            ) {
+              const groupId = operation.patch.geometricGroupId;
+              const peers = originalObjects.filter(
+                (entry) =>
+                  entry.id !== object.id &&
+                  entry.geometricGroupId &&
+                  (entry.geometricGroupId === object.geometricGroupId ||
+                    entry.geometricGroupId === groupId),
+              );
+              for (const peer of peers) fenceRelated(peer);
+            }
+          }
           for (const operation of command.operations) {
             const objectId = operation.type === "create" ? operation.object.id : operation.id;
             assert(!touched.has(objectId), "Change each object at most once per batch");
@@ -847,6 +1180,23 @@ export class CanvasBoardRepository {
                 "This object identifier is already used",
               );
               const object = CanvasObjectSchema.parse({ ...operation.object, version: 1 });
+              if (
+                ancestors(
+                  [
+                    ...originalObjects,
+                    ...state.objects.filter(
+                      (entry) => !originalObjects.some((prior) => prior.id === entry.id),
+                    ),
+                  ],
+                  object,
+                ).some((parent) => parent.locked)
+              )
+                throw new CanvasBoardError("FORBIDDEN", "Unlock the containing frame first");
+              if (object.geometricGroupId)
+                for (const peer of originalObjects.filter(
+                  (entry) => entry.geometricGroupId === object.geometricGroupId,
+                ))
+                  fenceRelated(peer);
               if (source && object.type !== "idea_ref")
                 assert(
                   !source.ideas.some((idea) => idea.id === object.id),
@@ -885,29 +1235,10 @@ export class CanvasBoardRepository {
                   "STALE_DRAFT",
                   "This object changed; refresh before applying your proposal",
                 );
-              if (source && existing.visibility === "published" && !capabilities.facilitate)
-                throw new CanvasBoardError(
-                  "FORBIDDEN",
-                  "Only facilitators can change published workshop objects",
-                );
-              if (
-                source &&
-                !capabilities.facilitate &&
-                state.objects.some(
-                  (entry) => entry.type === "idea_ref" && entry.parentId === existing.id,
-                )
-              )
-                throw new CanvasBoardError(
-                  "FORBIDDEN",
-                  "Only facilitators can change a frame containing guest ideas",
-                );
-              if (existing.locked && !capabilities.facilitate)
-                throw new CanvasBoardError("FORBIDDEN", "This object is locked");
-              if (existing.type === "idea_ref" && !capabilities.facilitate)
-                throw new CanvasBoardError(
-                  "FORBIDDEN",
-                  "Only facilitators can arrange guest idea cards",
-                );
+              assertMutable(
+                originalObjects.find((entry) => entry.id === existing.id)!,
+                operation.type === "update" ? operation.patch : {},
+              );
               before.push(structuredClone(existing));
               if (operation.type === "delete") {
                 assert(existing.type !== "idea_ref", "Remove a guest idea through moderation");
@@ -916,7 +1247,17 @@ export class CanvasBoardRepository {
                 if (existing.type === "idea_ref")
                   assert(
                     Object.keys(operation.patch).every((key) =>
-                      ["x", "y", "width", "height", "rotation", "zIndex", "parentId"].includes(key),
+                      [
+                        "x",
+                        "y",
+                        "width",
+                        "height",
+                        "rotation",
+                        "zIndex",
+                        "parentId",
+                        "geometricGroupId",
+                        "locked",
+                      ].includes(key),
                     ),
                     "Guest idea content is protected",
                   );
@@ -934,6 +1275,8 @@ export class CanvasBoardRepository {
                   ...operation.patch,
                   version: existing.version + 1,
                 });
+                if (ancestors(originalObjects, updated).some((parent) => parent.locked))
+                  throw new CanvasBoardError("FORBIDDEN", "Unlock the containing frame first");
                 state.objects[index] = updated;
                 after.push(updated);
               }
@@ -942,6 +1285,8 @@ export class CanvasBoardRepository {
           const ids = new Set(state.objects.map((object) => object.id));
           for (const object of state.objects) {
             if (object.parentId && !ids.has(object.parentId)) {
+              assert(!touched.has(object.id), "Explicitly unparent a child whose frame is deleted");
+              fenceRelated(object);
               if (!before.some((entry) => entry.id === object.id))
                 before.push(structuredClone(object));
               object.parentId = null;
@@ -956,6 +1301,7 @@ export class CanvasBoardRepository {
                 (object.to.objectId && !ids.has(object.to.objectId))),
           );
           for (const object of dangling) {
+            fenceRelated(object);
             const deletedIds = new Set(
               before.filter((entry) => !ids.has(entry.id)).map((entry) => entry.id),
             );
@@ -969,6 +1315,15 @@ export class CanvasBoardRepository {
             if (!before.some((entry) => entry.id === object.id)) before.push(object);
             state.objects = state.objects.filter((entry) => entry.id !== object.id);
           }
+          assert(
+            new Set([
+              ...touched,
+              ...expected.keys(),
+              ...before.map((object) => object.id),
+              ...after.map((object) => object.id),
+            ]).size <= CANVAS_MAX_OPERATIONS,
+            "Change up to 50 affected objects in one action",
+          );
         } else {
           const target = state.receipts.find(
             (receipt) =>
@@ -984,6 +1339,10 @@ export class CanvasBoardRepository {
           const expected = command.type === "undo" ? target.after : target.before,
             desired = command.type === "undo" ? target.before : target.after;
           const allIds = new Set([...expected, ...desired].map((object) => object.id));
+          assert(
+            allIds.size <= CANVAS_MAX_OPERATIONS,
+            "Undo up to 50 affected objects in one action",
+          );
           for (const objectId of allIds) {
             const current = state.objects.find((object) => object.id === objectId),
               expectation = expected.find((object) => object.id === objectId);
@@ -995,20 +1354,33 @@ export class CanvasBoardRepository {
                 "Another change affects this operation; undo cannot overwrite it",
               );
             const restoration = desired.find((object) => object.id === objectId);
+            const unlocking =
+              current && restoration && sameExceptLock(current, restoration)
+                ? { locked: restoration.locked }
+                : {};
+            if (current) assertMutable(current, unlocking);
+            if (restoration) assertMutable(restoration, unlocking);
             if (
-              !capabilities.facilitate &&
-              (current?.locked ||
-                restoration?.locked ||
-                (source &&
-                  (current?.type === "idea_ref" ||
-                    restoration?.type === "idea_ref" ||
-                    current?.visibility === "published" ||
-                    restoration?.visibility === "published")))
+              current &&
+              !restoration &&
+              current.type === "frame" &&
+              descendants(originalObjects, current.id).some((child) => !allIds.has(child.id))
             )
-              throw new CanvasBoardError(
-                "FORBIDDEN",
-                "Your current role cannot undo protected or published objects",
-              );
+              throw new CanvasBoardError("STALE_DRAFT", "Another object now belongs to this frame");
+            if (
+              current &&
+              restoration &&
+              current.geometricGroupId !== restoration.geometricGroupId &&
+              originalObjects.some(
+                (entry) =>
+                  entry.id !== objectId &&
+                  entry.geometricGroupId &&
+                  (entry.geometricGroupId === current.geometricGroupId ||
+                    entry.geometricGroupId === restoration.geometricGroupId) &&
+                  !allIds.has(entry.id),
+              )
+            )
+              throw new CanvasBoardError("STALE_DRAFT", "Another object now belongs to this group");
           }
           for (const objectId of allIds) {
             const current = state.objects.find((object) => object.id === objectId),
@@ -1036,6 +1408,33 @@ export class CanvasBoardRepository {
               };
               state.objects.push(object);
               after.push(object);
+            }
+          }
+          for (const previous of before) {
+            const restored = after.find((object) => object.id === previous.id);
+            if (!restored) continue;
+            const dx = restored.x - previous.x,
+              dy = restored.y - previous.y;
+            if (!dx && !dy) continue;
+            const peers = previous.geometricGroupId
+              ? originalObjects.filter(
+                  (object) =>
+                    object.id !== previous.id &&
+                    object.geometricGroupId === previous.geometricGroupId,
+                )
+              : [];
+            for (const child of [...descendants(originalObjects, previous.id), ...peers]) {
+              const moved = after.find((object) => object.id === child.id);
+              if (
+                !allIds.has(child.id) ||
+                !moved ||
+                !closeCoordinate(moved.x, child.x + dx) ||
+                !closeCoordinate(moved.y, child.y + dy)
+              )
+                throw new CanvasBoardError(
+                  "STALE_DRAFT",
+                  "Undo cannot move part of a group or frame",
+                );
             }
           }
           rebaseOwnHistory(state.receipts, actor.userId, desired, after);

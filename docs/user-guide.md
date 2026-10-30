@@ -33,9 +33,20 @@ content is English; chooser/filter controls are localized.
 
 When enabled for your workspace, open **Idea boards → New board** and choose **Team canvas**
 for a shared spatial workspace or **Guided workshop** for moderated guest ideas and voting.
-Enter a title first. Workshop settings contain the participant identity, review, visibility,
-vote budget and lifetime choices. Existing workshop links continue to work; a facilitator can
+Review the title before creating. Workshop settings contain the participant identity, review,
+visibility, vote budget and lifetime choices. Existing workshop links continue to work; a facilitator can
 choose **Add canvas view** while the workshop is still a draft or collecting ideas.
+
+Choose a blank board or preview one of seven original starters for brainstorming, retrospectives,
+project planning, decisions and learning reflection. Starter content is in English and remains
+editable. Review the title, workshop prompt and settings before creating. Guided starters create
+both the workshop and its canvas, with published instructions and prompt notes rather than
+invented guest responses. If setup is interrupted, return in the same tab and retry;
+the saved setup resumes the unfinished step. Restore the original account and owning workspace
+if the setup reports that they changed. **Keep workshop without canvas** retains an
+already-created workshop and its direct link. Signing out clears saved setup. If tab storage is
+unavailable, use a blank guided workshop or allow storage before retrying a starter. Search finds
+matching titles throughout the selected board view; **Load more boards** pages through those matches.
 
 On a Team canvas, add sticky notes, text, rectangles and ellipses. Select an object to change its
 text, color, size and position in the inspector, then choose **Save changes**. The object outline
@@ -43,6 +54,23 @@ provides equivalent selection without dragging. Use **Connector** and select two
 choose the endpoints in the inspector. **Fit board**, **Fit selection** and zoom controls help
 navigate; the hand tool pans, and touch devices support pinch zoom. Duplicate, delete, arrow-key
 movement and your own undo/redo are available outside text fields.
+
+Use Shift-click, outline checkboxes or **Select area** to select several objects. **Group selection**
+keeps objects in the same parent frame together; **Frame selection** wraps them in a frame.
+**Parent frame** moves selected items into or out of a frame. Moving a frame carries its contents;
+resizing changes its border. The selection panel provides alignment, distribution, duplicate,
+delete and numeric movement controls. Actions affecting more than 50 objects, including frame
+contents and connected objects, stay disabled until you choose a smaller selection. Lock a
+selection to prevent editing, and explicitly unlock it before making changes. Workshop guest-card
+and publication permissions continue to apply inside groups and frames.
+
+**Freehand** creates a saved stroke when you finish drawing; use two fingers to navigate. **Link**
+adds an HTTP(S) link card with a label, without fetching a remote preview. **Image** accepts JPEG,
+PNG and WebP files up to 10 MiB when the operator has enabled image storage and scanning. Add an
+image description for people who cannot see it. Images become usable after successful malware
+scanning. Uploaded images remain private to the board until a facilitator deliberately publishes
+their objects to workshop guests. You can
+undo image deletion while its operation remains in retained history.
 
 **Share board** invites a verified teammate in the same organization as a Viewer, Editor or
 Facilitator. The recipient opens the invitation link and chooses **Accept board invitation**;
@@ -70,6 +98,8 @@ original identity and privacy rules. For an ordinary selected object, facilitato
 visibility → Published to guests** and save to publish it; **Team only** keeps it private.
 Publishing an object does not publish its children. Editors cannot change published workshop
 objects or move or rewrite guest idea cards.
+Published instructions and images remain visible while peer ideas are hidden during collection.
+Workshop groups organize ideas for voting; canvas groups organize their positions.
 Starting voting freezes the workshop canvas, and accepted guest ballots remain final after
 refresh. Guests keep the guided submission and voting list beside the published canvas and
 never need creator accounts.
@@ -82,8 +112,9 @@ pilot lifetime. Reaching that change budget stops further editing; deletion rema
 Workshops reserve space for their
 existing limit of 200 idea cards, leaving up to 300 ordinary canvas objects. Existing workshop
 participant, lifetime and retention limits still apply. Team boards have a recorded retention
-window; deletion requires confirmation. Frames, bulk layout, richer drawing, team file uploads,
-comments, timers and version browsing are later increments.
+window; deletion requires confirmation. Each board allows up to 100 image upload reservations
+and 200 MiB of reserved image data over its lifetime. Comments, timers, exports and version
+browsing are later increments.
 
 ## Standalone Surveys (beta)
 

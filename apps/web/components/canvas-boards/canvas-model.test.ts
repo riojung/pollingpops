@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CanvasObjectSchema } from "@openround/contracts";
 import {
+  canvasObjectLabel,
   canChangeObject,
   canPublishCanvasObject,
   duplicateCanvasObject,
@@ -11,6 +12,32 @@ import {
 import { canvasBoard, canvasObject } from "./canvas-test-fixtures";
 
 describe("canvas draft and object permissions", () => {
+  it("identifies creator images by their description instead of an empty text field or generic index", () => {
+    const altText = "Workshop diagram showing our three priorities";
+    const image = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "image",
+      text: "",
+      mediaId: "00000000-0000-4000-8000-000000000099",
+      altText,
+    });
+    expect(canvasObjectLabel(image, "Image 2")).toBe(altText);
+    expect(canvasObjectLabel({ ...canvasObject, text: "" }, "Sticky note 3")).toBe("Sticky note 3");
+  });
+  it("does not treat large frame backdrops as occupied insertion space", () => {
+    const frame = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "frame",
+      x: -500,
+      y: -500,
+      width: 3000,
+      height: 3000,
+    });
+    expect(nextCanvasPosition([frame], { x: 120.5, y: 57.5 }, 320, 220)).toEqual({
+      x: 120.5,
+      y: 57.5,
+    });
+  });
   it("only lets workshop facilitators publish ordinary objects and protects published objects from editors", () => {
     const workshop = { ...canvasBoard, boardType: "workshop" as const };
     expect(canPublishCanvasObject(canvasBoard, canvasObject)).toBe(false);
@@ -20,7 +47,7 @@ describe("canvas draft and object permissions", () => {
     expect(canChangeObject(editor, { ...canvasObject, visibility: "published" })).toBe(false);
     expect(canChangeObject(editor, canvasObject)).toBe(true);
     const frame = CanvasObjectSchema.parse({ ...canvasObject, type: "frame" });
-    expect(canPublishCanvasObject(workshop, frame)).toBe(false);
+    expect(canPublishCanvasObject(workshop, frame)).toBe(true);
     const idea = CanvasObjectSchema.parse({
       ...canvasObject,
       type: "idea_ref",

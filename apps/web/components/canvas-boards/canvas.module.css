@@ -91,6 +91,25 @@
   min-height: 300px;
   touch-action: none;
   user-select: none;
+  --canvas-pen-yellow: #8b6900;
+  --canvas-pen-blue: #236b9e;
+  --canvas-pen-green: #287654;
+  --canvas-pen-pink: #a73562;
+  --canvas-pen-purple: #7544a0;
+  --canvas-pen-white: var(--ui-text);
+}
+:global([data-color-mode="dark"]) .surface {
+  --canvas-pen-yellow: #f5d76e;
+  --canvas-pen-blue: #8dcafa;
+  --canvas-pen-green: #8ed8b2;
+  --canvas-pen-pink: #f0a1bf;
+  --canvas-pen-purple: #c5abed;
+}
+.surface[data-tool="pen"] {
+  cursor: crosshair;
+}
+.surface[data-tool="marquee"] {
+  cursor: crosshair;
 }
 .surface[data-tool="hand"] {
   cursor: grab;
@@ -144,6 +163,7 @@
   background: var(--ui-surface-raised);
 }
 .sidebar summary {
+  color: var(--ui-text);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -170,6 +190,57 @@
   color: var(--ui-text);
   overflow-wrap: anywhere;
   cursor: pointer;
+}
+.outlineRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.outlineRow button {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+.outlineRow input {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.selectionTools {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.selectionTools h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.selectionTools button {
+  white-space: normal;
+  max-width: 100%;
+}
+.selectionTools details {
+  min-width: 0;
+}
+.selectionTools label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+.selectionTools input,
+.selectionTools select {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
 }
 .inspector,
 .form {

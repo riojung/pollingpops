@@ -15,6 +15,14 @@ export interface RateLimitBudget {
 
 export type EmailAuthBudget = RateLimitBudget;
 
+/** Ephemeral named presence is separate from durable board content and audience identities. */
+export interface CanvasPresenceRecord {
+  userId: string;
+  name: string;
+  cursor: { x: number; y: number } | null;
+  expiresAt: number;
+}
+
 export interface SessionCache {
   get(sessionId: string): Promise<GameState | null>;
   set(state: GameState, ttlSeconds: number): Promise<void>;
@@ -42,11 +50,17 @@ export interface SessionCache {
     maximum: number,
     windowMs: number,
   ): Promise<boolean>;
+  setCanvasPresence?(boardId: string, presence: CanvasPresenceRecord): Promise<void>;
+  listCanvasPresence?(boardId: string): Promise<CanvasPresenceRecord[]>;
+  removeCanvasPresence?(boardId: string, userId: string): Promise<void>;
+  clearCanvasPresence?(boardId: string): Promise<void>;
   delete(sessionId: string): Promise<void>;
   close(): Promise<void>;
 }
 
 export class MemorySessionCache implements SessionCache {
+  private readonly canvasPresence = new Map<string, Map<string, CanvasPresenceRecord>>();
+  private presenceTimer: ReturnType<typeof setInterval> | undefined;
   private readonly states = new Map<string, GameState>();
   private readonly events = new Map<string, CachedSessionEvent[]>();
   private readonly codeReservations = new Map<string, { owner: string; expiresAt: number }>();
@@ -60,6 +74,54 @@ export class MemorySessionCache implements SessionCache {
   async get(sessionId: string) {
     const state = this.states.get(sessionId);
     return state ? structuredClone(state) : null;
+  }
+
+  async setCanvasPresence(boardId: string, presence: CanvasPresenceRecord) {
+    if (!this.presenceTimer) {
+      this.presenceTimer = setInterval(() => {
+        for (const [id, entries] of this.canvasPresence) {
+          for (const [userId, entry] of entries)
+            if (entry.expiresAt <= Date.now()) entries.delete(userId);
+          if (!entries.size) this.canvasPresence.delete(id);
+        }
+      }, 1_000);
+      this.presenceTimer.unref();
+    }
+    if (!this.canvasPresence.has(boardId) && this.canvasPresence.size >= 1_000) {
+      for (const [id, entries] of this.canvasPresence) {
+        for (const [userId, entry] of entries)
+          if (entry.expiresAt <= Date.now()) entries.delete(userId);
+        if (!entries.size) this.canvasPresence.delete(id);
+      }
+      if (this.canvasPresence.size >= 1_000) return;
+    }
+    const members = this.canvasPresence.get(boardId) ?? new Map<string, CanvasPresenceRecord>();
+    if (!members.has(presence.userId) && members.size >= 100) {
+      for (const [id, entry] of members) if (entry.expiresAt <= Date.now()) members.delete(id);
+      if (members.size >= 100) return;
+    }
+    members.set(presence.userId, structuredClone(presence));
+    this.canvasPresence.set(boardId, members);
+  }
+
+  async listCanvasPresence(boardId: string) {
+    const members = this.canvasPresence.get(boardId);
+    if (!members) return [];
+    for (const [id, presence] of members) {
+      if (presence.expiresAt <= Date.now()) members.delete(id);
+    }
+    if (!members.size) this.canvasPresence.delete(boardId);
+    return [...members.values()].map((presence) => structuredClone(presence));
+  }
+
+  async removeCanvasPresence(boardId: string, userId: string) {
+    const members = this.canvasPresence.get(boardId);
+    members?.delete(userId);
+    if (!members?.size) this.canvasPresence.delete(boardId);
+  }
+
+  async clearCanvasPresence(boardId: string) {
+    this.canvasPresence.delete(boardId);
   }
 
   async set(state: GameState, _ttlSeconds: number) {
@@ -196,6 +258,8 @@ export class MemorySessionCache implements SessionCache {
   }
 
   async close() {
+    if (this.presenceTimer) clearInterval(this.presenceTimer);
+    this.canvasPresence.clear();
     this.codeReservations.clear();
     this.leases.clear();
     this.rateLimits.clear();
@@ -212,6 +276,57 @@ export class RedisSessionCache implements SessionCache {
 
   async connect() {
     await this.redis.connect();
+  }
+
+  async setCanvasPresence(boardId: string, presence: CanvasPresenceRecord) {
+    const key = `openround:canvas-presence:${boardId}`;
+    const results = await this.redis
+      .multi()
+      .set(
+        `${key}:${presence.userId}`,
+        JSON.stringify(presence),
+        "PX",
+        Math.max(1, Math.min(10_000, presence.expiresAt - Date.now())),
+      )
+      .zadd(key, presence.expiresAt, presence.userId)
+      .pexpire(key, 30_000)
+      .exec();
+    const failure = results?.find(([error]) => error);
+    if (!results || failure?.[0]) throw failure?.[0] ?? new Error("Presence write failed");
+  }
+
+  async listCanvasPresence(boardId: string) {
+    const key = `openround:canvas-presence:${boardId}`;
+    const now = Date.now();
+    const [users] = await Promise.all([
+      this.redis.zrangebyscore(key, now + 1, "+inf", "LIMIT", 0, 100),
+      this.redis.zremrangebyscore(key, "-inf", now),
+    ]);
+    if (!users.length) return [];
+    const records = await this.redis.mget(...users.map((userId) => `${key}:${userId}`));
+    const live: CanvasPresenceRecord[] = [];
+    for (const [index, serialized] of records.entries()) {
+      if (!serialized) continue;
+      try {
+        const presence = JSON.parse(serialized) as CanvasPresenceRecord;
+        if (presence.userId === users[index] && presence.expiresAt > Date.now())
+          live.push(presence);
+      } catch {
+        /* An invalid ephemeral record is ignored, never returned to clients. */
+      }
+    }
+    return live;
+  }
+
+  async removeCanvasPresence(boardId: string, userId: string) {
+    const key = `openround:canvas-presence:${boardId}`;
+    await this.redis.multi().del(`${key}:${userId}`).zrem(key, userId).exec();
+  }
+
+  async clearCanvasPresence(boardId: string) {
+    const key = `openround:canvas-presence:${boardId}`;
+    const users = await this.redis.zrange(key, "0", "-1");
+    await this.redis.del(key, ...users.map((userId) => `${key}:${userId}`));
   }
 
   async get(sessionId: string) {

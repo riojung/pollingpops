@@ -1,6 +1,10 @@
+import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
+import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
+  ...canvasMessages("it-IT"),
+  ...canvasWorkshopMessages("it-IT"),
   "boards.more": "Carica altre bacheche",
   "boards.title": "Bacheche delle idee",
   "boards.description": "Raccogli idee, raggruppale e scegli le priorità comuni.",

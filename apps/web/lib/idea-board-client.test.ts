@@ -18,6 +18,33 @@ import {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("idea board browser boundaries", () => {
+  it("uses board-scoped canvas authorization for shared creator images while preserving cookie-omitted guest reads", async () => {
+    const mock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(new Uint8Array([137, 80, 78, 71]), {
+          headers: { "content-type": "image/png" },
+        }),
+    );
+    vi.stubGlobal("fetch", mock);
+    const canvasId = "00000000-0000-4000-8000-000000000008";
+    await fetchIdeaBoardImage(boardId, boardIdeaId, undefined, undefined, canvasId);
+    expect(mock.mock.calls[0]![0]).toContain(`/canvas-boards/${canvasId}/media/${boardIdeaId}`);
+    expect(mock.mock.calls[0]![1]).toMatchObject({ credentials: "include", cache: "no-store" });
+    const token = "ab".repeat(32);
+    await fetchIdeaBoardImage(boardId, boardIdeaId, token, undefined, canvasId);
+    expect(mock.mock.calls[1]![0]).toContain(
+      `/idea-boards/${boardId}/media/${boardIdeaId}/content`,
+    );
+    expect(mock.mock.calls[1]![1]).toMatchObject({
+      credentials: "omit",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await expect(
+      fetchIdeaBoardImage(boardId, boardIdeaId, undefined, undefined, "../other"),
+    ).rejects.toThrow();
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
   it("uses an independent persisted 32-byte credential for each board and works without randomUUID", () => {
     const values = new Map<string, string>();
     vi.stubGlobal("window", {

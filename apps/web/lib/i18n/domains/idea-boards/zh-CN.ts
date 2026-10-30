@@ -1,6 +1,10 @@
+import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
+import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
+  ...canvasMessages("zh-CN"),
+  ...canvasWorkshopMessages("zh-CN"),
   "boards.more": "加载更多看板",
   "boards.title": "创意看板",
   "boards.description": "收集创意，手动分组，共同确定优先事项。",

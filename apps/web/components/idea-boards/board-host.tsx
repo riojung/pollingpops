@@ -19,6 +19,7 @@ import { WorkspaceShell } from "../workspace/workspace-shell";
 import { IdeaBoardIdeas } from "./idea-list";
 import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
+import { WorkshopCanvasLauncher } from "../canvas-boards/workshop-canvas-bridge";
 
 function BoardDeletionDialog({
   busy,
@@ -236,9 +237,12 @@ export function BoardHost({ id }: { id: string }) {
       requireBeta={false}
       translationLevel="full"
       actions={
-        <Link className="button-quiet" href="/boards">
-          {t("boards.back")}
-        </Link>
+        <>
+          {board ? <WorkshopCanvasLauncher board={board} disabled={locked} /> : null}
+          <Link className="button-quiet" href="/boards">
+            {t("boards.back")}
+          </Link>
+        </>
       }
     >
       {error ? (

@@ -48,6 +48,16 @@ export async function fetchIdeaBoard(id: string, signal?: AbortSignal) {
   if (board.id !== id) throw new Error("Mismatched board");
   return board;
 }
+export async function listIdeaBoards(search = "", signal?: AbortSignal, cursor?: string | null) {
+  if (cursor) ideaBoardPath(cursor);
+  const result = await apiFetch<{ boards: unknown[]; nextCursor: string | null }>(
+    `/v1/idea-boards?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+    { signal, cache: "no-store" },
+  );
+  const nextCursor = result.nextCursor ?? null;
+  if (nextCursor) ideaBoardPath(nextCursor);
+  return { boards: result.boards.map((board) => IdeaBoardViewSchema.parse(board)), nextCursor };
+}
 
 export async function fetchPublicIdeaBoard(id: string, signal?: AbortSignal) {
   const result = await apiFetch<{ board: unknown }>(`${ideaBoardPath(id)}/public`, {
@@ -203,8 +213,15 @@ export async function fetchIdeaBoardImage(
   mediaId: string,
   token?: string,
   signal?: AbortSignal,
+  canvasId?: string,
 ): Promise<Blob> {
-  const response = await fetch(`${API_URL}${boardMediaPath(id, mediaId)}/content`, {
+  const sourcePath = boardMediaPath(id, mediaId);
+  const path =
+    canvasId && token === undefined
+      ? `/v1/canvas-boards/${canvasId}/media/${mediaId}`
+      : `${sourcePath}/content`;
+  if (canvasId) ideaBoardPath(canvasId);
+  const response = await fetch(`${API_URL}${path}`, {
     ...guestOptions(token),
     credentials: token === undefined ? "include" : "omit",
     signal,

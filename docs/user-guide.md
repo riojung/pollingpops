@@ -29,6 +29,62 @@ reviews, and workshops. Survey templates contain opinion polls and ratings for s
 Review every answer, explanation and recheck for your audience before publishing. Original template
 content is English; chooser/filter controls are localized.
 
+## Idea Boards and shared canvases
+
+When enabled for your workspace, open **Idea boards → New board** and choose **Team canvas**
+for a shared spatial workspace or **Guided workshop** for moderated guest ideas and voting.
+Enter a title first. Workshop settings contain the participant identity, review, visibility,
+vote budget and lifetime choices. Existing workshop links continue to work; a facilitator can
+choose **Add canvas view** while the workshop is still a draft or collecting ideas.
+
+On a Team canvas, add sticky notes, text, rectangles and ellipses. Select an object to change its
+text, color, size and position in the inspector, then choose **Save changes**. The object outline
+provides equivalent selection without dragging. Use **Connector** and select two objects, or
+choose the endpoints in the inspector. **Fit board**, **Fit selection** and zoom controls help
+navigate; the hand tool pans, and touch devices support pinch zoom. Duplicate, delete, arrow-key
+movement and your own undo/redo are available outside text fields.
+
+**Share board** invites a verified teammate in the same organization as a Viewer, Editor or
+Facilitator. The recipient opens the invitation link and chooses **Accept board invitation**;
+the accepted board appears under **Shared with me**. This leaves the teammate's workspace and
+license unchanged. Editing requires an active creator
+license. Owners can revoke pending invitations and change or revoke accepted board roles.
+Presence is optional and visible only to
+authorized team members. Sharing is not available between personal accounts or organizations.
+
+Changes save when you finish a gesture or explicitly save text. Different objects can be edited
+at the same time. If another person changes the same object, your draft stays available for
+review; **Apply reviewed change** submits it against the latest version. An interrupted request
+can be retried without duplicating its accepted operation. Check the saved/connection state
+before leaving. This release does not provide simultaneous character editing or offline editing.
+Interrupted live connections reopen automatically; when live updates are unavailable, authorized
+snapshot polling continues and the saved state identifies that fallback.
+
+If a collaborator deletes a note while you are editing it, **Object no longer available** keeps
+your unsaved text visible. Use **Copy draft text** to recover it for another note, or explicitly
+choose **Discard my draft**. The leave-page warning remains active until you discard the draft.
+
+For workshops, open **Workshop controls** to start collection, review pending ideas, arrange
+approved cards, manage groups, start voting and close the board. Guest submissions keep their
+original identity and privacy rules. For an ordinary selected object, facilitators use **Guest
+visibility → Published to guests** and save to publish it; **Team only** keeps it private.
+Publishing an object does not publish its children. Editors cannot change published workshop
+objects or move or rewrite guest idea cards.
+Starting voting freezes the workshop canvas, and accepted guest ballots remain final after
+refresh. Guests keep the guided submission and voting list beside the published canvas and
+never need creator accounts.
+Owners can choose **Switch workspace and open workshop** in Workshop controls to return to
+the original grouped list and its deletion controls. This explicit action selects the owning
+workspace before navigating.
+
+Canvases allow up to 500 objects, 2 MiB of document data and 5,000 accepted changes over their
+pilot lifetime. Reaching that change budget stops further editing; deletion remains available.
+Workshops reserve space for their
+existing limit of 200 idea cards, leaving up to 300 ordinary canvas objects. Existing workshop
+participant, lifetime and retention limits still apply. Team boards have a recorded retention
+window; deletion requires confirmation. Frames, bulk layout, richer drawing, team file uploads,
+comments, timers and version browsing are later increments.
+
 ## Standalone Surveys (beta)
 
 Surveys are a first-class **Library → Surveys** tab alongside Rounds and Presentations. Search

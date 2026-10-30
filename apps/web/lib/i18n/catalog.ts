@@ -133,6 +133,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   const path = pathname.split("?", 1)[0] || "/";
 
   if (path === "/boards" || path.startsWith("/boards/")) return ["idea-boards"];
+  if (path === "/canvas" || path.startsWith("/canvas/")) return ["idea-boards"];
   if (/^\/board\/[^/]+\/?$/.test(path)) return ["idea-boards"];
 
   if (path === "/account" || path.startsWith("/account/")) return ["account"];

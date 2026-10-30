@@ -6,6 +6,7 @@ type ImageRead = {
   boardId: string;
   mediaId: string;
   token?: string;
+  canvasId?: string;
   controller: AbortController;
   consumers: number;
   attempts: number;
@@ -35,7 +36,13 @@ function drainQueue() {
     activeReads++;
     read.status = "running";
     read.attempts++;
-    void fetchIdeaBoardImage(read.boardId, read.mediaId, read.token, read.controller.signal)
+    void fetchIdeaBoardImage(
+      read.boardId,
+      read.mediaId,
+      read.token,
+      read.controller.signal,
+      read.canvasId,
+    )
       .then((blob) => {
         if (read.controller.signal.aborted) return;
         read.status = "complete";
@@ -66,8 +73,13 @@ function drainQueue() {
 }
 
 /** Share an eligible read while its projected cards are mounted; retain no cache after release. */
-export function readBoardIdeaImage(boardId: string, mediaId: string, token?: string) {
-  const key = JSON.stringify([boardId, mediaId, token ?? null]);
+export function readBoardIdeaImage(
+  boardId: string,
+  mediaId: string,
+  token?: string,
+  canvasId?: string,
+) {
+  const key = JSON.stringify([boardId, mediaId, token ?? null, canvasId ?? null]);
   let read = reads.get(key);
   if (!read || read.status === "failed") {
     let resolve: (blob: Blob) => void = () => {};
@@ -81,6 +93,7 @@ export function readBoardIdeaImage(boardId: string, mediaId: string, token?: str
       boardId,
       mediaId,
       token,
+      canvasId,
       controller: new AbortController(),
       consumers: 0,
       attempts: 0,

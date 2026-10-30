@@ -7649,6 +7649,15 @@ export class PostgresRepository implements Repository {
         const ideaBoards = await queryWorkspaceData(
           "SELECT data FROM idea_boards WHERE workspace_id = ANY($1::uuid[]) AND retention_expires_at > clock_timestamp() ORDER BY id",
         );
+        await client.query("SELECT set_config('app.canvas_lifecycle','on',true)");
+        const canvasBoards = await queryWorkspaceData(
+          `SELECT board.id, board.workspace_id AS "workspaceId", board.organization_id AS "organizationId",
+            board.title, board.board_type AS "boardType", board.source_board_id AS "sourceBoardId",
+            board.status, board.created_at AS "createdAt", board.updated_at AS "updatedAt", board.expires_at AS "expiresAt",
+            COALESCE((SELECT jsonb_agg(object.data ORDER BY object.id) FROM canvas_board_objects object
+              WHERE object.board_id=board.id AND object.data->>'type'<>'idea_ref'),'[]'::jsonb) AS objects
+           FROM canvas_boards board WHERE board.workspace_id=ANY($1::uuid[]) AND board.expires_at>clock_timestamp() ORDER BY board.id`,
+        );
         const surveyRooms = await queryWorkspaceData(
           "SELECT data FROM survey_feedback_rooms WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
         );
@@ -8022,6 +8031,9 @@ export class PostgresRepository implements Repository {
           workspaces: workspaceResult.rows,
           folders: folders.rows,
           surveys: surveys.rows.map((row) => row.data),
+          canvasBoards: canvasBoards.rows.filter(
+            (row) => new Date(row.expiresAt).getTime() > Date.now(),
+          ),
           ideaBoards: ideaBoards.rows.flatMap((row) => {
             const board = IdeaBoardStoredSchema.parse(row.data);
             const now = new Date();
@@ -8211,6 +8223,9 @@ export class PostgresRepository implements Repository {
         await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
         const platform = new PlatformService(new PostgresPlatformStore(null, client));
         await platform.deleteIdentityMemberships(userId);
+        await client.query("SELECT set_config('app.canvas_lifecycle','on',true)");
+        await client.query("DELETE FROM canvas_board_grants WHERE user_id=$1", [userId]);
+        await client.query("DELETE FROM canvas_board_invitations WHERE user_id=$1", [userId]);
         await this.deleteCollaborationGroupMemberships(client, userId);
         await client.query("DELETE FROM external_identities WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM library_favorites WHERE user_id=$1", [userId]);
@@ -8259,6 +8274,9 @@ export class PostgresRepository implements Repository {
         for (const row of workspaceResult.rows) {
           await client.query("DELETE FROM workspaces WHERE id = $1", [row.workspace_id]);
         }
+        await client.query("SELECT set_config('app.canvas_lifecycle','on',true)");
+        await client.query("DELETE FROM canvas_board_grants WHERE user_id=$1", [userId]);
+        await client.query("DELETE FROM canvas_board_invitations WHERE user_id=$1", [userId]);
         await this.deleteCollaborationGroupMemberships(client, userId);
         await client.query("DELETE FROM library_favorites WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
@@ -8336,6 +8354,13 @@ export class PostgresRepository implements Repository {
           "DELETE FROM idea_boards WHERE retention_expires_at <= $1 RETURNING id",
           [now],
         );
+        await client.query("SELECT set_config('app.canvas_lifecycle','on',true)");
+        await client.query("SELECT set_config('app.canvas_relay','on',true)");
+        const canvasBoardResult = await client.query(
+          "DELETE FROM canvas_boards WHERE expires_at<=$1 RETURNING id",
+          [now],
+        );
+        await client.query("DELETE FROM canvas_board_outbox WHERE expires_at<=$1", [now]);
         await client.query("DELETE FROM session_summary_snapshots WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM auth_email_pin_challenges WHERE expires_at <= $1", [now]);
@@ -8361,6 +8386,7 @@ export class PostgresRepository implements Repository {
           ...presentationResult.rows,
           ...surveyResult.rows,
           ...ideaBoardResult.rows,
+          ...canvasBoardResult.rows,
         ].map((row) => String(row.id));
       },
       { system: true },

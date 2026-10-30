@@ -1,0 +1,995 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import type { CanvasObject } from "@openround/contracts";
+import { Brand } from "../brand";
+import { useLocale } from "../locale-provider";
+import { GuardedLink, NavigationGuardProvider, useNavigationBlocker } from "../navigation-guard";
+import { apiFetch, humanError } from "../../lib/api";
+import { formatDateTime, formatNumber } from "../../lib/i18n/format";
+import { CanvasSurface, type CanvasPatch, type CanvasTool } from "./canvas-surface";
+import {
+  fitViewport,
+  INITIAL_VIEWPORT,
+  worldPoint,
+  zoomAt,
+  type CanvasPoint,
+} from "./canvas-geometry";
+import {
+  canChangeObject,
+  canPublishCanvasObject,
+  duplicateCanvasObject,
+  moveCanvasPatch,
+  newCanvasObject,
+  nextCanvasPosition,
+  reviewedCanvasCommand,
+} from "./canvas-model";
+import { useCanvasBoard } from "./use-canvas-board";
+import { canvasPath, deleteCanvas } from "./canvas-client";
+import { CanvasShareDialog } from "./canvas-share-dialog";
+import { CanvasWorkshopControls } from "./workshop-controls";
+import { useCanvasDraft } from "./use-canvas-draft";
+import { CanvasDraftRecovery } from "./canvas-draft-recovery";
+import styles from "./canvas.module.css";
+
+function CanvasEditorContent({ id }: { id: string }) {
+  const { t, locale } = useLocale();
+  function objectLabel(object: CanvasObject, index: number) {
+    const name = t(
+      object.type === "sticky"
+        ? "canvas.sticky"
+        : object.type === "text"
+          ? "boards.textTool"
+          : object.type === "rect"
+            ? "boards.rectangleTool"
+            : object.type === "ellipse"
+              ? "boards.ellipseTool"
+              : object.type === "connector"
+                ? "canvas.connector"
+                : object.type === "idea_ref"
+                  ? "canvas.protected"
+                  : "boards.elementSettings",
+    );
+    return object.text.trim().slice(0, 80) || `${name} ${formatNumber(locale, index + 1)}`;
+  }
+  const state = useCanvasBoard(id);
+  const board = state.board;
+  const [tool, setTool] = useState<CanvasTool>("select");
+  const [viewport, setViewport] = useState(INITIAL_VIEWPORT);
+  const [sharing, setSharing] = useState(false);
+  const [outline, setOutline] = useState(true);
+  const [workshop, setWorkshop] = useState(false);
+  const [presence, setPresence] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteAttempted, setDeleteAttempted] = useState(false);
+  const deleted = useRef(false);
+  const active = useRef(true);
+  const [members, setMembers] = useState<
+    Array<{ userId: string; name: string; cursor: CanvasPoint | null }>
+  >([]);
+  const [connectorFrom, setConnectorFrom] = useState<string | null>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  const cursor = useRef<CanvasPoint | null>(null);
+  const restoredTool = useRef<CanvasTool | null>(null);
+  const {
+    selectedId,
+    selected,
+    localDraft,
+    dirty,
+    draft,
+    recovery,
+    setDraft,
+    select,
+    acceptSelection,
+  } = useCanvasDraft(id, board, {
+    locked: state.saving || deleting,
+    pending: state.failure !== null,
+    confirmDiscard: () => window.confirm(t("canvas.discard")),
+    onDiscardPending: state.discard,
+  });
+  const blocked = useCallback(
+    () => !deleted.current && (dirty || state.saving || state.failure !== null || deleting),
+    [dirty, state.saving, state.failure, deleting],
+  );
+  useNavigationBlocker(blocked);
+  const busy = state.saving || state.failure !== null || deleting;
+  const editable = Boolean(board && selected && canChangeObject(board, selected));
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (window.matchMedia?.("(pointer: coarse)").matches) setTool("hand");
+    if (window.innerWidth < 760) setOutline(false);
+  }, []);
+  useEffect(() => {
+    setSharing(false);
+    setViewport(INITIAL_VIEWPORT);
+  }, [id]);
+  useEffect(() => {
+    if (board?.boardType === "workshop") setWorkshop(true);
+  }, [board?.id, board?.boardType]);
+  useEffect(() => {
+    if (!presence || !board) {
+      setMembers([]);
+      return;
+    }
+    const active = new AbortController();
+    const path = `${canvasPath(id)}/presence`;
+    let running = false;
+    async function update() {
+      if (running || active.signal.aborted) return;
+      running = true;
+      try {
+        await apiFetch(path, {
+          method: "PUT",
+          signal: active.signal,
+          body: JSON.stringify({ cursor: cursor.current }),
+        });
+        const response = await apiFetch<{ members: typeof members }>(path, {
+          signal: active.signal,
+          cache: "no-store",
+        });
+        if (!active.signal.aborted) setMembers(response.members);
+      } catch {
+        if (!active.signal.aborted) setMembers([]);
+      } finally {
+        running = false;
+      }
+    }
+    void update();
+    const timer = setInterval(() => void update(), 3000);
+    return () => {
+      active.abort();
+      clearInterval(timer);
+      void apiFetch(path, { method: "DELETE" }).catch(() => undefined);
+    };
+  }, [id, presence, Boolean(board)]);
+
+  function changeSelection(next: string | null) {
+    if (next === selectedId) return;
+    if (select(next)) setOutline(true);
+  }
+  async function patch(object: CanvasObject, value: CanvasPatch) {
+    return state.execute({
+      type: "batch",
+      operations: [
+        { type: "update", id: object.id, expectedVersion: object.version, patch: value },
+      ],
+    });
+  }
+  function fit(selection = false) {
+    if (!board) return;
+    setViewport(
+      fitViewport(
+        selection && selected ? [selected] : board.objects,
+        stage.current?.clientWidth ?? 1000,
+        stage.current?.clientHeight ?? 650,
+      ),
+    );
+  }
+  async function add(type: "sticky" | "text" | "rect" | "ellipse") {
+    if (!board?.capabilities.edit || busy || (dirty && !window.confirm(t("canvas.discard"))))
+      return;
+    const point = worldPoint(
+      {
+        x: (stage.current?.clientWidth ?? 900) / 2 - 100,
+        y: (stage.current?.clientHeight ?? 650) / 2 - 80,
+      },
+      viewport,
+    );
+    const object = newCanvasObject(
+      type,
+      nextCanvasPosition(
+        board.objects,
+        point,
+        type === "text" ? 280 : 220,
+        type === "text" ? 100 : 160,
+      ),
+      type === "text" ? t("boards.newText") : "",
+    );
+    if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
+      acceptSelection(object.id);
+      setTool("select");
+      setOutline(true);
+    }
+  }
+  async function duplicate() {
+    if (!board || !selected || !canChangeObject(board, selected) || busy || dirty) return;
+    const object = duplicateCanvasObject(selected);
+    if (!object) return;
+    if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
+      acceptSelection(object.id);
+    }
+  }
+  async function remove() {
+    if (
+      !board ||
+      !selected ||
+      !canChangeObject(board, selected) ||
+      selected.type === "idea_ref" ||
+      busy ||
+      dirty
+    )
+      return;
+    if (
+      await state.execute({
+        type: "batch",
+        operations: [{ type: "delete", id: selected.id, expectedVersion: selected.version }],
+      })
+    ) {
+      acceptSelection(null);
+    }
+  }
+  async function deleteBoard() {
+    if (
+      busy ||
+      dirty ||
+      (!deleteAttempted &&
+        (!board ||
+          board.boardType !== "team" ||
+          !board.capabilities.delete ||
+          !window.confirm(t("canvas.deleteConfirm"))))
+    )
+      return;
+    setDeleteAttempted(true);
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteCanvas(id);
+      if (!active.current) return;
+      deleted.current = true;
+      window.location.assign("/boards");
+    } catch (error) {
+      if (active.current) {
+        setDeleteError(humanError(error));
+        setDeleting(false);
+      }
+    }
+  }
+  async function connect(next: string) {
+    if (!board?.capabilities.edit || busy || dirty) return;
+    if (!connectorFrom) {
+      setConnectorFrom(next);
+      select(next);
+      return;
+    }
+    if (connectorFrom === next) return;
+    const from = board.objects.find((object) => object.id === connectorFrom),
+      to = board.objects.find((object) => object.id === next);
+    if (!from || !to) return;
+    const object = newCanvasObject("connector", { x: from.x, y: from.y });
+    if (object.type !== "connector") return;
+    object.from = {
+      objectId: from.id,
+      x: from.x + from.width / 2,
+      y: from.y + from.height / 2,
+      anchor: "center",
+    };
+    object.to = {
+      objectId: to.id,
+      x: to.x + to.width / 2,
+      y: to.y + to.height / 2,
+      anchor: "center",
+    };
+    if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
+      acceptSelection(object.id);
+      setConnectorFrom(null);
+      setTool("select");
+    }
+  }
+  async function saveProperties(event: FormEvent) {
+    event.preventDefault();
+    if (!board || !selected || !localDraft || !editable || busy) return;
+    const value = localDraft;
+    const patchValue: CanvasPatch = {
+      x: value.x,
+      y: value.y,
+      width: value.width,
+      height: value.height,
+    };
+    if (selected.type !== "idea_ref") {
+      patchValue.text = value.text;
+      patchValue.color = value.color;
+      patchValue.rotation = value.rotation;
+    }
+    if (canPublishCanvasObject(board, selected)) patchValue.visibility = value.visibility;
+    if (selected.type === "connector") {
+      patchValue.from = { ...selected.from, objectId: value.fromId || null };
+      patchValue.to = { ...selected.to, objectId: value.toId || null };
+    }
+    if (await patch({ ...selected, version: value.version }, patchValue)) setDraft(null);
+  }
+  function keyboard(event: KeyboardEvent<HTMLElement>) {
+    if (
+      event.nativeEvent.isComposing ||
+      (event.target instanceof HTMLElement &&
+        (event.target.matches("input,textarea,select") || event.target.isContentEditable))
+    )
+      return;
+    if (event.code === "Space" && !event.repeat && event.target instanceof SVGElement) {
+      event.preventDefault();
+      restoredTool.current = tool;
+      setTool("hand");
+      return;
+    }
+    if (!board || busy) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      const targetOperationId = event.shiftKey ? board.redoOperationId : board.undoOperationId;
+      if (targetOperationId && board.capabilities.edit && !dirty) {
+        event.preventDefault();
+        void state.execute({ type: event.shiftKey ? "redo" : "undo", targetOperationId });
+      }
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && selected) {
+      event.preventDefault();
+      void duplicate();
+    } else if (
+      selected &&
+      editable &&
+      !dirty &&
+      ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    ) {
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      void patch(
+        selected,
+        moveCanvasPatch(
+          selected,
+          event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
+          event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0,
+        ),
+      );
+    } else if (
+      (event.key === "Delete" || event.key === "Backspace") &&
+      selected &&
+      editable &&
+      !dirty
+    ) {
+      event.preventDefault();
+      void remove();
+    } else if (event.key === "Escape") {
+      setConnectorFrom(null);
+      setTool("select");
+    }
+  }
+  async function reviewedRetry() {
+    if (!board || !state.failure) return;
+    const command = reviewedCanvasCommand(board, state.failure.operation.command);
+    if (!command) return;
+    state.discard();
+    if (await state.execute(command)) setDraft(null);
+  }
+  async function retryPending() {
+    if (await state.execute()) setDraft(null);
+  }
+  function discardPending() {
+    state.discard();
+    setDraft(null);
+  }
+
+  if (!board)
+    return (
+      <main className={styles.access}>
+        <Brand />
+        <h1>{t("canvas.team")}</h1>
+        {draft && recovery ? (
+          <CanvasDraftRecovery
+            draft={draft}
+            reason={recovery}
+            disabled={state.saving}
+            onDiscard={discardPending}
+          />
+        ) : null}
+        {state.loading ? (
+          <p role="status">{t("boards.loading")}</p>
+        ) : (
+          <>
+            <p role="alert" lang="en-CA">
+              {state.error || t("boards.unavailable")}
+            </p>
+            {deleteAttempted ? (
+              <>
+                {deleting ? <p role="status">{t("canvas.saving")}</p> : null}
+                {deleteError ? (
+                  <p className="error" role="alert" lang="en-CA">
+                    {deleteError}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  className="button"
+                  disabled={deleting}
+                  onClick={() => void deleteBoard()}
+                >
+                  {t("boards.retry")}
+                </button>
+              </>
+            ) : null}
+            <button type="button" className="button" onClick={() => void state.refresh()}>
+              {t("boards.refresh")}
+            </button>
+            <GuardedLink href={`/signin?returnTo=${encodeURIComponent(`/canvas/${id}`)}`}>
+              {t("canvas.signIn")}
+            </GuardedLink>
+            <GuardedLink href="/boards">{t("boards.back")}</GuardedLink>
+          </>
+        )}
+      </main>
+    );
+  const frozen = !board.capabilities.edit;
+  return (
+    <main
+      className={styles.editor}
+      onKeyDown={keyboard}
+      onKeyUp={(event) => {
+        if (event.code === "Space" && restoredTool.current) {
+          setTool(restoredTool.current);
+          restoredTool.current = null;
+        }
+      }}
+    >
+      <header className={styles.header}>
+        <GuardedLink className={styles.back} href="/boards">
+          ← {t("boards.title")}
+        </GuardedLink>
+        <div className={styles.title}>
+          <h1 lang="" dir="auto">
+            {board.title}
+          </h1>
+          <p>
+            {t("canvas.origin")}:{" "}
+            <span lang="">
+              {board.organizationName ? `${board.organizationName} · ` : ""}
+              {board.workspaceName ?? board.title}
+            </span>{" "}
+            · {t(board.role === "owner" ? "role.owner" : `canvas.${board.role}`)}
+          </p>
+        </div>
+        <p className={styles.saveStatus} role="status">
+          {state.saving
+            ? t("canvas.saving")
+            : state.failure
+              ? t("canvas.conflict")
+              : t(`canvas.${state.connection}`)}
+        </p>
+        {board.capabilities.share ? (
+          <button
+            type="button"
+            className="button"
+            onClick={() => setSharing(true)}
+            disabled={busy || dirty}
+          >
+            {t("canvas.share")}
+          </button>
+        ) : null}
+      </header>
+      <div className={styles.toolbar} role="group" aria-label={t("boards.richTypes")}>
+        <button
+          type="button"
+          className="button-quiet"
+          aria-pressed={tool === "select"}
+          onClick={() => setTool("select")}
+        >
+          {t("boards.selectTool")}
+        </button>
+        <button
+          type="button"
+          className="button-quiet"
+          aria-pressed={tool === "hand"}
+          onClick={() => setTool("hand")}
+        >
+          {t("canvas.hand")}
+        </button>
+        <span className={styles.divider} />
+        {(["sticky", "text", "rect", "ellipse"] as const).map((type) => (
+          <button
+            type="button"
+            className="button-quiet"
+            key={type}
+            disabled={frozen || busy || board.objects.length >= 500}
+            onClick={() => void add(type)}
+          >
+            {t(
+              type === "sticky"
+                ? "canvas.sticky"
+                : type === "text"
+                  ? "boards.textTool"
+                  : type === "rect"
+                    ? "boards.rectangleTool"
+                    : "boards.ellipseTool",
+            )}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="button-quiet"
+          aria-pressed={tool === "connector"}
+          disabled={frozen || busy || dirty}
+          onClick={() => {
+            setTool("connector");
+            setConnectorFrom(selectedId);
+          }}
+        >
+          {t("canvas.connector")}
+        </button>
+        <span className={styles.divider} />
+        <button
+          type="button"
+          className="button-quiet"
+          disabled={frozen || busy || dirty || !board.undoOperationId}
+          onClick={() =>
+            board.undoOperationId &&
+            void state.execute({ type: "undo", targetOperationId: board.undoOperationId })
+          }
+        >
+          {t("boards.undo")}
+        </button>
+        <button
+          type="button"
+          className="button-quiet"
+          disabled={frozen || busy || dirty || !board.redoOperationId}
+          onClick={() =>
+            board.redoOperationId &&
+            void state.execute({ type: "redo", targetOperationId: board.redoOperationId })
+          }
+        >
+          {t("boards.redo")}
+        </button>
+        <button
+          type="button"
+          className="button-quiet"
+          aria-expanded={outline}
+          onClick={() => setOutline(!outline)}
+        >
+          {t("canvas.objects")}
+        </button>
+        {board.boardType === "workshop" && board.capabilities.facilitate ? (
+          <button
+            className="button-quiet"
+            type="button"
+            aria-expanded={workshop}
+            onClick={() => setWorkshop(!workshop)}
+          >
+            {t("canvas.workshop.controls")}
+          </button>
+        ) : null}
+      </div>
+      {frozen ? <p className={styles.readOnlyNotice}>{t("canvas.readOnly")}</p> : null}
+      {tool === "connector" ? (
+        <p className={styles.readOnlyNotice} role="status">
+          {t("canvas.connectHelp")}
+        </p>
+      ) : null}
+      {state.failure && !recovery ? (
+        <section className={styles.failure} role="alert">
+          <strong>{t(state.failure.conflict ? "canvas.conflict" : "canvas.offline")}</strong>
+          <p>{t("canvas.conflictHelp")}</p>
+          <ul>
+            {state.failure.operation.command.type === "batch"
+              ? state.failure.operation.command.operations.map((operation, index) => (
+                  <li key={index}>
+                    {operation.type === "create"
+                      ? operation.object.text
+                      : operation.type === "update"
+                        ? (operation.patch.text ??
+                          `${operation.patch.x ?? ""}, ${operation.patch.y ?? ""}`)
+                        : t("boards.deleteElement")}
+                  </li>
+                ))
+              : null}
+          </ul>
+          <div className={styles.actions}>
+            {state.failure.conflict ? (
+              <button
+                type="button"
+                className="button"
+                disabled={!reviewedCanvasCommand(board, state.failure.operation.command)}
+                onClick={() => void reviewedRetry()}
+              >
+                {t("canvas.applyReviewed")}
+              </button>
+            ) : (
+              <button type="button" className="button" onClick={() => void retryPending()}>
+                {t("boards.retry")}
+              </button>
+            )}
+            <button type="button" className="button-quiet" onClick={discardPending}>
+              {t("canvas.discard")}
+            </button>
+          </div>
+        </section>
+      ) : null}
+      {state.error ? (
+        <p className={styles.readOnlyNotice} role="alert" lang="en-CA">
+          {state.error}
+        </p>
+      ) : null}
+      {draft && recovery ? (
+        <CanvasDraftRecovery
+          draft={draft}
+          reason={recovery}
+          disabled={state.saving}
+          onDiscard={discardPending}
+        />
+      ) : null}
+      <div className={styles.workspace}>
+        <div className={styles.stage} ref={stage}>
+          <CanvasSurface
+            objects={board.objects}
+            viewport={viewport}
+            onViewport={setViewport}
+            selectedId={selectedId}
+            onSelect={changeSelection}
+            tool={tool}
+            canEdit={board.capabilities.edit && !busy && !dirty}
+            canFacilitate={board.capabilities.facilitate}
+            isObjectEditable={(object) => canChangeObject(board, object)}
+            onPatch={patch}
+            onConnect={(next) => void connect(next)}
+            onCursor={(point) => {
+              cursor.current = point;
+            }}
+            members={members}
+            canvasId={board.id}
+            sourceBoardId={board.sourceBoardId ?? undefined}
+            sourceBoard={board.sourceBoard}
+          />
+          {!board.objects.length ? <p className={styles.emptyCanvas}>{t("canvas.empty")}</p> : null}
+          <div className={styles.navigation} role="group" aria-label={t("canvas.zoom")}>
+            <button className="button-quiet" type="button" onClick={() => fit()}>
+              {t("canvas.fit")}
+            </button>
+            <button
+              className="button-quiet"
+              type="button"
+              disabled={!selected}
+              onClick={() => fit(true)}
+            >
+              {t("canvas.fitSelection")}
+            </button>
+            <button
+              className="button-quiet"
+              type="button"
+              aria-label={t("canvas.zoom") + " −"}
+              onClick={() =>
+                setViewport(
+                  zoomAt(
+                    viewport,
+                    {
+                      x: (stage.current?.clientWidth ?? 900) / 2,
+                      y: (stage.current?.clientHeight ?? 650) / 2,
+                    },
+                    viewport.zoom / 1.25,
+                  ),
+                )
+              }
+            >
+              −
+            </button>
+            <output>
+              {formatNumber(locale, viewport.zoom, { style: "percent", maximumFractionDigits: 0 })}
+            </output>
+            <button
+              className="button-quiet"
+              type="button"
+              aria-label={t("canvas.zoom") + " +"}
+              onClick={() =>
+                setViewport(
+                  zoomAt(
+                    viewport,
+                    {
+                      x: (stage.current?.clientWidth ?? 900) / 2,
+                      y: (stage.current?.clientHeight ?? 650) / 2,
+                    },
+                    viewport.zoom * 1.25,
+                  ),
+                )
+              }
+            >
+              +
+            </button>
+          </div>
+        </div>
+        {outline || workshop ? (
+          <aside className={styles.sidebar}>
+            {workshop ? (
+              <CanvasWorkshopControls
+                board={board}
+                onRefresh={() => void state.refresh()}
+                disabled={busy || dirty}
+              />
+            ) : null}
+            {outline ? (
+              <>
+                <details open>
+                  <summary>
+                    {t("canvas.objects")} · {formatNumber(locale, board.objects.length)}
+                  </summary>
+                  <ol className={styles.outline}>
+                    {board.objects.map((object, index) => (
+                      <li key={object.id}>
+                        <button
+                          type="button"
+                          aria-pressed={selectedId === object.id}
+                          onClick={() =>
+                            tool === "connector"
+                              ? void connect(object.id)
+                              : changeSelection(object.id)
+                          }
+                        >
+                          {object.type === "idea_ref"
+                            ? (object.idea?.body ??
+                              board.sourceBoard?.ideas.find((idea) => idea.id === object.ideaId)
+                                ?.body ??
+                              t("canvas.protected"))
+                            : objectLabel(object, index)}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+                {selected && localDraft && !recovery ? (
+                  <form
+                    className={styles.inspector}
+                    onSubmit={(event) => void saveProperties(event)}
+                  >
+                    <h2>{t("boards.elementSettings")}</h2>
+                    {selected.type === "idea_ref" ? (
+                      <p className={styles.protected}>{t("canvas.protected")}</p>
+                    ) : (
+                      <label>
+                        {t("boards.textTool")}
+                        <textarea
+                          maxLength={2000}
+                          value={localDraft.text}
+                          disabled={!editable || busy}
+                          dir="auto"
+                          lang=""
+                          onChange={(event) =>
+                            setDraft({ ...localDraft, text: event.target.value })
+                          }
+                        />
+                      </label>
+                    )}
+                    {dirty && draft!.version !== selected.version ? (
+                      <div className={styles.draftConflict}>
+                        <strong>{t("canvas.currentVersion")}</strong>
+                        <p lang="" dir="auto">
+                          {selected.text}
+                        </p>
+                        <p>{t("canvas.conflictHelp")}</p>
+                      </div>
+                    ) : null}
+                    <div className={styles.numeric}>
+                      {(["x", "y", "width", "height"] as const).map((field) => (
+                        <label key={field}>
+                          {t(
+                            field === "x"
+                              ? "boards.positionX"
+                              : field === "y"
+                                ? "boards.positionY"
+                                : field === "width"
+                                  ? "boards.shapeWidth"
+                                  : "boards.shapeHeight",
+                          )}
+                          <input
+                            type="number"
+                            step={1}
+                            min={field === "width" || field === "height" ? 1 : -100000}
+                            max={field === "width" || field === "height" ? 10000 : 100000}
+                            value={localDraft[field]}
+                            disabled={!editable || busy}
+                            onChange={(event) => {
+                              if (Number.isFinite(event.currentTarget.valueAsNumber))
+                                setDraft({
+                                  ...localDraft,
+                                  [field]: event.currentTarget.valueAsNumber,
+                                });
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    {selected.type !== "idea_ref" ? (
+                      <label>
+                        {t("boards.strokeColor")}
+                        <select
+                          disabled={!editable || busy}
+                          value={localDraft.color}
+                          onChange={(event) =>
+                            setDraft({
+                              ...localDraft,
+                              color: event.target.value as CanvasObject["color"],
+                            })
+                          }
+                        >
+                          {(["yellow", "blue", "green", "pink", "purple", "white"] as const).map(
+                            (color) => (
+                              <option key={color} value={color}>
+                                {t(
+                                  color === "yellow" || color === "pink" || color === "white"
+                                    ? `canvas.color.${color}`
+                                    : color === "blue"
+                                      ? "boards.colorBlue"
+                                      : color === "green"
+                                        ? "boards.colorGreen"
+                                        : "boards.colorPurple",
+                                )}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                    ) : null}
+                    {canPublishCanvasObject(board, selected) ? (
+                      <>
+                        <label>
+                          {t("canvas.visibility")}
+                          <select
+                            aria-describedby="canvas-visibility-help"
+                            value={localDraft.visibility}
+                            disabled={busy}
+                            onChange={(event) =>
+                              setDraft({
+                                ...localDraft,
+                                visibility: event.target.value as CanvasObject["visibility"],
+                              })
+                            }
+                          >
+                            <option value="team">{t("canvas.teamOnly")}</option>
+                            <option value="published">{t("canvas.published")}</option>
+                          </select>
+                        </label>
+                        <small id="canvas-visibility-help">{t("canvas.publishHelp")}</small>
+                      </>
+                    ) : null}
+                    {!editable && selected.type !== "idea_ref" ? (
+                      <p className={styles.muted}>{t("canvas.readOnly")}</p>
+                    ) : null}
+                    {selected.type === "connector"
+                      ? (["fromId", "toId"] as const).map((key) => (
+                          <label key={key}>
+                            {t(key === "fromId" ? "canvas.connectorFrom" : "canvas.connectorTo")}
+                            <select
+                              disabled={!editable || busy}
+                              value={localDraft[key] ?? ""}
+                              onChange={(event) =>
+                                setDraft({ ...localDraft, [key]: event.target.value })
+                              }
+                            >
+                              <option value="">—</option>
+                              {board.objects
+                                .filter(
+                                  (object) =>
+                                    object.id !== selected.id && object.type !== "connector",
+                                )
+                                .map((object, index) => (
+                                  <option key={object.id} value={object.id}>
+                                    {objectLabel(object, index)}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                        ))
+                      : null}
+                    <button type="submit" className="button" disabled={!editable || busy || !dirty}>
+                      {t("canvas.saveChanges")}
+                    </button>
+                    {dirty ? (
+                      <button
+                        type="button"
+                        className="button-quiet"
+                        disabled={state.saving}
+                        onClick={() => setDraft(null)}
+                      >
+                        {t("canvas.discard")}
+                      </button>
+                    ) : null}
+                    {selected.type !== "idea_ref" ? (
+                      <div className={styles.actions}>
+                        <button
+                          type="button"
+                          className="button-quiet"
+                          disabled={!editable || busy || dirty}
+                          onClick={() => void duplicate()}
+                        >
+                          {t("canvas.duplicate")}
+                        </button>
+                        <button
+                          type="button"
+                          className="button-quiet"
+                          disabled={!editable || busy || dirty}
+                          onClick={() => void remove()}
+                        >
+                          {t("boards.deleteElement")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </form>
+                ) : (
+                  <p className={styles.muted}>{t("boards.noElements")}</p>
+                )}
+                <p className={styles.keyboardHelp}>{t("canvas.keyboard")}</p>
+                <p className={styles.muted}>
+                  {t("canvas.retention", { date: formatDateTime(locale, board.expiresAt) })}
+                </p>
+                {board.capabilities.archive ? (
+                  <button
+                    type="button"
+                    className="button-quiet"
+                    disabled={busy || dirty}
+                    onClick={() =>
+                      void state.execute({
+                        type: board.status === "archived" ? "restore" : "archive",
+                      })
+                    }
+                  >
+                    {t(board.status === "archived" ? "canvas.restore" : "canvas.archive")}
+                  </button>
+                ) : null}
+                {board.boardType === "team" && board.capabilities.delete ? (
+                  <button
+                    type="button"
+                    className="button-quiet"
+                    disabled={busy || dirty}
+                    onClick={() => void deleteBoard()}
+                  >
+                    {t("canvas.delete")}
+                  </button>
+                ) : null}
+                {deleteError ? (
+                  <p className="error" role="alert" lang="en-CA">
+                    {deleteError}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </aside>
+        ) : null}
+      </div>
+      <footer className={styles.footer}>
+        <label>
+          <input
+            type="checkbox"
+            checked={presence}
+            onChange={(event) => setPresence(event.target.checked)}
+          />{" "}
+          {t("canvas.presence")}
+        </label>
+        {presence ? (
+          <span>
+            {t("canvas.connected")}: {formatNumber(locale, members.length)}
+          </span>
+        ) : null}
+        <button type="button" className="button-quiet" onClick={() => void state.refresh()}>
+          {t("boards.refresh")}
+        </button>
+      </footer>
+      {sharing && board.capabilities.share ? (
+        <CanvasShareDialog
+          board={board}
+          onClose={() => setSharing(false)}
+          onRefresh={() => void state.refresh()}
+        />
+      ) : null}
+    </main>
+  );
+}
+
+export function CanvasEditor({ id }: { id: string }) {
+  return (
+    <NavigationGuardProvider>
+      <CanvasEditorContent id={id} key={id} />
+    </NavigationGuardProvider>
+  );
+}

@@ -241,6 +241,7 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  deleteIdeaBoardMetadata?(sourceBoardId: string): void;
   getSessionSummarySource?(
     workspaceId: string,
     kind: "presentation" | "survey",
@@ -487,6 +488,11 @@ export class MemoryRepository implements Repository {
     const instance = create();
     this.lifecycleExtensions.set(name, { instance, lifecycle: instance });
     return instance;
+  }
+
+  deleteIdeaBoardCanvasMetadata(sourceBoardId: string) {
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.deleteIdeaBoardMetadata?.(sourceBoardId);
   }
 
   hasLibraryArtifact(

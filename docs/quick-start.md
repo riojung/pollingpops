@@ -72,6 +72,28 @@ Surveys. Version-1 Surveys and their frozen runs remain readable. New content us
 do not roll back to an older binary that cannot read it. Keep these beta flags allowlisted rather
 than enabling Surveys globally before the release gates pass.
 
+## Try the shared Idea Board pilot
+
+After applying the current migrations, enable these independent flags for an allowlisted
+workspace, or configure their equivalent Admin feature policies:
+
+```dotenv
+FEATURE_IDEA_BOARDS=true
+FEATURE_CANVAS_BOARDS=true
+FEATURE_CANVAS_BOARD_SHARING=true
+FEATURE_CANVAS_BOARD_REALTIME=true
+CORE_PARITY_WORKSPACE_ALLOWLIST=YOUR_WORKSPACE_UUID
+```
+
+Restart the API through your existing runtime. Open **Idea boards → New board → Team canvas**,
+enter a title and create the board. Add a sticky note, edit its text and choose **Save changes**.
+To try collaboration, use **Share board** to invite another verified, licensed member of your
+organization; the member keeps their own workspace. Choose **Guided workshop** instead to
+collect, moderate and vote on guest ideas, or add a canvas to an existing draft/collecting
+workshop. See the [user guide](user-guide.md#idea-boards-and-shared-canvases) for editing,
+privacy and recovery behavior. These opt-in flags enable a pilot; they do not establish
+production capacity or bypass workspace licensing.
+
 ## What you need
 
 - A running Docker Desktop, Docker Engine, or Docker-backed Colima profile, with Docker Compose v2

@@ -1,4 +1,8 @@
+import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
+import { canvasMessages } from "../../canvas-messages";
 const messages = {
+  ...canvasMessages("en-CA"),
+  ...canvasWorkshopMessages("en-CA"),
   "boards.title": "Idea boards",
   "boards.description": "Collect ideas, group them together, and choose shared priorities.",
   "boards.create": "Create board",

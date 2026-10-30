@@ -1,6 +1,10 @@
+import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
+import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
+  ...canvasMessages("ko-KR"),
+  ...canvasWorkshopMessages("ko-KR"),
   "boards.more": "보드 더 불러오기",
   "boards.title": "아이디어 보드",
   "boards.description": "아이디어를 모으고 그룹으로 정리하여 함께 우선순위를 정하세요.",

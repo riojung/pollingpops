@@ -3,6 +3,16 @@ import AxeBuilder from "@axe-core/playwright";
 import { devices, expect, test, type Page } from "@playwright/test";
 import { signInBeta } from "./sign-in";
 
+async function openWorkshopCreate(page: Page) {
+  await page.getByRole("button", { name: "New board", exact: true }).click();
+  await page.getByRole("button", { name: "Guided workshop", exact: true }).click();
+  const identity = page.getByRole("combobox", { name: "Participant identity", exact: true });
+  if (!(await identity.isVisible())) {
+    await page.getByText("Workshop settings", { exact: true }).click();
+  }
+  await expect(identity).toBeVisible();
+}
+
 async function hostCommand(page: Page, action: () => Promise<unknown>) {
   const [response] = await Promise.all([
     page.waitForResponse(
@@ -50,6 +60,7 @@ for (const mobile of [false, true]) {
     page.setDefaultTimeout(15_000);
     await signInBeta(page);
     await page.goto("/boards");
+    await openWorkshopCreate(page);
     const title = `Synthetic rich board ${randomUUID().slice(0, 8)}`;
     const idea = `Synthetic diagram ${randomUUID().slice(0, 8)}`;
     const caption = "A reference for this diagram";
@@ -218,6 +229,7 @@ for (const mobile of [false, true]) {
     await page.goto("/boards");
     const title = `Synthetic board ${randomUUID().slice(0, 8)}`;
     const firstIdea = `Synthetic first priority ${"LongUnbrokenIdea".repeat(15)}`;
+    await openWorkshopCreate(page);
     await page.getByLabel("Board title", { exact: true }).fill(title);
     await page
       .getByLabel("Prompt", { exact: true })
@@ -364,8 +376,11 @@ for (const mobile of [false, true]) {
       ).toContainText("This board is unavailable or has expired.");
 
       // A separate alias board requests an explicit board-only nickname at admission.
+      await openWorkshopCreate(page);
       await page.getByLabel("Board title", { exact: true }).fill(`${title} alias`);
-      await page.getByLabel("Participant identity", { exact: true }).selectOption("alias");
+      await page
+        .getByRole("combobox", { name: "Participant identity", exact: true })
+        .selectOption("alias");
       await page.getByRole("button", { name: "Create board", exact: true }).click();
       await expect(page).toHaveURL(/\/boards\/[0-9a-f-]{36}$/);
       const aliasId = new URL(page.url()).pathname.split("/").at(-1)!;
@@ -396,7 +411,7 @@ for (const mobile of [false, true]) {
       await page.goto("/dashboard");
       await page.getByRole("link", { name: "Idea boards", exact: true }).click();
       await expect(page).toHaveURL(/\/boards$/);
-      await expect(page.getByRole("heading", { name: "Create board", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "New board", exact: true })).toBeVisible();
     } catch (caught) {
       primaryFailure = caught;
     }

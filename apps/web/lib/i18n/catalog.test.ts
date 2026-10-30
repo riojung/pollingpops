@@ -143,6 +143,7 @@ describe("localized message catalogs", () => {
     expect(localeDomainsForPath("/practice/example")).toEqual(["report-round"]);
     expect(localeDomainsForPath("/followup/example")).toEqual(["report-round"]);
     expect(localeDomainsForPath("/templates")).toEqual(["workspace-pages"]);
+    expect(localeDomainsForPath("/canvas/board-id")).toEqual(["idea-boards"]);
     expect(localeDomainsForPath("/privacy")).toEqual([]);
     expect(localeDomainsForPath("/terms")).toEqual([]);
     expect(localeDomainsForPath("/pricing")).toEqual([]);

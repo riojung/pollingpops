@@ -466,3 +466,45 @@ Check the same image cannot be attached to another board or ordinary authored co
 existing orphan cleanup and media deletion jobs running. Preserve migration 076 and private
 provenance on rollback; restoring readers that predate these protections is not a safe media
 rollback. Pause collection and restore the matching image set if a rich-board rollout fails.
+
+### Shared Idea Board canvases
+
+Apply additive migration `079_canvas_boards.sql` with migration credentials before deploying
+the matching server and web images. It adds versioned canvas metadata, typed objects, board
+grants and invitations, operation receipts and a metadata outbox with tenant and workshop
+lifecycle guards. Legacy Idea Board aggregates and links remain valid. Creating a workshop
+canvas is an explicit facilitator action; voting and closed workshops cannot be upgraded into
+an editable scene. Keep migration 079 during rollback.
+
+The independent **Canvas boards**, **Canvas board sharing** and **Canvas board live updates**
+policies are opt-in. Their inherited deployment flags are `FEATURE_CANVAS_BOARDS`,
+`FEATURE_CANVAS_BOARD_SHARING` and `FEATURE_CANVAS_BOARD_REALTIME`, all defaulting to false.
+They follow the existing core-parity workspace allowlist and feature-policy precedence.
+Canvas boards depends on Brainstorming boards; sharing and live updates depend on Canvas
+boards. Deploy the matching admin console so operators can manage all three keys. Enabling
+creation does not automatically enable sharing or live updates.
+
+Pausing creation or sharing preserves authorized existing reads, revocation and deletion.
+With live updates paused, clients fall back to authorized polling. For an incident, pause new
+creation/sharing and retain matching readers for existing board links. Before rolling back to
+an older image, remove explicit canvas policy entries by returning all three to **Inherit
+deployment**, and leave their environment flags false. Older images have no canvas routes;
+restore compatible readers to make existing links available again. Do not drop canvas data or
+downgrade frozen workshop content to simulate a writer pause.
+
+Use the existing authenticated HTTP/CORS proxy path for bounded fetch streams. Proxy buffering
+must be disabled for `/v1/canvas-boards/*/events` and workshop guest event streams. Each API node
+reads its own outbox cursor; Redis holds short-lived opt-in team presence. Rehearse access/seat
+revocation across two nodes, guest cookie omission, pending-content privacy, media removal,
+voting freeze and expiry before enabling a pilot.
+
+Admission caps are 100 retained canvases per workspace, 500 objects and 2 MiB per document.
+Workshop canvases reserve 200 object slots for source ideas. Each document also has a lifetime
+pilot limit of 5,000 accepted mutation receipts, with a separate 4 MiB inverse-history budget;
+owner deletion remains available at the limit. These caps do not establish a
+production editor-count or latency guarantee. Run `pnpm test:e2e:canvas` for browser acceptance
+and `pnpm exec tsx tests/load/canvas-load.mts` for the opt-in correctness/capacity smoke; its
+header documents the restricted PostgreSQL setup. The smoke measures durable acknowledgements
+and snapshot reads, not browser delivery or render frame rate. See the
+[canvas architecture decision](../decisions/002-idea-board-canvas.md) and
+[implementation plan](../idea-board-canvas-implementation-plan.md) for scope and evidence limits.

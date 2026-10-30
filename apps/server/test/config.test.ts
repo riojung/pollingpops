@@ -97,6 +97,9 @@ describe("production configuration", () => {
     expect(config.FEATURE_FEEDBACK_EXPORTS).toBe(false);
     expect(config.FEATURE_SESSION_SUMMARIES).toBe(false);
     expect(config.FEATURE_IDEA_BOARDS).toBe(false);
+    expect(config.FEATURE_CANVAS_BOARDS).toBe(false);
+    expect(config.FEATURE_CANVAS_BOARD_SHARING).toBe(false);
+    expect(config.FEATURE_CANVAS_BOARD_REALTIME).toBe(false);
     expect(config.CORE_PARITY_WORKSPACE_ALLOWLIST).toEqual([]);
     expect(config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST).toEqual([]);
     expect(config.EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST).toEqual([]);

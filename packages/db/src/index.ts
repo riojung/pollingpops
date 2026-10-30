@@ -26,3 +26,6 @@ export * from "./platform.js";
 export * from "./session-summaries.js";
 export * from "./operator-founder.js";
 export * from "./idea-boards.js";
+
+export * from "./canvas-board-types.js";
+export * from "./canvas-boards.js";

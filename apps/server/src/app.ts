@@ -15,6 +15,7 @@ import {
   createScopedQnaRepository,
   createSurveyRepository,
   createIdeaBoardRepository,
+  createCanvasBoardRepository,
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
@@ -66,6 +67,7 @@ import { registerLibraryRoutes } from "./library-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
 import { registerIdeaBoardRoutes } from "./idea-board-routes.js";
+import { registerCanvasBoardRoutes } from "./canvas-board-routes.js";
 import { registerSessionSummaryRoutes } from "./session-summary-routes.js";
 import { createSessionSummaryExportService } from "./session-summary-export.js";
 import { registerFeedbackRoutes } from "./feedback-routes.js";
@@ -506,6 +508,19 @@ export async function buildApp(
     metrics,
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
+  const canvasBoards = createCanvasBoardRepository(repository, {
+    communityMode: config.COMMUNITY_MODE,
+    communityRetentionDays: config.COMMUNITY_REPORT_RETENTION_DAYS,
+  });
+  const canvasBoardLive = await registerCanvasBoardRoutes(app, {
+    repository,
+    auth,
+    config,
+    canvases: canvasBoards,
+    cache,
+    storage,
+    metrics,
+  });
   const summaryExports = overrides.summaryExports ?? createSessionSummaryExportService();
   await registerSessionSummaryRoutes(app, {
     repository,
@@ -610,5 +625,7 @@ export async function buildApp(
     presentationService,
     groups,
     libraryMetadata,
+    canvasBoards,
+    canvasBoardLive,
   };
 }

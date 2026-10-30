@@ -1,6 +1,10 @@
+import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
+import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
+  ...canvasMessages("fr-FR"),
+  ...canvasWorkshopMessages("fr-FR"),
   "boards.more": "Charger plus de tableaux",
   "boards.title": "Tableaux d’idées",
   "boards.description": "Recueillez des idées, regroupez-les et choisissez des priorités communes.",

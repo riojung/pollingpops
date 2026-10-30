@@ -47,6 +47,9 @@ const flagKeys: Partial<Record<ProductFeatureKey, keyof AppConfig>> = {
   surveys: "FEATURE_SURVEYS",
   sessionSummaries: "FEATURE_SESSION_SUMMARIES",
   ideaBoards: "FEATURE_IDEA_BOARDS",
+  canvasBoards: "FEATURE_CANVAS_BOARDS",
+  canvasBoardSharing: "FEATURE_CANVAS_BOARD_SHARING",
+  canvasBoardRealtime: "FEATURE_CANVAS_BOARD_REALTIME",
 };
 const professional = new Set<ProductFeatureKey>([
   "uxBeta",
@@ -75,6 +78,9 @@ const parity = new Set<ProductFeatureKey>([
   "surveys",
   "sessionSummaries",
   "ideaBoards",
+  "canvasBoards",
+  "canvasBoardSharing",
+  "canvasBoardRealtime",
 ]);
 const dependencies = new Map(
   productFeatureCatalog.map((feature) => [feature.key, feature.dependencies]),
@@ -154,6 +160,9 @@ export async function workspaceProductFeatures(
   ]);
   return {
     ideaBoards: features.enabled("ideaBoards"),
+    canvasBoards: features.enabled("canvasBoards"),
+    canvasBoardSharing: features.enabled("canvasBoardSharing"),
+    canvasBoardRealtime: features.enabled("canvasBoardRealtime"),
     multiSelectPolls: features.enabled("roundClientProtocol"),
     rankingPolls: features.enabled("roundClientProtocol"),
     openTextPolls: features.enabled("roundClientProtocol"),

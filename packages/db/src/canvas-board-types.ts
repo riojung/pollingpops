@@ -9,6 +9,14 @@ import type {
   CanvasObject,
   CanvasBoardEvent,
   IdeaBoardStored,
+  CanvasCommentThread,
+  CanvasTimer,
+  CanvasVersionMetadata,
+  CanvasFacilitationView,
+  CanvasFacilitationMutation,
+  CanvasFacilitationResponse,
+  CanvasVersionView,
+  CanvasGuestFacilitationView,
 } from "@openround/contracts";
 import type {
   OrganizationRecord,
@@ -63,6 +71,7 @@ export interface CanvasReceipt {
   undone: boolean;
   undoable: boolean;
   objectVersions?: Record<string, number>;
+  facilitationEntities?: { threadId?: string; messageId?: string; versionId?: string };
 }
 export interface CanvasState {
   board: CanvasBoardStored;
@@ -75,6 +84,16 @@ export interface CanvasState {
   }>;
   invitations: CanvasBoardInvitation[];
   receipts: CanvasReceipt[];
+  facilitation?: CanvasFacilitationStored;
+}
+export interface CanvasSavedVersion {
+  metadata: CanvasVersionMetadata;
+  objects: CanvasObject[];
+}
+export interface CanvasFacilitationStored {
+  threads: CanvasCommentThread[];
+  timer: CanvasTimer;
+  versions: CanvasSavedVersion[];
 }
 export interface CanvasMediaUpload {
   boardId: string;
@@ -104,10 +123,12 @@ export interface CanvasTransaction {
   metadata(id: string): Promise<CanvasBoardStored | null>;
   creation(workspaceId: string, operationId: string): Promise<CanvasBoardStored | null>;
   countWorkspace(workspaceId: string, now: Date): Promise<number>;
+  timer(boardId: string, lock?: boolean): Promise<CanvasTimer>;
   grant(boardId: string, userId: string): Promise<CanvasState["grants"][number] | null>;
   sourceMetadata(
     id: string,
     guestHash?: string,
+    lock?: boolean,
   ): Promise<
     | (Pick<
         IdeaBoardStored,
@@ -148,6 +169,35 @@ export type CanvasRun = <T>(
   work: (tx: CanvasTransaction) => Promise<T>,
 ) => Promise<T>;
 export interface CanvasBoardRepositoryApi {
+  getFacilitation(
+    actor: CanvasActor,
+    id: string,
+    clock?: CanvasClock,
+  ): Promise<CanvasFacilitationView>;
+  facilitate(
+    actor: CanvasActor,
+    id: string,
+    input: CanvasFacilitationMutation,
+    clock?: CanvasClock,
+  ): Promise<CanvasFacilitationResponse>;
+  getVersion(
+    actor: CanvasActor,
+    id: string,
+    versionId: string,
+    clock?: CanvasClock,
+  ): Promise<CanvasVersionView>;
+  getGuestFacilitation(
+    sourceBoardId: string,
+    tokenHash: string,
+    clock?: CanvasClock,
+  ): Promise<CanvasGuestFacilitationView | null>;
+  authorizeVersionMedia(
+    actor: CanvasActor,
+    id: string,
+    versionId: string,
+    mediaId: string,
+    clock?: CanvasClock,
+  ): Promise<{ workspaceId: string }>;
   create(
     actor: CanvasActor,
     input: CanvasBoardCreate,

@@ -215,8 +215,8 @@ metrics use bounded labels without content or principal identifiers.
 The 500-object/20-editor restricted PostgreSQL smoke passes correctness, retries, RLS and
 durability; durable acknowledgement p95 measured 821ms on the local test instance. This does
 not measure post-commit peer delivery, rendering, physical touch hardware or production capacity.
-These October 29 timings precede Order 5 and do not establish its capacity. Orders 5–7 were
-outside that initial increment; Order 5 is described below. AI, full offline editing and
+These October 29 timings precede Orders 5–6 and do not establish their capacity. Orders 5–7 were
+outside that initial increment; Orders 5–6 are described below. AI, full offline editing and
 character-level coauthoring remain outside the selected scope.
 See the [architecture decision](decisions/002-idea-board-canvas.md),
 [user guide](user-guide.md#idea-boards-and-shared-canvases) and
@@ -248,8 +248,68 @@ canvas browser journeys and two legacy workshop journeys pass, including Chromiu
 actions remain available in Object outline. Browser image tests use mocked object storage and
 scanning; this increment does not
 establish a production media-pipeline result, physical-touch acceptance or production load,
-commit-to-peer latency or rendering performance. Orders 6–7, including comments, timers,
-presenter follow, exports, version browsing and higher capacity, remain deferred.
+commit-to-peer latency or rendering performance. Order 6 follows below; Order 7's higher-capacity
+and further diagram/integration scope remains deferred.
+
+### Canvas facilitation Order 6 October 30 2026
+
+Implemented locally on `codex/idea-board-facilitation` from merged `main` baseline `db6dade` after
+Order 5/PR #166. This increment adds object-anchored team discussions, a server-clock timer,
+optional presenter following, permission-safe region exports and bounded manual saved versions.
+Controls cover ten locales. The full repository check and desktop/mobile browser acceptance pass
+locally; deployment and production performance acceptance remain separate.
+
+An independent facilitation V1 protocol leaves strict Canvas V1/V2 requests and accepted receipt
+hashes unchanged. Migration 081 adds forced-RLS comment/message, timer and checkpoint tables plus
+source/author cleanup and historical media references. Viewers read team comments without posting;
+eligible editors edit/delete their own messages, and owners/facilitators resolve and moderate.
+The guest facilitation projection contains the timer only, with no threads or saved history. Failed comment drafts
+stay in memory for explicit retry/review. Timer controls are revision-fenced, use server time,
+support 5 seconds–2 hours and never change workshop phases.
+
+Presentation is an opt-in, live-update-gated, 15-second Memory/Redis lease with atomic compare-and-set
+fencing. Pan, zoom, Escape, access loss or expiry ends following. Team members may receive a
+viewport; guests receive only an explicitly published frame, without private team coordinates or
+presenter identity. Cache tests use two real Valkey clients for contention and stale-lease cases.
+
+Exports produce a closed authorized SVG or local PNG for the whole board, current view or selected
+frame area, excluding pending content, credentials and system identity metadata. Limits remain
+25 image placements, 10 MiB per image, 20 MiB per export, 15-second server-render/local-conversion
+budgets and 4,096 pixels per output side. Manual checkpoints allow ten versions, 2 MiB per scene
+and 4 MiB in aggregate. Preview and historical media reads use current access and moderation.
+Layout restore changes existing-object geometry only, with current version fences, locks,
+protected cards, coherent frame/group movement and at most 50 updates; it never restores text,
+visibility, media identity or deleted objects.
+
+The rollout requires coordinated maintenance: drain/stop every old API writer and cleanup jobs
+process, apply 081, and start only matching facilitation-aware server/jobs/web images before
+admitting checkpoints. There is no independent checkpoint-admission switch. Keeping 081 installed
+does not make an 080 writer safe: it can remove references held only by checkpoints. Do not roll
+back to 080 server/jobs writers after checkpoints exist; use a compatible image set or forward
+repair. A creation-policy pause does not fence existing writes or cleanup workers.
+
+Validation passes `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, including
+1,487 web tests, 925 server tests, strict types, lint and production builds. All 17 configured
+canvas browser cases pass, covering comments and viewer permissions, timer and optional guest
+following, real SVG/PNG downloads, safe layout restore, and Chromium/WebKit at 320px in light
+and dark themes. Three follow-up export/mobile cases also pass after correcting the Download
+button's touch target. Visual review confirms the desktop and mobile export controls. The drawer
+regression retains unsent comments, version names and exact retry identity while hidden,
+preserves navigation warnings, and verifies that retrying a lost response creates no duplicate.
+
+Separate integration evidence includes 324 restricted-PostgreSQL passes (80 canvas cases, with
+one existing skip in the run), 21 facilitation/presenter HTTP cases and ten cache conformance
+cases including real Valkey. Response-delivery regressions reject stale history and discussion
+snapshots after canonical ideas are removed; saved-version media tests cover current permissions,
+credential boundaries and independent cache lifetimes. An independent review's confirmed
+source-removal race and drawer-toggle draft loss were fixed and independently rechecked.
+The 500-object, 20-editor pilot and workshop allowance of 300 ordinary objects are unchanged.
+No production media-pipeline, physical-touch, load, post-commit peer-latency or rendering-performance
+measurement is established for Order 6. Order 7 and AI remain outside this increment.
+
+See the [user guide](user-guide.md#idea-boards-and-shared-canvases),
+[upgrade procedure](runbooks/upgrade.md#canvas-facilitation-exports-and-saved-versions) and
+[architecture decision](decisions/002-idea-board-canvas.md#facilitation-and-historical-views).
 
 ### Standalone administrator authentication October 15 2026
 

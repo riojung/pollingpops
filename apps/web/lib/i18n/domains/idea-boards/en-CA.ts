@@ -1,10 +1,16 @@
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
+import { canvasExportMessages } from "../../canvas-export-messages";
+import { canvasPresenterMessages } from "../../canvas-presenter-messages";
 import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
 const messages = {
   ...canvasMessages("en-CA"),
   ...canvasAssetsMessages("en-CA"),
+  ...canvasFacilitationMessages("en-CA"),
+  ...canvasExportMessages("en-CA"),
+  ...canvasPresenterMessages("en-CA"),
   ...canvasProductivityMessages("en-CA"),
   ...canvasWorkshopMessages("en-CA"),
   "boards.title": "Idea boards",

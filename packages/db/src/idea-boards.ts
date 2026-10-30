@@ -744,6 +744,7 @@ class MemoryIdeaBoards {
       }
     }
     this.rows.set(row.id, parsed);
+    this.parent.updateIdeaBoardCanvasMetadata(row.id);
   }
   private remove(id: string, now = new Date()) {
     const row = this.rows.get(id);

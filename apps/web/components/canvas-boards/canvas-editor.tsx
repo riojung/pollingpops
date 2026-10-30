@@ -9,7 +9,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import type { CanvasObject, CanvasObjectCreate } from "@openround/contracts";
+import type { CanvasObject, CanvasObjectCreate, CanvasExportRegion } from "@openround/contracts";
 import { Brand } from "../brand";
 import { useLocale } from "../locale-provider";
 import { GuardedLink, NavigationGuardProvider, useNavigationBlocker } from "../navigation-guard";
@@ -55,10 +55,16 @@ import {
   type CanvasTransform,
 } from "./canvas-productivity";
 import { CanvasAssetTools } from "./canvas-asset-tools";
+import { CanvasFacilitationPanel } from "./canvas-facilitation-panel";
+import { CanvasExportDialog } from "./canvas-export-dialog";
+import { CanvasPresenterControls } from "./canvas-presenter-controls";
+import { canvasVisibleRegion, followCanvasRegion } from "./canvas-presentation";
+import { canvasFacilitationCopy } from "../../lib/i18n/canvas-facilitation-messages";
 import styles from "./canvas.module.css";
 
 function CanvasEditorContent({ id }: { id: string }) {
   const { t, locale } = useLocale();
+  const facilitationCopy = canvasFacilitationCopy(locale);
   function objectLabel(object: CanvasObject, index: number) {
     const name = t(
       object.type === "sticky"
@@ -95,6 +101,12 @@ function CanvasEditorContent({ id }: { id: string }) {
   const [sharing, setSharing] = useState(false);
   const [outline, setOutline] = useState(true);
   const [workshop, setWorkshop] = useState(false);
+  const [facilitation, setFacilitation] = useState(false);
+  const [facilitationMounted, setFacilitationMounted] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [visibleRegion, setVisibleRegion] = useState<CanvasExportRegion | null>(null);
+  const [navigation, setNavigation] = useState(0);
+  const followedRegion = useRef<CanvasExportRegion | null>(null);
   const [presence, setPresence] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -106,6 +118,38 @@ function CanvasEditorContent({ id }: { id: string }) {
   >([]);
   const [connectorFrom, setConnectorFrom] = useState<string | null>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const stopFollowing = useCallback(() => {
+    followedRegion.current = null;
+    setNavigation((value) => value + 1);
+  }, []);
+  const followRegion = useCallback((region: CanvasExportRegion | null) => {
+    followedRegion.current = region;
+    const element = stage.current;
+    if (!region || !element) return;
+    const next = followCanvasRegion(region, element.clientWidth, element.clientHeight);
+    if (next)
+      setViewport((previous) =>
+        previous.x === next.x && previous.y === next.y && previous.zoom === next.zoom
+          ? previous
+          : next,
+      );
+  }, []);
+  useLayoutEffect(() => {
+    const element = stage.current;
+    if (!element || !board) return;
+    const update = () => {
+      const region = canvasVisibleRegion(viewport, element.clientWidth, element.clientHeight);
+      setVisibleRegion((previous) =>
+        JSON.stringify(previous) === JSON.stringify(region) ? previous : region,
+      );
+      if (followedRegion.current) followRegion(followedRegion.current);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [board?.id, viewport, followRegion]);
   const cursor = useRef<CanvasPoint | null>(null);
   const restoredTool = useRef<CanvasTool | null>(null);
   const {
@@ -751,6 +795,25 @@ function CanvasEditorContent({ id }: { id: string }) {
         >
           {t("canvas.objects")}
         </button>
+        <button
+          type="button"
+          className="button-quiet"
+          aria-expanded={facilitation}
+          onClick={() => {
+            setFacilitationMounted(true);
+            setFacilitation((visible) => !visible);
+          }}
+        >
+          {facilitationCopy.title}
+        </button>
+        <button
+          type="button"
+          className="button-quiet"
+          disabled={uiBusy || dirty || gestureActive}
+          onClick={() => setExporting(true)}
+        >
+          {t("canvas.export.open")}
+        </button>
         {board.boardType === "workshop" && board.capabilities.facilitate ? (
           <button
             className="button-quiet"
@@ -762,6 +825,18 @@ function CanvasEditorContent({ id }: { id: string }) {
           </button>
         ) : null}
       </div>
+      <CanvasPresenterControls
+        boardId={board.id}
+        objects={board.objects}
+        canPresent={board.capabilities.facilitate}
+        viewportRegion={visibleRegion}
+        sourceBoardId={board.sourceBoardId ?? undefined}
+        publishedFrameId={
+          selected?.type === "frame" && selected.visibility === "published" ? selected.id : null
+        }
+        cancelKey={navigation}
+        onFollow={followRegion}
+      />
       {frozen ? <p className={styles.readOnlyNotice}>{t("canvas.readOnly")}</p> : null}
       {tool === "connector" ? (
         <p className={styles.readOnlyNotice} role="status">
@@ -834,6 +909,7 @@ function CanvasEditorContent({ id }: { id: string }) {
             objects={board.objects}
             viewport={viewport}
             onViewport={setViewport}
+            onInteract={stopFollowing}
             selectedId={selectedId}
             selectedIds={selectedIds}
             onSelectMany={(ids, additive) => selectMany(ids, additive, false)}
@@ -857,7 +933,12 @@ function CanvasEditorContent({ id }: { id: string }) {
             sourceBoard={board.sourceBoard}
           />
           {!board.objects.length ? <p className={styles.emptyCanvas}>{t("canvas.empty")}</p> : null}
-          <div className={styles.navigation} role="group" aria-label={t("canvas.zoom")}>
+          <div
+            className={styles.navigation}
+            role="group"
+            aria-label={t("canvas.zoom")}
+            onClickCapture={stopFollowing}
+          >
             <button className="button-quiet" type="button" onClick={() => fit()}>
               {t("canvas.fit")}
             </button>
@@ -912,8 +993,20 @@ function CanvasEditorContent({ id }: { id: string }) {
             </button>
           </div>
         </div>
-        {outline || workshop ? (
-          <aside className={styles.sidebar}>
+        {outline || workshop || facilitationMounted ? (
+          <aside className={styles.sidebar} hidden={!outline && !workshop && !facilitation}>
+            {facilitationMounted ? (
+              <div hidden={!facilitation}>
+                <CanvasFacilitationPanel
+                  board={board}
+                  selectedIds={selectedIds}
+                  disabled={uiBusy || dirty || gestureActive}
+                  onPlan={perform}
+                  onRefresh={() => void state.refresh()}
+                  onSelectObject={(objectId) => changeSelection(objectId)}
+                />
+              </div>
+            ) : null}
             {selectedIds.length ? (
               <CanvasSelectionTools
                 board={board}
@@ -1208,6 +1301,17 @@ function CanvasEditorContent({ id }: { id: string }) {
           </aside>
         ) : null}
       </div>
+      {exporting ? (
+        <CanvasExportDialog
+          boardId={board.id}
+          title={board.title}
+          objects={board.objects}
+          selectedIds={selectedIds}
+          viewportRegion={visibleRegion}
+          disabled={uiBusy || dirty || gestureActive}
+          onClose={() => setExporting(false)}
+        />
+      ) : null}
       <footer className={styles.footer}>
         <label>
           <input

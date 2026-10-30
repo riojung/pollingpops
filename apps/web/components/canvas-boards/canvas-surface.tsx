@@ -31,6 +31,7 @@ import {
   type CanvasTransform,
 } from "./canvas-productivity";
 import { canvasModelBounds, canvasSelectionBounds } from "./canvas-hierarchy";
+import { followCanvasRegion } from "./canvas-presentation";
 
 export type CanvasPatch = ReturnType<typeof CanvasObjectPatchSchema.parse>;
 export type CanvasTool = "select" | "hand" | "connector" | "marquee" | "pen";
@@ -50,6 +51,7 @@ export function CanvasSurface({
   objects,
   viewport,
   onViewport,
+  onInteract,
   selectedId,
   selectedIds,
   onSelect,
@@ -69,10 +71,12 @@ export function CanvasSurface({
   sourceBoard,
   guestToken,
   canvasId,
+  versionId,
 }: {
   objects: CanvasObject[];
   viewport: CanvasViewport;
   onViewport: (viewport: CanvasViewport) => void;
+  onInteract?: () => void;
   selectedId?: string | null;
   selectedIds?: string[];
   onSelect?: (id: string | null, additive?: boolean, revealInspector?: boolean) => void;
@@ -94,6 +98,7 @@ export function CanvasSurface({
   sourceBoard?: IdeaBoardView;
   guestToken?: string;
   canvasId?: string;
+  versionId?: string;
   onCursor?: (point: CanvasPoint) => void;
   members?: Array<{ userId: string; name: string; cursor: CanvasPoint | null }>;
 }) {
@@ -175,6 +180,7 @@ export function CanvasSurface({
       (event.target instanceof Element && event.target.closest("button,a,input,textarea,select"))
     )
       return;
+    onInteract?.();
     const position = point(event);
     pointers.current.set(event.pointerId, position);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -375,6 +381,7 @@ export function CanvasSurface({
       onPointerUp={(event) => void end(event)}
       onPointerCancel={cancel}
       onWheel={wheel}
+      onWheelCapture={() => onInteract?.()}
       data-tool={tool}
     >
       <defs>
@@ -527,6 +534,7 @@ export function CanvasSurface({
               {object.type === "image" && canvasId ? (
                 <CanvasImage
                   canvasId={canvasId}
+                  versionId={versionId}
                   mediaId={object.mediaId}
                   altText={object.altText}
                   width={object.width}
@@ -656,19 +664,43 @@ export function CanvasReadOnlySurface({
   sourceBoard,
   guestToken,
   canvasId,
+  versionId,
   label,
+  followRegion,
+  onInteract,
 }: {
   objects: CanvasObject[];
   sourceBoardId?: string;
   sourceBoard?: IdeaBoardView;
   guestToken?: string;
   canvasId?: string;
+  versionId?: string;
   label?: string;
+  followRegion?: CanvasBounds | null;
+  onInteract?: () => void;
 }) {
   const { t } = useLocale();
   const container = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT);
   const [list, setList] = useState(false);
+  useEffect(() => {
+    const element = container.current;
+    if (!element || !followRegion) return;
+    const update = () => {
+      const next = followCanvasRegion(followRegion, element.clientWidth, element.clientHeight);
+      if (next)
+        setViewport((previous) =>
+          previous.x === next.x && previous.y === next.y && previous.zoom === next.zoom
+            ? previous
+            : next,
+        );
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [followRegion, list]);
   const visible = objects.filter(
     (object) =>
       object.type !== "idea_ref" ||
@@ -696,12 +728,22 @@ export function CanvasReadOnlySurface({
   return (
     <section className={styles.readOnly} aria-label={label ?? t("canvas.team")}>
       <div className={styles.readOnlyTools}>
-        <button className="button-quiet" onClick={fit} type="button">
+        <button
+          className="button-quiet"
+          onClick={() => {
+            onInteract?.();
+            fit();
+          }}
+          type="button"
+        >
           {t("canvas.fit")}
         </button>
         <button
           className="button-quiet"
-          onClick={() => setList(!list)}
+          onClick={() => {
+            onInteract?.();
+            setList(!list);
+          }}
           aria-expanded={list}
           type="button"
         >
@@ -751,10 +793,12 @@ export function CanvasReadOnlySurface({
             objects={visible}
             viewport={viewport}
             onViewport={setViewport}
+            onInteract={onInteract}
             sourceBoardId={sourceBoardId}
             sourceBoard={sourceBoard}
             guestToken={guestToken}
             canvasId={canvasId}
+            versionId={versionId}
           />
         </div>
       )}

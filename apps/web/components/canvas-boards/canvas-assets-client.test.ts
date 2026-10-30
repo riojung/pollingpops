@@ -10,12 +10,65 @@ vi.mock("../../lib/api", async (original) => ({
 const board = "00000000-0000-4000-8000-000000000001";
 const media = "00000000-0000-4000-8000-000000000002";
 const source = "00000000-0000-4000-8000-000000000003";
+const version = "00000000-0000-4000-8000-000000000004";
 const token = "a".repeat(64);
 afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllGlobals();
 });
 describe("canvas image transport", () => {
+  it("reads a saved version through its board/version/media route with creator credentials and no caching", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(new Blob(["saved image"]), { headers: { "content-type": "image/png" } }),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const abort = new AbortController();
+    await expect(
+      fetchCanvasImage(board, media, abort.signal, undefined, version),
+    ).resolves.toBeInstanceOf(Blob);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(
+      `https://api.example.test/v1/canvas-boards/${board}/versions/${version}/media/${media}`,
+      {
+        credentials: "include",
+        cache: "no-store",
+        referrerPolicy: "no-referrer",
+        signal: abort.signal,
+      },
+    );
+    expect(api.fetch).not.toHaveBeenCalled();
+  });
+  it.each([version, ""])(
+    "rejects a guest saved-version request before any network access %#",
+    async (versionId) => {
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      await expect(
+        fetchCanvasImage(board, media, undefined, { sourceBoardId: source, token }, versionId),
+      ).rejects.toThrow();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(api.fetch).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    { boardId: "../another-board", mediaId: media, versionId: version },
+    { boardId: board, mediaId: "../another-image", versionId: version },
+    { boardId: board, mediaId: media, versionId: "../another-version" },
+    { boardId: board, mediaId: media, versionId: `${version}/media` },
+    { boardId: board, mediaId: media, versionId: "" },
+  ])(
+    "rejects invalid saved-image path segments before network access %#",
+    async ({ boardId, mediaId, versionId }) => {
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      await expect(
+        fetchCanvasImage(boardId, mediaId, undefined, undefined, versionId),
+      ).rejects.toThrow("Invalid canvas");
+      expect(fetch).not.toHaveBeenCalled();
+      expect(api.fetch).not.toHaveBeenCalled();
+    },
+  );
   it("uploads without creator cookies to storage and finalizes only in the same board", async () => {
     api.fetch
       .mockResolvedValueOnce({

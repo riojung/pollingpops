@@ -7655,7 +7655,18 @@ export class PostgresRepository implements Repository {
             board.title, board.board_type AS "boardType", board.source_board_id AS "sourceBoardId",
             board.status, board.created_at AS "createdAt", board.updated_at AS "updatedAt", board.expires_at AS "expiresAt",
             COALESCE((SELECT jsonb_agg(object.data ORDER BY object.id) FROM canvas_board_objects object
-              WHERE object.board_id=board.id AND object.data->>'type'<>'idea_ref'),'[]'::jsonb) AS objects
+              WHERE object.board_id=board.id AND object.data->>'type'<>'idea_ref'),'[]'::jsonb) AS objects,
+            jsonb_build_object(
+              'timer',(SELECT timer.data FROM canvas_board_timers timer WHERE timer.board_id=board.id),
+              'threads',COALESCE((SELECT jsonb_agg(thread.data||jsonb_build_object('messages',
+                COALESCE((SELECT jsonb_agg(message.data||jsonb_build_object('authorId',message.author_id) ORDER BY message.created_at,message.id)
+                  FROM canvas_board_comment_messages message WHERE message.board_id=board.id AND message.thread_id=thread.id),'[]'::jsonb)))
+                FROM canvas_board_comment_threads thread JOIN canvas_board_objects anchor ON anchor.board_id=thread.board_id AND anchor.id=thread.object_id
+                WHERE thread.board_id=board.id AND anchor.data->>'type'<>'idea_ref'),'[]'::jsonb),
+              'versions',COALESCE((SELECT jsonb_agg(version.data||jsonb_build_object('createdBy',version.created_by,'objects',
+                COALESCE((SELECT jsonb_agg(object) FROM jsonb_array_elements(version.objects) object WHERE object->>'type'<>'idea_ref'),'[]'::jsonb)) ORDER BY version.created_at,version.id)
+                FROM canvas_board_versions version WHERE version.board_id=board.id),'[]'::jsonb)
+            ) AS facilitation
            FROM canvas_boards board WHERE board.workspace_id=ANY($1::uuid[]) AND board.expires_at>clock_timestamp() ORDER BY board.id`,
         );
         const surveyRooms = await queryWorkspaceData(

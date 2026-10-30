@@ -1,0 +1,25 @@
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  min-width: 0;
+}
+.controls span {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.controls small,
+.controls p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ui-text-subtle);
+}
+.controls button {
+  max-width: 100%;
+  white-space: normal;
+}

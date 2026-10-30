@@ -1,4 +1,7 @@
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
+import { canvasExportMessages } from "../../canvas-export-messages";
+import { canvasPresenterMessages } from "../../canvas-presenter-messages";
 import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
@@ -7,6 +10,9 @@ import type { IdeaBoardMessages } from "./en-CA";
 const messages: IdeaBoardMessages = {
   ...canvasMessages("ja-JP"),
   ...canvasAssetsMessages("ja-JP"),
+  ...canvasFacilitationMessages("ja-JP"),
+  ...canvasExportMessages("ja-JP"),
+  ...canvasPresenterMessages("ja-JP"),
   ...canvasProductivityMessages("ja-JP"),
   ...canvasWorkshopMessages("ja-JP"),
   "boards.more": "さらにボードを読み込む",

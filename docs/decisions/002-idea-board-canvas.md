@@ -1,12 +1,13 @@
 # Idea Board canvas architecture
 
-Date: October 29, 2026; productivity extension October 30, 2026
+Date: October 29, 2026; productivity and facilitation extensions October 30, 2026
 
 ## Decision
 
 The initial customer pilot implements orders 0–4 of the
 [canvas implementation plan](../idea-board-canvas-implementation-plan.md); Order 5 extends it
-with the productivity tools described below. Orders 6–7 remain deferred. Use a separately
+with productivity tools, and Order 6 adds the bounded facilitation tools described below.
+Order 7 remains deferred. Use a separately
 versioned, typed canvas domain with server-authoritative object operations, board-scoped sharing,
 and metadata-only live notifications. Preserve the existing Idea Board workshop state machine,
 guest credentials, moderation, voting, and scanned media.
@@ -54,7 +55,7 @@ enforce permissions, ancestry, lock-only toggles, expected related versions and 
 budget. Privacy removals stay terminal even when removing their dependent scene relationships.
 
 Native images use board authorization, private scanned bytes and explicit media references that
-include retained undo history. Generic media/content routes cannot attach or serve those assets.
+include retained undo history and manual saved versions. Generic media/content routes cannot attach or serve those assets.
 Guest image delivery requires a currently published object and a fresh source-board credential.
 Public children are flattened from omitted private frames; private children and connector
 endpoints are never promoted. The original manually authored template factory runs inside canvas
@@ -65,7 +66,7 @@ published authored scaffolding; ordinary new objects retain their private defaul
 Image reservations are bounded to 100 per board lifetime and 200 MiB in total, with JPEG, PNG or
 WebP files of at most 10 MiB and required alternative text. Scanning and authorized private byte
 delivery reuse the existing media pipeline. Unattached reservations become cleanup-eligible after
-15 minutes; current objects and retained inverse history protect referenced images from pruning.
+15 minutes; current objects, retained inverse history and saved versions protect referenced images from pruning.
 
 Guided starter creation checkpoints source and canvas retry keys plus the acknowledged source ID
 in bounded account/workspace-scoped tab storage. HTTP setup context is a mismatch guard against
@@ -98,6 +99,53 @@ Text editing initially uses explicit save and conflict review. Two users may edi
 objects concurrently. Simultaneous character-level editing and unrestricted offline coauthoring
 are outside this release. Rejected or uncertain text remains available locally for recovery;
 an ordinary refresh must not silently replace a dirty text field.
+
+## Facilitation and historical views
+
+Order 6 uses an independent facilitation schema-version-1 protocol and migration 081. Its
+operation IDs and thread/timer version fences leave the strict Canvas V1/V2 request shapes and
+accepted retry hashes unchanged. Comment threads/messages, timer state and named checkpoints
+use board-scoped forced-RLS tables and the existing source/board lifecycle boundary.
+
+Comments are plain text attached to current objects and visible only to authorized team readers.
+Eligible editors create/reply and edit/delete their own messages; owners/facilitators resolve,
+reopen and moderate. Viewers remain read-only, and guest projections contain no discussions or
+history. Local failed text stays in editor memory for exact retry or explicit conflict review;
+it is not written to browser guest-content storage. Discussion bounds are 100 threads, 20 messages
+per thread, 500 messages and 512 KiB in total. Object removal and source moderation remove
+dependent discussions; author deletion purges that author's retained messages.
+
+The owner/facilitator timer is a durable server-clock countdown of 5 seconds to 2 hours, with
+revision-fenced start, pause, resume and reset. Guests receive only its read-only projection.
+Browser elapsed time uses the server snapshot and a monotonic clock; expiry never changes the
+workshop phase.
+
+Presenter state is an independent 15-second cache lease rather than durable canvas content.
+Memory and Redis use compare-and-set fencing so competing starts and stale heartbeat/stop
+requests cannot replace a newer lease. Production instances share Redis. Following requires
+explicit opt-in and ends on pan, zoom, Escape, access loss or expiry. Team viewers may receive
+the presenter's world region; guests receive only a currently authorized, explicitly published
+frame reference, with neither presenter identity nor private viewport coordinates. Presenter
+delivery is gated by the existing canvas live-update policy.
+
+Manual checkpoints are bounded to ten versions, 2 MiB per scene and 4 MiB of total retained
+history. A checkpoint never freezes canonical guest bodies. Preview and historical media reads
+recheck current board access and current guest moderation, so old snapshots cannot revive
+removed source content. Historical-image authorization includes checkpoint references even
+when no live or undo object still uses those bytes. **Restore layout** is an ordinary V2 batch
+over existing current objects only: current expected versions, locks, protected cards, parent
+cycles, group/frame translation coherence and the 50-object limit remain authoritative. It
+does not restore text, media identity, visibility or deleted objects; an incompatible layout
+is rejected as a whole.
+
+Exports render a fresh authorized object projection to a closed SVG subset with embedded
+authorized image bytes. Links become plain text; remote URLs, executable content, pending ideas,
+credentials and system identity metadata are excluded. PNG conversion happens locally from the
+validated SVG. Whole-board, current-view and selected-frame-area exports are clipped regions,
+not a new publication grant. Bounds are 25 image placements, 10 MiB per image, 20 MiB per export,
+15-second operation budgets and a maximum 4,096 pixels per output side. Access and content
+visibility are revalidated after asynchronous media reads. Already downloaded bytes cannot be
+recalled.
 
 ## Board sharing
 
@@ -157,8 +205,16 @@ delivery, legacy workshop regressions and desktop/mobile browser acceptance pass
 claims require their own measured evidence; the plan's editor-count, latency and frame-rate
 targets are not implied by a passing functional suite.
 
-Order 5's focused verification passes; final full repository and browser results are tracked in
-the [implementation status](../implementation-status.md#canvas-productivity-order-5-october-30-2026).
+Migration 081 requires a coordinated maintenance cutover: drain and stop all old API writers
+and cleanup jobs, apply 081, and restart only matching facilitation-aware server/jobs/web images
+before admitting checkpoints. No independent checkpoint-admission flag exists. Once checkpoints
+exist, an 080-era server or jobs writer is not a compatible rollback: it can drop checkpoint-only
+media references even with migration 081 retained. Keep 079–081 and use matching readers/writers
+or a reviewed forward repair. Pausing canvas creation does not stop old scene writes or jobs.
+
+Order 5's completed verification and Order 6's results are tracked in the
+[implementation status](../implementation-status.md#canvas-facilitation-order-6-october-30-2026).
+Order 6 passes the full repository check and all 17 configured desktop/mobile canvas browser cases.
 The browser fixture substitutes in-memory object storage and
 scanning. Physical touch hardware, production media operation, production load, post-commit peer
 latency and rendering performance remain unmeasured for this increment. The October 29 repository

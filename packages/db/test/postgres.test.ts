@@ -1351,6 +1351,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 78, name: "customer_account_user_licenses" },
       { version: 79, name: "canvas_boards" },
       { version: 80, name: "canvas_productivity" },
+      { version: 81, name: "canvas_facilitation" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.

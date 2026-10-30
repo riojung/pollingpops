@@ -10,6 +10,10 @@ import {
   CanvasBoardMutationSchema,
   CanvasBoardViewSchema,
   CanvasObjectSchema,
+  CanvasFacilitationMutationSchema,
+  CanvasFacilitationViewSchema,
+  CanvasVersionViewSchema,
+  CanvasGuestFacilitationViewSchema,
   ideaBoardProjection,
   instantiateCanvasTemplate,
   type CanvasBoardCreate,
@@ -22,6 +26,8 @@ import {
   type CanvasBoardView,
   type CanvasObject,
   type IdeaBoardStored,
+  type CanvasFacilitationMutation,
+  type CanvasFacilitationResponse,
 } from "@openround/contracts";
 import { MemoryRepository } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
@@ -46,6 +52,15 @@ import type {
 } from "./canvas-board-types.js";
 
 import { CanvasBoardError } from "./canvas-board-error.js";
+import {
+  canvasFacilitation,
+  canvasHistoricalObjects,
+  canvasTimerAt,
+  applyCanvasComment,
+  applyCanvasTimer,
+  sanitizeCanvasFacilitation,
+  validateCanvasVersions,
+} from "./canvas-facilitation.js";
 export { CanvasBoardError } from "./canvas-board-error.js";
 
 const instant = (clock: CanvasClock) => (typeof clock === "function" ? clock() : clock);
@@ -157,15 +172,32 @@ function rebaseOwnHistory(
     }
   }
 }
+function compactCanvasReceipts(receipts: CanvasReceipt[]) {
+  let retained = Buffer.byteLength(JSON.stringify(receipts));
+  for (const entry of receipts) {
+    if (retained <= 4 * 1024 * 1024) break;
+    retained -=
+      Buffer.byteLength(JSON.stringify(entry.before)) +
+      Buffer.byteLength(JSON.stringify(entry.after));
+    entry.before = [];
+    entry.after = [];
+    entry.undoable = false;
+  }
+}
 function projectedObjects(
   state: CanvasState,
   source: IdeaBoardStored | null,
   guest: boolean,
   now: Date,
   moderator = false,
+  synchronizeSource = true,
 ) {
   const published = source ? ideaBoardProjection(source, now, moderator && !guest).ideas : [];
-  let projected = sourceObjects(state.objects, source)
+  let projected = (
+    synchronizeSource
+      ? sourceObjects(state.objects, source)
+      : canvasHistoricalObjects(state.objects, source)
+  )
     .filter((object) => !guest || object.visibility === "published")
     .flatMap((object) => {
       const { idea: _idea, ...safe } = object;
@@ -891,6 +923,10 @@ export class CanvasBoardRepository {
     return access.user;
   }
   private async commit(tx: CanvasTransaction, state: CanvasState, clock: CanvasClock) {
+    sanitizeCanvasFacilitation(
+      state,
+      state.board.sourceBoardId ? await tx.source(state.board.sourceBoardId) : null,
+    );
     state.board.schemaVersion = 2;
     state.board.canvasSeq++;
     state.board.updatedAt = instant(clock).toISOString();
@@ -914,6 +950,316 @@ export class CanvasBoardRepository {
     notExpired(state.board, instant(clock));
     await tx.put(state);
     await this.emit(tx, state, "canvas.changed", instant(clock));
+  }
+  private facilitationView(
+    checked: Awaited<ReturnType<CanvasBoardRepository["checked"]>>,
+    actor: CanvasActor,
+    clock: CanvasClock,
+  ) {
+    const { state, source, capabilities } = checked;
+    const now = instant(clock);
+    notExpired(state.board, now);
+    if (source) sourceCurrent(source, now);
+    const stored = canvasFacilitation(state);
+    const visible = new Set(
+      projectedObjects(state, source, false, now, capabilities.facilitate).map(
+        (object) => object.id,
+      ),
+    );
+    const boardStatus = status(state.board, source, now);
+    return CanvasFacilitationViewSchema.parse({
+      schemaVersion: 1,
+      boardId: state.board.id,
+      canvasSeq: state.board.canvasSeq,
+      actorId: actor.userId,
+      serverNow: now.toISOString(),
+      timer: canvasTimerAt(stored.timer, now),
+      capabilities: {
+        comment: capabilities.edit,
+        moderateComments: capabilities.edit && capabilities.facilitate,
+        controlTimer: capabilities.facilitate && !["closed", "archived"].includes(boardStatus),
+        saveVersion: capabilities.edit,
+        deleteVersion: capabilities.facilitate,
+      },
+      threads: stored.threads.filter((thread) => visible.has(thread.objectId)),
+      versions: stored.versions.map((saved) => ({
+        ...saved.metadata,
+        objectCount: projectedObjects(
+          { ...state, objects: saved.objects },
+          source,
+          false,
+          now,
+          capabilities.facilitate,
+          false,
+        ).length,
+      })),
+    });
+  }
+  getFacilitation(actor: CanvasActor, id: string, clock: CanvasClock = () => new Date()) {
+    return this.run(actor, { boardId: id }, async (tx) =>
+      this.facilitationView(await this.checked(tx, actor, id, clock), actor, clock),
+    );
+  }
+  facilitate(
+    actor: CanvasActor,
+    id: string,
+    input: CanvasFacilitationMutation,
+    clock: CanvasClock = () => new Date(),
+  ): Promise<CanvasFacilitationResponse> {
+    const mutation = CanvasFacilitationMutationSchema.parse(input);
+    const hash = fingerprint({ protocol: "canvas-facilitation-v1", mutation });
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const checked = await this.checked(tx, actor, id, clock, true);
+      const { state, source } = checked;
+      const prior = state.receipts.find(
+        (receipt) =>
+          receipt.actorId === actor.userId && receipt.operationId === mutation.operationId,
+      );
+      if (prior) {
+        if (prior.hash !== hash)
+          throw new CanvasBoardError(
+            "IDEMPOTENCY_CONFLICT",
+            "This operation identifier was used for another change",
+          );
+        return {
+          facilitation: this.facilitationView(checked, actor, clock),
+          receipt: { operationId: prior.operationId, canvasSeq: prior.canvasSeq, type: prior.type },
+        };
+      }
+      if (state.receipts.length >= 5000)
+        throw new CanvasBoardError(
+          "ENTITLEMENT_LIMIT",
+          "This canvas has reached its durable operation limit",
+        );
+      const stored = canvasFacilitation(state);
+      const command = mutation.command;
+      const entities: NonNullable<CanvasReceipt["facilitationEntities"]> = {};
+      if (command.type === "comment_thread_create") entities.threadId = command.threadId;
+      if (command.type === "comment_thread_create" || command.type === "comment_reply")
+        entities.messageId = command.messageId;
+      if (command.type === "version_create") entities.versionId = command.versionId;
+      const assertNewIdentifiers = () => {
+        for (const key of ["threadId", "messageId", "versionId"] as const)
+          if (entities[key])
+            assert(
+              !state.receipts.some(
+                (receipt) => receipt.facilitationEntities?.[key] === entities[key],
+              ),
+              "Choose a new discussion or checkpoint identifier; retired identifiers cannot be reused",
+            );
+      };
+      const view = this.facilitationView(checked, actor, clock);
+      const requireCapability = (permitted: boolean) => {
+        if (!permitted)
+          throw new CanvasBoardError(
+            "FORBIDDEN",
+            "This action is not available with your current canvas permissions",
+          );
+      };
+      if ("threadId" in command) {
+        requireCapability(view.capabilities.comment);
+        assertNewIdentifiers();
+        // Approved references may have arrived through the legacy collection endpoint.
+        state.objects = stripProjected(sourceObjects(state.objects, source));
+        const visible = new Set(
+          projectedObjects(
+            state,
+            source,
+            false,
+            instant(clock),
+            checked.capabilities.facilitate,
+          ).map((object) => object.id),
+        );
+        sanitizeCanvasFacilitation(state, source);
+        applyCanvasComment(
+          stored,
+          command,
+          actor.userId,
+          view.capabilities.moderateComments,
+          visible,
+          instant(clock).toISOString(),
+        );
+      } else if ("expectedRevision" in command) {
+        requireCapability(view.capabilities.controlTimer);
+        applyCanvasTimer(stored, command, instant(clock));
+      } else if (command.type === "version_create") {
+        requireCapability(view.capabilities.saveVersion);
+        assertNewIdentifiers();
+        assert(
+          !stored.versions.some((saved) => saved.metadata.id === command.versionId),
+          "Choose a new checkpoint identifier",
+        );
+        const objects = stripProjected(
+          projectedObjects(state, source, false, instant(clock), checked.capabilities.facilitate),
+        );
+        stored.versions.unshift({
+          metadata: {
+            id: command.versionId,
+            name: command.name,
+            version: 1,
+            createdAt: instant(clock).toISOString(),
+            createdBy: actor.userId,
+            canvasSeq: state.board.canvasSeq,
+            objectCount: objects.length,
+          },
+          objects,
+        });
+        validateCanvasVersions(stored);
+      } else {
+        requireCapability(view.capabilities.deleteVersion);
+        const saved = stored.versions.find((entry) => entry.metadata.id === command.versionId);
+        if (!saved) fail("Checkpoint is no longer available");
+        if (saved.metadata.version !== command.expectedVersion)
+          throw new CanvasBoardError(
+            "STALE_DRAFT",
+            "This checkpoint changed; review the latest history",
+          );
+        stored.versions = stored.versions.filter((entry) => entry !== saved);
+      }
+      const receipt: CanvasReceipt = {
+        operationId: mutation.operationId,
+        actorId: actor.userId,
+        hash,
+        canvasSeq: state.board.canvasSeq + 1,
+        type: command.type,
+        before: [],
+        after: [],
+        undone: false,
+        undoable: false,
+        ...(Object.keys(entities).length ? { facilitationEntities: entities } : {}),
+      };
+      state.receipts.push(receipt);
+      compactCanvasReceipts(state.receipts);
+      await this.commit(tx, state, clock);
+      // Deadlines and subscription time can change while storage checks await.
+      const fresh = this.facilitationView(checked, actor, clock);
+      const eligible =
+        this.options.communityMode || currentSeat(checked.access, actor.userId, instant(clock));
+      requireCapability(Boolean(eligible));
+      if (
+        ("threadId" in command || command.type === "version_create") &&
+        status(state.board, source, instant(clock)) !== "active"
+      )
+        throw new CanvasBoardError("ROOM_CLOSED", "This canvas is no longer editable");
+      if (
+        "expectedRevision" in command &&
+        ["closed", "archived"].includes(status(state.board, source, instant(clock)))
+      )
+        throw new CanvasBoardError("ROOM_CLOSED", "This timer can no longer be controlled");
+      return {
+        facilitation: fresh,
+        receipt: {
+          operationId: receipt.operationId,
+          canvasSeq: receipt.canvasSeq,
+          type: receipt.type,
+        },
+      };
+    });
+  }
+  private async versionView(
+    tx: CanvasTransaction,
+    checked: Awaited<ReturnType<CanvasBoardRepository["checked"]>>,
+    versionId: string,
+    clock: CanvasClock,
+  ) {
+    const saved = canvasFacilitation(checked.state).versions.find(
+      (entry) => entry.metadata.id === versionId,
+    );
+    if (!saved) fail("Checkpoint is no longer available");
+    let objects = projectedObjects(
+      { ...checked.state, objects: saved.objects },
+      checked.source,
+      false,
+      instant(clock),
+      checked.capabilities.facilitate,
+      false,
+    );
+    const available = new Set<string>();
+    for (const object of objects)
+      if (object.type === "image") {
+        const upload = await tx.media(checked.state.board.id, object.mediaId);
+        if (upload?.asset.scanStatus === "clean") available.add(object.mediaId);
+      }
+    objects = canvasHistoricalObjects(
+      objects.filter((object) => object.type !== "image" || available.has(object.mediaId)),
+      checked.source,
+    );
+    // Restore only current canonical guest projections after the stored-body stripping pass.
+    objects = projectedObjects(
+      { ...checked.state, objects },
+      checked.source,
+      false,
+      instant(clock),
+      checked.capabilities.facilitate,
+      false,
+    );
+    notExpired(checked.state.board, instant(clock));
+    if (checked.source) sourceCurrent(checked.source, instant(clock));
+    return CanvasVersionViewSchema.parse({
+      schemaVersion: 1,
+      boardId: checked.state.board.id,
+      version: { ...saved.metadata, objectCount: objects.length },
+      objects,
+    });
+  }
+  getVersion(
+    actor: CanvasActor,
+    id: string,
+    versionId: string,
+    clock: CanvasClock = () => new Date(),
+  ) {
+    return this.run(actor, { boardId: id }, async (tx) =>
+      this.versionView(tx, await this.checked(tx, actor, id, clock), versionId, clock),
+    );
+  }
+  authorizeVersionMedia(
+    actor: CanvasActor,
+    id: string,
+    versionId: string,
+    mediaId: string,
+    clock: CanvasClock = () => new Date(),
+  ) {
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const checked = await this.checked(tx, actor, id, clock);
+      const view = await this.versionView(tx, checked, versionId, clock);
+      if (!view.objects.some((object) => object.type === "image" && object.mediaId === mediaId))
+        fail("Checkpoint image is no longer available");
+      return { workspaceId: checked.state.board.workspaceId };
+    });
+  }
+  getGuestFacilitation(
+    sourceBoardId: string,
+    tokenHash: string,
+    clock: CanvasClock = () => new Date(),
+  ) {
+    return this.run(null, { sourceBoardId, guestHash: tokenHash }, async (tx) => {
+      if (!/^[a-f0-9]{64}$/.test(tokenHash)) fail();
+      const admission = await tx.sourceMetadata(sourceBoardId, tokenHash);
+      if (!admission?.guestPresent || Date.parse(admission.expiresAt) <= instant(clock).getTime())
+        fail();
+      const board = (await tx.list()).find((entry) => entry.sourceBoardId === sourceBoardId);
+      if (!board) return null;
+      notExpired(board, instant(clock));
+      const stored = await tx.timer(board.id, true);
+      const currentAdmission = await tx.sourceMetadata(sourceBoardId, tokenHash, true);
+      const currentBoard = await tx.metadata(board.id);
+      const now = instant(clock);
+      if (
+        !currentAdmission?.guestPresent ||
+        Date.parse(currentAdmission.expiresAt) <= now.getTime()
+      )
+        fail();
+      if (!currentBoard) fail();
+      const timer = canvasTimerAt(stored, now);
+      notExpired(currentBoard, now);
+      return CanvasGuestFacilitationViewSchema.parse({
+        schemaVersion: 1,
+        boardId: board.id,
+        canvasSeq: currentBoard.canvasSeq,
+        serverNow: now.toISOString(),
+        timer,
+      });
+    });
   }
   command(
     actor: CanvasActor,
@@ -1483,16 +1829,7 @@ export class CanvasBoardRepository {
         receipt.undoable = false;
       }
       state.receipts.push(receipt);
-      let retained = Buffer.byteLength(JSON.stringify(state.receipts));
-      for (const entry of state.receipts) {
-        if (retained <= 4 * 1024 * 1024) break;
-        retained -=
-          Buffer.byteLength(JSON.stringify(entry.before)) +
-          Buffer.byteLength(JSON.stringify(entry.after));
-        entry.before = [];
-        entry.after = [];
-        entry.undoable = false;
-      }
+      compactCanvasReceipts(state.receipts);
       await this.commit(tx, state, clock);
       if (
         (command.type === "batch" || command.type === "undo" || command.type === "redo") &&
@@ -1809,9 +2146,27 @@ export function createCanvasBoardRepository(
       try {
         return await execute(actor, scope, work);
       } catch (error) {
-        const candidate = error as { code?: string; message?: string };
+        const candidate = error as { code?: string; message?: string; constraint?: string };
         if (candidate.code === "23514" && candidate.message?.includes("Workshop canvas is frozen"))
           throw new CanvasBoardError("ROOM_CLOSED", "Workshop content is frozen");
+        if (
+          candidate.code === "23514" &&
+          candidate.message &&
+          /Canvas (discussion|retained message|retained checkpoint) limit reached/.test(
+            candidate.message,
+          )
+        )
+          throw new CanvasBoardError("VALIDATION_ERROR", candidate.message);
+        if (
+          candidate.code === "23514" &&
+          /^canvas_board_(comment_threads|comment_messages|timers|versions)_/.test(
+            candidate.constraint ?? "",
+          )
+        )
+          throw new CanvasBoardError(
+            "VALIDATION_ERROR",
+            "This canvas has reached a facilitation content limit",
+          );
         if (candidate.code === "23505")
           throw new CanvasBoardError(
             "IDEMPOTENCY_CONFLICT",

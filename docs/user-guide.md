@@ -107,14 +107,54 @@ Owners can choose **Switch workspace and open workshop** in Workshop controls to
 the original grouped list and its deletion controls. This explicit action selects the owning
 workspace before navigating.
 
+Open **Facilitation** for **Comments**, **Timer** and **Saved versions**. Select an object and
+choose **Comment on selected object** to start a discussion attached to it. Eligible editors can
+reply and edit or delete their own comments; owners and facilitators can resolve, reopen and
+moderate discussions. Viewers can read comments. These discussions are team-only and are not
+shown to workshop guests. If a request is interrupted or conflicts with another update, **Your
+draft** stays available for retry or explicit review and resend. Hiding and reopening
+**Facilitation** preserves unsent comments, version names and pending retries. Discard a draft
+explicitly when it is no longer needed. Draft text is kept only in the open editor; it is not an
+offline backup.
+
+Owners and facilitators use **Timer** to start, pause, resume or reset a countdown of up to two
+hours. Everyone sees the server's remaining time, including admitted workshop guests. The
+countdown never starts voting, closes a workshop or changes its phase automatically.
+
+When live updates are enabled, an owner or facilitator can choose **Present my view** for team
+members. Following is optional: choose **Follow presenter**, and use **Stop following**, pan,
+zoom or Escape to return to your own view. For workshop guests, select an explicitly published
+frame and choose **Present selected frame to guests**. Guests follow that published frame;
+private team viewport coordinates and presenter identities are not shared with them. A stopped
+or expired presentation stops following without changing the canvas.
+
+**Export** downloads **Whole board**, **Current view** or the area of one **Selected frame** as
+SVG or PNG, with a white or transparent background. A frame export includes authorized objects
+within its area, not just objects assigned to that frame. Links appear as plain text, without
+opening websites. Exports omit pending ideas, comment threads, system identity metadata and
+credentials. Downloads are bounded to 25 image placements and 20 MiB, with dimensions up to
+4,096 pixels per side. Choose a smaller area if a download cannot finish. Export is a team
+account action; workshop guests do not receive export controls.
+
+In **Saved versions**, eligible editors enter a **Version name** and choose **Save version**.
+Up to ten manual checkpoints are retained within the board's history allowance; owners and
+facilitators can delete saved versions to make room. **Preview** shows the saved layout using
+current access and guest-moderation rules. Removed guest content does not reappear in an older
+version. **Restore layout** changes only the layout of objects that still exist. It preserves
+current text, image descriptions, publication choices and content, and never recreates deleted
+objects. Locks, protected cards, current object versions and the 50-object action limit still
+apply. A restore that cannot move current groups and frame contents together is unavailable;
+review the current arrangement before trying again.
+
 Canvases allow up to 500 objects, 2 MiB of document data and 5,000 accepted changes over their
 pilot lifetime. Reaching that change budget stops further editing; deletion remains available.
 Workshops reserve space for their
 existing limit of 200 idea cards, leaving up to 300 ordinary canvas objects. Existing workshop
 participant, lifetime and retention limits still apply. Team boards have a recorded retention
 window; deletion requires confirmation. Each board allows up to 100 image upload reservations
-and 200 MiB of reserved image data over its lifetime. Comments, timers, exports and version
-browsing are later increments.
+and 200 MiB of reserved image data over its lifetime. Saved versions have a separate 4 MiB total
+allowance and a 2 MiB limit per saved scene. Higher canvas capacity and further roadmap tools
+remain deferred; these tools do not add AI features.
 
 ## Standalone Surveys (beta)
 

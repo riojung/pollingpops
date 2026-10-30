@@ -1,4 +1,7 @@
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
+import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
+import { canvasExportMessages } from "../../canvas-export-messages";
+import { canvasPresenterMessages } from "../../canvas-presenter-messages";
 import { canvasProductivityMessages } from "../../canvas-productivity-messages";
 import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
 import { canvasMessages } from "../../canvas-messages";
@@ -7,6 +10,9 @@ import type { IdeaBoardMessages } from "./en-CA";
 const messages: IdeaBoardMessages = {
   ...canvasMessages("zh-CN"),
   ...canvasAssetsMessages("zh-CN"),
+  ...canvasFacilitationMessages("zh-CN"),
+  ...canvasExportMessages("zh-CN"),
+  ...canvasPresenterMessages("zh-CN"),
   ...canvasProductivityMessages("zh-CN"),
   ...canvasWorkshopMessages("zh-CN"),
   "boards.more": "加载更多看板",

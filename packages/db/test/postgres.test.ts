@@ -158,40 +158,104 @@ function publishableRound(title: string): QuizDraft {
 }
 
 describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
-  it("bootstraps the original untracked baseline before applying forward-only canvas migrations", async () => {
-    const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
-    const baselineDirectory = await mkdtemp(join(tmpdir(), "openround-baseline-"));
-    const schema = `baseline_${randomUUID().replaceAll("-", "")}`;
-    const adminPool = new Pool({ connectionString: adminUrl });
-    let pool: Pool | undefined;
-    try {
-      const migrations = await discoverMigrations(directory);
-      await writeFile(join(baselineDirectory, migrations[0]!.fileName), migrations[0]!.sql);
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
-      const url = new URL(adminUrl!);
-      url.searchParams.set("options", `-csearch_path=${schema},public`);
-      pool = new Pool({ connectionString: url.toString(), max: 1 });
-      await runMigrations(pool, baselineDirectory);
-      await pool.query("DROP TABLE _openround_migrations");
-      await runMigrations(pool, directory);
-      await runMigrations(pool, directory);
-      expect(
-        (await pool.query("SELECT count(*)::integer AS count FROM _openround_migrations")).rows[0]
-          .count,
-      ).toBe(migrations.length);
-      const constraint = await pool.query(
-        "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='media_references'::regclass AND conname='media_references_owner_type_check'",
-      );
-      expect(constraint.rows[0].definition).toContain("canvas_board");
-    } finally {
-      await pool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      await adminPool.end();
-      await rm(baselineDirectory, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(!runtimeUrl)(
+    "bootstraps the original untracked baseline without changing another database's runtime privileges",
+    async () => {
+      const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
+      const baselineDirectory = await mkdtemp(join(tmpdir(), "openround-baseline-"));
+      const database = `baseline_${randomUUID().replaceAll("-", "")}`;
+      const sentinel = `baseline_privileges_${randomUUID().replaceAll("-", "")}`;
+      const adminPool = new Pool({ connectionString: adminUrl });
+      const runtimePool = new Pool({ connectionString: runtimeUrl });
+      let pool: Pool | undefined;
+      try {
+        await preparePostgresTestRuntime(adminUrl!, runtimeUrl!);
+        const principal = await runtimePool.query<{
+          username: string;
+          rolsuper: boolean;
+          rolbypassrls: boolean;
+          runtime_member: boolean;
+        }>(`SELECT current_user AS username, rolsuper, rolbypassrls,
+                 pg_has_role(current_user, 'openround_runtime', 'MEMBER') AS runtime_member
+            FROM pg_roles WHERE rolname = current_user`);
+        expect(principal.rows[0]).toMatchObject({
+          rolsuper: false,
+          rolbypassrls: false,
+          runtime_member: true,
+        });
+        await adminPool.query(`CREATE TABLE public."${sentinel}" (id integer)`);
+        await adminPool.query(`REVOKE ALL ON public."${sentinel}" FROM openround_runtime`);
+        await adminPool.query(`GRANT SELECT, INSERT ON public."${sentinel}" TO openround_runtime`);
+        const publicPrivileges = async () => ({
+          tables: (
+            await adminPool.query(
+              `SELECT relation.relname, relation.relacl::text AS grants,
+                    has_table_privilege($1, relation.oid, 'SELECT') AS can_select,
+                    has_table_privilege($1, relation.oid, 'INSERT') AS can_insert,
+                    has_table_privilege($1, relation.oid, 'UPDATE') AS can_update,
+                    has_table_privilege($1, relation.oid, 'DELETE') AS can_delete,
+                    (SELECT jsonb_object_agg(attribute.attname, attribute.attacl::text)
+                       FROM pg_attribute AS attribute
+                      WHERE attribute.attrelid = relation.oid AND attribute.attacl IS NOT NULL
+                    ) AS column_grants
+               FROM pg_class AS relation
+               JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+              WHERE namespace.nspname = 'public' AND relation.relkind IN ('r', 'p')
+              ORDER BY relation.relname`,
+              [principal.rows[0]!.username],
+            )
+          ).rows,
+          defaults: (
+            await adminPool.query(
+              `SELECT pg_get_userbyid(defaults.defaclrole) AS owner, defaults.defaclobjtype,
+                    defaults.defaclacl::text AS grants
+               FROM pg_default_acl AS defaults
+               JOIN pg_namespace AS namespace ON namespace.oid = defaults.defaclnamespace
+              WHERE namespace.nspname = 'public'
+              ORDER BY owner, defaults.defaclobjtype`,
+            )
+          ).rows,
+        });
+        const before = await publicPrivileges();
+        expect(before.tables.find((table) => table.relname === sentinel)).toMatchObject({
+          can_select: true,
+          can_insert: true,
+          can_update: false,
+          can_delete: false,
+        });
+        const migrations = await discoverMigrations(directory);
+        await writeFile(join(baselineDirectory, migrations[0]!.fileName), migrations[0]!.sql);
+        // Migration 001 grants CRUD on public explicitly, so search_path isolation would
+        // broaden another fixture's runtime grants. Keep the entire legacy baseline separate.
+        await adminPool.query(`CREATE DATABASE "${database}"`);
+        const url = new URL(adminUrl!);
+        url.pathname = `/${database}`;
+        pool = new Pool({ connectionString: url.toString(), max: 1 });
+        await runMigrations(pool, baselineDirectory);
+        await pool.query("DROP TABLE _openround_migrations");
+        await runMigrations(pool, directory);
+        await runMigrations(pool, directory);
+        expect(
+          (await pool.query("SELECT count(*)::integer AS count FROM _openround_migrations")).rows[0]
+            .count,
+        ).toBe(migrations.length);
+        const constraint = await pool.query(
+          "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='media_references'::regclass AND conname='media_references_owner_type_check'",
+        );
+        expect(constraint.rows[0].definition).toContain("canvas_board");
+        expect(await publicPrivileges()).toEqual(before);
+      } finally {
+        await pool?.end();
+        await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
+        await adminPool.query(`DROP TABLE IF EXISTS public."${sentinel}"`);
+        await runtimePool.end();
+        await adminPool.end();
+        await rm(baselineDirectory, { recursive: true, force: true });
+      }
+    },
+  );
   it("splits legacy shared folders by content type while retaining Round IDs and frozen versions", async () => {
-    const schema = `openround_folder_upgrade_${randomUUID().replaceAll("-", "")}`;
+    const database = `openround_folder_upgrade_${randomUUID().replaceAll("-", "")}`;
     const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const legacyDirectory = await mkdtemp(join(tmpdir(), "openround-pre-scoped-folders-"));
     const adminPool = new Pool({ connectionString: adminUrl });
@@ -201,9 +265,9 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         ({ version }) => version <= 65,
       ))
         await writeFile(join(legacyDirectory, migration.fileName), migration.sql);
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await adminPool.query(`CREATE DATABASE "${database}"`);
       const url = new URL(adminUrl!);
-      url.searchParams.set("options", `-csearch_path=${schema},public`);
+      url.pathname = `/${database}`;
       pool = new Pool({ connectionString: url.toString(), max: 1 });
       await runMigrations(pool, legacyDirectory);
       await pool.query("SELECT set_config('app.system_access', 'on', false)");
@@ -318,14 +382,14 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       ).rejects.toMatchObject({ code: "23514" });
     } finally {
       await pool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
       await adminPool.end();
       await rm(legacyDirectory, { recursive: true, force: true });
     }
   });
 
   it("upgrades pre-055 rooms and command receipts without retroactively enabling live cards", async () => {
-    const schema = `openround_live_cards_upgrade_${randomUUID().replaceAll("-", "")}`;
+    const database = `openround_live_cards_upgrade_${randomUUID().replaceAll("-", "")}`;
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const legacyDirectory = await mkdtemp(join(tmpdir(), "openround-pre-live-cards-"));
     const adminPool = new Pool({ connectionString: adminUrl });
@@ -335,21 +399,11 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       for (const migration of migrations.filter(({ version }) => version <= 54)) {
         await writeFile(join(legacyDirectory, migration.fileName), migration.sql);
       }
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await adminPool.query(`CREATE DATABASE "${database}"`);
       const isolatedUrl = new URL(adminUrl!);
-      isolatedUrl.searchParams.set("options", `-csearch_path=${schema},public`);
+      isolatedUrl.pathname = `/${database}`;
       isolatedPool = new Pool({ connectionString: isolatedUrl.toString(), max: 1 });
       await runMigrations(isolatedPool, legacyDirectory);
-      // Production security-definer helpers intentionally pin public. Point only these isolated
-      // fixture copies at the temporary schema before populating its pre-migration room.
-      await isolatedPool.query(
-        `ALTER FUNCTION "${schema}".register_presentation_room_code()
-         SET search_path = pg_catalog, "${schema}"`,
-      );
-      await isolatedPool.query(
-        `ALTER FUNCTION "${schema}".claim_live_room_code(character, uuid, text, uuid, timestamptz, timestamptz)
-         SET search_path = pg_catalog, "${schema}"`,
-      );
       await isolatedPool.query("SELECT set_config('app.system_access', 'on', false)");
       const userId = randomUUID();
       const workspaceId = randomUUID();
@@ -441,7 +495,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class
          WHERE relnamespace = $1::regnamespace AND relname = ANY($2::text[]) ORDER BY relname`,
         [
-          schema,
+          "public",
           [
             "presentation_live_sessions",
             "presentation_session_timeline",
@@ -455,14 +509,14 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       );
     } finally {
       await isolatedPool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
       await adminPool.end();
       await rm(legacyDirectory, { recursive: true, force: true });
     }
   });
 
   it("backfills frozen Presentation Pack media on populated pre-053 documents without rewriting them", async () => {
-    const schema = `openround_pack_media_upgrade_${randomUUID().replaceAll("-", "")}`;
+    const database = `openround_pack_media_upgrade_${randomUUID().replaceAll("-", "")}`;
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const prePackDirectory = await mkdtemp(join(tmpdir(), "openround-pre-presentation-pack-"));
     const adminPool = new Pool({ connectionString: adminUrl });
@@ -472,9 +526,9 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       for (const migration of migrations.filter(({ version }) => version <= 52)) {
         await writeFile(join(prePackDirectory, migration.fileName), migration.sql);
       }
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await adminPool.query(`CREATE DATABASE "${database}"`);
       const isolatedUrl = new URL(adminUrl!);
-      isolatedUrl.searchParams.set("options", `-csearch_path=${schema},public`);
+      isolatedUrl.pathname = `/${database}`;
       isolatedPool = new Pool({ connectionString: isolatedUrl.toString(), max: 1 });
       await runMigrations(isolatedPool, prePackDirectory);
       const userId = randomUUID();
@@ -582,14 +636,14 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       ).rejects.toMatchObject({ code: "55000" });
     } finally {
       await isolatedPool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
       await adminPool.end();
       await rm(prePackDirectory, { recursive: true, force: true });
     }
   });
 
   it("backfills revision metadata on a populated pre-018 schema and restores immutability", async () => {
-    const schema = `openround_upgrade_${randomUUID().replaceAll("-", "")}`;
+    const database = `openround_upgrade_${randomUUID().replaceAll("-", "")}`;
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const preRevisionDirectory = await mkdtemp(join(tmpdir(), "openround-pre-revision-"));
     const adminPool = new Pool({ connectionString: adminUrl });
@@ -601,14 +655,14 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         await writeFile(join(preRevisionDirectory, migration.fileName), migration.sql);
       }
 
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await adminPool.query(`CREATE DATABASE "${database}"`);
       const isolatedUrl = new URL(adminUrl!);
-      isolatedUrl.searchParams.set("options", `-csearch_path=${schema},public`);
+      isolatedUrl.pathname = `/${database}`;
       isolatedPool = new Pool({ connectionString: isolatedUrl.toString(), max: 1 });
 
       await expect(
-        isolatedPool.query<{ current_schema: string }>("SELECT current_schema()"),
-      ).resolves.toMatchObject({ rows: [{ current_schema: schema }] });
+        isolatedPool.query("SELECT current_database() AS database, current_schema() AS schema"),
+      ).resolves.toMatchObject({ rows: [{ database, schema: "public" }] });
       await runMigrations(isolatedPool, preRevisionDirectory);
 
       const ownerId = randomUUID();
@@ -760,14 +814,14 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       }
     } finally {
       await isolatedPool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
       await adminPool.end();
       await rm(preRevisionDirectory, { recursive: true, force: true });
     }
   });
 
   it("aligns old and new Presentation fences for sessions populated before realtime migration", async () => {
-    const schema = `openround_sequence_upgrade_${randomUUID().replaceAll("-", "")}`;
+    const database = `openround_sequence_upgrade_${randomUUID().replaceAll("-", "")}`;
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const preRealtimeDirectory = await mkdtemp(join(tmpdir(), "openround-pre-realtime-"));
     const adminPool = new Pool({ connectionString: adminUrl });
@@ -779,9 +833,9 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         await writeFile(join(preRealtimeDirectory, migration.fileName), migration.sql);
       }
 
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await adminPool.query(`CREATE DATABASE "${database}"`);
       const isolatedUrl = new URL(adminUrl!);
-      isolatedUrl.searchParams.set("options", `-csearch_path=${schema},public`);
+      isolatedUrl.pathname = `/${database}`;
       isolatedPool = new Pool({ connectionString: isolatedUrl.toString(), max: 1 });
       await runMigrations(isolatedPool, preRealtimeDirectory);
 
@@ -1097,7 +1151,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       }
     } finally {
       await isolatedPool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
       await adminPool.end();
       await rm(preRealtimeDirectory, { recursive: true, force: true });
     }
@@ -1106,7 +1160,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
 
 describe.skipIf(!adminUrl)("PostgreSQL media cleanup migration", () => {
   it("backfills old finalized media directly into the final sweep", async () => {
-    const schema = `openround_cleanup_${randomUUID().replaceAll("-", "")}`;
+    const database = `openround_cleanup_${randomUUID().replaceAll("-", "")}`;
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const preCleanupDirectory = await mkdtemp(join(tmpdir(), "openround-pre-cleanup-"));
     const adminPool = new Pool({ connectionString: adminUrl });
@@ -1117,9 +1171,9 @@ describe.skipIf(!adminUrl)("PostgreSQL media cleanup migration", () => {
       for (const migration of migrations.filter(({ version }) => version <= 42)) {
         await writeFile(join(preCleanupDirectory, migration.fileName), migration.sql);
       }
-      await adminPool.query(`CREATE SCHEMA "${schema}"`);
+      await adminPool.query(`CREATE DATABASE "${database}"`);
       const isolatedUrl = new URL(adminUrl!);
-      isolatedUrl.searchParams.set("options", `-csearch_path=${schema},public`);
+      isolatedUrl.pathname = `/${database}`;
       isolatedPool = new Pool({ connectionString: isolatedUrl.toString(), max: 1 });
       await runMigrations(isolatedPool, preCleanupDirectory);
       await isolatedPool.query("SELECT set_config('app.system_access', 'on', false)");
@@ -1175,7 +1229,7 @@ describe.skipIf(!adminUrl)("PostgreSQL media cleanup migration", () => {
       });
     } finally {
       await isolatedPool?.end();
-      await adminPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
       await adminPool.end();
       await rm(preCleanupDirectory, { recursive: true, force: true });
     }
@@ -1183,11 +1237,31 @@ describe.skipIf(!adminUrl)("PostgreSQL media cleanup migration", () => {
 });
 
 describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
+  const clusterAdminUrl = process.env.TEST_DATABASE_ADMIN_URL;
+  const clusterRuntimeUrl = process.env.TEST_DATABASE_URL;
+  const database = `postgres_conformance_${randomUUID().replaceAll("-", "")}`;
+  let adminUrl = clusterAdminUrl;
+  let runtimeUrl = clusterRuntimeUrl;
   let repository: PostgresRepository;
   let runtimePool: Pool;
 
   beforeAll(async () => {
-    await preparePostgresTestRuntime(adminUrl!, runtimeUrl!);
+    await preparePostgresTestRuntime(clusterAdminUrl!, clusterRuntimeUrl!);
+    const cluster = new Pool({ connectionString: clusterAdminUrl });
+    try {
+      await cluster.query(`CREATE DATABASE "${database}"`);
+    } finally {
+      await cluster.end();
+    }
+    // CI may have migrated its original database before the runtime role existed.
+    // Give this suite a clean database whose grants are created by the real migrations,
+    // after role bootstrap, rather than repairing or inheriting another fixture's grants.
+    const administrator = new URL(clusterAdminUrl!);
+    administrator.pathname = `/${database}`;
+    adminUrl = administrator.toString();
+    const runtime = new URL(clusterRuntimeUrl!);
+    runtime.pathname = `/${database}`;
+    runtimeUrl = runtime.toString();
 
     const migrationRepository = new PostgresRepository(adminUrl!);
     await migrationRepository.migrate();
@@ -1309,8 +1383,17 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   });
 
   afterAll(async () => {
-    await repository?.close();
-    await runtimePool?.end();
+    try {
+      await repository?.close();
+      await runtimePool?.end();
+    } finally {
+      const cluster = new Pool({ connectionString: clusterAdminUrl });
+      try {
+        await cluster.query(`DROP DATABASE IF EXISTS "${database}"`);
+      } finally {
+        await cluster.end();
+      }
+    }
   });
 
   async function creator(label: string) {
@@ -9212,15 +9295,15 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     isolatedRuntime.username = login;
     isolatedRuntime.password = `test-only-quote'${randomUUID()}`;
     const isolated = new PostgresRepository(isolatedRuntime.toString());
-    const adminPool = new Pool({ connectionString: adminUrl });
+    const adminPool = new Pool({ connectionString: clusterAdminUrl });
     try {
       const attempts = await Promise.allSettled(
         Array.from({ length: 4 }, () =>
-          preparePostgresTestRuntime(adminUrl!, isolatedRuntime.toString()),
+          preparePostgresTestRuntime(clusterAdminUrl!, isolatedRuntime.toString()),
         ),
       );
       for (const attempt of attempts) expect(attempt).toMatchObject({ status: "fulfilled" });
-      await preparePostgresTestRuntime(adminUrl!, isolatedRuntime.toString());
+      await preparePostgresTestRuntime(clusterAdminUrl!, isolatedRuntime.toString());
       const principal = await isolated.inspectRuntimeDatabasePrincipal();
       expect(principal).toMatchObject({ principal: login, sessionPrincipal: login });
       expect(() => assertRestrictedRuntimeDatabasePrincipal(principal)).not.toThrow();

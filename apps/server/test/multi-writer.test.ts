@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { QuizDraft } from "@openround/contracts";
 import { PostgresRepository, type CreatorContext } from "@openround/db";
+import { preparePostgresTestRuntime } from "../../../packages/db/test/support/postgres-test-runtime.js";
 import { RedisSessionCache } from "../src/cache.js";
 import { ConfigSchema, type AppConfig } from "../src/config.js";
 import { MetricsService } from "../src/metrics.js";
@@ -14,6 +15,8 @@ const redisUrl = process.env.TEST_REDIS_URL;
 const enabled = Boolean(adminUrl && runtimeUrl && redisUrl);
 
 describe.skipIf(!enabled)("distributed session mutation ownership", () => {
+  const databaseName = `multi_writer_${randomUUID().replaceAll("-", "")}`;
+  let databaseCreated = false;
   let firstRepository: PostgresRepository;
   let secondRepository: PostgresRepository;
   let firstCache: RedisSessionCache;
@@ -24,25 +27,27 @@ describe.skipIf(!enabled)("distributed session mutation ownership", () => {
   let creator: CreatorContext | null = null;
 
   beforeAll(async () => {
-    const migrationRepository = new PostgresRepository(adminUrl!);
-    await migrationRepository.pool.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'openround_runtime') THEN
-          CREATE ROLE openround_runtime NOLOGIN;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'openround_test_app') THEN
-          CREATE ROLE openround_test_app LOGIN PASSWORD 'test-only-runtime';
-        END IF;
-      END $$;
-      GRANT openround_runtime TO openround_test_app;
-      GRANT CONNECT ON DATABASE openround TO openround_test_app;
-    `);
-    await migrationRepository.migrate();
-    await migrationRepository.close();
+    await preparePostgresTestRuntime(adminUrl!, runtimeUrl!);
+    const cluster = new PostgresRepository(adminUrl!);
+    try {
+      await cluster.pool.query(`CREATE DATABASE "${databaseName}"`);
+      databaseCreated = true;
+    } finally {
+      await cluster.close();
+    }
+    const admin = new URL(adminUrl!);
+    const runtime = new URL(runtimeUrl!);
+    admin.pathname = `/${databaseName}`;
+    runtime.pathname = `/${databaseName}`;
+    const migrationRepository = new PostgresRepository(admin.toString());
+    try {
+      await migrationRepository.migrate();
+    } finally {
+      await migrationRepository.close();
+    }
 
-    firstRepository = new PostgresRepository(runtimeUrl!);
-    secondRepository = new PostgresRepository(runtimeUrl!);
+    firstRepository = new PostgresRepository(runtime.toString());
+    secondRepository = new PostgresRepository(runtime.toString());
     firstCache = new RedisSessionCache(redisUrl!);
     secondCache = new RedisSessionCache(redisUrl!);
     await Promise.all([
@@ -53,7 +58,7 @@ describe.skipIf(!enabled)("distributed session mutation ownership", () => {
     ]);
     const config: AppConfig = ConfigSchema.parse({
       NODE_ENV: "test",
-      DATABASE_URL: runtimeUrl,
+      DATABASE_URL: runtime.toString(),
       REDIS_URL: redisUrl,
       COMMUNITY_MODE: "true",
       ALLOW_IN_MEMORY: "false",
@@ -66,15 +71,26 @@ describe.skipIf(!enabled)("distributed session mutation ownership", () => {
   });
 
   afterAll(async () => {
-    if (creator) await secondRepository.deleteAccount(creator.userId);
-    if (!firstClosed) {
-      firstService.close();
-      await firstCache.close();
-      await firstRepository.close();
+    try {
+      if (creator) await secondRepository?.deleteAccount(creator.userId);
+      if (!firstClosed) {
+        firstService?.close();
+        await firstCache?.close();
+        await firstRepository?.close();
+      }
+      secondService?.close();
+      await secondCache?.close();
+      await secondRepository?.close();
+    } finally {
+      if (databaseCreated) {
+        const cluster = new PostgresRepository(adminUrl!);
+        try {
+          await cluster.pool.query(`DROP DATABASE "${databaseName}"`);
+        } finally {
+          await cluster.close();
+        }
+      }
     }
-    secondService.close();
-    await secondCache.close();
-    await secondRepository.close();
   });
 
   it("atomically charges each feedback intent once across independent Redis clients", async () => {

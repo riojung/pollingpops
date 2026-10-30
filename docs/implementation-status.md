@@ -198,6 +198,28 @@ and cookie/referrer omission. Narrow automated axe checks and light/dark 320px/d
 pass; form controls and wrapped long text were visually inspected. No production enablement,
 Firefox, manual assistive-tech, native-speaker or physical-device acceptance is claimed.
 
+### Shared Idea Board canvas pilot October 29 2026
+
+Implemented orders 0–4 of the [canvas plan](idea-board-canvas-implementation-plan.md): board-only
+same-organization sharing, separate-workspace collaboration, typed canvas editing and connectors,
+actor-scoped undo/redo, explicit conflict recovery, transient opt-in presence, and live metadata
+streams with authorized snapshot recovery. Guided guests retain private intake, moderation and
+final ballots alongside a facilitator-published canvas. Starting voting freezes both canvas
+and legacy workshop edits. Migration 079 supplies normalized bounded storage and lifecycle guards.
+
+Creation, sharing and live delivery have independent default-off operator policies. Matching
+Compose and service-launcher configuration, admin feature controls and backward-compatible
+deployment receipts support their rollout. Canvas HTTP action/conflict/latency and stream/outbox
+metrics use bounded labels without content or principal identifiers.
+
+The 500-object/20-editor restricted PostgreSQL smoke passes correctness, retries, RLS and
+durability; durable acknowledgement p95 measured 821ms on the local test instance. This does
+not measure post-commit peer delivery, rendering, physical touch hardware or production capacity.
+Orders 5–7, AI, full offline editing and character-level coauthoring remain outside this increment.
+See the [architecture decision](decisions/002-idea-board-canvas.md),
+[user guide](user-guide.md#idea-boards-and-shared-canvases) and
+[upgrade instructions](runbooks/upgrade.md#shared-idea-board-canvases).
+
 ### Standalone administrator authentication October 15 2026
 
 Implemented locally on `codex/standalone-admin-console`. Administrators open the separate console

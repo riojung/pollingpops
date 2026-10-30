@@ -1,0 +1,112 @@
+import type { SupportedLocale } from "@openround/contracts";
+
+const english = {
+  "canvas.workshop.open": "Open workshop canvas",
+  "canvas.workshop.add": "Add canvas view",
+  "canvas.workshop.controls": "Workshop controls",
+  "canvas.workshop.published": "Published canvas",
+  "canvas.workshop.loadError": "The canvas could not be loaded. Try again.",
+  "canvas.workshop.rename": "Rename group",
+  "canvas.invitation.revoke": "Revoke invitation",
+  "canvas.workshop.switchOriginal": "Switch workspace and open workshop",
+} as const;
+
+const translations: Record<SupportedLocale, readonly string[]> = {
+  "en-CA": Object.values(english),
+  "fr-FR": [
+    "Ouvrir le canevas de l’atelier",
+    "Ajouter une vue canevas",
+    "Commandes de l’atelier",
+    "Canevas publié",
+    "Le canevas n’a pas pu être chargé. Réessayez.",
+    "Renommer le groupe",
+    "Révoquer l’invitation",
+    "Changer d’espace et ouvrir l’atelier",
+  ],
+  "de-DE": [
+    "Workshop-Canvas öffnen",
+    "Canvas-Ansicht hinzufügen",
+    "Workshop-Steuerung",
+    "Veröffentlichter Canvas",
+    "Der Canvas konnte nicht geladen werden. Versuchen Sie es erneut.",
+    "Gruppe umbenennen",
+    "Einladung widerrufen",
+    "Arbeitsbereich wechseln und Workshop öffnen",
+  ],
+  "es-ES": [
+    "Abrir lienzo del taller",
+    "Añadir vista de lienzo",
+    "Controles del taller",
+    "Lienzo publicado",
+    "No se pudo cargar el lienzo. Inténtalo de nuevo.",
+    "Cambiar nombre del grupo",
+    "Revocar invitación",
+    "Cambiar espacio y abrir taller",
+  ],
+  "it-IT": [
+    "Apri la lavagna del workshop",
+    "Aggiungi vista lavagna",
+    "Controlli del workshop",
+    "Lavagna pubblicata",
+    "Impossibile caricare la lavagna. Riprova.",
+    "Rinomina gruppo",
+    "Revoca invito",
+    "Cambia spazio e apri workshop",
+  ],
+  "pt-PT": [
+    "Abrir tela da sessão",
+    "Adicionar vista de tela",
+    "Controlos da sessão",
+    "Tela publicada",
+    "Não foi possível carregar a tela. Tente novamente.",
+    "Mudar o nome do grupo",
+    "Revogar convite",
+    "Mudar de espaço e abrir sessão",
+  ],
+  "ja-JP": [
+    "ワークショップのキャンバスを開く",
+    "キャンバス表示を追加",
+    "ワークショップの操作",
+    "公開キャンバス",
+    "キャンバスを読み込めませんでした。再試行してください。",
+    "グループ名を変更",
+    "招待を取り消す",
+    "ワークスペースを切り替えてワークショップを開く",
+  ],
+  "ko-KR": [
+    "워크숍 캔버스 열기",
+    "캔버스 보기 추가",
+    "워크숍 관리",
+    "공개 캔버스",
+    "캔버스를 불러오지 못했습니다. 다시 시도해 주세요.",
+    "그룹 이름 변경",
+    "초대 취소",
+    "워크스페이스를 전환하고 워크숍 열기",
+  ],
+  "zh-CN": [
+    "打开工作坊画布",
+    "添加画布视图",
+    "工作坊控制",
+    "已发布的画布",
+    "无法加载画布。请重试。",
+    "重命名分组",
+    "撤销邀请",
+    "切换工作区并打开工作坊",
+  ],
+  "zh-TW": [
+    "開啟工作坊畫布",
+    "新增畫布檢視",
+    "工作坊控制",
+    "已發布的畫布",
+    "無法載入畫布。請再試一次。",
+    "重新命名群組",
+    "撤銷邀請",
+    "切換工作區並開啟工作坊",
+  ],
+};
+
+export function canvasWorkshopMessages(locale: SupportedLocale) {
+  return Object.fromEntries(
+    Object.keys(english).map((key, index) => [key, translations[locale][index]]),
+  ) as Record<keyof typeof english, string>;
+}

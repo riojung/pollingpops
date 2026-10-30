@@ -9,6 +9,7 @@ export * from "./audience-scopes";
 export * from "./qna-policy";
 export * from "./text-opinions";
 export * from "./session-summaries";
+export * from "./canvas-boards";
 import {
   hasTextOpinionQuestions,
   isTextOpinionQuestion,
@@ -164,6 +165,9 @@ export type PublicFeatures = z.infer<typeof PublicFeaturesSchema>;
 
 export const WorkspaceProductFeaturesSchema = z.object({
   ideaBoards: z.boolean().optional(),
+  canvasBoards: z.boolean().optional(),
+  canvasBoardSharing: z.boolean().optional(),
+  canvasBoardRealtime: z.boolean().optional(),
   multiSelectPolls: z.boolean().default(false),
   rankingPolls: z.boolean().default(false),
   openTextPolls: z.boolean().default(false),

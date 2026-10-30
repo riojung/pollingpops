@@ -29,6 +29,37 @@ const realtimeEventTypes = new Set([
   "chat.reaction.updated",
 ]);
 
+const canvasActions = new Set([
+  "create",
+  "list",
+  "snapshot",
+  "guest_snapshot",
+  "command",
+  "batch",
+  "undo",
+  "redo",
+  "archive",
+  "restore",
+  "grant",
+  "revoke",
+  "workshop",
+  "invite",
+  "accept",
+  "revoke_invitation",
+  "delete",
+  "presence",
+  "media",
+]);
+const canvasStreamEvents = new Set([
+  "opened",
+  "closed",
+  "revoked",
+  "backpressure",
+  "reconnect_requested",
+  "unavailable",
+  "presence_cleanup_failed",
+]);
+
 export const RECOVERY_FUNNEL_STAGES = [
   "create",
   "publish",
@@ -89,6 +120,37 @@ export class MetricsService {
     help: "Duration of HTTP requests handled by the API",
     labelNames: ["method", "route", "status_code"] as const,
     buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+    registers: [this.registry],
+  });
+
+  private readonly canvasOperations = new Counter({
+    name: "openround_canvas_operations_total",
+    help: "Canvas HTTP actions by bounded action and outcome",
+    labelNames: ["action", "outcome"] as const,
+    registers: [this.registry],
+  });
+  private readonly canvasOperationDuration = new Histogram({
+    name: "openround_canvas_operation_duration_seconds",
+    help: "Canvas HTTP acknowledgement duration including authorization and safe projection",
+    labelNames: ["action", "outcome"] as const,
+    buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+    registers: [this.registry],
+  });
+  private readonly canvasStreamEvents = new Counter({
+    name: "openround_canvas_stream_events_total",
+    help: "Canvas connection and recovery events with no tenant or principal labels",
+    labelNames: ["event"] as const,
+    registers: [this.registry],
+  });
+  private readonly canvasStreams = new Gauge({
+    name: "openround_canvas_live_connections",
+    help: "Current authorized canvas fetch streams on this node",
+    registers: [this.registry],
+  });
+  private readonly canvasOutboxLag = new Histogram({
+    name: "openround_canvas_outbox_observation_lag_seconds",
+    help: "Age of durable metadata notifications when observed by a serving node; includes reconnect catch-up",
+    buckets: [0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 30, 300],
     registers: [this.registry],
   });
 
@@ -581,6 +643,29 @@ export class MetricsService {
 
   observeHttp(method: string, route: string, statusCode: number, seconds: number) {
     this.httpDuration.observe({ method, route, status_code: String(statusCode) }, seconds);
+  }
+
+  observeCanvasOperation(action: string, outcome: string, seconds: number) {
+    const labels = {
+      action: canvasActions.has(action) ? action : "other",
+      outcome: ["accepted", "conflict", "rejected", "failed"].includes(outcome)
+        ? outcome
+        : "failed",
+    };
+    this.canvasOperations.inc(labels);
+    this.canvasOperationDuration.observe(labels, Math.max(0, seconds));
+  }
+
+  canvasStreamEvent(event: string) {
+    this.canvasStreamEvents.inc({ event: canvasStreamEvents.has(event) ? event : "other" });
+  }
+
+  setCanvasStreams(count: number) {
+    this.canvasStreams.set(Math.max(0, count));
+  }
+
+  observeCanvasOutboxLag(seconds: number) {
+    if (Number.isFinite(seconds)) this.canvasOutboxLag.observe(Math.max(0, seconds));
   }
 
   recordSessionEvents(types: string[]) {

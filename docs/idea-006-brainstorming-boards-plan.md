@@ -7,6 +7,10 @@ selected scope. IDEA-004's Presentation/Survey format expansion and IDEA-005's G
 delivery remain separate deferred increments. Their selected changes and follow-up fixes are
 merged into `main`.
 
+The next proposed increment covers a shared team canvas and guided guest experience. See the
+[Idea Board canvas analysis and implementation plan](idea-board-canvas-implementation-plan.md)
+for the capability gaps, sharing architecture, delivery order, and acceptance gates.
+
 ## Customer workflow
 
 A standalone board can collect ideas before, during, or after a meeting. Its shareable participant

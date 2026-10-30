@@ -12,12 +12,14 @@ export function BoardIdeaImage({
   mediaId,
   alt,
   guestToken,
+  canvasId,
   showCaption = true,
 }: {
   boardId: string;
   mediaId: string;
   alt: string;
   guestToken?: string;
+  canvasId?: string;
   showCaption?: boolean;
 }) {
   const { t } = useLocale();
@@ -26,7 +28,7 @@ export function BoardIdeaImage({
   const [failed, setFailed] = useState<string | null>(null);
   const [visibleKey, setVisibleKey] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const sourceKey = JSON.stringify([boardId, mediaId, guestToken ?? null]);
+  const sourceKey = JSON.stringify([boardId, mediaId, guestToken ?? null, canvasId ?? null]);
   const key = `${sourceKey}:${attempt}`;
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined" || !figure.current) {
@@ -53,7 +55,7 @@ export function BoardIdeaImage({
     if (visibleKey !== sourceKey) return;
     let active = true;
     let url: string | undefined;
-    const read = readBoardIdeaImage(boardId, mediaId, guestToken);
+    const read = readBoardIdeaImage(boardId, mediaId, guestToken, canvasId);
     void read.promise
       .then((blob) => {
         if (!active) return;
@@ -68,7 +70,7 @@ export function BoardIdeaImage({
       read.release();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [boardId, mediaId, guestToken, key, sourceKey, visibleKey]);
+  }, [boardId, mediaId, guestToken, canvasId, key, sourceKey, visibleKey]);
   return (
     <figure ref={figure} className={styles.ideaImage}>
       {image?.key === key && failed !== key ? (
@@ -139,11 +141,13 @@ export function IdeaContent({
   boardId,
   idea,
   guestToken,
+  canvasId,
   showBody = true,
 }: {
   boardId: string;
   idea: Pick<IdeaBoardIdea, "body" | "status" | "attachments" | "links" | "sketch">;
   guestToken?: string;
+  canvasId?: string;
   showBody?: boolean;
 }) {
   const { t } = useLocale();
@@ -179,6 +183,7 @@ export function IdeaContent({
               mediaId={attachment.mediaId}
               alt={attachment.alt}
               guestToken={guestToken}
+              canvasId={canvasId}
             />
           ))}
         </div>
@@ -217,6 +222,7 @@ export function IdeaContent({
                         mediaId={image.mediaId}
                         alt={image.alt}
                         guestToken={guestToken}
+                        canvasId={canvasId}
                         showCaption={false}
                       />
                     </div>

@@ -203,8 +203,15 @@ export async function fetchIdeaBoardImage(
   mediaId: string,
   token?: string,
   signal?: AbortSignal,
+  canvasId?: string,
 ): Promise<Blob> {
-  const response = await fetch(`${API_URL}${boardMediaPath(id, mediaId)}/content`, {
+  const sourcePath = boardMediaPath(id, mediaId);
+  const path =
+    canvasId && token === undefined
+      ? `/v1/canvas-boards/${canvasId}/media/${mediaId}`
+      : `${sourcePath}/content`;
+  if (canvasId) ideaBoardPath(canvasId);
+  const response = await fetch(`${API_URL}${path}`, {
     ...guestOptions(token),
     credentials: token === undefined ? "include" : "omit",
     signal,

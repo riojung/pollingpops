@@ -40,16 +40,29 @@ const config = ConfigSchema.parse({
   BILLING_MODE: "disabled",
   LOG_LEVEL: "silent",
 });
-if (process.env.CONTROL_AUTH_MODE === "password") {
+if (process.env.CONTROL_AUTH_MODE === "password" || process.env.CANVAS_BROWSER_FIXTURE === "true") {
   // The test UI receives real development links from the HTTP response. Keep
   // synthetic email addresses and single-use credentials out of fixture logs.
   ConsoleMailer.prototype.sendMagicLink = async () => {};
+  ConsoleMailer.prototype.sendAccountVerification = async () => {};
+  ConsoleMailer.prototype.sendSignInPin = async () => {};
   ConsoleMailer.prototype.sendWorkspaceInvitation = async () => {};
   ConsoleMailer.prototype.sendOrganizationInvitation = async () => {};
 }
 const repository = new MemoryRepository();
 const built = await buildApp(config, { repository });
 const platform = createPlatformRepository(repository);
+if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
+  await platform.saveFeaturePolicy({
+    expectedRevision: 0,
+    features: {
+      ideaBoards: { enabled: true, plans: ["free", "pro", "team"] },
+      canvasBoards: { enabled: true, plans: ["free", "pro", "team"] },
+      canvasBoardSharing: { enabled: true, plans: ["free", "pro", "team"] },
+      canvasBoardRealtime: { enabled: true, plans: ["free", "pro", "team"] },
+    },
+  });
+}
 const realtime = await attachRealtime(
   built.app.server,
   built.sessions,

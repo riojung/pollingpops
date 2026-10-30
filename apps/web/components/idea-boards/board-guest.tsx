@@ -19,6 +19,7 @@ import { IdeaBoardIdeas } from "./idea-list";
 import { emptyIdeaDraft, IdeaComposer, type IdeaDraft } from "./idea-composer";
 import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
+import { PublishedWorkshopCanvas } from "../canvas-boards/workshop-canvas-bridge";
 
 type IdeaIntent = {
   kind: "idea";
@@ -323,6 +324,9 @@ export function BoardGuest({ id }: { id: string }) {
       {board?.status === "draft" ? <p>{t("boards.notOpen")}</p> : null}
       {guest ? (
         <>
+          {token.current ? (
+            <PublishedWorkshopCanvas sourceBoardId={id} token={token.current} />
+          ) : null}
           {guest.board.status === "collecting" ? (
             <section className={styles.panel}>
               <h2>{t("boards.submitIdea")}</h2>

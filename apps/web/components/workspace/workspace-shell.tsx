@@ -115,7 +115,7 @@ const destinations: Array<{
     href: "/boards",
     icon: "library",
     label: "workspace.nav.boards",
-    match: (path) => path.startsWith("/boards"),
+    match: (path) => path.startsWith("/boards") || path.startsWith("/canvas/"),
     feature: "ideaBoards",
   },
   {

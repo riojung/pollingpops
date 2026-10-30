@@ -1,6 +1,10 @@
+import { canvasWorkshopMessages } from "../../canvas-workshop-messages";
+import { canvasMessages } from "../../canvas-messages";
 import type { IdeaBoardMessages } from "./en-CA";
 
 const messages: IdeaBoardMessages = {
+  ...canvasMessages("ja-JP"),
+  ...canvasWorkshopMessages("ja-JP"),
   "boards.more": "さらにボードを読み込む",
   "boards.title": "アイデアボード",
   "boards.description": "アイデアを集めてグループに分け、共通の優先事項を選びます。",

@@ -2072,6 +2072,9 @@ describe("deployment configuration and manifest validation", () => {
       "roundClientProtocol",
       "sessionSummaries",
       "ideaBoards",
+      "canvasBoards",
+      "canvasBoardSharing",
+      "canvasBoardRealtime",
     ]) {
       for (const value of [false, true]) {
         const summary = {
@@ -2117,6 +2120,9 @@ describe("deployment configuration and manifest validation", () => {
       FEATURE_PRESENTATION_COMPANION: "true",
       FEATURE_ROUND_CLIENT_PROTOCOL: "true",
       FEATURE_IDEA_BOARDS: "true",
+      FEATURE_CANVAS_BOARDS: "true",
+      FEATURE_CANVAS_BOARD_SHARING: "true",
+      FEATURE_CANVAS_BOARD_REALTIME: "true",
     });
     const summary = createConfigCheckSummary({ ...serverConfig, NODE_ENV: "production" });
 
@@ -2125,6 +2131,9 @@ describe("deployment configuration and manifest validation", () => {
     expect(summary.featureFlags.presentationCompanion).toBe(true);
     expect(summary.featureFlags.roundClientProtocol).toBe(true);
     expect(summary.featureFlags.ideaBoards).toBe(true);
+    expect(summary.featureFlags.canvasBoards).toBe(true);
+    expect(summary.featureFlags.canvasBoardSharing).toBe(true);
+    expect(summary.featureFlags.canvasBoardRealtime).toBe(true);
     expect(validateReceiptConfigCheckSummary(summary, config, buildId)).toBe(summary);
   });
 
@@ -2198,7 +2207,14 @@ describe("deployment configuration and manifest validation", () => {
       },
     };
     expect(() => assertConfigCheckSummary(fly, flyConfig, buildId)).not.toThrow();
-    for (const flag of [...Object.keys(flags), "sessionSummaries", "ideaBoards"]) {
+    for (const flag of [
+      ...Object.keys(flags),
+      "sessionSummaries",
+      "ideaBoards",
+      "canvasBoards",
+      "canvasBoardSharing",
+      "canvasBoardRealtime",
+    ]) {
       expect(() =>
         assertConfigCheckSummary(
           { ...fly, featureFlags: { ...fly.featureFlags, [flag]: true } },

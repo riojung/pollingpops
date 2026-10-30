@@ -188,6 +188,9 @@ const optionalConfigCheckFeatureKeys = Object.freeze([
   "presentationCompanion",
   "sessionSummaries",
   "ideaBoards",
+  "canvasBoards",
+  "canvasBoardSharing",
+  "canvasBoardRealtime",
 ]);
 const coreParityConfigCheckFeatureKeys = Object.freeze([
   "audienceScopes",
@@ -1082,6 +1085,9 @@ export function assertConfigCheckSummary(summary, config, buildId) {
     ...coreParityConfigCheckFeatureKeys,
     "sessionSummaries",
     "ideaBoards",
+    "canvasBoards",
+    "canvasBoardSharing",
+    "canvasBoardRealtime",
   ]) {
     if (Object.hasOwn(summary.featureFlags, key) && summary.featureFlags[key] !== false) {
       throw new Error(`The exact server image config-check left feature flag ${key} enabled`);

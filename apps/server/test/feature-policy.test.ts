@@ -97,6 +97,44 @@ describe("operator product feature policy", () => {
     );
   });
 
+  it("separates canvas creation, sharing and live updates while respecting their board dependency", async () => {
+    const f = fixture();
+    f.config.FEATURE_IDEA_BOARDS = true;
+    f.config.CORE_PARITY_WORKSPACE_ALLOWLIST = [f.workspaceId];
+    let features = await workspaceProductFeatures(f.repository, f.config, f.workspaceId);
+    expect(features.ideaBoards).toBe(true);
+    expect(features.canvasBoards).toBe(false);
+    expect(features.canvasBoardSharing).toBe(false);
+    expect(features.canvasBoardRealtime).toBe(false);
+
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: {
+        canvasBoards: { enabled: true, plans: ["free", "pro", "team"] },
+        canvasBoardSharing: { enabled: false, plans: [] },
+        canvasBoardRealtime: { enabled: true, plans: ["free", "pro", "team"] },
+      },
+    });
+    features = await workspaceProductFeatures(f.repository, f.config, f.workspaceId);
+    expect(features.canvasBoards).toBe(true);
+    expect(features.canvasBoardSharing).toBe(false);
+    expect(features.canvasBoardRealtime).toBe(true);
+
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: {
+        ideaBoards: { enabled: false, plans: [] },
+        canvasBoards: { enabled: true, plans: ["free", "pro", "team"] },
+        canvasBoardSharing: { enabled: true, plans: ["free", "pro", "team"] },
+        canvasBoardRealtime: { enabled: true, plans: ["free", "pro", "team"] },
+      },
+    });
+    features = await workspaceProductFeatures(f.repository, f.config, f.workspaceId);
+    expect(features.canvasBoards).toBe(false);
+    expect(features.canvasBoardSharing).toBe(false);
+    expect(features.canvasBoardRealtime).toBe(false);
+  });
+
   it("keeps missing entries subject to their legacy flags and workspace rollout", async () => {
     const f = fixture();
     f.config.FEATURE_DECISION_REPLAY = true;

@@ -679,6 +679,9 @@ class MemoryIdeaBoards {
   readonly rows = new Map<string, IdeaBoardStored>();
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private readonly parent: MemoryRepository) {}
+  saveFromCanvas(row: IdeaBoardStored) {
+    this.save(row);
+  }
   private assertWritable(row: IdeaBoardStored, insert = false) {
     if (!this.parent.workspaces.has(row.workspaceId) || (!insert && !this.rows.has(row.id)))
       throw new IdeaBoardError("NOT_FOUND", "Idea board workspace was deleted");
@@ -753,6 +756,7 @@ class MemoryIdeaBoards {
         this.tombstone(mediaId, now);
         this.parent.ideaBoardMediaOwners.delete(mediaId);
       }
+    this.parent.deleteIdeaBoardCanvasMetadata(id);
     this.rows.delete(id);
   }
   run: Run = (workspaceId, _boardId, work) => {
@@ -985,4 +989,27 @@ export function createIdeaBoardRepository(repository: Repository) {
         .run,
     );
   throw new Error("Unsupported idea board repository");
+}
+
+/** Trusted canvas transaction bridge. Call only under the shared memory platform transaction. */
+export function memoryIdeaBoardCanvasSource(repository: MemoryRepository, id: string) {
+  createIdeaBoardRepository(repository);
+  const store = repository.getOrCreateLifecycleExtension(
+    "ideaBoards",
+    () => new MemoryIdeaBoards(repository),
+  );
+  const row = store.rows.get(id);
+  return row ? structuredClone(row) : null;
+}
+/** Preserve the normal rich-media retention checks when an ACL-authorized canvas facilitates its source. */
+export function saveMemoryIdeaBoardCanvasSource(
+  repository: MemoryRepository,
+  row: IdeaBoardStored,
+) {
+  createIdeaBoardRepository(repository);
+  const store = repository.getOrCreateLifecycleExtension(
+    "ideaBoards",
+    () => new MemoryIdeaBoards(repository),
+  );
+  store.saveFromCanvas(row);
 }

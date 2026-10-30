@@ -130,6 +130,56 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
 }
 
 describe("independent idea board APIs", () => {
+  it("searches retained titles before pagination, including boards beyond the initial page", async () => {
+    const { app, headers } = await fixture();
+    const created: Array<{ id: string; title: string }> = [];
+    for (let index = 0; index < 52; index++) {
+      const { board } = await createBoard(app, headers, { title: `Search board ${randomUUID()}` });
+      created.push({ id: board.id, title: board.title });
+    }
+    await createBoard(app, headers, { title: "Different workshop" });
+    const initial = await app.inject({ method: "GET", url: "/v1/idea-boards?limit=50", headers });
+    expect(initial.statusCode, initial.body).toBe(200);
+    expect(initial.json().boards).toHaveLength(50);
+    const visible = new Set(initial.json().boards.map((board: { id: string }) => board.id));
+    const later = created.find((board) => !visible.has(board.id))!;
+    expect(later).toBeDefined();
+    const found = await app.inject({
+      method: "GET",
+      url: `/v1/idea-boards?limit=1&search=${encodeURIComponent(`  ${later.title.toUpperCase()}  `)}`,
+      headers,
+    });
+    expect(found.statusCode, found.body).toBe(200);
+    expect(found.json().boards.map((board: { id: string }) => board.id)).toEqual([later.id]);
+    expect(found.json().nextCursor).toBeNull();
+    const firstMatch = await app.inject({
+      method: "GET",
+      url: "/v1/idea-boards?limit=1&search=search%20board",
+      headers,
+    });
+    expect(firstMatch.statusCode, firstMatch.body).toBe(200);
+    const nextMatch = await app.inject({
+      method: "GET",
+      url: `/v1/idea-boards?limit=1&search=search%20board&cursor=${firstMatch.json().nextCursor}`,
+      headers,
+    });
+    expect(nextMatch.statusCode, nextMatch.body).toBe(200);
+    expect([firstMatch.json().boards[0].id, nextMatch.json().boards[0].id]).toEqual(
+      created
+        .map((board) => board.id)
+        .sort()
+        .slice(0, 2),
+    );
+    const invalid = await app.inject({
+      method: "GET",
+      url: `/v1/idea-boards?search=${"x".repeat(161)}`,
+      headers,
+    });
+    expect(invalid.statusCode).toBe(400);
+    const anonymous = await app.inject({ method: "GET", url: "/v1/idea-boards?search=search" });
+    expect(anonymous.statusCode).toBe(401);
+  });
+
   it("reports image availability on guest responses and refuses uploads without storage and scanning", async () => {
     const { app, headers } = await fixture();
     const { board } = await createBoard(app, headers);

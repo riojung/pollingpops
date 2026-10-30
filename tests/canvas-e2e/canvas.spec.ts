@@ -463,6 +463,58 @@ test("keyboard editing, composition, connectors and confirmed deletion stay acce
   expect((await page.request.get(`${api}/v1/canvas-boards/${id}`)).status()).toBe(404);
 });
 
+test("library search finds later-page canvases and workshops and resets pagination", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  await organization(page, testInfo);
+  const seeded = await page.request.post(`${api}/__test/canvas/library`, { data: { count: 51 } });
+  expect(seeded.ok(), await seeded.text()).toBe(true);
+  const canvases = (await seeded.json()).boards as Array<{ id: string; title: string }>;
+  const workshops: Array<{ id: string; title: string }> = [];
+  for (let index = 0; index < 51; index++) {
+    const workshop = await page.request.post(`${api}/v1/idea-boards`, {
+      data: { title: `Workshop ${randomUUID()}`, idempotencyKey: randomUUID() },
+    });
+    expect(workshop.status(), await workshop.text()).toBe(201);
+    workshops.push((await workshop.json()).board);
+  }
+  const firstCanvases = await (await page.request.get(`${api}/v1/canvas-boards?scope=all`)).json();
+  const firstWorkshops = await (await page.request.get(`${api}/v1/idea-boards?limit=50`)).json();
+  expect(firstCanvases.boards).toHaveLength(50);
+  expect(firstWorkshops.boards).toHaveLength(50);
+  const visibleCanvases = new Set(firstCanvases.boards.map((board: { id: string }) => board.id));
+  const visibleWorkshops = new Set(firstWorkshops.boards.map((board: { id: string }) => board.id));
+  const laterCanvas = canvases.find((board) => !visibleCanvases.has(board.id))!;
+  const laterWorkshop = workshops.find((board) => !visibleWorkshops.has(board.id))!;
+  const initialTitle = firstCanvases.boards[0].title as string;
+  await page.goto("/boards");
+  await expect(page.getByRole("link", { name: initialTitle, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: laterCanvas.title, exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: laterWorkshop.title, exact: true })).toHaveCount(0);
+  const search = page.getByRole("searchbox", { name: "Search boards", exact: true });
+  async function find(title: string, endpoint: string) {
+    const request = page.waitForRequest((candidate) => {
+      const url = new URL(candidate.url());
+      return url.pathname === endpoint && url.searchParams.get("search") === title.toUpperCase();
+    });
+    await search.fill(`  ${title.toUpperCase()}  `);
+    expect(new URL((await request).url()).searchParams.has("cursor")).toBe(false);
+    await expect(page.getByRole("link", { name: title, exact: true })).toBeVisible();
+  }
+  await find(laterCanvas.title, "/v1/canvas-boards");
+  await expect(page.getByRole("link", { name: laterWorkshop.title, exact: true })).toHaveCount(0);
+  await find(laterWorkshop.title, "/v1/idea-boards");
+  await expect(page.getByRole("link", { name: laterCanvas.title, exact: true })).toHaveCount(0);
+  await search.fill("");
+  await expect(page.getByRole("link", { name: initialTitle, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Load more boards", exact: true }).click();
+  await expect(page.getByRole("link", { name: laterCanvas.title, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: laterWorkshop.title, exact: true })).toBeVisible();
+  await find(laterCanvas.title, "/v1/canvas-boards");
+  await expect(page.getByRole("link", { name: laterWorkshop.title, exact: true })).toHaveCount(0);
+});
+
 test("@mobile canvas retains keyboard alternatives, touch navigation and readable layouts", async ({
   page,
   browserName,

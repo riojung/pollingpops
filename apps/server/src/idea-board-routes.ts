@@ -36,6 +36,7 @@ const Page = z
   .object({
     cursor: z.string().uuid().optional(),
     limit: z.coerce.number().int().min(1).max(50).default(50),
+    search: z.string().trim().max(160).default(""),
   })
   .strict();
 const HostMutation = z
@@ -193,7 +194,11 @@ export async function registerIdeaBoardRoutes(
         await deps.boards.list(actor.workspaceId, () => new Date(), actor.role !== "viewer")
       )
         .sort((a, b) => a.id.localeCompare(b.id))
-        .filter((row) => !input.cursor || row.id > input.cursor);
+        .filter(
+          (row) =>
+            (!input.cursor || row.id > input.cursor) &&
+            row.title.toLocaleLowerCase().includes(input.search.toLocaleLowerCase()),
+        );
       const boards = rows.slice(0, input.limit);
       return { boards, nextCursor: rows.length > input.limit ? boards.at(-1)!.id : null };
     });

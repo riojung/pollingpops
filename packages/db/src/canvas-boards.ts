@@ -3,6 +3,7 @@ import {
   CANVAS_MAX_DOCUMENT_BYTES,
   CANVAS_MAX_OBJECTS,
   CanvasBoardCreateSchema,
+  CanvasBoardCommandSchema,
   CanvasBoardGuestViewSchema,
   CanvasBoardInviteSchema,
   CanvasBoardMutationSchema,
@@ -1275,12 +1276,19 @@ export class CanvasBoardRepository {
     userId: string,
     clock: CanvasClock = () => new Date(),
   ) {
-    return this.command(
-      actor,
-      id,
-      { schemaVersion: 1, operationId: randomUUID(), command: { type: "revoke", userId } },
-      clock,
-    );
+    CanvasBoardCommandSchema.parse({ type: "revoke", userId });
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const value = await this.checked(tx, actor, id, clock, true);
+      if (!value.capabilities.share)
+        throw new CanvasBoardError("FORBIDDEN", "Only a board owner can manage sharing");
+      assert(
+        userId !== value.state.board.ownerUserId,
+        "Board ownership cannot be changed through a grant",
+      );
+      if (!value.state.grants.some((grant) => grant.userId === userId)) return;
+      value.state.grants = value.state.grants.filter((grant) => grant.userId !== userId);
+      await this.commit(tx, value.state, clock);
+    });
   }
   delete(actor: CanvasActor, id: string, clock: CanvasClock = () => new Date()) {
     return this.run(actor, { boardId: id }, async (tx) => {

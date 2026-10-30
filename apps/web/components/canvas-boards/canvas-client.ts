@@ -54,10 +54,11 @@ export async function listCanvases(
   scope: "all" | "owned" | "shared" | "archived",
   signal?: AbortSignal,
   cursor?: string | null,
+  search = "",
 ) {
   if (cursor) canvasPath(cursor);
   const result = await apiFetch<{ boards: unknown[]; nextCursor: string | null }>(
-    `/v1/canvas-boards?scope=${scope}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    `/v1/canvas-boards?scope=${scope}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
     {
       signal,
       cache: "no-store",

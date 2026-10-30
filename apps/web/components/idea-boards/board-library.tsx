@@ -3,24 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import {
-  IdeaBoardViewSchema,
-  type CanvasBoardCreate,
-  type CanvasBoardView,
-  type IdeaBoardCreate,
-  type IdeaBoardView,
-} from "@openround/contracts";
-import { apiFetch, ApiClientError } from "../../lib/api";
+import { type CanvasBoardCreate, type IdeaBoardCreate } from "@openround/contracts";
+import { ApiClientError } from "../../lib/api";
 import { createIdeaBoard, ideaBoardCreateIntent } from "../../lib/idea-board-client";
 import { clientUuid } from "../../lib/uuid";
-import { createCanvas, listCanvases } from "../canvas-boards/canvas-client";
+import { createCanvas } from "../canvas-boards/canvas-client";
+import { useBoardLibrary, type BoardLibraryScope } from "./use-board-library";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
 import { WorkspaceShell } from "../workspace/workspace-shell";
 import styles from "./boards.module.css";
 import canvasStyles from "../canvas-boards/canvas.module.css";
 
-type Scope = "all" | "owned" | "shared" | "archived";
 type Intent =
   | { kind: "team"; value: CanvasBoardCreate }
   | { kind: "workshop"; value: ReturnType<typeof ideaBoardCreateIntent> };
@@ -40,15 +34,7 @@ export function BoardLibrary() {
   const router = useRouter();
   const { creator, canEdit, productFeatures } = useWorkspace();
   const workspaceId = creator?.workspaceId;
-  const [loaded, setLoaded] = useState<{
-    workspaceId: string;
-    scope: Scope;
-    boards: IdeaBoardView[];
-    canvases: CanvasBoardView[];
-    nextCursor: string | null;
-    canvasNextCursor: string | null;
-  } | null>(null);
-  const [scope, setScope] = useState<Scope>("all");
+  const [scope, setScope] = useState<BoardLibraryScope>("all");
   const [search, setSearch] = useState("");
   const [input, setInput] = useState<IdeaBoardCreate>(defaults);
   const [kind, setKind] = useState<"team" | "workshop">("team");
@@ -64,49 +50,23 @@ export function BoardLibrary() {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLInputElement>(null);
   const canCreate = canEdit && (productFeatures?.canvasBoards || productFeatures?.ideaBoards);
+  const library = useBoardLibrary({
+    workspaceId,
+    scope,
+    search,
+    refresh,
+    canvasEnabled: Boolean(productFeatures?.canvasBoards),
+  });
   useEffect(() => {
     const active = new AbortController();
     controller.current = active;
-    setError(false);
-    if (workspaceId) {
-      void Promise.all([
-        scope === "all" || scope === "owned"
-          ? apiFetch<{ boards: unknown[]; nextCursor: string | null }>("/v1/idea-boards?limit=50", {
-              signal: active.signal,
-              cache: "no-store",
-            })
-          : Promise.resolve({ boards: [], nextCursor: null }),
-        listCanvases(scope, active.signal).catch((caught: unknown) => {
-          if (
-            caught instanceof ApiClientError &&
-            caught.status === 404 &&
-            !productFeatures?.canvasBoards
-          )
-            return { boards: [], nextCursor: null };
-          throw caught;
-        }),
-      ])
-        .then(([legacy, canvases]) => {
-          if (!active.signal.aborted)
-            setLoaded({
-              workspaceId,
-              scope,
-              boards: legacy.boards.map((board) => IdeaBoardViewSchema.parse(board)),
-              nextCursor: legacy.nextCursor,
-              canvases: canvases.boards,
-              canvasNextCursor: canvases.nextCursor,
-            });
-        })
-        .catch(() => {
-          if (!active.signal.aborted) setError(true);
-        });
-    }
     return () => active.abort();
-  }, [workspaceId, scope, refresh, productFeatures?.canvasBoards]);
+  }, [workspaceId]);
   useEffect(() => {
     pending.current = null;
     inFlight.current = false;
     setBusy(false);
+    setError(false);
     setCreating(false);
     setInput(defaults);
   }, [workspaceId]);
@@ -121,18 +81,10 @@ export function BoardLibrary() {
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, [creating]);
-  const current =
-    loaded && loaded.workspaceId === workspaceId && loaded.scope === scope ? loaded : null;
-  const query = search.trim().toLocaleLowerCase();
-  const canvases =
-    current?.canvases.filter((board) => board.title.toLocaleLowerCase().includes(query)) ?? [];
-  const attachedSources = new Set(
-    current?.canvases.map((board) => board.sourceBoardId).filter(Boolean),
-  );
-  const boards =
-    current?.boards.filter(
-      (board) => !attachedSources.has(board.id) && board.title.toLocaleLowerCase().includes(query),
-    ) ?? [];
+  const current = library.data;
+  const canvases = current?.canvases ?? [];
+  const attachedSources = new Set(canvases.map((board) => board.sourceBoardId).filter(Boolean));
+  const boards = current?.boards.filter((board) => !attachedSources.has(board.id)) ?? [];
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -188,43 +140,6 @@ export function BoardLibrary() {
       }
     }
   }
-  async function more() {
-    if (!current || (!current.nextCursor && !current.canvasNextCursor) || inFlight.current) return;
-    const active = controller.current;
-    inFlight.current = true;
-    setBusy(true);
-    try {
-      const [result, canvasResult] = await Promise.all([
-        current.nextCursor
-          ? apiFetch<{ boards: unknown[]; nextCursor: string | null }>(
-              "/v1/idea-boards?limit=50&cursor=" + encodeURIComponent(current.nextCursor),
-              { signal: active?.signal, cache: "no-store" },
-            )
-          : Promise.resolve({ boards: [], nextCursor: null }),
-        current.canvasNextCursor
-          ? listCanvases(scope, active?.signal, current.canvasNextCursor)
-          : Promise.resolve({ boards: [], nextCursor: null }),
-      ]);
-      if (!active?.signal.aborted && currentWorkspace.current === workspaceId)
-        setLoaded({
-          ...current,
-          boards: [
-            ...current.boards,
-            ...result.boards.map((board) => IdeaBoardViewSchema.parse(board)),
-          ],
-          nextCursor: result.nextCursor,
-          canvases: [...current.canvases, ...canvasResult.boards],
-          canvasNextCursor: canvasResult.nextCursor,
-        });
-    } catch {
-      if (!active?.signal.aborted) setError(true);
-    } finally {
-      if (controller.current === active) {
-        inFlight.current = false;
-        setBusy(false);
-      }
-    }
-  }
   return (
     <WorkspaceShell
       title={t("boards.title")}
@@ -235,7 +150,12 @@ export function BoardLibrary() {
       <div className={canvasStyles.libraryToolbar}>
         <label>
           {t("canvas.search")}
-          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input
+            type="search"
+            maxLength={160}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </label>
         {canCreate ? (
           <button
@@ -264,20 +184,20 @@ export function BoardLibrary() {
           </button>
         ))}
       </div>
-      {error ? (
+      {error || library.error ? (
         <p className="error" role="alert">
           {t("boards.error")}{" "}
           <button
             type="button"
             className="button-quiet"
-            disabled={busy}
+            disabled={busy || library.busy}
             onClick={() => setRefresh((value) => value + 1)}
           >
             {t("boards.refresh")}
           </button>
         </p>
       ) : null}
-      {!current && !error ? <p role="status">{t("boards.loading")}</p> : null}
+      {!current && !error && !library.error ? <p role="status">{t("boards.loading")}</p> : null}
       {current && !canvases.length && !boards.length ? <p>{t("canvas.noBoards")}</p> : null}
       <ul className={canvasStyles.libraryGrid}>
         {canvases.map((board) => (
@@ -332,7 +252,12 @@ export function BoardLibrary() {
         ))}
       </ul>
       {current?.nextCursor || current?.canvasNextCursor ? (
-        <button type="button" className="button-quiet" disabled={busy} onClick={() => void more()}>
+        <button
+          type="button"
+          className="button-quiet"
+          disabled={busy || library.busy}
+          onClick={() => void library.more()}
+        >
           {t("boards.more")}
         </button>
       ) : null}

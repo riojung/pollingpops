@@ -338,6 +338,70 @@ describe("board-scoped canvas HTTP boundaries", () => {
     ).toBeGreaterThanOrEqual(403);
   });
 
+  it("returns 204 for a lost-response grant deletion retry while preserving board authorization", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    const invitation = await invite(f, board, f.editor.email, "editor");
+    expect((await accept(f, invitation.id, f.editor.headers)).statusCode).toBe(200);
+    const remove = (target: string, headers = f.owner.headers, id = board.id) =>
+      f.app.inject({
+        method: "DELETE",
+        url: `/v1/canvas-boards/${id}/grants/${target}`,
+        headers,
+      });
+    expect((await remove(f.billing.userId, f.editor.headers)).statusCode).toBe(403);
+    expect((await remove(f.editor.userId, f.outsider.headers)).statusCode).toBe(404);
+    expect((await remove(f.owner.userId)).statusCode).toBe(422);
+    expect((await remove(f.editor.userId, f.owner.headers, randomUUID())).statusCode).toBe(404);
+    // The first deletion commits even if its response never reaches the client.
+    const first = await remove(f.editor.userId);
+    expect(first.statusCode, first.body).toBe(204);
+    const committed = await f.app.inject({
+      url: `/v1/canvas-boards/${board.id}`,
+      headers: f.owner.headers,
+    });
+    expect(committed.statusCode, committed.body).toBe(200);
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: {
+        ...structuredClone(features),
+        canvasBoards: { enabled: false, plans: ["free", "pro", "team"] },
+        canvasBoardSharing: { enabled: false, plans: ["free", "pro", "team"] },
+      },
+    });
+    const retry = await remove(f.editor.userId);
+    expect(retry.statusCode, retry.body).toBe(204);
+    expect(
+      (
+        await f.app.inject({ url: `/v1/canvas-boards/${board.id}`, headers: f.owner.headers })
+      ).json(),
+    ).toEqual(committed.json());
+    expect(
+      (await f.app.inject({ url: `/v1/canvas-boards/${board.id}`, headers: f.editor.headers }))
+        .statusCode,
+    ).toBe(404);
+    await f.platform.assignOrganizationUserLicense(
+      f.organization.id,
+      f.owner.userId,
+      f.owner.userId,
+      false,
+    );
+    expect((await remove(f.editor.userId)).statusCode).toBe(404);
+    await f.platform.assignOrganizationUserLicense(
+      f.organization.id,
+      f.owner.userId,
+      f.owner.userId,
+      true,
+    );
+    const deleted = await f.app.inject({
+      method: "DELETE",
+      url: `/v1/canvas-boards/${board.id}`,
+      headers: f.owner.headers,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    expect((await remove(f.editor.userId)).statusCode).toBe(404);
+  });
+
   it("durably acknowledges exact retries and rejects stale same-object changes and somebody else's undo", async () => {
     const f = await fixture(),
       board = await create(f);

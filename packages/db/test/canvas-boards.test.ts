@@ -186,6 +186,67 @@ for (const backend of ["memory", "postgres"] as const)
           code: "NOT_FOUND",
         });
       });
+      it("retries grant deletion without changing the durable canvas or emitting another event", async () => {
+        const board = await create();
+        const accepted = await share(board.id);
+        const before = await canvases.listOutbox(0, 500);
+        await canvases.revokeGrant(owner, board.id, editor.userId);
+        const removed = await canvases.get(owner, board.id);
+        expect(removed.canvasSeq).toBe(accepted.canvasSeq + 1);
+        expect(removed.grants).toEqual([]);
+        const committed = await canvases.listOutbox(before.cursor, 500);
+        expect(committed.events).toHaveLength(1);
+        expect(committed.events[0]).toMatchObject({
+          boardId: board.id,
+          type: "canvas.changed",
+          canvasSeq: removed.canvasSeq,
+        });
+        // A lost response is retried without a client operation ID, including after reopening.
+        const reopened = createCanvasBoardRepository(repository);
+        await reopened.revokeGrant(owner, board.id, editor.userId);
+        await reopened.revokeGrant(owner, board.id, editor.userId);
+        await reopened.revokeGrant(owner, board.id, outsider.userId);
+        expect(await reopened.get(owner, board.id)).toEqual(removed);
+        expect(await reopened.listOutbox(committed.cursor, 500)).toEqual({
+          cursor: committed.cursor,
+          events: [],
+        });
+        await expect(reopened.get(editor, board.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+      });
+      it("checks current board ownership, license and retention before an absent-grant no-op", async () => {
+        const board = await create();
+        await share(board.id);
+        await expect(canvases.revokeGrant(editor, board.id, outsider.userId)).rejects.toMatchObject(
+          { code: "FORBIDDEN" },
+        );
+        await expect(canvases.revokeGrant(outsider, board.id, editor.userId)).rejects.toMatchObject(
+          { code: "NOT_FOUND" },
+        );
+        await expect(
+          canvases.revokeGrant(owner, randomUUID(), editor.userId),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        await expect(canvases.revokeGrant(owner, board.id, owner.userId)).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+        });
+        await canvases.revokeGrant(owner, board.id, editor.userId);
+        const removed = await canvases.get(owner, board.id);
+        await platform.assignOrganizationUserLicense(org, owner.userId, owner.userId, false);
+        await expect(canvases.revokeGrant(owner, board.id, editor.userId)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        await platform.assignOrganizationUserLicense(org, owner.userId, owner.userId, true);
+        await expect(
+          canvases.revokeGrant(owner, board.id, editor.userId, new Date(board.expiresAt)),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        expect(await canvases.get(owner, board.id)).toEqual(removed);
+        await canvases.delete(owner, board.id);
+        const deleted = await canvases.listOutbox(0, 500);
+        await expect(canvases.revokeGrant(owner, board.id, editor.userId)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+        expect((await canvases.listOutbox(0, 500)).cursor).toBe(deleted.cursor);
+        expect(await canvases.list(owner, { scope: "owned" })).toEqual([]);
+      });
       it("resolves only current authorized canonical creation receipts without recreating deleted boards", async () => {
         const input = CanvasBoardCreateSchema.parse({
           workspaceId,

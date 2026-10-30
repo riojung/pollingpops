@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { CanvasBoardCreateSchema } from "@openround/contracts";
 import {
   createPlatformRepository,
   MemoryPlatformRepository,
@@ -23,6 +24,7 @@ import { ConfigSchema } from "../../src/config.js";
 import { entitlementsFor } from "../../src/entitlements.js";
 import { ConsoleMailer } from "../../src/mailer.js";
 import { attachRealtime } from "../../src/realtime.js";
+import { hashToken } from "../../src/security.js";
 
 // This executable is a loopback-only browser fixture, never a production server entrypoint.
 if (process.env.NODE_ENV !== "test")
@@ -61,6 +63,33 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
       canvasBoardSharing: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoardRealtime: { enabled: true, plans: ["free", "pro", "team"] },
     },
+  });
+  // Seed a paginated library without relaxing the production 20/minute creation budget.
+  built.app.post("/__test/canvas/library", async (request, reply) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
+      return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
+    const token = request.cookies[config.COOKIE_NAME];
+    const actor = token ? await repository.getCreatorBySession(hashToken(token), new Date()) : null;
+    if (!actor) return reply.code(401).send({ error: { message: "Sign in required" } });
+    const { count } = z
+      .object({ count: z.number().int().min(1).max(75) })
+      .strict()
+      .parse(request.body);
+    const boards: Array<{ id: string; title: string }> = [];
+    for (let index = 0; index < count; index++) {
+      const board = await built.canvasBoards.create(
+        actor,
+        CanvasBoardCreateSchema.parse({
+          schemaVersion: 1,
+          workspaceId: actor.workspaceId,
+          title: `Canvas ${randomUUID()}`,
+          boardType: "team",
+          operationId: randomUUID(),
+        }),
+      );
+      boards.push({ id: board.id, title: board.title });
+    }
+    return { boards };
   });
 }
 const realtime = await attachRealtime(

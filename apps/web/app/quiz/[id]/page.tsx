@@ -26,6 +26,7 @@ import {
   TEXT_RESPONSE_MAX_QUESTIONS,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../components/brand";
+import { CanvasArtifactLinks } from "../../../components/canvas-artifact-links/links";
 import { BuilderCommandBar } from "../../../components/editor/builder-command-bar";
 import { DeliveryScoring } from "../../../components/editor/delivery-scoring";
 import { DiagnosticDetails } from "../../../components/editor/diagnostic-details";
@@ -86,6 +87,7 @@ interface QuizRecord {
 }
 
 interface EditorProductFeatures {
+  canvasBoards?: boolean;
   roundExperiences: boolean;
   uxBeta: boolean;
   builderV2: boolean;
@@ -1291,6 +1293,14 @@ export default function QuizEditorPage() {
     />
   ));
   const mutationFieldsetStyle = { border: 0, padding: 0, margin: 0, minWidth: 0 };
+  const canvasSnapshotLinks =
+    quiz && productFeatures?.canvasBoards ? (
+      <CanvasArtifactLinks
+        target={{ kind: "round", targetId: id }}
+        editable={canEdit}
+        disabled={draftMutationBusy}
+      />
+    ) : null;
 
   if (!uxBeta) {
     const draftGuidance = readinessIssues[0];
@@ -1359,6 +1369,7 @@ export default function QuizEditorPage() {
               </span>
             ) : null}
           </div>
+          {canvasSnapshotLinks}
           {recoverySnapshot ? (
             <section className="notice" lang="en-CA" role="status">
               <strong>Unsaved local work is available</strong>
@@ -1716,6 +1727,7 @@ export default function QuizEditorPage() {
             t("delivery.builder.titlePlaceholder")
           )}
         </h1>
+        {canvasSnapshotLinks}
         {recoverySnapshot ? (
           <section className={builderStyles.recoveryBanner} lang="en-CA" role="status">
             <div>

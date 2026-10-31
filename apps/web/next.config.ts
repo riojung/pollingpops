@@ -1,9 +1,16 @@
 import type { NextConfig } from "next";
 
 const buildId = process.env.OPENROUND_BUILD_ID?.trim() || "unversioned";
+const canvasCapacityDist = process.env.CANVAS_COLLAB_DIST_DIR;
+if (
+  canvasCapacityDist !== undefined &&
+  !/^\.next-canvas-capacity(?:-[a-z0-9-]{1,48})?$/.test(canvasCapacityDist)
+)
+  throw new Error("CANVAS_COLLAB_DIST_DIR must name a dedicated .next-canvas-capacity directory");
 
 const nextConfig: NextConfig = {
-  distDir: process.env.PLAYWRIGHT_BUSINESS === "true" ? ".next-business" : ".next",
+  distDir:
+    canvasCapacityDist ?? (process.env.PLAYWRIGHT_BUSINESS === "true" ? ".next-business" : ".next"),
   allowedDevOrigins: ["127.0.0.1"],
   output: "standalone",
   poweredByHeader: false,

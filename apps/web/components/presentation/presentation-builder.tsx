@@ -66,6 +66,7 @@ import {
   presentationPackSelectedBlock,
 } from "../../lib/presentation-pack-update-ui";
 import { AuthoringAssistant } from "../authoring-assistant";
+import { CanvasArtifactLinks } from "../canvas-artifact-links/links";
 import { ResponseEditor } from "../editor/response-editor";
 import { MediaEditor } from "../editor/media-editor";
 import type { RecoveryPackUpdateUndo } from "../editor/recovery-pack-update-panel";
@@ -1827,6 +1828,13 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         </aside>
 
         <main className={styles.canvasArea} id="presentation-canvas">
+          {productFeatures?.canvasBoards ? (
+            <CanvasArtifactLinks
+              target={{ kind: "presentation", targetId: presentationId }}
+              editable={canEdit}
+              disabled={builderMutationBlocked}
+            />
+          ) : null}
           <RecoveryPackPresentationReferences insertions={draft.recoveryPackInsertions ?? []} />
           {!mapOpen ? (
             <button

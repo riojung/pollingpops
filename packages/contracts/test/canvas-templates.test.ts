@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CanvasObjectCreateSchema } from "../src/canvas-boards";
+import { CanvasBoardCreateSchema, CanvasObjectCreateSchema } from "../src/canvas-boards";
+import { CanvasBoardCreateV2Schema } from "../src/canvas-boards-v2";
 import { CANVAS_TEMPLATES, CANVAS_TEMPLATE_IDS } from "../src/canvas-template-catalog";
 import { instantiateCanvasTemplate } from "../src/canvas-template-factory";
 
 describe("original canvas starters", () => {
   it("has a bounded, explicit English catalog covering the intended activities", () => {
     expect(CANVAS_TEMPLATES.map((template) => template.id)).toEqual([...CANVAS_TEMPLATE_IDS]);
-    expect(new Set(CANVAS_TEMPLATE_IDS).size).toBe(7);
+    expect(new Set(CANVAS_TEMPLATE_IDS).size).toBe(8);
     expect(new Set(CANVAS_TEMPLATES.map((template) => template.category))).toEqual(
       new Set(["brainstorm", "retro", "project", "decision", "learning"]),
     );
@@ -29,7 +30,11 @@ describe("original canvas starters", () => {
     );
     for (const object of first) {
       expect(CanvasObjectCreateSchema.parse(object)).toEqual(object);
-      expect(["frame", "text", "sticky"]).toContain(object.type);
+      expect(
+        id === "flow-to-action"
+          ? ["frame", "text", "rect", "diamond", "parallelogram", "connector"]
+          : ["frame", "text", "sticky"],
+      ).toContain(object.type);
       expect(object.visibility).toBe("published");
       expect(object.locked).toBe(false);
       if (object.parentId) expect(frames.has(object.parentId)).toBe(true);
@@ -44,5 +49,28 @@ describe("original canvas starters", () => {
     expect(() => instantiateCanvasTemplate("possibility-map", () => "not-an-id")).toThrow();
     const id = randomUUID();
     expect(() => instantiateCanvasTemplate("possibility-map", () => id)).toThrow("unique");
+  });
+  it("keeps the original flowchart V3-only with fresh internal links and authored choices", () => {
+    const input = {
+      schemaVersion: 3,
+      workspaceId: randomUUID(),
+      operationId: randomUUID(),
+      title: "Flow",
+      boardType: "team",
+      templateId: "flow-to-action",
+    };
+    expect(CanvasBoardCreateSchema.safeParse(input).success).toBe(true);
+    expect(CanvasBoardCreateV2Schema.safeParse({ ...input, schemaVersion: 2 }).success).toBe(false);
+    const objects = instantiateCanvasTemplate("flow-to-action", randomUUID);
+    const ids = new Set(objects.map((object) => object.id));
+    const arrows = objects.filter((object) => object.type === "connector");
+    expect(arrows).toHaveLength(4);
+    expect(arrows.map((object) => object.text)).toEqual(["Read", "Check", "Yes", "Not yet"]);
+    expect(objects.some((object) => object.type === "diamond")).toBe(true);
+    expect(objects.some((object) => object.type === "parallelogram")).toBe(true);
+    for (const arrow of arrows) {
+      expect(ids.has(arrow.from.objectId!)).toBe(true);
+      expect(ids.has(arrow.to.objectId!)).toBe(true);
+    }
   });
 });

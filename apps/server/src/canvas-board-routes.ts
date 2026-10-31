@@ -23,6 +23,7 @@ import { cleanPlainText, hashToken } from "./security.js";
 import { completeMediaFinalization, MediaFinalizationConflictError } from "./media-finalization.js";
 import { CanvasBoardLive } from "./canvas-board-live.js";
 import { registerCanvasFacilitationRoutes } from "./canvas-facilitation-routes.js";
+import { registerCanvasArtifactLinkRoutes } from "./canvas-artifact-link-routes.js";
 
 const clock = () => new Date();
 const Id = z.object({ id: z.string().uuid() }).strict();
@@ -716,6 +717,12 @@ export async function registerCanvasBoardRoutes(
       const authorize = async () =>
         deps.canvases.authorizeMedia(await sameUser(request, actor.userId), id, mediaId, clock);
       return imageBytes(mediaId, authorize, reply);
+    });
+    await registerCanvasArtifactLinkRoutes(routes, deps, {
+      user,
+      sameUser,
+      requireFeature,
+      imageBytes,
     });
     await registerCanvasFacilitationRoutes(routes, deps, {
       user,

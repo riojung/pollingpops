@@ -1,5 +1,5 @@
-import type { CanvasObject } from "@openround/contracts";
-import { connectorPoint, type CanvasBounds } from "./canvas-geometry";
+import { canvasConnectorGeometry, type CanvasObject } from "@openround/contracts";
+import type { CanvasBounds } from "./canvas-geometry";
 
 export function canvasAncestors(objects: readonly CanvasObject[], object: CanvasObject) {
   const found: CanvasObject[] = [],
@@ -86,14 +86,7 @@ export function canvasObjectBounds(
   objects: readonly CanvasObject[],
 ): CanvasBounds {
   if (object.type === "connector") {
-    const a = connectorPoint(object.from, objects),
-      b = connectorPoint(object.to, objects);
-    return {
-      x: Math.min(a.x, b.x),
-      y: Math.min(a.y, b.y),
-      width: Math.max(1, Math.abs(a.x - b.x)),
-      height: Math.max(1, Math.abs(a.y - b.y)),
-    };
+    return canvasConnectorGeometry(object, objects).bounds;
   }
   const radians = (object.rotation * Math.PI) / 180;
   const width =

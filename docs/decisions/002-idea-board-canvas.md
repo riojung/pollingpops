@@ -1,13 +1,14 @@
 # Idea Board canvas architecture
 
-Date: October 29, 2026; productivity and facilitation extensions October 30, 2026
+Date: October 29, 2026; productivity, facilitation and diagram/reference extensions October 30, 2026
 
 ## Decision
 
 The initial customer pilot implements orders 0–4 of the
 [canvas implementation plan](../idea-board-canvas-implementation-plan.md); Order 5 extends it
 with productivity tools, and Order 6 adds the bounded facilitation tools described below.
-Order 7 remains deferred. Use a separately
+Order 7 adds diagram styles, private authoring references and capacity evidence tooling while
+keeping higher limits gated. Use a separately
 versioned, typed canvas domain with server-authoritative object operations, board-scoped sharing,
 and metadata-only live notifications. Preserve the existing Idea Board workshop state machine,
 guest credentials, moderation, voting, and scanned media.
@@ -59,7 +60,7 @@ include retained undo history and manual saved versions. Generic media/content r
 Guest image delivery requires a currently published object and a fresh source-board credential.
 Public children are flattened from omitted private frames; private children and connector
 endpoints are never promoted. The original manually authored template factory runs inside canvas
-creation, remaps all IDs and contains neither guest responses nor cloned media. Seven English
+creation, remaps all IDs and contains neither guest responses nor cloned media. Eight English
 starters have localized chooser controls and previews. Workshop starters deliberately seed
 published authored scaffolding; ordinary new objects retain their private default.
 
@@ -219,3 +220,39 @@ The browser fixture substitutes in-memory object storage and
 scanning. Physical touch hardware, production media operation, production load, post-commit peer
 latency and rendering performance remain unmeasured for this increment. The October 29 repository
 acknowledgement measurements belong to the earlier pilot and do not accept these gates.
+
+## Diagram and activity-reference extension
+
+Canvas scene V3 introduces diamond/parallelogram nodes and bounded connector labels, cardinal ports,
+straight/elbow routes, solid/dashed strokes, start/end arrows and palette colors. Shared pure
+geometry keeps the interactive surface, fit bounds, saved previews and closed SVG/PNG export aligned.
+Missing or unauthorized endpoints remain omitted before geometry is calculated. The renderer
+accepts typed fields only; exports never accept arbitrary path markup or remote resources. Original
+V1/V2 input contracts are frozen, including template IDs and retry hashes. Readers deterministically
+upcast retained scenes/history; new writers use V3. Saved-version view V2 independently carries V3
+objects; old view V1 upcasts, while facilitation commands stay V1. Existing resumable template intents
+retain their captured schema version so an uncertain V2 retry does not become a different request.
+
+Migration 082 extends the existing one-way scene-version constraint without rewriting 079–081.
+Migration 083 adds forced-RLS references and receipts scoped to Round/Presentation targets. References
+store exact source/version IDs rather than copied object bodies, pixels or live source pointers.
+Source owner plus target editor is required to create/delete; same-workspace source access and target
+access intersect on every metadata, preview and media read. Native and currently approved guest media
+use a target-scoped private proxy, including reauthorization after storage waits. Current moderation,
+source/version lifecycle and source deadlines remain authoritative at delivery. Archived targets
+retain authorized reads but accept no new references. Unique live reference IDs, canonical request
+hashes, target tombstones and bounded receipts make retries safe across memory and PostgreSQL.
+
+The bounds are 20 references and 2,000 receipts per target, reserving deletion headroom. Source,
+version and target deletion cascade; identity deletion clears attribution while organization-owned
+content remains. References are creator-only authoring aids: they do not enter published documents,
+participant/live payloads, activity/image exports or duplicated artifacts. Client previews watch source metadata,
+poll target access, expire their TTL and release private image URLs on invalidation. This does not
+grant target readers access to a source board, create workspace membership or publish a canvas.
+
+Use coordinated maintenance for 082/083 and matching V3 server/jobs/web readers/writers. Keep
+079–083; never downgrade accepted scenes or run a pre-checkpoint cleanup writer. An older V2-only
+reader/writer is not a safe rollback once V3 data or references exist. Higher object/editor workload
+claims require separate evidence; map-indexed persistence comparisons and shorter notification
+coalescing are bounded optimizations, not authorization to raise limits. See
+[capacity evidence](../canvas-capacity-evidence.md) for methods, observed results and missing gates.

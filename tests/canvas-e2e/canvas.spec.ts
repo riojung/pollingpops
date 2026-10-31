@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import {
@@ -502,6 +503,34 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
   for (const mode of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: mode });
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
+    const theme = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const rgb = (token: string) => {
+        const hex = root.getPropertyValue(token).trim();
+        if (!/^#[0-9a-f]{6}$/i.test(hex))
+          throw new Error("Expected the canvas theme's six-digit color token");
+        return `rgb(${[1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)).join(", ")})`;
+      };
+      return {
+        expectedText: rgb("--ui-text"),
+        expectedMuted: rgb("--ui-text-muted"),
+        presentation: getComputedStyle(
+          document.querySelector('section[aria-label="Presentation"] [role="status"]')!,
+        ).color,
+        footer: getComputedStyle(document.querySelector("footer label")!).color,
+        workspace: getComputedStyle(document.querySelector("header p span[lang]")!).color,
+      };
+    });
+    await writeFile(
+      testInfo.outputPath(`canvas-theme-${mode}-before-contrast.json`),
+      JSON.stringify(theme, null, 2),
+    );
+    // Require inherited foregrounds to agree with the requested theme before checking contrast.
+    await expect(
+      page.getByRole("region", { name: "Presentation", exact: true }).getByRole("status"),
+    ).toHaveCSS("color", theme.expectedText);
+    await expect(page.locator("footer label")).toHaveCSS("color", theme.expectedMuted);
+    await expect(page.locator("header p span[lang]")).toHaveCSS("color", theme.expectedMuted);
     await fits(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({

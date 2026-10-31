@@ -1,4 +1,5 @@
 import {
+  CANVAS_SCHEMA_VERSION,
   CanvasBoardCreateSchema,
   CanvasBoardInviteSchema,
   CanvasBoardMutationResponseSchema,
@@ -18,7 +19,11 @@ export function canvasPath(id: string) {
   return `/v1/canvas-boards/${id}`;
 }
 export function canvasIntent(command: CanvasBoardCommand): CanvasBoardMutation {
-  return CanvasBoardMutationSchema.parse({ schemaVersion: 2, operationId: clientUuid(), command });
+  return CanvasBoardMutationSchema.parse({
+    schemaVersion: CANVAS_SCHEMA_VERSION,
+    operationId: clientUuid(),
+    command,
+  });
 }
 export async function readCanvas(id: string, signal?: AbortSignal) {
   const result = await apiFetch<{ board: unknown }>(canvasPath(id), { signal, cache: "no-store" });

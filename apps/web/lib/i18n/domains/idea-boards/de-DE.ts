@@ -1,3 +1,4 @@
+import { canvasDiagramMessages } from "../../canvas-diagram-messages";
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
 import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
 import { canvasExportMessages } from "../../canvas-export-messages";
@@ -13,6 +14,7 @@ const messages: IdeaBoardMessages = {
   ...canvasFacilitationMessages("de-DE"),
   ...canvasExportMessages("de-DE"),
   ...canvasPresenterMessages("de-DE"),
+  ...canvasDiagramMessages("de-DE"),
   ...canvasProductivityMessages("de-DE"),
   ...canvasWorkshopMessages("de-DE"),
   "boards.more": "Weitere Boards laden",

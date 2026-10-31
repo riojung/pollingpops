@@ -1289,3 +1289,32 @@ computed by the server rather than stored with the board. The rich-content field
 to version 1 and require a coordinated server/web deployment for strict readers. Public admission
 metadata never contains idea text or attachments. Link cards are user-supplied links: no remote
 metadata fetches or social embeds are performed.
+
+## Canvas diagrams and activity references
+
+Canvas creation/mutation requests accept frozen strict schema versions 1 and 2 plus current
+version 3. Current scene responses use V3, deterministically upcasting old scenes and undo objects;
+old request fingerprints remain unchanged. V3 adds diamond/parallelogram nodes and bounded connector
+routing, stroke, markers and colors. Saved-version preview responses use independent view V2 with
+V3 objects and an upcaster for old V1 views; facilitation commands remain V1. The `/v1` route prefix
+does not select those payload versions.
+
+Creator-cookie endpoints are scoped to `/v1/quizzes/:id/canvas-snapshot-links` or
+`/v1/presentations/:id/canvas-snapshot-links`:
+
+- `GET /` returns V1 `{canCreate, links}` metadata, filtered by current target and source access.
+- `GET /eligible` returns same-workspace owned boards and saved-version metadata for a target editor.
+- `POST /` accepts V1 `{operationId, linkId, boardId, versionId}` and returns a durable receipt.
+- `DELETE /:linkId` accepts V1 `{operationId, expectedRevision}` and returns a deletion receipt.
+- `GET /:linkId/preview` returns the exact saved layout through current version-view authorization.
+- `GET /:linkId/media/:mediaId` serves private bytes through both target and source authorization.
+
+Every JSON request/response includes `schemaVersion`; create/delete/list envelopes use V1. Link
+revision is currently 1. At most 20 links and 2,000 operation receipts are retained per target, with
+deletion headroom. Operation IDs bind exact normalized request intent, including target context;
+uncertain retries must resend the same body. Source-owner and target-editor rights are required for
+create/delete. Current access to both sides and current guest moderation govern all reads, including
+historical media and delayed delivery. Sources must belong to the target workspace. Archived targets
+allow existing authorized reads but reject new links. No guest, participant, published-content,
+activity/image export or duplication contract is extended with these private authoring references.
+Authorized account exports include reference metadata for owned workspaces.

@@ -552,8 +552,8 @@ Run the targeted contract, memory/restricted-PostgreSQL, HTTP and browser suites
 `pnpm check` before rollout. The canvas browser fixture substitutes in-memory object storage and
 scanning; verify the deployed private-storage/scanner pipeline separately. Physical touch hardware,
 production load and post-commit peer/render performance have not been measured for Order 5.
-Earlier pilot repository acknowledgement timings do not accept those gates. Order 6 is described below;
-Order 7 remains deferred.
+Earlier pilot repository acknowledgement timings do not accept those gates. Orders 6 and 7 are
+described below; higher limits remain gated.
 
 ### Canvas facilitation, exports and saved versions
 
@@ -618,3 +618,42 @@ follow-up export/mobile checks also verify the corrected Download touch target. 
 [Order 6 status](../implementation-status.md#canvas-facilitation-order-6-october-30-2026).
 No deployed production media, physical-device, load, peer-latency or rendering-performance result
 is established by these checks. Order 7 and all AI functionality remain outside this increment.
+
+### Canvas diagrams and private activity references
+
+Use coordinated maintenance: drain/stop API writers and cleanup jobs, apply
+`082_canvas_diagrams.sql` and `083_canvas_artifact_links.sql` after 079–081, and deploy matching
+V3-capable server/jobs/web images before reopening traffic. Preserve the migration 081 checkpoint
+media requirement above. There is no independent diagram/reference admission switch; the existing
+Canvas boards policy gates these endpoints. Keep all migrations 079–083 during rollback. Once V3
+scenes or references exist, use a compatible image set or forward repair; do not rewrite scenes,
+retry fingerprints or saved versions to fit an older binary.
+
+Canvas scene V3 adds diagram nodes/styles and an eighth original starter. Frozen strict V1/V2
+creation/mutation inputs retain their original canonical hashes. New readers upcast old scenes and
+undo entries. Saved-version views independently advance to V2, accepting old V1 views through an
+upcaster; facilitation commands stay V1. Refresh open clients before editing V3 scenes. Resumed
+starter requests retain their original schema version and operation identity.
+
+Migration 083 adds reference/receipt tables with forced RLS and lifecycle cascades. Rehearse same-
+workspace source-owner/target-editor creation, target/source read intersection, unrelated known-ID
+denials, archived-target creation denial, exact retry, deletion retry and cross-target ID collisions.
+Metadata, preview and target-proxied native/approved-guest images must not disclose revoked,
+expired or removed content, including delayed storage and COMMIT-response boundaries. Preview
+reprojects the saved scene with removed guest content omitted; no-longer-authorized media is denied.
+Source/version/target deletion removes links; creator deletion clears attribution without deleting
+organization-owned scenes. Verify a target reader receives no newly granted source access and a
+participant/published/duplicate payload contains no reference metadata or image credentials.
+
+Each target allows 20 references and 2,000 lifetime operation receipts with reserved deletion
+headroom. No scenes or image bytes are copied into activity content. Browser invalidation uses
+source watches plus target polling/TTL; stale previews and private blob URLs must be cleared on
+loss of access. Exercise Round and Presentation authoring at desktop and narrow mobile widths,
+light/dark themes, keyboard controls and accessibility checks.
+
+Run `pnpm check`, the restricted-PostgreSQL link/core suites and `pnpm test:e2e:canvas`. Capacity
+verification is separate: use the repository and production-browser harnesses described in
+[capacity evidence](../canvas-capacity-evidence.md). The 500-object/2 MiB bound and workshop reserve
+remain unchanged. Twenty editors is an evidence workload target, not a hard admission cap or
+production guarantee. Do not raise limits until the applicable target-host, media, physical-device,
+latency and sustained-load gates pass.

@@ -1,3 +1,4 @@
+import { canvasDiagramMessages } from "../../canvas-diagram-messages";
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
 import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
 import { canvasExportMessages } from "../../canvas-export-messages";
@@ -13,6 +14,7 @@ const messages: IdeaBoardMessages = {
   ...canvasFacilitationMessages("it-IT"),
   ...canvasExportMessages("it-IT"),
   ...canvasPresenterMessages("it-IT"),
+  ...canvasDiagramMessages("it-IT"),
   ...canvasProductivityMessages("it-IT"),
   ...canvasWorkshopMessages("it-IT"),
   "boards.more": "Carica altre bacheche",

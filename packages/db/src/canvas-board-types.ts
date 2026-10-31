@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import type {
   CanvasBoardCreate,
   CanvasBoardGuestView,
@@ -40,7 +41,7 @@ export interface CanvasBoardAuthorization {
   expiresAt: string;
 }
 export interface CanvasBoardStored {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   id: string;
   workspaceId: string;
   organizationId: string;
@@ -120,6 +121,8 @@ export interface CanvasAccessContext {
   workspaceLicensed: boolean;
 }
 export interface CanvasTransaction {
+  /** Internal shared transaction for same-workspace authoring link authorization. */
+  sqlClient?: PoolClient;
   metadata(id: string): Promise<CanvasBoardStored | null>;
   creation(workspaceId: string, operationId: string): Promise<CanvasBoardStored | null>;
   countWorkspace(workspaceId: string, now: Date): Promise<number>;

@@ -7,6 +7,7 @@ export const CANVAS_TEMPLATE_IDS = [
   "evidence-review",
   "learning-reflection",
   "next-step-studio",
+  "flow-to-action",
 ] as const;
 export type CanvasTemplateId = (typeof CANVAS_TEMPLATE_IDS)[number];
 export type CanvasTemplateCategory = "brainstorm" | "retro" | "project" | "decision" | "learning";
@@ -253,6 +254,35 @@ export const CANVAS_TEMPLATES: readonly CanvasTemplate[] = [
         title: "Support and check-in",
         guidance: "Make dependencies and follow-up explicit.",
         prompts: ["What help or agreement is needed?", "When will we share what we learned?"],
+        color: "green",
+      },
+    ],
+  },
+  {
+    id: "flow-to-action",
+    category: "decision",
+    language: "en",
+    title: "Flow to action",
+    description: "Map an input, a review and a decision into a clear next action.",
+    prompt: "What information enters this process, what decision is needed, and what happens next?",
+    workshop,
+    sections: [
+      {
+        title: "Start with information",
+        guidance: "Name the input and the review that makes it useful.",
+        prompts: ["What starts this process?", "What information needs review?"],
+        color: "blue",
+      },
+      {
+        title: "Make the decision clear",
+        guidance: "Write a question with distinct routes, then label each connection.",
+        prompts: ["What must be true to continue?", "What happens if it is not ready?"],
+        color: "yellow",
+      },
+      {
+        title: "Choose a next action",
+        guidance: "Give each route a practical next step and check it with the people involved.",
+        prompts: ["Who takes the next action?", "Where do we gather missing information?"],
         color: "green",
       },
     ],

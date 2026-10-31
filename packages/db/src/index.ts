@@ -29,3 +29,4 @@ export * from "./idea-boards.js";
 
 export * from "./canvas-board-types.js";
 export * from "./canvas-boards.js";
+export * from "./canvas-artifact-links.js";

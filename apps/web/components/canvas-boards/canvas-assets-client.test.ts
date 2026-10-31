@@ -17,6 +17,57 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("canvas image transport", () => {
+  it.each(["round", "presentation"] as const)(
+    "uses only the authorized %s snapshot-link media proxy",
+    async (kind) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(new Blob(["image"]), { headers: { "content-type": "image/png" } }),
+        );
+      vi.stubGlobal("fetch", fetch);
+      const context = { kind, targetId: source, linkId: version };
+      await fetchCanvasImage(board, media, undefined, undefined, version, context);
+      expect(fetch).toHaveBeenCalledExactlyOnceWith(
+        `https://api.example.test/v1/${kind === "round" ? "quizzes" : "presentations"}/${source}/canvas-snapshot-links/${version}/media/${media}`,
+        expect.objectContaining({
+          credentials: "include",
+          cache: "no-store",
+          referrerPolicy: "no-referrer",
+        }),
+      );
+      expect(fetch.mock.calls[0]![1]).not.toHaveProperty("headers");
+    },
+  );
+  it("never falls back to source or creator media for invalid or guest link contexts", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      fetchCanvasImage(board, media, undefined, { sourceBoardId: source, token }, undefined, {
+        kind: "round",
+        targetId: source,
+        linkId: version,
+      }),
+    ).rejects.toThrow("team access");
+    for (const context of [
+      { kind: "round", targetId: "../../private", linkId: version },
+      { kind: "presentation", targetId: source, linkId: "" },
+      { kind: "other", targetId: source, linkId: version },
+      null,
+    ]) {
+      await expect(
+        fetchCanvasImage(
+          board,
+          media,
+          undefined,
+          undefined,
+          version,
+          context as Parameters<typeof fetchCanvasImage>[5],
+        ),
+      ).rejects.toThrow();
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("reads a saved version through its board/version/media route with creator credentials and no caching", async () => {
     const fetch = vi
       .fn()

@@ -5,6 +5,7 @@
 artifacts/
 .next/
 .next-business/
+.next-canvas-capacity*/
 .next-control-test/
 .turbo/
 coverage/

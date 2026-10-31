@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { IdeaBoardIdea, IdeaBoardSketch } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
+import type { CanvasArtifactImageContext } from "../canvas-boards/canvas-assets-client";
+import { readCanvasImage } from "../canvas-boards/canvas-image-resource";
 import { readBoardIdeaImage } from "./idea-image-resource";
 import { SketchPreview } from "./sketch-preview";
 import styles from "./boards.module.css";
@@ -13,6 +15,8 @@ export function BoardIdeaImage({
   alt,
   guestToken,
   canvasId,
+  versionId,
+  artifactLink,
   showCaption = true,
 }: {
   boardId: string;
@@ -20,6 +24,8 @@ export function BoardIdeaImage({
   alt: string;
   guestToken?: string;
   canvasId?: string;
+  versionId?: string;
+  artifactLink?: CanvasArtifactImageContext;
   showCaption?: boolean;
 }) {
   const { t } = useLocale();
@@ -28,7 +34,16 @@ export function BoardIdeaImage({
   const [failed, setFailed] = useState<string | null>(null);
   const [visibleKey, setVisibleKey] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const sourceKey = JSON.stringify([boardId, mediaId, guestToken ?? null, canvasId ?? null]);
+  const sourceKey = JSON.stringify([
+    boardId,
+    mediaId,
+    guestToken ?? null,
+    canvasId ?? null,
+    versionId ?? null,
+    artifactLink === undefined
+      ? null
+      : [artifactLink?.kind, artifactLink?.targetId, artifactLink?.linkId],
+  ]);
   const key = `${sourceKey}:${attempt}`;
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined" || !figure.current) {
@@ -55,7 +70,16 @@ export function BoardIdeaImage({
     if (visibleKey !== sourceKey) return;
     let active = true;
     let url: string | undefined;
-    const read = readBoardIdeaImage(boardId, mediaId, guestToken, canvasId);
+    const read =
+      artifactLink !== undefined
+        ? readCanvasImage(
+            canvasId ?? "",
+            mediaId,
+            guestToken !== undefined ? { sourceBoardId: boardId, token: guestToken } : undefined,
+            versionId,
+            artifactLink,
+          )
+        : readBoardIdeaImage(boardId, mediaId, guestToken, canvasId);
     void read.promise
       .then((blob) => {
         if (!active) return;
@@ -70,7 +94,19 @@ export function BoardIdeaImage({
       read.release();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [boardId, mediaId, guestToken, canvasId, key, sourceKey, visibleKey]);
+  }, [
+    boardId,
+    mediaId,
+    guestToken,
+    canvasId,
+    versionId,
+    artifactLink?.kind,
+    artifactLink?.targetId,
+    artifactLink?.linkId,
+    key,
+    sourceKey,
+    visibleKey,
+  ]);
   return (
     <figure ref={figure} className={styles.ideaImage}>
       {image?.key === key && failed !== key ? (
@@ -142,12 +178,16 @@ export function IdeaContent({
   idea,
   guestToken,
   canvasId,
+  versionId,
+  artifactLink,
   showBody = true,
 }: {
   boardId: string;
   idea: Pick<IdeaBoardIdea, "body" | "status" | "attachments" | "links" | "sketch">;
   guestToken?: string;
   canvasId?: string;
+  versionId?: string;
+  artifactLink?: CanvasArtifactImageContext;
   showBody?: boolean;
 }) {
   const { t } = useLocale();
@@ -184,6 +224,8 @@ export function IdeaContent({
               alt={attachment.alt}
               guestToken={guestToken}
               canvasId={canvasId}
+              versionId={versionId}
+              artifactLink={artifactLink}
             />
           ))}
         </div>
@@ -223,6 +265,8 @@ export function IdeaContent({
                         alt={image.alt}
                         guestToken={guestToken}
                         canvasId={canvasId}
+                        versionId={versionId}
+                        artifactLink={artifactLink}
                         showCaption={false}
                       />
                     </div>

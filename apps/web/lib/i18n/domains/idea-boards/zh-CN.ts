@@ -1,3 +1,4 @@
+import { canvasDiagramMessages } from "../../canvas-diagram-messages";
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
 import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
 import { canvasExportMessages } from "../../canvas-export-messages";
@@ -13,6 +14,7 @@ const messages: IdeaBoardMessages = {
   ...canvasFacilitationMessages("zh-CN"),
   ...canvasExportMessages("zh-CN"),
   ...canvasPresenterMessages("zh-CN"),
+  ...canvasDiagramMessages("zh-CN"),
   ...canvasProductivityMessages("zh-CN"),
   ...canvasWorkshopMessages("zh-CN"),
   "boards.more": "加载更多看板",

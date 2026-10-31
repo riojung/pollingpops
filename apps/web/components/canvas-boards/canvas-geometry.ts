@@ -1,3 +1,4 @@
+import { canvasDiagramPort } from "@openround/contracts";
 export interface CanvasPoint {
   x: number;
   y: number;
@@ -104,28 +105,7 @@ export function connectorPoint(
     y: number;
     anchor?: "center" | "top" | "right" | "bottom" | "left";
   },
-  objects: readonly (CanvasBounds & { id: string; rotation?: number })[],
+  objects: readonly (CanvasBounds & { id: string; type?: string; rotation?: number })[],
 ): CanvasPoint {
-  const target = objects.find((item) => item.id === anchor.objectId);
-  if (!target) return { x: anchor.x, y: anchor.y };
-  const center = { x: target.x + target.width / 2, y: target.y + target.height / 2 };
-  const offset = {
-    x:
-      anchor.anchor === "left"
-        ? -target.width / 2
-        : anchor.anchor === "right"
-          ? target.width / 2
-          : 0,
-    y:
-      anchor.anchor === "top"
-        ? -target.height / 2
-        : anchor.anchor === "bottom"
-          ? target.height / 2
-          : 0,
-  };
-  const radians = ((target.rotation ?? 0) * Math.PI) / 180;
-  return {
-    x: center.x + offset.x * Math.cos(radians) - offset.y * Math.sin(radians),
-    y: center.y + offset.x * Math.sin(radians) + offset.y * Math.cos(radians),
-  };
+  return canvasDiagramPort(anchor, objects);
 }

@@ -241,6 +241,7 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  syncCanvasArtifactLinks?(boardId: string, versionIds: ReadonlySet<string>): void;
   deleteIdeaBoardMetadata?(sourceBoardId: string): void;
   updateIdeaBoardMetadata?(sourceBoardId: string): void;
   getSessionSummarySource?(
@@ -499,6 +500,10 @@ export class MemoryRepository implements Repository {
   updateIdeaBoardCanvasMetadata(sourceBoardId: string) {
     for (const { lifecycle } of this.lifecycleExtensions.values())
       lifecycle.updateIdeaBoardMetadata?.(sourceBoardId);
+  }
+  syncCanvasArtifactLinks(boardId: string, versionIds: ReadonlySet<string>) {
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.syncCanvasArtifactLinks?.(boardId, versionIds);
   }
 
   hasLibraryArtifact(

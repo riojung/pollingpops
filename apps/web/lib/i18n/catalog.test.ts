@@ -89,6 +89,7 @@ describe("localized message catalogs", () => {
       "delivery-authoring",
       "report-round",
       "live-delivery",
+      "idea-boards",
     ]);
     expect(localeDomainsForPath("/quiz/example/preview")).toEqual([
       "delivery-authoring",
@@ -106,8 +107,15 @@ describe("localized message catalogs", () => {
       "report-round",
     ]);
     expect(localeDomainsForPath("/quiz/example/unknown")).toEqual([]);
-    expect(localeDomainsForPath("/create")).toEqual(["delivery-authoring", "report-round"]);
-    expect(localeDomainsForPath("/create/presentation")).toEqual(["delivery-authoring"]);
+    expect(localeDomainsForPath("/create")).toEqual([
+      "delivery-authoring",
+      "report-round",
+      "idea-boards",
+    ]);
+    expect(localeDomainsForPath("/create/presentation")).toEqual([
+      "delivery-authoring",
+      "idea-boards",
+    ]);
     expect(localeDomainsForPath("/recovery-packs")).toEqual(["delivery-authoring"]);
     expect(localeDomainsForPath("/recovery-packs/")).toEqual(["delivery-authoring"]);
     expect(localeDomainsForPath("/dashboard")).toEqual([
@@ -131,7 +139,10 @@ describe("localized message catalogs", () => {
     expect(localeDomainsForPath("/summary/example")).toEqual(["session-summary"]);
     expect(localeDomainsForPath("/presentation-session/example/host")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/presentation-session/example/play")).toEqual(["live-delivery"]);
-    expect(localeDomainsForPath("/presentation/example")).toEqual(["delivery-authoring"]);
+    expect(localeDomainsForPath("/presentation/example")).toEqual([
+      "delivery-authoring",
+      "idea-boards",
+    ]);
     expect(localeDomainsForPath("/presentation/example/host")).toEqual([
       "delivery-authoring",
       "live-delivery",
@@ -170,6 +181,7 @@ describe("localized message catalogs", () => {
       "delivery-authoring",
       "report-round",
       "live-delivery",
+      "idea-boards",
     ]);
     expect(localeDomainsForPath("/quiz/round-1/preview/")).toEqual([
       "delivery-authoring",

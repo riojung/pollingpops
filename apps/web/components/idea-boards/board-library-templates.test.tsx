@@ -203,7 +203,7 @@ afterEach(() => {
 });
 
 describe("board library starter creation", () => {
-  it("creates a team starter in one V2 request with an editable title", async () => {
+  it("creates a team starter in one current request with an editable title", async () => {
     mocked.fetch.mockRejectedValueOnce(new ApiClientError("Paused", "NOT_FOUND", 404));
     const view = harness();
     view.render();
@@ -222,7 +222,7 @@ describe("board library starter creation", () => {
     expect(mocked.fetch).toHaveBeenCalledTimes(1);
     expect(mocked.fetch.mock.calls[0]![0]).toBe("/v1/canvas-boards");
     expect(JSON.parse(mocked.fetch.mock.calls[0]![1].body)).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       title: "My kickoff",
       templateId: "project-kickoff",
       boardType: "team",

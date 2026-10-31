@@ -280,9 +280,15 @@ export class MemoryCanvasBoards {
       }
       for (const row of sources.values()) saveMemoryIdeaBoardCanvasSource(this.repository, row);
       for (const [id, state] of changed) {
-        if (state) this.rows.set(id, state);
-        else {
+        if (state) {
+          this.rows.set(id, state);
+          this.repository.syncCanvasArtifactLinks(
+            id,
+            new Set(state.facilitation?.versions.map((saved) => saved.metadata.id) ?? []),
+          );
+        } else {
           this.rows.delete(id);
+          this.repository.syncCanvasArtifactLinks(id, new Set());
           this.removeMedia(id);
           for (let index = this.events.length - 1; index >= 0; index--)
             if (this.events[index]!.boardId === id && this.events[index]!.type !== "canvas.deleted")
@@ -377,6 +383,7 @@ export class MemoryCanvasBoards {
       if (ownedWorkspaceIds.has(state.board.workspaceId)) {
         this.removeMedia(id);
         this.rows.delete(id);
+        this.repository.syncCanvasArtifactLinks(id, new Set());
       } else {
         state.grants = state.grants.filter((grant) => grant.userId !== userId);
         state.invitations = state.invitations.filter(
@@ -406,6 +413,7 @@ export class MemoryCanvasBoards {
       ) {
         this.removeMedia(id, now);
         this.rows.delete(id);
+        this.repository.syncCanvasArtifactLinks(id, new Set());
         removed.push(id);
       } else {
         const retained = new Set(canvasMediaIds(state));
@@ -432,6 +440,7 @@ export class MemoryCanvasBoards {
     for (const id of ids) {
       this.removeMedia(id);
       this.rows.delete(id);
+      this.repository.syncCanvasArtifactLinks(id, new Set());
     }
     for (let index = this.events.length - 1; index >= 0; index--)
       if (ids.has(this.events[index]!.boardId)) this.events.splice(index, 1);
@@ -445,7 +454,7 @@ export class MemoryCanvasBoards {
 
 function boardRow(row: Record<string, unknown>): CanvasBoardStored {
   return {
-    schemaVersion: Number(row.schema_version ?? 1) as 1 | 2,
+    schemaVersion: Number(row.schema_version ?? 1) as 1 | 2 | 3,
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     organizationId: String(row.organization_id),
@@ -510,6 +519,7 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
       }
       const platform = new PostgresPlatformStore(null, client);
       const tx: CanvasTransaction = {
+        sqlClient: client,
         timer: async (id, lock = false) => {
           if (lock) {
             const board = selectedBoards.get(id);
@@ -715,16 +725,30 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               ],
             );
           const previous = originals.get(board.id);
+          // Index retained rows once; diffing must not become quadratic as receipts accumulate.
+          const oldObjects = new Map(previous?.objects.map((object) => [object.id, object]) ?? []);
+          const oldReceipts = new Map(
+            previous?.receipts.map((receipt) => [
+              `${receipt.actorId}:${receipt.operationId}`,
+              receipt,
+            ]) ?? [],
+          );
+          const oldInvitations = new Map(
+            previous?.invitations.map((invitation) => [invitation.id, invitation]) ?? [],
+          );
+          const oldThreads = new Map(
+            previous?.facilitation?.threads.map((thread) => [thread.id, thread]) ?? [],
+          );
+          const oldVersions = new Map(
+            previous?.facilitation?.versions.map((saved) => [saved.metadata.id, saved]) ?? [],
+          );
           const nextIds = state.objects.map((object) => object.id);
           await client.query(
             "DELETE FROM canvas_board_objects WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
             [board.id, nextIds],
           );
           for (const object of state.objects)
-            if (
-              JSON.stringify(previous?.objects.find((entry) => entry.id === object.id)) !==
-              JSON.stringify(object)
-            )
+            if (JSON.stringify(oldObjects.get(object.id)) !== JSON.stringify(object))
               await client.query(
                 "INSERT INTO canvas_board_objects(board_id,workspace_id,id,version,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(board_id,id) DO UPDATE SET version=EXCLUDED.version,data=EXCLUDED.data",
                 [board.id, board.workspaceId, object.id, object.version, object],
@@ -746,22 +770,15 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
           }
           for (const receipt of state.receipts)
             if (
-              JSON.stringify(
-                previous?.receipts.find(
-                  (entry) =>
-                    entry.operationId === receipt.operationId && entry.actorId === receipt.actorId,
-                ),
-              ) !== JSON.stringify(receipt)
+              JSON.stringify(oldReceipts.get(`${receipt.actorId}:${receipt.operationId}`)) !==
+              JSON.stringify(receipt)
             )
               await client.query(
                 "INSERT INTO canvas_board_receipts(board_id,workspace_id,actor_id,operation_id,data) VALUES($1,$2,$3,$4,$5) ON CONFLICT(board_id,actor_id,operation_id) DO UPDATE SET data=EXCLUDED.data",
                 [board.id, board.workspaceId, receipt.actorId, receipt.operationId, receipt],
               );
           for (const invitation of state.invitations)
-            if (
-              JSON.stringify(previous?.invitations.find((entry) => entry.id === invitation.id)) !==
-              JSON.stringify(invitation)
-            ) {
+            if (JSON.stringify(oldInvitations.get(invitation.id)) !== JSON.stringify(invitation)) {
               const user = await tx.findUser(invitation.email, board.organizationId);
               if (!user) throw new Error("Canvas invitee is no longer available");
               await client.query(
@@ -775,9 +792,12 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             [board.id, facilitation.threads.map((thread) => thread.id)],
           );
           for (const thread of facilitation.threads) {
-            const old = previous?.facilitation?.threads.find((entry) => entry.id === thread.id);
+            const old = oldThreads.get(thread.id);
             if (JSON.stringify(old) === JSON.stringify(thread)) continue;
             const { messages, ...data } = thread;
+            const oldMessages = new Map(
+              old?.messages.map((message) => [message.id, message]) ?? [],
+            );
             if (
               JSON.stringify(old ? { ...old, messages: undefined } : undefined) !==
               JSON.stringify({ ...thread, messages: undefined })
@@ -791,10 +811,7 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               [board.id, thread.id, messages.map((message) => message.id)],
             );
             for (const message of messages)
-              if (
-                JSON.stringify(old?.messages.find((entry) => entry.id === message.id)) !==
-                JSON.stringify(message)
-              ) {
+              if (JSON.stringify(oldMessages.get(message.id)) !== JSON.stringify(message)) {
                 const { authorId, ...messageData } = message;
                 await client.query(
                   "INSERT INTO canvas_board_comment_messages(board_id,workspace_id,id,thread_id,author_id,created_at,data) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(board_id,id) DO UPDATE SET data=EXCLUDED.data",
@@ -820,13 +837,7 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             [board.id, facilitation.versions.map((saved) => saved.metadata.id)],
           );
           for (const saved of facilitation.versions)
-            if (
-              JSON.stringify(
-                previous?.facilitation?.versions.find(
-                  (entry) => entry.metadata.id === saved.metadata.id,
-                ),
-              ) !== JSON.stringify(saved)
-            ) {
+            if (JSON.stringify(oldVersions.get(saved.metadata.id)) !== JSON.stringify(saved)) {
               const { createdBy, ...data } = saved.metadata;
               await client.query(
                 "INSERT INTO canvas_board_versions(board_id,workspace_id,id,created_by,created_at,data,objects) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(board_id,id) DO UPDATE SET data=EXCLUDED.data,objects=EXCLUDED.objects,created_by=EXCLUDED.created_by",

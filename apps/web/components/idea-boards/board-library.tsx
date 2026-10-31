@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  CANVAS_SCHEMA_VERSION,
   getCanvasTemplate,
   type CanvasBoardCreate,
   type CanvasTemplateId,
@@ -199,7 +200,7 @@ export function BoardLibrary() {
           ? {
               kind,
               value: {
-                schemaVersion: templateId ? 2 : 1,
+                schemaVersion: CANVAS_SCHEMA_VERSION,
                 workspaceId,
                 title: input.title.trim(),
                 boardType: "team",

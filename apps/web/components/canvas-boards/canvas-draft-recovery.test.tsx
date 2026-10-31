@@ -101,6 +101,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("removed canvas target recovery UI", () => {
+  it("keeps manual connector settings recoverable without exposing opaque endpoint IDs", () => {
+    const proposal = {
+      ...draft,
+      text: "",
+      routing: "elbow" as const,
+      lineStyle: "dashed" as const,
+      startMarker: "arrow" as const,
+      endMarker: "none" as const,
+      lineColor: "blue" as const,
+      fromId: "private-object-id",
+      fromAnchor: "right" as const,
+      fromX: 20.5,
+      fromY: 40.25,
+      toId: "",
+      toX: 200,
+      toY: 300,
+    };
+    const html = renderToStaticMarkup(
+      <CanvasDraftRecovery draft={proposal} reason="missing" onDiscard={() => undefined} />,
+    );
+    expect(html).toContain("Route: Elbow");
+    expect(html).toContain("Line style: Dashed");
+    expect(html).toContain("Start marker: Arrow");
+    expect(html).toContain("Source port: Right");
+    expect(html).toContain("20.5");
+    expect(html).not.toContain("private-object-id");
+    expect(html).toContain("Copy draft text");
+  });
   it("retains selectable local text and shows no save or recreate action", () => {
     const html = renderToStaticMarkup(
       <CanvasDraftRecovery draft={draft} reason="missing" onDiscard={() => undefined} />,

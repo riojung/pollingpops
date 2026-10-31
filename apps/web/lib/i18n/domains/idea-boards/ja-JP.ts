@@ -1,3 +1,4 @@
+import { canvasDiagramMessages } from "../../canvas-diagram-messages";
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
 import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
 import { canvasExportMessages } from "../../canvas-export-messages";
@@ -13,6 +14,7 @@ const messages: IdeaBoardMessages = {
   ...canvasFacilitationMessages("ja-JP"),
   ...canvasExportMessages("ja-JP"),
   ...canvasPresenterMessages("ja-JP"),
+  ...canvasDiagramMessages("ja-JP"),
   ...canvasProductivityMessages("ja-JP"),
   ...canvasWorkshopMessages("ja-JP"),
   "boards.more": "さらにボードを読み込む",

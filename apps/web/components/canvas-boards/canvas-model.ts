@@ -82,6 +82,12 @@ export function duplicateCanvasObject(object: CanvasObject): CanvasObjectCreate 
     x: object.x + 28,
     y: object.y + 28,
     ...(object.type === "pen" ? { points: object.points.map(([x, y]) => [x + 28, y + 28]) } : {}),
+    ...(object.type === "connector"
+      ? {
+          from: { ...object.from, x: object.from.x + 28, y: object.from.y + 28 },
+          to: { ...object.to, x: object.to.x + 28, y: object.to.y + 28 },
+        }
+      : {}),
   });
   return copy.success ? copy.data : null;
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CanvasObjectSchema } from "./canvas-boards";
+import { CanvasObjectSchema, CanvasObjectV2Schema } from "./canvas-boards";
 
 export const CANVAS_MAX_COMMENT_THREADS = 100;
 export const CANVAS_MAX_THREAD_MESSAGES = 20;
@@ -161,15 +161,34 @@ export const CanvasFacilitationViewSchema = z
   })
   .strict();
 export type CanvasFacilitationView = z.infer<typeof CanvasFacilitationViewSchema>;
-export const CanvasVersionViewSchema = z
+/** Frozen saved-scene V1 envelope uses strict Canvas V2 objects. */
+export const CanvasVersionViewV1Schema = z
   .object({
     schemaVersion: z.literal(1),
+    boardId: id,
+    version: CanvasVersionMetadataSchema,
+    objects: z.array(CanvasObjectV2Schema).max(500),
+  })
+  .strict();
+export const CanvasVersionViewV2Schema = z
+  .object({
+    schemaVersion: z.literal(2),
     boardId: id,
     version: CanvasVersionMetadataSchema,
     objects: z.array(CanvasObjectSchema).max(500),
   })
   .strict();
-export type CanvasVersionView = z.infer<typeof CanvasVersionViewSchema>;
+export const CanvasVersionViewSchema = z.union([
+  CanvasVersionViewV2Schema,
+  CanvasVersionViewV1Schema.transform((view) =>
+    CanvasVersionViewV2Schema.parse({
+      ...view,
+      schemaVersion: 2,
+      objects: view.objects.map((object) => CanvasObjectSchema.parse(object)),
+    }),
+  ),
+]);
+export type CanvasVersionView = z.infer<typeof CanvasVersionViewV2Schema>;
 export const CanvasGuestFacilitationViewSchema = z
   .object({
     schemaVersion: z.literal(1),

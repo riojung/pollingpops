@@ -126,9 +126,19 @@ export function validateClosedCanvasSvg(svg: string): { width: number; height: n
       } else if (key === "xmlns") {
         if (name !== "svg" || value !== "http://www.w3.org/2000/svg") invalid();
       } else if (key === "id") {
-        if (!/^export-(?:region|arrow|object-\d+)$/.test(value)) invalid();
-      } else if (key === "clip-path" || key === "marker-end") {
-        if (!/^url\(#export-(?:region|arrow|object-\d+)\)$/.test(value)) invalid();
+        if (
+          !/^export-(?:region|arrow(?:-(?:yellow|blue|green|pink|purple|white))?|object-\d+)$/.test(
+            value,
+          )
+        )
+          invalid();
+      } else if (key === "clip-path" || key === "marker-end" || key === "marker-start") {
+        if (
+          !/^url\(#export-(?:region|arrow(?:-(?:yellow|blue|green|pink|purple|white))?|object-\d+)\)$/.test(
+            value,
+          )
+        )
+          invalid();
       } else if (key === "href") {
         if (
           name !== "image" ||
@@ -141,7 +151,23 @@ export function validateClosedCanvasSvg(svg: string): { width: number; height: n
         if (!/^translate\(-?[\d.]+ -?[\d.]+\) rotate\(-?[\d.]+ [\d.]+ [\d.]+\)$/.test(value))
           invalid();
       } else if (key === "d") {
-        if (value !== "M0 0L8 3L0 6") invalid();
+        const commands = value
+          .trim()
+          .split(/(?=[MLZ])/)
+          .map((command) => command.trim());
+        if (!commands.length || commands.length > 32 || !commands[0]!.startsWith("M")) invalid();
+        for (const [index, command] of commands.entries()) {
+          if (command === "Z" && index === commands.length - 1 && index >= 2) continue;
+          const match = /^(M|L)(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)$/.exec(command);
+          if (
+            !match ||
+            (index > 0 && match[1] !== "L") ||
+            ![match[2], match[3]].every(
+              (number) => Number.isFinite(Number(number)) && Math.abs(Number(number)) <= 1_000_000,
+            )
+          )
+            invalid();
+        }
       } else if (key === "font-family") {
         if (value !== "Arial, sans-serif") invalid();
       } else if (key === "xml:space") {
@@ -149,7 +175,7 @@ export function validateClosedCanvasSvg(svg: string): { width: number; height: n
       } else if (key === "preserveAspectRatio") {
         if (value !== "xMidYMid meet") invalid();
       } else if (key === "orient") {
-        if (value !== "auto") invalid();
+        if (value !== "auto" && value !== "auto-start-reverse") invalid();
       } else if (key === "markerUnits") {
         if (value !== "strokeWidth") invalid();
       } else if (key === "stroke-linecap" || key === "stroke-linejoin") {

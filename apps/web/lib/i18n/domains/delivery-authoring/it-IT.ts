@@ -1,8 +1,10 @@
+import { canvasArtifactLinkMessages } from "../../canvas-artifact-link-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 import type { DeliveryAuthoringMessages } from "./en-CA";
 
 export default {
+  ...canvasArtifactLinkMessages("it-IT"),
   ...textPollAuthoringEnglishMessages,
   ...textPollTranslations["it-IT"].authoring,
   "delivery.builder.type.ranking": "Classifica",

@@ -245,6 +245,27 @@ describe("canvas export download boundary", () => {
     expect(revoke).toHaveBeenCalledWith("blob:synthetic-export");
   });
 
+  it("accepts bounded diagram paths and local arrow markers without admitting arbitrary SVG paths", () => {
+    const diagram =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><defs><marker id="export-arrow-blue" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#175ca5"/></marker></defs><path d="M100 0 L200 80 L100 160 L0 80 Z" fill="#cde7ff"/><path d="M220 110 L270 110 L270 280 L320 280" stroke="#175ca5" marker-start="url(#export-arrow-blue)" marker-end="url(#export-arrow-blue)"/></svg>';
+    expect(validateClosedCanvasSvg(diagram)).toEqual({ width: 600, height: 400 });
+    for (const path of [
+      "M0 0 C10 10 20 20 30 30",
+      "M0 0 LInfinity 1",
+      "M0 0 L1000001 0",
+      "M0 0 Z L10 10",
+      "M0 0 " + "L1 1 ".repeat(33),
+    ])
+      expect(() =>
+        validateClosedCanvasSvg(diagram.replace("M100 0 L200 80 L100 160 L0 80 Z", path)),
+      ).toThrow();
+    expect(() =>
+      validateClosedCanvasSvg(
+        diagram.replace("url(#export-arrow-blue)", "url(https://example.test/arrow)"),
+      ),
+    ).toThrow();
+  });
+
   it("creates an explicit local file download with a fixed safe filename and cleans up", async () => {
     vi.useFakeTimers();
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-download");

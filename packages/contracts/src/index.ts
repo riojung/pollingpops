@@ -11,6 +11,8 @@ export * from "./text-opinions";
 export * from "./session-summaries";
 export * from "./canvas-boards";
 export * from "./canvas-facilitation";
+export * from "./canvas-diagram-geometry";
+export * from "./canvas-artifact-links";
 export * from "./canvas-template-catalog";
 export * from "./canvas-template-factory";
 import {

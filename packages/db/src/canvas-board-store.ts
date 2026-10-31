@@ -11,7 +11,7 @@ import type { MemoryRepository, MemoryRepositoryLifecycleContext } from "./memor
 import type { PostgresRepository } from "./postgres.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PostgresPlatformStore } from "./platform-postgres.js";
-import { PlatformService } from "./platform-service.js";
+import { selectWorkspaceLicenseAssignment, workspaceLicenseTerms } from "./platform-service.js";
 import { memoryIdeaBoardCanvasSource, saveMemoryIdeaBoardCanvasSource } from "./idea-boards.js";
 import type {
   CanvasAccessContext,
@@ -22,12 +22,18 @@ import type {
   CanvasMediaUpload,
 } from "./canvas-board-types.js";
 import { CanvasBoardError } from "./canvas-board-error.js";
+import { canvasHistoryHeads } from "./canvas-snapshot.js";
 import {
   canvasDefaultTimer,
   canvasFacilitation,
   sanitizeCanvasFacilitation,
 } from "./canvas-facilitation.js";
 
+function hasRemovedIds(before: ReadonlyMap<string, unknown>, after: readonly string[]) {
+  const retained = new Set(after);
+  for (const id of before.keys()) if (!retained.has(id)) return true;
+  return false;
+}
 export function canvasMediaIds(state: CanvasState) {
   return [
     ...new Set(
@@ -41,7 +47,13 @@ export function canvasMediaIds(state: CanvasState) {
     ),
   ];
 }
-function normalizedCanvasState(state: CanvasState): CanvasState {
+function normalizedCanvasState(
+  input: Omit<CanvasState, "objects"> & { objects: unknown[] },
+): CanvasState {
+  const state: CanvasState = {
+    ...input,
+    objects: input.objects.map((object) => CanvasObjectSchema.parse(object)),
+  };
   return {
     ...state,
     board: {
@@ -50,7 +62,7 @@ function normalizedCanvasState(state: CanvasState): CanvasState {
       uploadCount: state.board.uploadCount ?? 0,
       uploadBytes: state.board.uploadBytes ?? 0,
     },
-    objects: state.objects.map((object) => CanvasObjectSchema.parse(object)),
+    objects: state.objects,
     receipts: state.receipts.map((receipt) => ({
       ...receipt,
       before: receipt.before.map((object) => CanvasObjectSchema.parse(object)),
@@ -72,6 +84,7 @@ function normalizedCanvasState(state: CanvasState): CanvasState {
   };
 }
 import type {
+  LicenseAssignment,
   OrganizationRecord,
   OrganizationMemberRecord,
   OrganizationWorkspaceRecord,
@@ -138,6 +151,26 @@ export class MemoryCanvasBoards {
         },
         get: async (id) =>
           current(id) ? normalizedCanvasState(structuredClone(current(id)!)) : null,
+        snapshot: async (id, actorId) => {
+          const state = current(id);
+          if (!state) return null;
+          const read = structuredClone({
+            board: {
+              ...state.board,
+              schemaVersion: state.board.schemaVersion ?? 1,
+              uploadCount: state.board.uploadCount ?? 0,
+              uploadBytes: state.board.uploadBytes ?? 0,
+            },
+            objects: state.objects,
+            grants: state.grants,
+            invitations: state.invitations,
+            historyHeads: canvasHistoryHeads(state.receipts, actorId),
+          });
+          return {
+            ...read,
+            objects: read.objects.map((object) => CanvasObjectSchema.parse(object)),
+          };
+        },
         list: async () => [...this.rows.values()].map((state) => structuredClone(state.board)),
         put: async (state) => {
           if (state.board.uploadCount || canvasMediaIds(state).length) await tx.syncMedia(state);
@@ -494,6 +527,27 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
       await context(client, "app.workspace_id", board.workspaceId);
       await context(client, "app.canvas_board_id", board.id);
     };
+    const readLockedBoard = async (id: string, lock = false): Promise<CanvasBoardStored | null> => {
+      let candidate = selectedBoards.get(id);
+      if (!candidate) {
+        const metadata = await client.query("SELECT * FROM canvas_boards WHERE id=$1", [id]);
+        if (!metadata.rows[0]) return null;
+        candidate = boardRow(metadata.rows[0]);
+        await selectBoard(candidate);
+      }
+      // Workspace -> canvas -> source is the same lock order as legacy source deletion.
+      await client.query("SELECT id FROM workspaces WHERE id=$1 FOR SHARE", [
+        candidate.workspaceId,
+      ]);
+      const result = await client.query(
+        `SELECT * FROM canvas_boards WHERE id=$1${lock ? " FOR UPDATE" : " FOR SHARE"}`,
+        [id],
+      );
+      if (!result.rows[0]) return null;
+      const board = boardRow(result.rows[0]);
+      await selectBoard(board);
+      return board;
+    };
     try {
       await client.query("BEGIN");
       // Platform identity/seat changes take the corresponding exclusive lock. Independent canvas writers share it.
@@ -601,31 +655,65 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
           (
             await client.query("SELECT * FROM canvas_boards ORDER BY updated_at DESC,id LIMIT 1000")
           ).rows.map(boardRow),
-        get: async (id, lock = false) => {
-          let candidate = selectedBoards.get(id);
-          if (!candidate) {
-            const metadata = await client.query("SELECT * FROM canvas_boards WHERE id=$1", [id]);
-            if (!metadata.rows[0]) return null;
-            candidate = boardRow(metadata.rows[0]);
-            await selectBoard(candidate);
-          }
-          // Workspace -> canvas -> source is the same lock order as legacy source deletion.
-          await client.query("SELECT id FROM workspaces WHERE id=$1 FOR SHARE", [
-            candidate.workspaceId,
-          ]);
-          const result = await client.query(
-            `SELECT * FROM canvas_boards WHERE id=$1${lock ? " FOR UPDATE" : " FOR SHARE"}`,
-            [id],
-          );
-          if (!result.rows[0]) return null;
-          const board = boardRow(result.rows[0]);
-          await selectBoard(board);
+        snapshot: async (id, actorId) => {
+          const board = await readLockedBoard(id);
+          if (!board) return null;
           const objects = (
             await client.query(
               "SELECT data FROM canvas_board_objects WHERE board_id=$1 ORDER BY id",
               [id],
             )
           ).rows.map((entry) => CanvasObjectSchema.parse(entry.data));
+          const grants = (
+            await client.query(
+              "SELECT user_id,role,created_at,label FROM canvas_board_grants WHERE board_id=$1 ORDER BY user_id",
+              [id],
+            )
+          ).rows.map((entry) => ({
+            userId: entry.user_id,
+            role: entry.role,
+            createdAt: new Date(entry.created_at).toISOString(),
+            ...(entry.label ? { label: entry.label } : {}),
+          }));
+          const invitations = (
+            await client.query(
+              "SELECT data FROM canvas_board_invitations WHERE board_id=$1 ORDER BY id",
+              [id],
+            )
+          ).rows.map((entry) => entry.data);
+          // Board FOR SHARE excludes concurrent commands/undo. Return the accepted JSON
+          // identifier, not PostgreSQL's lowercase UUID column representation.
+          const heads = await client.query<{ undone: boolean; operationId: string }>(
+            `SELECT DISTINCT ON (COALESCE((data->>'undone')::boolean,false))
+                COALESCE((data->>'undone')::boolean,false) AS undone,data->>'operationId' AS "operationId"
+              FROM canvas_board_receipts
+              WHERE board_id=$1 AND actor_id=$2::uuid AND data->>'actorId'=$3
+                AND data->>'undoable'='true'
+              ORDER BY COALESCE((data->>'undone')::boolean,false),
+                COALESCE((data->>'historySeq')::bigint,(data->>'canvasSeq')::bigint) DESC,
+                (data->>'canvasSeq')::bigint DESC,operation_id DESC`,
+            [id, actorId, actorId],
+          );
+          return {
+            board,
+            objects,
+            grants,
+            invitations,
+            historyHeads: {
+              undoOperationId: heads.rows.find((head) => !head.undone)?.operationId ?? null,
+              redoOperationId: heads.rows.find((head) => head.undone)?.operationId ?? null,
+            },
+          };
+        },
+        get: async (id, lock = false) => {
+          const board = await readLockedBoard(id, lock);
+          if (!board) return null;
+          const objects = (
+            await client.query(
+              "SELECT data FROM canvas_board_objects WHERE board_id=$1 ORDER BY id",
+              [id],
+            )
+          ).rows.map((entry) => entry.data);
           const grants = (
             await client.query(
               "SELECT user_id,role,created_at,label FROM canvas_board_grants WHERE board_id=$1 ORDER BY user_id",
@@ -743,10 +831,12 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             previous?.facilitation?.versions.map((saved) => [saved.metadata.id, saved]) ?? [],
           );
           const nextIds = state.objects.map((object) => object.id);
-          await client.query(
-            "DELETE FROM canvas_board_objects WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
-            [board.id, nextIds],
-          );
+          // Only get()/put() register complete locked originals; snapshot() never does.
+          if (!previous || hasRemovedIds(oldObjects, nextIds))
+            await client.query(
+              "DELETE FROM canvas_board_objects WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
+              [board.id, nextIds],
+            );
           for (const object of state.objects)
             if (JSON.stringify(oldObjects.get(object.id)) !== JSON.stringify(object))
               await client.query(
@@ -787,10 +877,12 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               );
             }
           const facilitation = canvasFacilitation(state);
-          await client.query(
-            "DELETE FROM canvas_board_comment_threads WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
-            [board.id, facilitation.threads.map((thread) => thread.id)],
-          );
+          const threadIds = facilitation.threads.map((thread) => thread.id);
+          if (!previous || hasRemovedIds(oldThreads, threadIds))
+            await client.query(
+              "DELETE FROM canvas_board_comment_threads WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
+              [board.id, threadIds],
+            );
           for (const thread of facilitation.threads) {
             const old = oldThreads.get(thread.id);
             if (JSON.stringify(old) === JSON.stringify(thread)) continue;
@@ -832,10 +924,12 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               "INSERT INTO canvas_board_timers(board_id,workspace_id,data) VALUES($1,$2,$3) ON CONFLICT(board_id) DO UPDATE SET data=EXCLUDED.data",
               [board.id, board.workspaceId, facilitation.timer],
             );
-          await client.query(
-            "DELETE FROM canvas_board_versions WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
-            [board.id, facilitation.versions.map((saved) => saved.metadata.id)],
-          );
+          const versionIds = facilitation.versions.map((saved) => saved.metadata.id);
+          if (!previous || hasRemovedIds(oldVersions, versionIds))
+            await client.query(
+              "DELETE FROM canvas_board_versions WHERE board_id=$1 AND NOT(id=ANY($2::uuid[]))",
+              [board.id, versionIds],
+            );
           for (const saved of facilitation.versions)
             if (JSON.stringify(oldVersions.get(saved.metadata.id)) !== JSON.stringify(saved)) {
               const { createdBy, ...data } = saved.metadata;
@@ -891,6 +985,62 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             "SELECT 1 FROM workspace_media_deletion_jobs WHERE workspace_id=$1",
             [workspaceId],
           );
+          const organization = await platform.get<OrganizationRecord>(
+            "organization",
+            organizationId,
+          );
+          const member = await platform.get<OrganizationMemberRecord>(
+            "member",
+            `${organizationId}:${userId}`,
+          );
+          const subscription = await platform.get<PlatformSubscription>(
+            "subscription",
+            organizationId,
+          );
+          const assignments = await platform.list<UserLicenseAssignment>(
+            "user_license",
+            organizationId,
+          );
+          const commercialHold = Boolean(
+            (await platform.get<{ held: boolean }>("commercial_hold", organizationId))?.held,
+          );
+          // The identity/org advisory locks and workspace row lock cover these facts.
+          // Reuse only this transaction's reads, at the original license-check clock point.
+          const terms = workspaceLicenseTerms(
+            organization,
+            subscription,
+            commercialHold,
+            new Date(),
+          );
+          let workspaceLicensed = false;
+          if (terms?.unit === "user") {
+            const assignment = selectWorkspaceLicenseAssignment(
+              assignments,
+              workspaceId,
+              terms.quantity,
+              (entry) => entry.userId,
+            );
+            if (assignment) {
+              // The origin workspace's assignee can differ from the current actor.
+              const assignedMember =
+                assignment.userId === userId
+                  ? member
+                  : await platform.get<OrganizationMemberRecord>(
+                      "member",
+                      `${organizationId}:${assignment.userId}`,
+                    );
+              workspaceLicensed = Boolean(assignedMember && assignedMember.role !== "billing");
+            }
+          } else if (terms) {
+            workspaceLicensed = Boolean(
+              selectWorkspaceLicenseAssignment(
+                await platform.list<LicenseAssignment>("license", organizationId),
+                workspaceId,
+                terms.quantity,
+                (entry) => entry.workspaceId,
+              ),
+            );
+          }
           return {
             workspace: {
               id: workspaceId,
@@ -908,18 +1058,13 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
                   verified: Boolean(userResult.rows[0].email_verified_at),
                 }
               : null,
-            organization: await platform.get<OrganizationRecord>("organization", organizationId),
-            member: await platform.get<OrganizationMemberRecord>(
-              "member",
-              `${organizationId}:${userId}`,
-            ),
-            subscription: await platform.get<PlatformSubscription>("subscription", organizationId),
-            assignments: await platform.list<UserLicenseAssignment>("user_license", organizationId),
-            commercialHold: Boolean(
-              (await platform.get<{ held: boolean }>("commercial_hold", organizationId))?.held,
-            ),
+            organization,
+            member,
+            subscription,
+            assignments,
+            commercialHold,
             workspaceDeleting: Boolean(deleting.rowCount),
-            workspaceLicensed: await new PlatformService(platform).workspaceHasLicense(workspaceId),
+            workspaceLicensed,
           } satisfies CanvasAccessContext;
         },
         findUser: async (email, organizationId) => {

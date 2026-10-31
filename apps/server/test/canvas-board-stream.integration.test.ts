@@ -1,4 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { connect as connectTcp } from "node:net";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -21,14 +23,18 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-async function within<T>(promise: Promise<T>, milliseconds = 4_000): Promise<T> {
+async function within<T>(
+  promise: Promise<T>,
+  milliseconds = 4_000,
+  operation = "TCP canvas stream",
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(
-          () => reject(new Error("TCP canvas stream did not complete promptly")),
+          () => reject(new Error(`${operation} did not complete promptly`)),
           milliseconds,
         );
       }),
@@ -53,7 +59,7 @@ async function signIn(app: FastifyInstance, email: string) {
   };
 }
 
-async function fixture() {
+async function fixture(readiness?: () => Promise<void>) {
   const repository = new MemoryRepository();
   const config = ConfigSchema.parse({
     NODE_ENV: "test",
@@ -68,7 +74,12 @@ async function fixture() {
     sendSignInPin: async () => {},
     sendWorkspaceInvitation: async () => {},
   };
-  const built = await buildApp(config, { repository, cache: new MemorySessionCache(), mailer });
+  const built = await buildApp(config, {
+    repository,
+    cache: new MemorySessionCache(),
+    mailer,
+    ...(readiness ? { readiness } : {}),
+  });
   apps.push(built.app);
   const owner = await signIn(built.app, "stream-owner@example.com");
   const editor = await signIn(built.app, "stream-editor@example.com");
@@ -142,6 +153,7 @@ async function stream(url: string, headers: Record<string, string>) {
   expect(response.headers.get("content-type")).toContain("application/x-ndjson");
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   expect(response.headers.get("x-accel-buffering")).toBe("no");
+  expect(response.headers.get("connection")).toBe("close");
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let pending = "";
@@ -343,12 +355,52 @@ describe("canvas fetch streams over real HTTP", () => {
     await first.next("canvas.ready");
     const pending = first.reader.read();
     first.controller.abort();
-    await expect(within(pending)).rejects.toMatchObject({ name: "AbortError" });
+    await expect(within(pending, 4_000, "Aborted canvas read")).rejects.toMatchObject({
+      name: "AbortError",
+    });
     const active = await stream(`${f.url}/v1/canvas-boards/${board.id}/events`, f.owner.headers);
     await active.next("canvas.ready");
-    await within(f.app.close(), 2_000);
-    expect((await within(active.reader.read())).done).toBe(true);
+    await within(f.app.close(), 2_000, "Canvas server shutdown");
+    expect((await within(active.reader.read(), 4_000, "Closed canvas read")).done).toBe(true);
   }, 10_000);
+
+  it("closes unused TCP connections while allowing an active HTTP request to finish", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const f = await fixture(async () => {
+      entered();
+      await pending;
+    });
+    const request = fetch(`${f.url}/health/ready`);
+    await within(ready);
+    const accepted = once(f.app.server, "connection");
+    const socket = connectTcp({ host: "127.0.0.1", port: Number(new URL(f.url).port) });
+    try {
+      await within(Promise.all([once(socket, "connect"), accepted]));
+      const closed = once(socket, "close");
+      let finished = false;
+      const closing = f.app.close().then(() => {
+        finished = true;
+      });
+      expect((await within(closed))[0]).toBe(false);
+      expect(finished).toBe(false);
+      release();
+      const response = await within(request);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("connection")).toBe("close");
+      expect(await response.json()).toMatchObject({ status: "ready" });
+      await within(closing, 2_000, "Canvas server shutdown with unused TCP connection");
+    } finally {
+      release();
+      socket.destroy();
+    }
+  });
 
   it("treats an active realtime policy pause as reconnect for both team and guest while authorized refresh remains available", async () => {
     const f = await fixture(),

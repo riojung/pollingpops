@@ -7,7 +7,7 @@ describe("Brand", () => {
     const markup = renderToStaticMarkup(<Brand />);
 
     expect(markup).toContain('<span class="sr-only">Polling Pops</span>');
-    expect(markup).toContain('<span aria-hidden="true">Polling Pops</span>');
+    expect(markup).toContain('<span class="brand-name" aria-hidden="true">Polling Pops</span>');
     expect(markup).toContain('href="/"');
   });
 
@@ -15,7 +15,7 @@ describe("Brand", () => {
     const markup = renderToStaticMarkup(<Brand name="Acme Learning" />);
 
     expect(markup).toContain('<span class="sr-only">Acme Learning</span>');
-    expect(markup).toContain('<span aria-hidden="true">Acme Learning</span>');
+    expect(markup).toContain('<span class="brand-name" aria-hidden="true">Acme Learning</span>');
     expect(markup).not.toContain('viewBox="0 0 64 80"');
     expect(markup).toContain("AL");
   });

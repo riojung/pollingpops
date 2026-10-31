@@ -35,6 +35,10 @@ import {
   parseCanvasCollaborationConfig,
   type CollaborationMetric,
 } from "./canvas-collaboration-config.ts";
+import {
+  CanvasCollaborationProfiler,
+  parseCanvasProfileConfig,
+} from "./canvas-collaboration-profile.ts";
 
 declare global {
   interface Window {
@@ -46,6 +50,7 @@ declare global {
 
 const root = resolve(import.meta.dirname, "../..");
 const config = parseCanvasCollaborationConfig(process.env);
+const profiler = new CanvasCollaborationProfiler(parseCanvasProfileConfig(process.env));
 const output = resolve(
   process.env.CANVAS_COLLAB_OUTPUT ?? `/tmp/pollingpops-canvas-collaboration-${Date.now()}.json`,
 );
@@ -75,27 +80,10 @@ function source() {
     workingTreeDirty: Boolean(git(["status", "--porcelain"])),
   };
 }
-function browserSourceFingerprint() {
+function sourceFingerprint(scopes: string[]) {
   const names = execFileSync(
     "git",
-    [
-      "ls-files",
-      "--cached",
-      "--others",
-      "--exclude-standard",
-      "--",
-      "apps/web/app",
-      "apps/web/components",
-      "apps/web/lib",
-      "apps/web/public",
-      "apps/web/next.config.ts",
-      "apps/web/proxy.ts",
-      "apps/web/package.json",
-      "packages/contracts/src",
-      "packages/experience/src",
-      "packages/rehearsal/src",
-      "pnpm-lock.yaml",
-    ],
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...scopes],
     { cwd: root, encoding: "utf8" },
   )
     .trim()
@@ -107,6 +95,21 @@ function browserSourceFingerprint() {
     hash.update(existsSync(resolve(root, name)) ? readFileSync(resolve(root, name)) : "<deleted>");
   }
   return hash.digest("hex");
+}
+function browserSourceFingerprint() {
+  return sourceFingerprint([
+    "apps/web/app",
+    "apps/web/components",
+    "apps/web/lib",
+    "apps/web/public",
+    "apps/web/next.config.ts",
+    "apps/web/proxy.ts",
+    "apps/web/package.json",
+    "packages/contracts/src",
+    "packages/experience/src",
+    "packages/rehearsal/src",
+    "pnpm-lock.yaml",
+  ]);
 }
 function startNext(args: string[], log: string) {
   const stream = createWriteStream(resolve(evidenceDir, log));
@@ -377,7 +380,7 @@ async function main() {
     return;
   }
   stage = "disposable-postgres-two-node-fixture";
-  fixture = await createCanvasCollaborationFixture(config);
+  fixture = await createCanvasCollaborationFixture(config, profiler);
   stage = "production-web-start";
   server = startNext(
     ["start", "--hostname", "127.0.0.1", "--port", String(config.webPort)],
@@ -553,7 +556,12 @@ async function main() {
   for (let index = 0; index < config.warmup; index++) await wave(index, false);
   stage = "measured-concurrent-http-writes-and-peer-paint";
   const writesStarted = performance.now();
-  for (let index = 0; index < config.updates; index++) await wave(index, true);
+  profiler.start();
+  try {
+    for (let index = 0; index < config.updates; index++) await wave(index, true);
+  } finally {
+    profiler.stop();
+  }
   const measuredWritesElapsedMs = performance.now() - writesStarted;
   await peer.screenshot({ path: resolve(evidenceDir, "peer-after-measured-updates.png") });
   const slowState = stalled.state();
@@ -762,7 +770,21 @@ async function main() {
     evidenceSchemaVersion: 1,
     complete: true,
     startedAt,
-    source: source(),
+    source: {
+      ...source(),
+      apiAndHarnessSha256: sourceFingerprint([
+        "apps/server/src",
+        "packages/db/src",
+        "packages/contracts/src",
+        "tests/load/canvas-collaboration-capacity.mts",
+        "tests/load/canvas-collaboration-fixture.mts",
+        "tests/load/canvas-collaboration-config.ts",
+        "tests/load/canvas-collaboration-profile.ts",
+        "tests/load/canvas-capacity.ts",
+        "package.json",
+        "pnpm-lock.yaml",
+      ]),
+    },
     protocolVersion: CANVAS_SCHEMA_VERSION,
     workload: {
       objects: config.objects,
@@ -827,7 +849,10 @@ async function main() {
         "Coordinator time from enabling the offline peer context network until its latest authorized matching text plus two rAF; requires a new stream request",
       stalledConsumerAcknowledgement:
         "HTTP acknowledgement samples while an additional authorized raw TCP stream deliberately does not consume its response body; checks isolation, not a forced worst-case backpressure cutoff",
+      repositoryProfiling:
+        "Optional CANVAS_COLLAB_PROFILE=true instance/SQL/pool observations during measured write-and-peer-paint waves only; setup/warm-up and operations begun before that window are excluded. Monotonic client elapsed times, numeric correlation and fixed method/SQL categories only. CANVAS_COLLAB_PROFILE_MAX_SAMPLES bounds retained completions (default20000,max100000); truncation and in-flight observations are disclosed. No authority cache or production behavior changes; gates remain independent.",
     },
+    repositoryProfiling: profiler.report(),
     latencyMs: measured,
     gates,
     gatePurpose:
@@ -925,6 +950,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
+  profiler.stop();
   const failure = {
     evidenceSchemaVersion: 1,
     complete: false,
@@ -949,6 +975,7 @@ try {
       initialRender: initialRender.length,
     },
     artifactDirectory: evidenceDir,
+    repositoryProfiling: profiler.report(),
   };
   await writeFile(output, `${JSON.stringify(failure, null, 2)}\n`);
   process.stderr.write(`${JSON.stringify(failure)}\n`);
@@ -964,4 +991,5 @@ try {
   await browser?.close();
   await stop(server);
   await fixture?.close();
+  profiler.restore();
 }

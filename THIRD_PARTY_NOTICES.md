@@ -94,9 +94,10 @@ This file is not legal advice.
 
 ### BlueOak-1.0.0
 
-| Package   | Version | Project                                                    |
-| --------- | ------- | ---------------------------------------------------------- |
-| minimatch | 10.2.6  | [Project page](https://github.com/isaacs/minimatch#readme) |
+| Package                         | Version | Project                                                    |
+| ------------------------------- | ------- | ---------------------------------------------------------- |
+| @isaacs/nonrecursive-glob-match | 1.0.3   | Not provided                                               |
+| minimatch                       | 11.0.3  | [Project page](https://github.com/isaacs/minimatch#readme) |
 
 ### BSD-2-Clause
 
@@ -120,7 +121,7 @@ This file is not legal advice.
 | @protobufjs/path         | 1.1.2        | [Project page](https://github.com/dcodeIO/protobuf.js#readme)       |
 | @protobufjs/pool         | 1.1.0        | [Project page](https://github.com/dcodeIO/protobuf.js#readme)       |
 | @protobufjs/utf8         | 1.1.2        | [Project page](https://github.com/protobufjs/protobuf.js#readme)    |
-| fast-uri                 | 3.1.8, 4.1.5 | [Project page](https://github.com/fastify/fast-uri)                 |
+| fast-uri                 | 3.1.9, 4.2.3 | [Project page](https://github.com/fastify/fast-uri)                 |
 | light-my-request         | 6.6.0        | [Project page](https://github.com/fastify/light-my-request#readme)  |
 | protobufjs               | 7.6.6        | [Project page](https://protobufjs.github.io/protobuf.js/)           |
 | secure-json-parse        | 4.1.1        | [Project page](https://github.com/fastify/secure-json-parse#readme) |
@@ -245,7 +246,7 @@ This file is not legal advice.
 | http-errors                           | 2.0.1               | [Project page](https://github.com/jshttp/http-errors#readme)                                        |
 | iconv-lite                            | 0.7.3               | [Project page](https://github.com/pillarjs/iconv-lite)                                              |
 | ioredis                               | 6.0.0               | [Project page](https://github.com/redis/ioredis#readme)                                             |
-| ip-address                            | 10.7.2              | [Project page](https://github.com/beaugunderson/ip-address#readme)                                  |
+| ip-address                            | 10.7.4              | [Project page](https://github.com/beaugunderson/ip-address#readme)                                  |
 | ipaddr.js                             | 2.5.0               | [Project page](https://github.com/whitequark/ipaddr.js#readme)                                      |
 | is-fullwidth-code-point               | 3.0.0               | [Project page](https://github.com/sindresorhus/is-fullwidth-code-point#readme)                      |
 | is-plain-object                       | 5.1.0               | [Project page](https://github.com/jonschlinkert/is-plain-object)                                    |

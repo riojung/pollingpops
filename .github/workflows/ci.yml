@@ -93,6 +93,8 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://openround:test-only@localhost:5432/openround
+      # Keep shared-cluster fixture DDL and resource usage isolated across test files.
+      VITEST_MAX_WORKERS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -118,6 +120,14 @@ jobs:
   browser-core:
     runs-on: ubuntu-26.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - chromium
+          - firefox
+          - chromium-mobile
+          - webkit-mobile
     env:
       PLAYWRIGHT_PRODUCTION: "true"
     steps:
@@ -132,18 +142,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Run feature-off browser suite
-        run: pnpm test:e2e
+        run: pnpm test:e2e --project="${{ matrix.project }}"
       - name: Run business administration browser journeys
+        if: ${{ matrix.project == 'chromium' }}
         run: pnpm test:e2e:business
       - name: Run operator administration browser journeys
+        if: ${{ matrix.project == 'chromium' }}
         run: pnpm test:e2e:control
       - name: Run local admin browser journeys
+        if: ${{ matrix.project == 'chromium' }}
         run: pnpm test:e2e:local-admin
       - name: Retain browser reports and retry diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-core-results
+          name: browser-core-${{ matrix.project }}-results
           path: |
             playwright-report/
             test-results/

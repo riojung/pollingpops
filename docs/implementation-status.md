@@ -376,6 +376,83 @@ including the added persistent-503 case that preserves actual scene/outline DOM 
 position across reconnects and successful reauthorization, then clears the scene on target denial.
 The reviewer independently rechecked the fix without finding a privacy regression.
 
+### CI stability and canvas profiling follow-up October 31 2026
+
+Work starts from merged PR #168 / `6cb8e2e` on `codex/ci-and-canvas-performance`. The previous
+`main` already failed the Node 22 stream-shutdown, dependency-audit, browser and web-image checks.
+The fixes preserve the existing assertions, rate limits and required aggregate browser context.
+
+- Node 22 could retain an unused replacement TCP connection after an aborted fetch. Shutdown now
+  closes sockets that have not sent data, lets admitted HTTP requests drain, and ends long-lived
+  NDJSON sockets after their final bytes. The original two-second shutdown assertion remains;
+  all 13 focused stream/lifecycle cases pass on Node 22 and Node 26, with an independent recheck.
+- The web image cannot resolve a server-only source import from a web unit test. The real
+  producer/consumer SVG interoperability case now lives in repository support tests, alongside
+  coverage for styled diagrams. Web unit/type coverage remains enabled. The isolated production
+  web image builds and serves `/signin` with HTTP 200.
+- Dependency overrides update `ip-address` to 10.7.4, `fast-uri` to 3.1.9/4.2.3, and `minimatch`
+  to 11.0.3 for its four current parent versions. Upstream advisories cover
+  [IP parsing](https://github.com/beaugunderson/ip-address/security/advisories/GHSA-rxp7-6hxx-x8q5),
+  URI [scheme](https://github.com/fastify/fast-uri/security/advisories/GHSA-w74x-v6f9-j3xg),
+  [host](https://github.com/fastify/fast-uri/security/advisories/GHSA-wjr9-j795-jxcr),
+  [relative-path](https://github.com/fastify/fast-uri/security/advisories/GHSA-xhq7-xmqj-769h) and
+  [suffix-reference](https://github.com/fastify/fast-uri/security/advisories/GHSA-333x-w4r6-6crp)
+  handling, and [glob matching](https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249).
+  The affected consumers use retained matcher APIs; compatibility checks include real tracing
+  and IPv6 rate limiting plus 43,420 old/new matcher comparisons. Frozen install, audit at the
+  unchanged low threshold, and byte-identical notices regeneration pass. Audit reports zero
+  vulnerabilities across 638 dependencies. Generated notices include the new Blue Oak licensed
+  `@isaacs/nonrecursive-glob-match` dependency.
+- Core browsers run as four fresh-API jobs instead of sharing one IP budget across all projects.
+  The matrix keeps all 148 cases; business/control/local-admin journeys remain on its Chromium
+  job, and `browser-smoke` still requires every core and beta result. PostgreSQL fixture workers
+  are bounded to one after a fresh `main` run exceeded the baseline migration test's existing
+  five-second deadline. The unchanged suites pass 244 Node 22 cases with one existing skip locally;
+  the hosted resource-sensitive failure was not reproduced locally.
+- Browser fixes scope duplicate participant labels to the roster, select the visible rehearsal
+  card through its real interaction, derive Recovery answers from authored starter metadata and
+  explicitly select timed mode for its lock/distribution journey. The visible brand name uses
+  the active theme token, including inverted treatment, so dark-mode contrast remains meaningful.
+  Administrator fixtures assert the personal-workspace boundary and create a real organization
+  for the credit-grant journey instead of assuming personal accounts appear in the organization menu.
+
+All 495 distinct browser cases are validated on Node 22: 148 core, 328 beta and 19 administration.
+Chromium/WebKit run natively on macOS. Firefox's macOS binary could not launch even with a clean
+pinned download; its matching Playwright 1.64.1 Linux/Ubuntu 26 ARM64 remote server validates the
+Firefox journeys. The Firefox beta broad run had 100 clean passes, one flaky navigation case and
+one remote-download test failure. Both repaired cases then passed three repetitions with retries
+disabled, and Chromium confirmed both repairs. Local admin's full eight-case rerun passes after
+two fixture repairs; the other completed projects pass without retries. These are automated
+browser results, not physical-device evidence.
+
+The full Node 22 `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check` passes, including
+1,554 web, 937 server, 419 database and 295 repository-support tests plus production builds. Existing
+environment-gated skips remain. Hosted confirmation requires the updated branch's workflows;
+the standalone web-image verification does not claim a full production-media Compose smoke.
+
+Capacity measurements retain the current 500-object/20-editor workload and all product limits.
+An opt-in harness-only profiler records numeric operation/query correlation, fixed SQL
+categories, row counts, pool waits and sampled pressure. It retains no SQL, parameters, identities,
+bodies or error text, excludes setup/warm-up, and discloses truncation/censored work. Its 11 helper
+and configuration cases pass on Node 22 and Node 26.
+
+The measured baseline identified repeated license reads, full history hydration on ordinary
+scene reads, and pool/board-lock contention. The implementation reuses license facts only within
+the existing locked transaction, adds a distinct read-only scene/history-head projection, parses
+current objects once, and skips provably empty DELETEs against complete locked originals. It
+preserves authorization, real removals/cascades, receipts, contract versions and all limits.
+All 369 selected database cases pass with one existing skip; all 25 Canvas desktop/mobile
+journeys pass. A pre-existing PostgreSQL retry-test ordering assumption reproduces on the
+baseline and now compares every object field by identity.
+
+Three alternating profiled pairs provide 600 measured commands per variant. Candidate
+acknowledgement p95 is 1.64–1.71 seconds versus 2.45–2.59 seconds on the CI-only baseline.
+With profiling disabled, p95 is 1.78 versus 2.43 seconds; peer paint-opportunity p95 is
+1.12 versus 1.78 seconds. Every run passes correctness; every candidate passes the unchanged
+smoke gates. The 500 ms peer roadmap target and staging/device/media/soak qualification remain
+open, so no capacity increase is authorized. See the [per-run capacity evidence](canvas-capacity-evidence.md#october-31-2026-node-22-comparison)
+for distributions, hashes, limitations and required next measurements.
+
 ### Standalone administrator authentication October 15 2026
 
 Implemented locally on `codex/standalone-admin-console`. Administrators open the separate console

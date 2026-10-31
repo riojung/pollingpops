@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { operatorTotpCode } from "../../packages/control-plane/src/index.js";
@@ -182,8 +183,16 @@ test("a direct credit grant preserves its payload and reason through fresh authe
 }, testInfo) => {
   const credentials = await fixture.provision();
   await signIn(page, testEmail("direct-credit-reauth", testInfo));
+  const created = await page.request.post(`${apiOrigin}/v1/organizations`, {
+    headers: { "x-idempotency-key": randomUUID() },
+    data: { name: "Synthetic credit grant organization" },
+  });
+  expect(created.status()).toBe(201);
+  const organizationId = (await created.json()).organization.id as string;
   const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();
-  const organizationId = navigation.organizations[0].id as string;
+  expect(navigation.organizations).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: organizationId, role: "owner" })]),
+  );
   await signInAdmin(page, credentials);
   await page
     .getByRole("navigation", { name: "Operator areas" })

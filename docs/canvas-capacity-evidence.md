@@ -143,6 +143,34 @@ still requires peer p95 ≤500 ms, guest ≤2 seconds, initial render ≤3 secon
 acceptance. Literal 16.7 ms rAF comparisons are quantized diagnostics, not a formal 60 fps p95 SLO.
 Every local report keeps `capacityIncreaseAuthorized: false`.
 
+### Optional query and pool profiling
+
+Set `CANVAS_COLLAB_PROFILE=true` to add harness-only numeric profiling. Disabled mode installs no
+repository or pool wrappers. `CANVAS_COLLAB_PROFILE_MAX_SAMPLES` defaults to 20,000 and accepts
+1–100,000 completed samples across all kinds; use the same value for compared variants. Reports
+include sample-truncation and censored in-flight counts. Truncated retained quantiles can be biased
+and do not represent a complete distribution.
+
+The measured epoch begins after warm-up and ends after the concurrent writes/peer observations.
+Numeric operation/parent ordinals correlate existing public repository methods with direct SQL
+category, elapsed time, driver row count and pool-acquisition wait. Setup and operations begun
+before the epoch are excluded. Query text, parameters, principals, result bodies and error text
+are never retained. Wrappers preserve original Promise identity and callback receivers, arguments
+and failures; they do not move the existing repository-resolution paint-ledger boundary.
+
+SQL duration includes driver/network/lock waits and is not database CPU or an exact SQL COMMIT
+timestamp. Row counts include writes and reveal neither byte cost nor row content. Pool pressure
+is sampled at acquisition boundaries; its high-water values are individual-pool observations,
+not continuous maxima or a sum across nodes. Only work inside wrapped Canvas methods is attributed;
+credential/policy queries outside them remain excluded. Nested method wall times overlap and direct
+SQL belongs to the innermost method, so do not add their durations or independent p95 values.
+
+The report records API/DB/harness source hashes alongside browser-build provenance. Compare equally
+instrumented variants with unchanged scene, actor count, network calibration and batching; then
+confirm the end-to-end result with profiling disabled. Instrumentation has overhead and changes no
+product behavior, workload or acceptance gate. All timed runs require a quiet host, without other
+builds, browser suites or database tests.
+
 ## October 30, 2026 local observations
 
 These are short, single-machine observations on the dirty Order 7 branch based on `6a8e828`, with
@@ -186,6 +214,142 @@ with a release's evidence bundle rather than treating temporary paths as durable
 Physical mobile/touch devices, realistic scanned media, independent API processes/hosts, deployed
 proxy/TLS, long-duration saturation, near-limit discussion/history/receipts and all-to-all peer
 observations remain unmeasured. **Capacity acceptance failed; all product limits remain unchanged.**
+
+## October 31, 2026 Node 22 comparison
+
+This follow-up starts from merged `6cb8e2e` with the CI repairs on
+`codex/ci-and-canvas-performance`. The baseline contains those repairs; the candidate adds only
+the Canvas database changes below. Both variants use the same production browser bundle,
+350 ms notification coalescing and unchanged product limits. The workload is 500 objects
+(313,422 scene bytes), 20 separately licensed browser contexts, one warm-up and ten measured
+waves: 200 commands per run, plus 100 ordinary guest objects and the same tiny synthetic image.
+Browser runs do not seed retained discussions/manual checkpoints; separate repository fixtures
+and conformance tests cover those features. These observations do not qualify a dense-history
+or realistic-media workload.
+
+Node 22.23.4 and Chromium 156.0.8078.4 run on ARM64 macOS. Dedicated PostgreSQL 17.11 and Valkey
+8.1.10 run in a 4-vCPU Docker VM reporting 8,309,010,432 bytes of total memory. The cache artifact
+records its advertised Redis compatibility version, 7.2.4. Two HTTP API nodes share one
+coordinator process with independent repository pools, each limited to 15 connections.
+Nominal CDP request latency stays 100 ms; each run records 100 actual health-fetch calibrations.
+No other task builds, suites or timed runs execute during a measurement.
+
+The run order is B1, C1, C2, B2, B3, C3, then B-off and C-off. Each run creates a fresh disposable
+database/cache namespace and browser process. Guarded source switches accept only the captured
+baseline/candidate bytes; browser and fixture hashes match across all eight runs. The dirty-tree
+base revision alone does not identify either variant, so the recorded SHA-256 values are:
+
+```text
+Baseline API/DB/harness: 1917efb4b344a614d3e937b0009889336d9485179a50f8c173050414720522ce
+Candidate API/DB/harness: f987f1a2672460fddee65118b1938b80264395f99ff53a1337edb18375a5071f
+Shared browser sources: 43dcc627c793a99e2600c10440791f06fcddf434d2e86d3920637d4ea6c88208
+Shared scene: da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1
+```
+
+### Bounded database changes
+
+- Ordinary scene reads load current objects, sharing metadata and actor-owned undo/redo heads.
+  They do not hydrate every inverse receipt, discussion or saved scene. Their distinct read-only
+  type never enters `put()` or the complete-originals cache. Authorization preflight, loaded-role
+  and expiry checks, workspace/board/source lock order and accepted operation-ID casing remain.
+- License decisions reuse facts read within the same locked transaction, through the canonical
+  pure policy. There is no cross-request authority cache. Origin-assignee membership remains
+  distinct from the actor's membership, and quantity, fallback, hold and clock semantics remain.
+- Complete write-state hydration parses current objects once. Persistence skips object,
+  discussion-thread and saved-version DELETEs only when a complete locked original proves that
+  no IDs were removed. Unknown prior state and real removals retain DELETEs and cascades; full
+  receipt/version validation remains on write/history paths.
+
+All 369 selected Memory/restricted-PostgreSQL cases pass, with one existing skip, including the
+new license/snapshot parity cases. The legacy retry test also reproduced an array-order
+assumption on the baseline; it now compares every current object field by ID. All 25 dedicated
+desktop/mobile Canvas browser cases pass. Independent read-only checks found no issue in the
+combined authorization, snapshot/originals and real-deletion behavior.
+
+### Per-run latency
+
+Every row below has 200 measured commands. Profiling-on pairs therefore provide 600 command
+samples per variant; the separate profiling-off pair supplies 200 more each. Percentiles are
+per run, not pooled or averaged. B-off/C-off install no profiling wrappers; this single pair
+confirms the direction without the observer and does not estimate its overhead precisely.
+The [numeric/provenance summary](canvas-capacity-comparison-2026-10-31.json) retains all per-run
+metric distributions, raw-artifact hashes, gate results, calibration and profiling coverage.
+
+| HTTP acknowledgement, ms |     p50 |     p95 |     p99 |     max |
+| ------------------------ | ------: | ------: | ------: | ------: |
+| B1, profiling on         | 1660.60 | 2589.80 | 2835.60 | 3081.60 |
+| C1, profiling on         | 1172.80 | 1701.00 | 1748.60 | 1876.90 |
+| B2, profiling on         | 1582.80 | 2450.30 | 2677.10 | 2766.80 |
+| C2, profiling on         | 1149.70 | 1705.70 | 1832.30 | 1906.60 |
+| B3, profiling on         | 1660.20 | 2531.50 | 3098.30 | 3186.20 |
+| C3, profiling on         | 1141.30 | 1635.30 | 1684.90 | 1724.20 |
+| B-off                    | 1554.50 | 2428.40 | 2653.50 | 2760.70 |
+| C-off                    | 1146.50 | 1781.70 | 1884.60 | 1976.10 |
+
+| Repository resolution to peer paint opportunity, ms |     p50 |     p95 |     p99 |     max |
+| --------------------------------------------------- | ------: | ------: | ------: | ------: |
+| B1                                                  | 1046.48 | 2217.85 | 2660.94 | 2757.12 |
+| C1                                                  |  519.62 | 1159.82 | 1350.98 | 1440.86 |
+| B2                                                  |  800.94 | 1681.95 | 1923.82 | 2021.59 |
+| C2                                                  |  773.93 | 1399.21 | 1475.62 | 1497.56 |
+| B3                                                  |  947.10 | 1748.70 | 1970.20 | 2078.13 |
+| C3                                                  |  673.17 | 1324.64 | 1634.90 | 1711.30 |
+| B-off                                               |  955.38 | 1776.99 | 2189.30 | 2283.57 |
+| C-off                                               |  627.92 | 1115.58 | 1247.09 | 1287.63 |
+
+### SQL and pool observations
+
+Exact direct SQL joins cover retained completed operations, with no query-count mismatches.
+The three profiled runs give the following counts; p50, p95, p99 and max coincide in each cell.
+Driver row totals include writes and are not transferred bytes or distinct business records.
+
+| Completed operation            | Baseline SQL statements | Candidate SQL statements | Completed samples B / C |
+| ------------------------------ | ----------------------: | -----------------------: | ----------------------: |
+| Owner command                  |                      58 |                       49 |                 30 / 30 |
+| Other-editor command           |                      58 |                       50 |               570 / 570 |
+| Owner current-scene get        |                      42 |                       32 |               186 / 142 |
+| Other-editor current-scene get |                      42 |                       33 |           1,637 / 1,468 |
+
+Platform-category statements fall from 14 to 8 for the owner and 9 for other editors. Commands
+also omit three empty DELETEs. Ordinary gets omit comment/timer/version hydration, and their
+receipt query returns one history head instead of the growing full receipt set. They still
+return 500 current object rows. Background refresh counts and measured-window durations differ,
+so full-window query totals are not used as a fixed-work query-reduction percentage.
+
+| Pair | Pool acquisition wait p95, baseline / candidate ms | Node-1 waiting boundary maximum B / C |
+| ---- | -------------------------------------------------: | ------------------------------------: |
+| 1    |                                  321.086 / 278.880 |                               49 / 53 |
+| 2    |                                  348.777 / 182.029 |                               57 / 48 |
+| 3    |                                  347.555 / 272.832 |                               52 / 51 |
+
+Node 1 reaches 15 connections in every run. Node-0 connection maxima are 5/5/5 for baseline
+and 6/5/5 for candidate, with no sampled queue. These are individual-pool acquisition-boundary
+maxima, not cluster totals or continuous maxima; queue maxima are not universally lower.
+Pool contention remains measurable.
+
+All six profiled runs retain samples below the same 100,000-completion bound, with no drops,
+unsupported returns, invalid samples or failed completed operations. At window stop, unfinished
+operation/query/pool counts are B: `13/12/1`, `13/13/0`, `13/13/0`; C: `9/9/0`, `10/10/0`,
+`18/14/4`. Their partially observed get/authorize queries are excluded from the completed-operation
+denominators above. These censored windows are not claimed as exhaustive accounting of every
+background request.
+
+All eight runs complete with all correctness checks passing: observed edits, final object versions,
+exact retry, stale rejection, cross-node outsider/revocation denial, guest privacy/cookie omission
+and zero application page errors. Every baseline fails the unchanged 2,000 ms acknowledgement
+and stalled-consumer gates; every candidate passes every smoke gate. **Every run still fails the
+500 ms peer roadmap target.** Initial-render p95 is 1,050.0–1,063.9 ms (20 samples/run).
+Guest publication is 461.29–531.71 ms and reconnect 420.80–1,257.37 ms, each with only one
+observation per run. Navigation rAF p95 is 16.7–16.8 ms; these quantized headless observations do
+not establish physical-device frame delivery or touch performance.
+
+Raw reports and sibling screenshots are under `/tmp/pollingpops-canvas-comparison/`; retain them
+with a release's evidence bundle. These are bounded local comparisons, not production capacity
+acceptance. Physical devices, real media/scanning, independent serving processes, deployed
+proxy/TLS, near-limit retained state and sustained staging load remain required. The 500-object,
+2 MiB, 50-affected-object, 64 KiB-operation and 5,000-receipt limits remain unchanged;
+20 editors describes this workload, not a new admission cap. Every report retains
+`capacityIncreaseAuthorized: false`.
 
 ## Required next evidence phase
 

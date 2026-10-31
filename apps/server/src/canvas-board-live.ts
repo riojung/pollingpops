@@ -110,6 +110,9 @@ export class CanvasBoardLive {
     reply.header("content-type", "application/x-ndjson; charset=utf-8");
     reply.header("cache-control", "private, no-store");
     reply.header("x-accel-buffering", "no");
+    // Node 22 can retain this socket in keep-alive when preClose ends the response
+    // just before server.close(). Finish the stream gracefully, then close its socket.
+    reply.header("connection", "close");
     reply.hijack();
     const headers: OutgoingHttpHeaders = {};
     for (const [name, value] of Object.entries(reply.getHeaders()))

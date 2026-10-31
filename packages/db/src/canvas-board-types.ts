@@ -87,6 +87,17 @@ export interface CanvasState {
   receipts: CanvasReceipt[];
   facilitation?: CanvasFacilitationStored;
 }
+/** Current-scene projection only. It cannot be passed to put(): it is not CanvasState. */
+export type CanvasSceneRead = Readonly<
+  Pick<CanvasState, "board" | "objects" | "grants" | "invitations">
+>;
+export interface CanvasHistoryHeads {
+  readonly undoOperationId: string | null;
+  readonly redoOperationId: string | null;
+}
+export interface CanvasSnapshotRead extends CanvasSceneRead {
+  readonly historyHeads: CanvasHistoryHeads;
+}
 export interface CanvasSavedVersion {
   metadata: CanvasVersionMetadata;
   objects: CanvasObject[];
@@ -141,6 +152,7 @@ export interface CanvasTransaction {
   >;
   list(): Promise<CanvasBoardStored[]>;
   get(id: string, lock?: boolean): Promise<CanvasState | null>;
+  snapshot(id: string, actorId: string): Promise<CanvasSnapshotRead | null>;
   put(state: CanvasState, insert?: boolean): Promise<void>;
   remove(id: string): Promise<void>;
   access(workspaceId: string, userId: string): Promise<CanvasAccessContext | null>;

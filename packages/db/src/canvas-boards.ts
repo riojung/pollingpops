@@ -50,9 +50,12 @@ import type {
   CanvasRun,
   CanvasState,
   CanvasTransaction,
+  CanvasSceneRead,
+  CanvasHistoryHeads,
 } from "./canvas-board-types.js";
 
 import { CanvasBoardError } from "./canvas-board-error.js";
+import { canvasHistoryHeads } from "./canvas-snapshot.js";
 import {
   canvasFacilitation,
   canvasHistoricalObjects,
@@ -63,6 +66,14 @@ import {
   validateCanvasVersions,
 } from "./canvas-facilitation.js";
 export { CanvasBoardError } from "./canvas-board-error.js";
+
+type CanvasCheckedRead<T extends CanvasSceneRead> = {
+  state: T;
+  access: CanvasAccessContext;
+  role: CanvasBoardRole;
+  source: IdeaBoardStored | null;
+  capabilities: CanvasBoardView["capabilities"];
+};
 
 const instant = (clock: CanvasClock) => (typeof clock === "function" ? clock() : clock);
 const fingerprint = (value: unknown) =>
@@ -92,7 +103,7 @@ function status(
   return board.status;
 }
 function roleFor(
-  state: CanvasState,
+  state: Pick<CanvasSceneRead, "board" | "grants">,
   actor: CanvasActor,
   access: CanvasAccessContext,
 ): CanvasBoardRole | null {
@@ -186,7 +197,7 @@ function compactCanvasReceipts(receipts: CanvasReceipt[]) {
   }
 }
 function projectedObjects(
-  state: CanvasState,
+  state: Pick<CanvasSceneRead, "objects">,
   source: IdeaBoardStored | null,
   guest: boolean,
   now: Date,
@@ -331,16 +342,26 @@ export class CanvasBoardRepository {
     private readonly store: MemoryCanvasBoards | PostgresRepository,
     private readonly options: { communityMode?: boolean; communityRetentionDays?: number } = {},
   ) {}
-  private async checked(
+  private checked(
     tx: CanvasTransaction,
     actor: CanvasActor,
     id: string,
     clock: CanvasClock,
     lock = false,
   ) {
-    // Refuse unaccepted, revoked or foreign grants before reading private scene/history rows.
+    return this.checkedRead(tx, actor, id, clock, () => tx.get(id, lock), lock);
+  }
+  private async checkedRead<T extends CanvasSceneRead>(
+    tx: CanvasTransaction,
+    actor: CanvasActor,
+    id: string,
+    clock: CanvasClock,
+    load: () => Promise<T | null>,
+    lock = false,
+  ): Promise<CanvasCheckedRead<T>> {
+    // Both loaders refuse unaccepted, revoked or foreign grants before private rows.
     const preflight = await this.authorizedMetadata(tx, actor, id, clock);
-    const state = await tx.get(id, lock);
+    const state = await load();
     if (!state) fail();
     const access = preflight.access;
     notExpired(state.board, instant(clock));
@@ -376,15 +397,21 @@ export class CanvasBoardRepository {
     actor: CanvasActor,
     clock: CanvasClock,
   ): CanvasBoardView {
+    return this.projectView(
+      checked,
+      canvasHistoryHeads(checked.state.receipts, actor.userId),
+      clock,
+    );
+  }
+  private projectView(
+    checked: CanvasCheckedRead<CanvasSceneRead>,
+    heads: CanvasHistoryHeads,
+    clock: CanvasClock,
+  ): CanvasBoardView {
     const { state, source, access, role, capabilities } = checked;
     const now = instant(clock);
     notExpired(state.board, now);
     if (source) sourceCurrent(source, now);
-    const own = state.receipts
-      .filter((receipt) => receipt.actorId === actor.userId && receipt.undoable)
-      .sort((a, b) => (a.historySeq ?? a.canvasSeq) - (b.historySeq ?? b.canvasSeq));
-    const undo = own.filter((receipt) => !receipt.undone).at(-1);
-    const redo = own.filter((receipt) => receipt.undone).at(-1);
     const { creationKey, creationHash, uploadCount, uploadBytes, ...metadata } = state.board;
     void creationKey;
     void creationHash;
@@ -402,8 +429,8 @@ export class CanvasBoardRepository {
       grants: capabilities.share ? state.grants : [],
       invitations: capabilities.share ? state.invitations : [],
       sourceBoard: source ? ideaBoardProjection(source, now, capabilities.facilitate) : undefined,
-      undoOperationId: undo?.operationId ?? null,
-      redoOperationId: redo?.operationId ?? null,
+      undoOperationId: heads.undoOperationId,
+      redoOperationId: heads.redoOperationId,
     });
   }
   /** Read-only receipt replay. Callers must return this existing resource, never recreate it
@@ -533,9 +560,12 @@ export class CanvasBoardRepository {
     });
   }
   get(actor: CanvasActor, id: string, clock: CanvasClock = () => new Date()) {
-    return this.run(actor, { boardId: id }, async (tx) =>
-      this.view(await this.checked(tx, actor, id, clock), actor, clock),
-    );
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const checked = await this.checkedRead(tx, actor, id, clock, () =>
+        tx.snapshot(id, actor.userId),
+      );
+      return this.projectView(checked, checked.state.historyHeads, clock);
+    });
   }
   list(
     actor: CanvasActor,
@@ -605,11 +635,7 @@ export class CanvasBoardRepository {
     )
       fail();
     const grant = await tx.grant(id, actor.userId);
-    const role = roleFor(
-      { board, objects: [], grants: grant ? [grant] : [], receipts: [], invitations: [] },
-      actor,
-      access,
-    );
+    const role = roleFor({ board, grants: grant ? [grant] : [] }, actor, access);
     if (!role || (access.member?.role === "billing" && role !== "viewer")) fail();
     if (
       access.organization?.licenseUnit === "user" &&

@@ -27,7 +27,9 @@ export function Brand({ href = "/", inverted = false, name = PRODUCT_BRAND.name 
         {name === PRODUCT_BRAND.name ? <LollipopMark /> : initials || "PP"}
       </span>
       <span className="sr-only">{name}</span>
-      <span aria-hidden="true">{name}</span>
+      <span className="brand-name" aria-hidden="true">
+        {name}
+      </span>
     </Link>
   );
 }

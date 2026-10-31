@@ -23,10 +23,14 @@ CI=true VITEST_MAX_WORKERS=1 pnpm check
 pnpm audit --audit-level low
 pnpm licenses:report
 git diff --exit-code -- THIRD_PARTY_NOTICES.md
-PLAYWRIGHT_PRODUCTION=true pnpm test:e2e
-PLAYWRIGHT_PRODUCTION=true BETA_E2E_AUTHORING=true \
-  BETA_E2E_ROUND_PROTOCOL=true BETA_E2E_SESSION_SUMMARIES=true \
-  BETA_E2E_IDEA_BOARDS=true pnpm test:e2e:beta
+for core_project in chromium firefox chromium-mobile webkit-mobile; do
+  PLAYWRIGHT_PRODUCTION=true pnpm test:e2e --project="$core_project" || exit 1
+done
+for beta_project in chromium-beta firefox-beta chromium-beta-mobile webkit-beta-mobile; do
+  PLAYWRIGHT_PRODUCTION=true BETA_E2E_AUTHORING=true \
+    BETA_E2E_ROUND_PROTOCOL=true BETA_E2E_SESSION_SUMMARIES=true \
+    BETA_E2E_IDEA_BOARDS=true pnpm test:e2e:beta --project="$beta_project" || exit 1
+done
 pnpm readiness:check
 pnpm research:check
 ```

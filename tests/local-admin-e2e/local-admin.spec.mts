@@ -28,10 +28,22 @@ test("customer sign-in never provisions or discovers console access", async ({
   expect(denied.status()).toBeGreaterThanOrEqual(400);
   await signIn(page, "admin@pollingpops.local");
   await expectNoBusinessAccess(page);
-  const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();
-  expect(navigation.organizations).toEqual(
-    expect.arrayContaining([expect.objectContaining({ role: "owner" })]),
+  const identity = await page.request.get(`${apiOrigin}/v1/auth/me`);
+  expect(identity.status()).toBe(200);
+  const creator = (await identity.json()).creator;
+  expect(creator).toMatchObject({ email: "admin@pollingpops.local", role: "owner" });
+  const workspaceResponse = await page.request.get(`${apiOrigin}/v1/workspaces`);
+  expect(workspaceResponse.status()).toBe(200);
+  const workspaces = await workspaceResponse.json();
+  expect(workspaces.activeWorkspaceId).toBe(creator.workspaceId);
+  expect(workspaces.workspaces).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: creator.workspaceId, accountType: "personal", role: "owner" }),
+    ]),
   );
+  const navigation = await (await page.request.get(`${apiOrigin}/v1/auth/navigation`)).json();
+  expect(navigation.user).toEqual({ userId: creator.userId, email: creator.email });
+  expect(navigation.organizations).toEqual([]);
   expect(navigation.operatorConsoleOrigin).toBeNull();
   expect(await operatorStatus(page)).toBe(403);
   expect(await fixture.cookie(cookieNames.session)).toBeUndefined();

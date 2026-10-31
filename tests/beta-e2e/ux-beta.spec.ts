@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import type { QuizDraft } from "@openround/contracts";
 import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { betaEmail, signInBeta } from "./sign-in";
 
@@ -121,6 +122,9 @@ test("brand navigation returns a signed-in creator to Home", async ({ page }) =>
   await publicHeaderBrand.click();
   await expect(page).toHaveURL(/\/home$/);
 
+  await page.locator("aside").getByRole("link", { name: "Library", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByRole("heading", { name: "Library", level: 1 })).toBeVisible();
   const brand = page.locator("aside").getByRole("link", { name: "Polling Pops", exact: true });
   await expect(brand).toHaveAttribute("href", "/home");
   await brand.click();
@@ -478,7 +482,8 @@ test("starter rehearsal completes privately with bounded telemetry", async ({ pa
   await expect(page.getByTestId("rehearsal-setup")).toBeVisible();
   const confidentMisconception = page.getByTestId("rehearsal-scenario-confident_misconception");
   await expect(confidentMisconception).toHaveAttribute("data-eligible", "true");
-  await confidentMisconception.getByRole("radio").check();
+  await confidentMisconception.click();
+  await expect(confidentMisconception.getByRole("radio")).toBeChecked();
   await page.getByTestId("rehearsal-start").click();
   await expect(page.getByTestId("rehearsal-step")).toHaveAttribute("data-stage", "briefing");
   await expect(page.getByText(/synthetic learners/i).first()).toBeVisible();
@@ -900,7 +905,27 @@ test("creator and participants complete a beta Recovery loop through report", as
     data: {},
   });
   expect(starterResponse.status()).toBe(201);
-  const quizId = (await starterResponse.json()).quiz.id as string;
+  const quiz = (await starterResponse.json()).quiz as { id: string; draft: QuizDraft };
+  const quizId = quiz.id;
+  const diagnostic = quiz.draft.questions.find((question) => question.linkedRecheckQuestionId);
+  if (!diagnostic || diagnostic.type !== "single_select")
+    throw new Error("The Recovery starter needs a diagnostic choice and linked recheck");
+  const misconception = diagnostic.choices.find(
+    (choice) => choice.misconceptionKey && !choice.isCorrect,
+  );
+  const recheck = quiz.draft.questions.find(
+    (question) => question.id === diagnostic.linkedRecheckQuestionId,
+  );
+  if (
+    !misconception ||
+    !recheck ||
+    recheck.type !== "single_select" ||
+    recheck.delivery !== "recheck"
+  )
+    throw new Error("The Recovery starter must identify the misconception and its transfer check");
+  const recovered = recheck.choices.find((choice) => choice.isCorrect);
+  const notRecovered = recheck.choices.find((choice) => !choice.isCorrect);
+  if (!recovered || !notRecovered) throw new Error("The linked recheck must distinguish recovery");
   const publishResponse = await page.request.post(`${apiUrl}/v1/quizzes/${quizId}/publish`, {
     data: {},
   });
@@ -910,6 +935,7 @@ test("creator and participants complete a beta Recovery loop through report", as
       quizId,
       settings: {
         audienceLimit: 20,
+        timeMode: "timed",
         scoringMode: "accuracy",
         resultVisibility: "private",
         confidenceEnabled: true,
@@ -946,16 +972,14 @@ test("creator and participants complete a beta Recovery loop through report", as
 
     await page.getByRole("button", { name: "Start round" }).click();
     await Promise.all(
-      participants.map(({ page: participant }) =>
-        submitChoice(participant, "Replace with the common misconception"),
-      ),
+      participants.map(({ page: participant }) => submitChoice(participant, misconception.label)),
     );
 
     await participants[0]!.page.reload();
     await expect(participants[0]!.page.getByText("Answer received and saved.")).toBeVisible();
     await expect(
       participants[0]!.page.getByRole("button", {
-        name: "Replace with the common misconception",
+        name: misconception.label,
         exact: true,
       }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -963,7 +987,7 @@ test("creator and participants complete a beta Recovery loop through report", as
     await page.getByRole("button", { name: "Lock answers" }).click();
     const distribution = page.getByRole("region", { name: "Post-lock response distribution" });
     await expect(distribution).toContainText("5 respondents");
-    await expect(distribution).toContainText("Replace with the common misconception");
+    await expect(distribution).toContainText(misconception.label);
     await page.getByRole("button", { name: "Reveal answer" }).click();
     await expect(page.getByText("Address the confident misconception")).toBeVisible();
     await page.getByRole("button", { name: "Address the misconception" }).click();
@@ -975,9 +999,7 @@ test("creator and participants complete a beta Recovery loop through report", as
       participants.map(({ page: participant }, index) =>
         submitChoice(
           participant,
-          index === participants.length - 1
-            ? "Replace with the misconception applied again"
-            : "Replace with the transfer case",
+          index === participants.length - 1 ? notRecovered.label : recovered.label,
         ),
       ),
     );
@@ -1004,9 +1026,7 @@ test("creator and participants complete a beta Recovery loop through report", as
     await page.getByRole("tab", { name: "Questions" }).click();
     const questionsPanel = page.getByRole("tabpanel", { name: "Questions" });
     await questionsPanel.getByText("5 respondents").first().click();
-    await expect(
-      questionsPanel.getByText(/Replace with the common misconception: 5 \(100%/),
-    ).toBeVisible();
+    await expect(questionsPanel.getByText(`${misconception.label}: 5 (100%`)).toBeVisible();
 
     await page.getByRole("tab", { name: "Participants" }).click();
     const participantsPanel = page.getByRole("tabpanel", { name: "Participants" });

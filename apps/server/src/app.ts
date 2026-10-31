@@ -1,4 +1,5 @@
 import type { Plan } from "@openround/contracts";
+import type { Socket } from "node:net";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
 import Fastify from "fastify";
 import { trace } from "@opentelemetry/api";
@@ -151,6 +152,30 @@ export async function buildApp(
     },
     bodyLimit: 128 * 1024,
     requestIdHeader: "x-request-id",
+  });
+
+  // Node 22 does not reap accepted sockets that have never sent HTTP data during
+  // server.close(). Cancelled fetches can leave these replacement connections open.
+  const awaitingHttp = new Set<Socket>();
+  let closing = false;
+  app.server.on("connection", (socket) => {
+    if (closing) {
+      socket.destroy();
+      return;
+    }
+    awaitingHttp.add(socket);
+    const untrack = () => awaitingHttp.delete(socket);
+    socket.once("data", untrack);
+    socket.once("close", untrack);
+  });
+  app.addHook("preClose", async () => {
+    closing = true;
+    for (const socket of awaitingHttp) socket.destroy();
+    awaitingHttp.clear();
+  });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    if (closing) reply.header("connection", "close");
+    return payload;
   });
 
   const repository =

@@ -246,6 +246,14 @@ button:disabled {
   width: 39px;
 }
 
+.brand-name {
+  color: var(--ui-text-strong);
+}
+
+.brand[data-inverted="true"] .brand-name {
+  color: white;
+}
+
 .brand-pop svg {
   height: 100%;
   width: 100%;

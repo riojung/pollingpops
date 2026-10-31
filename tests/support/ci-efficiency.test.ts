@@ -99,6 +99,7 @@ describe("CI efficiency without coverage bypasses", () => {
     ) as { tasks: { test: { env?: string[] } } };
     expect(turbo.tasks.test.env).toContain("VITEST_MAX_WORKERS");
     const postgres = ci.jobs["postgres-migration"].steps;
+    expect(ci.jobs["postgres-migration"].env?.VITEST_MAX_WORKERS).toBe("1");
     expect(
       postgres.filter((step) => step.run === "pnpm --filter @openround/db migrate"),
     ).toHaveLength(2);
@@ -133,7 +134,7 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(steps.some((step) => step.uses?.startsWith("github/codeql-action/analyze@"))).toBe(true);
   });
 
-  it("runs feature-off and administration coverage once and isolates every beta profile", async () => {
+  it("isolates each browser profile and runs administration coverage once", async () => {
     const ci = await workflow("ci");
     const core = ci.jobs["browser-core"];
     const beta = ci.jobs["browser-beta"];
@@ -148,7 +149,10 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(config.projects?.map((project) => project.name)).toEqual(projects);
     expect(config.workers).toBe(1);
     expect(config.fullyParallel).toBe(false);
-    expect(core.strategy).toBeUndefined();
+    const coreProjects = ["chromium", "firefox", "chromium-mobile", "webkit-mobile"];
+    expect(core.strategy).toEqual({ "fail-fast": false, matrix: { project: coreProjects } });
+    const coreConfig = (await import("../../playwright.config")).default;
+    expect(coreConfig.projects?.map((project) => project.name)).toEqual(coreProjects);
     expect(core["timeout-minutes"]).toBe(25);
     expect(beta["timeout-minutes"]).toBe(30);
     for (const browser of [core, beta]) {
@@ -162,15 +166,17 @@ describe("CI efficiency without coverage bypasses", () => {
         ),
       ).toBe(true);
     }
+    const coreRun = core.steps.find((step) => step.name === "Run feature-off browser suite");
+    expect(coreRun?.run).toBe('pnpm test:e2e --project="${{ matrix.project }}"');
+    expect(coreRun?.if).toBeUndefined();
     for (const run of [
-      "pnpm test:e2e",
       "pnpm test:e2e:business",
       "pnpm test:e2e:control",
       "pnpm test:e2e:local-admin",
     ]) {
       const coreRuns = core.steps.filter((step) => step.run === run);
       expect(coreRuns, run).toHaveLength(1);
-      expect(coreRuns[0]?.if, run).toBeUndefined();
+      expect(coreRuns[0]?.if, run).toBe("${{ matrix.project == 'chromium' }}");
       expect(
         Object.values(ci.jobs).flatMap((job) => job.steps.filter((step) => step.run === run)),
         run,
@@ -191,7 +197,7 @@ describe("CI efficiency without coverage bypasses", () => {
     const betaArtifacts = beta.steps.find((step) =>
       step.uses?.startsWith("actions/upload-artifact@"),
     );
-    expect(coreArtifacts?.with?.name).toBe("browser-core-results");
+    expect(coreArtifacts?.with?.name).toBe("browser-core-${{ matrix.project }}-results");
     expect(betaArtifacts?.with?.name).toBe("browser-beta-${{ matrix.project }}-results");
     expect(coreArtifacts?.with?.path).toBe(
       "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",

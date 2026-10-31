@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { json } from "node:stream/consumers";
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { signInBeta } from "./sign-in";
@@ -338,7 +338,7 @@ for (const surface of ["", "@mobile "]) {
       await other.getByRole("button", { name: "Download local draft", exact: true }).click();
       const copy = await download;
       expect(copy.suggestedFilename()).toBe(`polling-pops-survey-${id}-local-draft.json`);
-      const data = JSON.parse(await readFile((await copy.path())!, "utf8"));
+      const data = await json(await copy.createReadStream());
       expect(data.title).toBe("Synthetic local work to keep");
       expect(data).not.toHaveProperty("workspaceId");
 

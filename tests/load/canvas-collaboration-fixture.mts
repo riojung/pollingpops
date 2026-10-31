@@ -33,6 +33,7 @@ import {
   canvasCollaborationScene,
   type CanvasCollaborationConfig,
 } from "./canvas-collaboration-config.ts";
+import type { CanvasCollaborationProfiler } from "./canvas-collaboration-profile.ts";
 
 const syntheticPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP4sAAAAASUVORK5CYII=",
@@ -81,7 +82,10 @@ function loopbackUrl(raw: string | undefined, protocols: string[]) {
   );
   return url;
 }
-export async function createCanvasCollaborationFixture(config: CanvasCollaborationConfig) {
+export async function createCanvasCollaborationFixture(
+  config: CanvasCollaborationConfig,
+  profiler?: CanvasCollaborationProfiler,
+) {
   const adminUrl = loopbackUrl(process.env.CANVAS_COLLAB_DATABASE_ADMIN_URL, [
     "postgres:",
     "postgresql:",
@@ -178,6 +182,7 @@ export async function createCanvasCollaborationFixture(config: CanvasCollaborati
         ).rows[0],
         { rolsuper: false, rolbypassrls: false },
       );
+      profiler?.wrapPool(repo.pool, index as 0 | 1);
       const cache = new RedisSessionCache(redisUrl.toString());
       caches.push(cache);
       await cache.connect();
@@ -214,6 +219,8 @@ export async function createCanvasCollaborationFixture(config: CanvasCollaborati
         ledger.commit(args[2].operationId, performance.now());
         return response;
       };
+      // The existing ledger still observes repository resolution, inside this optional wrapper.
+      profiler?.wrapRepository(built.canvasBoards, index as 0 | 1);
       const streamEvent = built.metrics.canvasStreamEvent.bind(built.metrics);
       built.metrics.canvasStreamEvent = (event) => {
         streamEvents[event] = (streamEvents[event] ?? 0) + 1;

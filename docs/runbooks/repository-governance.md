@@ -91,19 +91,29 @@ Browser failures require inspecting retained traces and fixing the underlying in
 fixture isolation, not increasing timeouts or broadly retrying every step. Hosted timings are not
 capacity evidence and runner availability cannot be guaranteed by repository changes.
 
-To reproduce the browser mode used by CI locally, run these sequentially (both use the same Next
-output directory):
+To reproduce CI locally, run each project against a fresh API fixture. The core matrix retains all
+four projects and the original authentication limits; combining them against one API can exhaust
+the shared IP budget. Run these sequentially because they share the Next output directory. Use
+Node 22 for CI parity and confirm `pnpm exec node --version` as well as `node --version`.
 
 ```bash
-PLAYWRIGHT_PRODUCTION=true pnpm test:e2e
-PLAYWRIGHT_PRODUCTION=true BETA_E2E_AUTHORING=true BETA_E2E_ROUND_PROTOCOL=true \
-  BETA_E2E_SESSION_SUMMARIES=true BETA_E2E_IDEA_BOARDS=true pnpm test:e2e:beta
+for core_project in chromium firefox chromium-mobile webkit-mobile; do
+  PLAYWRIGHT_PRODUCTION=true pnpm test:e2e --project="$core_project" || exit 1
+done
+for beta_project in chromium-beta firefox-beta chromium-beta-mobile webkit-beta-mobile; do
+  PLAYWRIGHT_PRODUCTION=true BETA_E2E_AUTHORING=true BETA_E2E_ROUND_PROTOCOL=true \
+    BETA_E2E_SESSION_SUMMARIES=true BETA_E2E_IDEA_BOARDS=true \
+    pnpm test:e2e:beta --project="$beta_project" || exit 1
+done
 ```
 
 Omit `PLAYWRIGHT_PRODUCTION=true` to keep the normal local development server. Do not run a build
 or another browser suite against that output directory while a suite is serving it. Full local
 tests also require all three installed browser engines; an engine that cannot launch locally is
-not a passing test.
+not a passing test. A matching-version [remote Playwright server](https://playwright.dev/docs/docker#remote-connection)
+can verify a platform where the local engine cannot launch. Keep its WebSocket endpoint on loopback,
+use `PW_TEST_CONNECT_EXPOSE_NETWORK='<loopback>'` for the local fixtures, and record the actual
+browser OS/runtime. This does not supply physical-device or target-host evidence.
 
 ## Release-tag ruleset specifications
 

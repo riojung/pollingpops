@@ -125,8 +125,9 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await expect(participant).toHaveURL(/\/play\//);
   await expect(participant.locator(".live-shell")).toHaveAttribute("data-pattern", "grid");
   await expect(participant.getByRole("img", { name: "Comet avatar" })).toBeVisible();
-  await expect(creator.getByText(/Bright|Calm|Curious|Kind|Quick|Sunny/)).toBeVisible();
-  await expect(creator.getByRole("img", { name: "Comet avatar" })).toBeVisible();
+  const roster = creator.getByRole("list", { name: "Participant roster" });
+  await expect(roster.getByText(/Bright|Calm|Curious|Kind|Quick|Sunny/)).toBeVisible();
+  await expect(roster.getByRole("img", { name: "Comet avatar" })).toBeVisible();
 
   await participant.getByRole("button", { name: "Show an example" }).click();
   await expect(creator.locator(".participant-pulse-table tbody tr").first()).toContainText(

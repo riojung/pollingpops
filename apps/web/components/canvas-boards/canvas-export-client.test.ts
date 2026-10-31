@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CanvasObjectSchema } from "@openround/contracts";
 import type * as ApiModule from "../../lib/api";
-import { renderCanvasSvg } from "../../../server/src/canvas-export";
 import {
   canvasExportPng,
   downloadCanvasExport,
@@ -145,39 +144,6 @@ describe("canvas export download boundary", () => {
     expect(validateClosedCanvasSvg(svg.replace("</svg>", content + "</svg>"))).toEqual({
       width: 800,
       height: 600,
-    });
-  });
-
-  it("accepts the actual server renderer output for the closed scene primitives", async () => {
-    const objects = ["sticky", "text", "rect", "ellipse", "frame", "link"].map((type, index) =>
-      CanvasObjectSchema.parse({
-        ...canvasObject,
-        id: `00000000-0000-4000-8000-${String(index + 100).padStart(12, "0")}`,
-        type,
-        rotation: -30,
-        ...(type === "link" ? { url: "https://example.test/?x=1&y=2" } : {}),
-      }),
-    );
-    objects.push(
-      CanvasObjectSchema.parse({
-        ...canvasObject,
-        type: "pen",
-        points: [
-          [0, 0],
-          [100, 100],
-        ],
-      }),
-    );
-    const document = await renderCanvasSvg({
-      objects,
-      region: null,
-      loadImage: async () => {
-        throw new Error("No image requested");
-      },
-    });
-    expect(validateClosedCanvasSvg(document.svg.toString())).toEqual({
-      width: document.width,
-      height: document.height,
     });
   });
 

@@ -123,6 +123,31 @@ describe("canvas metadata fetch streams", () => {
     expect(client.raw.end).toHaveBeenCalledOnce();
   });
 
+  it("retains principal limits until disconnect and releases every admitted stream on shutdown", async () => {
+    const f = fixture();
+    const clients = [response(), response(), response()];
+    for (const client of clients)
+      await f.relay.connect(client.request, client.reply, "same-user", f.authorize);
+    const other = response();
+    await f.relay.connect(other.request, other.reply, "other-user", f.authorize);
+    const denied = response();
+    await f.relay.connect(denied.request, denied.reply, "same-user", f.authorize);
+    expect(denied.reply.code).toHaveBeenCalledWith(429);
+    expect(denied.reply.hijack).not.toHaveBeenCalled();
+
+    clients[0]!.raw.emit("close");
+    const replacement = response();
+    await f.relay.connect(replacement.request, replacement.reply, "same-user", f.authorize);
+    expect(replacement.reply.hijack).toHaveBeenCalledOnce();
+    f.relay.close();
+    for (const client of [...clients, other, replacement])
+      expect(client.raw.end).toHaveBeenCalledOnce();
+    const closed = response();
+    await f.relay.connect(closed.request, closed.reply, "same-user", f.authorize);
+    expect(closed.reply.code).toHaveBeenCalledWith(429);
+    expect(closed.reply.hijack).not.toHaveBeenCalled();
+  });
+
   it("notifies source changes without treating legacy revision as the canvas sequence", async () => {
     const f = fixture(),
       client = response();

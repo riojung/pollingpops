@@ -1,0 +1,1442 @@
+{
+  "schemaVersion": 1,
+  "analyzerSha256": "411a341a68b80cfbdae87760cc512c1340f5709a6ff672279760ec83d240c43a",
+  "fullAnalysisSha256": "d1cedbd21a014cdb73b983b04ae560b92a093954e4d5017cb811216ac6a56787",
+  "provenance": {
+    "revision": ["6cb8e2eb790569b016203ec88203e25db3f6484c"],
+    "workingTreeDirty": [true],
+    "baselineApiAndHarnessSha256": [
+      "1917efb4b344a614d3e937b0009889336d9485179a50f8c173050414720522ce"
+    ],
+    "candidateApiAndHarnessSha256": [
+      "f987f1a2672460fddee65118b1938b80264395f99ff53a1337edb18375a5071f"
+    ],
+    "browserSourceSha256": ["43dcc627c793a99e2600c10440791f06fcddf434d2e86d3920637d4ea6c88208"],
+    "compiledAt": ["2026-10-31T08:21:43.753Z"],
+    "fixtureSha256": ["da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1"],
+    "browserVersion": ["156.0.8078.4"],
+    "nodeVersion": ["22.23.4"],
+    "databaseVersion": ["17.11"],
+    "protocolVersion": [3],
+    "objects": [500],
+    "editors": [20],
+    "measuredCommands": [200],
+    "updatesPerEditor": [10],
+    "warmupWaves": [1],
+    "allCorrectnessPassed": true,
+    "allThresholdsUnchanged": true,
+    "allPeer500msP95TargetsFailed": true,
+    "aggregateHealthFetchP50RangeMs": [108.5, 114],
+    "aggregateHealthFetchP95RangeMs": [114.5, 117.3],
+    "aggregateHealthFetchMaximumRangeMs": [115, 119.1],
+    "actorHealthFetchP50RangeMs": [101, 114.3],
+    "artifactReportedRedisCompatibilityVersion": ["7.2.4"]
+  },
+  "runs": [
+    {
+      "label": "baseline-pair-1",
+      "artifactSha256": "e06cedd8ccda90ad17202b3fc2350db4eb6a6ae4197609033b47e141394446ee",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "failed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1660.6,
+        "p95": 2589.8,
+        "p99": 2835.6,
+        "max": 3081.6
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 1046.48,
+        "p95": 2217.85,
+        "p99": 2660.94,
+        "max": 2757.12
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 108.5,
+          "p95": 114.5,
+          "p99": 114.8,
+          "max": 115
+        },
+        "actorP50RangeMs": [101, 112.3],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "complete-window",
+        "completed": {
+          "operation": 2594,
+          "query": 85522,
+          "pool": 2606
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 13,
+          "query": 12,
+          "pool": 1
+        },
+        "orphanQuerySamples": 196,
+        "orphanQueryMethods": [
+          {
+            "node": 1,
+            "method": "authorize",
+            "count": 196
+          }
+        ],
+        "truncated": false,
+        "censored": true,
+        "poolWaitP95Ms": 321.086,
+        "poolWaitMaxMs": 763.611,
+        "individualPoolBoundaryMaximaByNode": [
+          {
+            "node": 1,
+            "totalCount": 15,
+            "idleCount": 15,
+            "waitingCount": 49
+          },
+          {
+            "node": 0,
+            "totalCount": 5,
+            "idleCount": 5,
+            "waitingCount": 0
+          }
+        ],
+        "maxSamples": 100000,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "queryCountMismatches": 0,
+        "completedOperationFailures": 0,
+        "poolFailedAcquisitions": 0
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 461.29,
+          "p95": 461.29,
+          "p99": 461.29,
+          "max": 461.29
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1036.8,
+          "p95": 1050.4,
+          "p99": 1067.2,
+          "max": 1067.2
+        },
+        "navigationFrameInterval": {
+          "count": 153,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1255.91,
+          "p95": 1255.91,
+          "p99": 1255.91,
+          "max": 1255.91
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1660.6,
+          "p95": 2589.8,
+          "p99": 2835.6,
+          "max": 3081.6
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "candidate-pair-1",
+      "artifactSha256": "c3d928ab3b92a0975d6dcb2e62f5e2aef308f1ca2dd6ef16b478770ec4d73c0f",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "passed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1172.8,
+        "p95": 1701,
+        "p99": 1748.6,
+        "max": 1876.9
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 519.62,
+        "p95": 1159.82,
+        "p99": 1350.98,
+        "max": 1440.86
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 112.7,
+          "p95": 115.2,
+          "p99": 115.4,
+          "max": 115.5
+        },
+        "actorP50RangeMs": [102, 114.3],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "complete-window",
+        "completed": {
+          "operation": 2229,
+          "query": 61105,
+          "pool": 2238
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 9,
+          "query": 9,
+          "pool": 0
+        },
+        "orphanQuerySamples": 108,
+        "orphanQueryMethods": [
+          {
+            "node": 1,
+            "method": "get",
+            "count": 108
+          }
+        ],
+        "truncated": false,
+        "censored": true,
+        "poolWaitP95Ms": 278.88,
+        "poolWaitMaxMs": 561.754,
+        "individualPoolBoundaryMaximaByNode": [
+          {
+            "node": 0,
+            "totalCount": 6,
+            "idleCount": 6,
+            "waitingCount": 0
+          },
+          {
+            "node": 1,
+            "totalCount": 15,
+            "idleCount": 15,
+            "waitingCount": 53
+          }
+        ],
+        "maxSamples": 100000,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "queryCountMismatches": 0,
+        "completedOperationFailures": 0,
+        "poolFailedAcquisitions": 0
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 520.77,
+          "p95": 520.77,
+          "p99": 520.77,
+          "max": 520.77
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1044,
+          "p95": 1063.9,
+          "p99": 1065.3,
+          "max": 1065.3
+        },
+        "navigationFrameInterval": {
+          "count": 143,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1257.37,
+          "p95": 1257.37,
+          "p99": 1257.37,
+          "max": 1257.37
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1172.8,
+          "p95": 1701,
+          "p99": 1748.6,
+          "max": 1876.9
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "candidate-pair-2",
+      "artifactSha256": "febe56d92ef5397aad70df30f54754a541b4d33b25816390abce00a0665a7e96",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "passed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1149.7,
+        "p95": 1705.7,
+        "p99": 1832.3,
+        "max": 1906.6
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 773.93,
+        "p95": 1399.21,
+        "p99": 1475.62,
+        "max": 1497.56
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 113.9,
+          "p95": 116.3,
+          "p99": 117,
+          "max": 117.1
+        },
+        "actorP50RangeMs": [105.4, 114.3],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "complete-window",
+        "completed": {
+          "operation": 2236,
+          "query": 60568,
+          "pool": 2246
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 10,
+          "query": 10,
+          "pool": 0
+        },
+        "orphanQuerySamples": 144,
+        "orphanQueryMethods": [
+          {
+            "node": 1,
+            "method": "get",
+            "count": 142
+          },
+          {
+            "node": 1,
+            "method": "authorize",
+            "count": 2
+          }
+        ],
+        "truncated": false,
+        "censored": true,
+        "poolWaitP95Ms": 182.029,
+        "poolWaitMaxMs": 465.957,
+        "individualPoolBoundaryMaximaByNode": [
+          {
+            "node": 1,
+            "totalCount": 15,
+            "idleCount": 15,
+            "waitingCount": 48
+          },
+          {
+            "node": 0,
+            "totalCount": 5,
+            "idleCount": 5,
+            "waitingCount": 0
+          }
+        ],
+        "maxSamples": 100000,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "queryCountMismatches": 0,
+        "completedOperationFailures": 0,
+        "poolFailedAcquisitions": 0
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 526.8,
+          "p95": 526.8,
+          "p99": 526.8,
+          "max": 526.8
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1044.5,
+          "p95": 1059.7,
+          "p99": 1072.3,
+          "max": 1072.3
+        },
+        "navigationFrameInterval": {
+          "count": 131,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 976.25,
+          "p95": 976.25,
+          "p99": 976.25,
+          "max": 976.25
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1149.7,
+          "p95": 1705.7,
+          "p99": 1832.3,
+          "max": 1906.6
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "baseline-pair-2",
+      "artifactSha256": "5523aec08b231bbb13c79b780439b9d9a41280c3662b22e50f6e4798c707795f",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "failed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1582.8,
+        "p95": 2450.3,
+        "p99": 2677.1,
+        "max": 2766.8
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 800.94,
+        "p95": 1681.95,
+        "p99": 1923.82,
+        "max": 2021.59
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 114,
+          "p95": 116.6,
+          "p99": 116.8,
+          "max": 116.8
+        },
+        "actorP50RangeMs": [105.5, 114.3],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "complete-window",
+        "completed": {
+          "operation": 2298,
+          "query": 76712,
+          "pool": 2311
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 13,
+          "query": 13,
+          "pool": 0
+        },
+        "orphanQuerySamples": 215,
+        "orphanQueryMethods": [
+          {
+            "node": 0,
+            "method": "get",
+            "count": 41
+          },
+          {
+            "node": 1,
+            "method": "authorize",
+            "count": 62
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "count": 93
+          },
+          {
+            "node": 0,
+            "method": "authorize",
+            "count": 19
+          }
+        ],
+        "truncated": false,
+        "censored": true,
+        "poolWaitP95Ms": 348.777,
+        "poolWaitMaxMs": 812.386,
+        "individualPoolBoundaryMaximaByNode": [
+          {
+            "node": 0,
+            "totalCount": 5,
+            "idleCount": 5,
+            "waitingCount": 0
+          },
+          {
+            "node": 1,
+            "totalCount": 15,
+            "idleCount": 14,
+            "waitingCount": 57
+          }
+        ],
+        "maxSamples": 100000,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "queryCountMismatches": 0,
+        "completedOperationFailures": 0,
+        "poolFailedAcquisitions": 0
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 511.78,
+          "p95": 511.78,
+          "p99": 511.78,
+          "max": 511.78
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1040.7,
+          "p95": 1054.1,
+          "p99": 1054.6,
+          "max": 1054.6
+        },
+        "navigationFrameInterval": {
+          "count": 142,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 420.8,
+          "p95": 420.8,
+          "p99": 420.8,
+          "max": 420.8
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1582.8,
+          "p95": 2450.3,
+          "p99": 2677.1,
+          "max": 2766.8
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "baseline-pair-3",
+      "artifactSha256": "cba26aa88233e81b42fa05f010a9e5bdd3c534b1b5140eacf74861af4af5cbcc",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "failed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1660.2,
+        "p95": 2531.5,
+        "p99": 3098.3,
+        "max": 3186.2
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 947.1,
+        "p95": 1748.7,
+        "p99": 1970.2,
+        "max": 2078.13
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 113.6,
+          "p95": 116,
+          "p99": 116.1,
+          "max": 116.3
+        },
+        "actorP50RangeMs": [104.2, 113.9],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "complete-window",
+        "completed": {
+          "operation": 2346,
+          "query": 78613,
+          "pool": 2359
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 13,
+          "query": 13,
+          "pool": 0
+        },
+        "orphanQuerySamples": 310,
+        "orphanQueryMethods": [
+          {
+            "node": 1,
+            "method": "get",
+            "count": 240
+          },
+          {
+            "node": 1,
+            "method": "authorize",
+            "count": 70
+          }
+        ],
+        "truncated": false,
+        "censored": true,
+        "poolWaitP95Ms": 347.555,
+        "poolWaitMaxMs": 767.443,
+        "individualPoolBoundaryMaximaByNode": [
+          {
+            "node": 1,
+            "totalCount": 15,
+            "idleCount": 15,
+            "waitingCount": 52
+          },
+          {
+            "node": 0,
+            "totalCount": 5,
+            "idleCount": 5,
+            "waitingCount": 0
+          }
+        ],
+        "maxSamples": 100000,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "queryCountMismatches": 0,
+        "completedOperationFailures": 0,
+        "poolFailedAcquisitions": 0
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 520.73,
+          "p95": 520.73,
+          "p99": 520.73,
+          "max": 520.73
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1034.1,
+          "p95": 1053.3,
+          "p99": 1066.7,
+          "max": 1066.7
+        },
+        "navigationFrameInterval": {
+          "count": 143,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1114.15,
+          "p95": 1114.15,
+          "p99": 1114.15,
+          "max": 1114.15
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1660.2,
+          "p95": 2531.5,
+          "p99": 3098.3,
+          "max": 3186.2
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "candidate-pair-3",
+      "artifactSha256": "5a78a86046cda3382928ad8d2255ba432f7be78d82e81c61da12a53189d80a45",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "passed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1141.3,
+        "p95": 1635.3,
+        "p99": 1684.9,
+        "max": 1724.2
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 673.17,
+        "p95": 1324.64,
+        "p99": 1634.9,
+        "max": 1711.3
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 110.1,
+          "p95": 114.6,
+          "p99": 115.4,
+          "max": 115.4
+        },
+        "actorP50RangeMs": [101.2, 112.1],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "complete-window",
+        "completed": {
+          "operation": 2060,
+          "query": 57132,
+          "pool": 2074
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 18,
+          "query": 14,
+          "pool": 4
+        },
+        "orphanQuerySamples": 230,
+        "orphanQueryMethods": [
+          {
+            "node": 1,
+            "method": "get",
+            "count": 30
+          },
+          {
+            "node": 1,
+            "method": "authorize",
+            "count": 200
+          }
+        ],
+        "truncated": false,
+        "censored": true,
+        "poolWaitP95Ms": 272.832,
+        "poolWaitMaxMs": 470.616,
+        "individualPoolBoundaryMaximaByNode": [
+          {
+            "node": 0,
+            "totalCount": 5,
+            "idleCount": 5,
+            "waitingCount": 0
+          },
+          {
+            "node": 1,
+            "totalCount": 15,
+            "idleCount": 15,
+            "waitingCount": 51
+          }
+        ],
+        "maxSamples": 100000,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "queryCountMismatches": 0,
+        "completedOperationFailures": 0,
+        "poolFailedAcquisitions": 0
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 523.7,
+          "p95": 523.7,
+          "p99": 523.7,
+          "max": 523.7
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1033.8,
+          "p95": 1050,
+          "p99": 1050.6,
+          "max": 1050.6
+        },
+        "navigationFrameInterval": {
+          "count": 143,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 743.68,
+          "p95": 743.68,
+          "p99": 743.68,
+          "max": 743.68
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1141.3,
+          "p95": 1635.3,
+          "p99": 1684.9,
+          "max": 1724.2
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "baseline-unprofiled",
+      "artifactSha256": "fde50ea02d1147466e978d69756a451f6f31386be8787460cefb91630bbc1522",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "failed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1554.5,
+        "p95": 2428.4,
+        "p99": 2653.5,
+        "max": 2760.7
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 955.38,
+        "p95": 1776.99,
+        "p99": 2189.3,
+        "max": 2283.57
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 110.5,
+          "p95": 115,
+          "p99": 115.3,
+          "max": 119.1
+        },
+        "actorP50RangeMs": [104, 111.5],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "disabled"
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 531.71,
+          "p95": 531.71,
+          "p99": 531.71,
+          "max": 531.71
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1044.5,
+          "p95": 1051.7,
+          "p99": 1066.7,
+          "max": 1066.7
+        },
+        "navigationFrameInterval": {
+          "count": 150,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1184.2,
+          "p95": 1184.2,
+          "p99": 1184.2,
+          "max": 1184.2
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1554.5,
+          "p95": 2428.4,
+          "p99": 2653.5,
+          "max": 2760.7
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    },
+    {
+      "label": "candidate-unprofiled",
+      "artifactSha256": "5c6de37cedd5431d7af494c81b46d770b64ec9c73657365c053de8f3186e7947",
+      "complete": true,
+      "correctnessPassed": true,
+      "pageErrors": 0,
+      "commands": 200,
+      "uniqueCommandRecords": 200,
+      "harnessGates": "passed",
+      "thresholdsUnchanged": true,
+      "ackMs": {
+        "count": 200,
+        "p50": 1146.5,
+        "p95": 1781.7,
+        "p99": 1884.6,
+        "max": 1976.1
+      },
+      "peerMs": {
+        "count": 200,
+        "p50": 627.92,
+        "p95": 1115.58,
+        "p99": 1247.09,
+        "max": 1287.63
+      },
+      "calibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 111.9,
+          "p95": 117.3,
+          "p99": 117.4,
+          "max": 117.4
+        },
+        "actorP50RangeMs": [103, 112.4],
+        "verifiedActorThresholdPassed": true,
+        "actorCount": 20
+      },
+      "profile": {
+        "status": "disabled"
+      },
+      "peer500msP95Passed": false,
+      "capacityGatePassed": false,
+      "otherLatencyMs": {
+        "guestPublication": {
+          "count": 1,
+          "p50": 531.57,
+          "p95": 531.57,
+          "p99": 531.57,
+          "max": 531.57
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1046.4,
+          "p95": 1051.1,
+          "p99": 1052.7,
+          "max": 1052.7
+        },
+        "navigationFrameInterval": {
+          "count": 134,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 33.3
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 977.3,
+          "p95": 977.3,
+          "p99": 977.3,
+          "max": 977.3
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1146.5,
+          "p95": 1781.7,
+          "p99": 1884.6,
+          "max": 1976.1
+        }
+      },
+      "capacityIncreaseAuthorized": false
+    }
+  ],
+  "exactCompletedSql": [
+    {
+      "node": 0,
+      "role": "owner-node",
+      "method": "command",
+      "baselineQueryDistribution": {
+        "count": 30,
+        "p50": 58,
+        "p95": 58,
+        "p99": 58,
+        "max": 58,
+        "total": 1740
+      },
+      "candidateQueryDistribution": {
+        "count": 30,
+        "p50": 49,
+        "p95": 49,
+        "p99": 49,
+        "max": 49,
+        "total": 1470
+      },
+      "baselineKnownDriverRows": {
+        "count": 30,
+        "p50": 748,
+        "p95": 848,
+        "p99": 848,
+        "max": 848,
+        "total": 22740
+      },
+      "candidateKnownDriverRows": {
+        "count": 30,
+        "p50": 724,
+        "p95": 824,
+        "p99": 833,
+        "max": 833,
+        "total": 22029
+      },
+      "unknownRowCountsPerOp": 2,
+      "changedCategoryQueryCounts": [
+        {
+          "category": "comments",
+          "baselineQueriesPerOp": 3,
+          "candidateQueriesPerOp": 2
+        },
+        {
+          "category": "objects",
+          "baselineQueriesPerOp": 3,
+          "candidateQueriesPerOp": 2
+        },
+        {
+          "category": "platform",
+          "baselineQueriesPerOp": 14,
+          "candidateQueriesPerOp": 8
+        },
+        {
+          "category": "versions",
+          "baselineQueriesPerOp": 2,
+          "candidateQueriesPerOp": 1
+        }
+      ],
+      "platformKnownRowsPerOp": {
+        "baseline": 50,
+        "candidate": 26
+      },
+      "objectsKnownRowsPerOp": {
+        "baseline": 501,
+        "candidate": 501
+      },
+      "receiptKnownRowDistribution": {
+        "baseline": {
+          "count": 30,
+          "p50": 131,
+          "p95": 231,
+          "p99": 231,
+          "max": 231,
+          "total": 4230
+        },
+        "candidate": {
+          "count": 30,
+          "p50": 131,
+          "p95": 231,
+          "p99": 240,
+          "max": 240,
+          "total": 4239
+        }
+      }
+    },
+    {
+      "node": 1,
+      "role": "other-editor-node",
+      "method": "command",
+      "baselineQueryDistribution": {
+        "count": 570,
+        "p50": 58,
+        "p95": 58,
+        "p99": 58,
+        "max": 58,
+        "total": 33060
+      },
+      "candidateQueryDistribution": {
+        "count": 570,
+        "p50": 50,
+        "p95": 50,
+        "p99": 50,
+        "max": 50,
+        "total": 28500
+      },
+      "baselineKnownDriverRows": {
+        "count": 570,
+        "p50": 767,
+        "p95": 858,
+        "p99": 866,
+        "max": 867,
+        "total": 437760
+      },
+      "candidateKnownDriverRows": {
+        "count": 570,
+        "p50": 744,
+        "p95": 835,
+        "p99": 843,
+        "max": 844,
+        "total": 424641
+      },
+      "unknownRowCountsPerOp": 2,
+      "changedCategoryQueryCounts": [
+        {
+          "category": "comments",
+          "baselineQueriesPerOp": 3,
+          "candidateQueriesPerOp": 2
+        },
+        {
+          "category": "objects",
+          "baselineQueriesPerOp": 3,
+          "candidateQueriesPerOp": 2
+        },
+        {
+          "category": "platform",
+          "baselineQueriesPerOp": 14,
+          "candidateQueriesPerOp": 9
+        },
+        {
+          "category": "versions",
+          "baselineQueriesPerOp": 2,
+          "candidateQueriesPerOp": 1
+        }
+      ],
+      "platformKnownRowsPerOp": {
+        "baseline": 49,
+        "candidate": 26
+      },
+      "objectsKnownRowsPerOp": {
+        "baseline": 501,
+        "candidate": 501
+      },
+      "receiptKnownRowDistribution": {
+        "baseline": {
+          "count": 570,
+          "p50": 150,
+          "p95": 241,
+          "p99": 249,
+          "max": 250,
+          "total": 86070
+        },
+        "candidate": {
+          "count": 570,
+          "p50": 150,
+          "p95": 241,
+          "p99": 249,
+          "max": 250,
+          "total": 86061
+        }
+      }
+    },
+    {
+      "node": 0,
+      "role": "owner-node",
+      "method": "get",
+      "baselineQueryDistribution": {
+        "count": 186,
+        "p50": 42,
+        "p95": 42,
+        "p99": 42,
+        "max": 42,
+        "total": 7812
+      },
+      "candidateQueryDistribution": {
+        "count": 142,
+        "p50": 32,
+        "p95": 32,
+        "p99": 32,
+        "max": 32,
+        "total": 4544
+      },
+      "baselineKnownDriverRows": {
+        "count": 186,
+        "p50": 756,
+        "p95": 850,
+        "p99": 855,
+        "max": 855,
+        "total": 141443
+      },
+      "candidateKnownDriverRows": {
+        "count": 142,
+        "p50": 581,
+        "p95": 581,
+        "p99": 581,
+        "max": 581,
+        "total": 82502
+      },
+      "unknownRowCountsPerOp": 2,
+      "changedCategoryQueryCounts": [
+        {
+          "category": "comments",
+          "baselineQueriesPerOp": 2,
+          "candidateQueriesPerOp": 0
+        },
+        {
+          "category": "platform",
+          "baselineQueriesPerOp": 14,
+          "candidateQueriesPerOp": 8
+        },
+        {
+          "category": "timer",
+          "baselineQueriesPerOp": 1,
+          "candidateQueriesPerOp": 0
+        },
+        {
+          "category": "versions",
+          "baselineQueriesPerOp": 1,
+          "candidateQueriesPerOp": 0
+        }
+      ],
+      "platformKnownRowsPerOp": {
+        "baseline": 50,
+        "candidate": 26
+      },
+      "objectsKnownRowsPerOp": {
+        "baseline": 500,
+        "candidate": 500
+      },
+      "receiptKnownRowDistribution": {
+        "baseline": {
+          "count": 186,
+          "p50": 151,
+          "p95": 245,
+          "p99": 250,
+          "max": 250,
+          "total": 28913
+        },
+        "candidate": {
+          "count": 142,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "total": 142
+        }
+      }
+    },
+    {
+      "node": 1,
+      "role": "other-editor-node",
+      "method": "get",
+      "baselineQueryDistribution": {
+        "count": 1637,
+        "p50": 42,
+        "p95": 42,
+        "p99": 42,
+        "max": 42,
+        "total": 68754
+      },
+      "candidateQueryDistribution": {
+        "count": 1468,
+        "p50": 33,
+        "p95": 33,
+        "p99": 33,
+        "max": 33,
+        "total": 48444
+      },
+      "baselineKnownDriverRows": {
+        "count": 1637,
+        "p50": 755,
+        "p95": 850,
+        "p99": 855,
+        "max": 855,
+        "total": 1242081
+      },
+      "candidateKnownDriverRows": {
+        "count": 1468,
+        "p50": 582,
+        "p95": 582,
+        "p99": 582,
+        "max": 582,
+        "total": 854376
+      },
+      "unknownRowCountsPerOp": 2,
+      "changedCategoryQueryCounts": [
+        {
+          "category": "comments",
+          "baselineQueriesPerOp": 2,
+          "candidateQueriesPerOp": 0
+        },
+        {
+          "category": "platform",
+          "baselineQueriesPerOp": 14,
+          "candidateQueriesPerOp": 9
+        },
+        {
+          "category": "timer",
+          "baselineQueriesPerOp": 1,
+          "candidateQueriesPerOp": 0
+        },
+        {
+          "category": "versions",
+          "baselineQueriesPerOp": 1,
+          "candidateQueriesPerOp": 0
+        }
+      ],
+      "platformKnownRowsPerOp": {
+        "baseline": 49,
+        "candidate": 26
+      },
+      "objectsKnownRowsPerOp": {
+        "baseline": 500,
+        "candidate": 500
+      },
+      "receiptKnownRowDistribution": {
+        "baseline": {
+          "count": 1637,
+          "p50": 150,
+          "p95": 245,
+          "p99": 250,
+          "max": 250,
+          "total": 251696
+        },
+        "candidate": {
+          "count": 1468,
+          "p50": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "total": 1468
+        }
+      }
+    }
+  ],
+  "pairwiseP95Changes": [
+    {
+      "pair": 1,
+      "changes": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 2589.8,
+          "candidateP95Ms": 1701,
+          "reductionMs": 888.8,
+          "reductionPercent": 34.32
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 2217.85,
+          "candidateP95Ms": 1159.82,
+          "reductionMs": 1058.03,
+          "reductionPercent": 47.71
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "changes": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 2450.3,
+          "candidateP95Ms": 1705.7,
+          "reductionMs": 744.6,
+          "reductionPercent": 30.39
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1681.95,
+          "candidateP95Ms": 1399.21,
+          "reductionMs": 282.74,
+          "reductionPercent": 16.81
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "changes": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 2531.5,
+          "candidateP95Ms": 1635.3,
+          "reductionMs": 896.2,
+          "reductionPercent": 35.4
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1748.7,
+          "candidateP95Ms": 1324.64,
+          "reductionMs": 424.06,
+          "reductionPercent": 24.25
+        }
+      }
+    },
+    {
+      "pair": "unprofiled",
+      "changes": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 2428.4,
+          "candidateP95Ms": 1781.7,
+          "reductionMs": 646.7,
+          "reductionPercent": 26.63
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1776.99,
+          "candidateP95Ms": 1115.58,
+          "reductionMs": 661.41,
+          "reductionPercent": 37.22
+        }
+      }
+    }
+  ],
+  "notes": [
+    "Pool counts are component-wise acquisition-boundary maxima for individual node pools, never total cluster connections or continuous maxima.",
+    "No profile truncation, unsupported/invalid samples, failed completed operations or query-count mismatches; every profiled window still has censored authorize/get calls, whose partial queries are excluded from completed-operation counts.",
+    "Query totals and get counts vary with window duration and notification/poll timing. Per-operation joins, not full-window ratios, establish the fixed query reductions.",
+    "Known rows are direct driver rowCount sums, including writes; every completed command/get has two unknown rowCounts for BEGIN/COMMIT. There is no query-byte or server-CPU claim.",
+    "All eight correctness checks pass. All baseline harness gates fail acknowledgement and stalled acknowledgement; all candidate harness gates pass. All eight fail the 500ms peer-p95 diagnostic and report capacityGatePassed=false.",
+    "Actual health-fetch calibration includes browser/HTTP overhead under nominal100ms CDP latency, not pure WAN RTT; all20actors meet calibration in every run.",
+    "Artifact reports Redis compatibility7.2.4; separate runtime checks verified actual Valkey8.1.10 and DockerVM4vCPU/8309010432bytes. The comparison uses the recorded runtime context above.",
+    "Local single-host, two API nodes in one coordinator process; physical-device/staging/real-media/soak evidence remains absent. No cap increases."
+  ],
+  "kind": "local-canvas-collaboration-comparison",
+  "capacityIncreaseAuthorized": false,
+  "additionalVerifiedRuntime": {
+    "valkeyVersion": "8.1.10",
+    "dockerVmVcpu": 4,
+    "dockerVmMemoryBytes": 8309010432
+  },
+  "workloadContext": {
+    "sceneBytes": 313422,
+    "guestOrdinaryObjects": 100,
+    "nominalCdpLatencyMs": 100,
+    "notificationCoalescingMs": 350,
+    "fakeImagePlacements": 2,
+    "fakeImageAssets": 1,
+    "fakeImageBytes": 68,
+    "browserSceneHasSeededDiscussionsOrManualCheckpoints": false,
+    "apiNodesInOneProcess": 2,
+    "maximumConnectionsPerRepositoryPool": 15
+  }
+}

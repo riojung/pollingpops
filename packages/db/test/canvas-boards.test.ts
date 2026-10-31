@@ -25,7 +25,7 @@ import {
 } from "../src/index.js";
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 import { MemoryCanvasBoards, postgresCanvasRun } from "../src/canvas-board-store.js";
-import type { CanvasState } from "../src/canvas-board-types.js";
+import type { CanvasState, CanvasTransaction } from "../src/canvas-board-types.js";
 import { stablePlatformJson } from "../src/platform-service.js";
 
 async function creator(repository: Repository) {
@@ -170,6 +170,108 @@ for (const backend of ["memory", "postgres"] as const)
         });
         return canvases.acceptInvitation(editor, invitation.id);
       }
+      async function storedAccess(actor: CreatorContext, targetWorkspaceId = workspaceId) {
+        const run =
+          repository instanceof MemoryRepository
+            ? repository.getOrCreateLifecycleExtension(
+                "canvasBoards",
+                () => new MemoryCanvasBoards(repository as MemoryRepository),
+              ).run
+            : postgresCanvasRun(repository as PostgresRepository);
+        return run(actor, { workspaceId: targetWorkspaceId }, (tx) =>
+          tx.access(targetWorkspaceId, actor.userId),
+        );
+      }
+      it("keeps canvas access and platform license policy equal across current locked facts", async () => {
+        const assertLicensed = async (expected: boolean) => {
+          expect(await platform.workspaceHasLicense(workspaceId)).toBe(expected);
+          for (const actor of [owner, editor]) {
+            const access = await storedAccess(actor);
+            expect(access?.workspaceLicensed).toBe(expected);
+            expect(access?.member?.userId).toBe(actor.userId);
+          }
+        };
+        await assertLicensed(true);
+        await platform.setOrganizationCommercialHold(org, true, "License policy parity");
+        await assertLicensed(false);
+        await platform.setOrganizationCommercialHold(org, false, "License policy parity");
+        await assertLicensed(true);
+        await platform.updateOrganizationStatus(org, "suspended");
+        await assertLicensed(false);
+        await platform.updateOrganizationStatus(org, "active");
+        await assertLicensed(true);
+        const snapshot = {
+          organizationId: org,
+          customerId: null,
+          subscriptionId: null,
+          status: "active",
+          licenseQuantity: 3,
+          licenseUnit: "user" as const,
+          offerId: null,
+          paidThrough: null,
+          graceUntil: null,
+          legacyPlan: "team" as const,
+        };
+        await platform.applySubscriptionSnapshot({
+          ...snapshot,
+          paidThrough: new Date(Date.now() - 60_000),
+        });
+        await assertLicensed(false);
+        await platform.applySubscriptionSnapshot(snapshot);
+        await assertLicensed(true);
+        await platform.applySubscriptionSnapshot({ ...snapshot, licenseQuantity: 0 });
+        await assertLicensed(false);
+        await platform.applySubscriptionSnapshot(snapshot);
+        await assertLicensed(true);
+      });
+      it("licenses the origin workspace by its assignee rather than the accessing editor", async () => {
+        const editorAssignment = (
+          await platform.getOrganizationUserLicenses(org, owner.userId)
+        ).assignments.find((assignment) => assignment.userId === editor.userId)!;
+        expect(editorAssignment.workspaceId).not.toBe(workspaceId);
+        expect((await storedAccess(editor))?.workspaceLicensed).toBe(true);
+        await platform.assignOrganizationUserLicense(org, owner.userId, owner.userId, false);
+        expect(await platform.workspaceHasLicense(editorAssignment.workspaceId)).toBe(true);
+        expect(await platform.workspaceHasLicense(workspaceId)).toBe(false);
+        expect((await storedAccess(editor))?.workspaceLicensed).toBe(false);
+        expect((await storedAccess(editor))?.member?.userId).toBe(editor.userId);
+      });
+      it("preserves workspace-license assignments independently of user-seat facts", async () => {
+        const legacyOrg = await platform.createOrganization({
+          name: "Historical workspace license",
+          actorId: owner.userId,
+          licenseUnit: "workspace",
+        });
+        await platform.applySubscriptionSnapshot({
+          organizationId: legacyOrg.id,
+          customerId: null,
+          subscriptionId: null,
+          status: "active",
+          licenseQuantity: 1,
+          licenseUnit: "workspace",
+          offerId: null,
+          paidThrough: null,
+          graceUntil: null,
+          legacyPlan: "team",
+        });
+        const legacyWorkspace = await platform.createOrganizationWorkspace({
+          organizationId: legacyOrg.id,
+          actorId: owner.userId,
+          name: "Licensed workspace",
+          segment: "workplace",
+        });
+        await platform.assignWorkspaceLicense(legacyOrg.id, owner.userId, legacyWorkspace.id, true);
+        expect(await platform.workspaceHasLicense(legacyWorkspace.id)).toBe(true);
+        expect((await storedAccess(owner, legacyWorkspace.id))?.workspaceLicensed).toBe(true);
+        await platform.assignWorkspaceLicense(
+          legacyOrg.id,
+          owner.userId,
+          legacyWorkspace.id,
+          false,
+        );
+        expect(await platform.workspaceHasLicense(legacyWorkspace.id)).toBe(false);
+        expect((await storedAccess(owner, legacyWorkspace.id))?.workspaceLicensed).toBe(false);
+      });
       const note = (text = "A concrete idea") =>
         CanvasObjectCreateSchema.parse({
           id: randomUUID(),
@@ -180,6 +282,151 @@ for (const backend of ["memory", "postgres"] as const)
           height: 160,
           text,
         });
+      function withReadTransaction(transform: (tx: CanvasTransaction) => CanvasTransaction) {
+        const store =
+          repository instanceof MemoryRepository
+            ? repository.getOrCreateLifecycleExtension(
+                "canvasBoards",
+                () => new MemoryCanvasBoards(repository as MemoryRepository),
+              )
+            : (repository as PostgresRepository);
+        const run = store instanceof MemoryCanvasBoards ? store.run : postgresCanvasRun(store);
+        return new CanvasBoardRepository(
+          (actor, scope, work) => run(actor, scope, (tx) => work(transform(tx))),
+          store,
+        );
+      }
+      it("matches the full-state response with exact actor-owned uppercase history heads", async () => {
+        const board = await create();
+        const a = note("Owner note"),
+          b = note("Independent editor note");
+        const creationId = "ABCDEF01-2345-4ABC-8DEF-0123456789AB";
+        const editId = "ABCDEF02-2345-4ABC-8DEF-0123456789AB";
+        const editorId = "ABCDEF03-2345-4ABC-8DEF-0123456789AB";
+        await change(
+          owner,
+          board.id,
+          {
+            type: "batch",
+            operations: [{ type: "create", object: a }],
+          },
+          creationId,
+        );
+        await share(board.id);
+        const editorCommand: CanvasBoardCommand = {
+          type: "batch",
+          operations: [{ type: "create", object: b }],
+        };
+        await change(editor, board.id, editorCommand, editorId);
+        await change(
+          owner,
+          board.id,
+          {
+            type: "batch",
+            operations: [
+              { type: "update", id: a.id, expectedVersion: 1, patch: { text: "Later edit" } },
+            ],
+          },
+          editId,
+        );
+        const undoCommand: CanvasBoardCommand = { type: "undo", targetOperationId: editId };
+        const undone = await change(owner, board.id, undoCommand);
+        await facilitate(owner, board.id, {
+          type: "comment_thread_create",
+          threadId: randomUUID(),
+          messageId: randomUUID(),
+          objectId: a.id,
+          text: "Retained discussion outside the ordinary snapshot",
+        });
+        await facilitate(owner, board.id, {
+          type: "version_create",
+          versionId: randomUUID(),
+          name: "Retained saved scene",
+        });
+        // Exact retries return the existing full-state view without advancing its sequence.
+        const fullOwner = (await change(owner, board.id, undoCommand, undone.receipt.operationId))
+          .board;
+        const fullEditor = (await change(editor, board.id, editorCommand, editorId)).board;
+        const snapshots = withReadTransaction((tx) => ({
+          ...tx,
+          get: async () => {
+            throw new Error("Ordinary reads must not hydrate full state");
+          },
+          timer: async () => {
+            throw new Error("Ordinary reads must not hydrate facilitation");
+          },
+          put: async () => {
+            throw new Error("A snapshot must never be written as CanvasState");
+          },
+        }));
+        const ownerRead = await snapshots.get(owner, board.id);
+        const editorRead = await snapshots.get(editor, board.id);
+        expect(ownerRead).toEqual(fullOwner);
+        expect(editorRead).toEqual(fullEditor);
+        expect(ownerRead).toMatchObject({ undoOperationId: creationId, redoOperationId: editId });
+        expect(editorRead).toMatchObject({ undoOperationId: editorId, redoOperationId: null });
+        expect(ownerRead.grants).toHaveLength(1);
+        expect(editorRead.grants).toEqual([]);
+        const redone = await change(owner, board.id, {
+          type: "redo",
+          targetOperationId: ownerRead.redoOperationId!,
+        });
+        expect(await snapshots.get(owner, board.id)).toEqual(redone.board);
+      });
+      it("keeps preflight before snapshot rows and rechecks the loaded role and expiry", async () => {
+        const board = await create();
+        let reads = 0;
+        const counted = withReadTransaction((tx) => ({
+          ...tx,
+          snapshot: async (id, actorId) => {
+            reads++;
+            return tx.snapshot(id, actorId);
+          },
+        }));
+        await expect(counted.get(editor, board.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+        expect(reads).toBe(0);
+        await share(board.id);
+        // Model a grant revocation between metadata preflight and acquiring the board read lock.
+        const revoked = withReadTransaction((tx) => ({
+          ...tx,
+          snapshot: async (id, actorId) => {
+            const read = await tx.snapshot(id, actorId);
+            return (
+              read && { ...read, grants: read.grants.filter((grant) => grant.userId !== actorId) }
+            );
+          },
+        }));
+        await expect(revoked.get(editor, board.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+        let milliseconds = Date.now();
+        const expired = withReadTransaction((tx) => ({
+          ...tx,
+          snapshot: async (id, actorId) => {
+            const read = await tx.snapshot(id, actorId);
+            milliseconds = Date.parse(board.expiresAt);
+            return read;
+          },
+        }));
+        await expect(
+          expired.get(owner, board.id, () => new Date(milliseconds)),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      });
+      it("does not mix snapshot objects or undo authority with an intervening undo", async () => {
+        const board = await create(),
+          object = note("Before edit");
+        await change(owner, board.id, { type: "batch", operations: [{ type: "create", object }] });
+        const edited = await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            { type: "update", id: object.id, expectedVersion: 1, patch: { text: "After edit" } },
+          ],
+        });
+        const [read, undone] = await Promise.all([
+          canvases.get(owner, board.id),
+          change(owner, board.id, { type: "undo", targetOperationId: edited.receipt.operationId }),
+        ]);
+        expect([edited.board, undone.board]).toContainEqual(read);
+        expect(await canvases.get(owner, board.id)).toEqual(undone.board);
+      });
       it("retains accepted V2 connector retries after V3 diagram edits and checkpoints", async () => {
         const board = await create();
         const a = note("Source"),
@@ -256,7 +503,10 @@ for (const backend of ["memory", "postgres"] as const)
         });
         const replay = await canvases.command(owner, board.id, legacy);
         expect(replay.receipt).toEqual(accepted.receipt);
-        expect(replay.board.objects).toEqual(updated.board.objects);
+        // A reload may change array order; every current object's content must stay identical.
+        expect(replay.board.objects.toSorted((a, b) => a.id.localeCompare(b.id))).toEqual(
+          updated.board.objects.toSorted((a, b) => a.id.localeCompare(b.id)),
+        );
         expect(JSON.stringify(legacy)).not.toMatch(/routing|lineStyle|lineColor|startMarker/);
         const changed = structuredClone(legacy);
         if (changed.command.type === "batch" && changed.command.operations[2]?.type === "create")

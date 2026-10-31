@@ -83,6 +83,45 @@ export function activeSubscription(subscription: P.PlatformSubscription, now = n
       (subscription.graceUntil !== null && subscription.graceUntil > now))
   );
 }
+/** Pure policy over facts read together by the caller; never caches authority. */
+export function workspaceLicenseTerms(
+  organization: P.OrganizationRecord | null,
+  subscription: P.PlatformSubscription | null,
+  commercialHold: boolean,
+  now: Date,
+): { unit: P.LicenseUnit; quantity: number } | null {
+  if (
+    commercialHold ||
+    !organization ||
+    organization.status !== "active" ||
+    !subscription ||
+    !activeSubscription(subscription, now)
+  )
+    return null;
+  return {
+    unit: subscription.licenseUnit ?? organization.licenseUnit ?? "workspace",
+    quantity: subscription.licenseQuantity,
+  };
+}
+
+/** Quantity limits apply before workspace matching; the unit defines the tie key. */
+export function selectWorkspaceLicenseAssignment<
+  T extends { workspaceId: string; assignedAt: Date },
+>(
+  assignments: readonly T[],
+  workspaceId: string,
+  quantity: number,
+  tieKey: (assignment: T) => string,
+): T | undefined {
+  return [...assignments]
+    .sort(
+      (a, b) =>
+        a.assignedAt.getTime() - b.assignedAt.getTime() || tieKey(a).localeCompare(tieKey(b)),
+    )
+    .slice(0, quantity)
+    .find((assignment) => assignment.workspaceId === workspaceId);
+}
+
 const emptySubscription = (organizationId: string): P.PlatformSubscription => ({
   organizationId,
   customerId: null,
@@ -1169,22 +1208,15 @@ export class PlatformService implements P.PlatformRepository {
     const organization = await store.get<P.OrganizationRecord>("organization", org);
     const subscription = await store.get<P.PlatformSubscription>("subscription", org);
     const hold = await store.get<P.OrganizationCommercialHold>("commercial_hold", org);
-    if (hold?.held) return false;
-    if (
-      !organization ||
-      organization.status !== "active" ||
-      !subscription ||
-      !activeSubscription(subscription, now)
-    )
-      return false;
-    if ((subscription.licenseUnit ?? organization.licenseUnit ?? "workspace") === "user") {
-      const assignments = (await store.list<P.UserLicenseAssignment>("user_license", org)).sort(
-        (a, b) =>
-          a.assignedAt.getTime() - b.assignedAt.getTime() || a.userId.localeCompare(b.userId),
+    const terms = workspaceLicenseTerms(organization, subscription, Boolean(hold?.held), now);
+    if (!terms) return false;
+    if (terms.unit === "user") {
+      const assignment = selectWorkspaceLicenseAssignment(
+        await store.list<P.UserLicenseAssignment>("user_license", org),
+        workspace,
+        terms.quantity,
+        (entry) => entry.userId,
       );
-      const assignment = assignments
-        .slice(0, subscription.licenseQuantity)
-        .find((candidate) => candidate.workspaceId === workspace);
       if (!assignment) return false;
       const member = await store.get<P.OrganizationMemberRecord>(
         "member",
@@ -1195,14 +1227,14 @@ export class PlatformService implements P.PlatformRepository {
       // authentication separately checks user liveness.
       return Boolean(member && member.role !== "billing");
     }
-    const assignments = (await store.list<P.LicenseAssignment>("license", org)).sort(
-      (a, b) =>
-        a.assignedAt.getTime() - b.assignedAt.getTime() ||
-        a.workspaceId.localeCompare(b.workspaceId),
+    return Boolean(
+      selectWorkspaceLicenseAssignment(
+        await store.list<P.LicenseAssignment>("license", org),
+        workspace,
+        terms.quantity,
+        (entry) => entry.workspaceId,
+      ),
     );
-    return assignments
-      .slice(0, subscription.licenseQuantity)
-      .some((entry) => entry.workspaceId === workspace);
   }
   async listOffers(includeDraft = false) {
     return (await this.store.list<P.PlatformOffer>("offer")).filter(

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "../locale-provider";
 import { formatNumber } from "../../lib/i18n/format";
+import { canvasDiagramCopy } from "../../lib/i18n/canvas-diagram-messages";
 import type { CanvasDraftRecoveryReason, CanvasObjectDraft } from "./canvas-draft";
 import styles from "./canvas.module.css";
 
@@ -18,6 +19,7 @@ export function CanvasDraftRecovery({
   onDiscard: () => void;
 }) {
   const { t, locale } = useLocale();
+  const diagram = canvasDiagramCopy(locale);
   const [notice, setNotice] = useState<"copied" | "manual" | null>(null);
   const text = useRef<HTMLTextAreaElement>(null);
   const active = useRef(true);
@@ -25,6 +27,23 @@ export function CanvasDraftRecovery({
     draft.text,
     draft.altText !== undefined ? `${t("canvas.assets.altText")}: ${draft.altText}` : "",
     draft.url !== undefined ? `${t("canvas.assets.url")}: ${draft.url}` : "",
+    ...(draft.routing !== undefined
+      ? [
+          `${diagram.routing}: ${diagram[draft.routing]}`,
+          `${diagram.lineStyle}: ${diagram[draft.lineStyle ?? "solid"]}`,
+          `${diagram.lineColor}: ${!draft.lineColor || draft.lineColor === "neutral" ? diagram.neutral : t(draft.lineColor === "yellow" || draft.lineColor === "pink" || draft.lineColor === "white" ? `canvas.color.${draft.lineColor}` : draft.lineColor === "blue" ? "boards.colorBlue" : draft.lineColor === "green" ? "boards.colorGreen" : "boards.colorPurple")}`,
+          `${diagram.startMarker}: ${diagram[draft.startMarker ?? "none"]}`,
+          `${diagram.endMarker}: ${diagram[draft.endMarker ?? "arrow"]}`,
+          `${diagram.fromPort}: ${draft.fromId ? diagram[draft.fromAnchor ?? "center"] : diagram.free}`,
+          `${diagram.toPort}: ${draft.toId ? diagram[draft.toAnchor ?? "center"] : diagram.free}`,
+          ...(["fromX", "fromY", "toX", "toY"] as const).flatMap((field) =>
+            draft[field] === undefined
+              ? []
+              : [`${diagram[field]}: ${formatNumber(locale, draft[field]!)}`],
+          ),
+        ]
+      : []),
+    ...(draft.rotation ? [`${diagram.rotation}: ${formatNumber(locale, draft.rotation)}`] : []),
   ]
     .filter(Boolean)
     .join("\n");

@@ -2,6 +2,20 @@ import { MediaUploadRequestSchema, MediaUploadTicketSchema } from "@openround/co
 import { API_URL, apiFetch, ApiClientError } from "../../lib/api";
 import { canvasPath } from "./canvas-client";
 
+export interface CanvasArtifactImageContext {
+  kind: "round" | "presentation";
+  targetId: string;
+  linkId: string;
+}
+export function canvasArtifactImagePath(context: CanvasArtifactImageContext, mediaId: string) {
+  if (!context || !["round", "presentation"].includes(context.kind))
+    throw new Error("Invalid activity image context");
+  canvasPath(context.targetId);
+  canvasPath(context.linkId);
+  canvasPath(mediaId);
+  return `/v1/${context.kind === "round" ? "quizzes" : "presentations"}/${context.targetId}/canvas-snapshot-links/${context.linkId}/media/${mediaId}`;
+}
+
 export function canvasMediaPath(boardId: string, mediaId: string) {
   canvasPath(mediaId);
   return `${canvasPath(boardId)}/media/${mediaId}`;
@@ -62,12 +76,17 @@ export async function fetchCanvasImage(
   signal?: AbortSignal,
   guest?: { sourceBoardId: string; token: string },
   versionId?: string,
+  artifactLink?: CanvasArtifactImageContext,
 ): Promise<Blob> {
   let path = canvasMediaPath(boardId, mediaId);
   if (versionId !== undefined) {
     canvasPath(versionId);
     if (guest) throw new Error("Saved versions require team access");
     path = `${canvasPath(boardId)}/versions/${versionId}/media/${mediaId}`;
+  }
+  if (artifactLink !== undefined) {
+    if (guest) throw new Error("Activity snapshots require team access");
+    path = canvasArtifactImagePath(artifactLink, mediaId);
   }
   if (guest) {
     canvasPath(guest.sourceBoardId);

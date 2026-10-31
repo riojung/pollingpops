@@ -22,6 +22,108 @@ export function instantiateCanvasTemplate(
     objects.push(object);
     return id;
   }
+  if (templateId === "flow-to-action") {
+    add({ type: "text", x: 40, y: 30, width: 1360, height: 80, text: template.title, zIndex: 1 });
+    const parentId = add({
+      type: "frame",
+      x: 40,
+      y: 150,
+      width: 1360,
+      height: 650,
+      text: "A path to review together",
+      zIndex: -1,
+    });
+    add({
+      type: "text",
+      x: 80,
+      y: 200,
+      width: 1280,
+      height: 60,
+      text: "Edit each step and label each route. These are starting prompts, not submitted responses.",
+      parentId,
+      zIndex: 1,
+    });
+    const input = add({
+      type: "parallelogram",
+      x: 80,
+      y: 310,
+      width: 230,
+      height: 130,
+      text: "Input to consider",
+      color: "blue",
+      parentId,
+      zIndex: 1,
+    });
+    const review = add({
+      type: "rect",
+      x: 410,
+      y: 310,
+      width: 230,
+      height: 130,
+      text: "Review information",
+      color: "blue",
+      parentId,
+      zIndex: 1,
+    });
+    const decision = add({
+      type: "diamond",
+      x: 760,
+      y: 280,
+      width: 280,
+      height: 190,
+      text: "Ready to continue?",
+      color: "yellow",
+      parentId,
+      zIndex: 1,
+    });
+    const action = add({
+      type: "rect",
+      x: 1120,
+      y: 310,
+      width: 230,
+      height: 130,
+      text: "Take the next action",
+      color: "green",
+      parentId,
+      zIndex: 1,
+    });
+    const gather = add({
+      type: "rect",
+      x: 785,
+      y: 620,
+      width: 230,
+      height: 130,
+      text: "Gather missing information",
+      color: "pink",
+      parentId,
+      zIndex: 1,
+    });
+    const connect = (
+      from: string,
+      to: string,
+      fromAnchor: string,
+      toAnchor: string,
+      text: string,
+    ) =>
+      add({
+        type: "connector",
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        parentId,
+        text,
+        from: { objectId: from, x: 0, y: 0, anchor: fromAnchor },
+        to: { objectId: to, x: 0, y: 0, anchor: toAnchor },
+        routing: "straight",
+        zIndex: 0,
+      });
+    connect(input, review, "right", "left", "Read");
+    connect(review, decision, "right", "left", "Check");
+    connect(decision, action, "right", "left", "Yes");
+    connect(decision, gather, "bottom", "top", "Not yet");
+    return objects;
+  }
   add({ type: "text", x: 40, y: 30, width: 1600, height: 80, text: template.title, zIndex: 1 });
   const columns = template.sections.length === 4 ? 2 : 3;
   template.sections.forEach((section, index) => {

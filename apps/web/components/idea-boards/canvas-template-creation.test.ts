@@ -76,6 +76,22 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("guided starter creation checkpoints", () => {
+  it("resumes a pre-V3 uncertain creation using the original V2 envelope and keys", async () => {
+    const legacy = intent();
+    delete legacy.canvasSchemaVersion;
+    legacy.sourceBoardId = boardFixture.id;
+    const resumed = parseWorkshopTemplateIntent(legacy, userId, workspaceId);
+    expect(resumed.canvasSchemaVersion).toBe(2);
+    api.fetch.mockResolvedValueOnce(canvasResponse());
+    await finishWorkshopTemplate(resumed, vi.fn());
+    expect(api.fetch).toHaveBeenCalledOnce();
+    expect(JSON.parse(api.fetch.mock.calls[0]![1].body)).toMatchObject({
+      schemaVersion: 2,
+      operationId: legacy.canvasOperationId,
+      sourceBoardId: boardFixture.id,
+      templateId: "experience-retro",
+    });
+  });
   it("preserves the complete edited setup and distinct exact retry keys", async () => {
     const pending = intent();
     const storage = checkpoints();
@@ -101,7 +117,7 @@ describe("guided starter creation checkpoints", () => {
       ideasVisible: true,
     });
     expect(JSON.parse(api.fetch.mock.calls[1]![1].body)).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       workspaceId,
       title: "Our chosen title",
       boardType: "workshop",

@@ -7669,6 +7669,14 @@ export class PostgresRepository implements Repository {
             ) AS facilitation
            FROM canvas_boards board WHERE board.workspace_id=ANY($1::uuid[]) AND board.expires_at>clock_timestamp() ORDER BY board.id`,
         );
+        const canvasArtifactLinks = await queryWorkspaceData(
+          `SELECT link.id,link.workspace_id AS "workspaceId",link.target_kind AS "targetKind",
+            link.target_id AS "targetId",link.board_id AS "boardId",link.version_id AS "versionId",
+            link.created_by AS "createdBy",link.created_at AS "createdAt",link.revision
+           FROM canvas_artifact_links link JOIN canvas_boards board ON board.id=link.board_id
+           WHERE link.workspace_id=ANY($1::uuid[]) AND board.expires_at>clock_timestamp()
+           ORDER BY link.created_at,link.id`,
+        );
         const surveyRooms = await queryWorkspaceData(
           "SELECT data FROM survey_feedback_rooms WHERE workspace_id = ANY($1::uuid[]) ORDER BY id",
         );
@@ -8045,6 +8053,7 @@ export class PostgresRepository implements Repository {
           canvasBoards: canvasBoards.rows.filter(
             (row) => new Date(row.expiresAt).getTime() > Date.now(),
           ),
+          canvasArtifactLinks: canvasArtifactLinks.rows,
           ideaBoards: ideaBoards.rows.flatMap((row) => {
             const board = IdeaBoardStoredSchema.parse(row.data);
             const now = new Date();

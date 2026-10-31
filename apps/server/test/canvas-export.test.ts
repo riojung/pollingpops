@@ -163,9 +163,54 @@ describe("closed current-scene canvas SVG export", () => {
     expect(result.svg.toString()).toContain('viewBox="25 35 400 300"');
     expect(result.svg.toString()).toContain('clip-path="url(#export-region)"');
     expect(result.svg.toString()).toContain("rotate(90 100 80)");
-    expect(result.svg.toString()).toContain('<line x1="120" y1="210" x2="350" y2="200"');
+    expect(result.svg.toString()).toContain('<path d="M120 210 L350 200"');
     expect(loadImage).not.toHaveBeenCalled();
     expect(result.mediaIds).toEqual([]);
+  });
+
+  it("exports polygon shapes, routed ports, labels and both coloured arrow markers", async () => {
+    const decision = object({ type: "diamond", text: "Decision", width: 200, height: 160 });
+    const input = object({
+      id: id(2),
+      type: "parallelogram",
+      x: 300,
+      y: 200,
+      width: 200,
+      height: 160,
+      text: "Input",
+    });
+    const connector = object({
+      id: id(3),
+      type: "connector",
+      text: "Yes <approved>",
+      from: { objectId: decision.id, x: 0, y: 0, anchor: "right" },
+      to: { objectId: input.id, x: 0, y: 0, anchor: "left" },
+      routing: "elbow",
+      lineStyle: "dashed",
+      startMarker: "arrow",
+      endMarker: "arrow",
+      lineColor: "blue",
+    });
+    const result = await renderCanvasSvg({
+      objects: [decision, input, connector],
+      region: null,
+      loadImage: unavailable,
+    });
+    const svg = result.svg.toString();
+    expect(svg).toContain('d="M100 0 L200 80 L100 160 L0 80 Z"');
+    expect(svg).toContain('d="M40 0 L200 0 L160 160 L0 160 Z"');
+    expect(svg).toContain('d="M220 110 L270 110 L270 280 L320 280"');
+    expect(svg).toContain(
+      'stroke="#175ca5" stroke-width="2" stroke-dasharray="8 6" marker-start="url(#export-arrow-blue)" marker-end="url(#export-arrow-blue)"',
+    );
+    expect(svg).toContain("Yes &lt;approved&gt;");
+    expect(svg).not.toContain("<foreignObject");
+    const removed = await renderCanvasSvg({
+      objects: [decision, connector],
+      region: null,
+      loadImage: unavailable,
+    });
+    expect(removed.svg.toString()).not.toContain("Yes &lt;approved&gt;");
   });
 
   it("fits rotated objects and scales output to 4096 without raising world or object caps", async () => {

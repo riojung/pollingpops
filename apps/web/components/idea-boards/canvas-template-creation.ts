@@ -1,4 +1,5 @@
 import {
+  CANVAS_SCHEMA_VERSION,
   CanvasBoardCreateSchema,
   IdeaBoardCreateSchema,
   CANVAS_TEMPLATE_IDS,
@@ -12,6 +13,7 @@ import { createCanvas } from "../canvas-boards/canvas-client";
 
 export interface WorkshopTemplateIntent {
   version: 1;
+  canvasSchemaVersion?: 2 | 3;
   userId: string;
   workspaceId: string;
   source: ReturnType<typeof ideaBoardCreateIntent>;
@@ -29,6 +31,7 @@ export function workshopTemplateIntent(
   return parseWorkshopTemplateIntent(
     {
       version: 1,
+      canvasSchemaVersion: CANVAS_SCHEMA_VERSION,
       userId,
       workspaceId,
       source: ideaBoardCreateIntent({ ...input, title: input.title.trim() }),
@@ -54,12 +57,16 @@ export function parseWorkshopTemplateIntent(
     "workspaceId",
     "source",
     "canvasOperationId",
+    "canvasSchemaVersion",
     "templateId",
     "sourceBoardId",
   ];
   if (
     Object.keys(record).some((field) => !fields.includes(field)) ||
     record.version !== 1 ||
+    (record.canvasSchemaVersion !== undefined &&
+      record.canvasSchemaVersion !== 2 &&
+      record.canvasSchemaVersion !== 3) ||
     record.userId !== userId ||
     record.workspaceId !== workspaceId ||
     !uuid.test(userId) ||
@@ -77,8 +84,10 @@ export function parseWorkshopTemplateIntent(
   if (typeof idempotencyKey !== "string" || !uuid.test(idempotencyKey))
     throw new Error("Invalid creation key");
   const input = IdeaBoardCreateSchema.parse(source);
+  const canvasSchemaVersion =
+    record.canvasSchemaVersion === undefined ? 2 : record.canvasSchemaVersion;
   CanvasBoardCreateSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: canvasSchemaVersion,
     workspaceId,
     title: input.title,
     boardType: "workshop",
@@ -91,6 +100,7 @@ export function parseWorkshopTemplateIntent(
     userId,
     workspaceId,
     source: { ...input, idempotencyKey },
+    canvasSchemaVersion: canvasSchemaVersion as 2 | 3,
     canvasOperationId: record.canvasOperationId,
     templateId: record.templateId as CanvasTemplateId,
     ...(record.sourceBoardId ? { sourceBoardId: record.sourceBoardId as string } : {}),
@@ -115,7 +125,7 @@ export async function finishWorkshopTemplate(
   }
   if (signal?.aborted) throw new DOMException("Creation interrupted", "AbortError");
   const canvas: CanvasBoardCreate = CanvasBoardCreateSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: intent.canvasSchemaVersion ?? 2,
     workspaceId: intent.workspaceId,
     title: intent.source.title,
     boardType: "workshop",

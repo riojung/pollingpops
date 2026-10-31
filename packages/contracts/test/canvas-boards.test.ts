@@ -103,7 +103,7 @@ describe("typed canvas contracts", () => {
       redoOperationId: null,
     });
     const current = CanvasBoardViewSchema.parse(v1);
-    expect(current.schemaVersion).toBe(2);
+    expect(current.schemaVersion).toBe(3);
     expect(current.objects[0]).toMatchObject({ version: 3, geometricGroupId: null });
     expect(current).not.toHaveProperty("imageUploadsAvailable");
     expect(CanvasBoardViewSchema.parse(current)).toEqual(current);

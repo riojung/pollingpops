@@ -4,7 +4,7 @@ Updated: October 30, 2026
 
 Source baseline: `e1d86c48639cb5fba904351efe657abaec5f7856`
 
-Status: Orders 0–6 implemented as an opt-in pilot; Order 6 locally verified; Order 7 planned
+Status: Orders 0–7 functional tools implemented and locally verified as an opt-in pilot; higher limits gated
 
 Idea Boards should become a shared spatial workspace for team members and a guided workshop
 experience for accountless guests. The first customer release should support both, as selected
@@ -27,8 +27,9 @@ original SVG/DOM renderer and its limits. This document's baseline analysis belo
 the pre-implementation code. Order 5 now adds frames, geometric groups, multiselect and atomic
 layout, locks, freehand drawing, private scanned image/link assets and seven original starter
 layouts. Order 6 adds anchored team comments, a server-clock timer, optional presenter following,
-permission-safe region exports and manual bounded version history. Order 7's capacity and further
-diagram/integration scope remains deferred.
+permission-safe region exports and manual bounded version history. Order 7 adds manual diagram
+styles, an original flow starter, creator-only saved-canvas references in Round/Presentation
+authoring, and separate repository/production-browser evidence tooling. Limits remain unchanged.
 
 The productivity increment introduces explicit Canvas V2 contracts and migration 080. Retained
 V1 data and inverse history are upcast deterministically without changing accepted retry hashes.
@@ -60,10 +61,39 @@ Hard pilot bounds are 100 retained canvases per workspace, 500 objects and 2 MiB
 Workshop canvases reserve 200 object slots for source ideas. No AI features, unrestricted
 offline editing or character-level text coauthoring are introduced.
 
+### Order 7 boundaries
+
+Canvas scene V3 adds diamond/parallelogram nodes, node rotation/layer controls and connector
+labels, cardinal ports, straight/elbow routing, dashed/solid lines, start/end arrows and bounded
+colors. The original **Flow to action** starter joins the seven previous starters. Frozen V1/V2
+requests retain canonical retry hashes; deterministic readers upcast old scenes and inverse
+history to V3. Saved-version view V2 independently carries V3 objects and upcasts old V1 views;
+facilitation commands remain V1. Migrations 082/083 are additive and require coordinated matching
+readers/writers/web, retaining the checkpoint-aware cleanup requirement from 081.
+
+Round and Presentation authoring can reference an exact manual saved version in the same workspace.
+This independent V1 protocol stores IDs and bounded metadata, never a copied scene. Source owners
+who can edit the target create/remove references; every list, preview and image read requires both
+current target access and current source access. Expiry is checked through read delivery, including
+a delayed database COMMIT response. Current moderation governs saved guest cards and images.
+There are at most 20 references and 2,000 operation receipts per target, with deletion headroom.
+Target/source/version deletion cleans references; creator deletion clears attribution without
+removing organization-owned content. References remain private authoring aids and do not enter
+published activity content, participant/live views, activity/image exports or duplication. Browser previews clear
+on access loss/source events and use target-authorized private media, with polling/TTL fallback.
+
+The repository harness now exercises mixed V3 scenes, groups, retained discussions/timer/history
+and exact retries. The separate production-browser harness uses restricted PostgreSQL, real Valkey,
+two HTTP nodes and calibrated network shaping. It measures HTTP acknowledgements separately from
+repository-resolution-to-visible-peer-paint opportunity; the latter is not an exact database COMMIT
+or physical-pixel measurement. Current-cap results and unresolved gates are recorded in
+[capacity evidence](canvas-capacity-evidence.md). Twenty editors is a workload target, not a new
+hard admission limit. No object, license, grant, operation or workshop allowance is increased.
+
 ## Baseline capabilities and gaps
 
 Before the canvas pilot, the implementation was a moderated idea collection and prioritization
-system. This table records that historical baseline, not the current Order 6 feature inventory.
+system. This table records that historical baseline, not the current feature inventory.
 
 | Area          | Current implementation                                                                                                      | Enhancement needed                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -325,7 +355,8 @@ The HTTP `/v1` prefix does not determine a stored document's schema version.
 - **Object:** stable ID, type, version, finite coordinates, dimensions, stacking order, bounded
   styles, visibility, and typed content. Current types: sticky/text, rectangle/ellipse, connector,
   approved `idea_ref`, bounded pen stroke, frame, native image and HTTP(S) link. V2 adds geometric
-  group IDs and native images while frozen strict V1 requests retain their prior shape.
+  group IDs and native images. V3 adds diamond/parallelogram nodes and bounded connector styles;
+  frozen strict V1/V2 inputs retain their shapes and retry fingerprints.
 - **Relationships:** geometric groups/frames are separate from the existing idea `groupId`,
   which describes a semantic category. Validate cycles, missing parents, connector anchors,
   and deleted endpoints. Invisible endpoints must not leak private object IDs or text.
@@ -470,7 +501,8 @@ rules are agreed, with design and QA involved from the first slice.
 | 7     | Higher object/editor caps, richer manual diagrams and optional snapshot links to Rounds/Presentations                                                                                                 | Target-load evidence and explicit integration/privacy contracts before raising limits or linking artifacts                         | L    |
 
 Orders 1–4 formed the initial customer pilot; Order 5 is its productivity increment and Order 6
-its locally verified facilitation increment. Order 7 remains deferred.
+its locally verified facilitation increment. Order 7 implements diagram and authoring-reference
+tools; higher limits remain conditional on performance and deployment evidence.
 An internal single-editor prototype at order 3 is
 useful engineering progress but does not satisfy the collaborative product promise. Accessibility,
 localization, permission checks and failure states belong in every order, not a final cleanup pass.

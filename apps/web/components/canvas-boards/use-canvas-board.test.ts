@@ -183,27 +183,68 @@ describe("canvas async state", () => {
   it("coalesces notifications and follows up when the final event arrives during a snapshot read", async () => {
     let finish!: (value: typeof canvasBoard) => void;
     mocked.read
+      .mockResolvedValueOnce(canvasBoard)
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
             finish = resolve;
           }),
       )
-      .mockResolvedValue({ ...canvasBoard, canvasSeq: 2 });
+      .mockResolvedValue({ ...canvasBoard, canvasSeq: 3 });
     const view = harness();
     view.render();
     view.mount();
+    await settle();
     const notify = mocked.watch.mock.calls[0]![2] as () => void;
     notify();
     notify();
     notify();
-    await vi.advanceTimersByTimeAsync(350);
+    await vi.advanceTimersByTimeAsync(349);
     expect(mocked.read).toHaveBeenCalledOnce();
-    finish(canvasBoard);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocked.read).toHaveBeenCalledTimes(2);
+    notify();
+    notify();
+    await vi.advanceTimersByTimeAsync(350);
+    expect(mocked.read).toHaveBeenCalledTimes(2);
+    finish({ ...canvasBoard, canvasSeq: 2 });
     await settle();
+    expect(mocked.read).toHaveBeenCalledTimes(3);
+    expect(view.render().board?.canvasSeq).toBe(3);
+    view.unmount();
+  });
+  it("bounds a continuing notification burst by the first event instead of postponing it", async () => {
+    mocked.read
+      .mockResolvedValueOnce(canvasBoard)
+      .mockResolvedValue({ ...canvasBoard, canvasSeq: 2 });
+    const view = harness();
+    view.render();
+    view.mount();
+    await settle();
+    const notify = mocked.watch.mock.calls[0]![2] as () => void;
+    notify();
+    await vi.advanceTimersByTimeAsync(150);
+    notify();
+    await vi.advanceTimersByTimeAsync(199);
+    expect(mocked.read).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
     expect(mocked.read).toHaveBeenCalledTimes(2);
     expect(view.render().board?.canvasSeq).toBe(2);
     view.unmount();
+  });
+  it("cancels a queued notification refresh on unmount and ignores later stream callbacks", async () => {
+    mocked.read.mockResolvedValue(canvasBoard);
+    const view = harness();
+    view.render();
+    view.mount();
+    await settle();
+    const notify = mocked.watch.mock.calls[0]![2] as () => void;
+    notify();
+    await vi.advanceTimersByTimeAsync(349);
+    view.unmount();
+    notify();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mocked.read).toHaveBeenCalledOnce();
   });
   it("retries an uncertain write with the original operation identity and keeps a stale draft until review", async () => {
     mocked.read.mockResolvedValue(canvasBoard);

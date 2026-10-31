@@ -1,5 +1,5 @@
 import { ApiClientError, isRetryableReadError } from "../../lib/api";
-import { fetchCanvasImage } from "./canvas-assets-client";
+import { fetchCanvasImage, type CanvasArtifactImageContext } from "./canvas-assets-client";
 
 type Read = {
   key: string;
@@ -7,6 +7,7 @@ type Read = {
   mediaId: string;
   guest?: { sourceBoardId: string; token: string };
   versionId?: string;
+  artifactLink?: CanvasArtifactImageContext;
   controller: AbortController;
   consumers: number;
   attempts: number;
@@ -32,6 +33,7 @@ function pump() {
       read.controller.signal,
       read.guest,
       read.versionId,
+      read.artifactLink,
     )
       .then((blob) => {
         if (!read.controller.signal.aborted) read.resolve(blob);
@@ -72,6 +74,7 @@ export function readCanvasImage(
   mediaId: string,
   guest?: { sourceBoardId: string; token: string },
   versionId?: string,
+  artifactLink?: CanvasArtifactImageContext,
 ) {
   const key = JSON.stringify([
     boardId,
@@ -79,6 +82,9 @@ export function readCanvasImage(
     guest?.sourceBoardId ?? null,
     guest?.token ?? null,
     versionId ?? null,
+    artifactLink === undefined
+      ? null
+      : [artifactLink?.kind, artifactLink?.targetId, artifactLink?.linkId],
   ]);
   let read = reads.get(key);
   if (!read) {
@@ -94,6 +100,7 @@ export function readCanvasImage(
       mediaId,
       guest,
       versionId,
+      artifactLink,
       controller: new AbortController(),
       consumers: 0,
       attempts: 0,

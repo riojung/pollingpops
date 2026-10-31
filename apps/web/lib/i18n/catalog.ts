@@ -119,6 +119,7 @@ function quizRouteDomains(path: string): LocaleDomain[] | null {
 
   switch (match[1]) {
     case undefined:
+      return [...roundEditorDomains, "idea-boards"];
     case "preview":
     case "rehearse":
       return [...roundEditorDomains];
@@ -183,7 +184,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   }
   if (path === "/") return ["delivery-authoring"];
   if (path === "/create" || path === "/create/") {
-    return ["delivery-authoring", "report-round"];
+    return ["delivery-authoring", "report-round", "idea-boards"];
   }
   if (path === "/recovery-packs" || path === "/recovery-packs/") {
     return ["delivery-authoring"];
@@ -195,6 +196,12 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   ) {
     return ["delivery-authoring", "live-delivery"];
   }
+  if (
+    /^\/presentation\/[^/]+\/?$/.test(path) ||
+    path === "/create/presentation" ||
+    path.startsWith("/create/presentation/")
+  )
+    return ["delivery-authoring", "idea-boards"];
   if (
     ["/signin", "/invite", "/presentation"].some(
       (prefix) => path === prefix || path.startsWith(`${prefix}/`),

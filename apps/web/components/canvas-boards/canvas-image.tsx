@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AUTH_CHANGE_EVENT } from "../../lib/api";
 import { useLocale } from "../locale-provider";
+import type { CanvasArtifactImageContext } from "./canvas-assets-client";
 import { readCanvasImage } from "./canvas-image-resource";
 
 export function CanvasImage({
@@ -14,6 +15,7 @@ export function CanvasImage({
   sourceBoardId,
   guestToken,
   versionId,
+  artifactLink,
 }: {
   canvasId: string;
   mediaId: string;
@@ -23,6 +25,7 @@ export function CanvasImage({
   sourceBoardId?: string;
   guestToken?: string;
   versionId?: string;
+  artifactLink?: CanvasArtifactImageContext;
 }) {
   const { t } = useLocale();
   const element = useRef<SVGGElement>(null);
@@ -33,7 +36,17 @@ export function CanvasImage({
     url: null,
     failed: false,
   });
-  const key = JSON.stringify([canvasId, mediaId, sourceBoardId, guestToken, versionId, epoch]);
+  const key = JSON.stringify([
+    canvasId,
+    mediaId,
+    sourceBoardId,
+    guestToken,
+    versionId,
+    artifactLink === undefined
+      ? null
+      : [artifactLink?.kind, artifactLink?.targetId, artifactLink?.linkId],
+    epoch,
+  ]);
   useEffect(() => {
     if (!element.current || typeof IntersectionObserver === "undefined") {
       setVisible(true);
@@ -62,6 +75,7 @@ export function CanvasImage({
       mediaId,
       guestToken && sourceBoardId ? { sourceBoardId, token: guestToken } : undefined,
       versionId,
+      artifactLink,
     );
     let active = true,
       url: string | null = null;
@@ -79,7 +93,18 @@ export function CanvasImage({
       read.release();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [visible, key, canvasId, mediaId, sourceBoardId, guestToken, versionId]);
+  }, [
+    visible,
+    key,
+    canvasId,
+    mediaId,
+    sourceBoardId,
+    guestToken,
+    versionId,
+    artifactLink?.kind,
+    artifactLink?.targetId,
+    artifactLink?.linkId,
+  ]);
   const current = state.key === key ? state : null;
   return (
     <g ref={element} role="img" aria-label={altText}>

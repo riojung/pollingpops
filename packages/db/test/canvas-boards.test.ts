@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  CANVAS_SCHEMA_VERSION,
   CanvasBoardCreateSchema,
   CanvasObjectCreateSchema,
   CanvasBoardMutationV1Schema,
+  CanvasBoardMutationV2Schema,
   CanvasBoardCreateV1Schema,
   IdeaBoardCreateSchema,
   CanvasFacilitationMutationSchema,
@@ -137,7 +139,8 @@ for (const backend of ["memory", "postgres"] as const)
         id: string,
         command: CanvasBoardCommand,
         operationId: string = randomUUID(),
-      ) => canvases.command(actor, id, { schemaVersion: 2, operationId, command });
+      ) =>
+        canvases.command(actor, id, { schemaVersion: CANVAS_SCHEMA_VERSION, operationId, command });
       const facilitate = (
         actor: CreatorContext,
         id: string,
@@ -177,6 +180,89 @@ for (const backend of ["memory", "postgres"] as const)
           height: 160,
           text,
         });
+      it("retains accepted V2 connector retries after V3 diagram edits and checkpoints", async () => {
+        const board = await create();
+        const a = note("Source"),
+          b = note("Destination"),
+          edgeId = randomUUID();
+        const legacy = CanvasBoardMutationV2Schema.parse({
+          schemaVersion: 2,
+          operationId: randomUUID(),
+          command: {
+            type: "batch",
+            operations: [
+              { type: "create", object: a },
+              { type: "create", object: b },
+              {
+                type: "create",
+                object: {
+                  id: edgeId,
+                  type: "connector",
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 100,
+                  from: { objectId: a.id, x: 0, y: 0, anchor: "right" },
+                  to: { objectId: b.id, x: 100, y: 100, anchor: "left" },
+                  text: "Original label",
+                },
+              },
+            ],
+          },
+        });
+        const accepted = await canvases.command(owner, board.id, legacy);
+        const updated = await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: edgeId,
+              expectedVersion: 1,
+              patch: {
+                routing: "elbow",
+                lineStyle: "dashed",
+                lineColor: "blue",
+                startMarker: "arrow",
+                text: "Current label",
+              },
+            },
+            {
+              type: "create",
+              object: CanvasObjectCreateSchema.parse({
+                id: randomUUID(),
+                type: "diamond",
+                x: 400,
+                y: 200,
+                width: 200,
+                height: 160,
+                text: "Decision",
+              }),
+            },
+          ],
+        });
+        expect(updated.board.schemaVersion).toBe(3);
+        const versionId = randomUUID();
+        await facilitate(owner, board.id, {
+          type: "version_create",
+          versionId,
+          name: "Diagram checkpoint",
+        });
+        const saved = await canvases.getVersion(owner, board.id, versionId);
+        expect(saved.schemaVersion).toBe(2);
+        expect(saved.objects.find((object) => object.id === edgeId)).toMatchObject({
+          routing: "elbow",
+          lineColor: "blue",
+          text: "Current label",
+        });
+        const replay = await canvases.command(owner, board.id, legacy);
+        expect(replay.receipt).toEqual(accepted.receipt);
+        expect(replay.board.objects).toEqual(updated.board.objects);
+        expect(JSON.stringify(legacy)).not.toMatch(/routing|lineStyle|lineColor|startMarker/);
+        const changed = structuredClone(legacy);
+        if (changed.command.type === "batch" && changed.command.operations[2]?.type === "create")
+          changed.command.operations[2].object.text = "Changed original request";
+        await expect(canvases.command(owner, board.id, changed)).rejects.toThrow();
+      });
       const pendingImage = (): MediaAssetCreateInput => {
         const id = randomUUID();
         return {
@@ -1296,7 +1382,7 @@ for (const backend of ["memory", "postgres"] as const)
         }
         const read = await canvases.get(owner, id);
         expect(read).toMatchObject({
-          schemaVersion: 2,
+          schemaVersion: 3,
           objects: [{ id: objectId, geometricGroupId: null, version: 2 }],
         });
         expect(await canvases.getCreation(owner, input)).toEqual({ id, workspaceId });
@@ -1329,7 +1415,7 @@ for (const backend of ["memory", "postgres"] as const)
               () => new MemoryCanvasBoards(repository as MemoryRepository),
             )
             .rows.get(id)!;
-          expect(retained.board).toMatchObject({ schemaVersion: 2, creationHash: hash(input) });
+          expect(retained.board).toMatchObject({ schemaVersion: 3, creationHash: hash(input) });
           for (const receipt of receipts)
             expect(
               retained.receipts.find((entry) => entry.operationId === receipt.operationId)!.hash,
@@ -1349,7 +1435,7 @@ for (const backend of ["memory", "postgres"] as const)
                   [id],
                 )
               ).rows[0],
-            ).toEqual({ schema_version: 2, creation_hash: hash(input) });
+            ).toEqual({ schema_version: 3, creation_hash: hash(input) });
             for (const receipt of receipts)
               expect(
                 (
@@ -1389,7 +1475,7 @@ for (const backend of ["memory", "postgres"] as const)
           },
         });
         const first = await canvases.command(owner, board.id, mutation);
-        expect(first.board.schemaVersion).toBe(2);
+        expect(first.board.schemaVersion).toBe(3);
         const object = first.board.objects[0]!;
         const next = await change(owner, board.id, {
           type: "batch",

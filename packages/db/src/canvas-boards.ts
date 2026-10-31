@@ -1,5 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
+  CANVAS_SCHEMA_VERSION,
   CANVAS_MAX_DOCUMENT_BYTES,
   CANVAS_MAX_OBJECTS,
   CANVAS_MAX_OPERATIONS,
@@ -391,7 +392,7 @@ export class CanvasBoardRepository {
     void uploadBytes;
     return CanvasBoardViewSchema.parse({
       ...metadata,
-      schemaVersion: 2,
+      schemaVersion: CANVAS_SCHEMA_VERSION,
       workspaceName: access.workspace.name,
       organizationName: access.organization?.name,
       status: status(state.board, source, now),
@@ -494,7 +495,7 @@ export class CanvasBoardRepository {
           : 30;
       const state: CanvasState = {
         board: {
-          schemaVersion: 2,
+          schemaVersion: CANVAS_SCHEMA_VERSION,
           id,
           workspaceId: parsed.workspaceId,
           organizationId: access.workspace.organizationId,
@@ -514,7 +515,7 @@ export class CanvasBoardRepository {
           uploadBytes: 0,
         },
         objects: sourceObjects(
-          parsed.schemaVersion === 2 && parsed.templateId
+          "templateId" in parsed && parsed.templateId
             ? instantiateCanvasTemplate(parsed.templateId, randomUUID).map((object) =>
                 CanvasObjectSchema.parse({ ...object, version: 1 }),
               )
@@ -564,7 +565,7 @@ export class CanvasBoardRepository {
           result.push(
             CanvasBoardViewSchema.parse({
               ...metadata,
-              schemaVersion: 2,
+              schemaVersion: CANVAS_SCHEMA_VERSION,
               workspaceName: checked.access.workspace.name,
               organizationName: checked.access.organization?.name,
               status: status(checked.board, checked.source, instant(clock)),
@@ -699,7 +700,7 @@ export class CanvasBoardRepository {
       const value = await this.guest(tx, sourceBoardId, tokenHash, clock);
       if (!value) return null;
       return CanvasBoardGuestViewSchema.parse({
-        schemaVersion: 2,
+        schemaVersion: CANVAS_SCHEMA_VERSION,
         id: value.state.board.id,
         sourceBoardId,
         canvasSeq: value.state.board.canvasSeq,
@@ -834,7 +835,7 @@ export class CanvasBoardRepository {
       const asset = await tx.reserveMedia(board, actor.userId, input);
       board.uploadCount++;
       board.uploadBytes += input.sizeBytes;
-      board.schemaVersion = 2;
+      board.schemaVersion = CANVAS_SCHEMA_VERSION;
       notExpired(board, instant(clock));
       if (value.source && status(board, value.source, instant(clock)) !== "active")
         throw new CanvasBoardError("ROOM_CLOSED", "The workshop collection window has ended");
@@ -927,7 +928,7 @@ export class CanvasBoardRepository {
       state,
       state.board.sourceBoardId ? await tx.source(state.board.sourceBoardId) : null,
     );
-    state.board.schemaVersion = 2;
+    state.board.schemaVersion = CANVAS_SCHEMA_VERSION;
     state.board.canvasSeq++;
     state.board.updatedAt = instant(clock).toISOString();
     validateObjects(state.objects);
@@ -1196,7 +1197,7 @@ export class CanvasBoardRepository {
     notExpired(checked.state.board, instant(clock));
     if (checked.source) sourceCurrent(checked.source, instant(clock));
     return CanvasVersionViewSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       boardId: checked.state.board.id,
       version: { ...saved.metadata, objectCount: objects.length },
       objects,
@@ -1222,7 +1223,15 @@ export class CanvasBoardRepository {
     return this.run(actor, { boardId: id }, async (tx) => {
       const checked = await this.checked(tx, actor, id, clock);
       const view = await this.versionView(tx, checked, versionId, clock);
-      if (!view.objects.some((object) => object.type === "image" && object.mediaId === mediaId))
+      if (
+        !view.objects.some(
+          (object) =>
+            (object.type === "image" && object.mediaId === mediaId) ||
+            (object.type === "idea_ref" &&
+              object.idea?.status === "approved" &&
+              object.idea.attachments?.some((attachment) => attachment.mediaId === mediaId)),
+        )
+      )
         fail("Checkpoint image is no longer available");
       return { workspaceId: checked.state.board.workspaceId };
     });

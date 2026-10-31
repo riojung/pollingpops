@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
 import { api, organization, snapshot, fits } from "./support";
 
 test("templates support atomic grouping, frame layout, locks, links and drawing", async ({
@@ -20,7 +21,7 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
   const id = new URL(page.url()).pathname.split("/").at(-1)!;
   await expect(page.getByTestId("canvas-surface")).toBeVisible();
   const initial = await snapshot(page, id);
-  expect(initial.schemaVersion).toBe(2);
+  expect(initial.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
   expect(initial.objects.length).toBeGreaterThan(10);
   const frames = initial.objects.filter((object) => object.type === "frame");
   expect(frames.length).toBeGreaterThanOrEqual(3);
@@ -138,6 +139,7 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
     .toBe(1);
   for (const mode of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: mode });
+    await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
     await fits(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`productivity-${mode}.png`) });

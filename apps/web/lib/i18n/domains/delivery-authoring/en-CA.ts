@@ -1,5 +1,7 @@
+import { canvasArtifactLinkMessages } from "../../canvas-artifact-link-messages";
 import { textPollAuthoringEnglishMessages } from "../../text-poll-copy";
 export const deliveryAuthoringEnglishMessages = {
+  ...canvasArtifactLinkMessages("en-CA"),
   ...textPollAuthoringEnglishMessages,
   "delivery.builder.type.ranking": "Ranking",
   "delivery.builder.rankingCount": "Choices to rank",

@@ -4,6 +4,7 @@ import { CANVAS_TEMPLATES, getCanvasTemplate, type CanvasTemplateId } from "@ope
 import { canvasTemplateMessages } from "../../lib/i18n/canvas-template-messages";
 import { useLocale } from "../locale-provider";
 import styles from "./canvas-templates.module.css";
+import { CanvasFlowTemplatePreview } from "./canvas-flow-template-preview";
 
 export function CanvasTemplateChooser({
   value,
@@ -52,46 +53,50 @@ export function CanvasTemplatePreview({ id }: { id: CanvasTemplateId }) {
     <section className={styles.preview} aria-labelledby="canvas-starter-preview">
       <h3 id="canvas-starter-preview">{copy.preview}</h3>
       <p>{copy.previewHelp}</p>
-      <svg viewBox={`0 0 ${columns * 180 + 10} ${rows * 180 + 10}`} aria-hidden="true">
-        {template.sections.map((section, index) => {
-          const x = 10 + (index % columns) * 180;
-          const y = 10 + Math.floor(index / columns) * 180;
-          return (
-            <g key={section.title}>
-              <rect
-                x={x}
-                y={y}
-                width="160"
-                height="160"
-                rx="5"
-                fill="var(--ui-surface)"
-                stroke="var(--ui-border-strong)"
-              />
-              <path
-                d={`M${x + 12} ${y + 18}h100 M${x + 12} ${y + 28}h76 M${x + 12} ${y + 51}h130 M${x + 12} ${y + 61}h105`}
-                stroke="var(--ui-text-subtle)"
-                strokeWidth="3"
-              />
-              <rect
-                x={x + 12}
-                y={y + 82}
-                width="63"
-                height="65"
-                rx="3"
-                fill={colors[section.color]}
-              />
-              <rect
-                x={x + 85}
-                y={y + 82}
-                width="63"
-                height="65"
-                rx="3"
-                fill={colors[section.color]}
-              />
-            </g>
-          );
-        })}
-      </svg>
+      {id === "flow-to-action" ? (
+        <CanvasFlowTemplatePreview />
+      ) : (
+        <svg viewBox={`0 0 ${columns * 180 + 10} ${rows * 180 + 10}`} aria-hidden="true">
+          {template.sections.map((section, index) => {
+            const x = 10 + (index % columns) * 180;
+            const y = 10 + Math.floor(index / columns) * 180;
+            return (
+              <g key={section.title}>
+                <rect
+                  x={x}
+                  y={y}
+                  width="160"
+                  height="160"
+                  rx="5"
+                  fill="var(--ui-surface)"
+                  stroke="var(--ui-border-strong)"
+                />
+                <path
+                  d={`M${x + 12} ${y + 18}h100 M${x + 12} ${y + 28}h76 M${x + 12} ${y + 51}h130 M${x + 12} ${y + 61}h105`}
+                  stroke="var(--ui-text-subtle)"
+                  strokeWidth="3"
+                />
+                <rect
+                  x={x + 12}
+                  y={y + 82}
+                  width="63"
+                  height="65"
+                  rx="3"
+                  fill={colors[section.color]}
+                />
+                <rect
+                  x={x + 85}
+                  y={y + 82}
+                  width="63"
+                  height="65"
+                  rx="3"
+                  fill={colors[section.color]}
+                />
+              </g>
+            );
+          })}
+        </svg>
+      )}
       <div lang="en" className={styles.previewContent}>
         <h4>{template.title}</h4>
         <p>{template.prompt}</p>

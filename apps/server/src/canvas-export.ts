@@ -1,5 +1,9 @@
 import {
   CANVAS_MAX_OBJECTS,
+  canvasDiagramPort,
+  canvasDiagramShapePath,
+  canvasConnectorGeometry,
+  canvasConnectorLabel,
   CanvasObjectSchema,
   type CanvasObject,
   type CanvasExportRegion,
@@ -102,15 +106,7 @@ function endpoint(value: Connector["from"], objects: Map<string, CanvasObject>):
   const target = objects.get(value.objectId);
   // Never fall back to a stored point for a private, removed or missing object.
   if (!target) return null;
-  const x =
-    value.anchor === "left" ? -target.width / 2 : value.anchor === "right" ? target.width / 2 : 0;
-  const y =
-    value.anchor === "top" ? -target.height / 2 : value.anchor === "bottom" ? target.height / 2 : 0;
-  const angle = (target.rotation * Math.PI) / 180;
-  return {
-    x: target.x + target.width / 2 + x * Math.cos(angle) - y * Math.sin(angle),
-    y: target.y + target.height / 2 + x * Math.sin(angle) + y * Math.cos(angle),
-  };
+  return canvasDiagramPort(value, [...objects.values()]);
 }
 function pointBounds(points: Point[]): CanvasExportRegion {
   const x = Math.min(...points.map((point) => point.x));
@@ -129,7 +125,7 @@ function bounds(
   if (object.type === "connector") {
     const from = endpoint(object.from, objects),
       to = endpoint(object.to, objects);
-    return from && to ? pointBounds([from, to]) : null;
+    return from && to ? canvasConnectorGeometry(object, [...objects.values()]).bounds : null;
   }
   if (object.type === "pen") return pointBounds(object.points.map(([x, y]) => ({ x, y })));
   const angle = (object.rotation * Math.PI) / 180;
@@ -347,8 +343,15 @@ export async function renderCanvasSvg(input: {
     );
     if (input.title) append(`<title>${xml(input.title)}</title>`);
     append(
-      `<defs><clipPath id="export-region"><rect x="${n(region.x)}" y="${n(region.y)}" width="${n(region.width)}" height="${n(region.height)}"/></clipPath><marker id="export-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0 0L8 3L0 6" fill="none" stroke="#667085"/></marker></defs>`,
+      `<defs><clipPath id="export-region"><rect x="${n(region.x)}" y="${n(region.y)}" width="${n(region.width)}" height="${n(region.height)}"/></clipPath></defs>`,
     );
+    for (const color of ["neutral", ...Object.keys(inks)] as Array<"neutral" | keyof typeof inks>) {
+      const id = color === "neutral" ? "export-arrow" : `export-arrow-${color}`;
+      const ink = color === "neutral" ? "#667085" : inks[color];
+      append(
+        `<defs><marker id="${id}" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="5" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0 0L10 5L0 10Z" fill="${ink}"/></marker></defs>`,
+      );
+    }
     if (input.background !== "transparent")
       append(
         `<rect x="${n(region.x)}" y="${n(region.y)}" width="${n(region.width)}" height="${n(region.height)}" fill="#ffffff"/>`,
@@ -356,11 +359,32 @@ export async function renderCanvasSvg(input: {
     append('<g clip-path="url(#export-region)">');
     visible.forEach((object, index) => {
       if (object.type === "connector") {
-        const from = endpoint(object.from, byId)!,
-          to = endpoint(object.to, byId)!;
+        const geometry = canvasConnectorGeometry(object, [...byId.values()]);
+        const path = geometry.points
+          .map((point, index) => `${index ? "L" : "M"}${n(point.x)} ${n(point.y)}`)
+          .join(" ");
+        const ink = object.lineColor === "neutral" ? "#667085" : inks[object.lineColor];
+        const marker =
+          object.lineColor === "neutral" ? "export-arrow" : `export-arrow-${object.lineColor}`;
         append(
-          `<line x1="${n(from.x)}" y1="${n(from.y)}" x2="${n(to.x)}" y2="${n(to.y)}" stroke="#667085" stroke-width="2" marker-end="url(#export-arrow)"/>`,
+          `<g><title>${xml(object.text)}</title><path d="${path}" fill="none" stroke="${ink}" stroke-width="2"${object.lineStyle === "dashed" ? ' stroke-dasharray="8 6"' : ""}${object.startMarker === "arrow" ? ` marker-start="url(#${marker})"` : ""}${object.endMarker === "arrow" ? ` marker-end="url(#${marker})"` : ""}/>`,
         );
+        const label = canvasConnectorLabel(object.text, geometry.label);
+        if (label) {
+          append(
+            `<rect x="${n(label.x)}" y="${n(label.y)}" width="${n(label.width)}" height="${n(label.height)}" rx="4" fill="#ffffff" stroke="#cdd4df"/>`,
+          );
+          append(
+            `<text fill="#202938" font-family="Arial, sans-serif" font-size="13" xml:space="preserve">`,
+          );
+          label.lines.forEach((line, lineIndex) =>
+            append(
+              `<tspan x="${n(label.x + 8)}" y="${n(label.y + 19 + lineIndex * 18)}">${xml(line)}</tspan>`,
+            ),
+          );
+          append("</text>");
+        }
+        append("</g>");
         return;
       }
       if (object.type === "pen") {
@@ -376,6 +400,10 @@ export async function renderCanvasSvg(input: {
       if (object.type === "ellipse")
         append(
           `<ellipse cx="${n(object.width / 2)}" cy="${n(object.height / 2)}" rx="${n(object.width / 2)}" ry="${n(object.height / 2)}" fill="${fill}" stroke="#89919d"/>`,
+        );
+      else if (object.type === "diamond" || object.type === "parallelogram")
+        append(
+          `<path d="${canvasDiagramShapePath(object.type, object.width, object.height)}" fill="${fill}" stroke="#89919d"/>`,
         );
       else
         append(
@@ -411,12 +439,19 @@ export async function renderCanvasSvg(input: {
           object.type === "link"
             ? [object.text, object.url].filter(Boolean).join("\n")
             : object.text;
+        const insetX =
+          object.type === "diamond"
+            ? object.width * 0.25
+            : object.type === "parallelogram"
+              ? object.width * 0.2
+              : 10;
+        const insetY = object.type === "diamond" ? object.height * 0.25 : 10;
         text(
           label,
-          10,
-          26,
-          Math.max(1, object.width - 20),
-          object.type === "frame" ? 28 : object.height - 20,
+          insetX,
+          insetY + 16,
+          Math.max(1, object.width - insetX * 2),
+          object.type === "frame" ? 28 : object.height - insetY * 2,
         );
       }
       append("</g></g>");

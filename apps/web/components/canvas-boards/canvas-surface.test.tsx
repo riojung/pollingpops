@@ -9,6 +9,75 @@ vi.mock("../locale-provider", () => ({
   useLocale: () => ({ t: (key: keyof typeof english) => english[key] ?? key }),
 }));
 describe("canvas visual privacy and normalized content", () => {
+  it("renders shared diagram paths, bounded plain labels and explicit arrow styles", () => {
+    const connector = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "connector",
+      text: "Yes <script>bad()</script>",
+      from: { objectId: null, x: 0, y: 0 },
+      to: { objectId: null, x: 120, y: 60 },
+      routing: "elbow",
+      lineStyle: "dashed",
+      lineColor: "blue",
+      startMarker: "arrow",
+      endMarker: "arrow",
+    });
+    const html = renderToStaticMarkup(
+      <CanvasSurface
+        objects={[connector]}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onViewport={() => undefined}
+      />,
+    );
+    expect(html).toContain('d="M0 0 L60 0 L60 60 L120 60"');
+    expect(html).toContain('stroke-dasharray="8 5"');
+    expect(html).toContain("marker-start=");
+    expect(html).toContain("marker-end=");
+    expect(html).toContain("Yes &lt;script&gt;bad()&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
+    const shape = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "diamond",
+      width: 200,
+      height: 100,
+    });
+    const diamond = renderToStaticMarkup(
+      <CanvasSurface
+        objects={[shape]}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onViewport={() => undefined}
+      />,
+    );
+    expect(diamond).toContain('d="M100 0 L200 50 L100 100 L0 50 Z"');
+    expect(diamond).toContain('<foreignObject x="50" y="25" width="100" height="50"');
+  });
+  it("omits connector routes and labels when an endpoint's guest idea is removed", () => {
+    const removed = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "idea_ref",
+      text: "",
+      ideaId: boardFixture.ideas[0]!.id,
+      idea: { ...boardFixture.ideas[0], status: "removed", body: "Removed secret" },
+    });
+    const connector = CanvasObjectSchema.parse({
+      ...canvasObject,
+      id: "00000000-0000-4000-8000-000000000099",
+      type: "connector",
+      text: "Removed path label",
+      from: { objectId: removed.id, x: 100, y: 100 },
+      to: { objectId: null, x: 200, y: 200 },
+    });
+    const html = renderToStaticMarkup(
+      <CanvasSurface
+        objects={[removed, connector]}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onViewport={() => undefined}
+      />,
+    );
+    expect(html).not.toContain("Removed secret");
+    expect(html).not.toContain("Removed path label");
+    expect(html).not.toContain(`canvas-object-${connector.id}`);
+  });
   it("renders plain text without executing supplied markup", () => {
     const note = CanvasObjectSchema.parse({
       ...canvasObject,

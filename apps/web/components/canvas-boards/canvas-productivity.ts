@@ -1,6 +1,7 @@
 import {
   CANVAS_MAX_OBJECTS,
   CANVAS_MAX_OPERATIONS,
+  CANVAS_SCHEMA_VERSION,
   CanvasBoardMutationSchema,
   CanvasObjectCreateSchema,
   type CanvasBoardCommand,
@@ -106,7 +107,7 @@ function finish(
   }
   const command: CanvasBatch = { type: "batch", operations };
   const parsed = CanvasBoardMutationSchema.safeParse({
-    schemaVersion: 2,
+    schemaVersion: CANVAS_SCHEMA_VERSION,
     operationId: "00000000-0000-4000-8000-000000000001",
     command,
   });
@@ -491,6 +492,38 @@ export function planCanvasLock(
         expectedVersion: object.version,
         patch: { locked },
       })),
+    [...ids],
+  );
+}
+export function planCanvasLayer(
+  board: CanvasBoardView,
+  ids: readonly string[],
+  direction: "front" | "back",
+): CanvasPlan {
+  const affected = canvasSelectionClosure(board.objects, ids),
+    reason = failure(board, affected);
+  if (reason) return invalid(reason);
+  const selected = new Set(affected.map((object) => object.id));
+  const rest = board.objects.filter((object) => !selected.has(object.id));
+  if (!rest.length) return invalid("empty");
+  const delta =
+    direction === "front"
+      ? Math.max(...rest.map((object) => object.zIndex)) +
+        1 -
+        Math.min(...affected.map((object) => object.zIndex))
+      : Math.min(...rest.map((object) => object.zIndex)) -
+        1 -
+        Math.max(...affected.map((object) => object.zIndex));
+  if ((direction === "front" && delta <= 0) || (direction === "back" && delta >= 0))
+    return invalid("empty");
+  return finish(
+    board,
+    affected.map((object) => ({
+      type: "update",
+      id: object.id,
+      expectedVersion: object.version,
+      patch: { zIndex: object.zIndex + delta },
+    })),
     [...ids],
   );
 }

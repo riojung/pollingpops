@@ -1,5 +1,6 @@
 import {
   CanvasBoardMutationSchema,
+  CANVAS_SCHEMA_VERSION,
   type CanvasBoardView,
   type CanvasObject,
 } from "@openround/contracts";
@@ -38,6 +39,18 @@ export function planCanvasHistoryLayout(
       zIndex: previous.zIndex,
       parentId: parent?.type === "frame" ? parent.id : null,
       geometricGroupId: previous.geometricGroupId,
+      ...(object.type === "connector" && previous.type === "connector"
+        ? {
+            from:
+              object.from.objectId === null && previous.from.objectId === null
+                ? { ...object.from, x: previous.from.x, y: previous.from.y }
+                : object.from,
+            to:
+              object.to.objectId === null && previous.to.objectId === null
+                ? { ...object.to, x: previous.to.x, y: previous.to.y }
+                : object.to,
+          }
+        : {}),
     };
     if (
       Object.entries(next).every(
@@ -119,7 +132,7 @@ export function planCanvasHistoryLayout(
   );
   const command: CanvasBatch = { type: "batch", operations };
   const parsed = CanvasBoardMutationSchema.safeParse({
-    schemaVersion: 2,
+    schemaVersion: CANVAS_SCHEMA_VERSION,
     operationId: "00000000-0000-4000-8000-000000000001",
     command,
   });

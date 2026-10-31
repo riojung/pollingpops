@@ -151,6 +151,7 @@ describe("saved layout restoration", () => {
           width: 200,
           height: 100,
           from: { objectId: object(99).id, x: 50, y: 50 },
+          to: { objectId: null, x: 210, y: 120 },
         }),
       ],
     );
@@ -165,6 +166,33 @@ describe("saved layout restoration", () => {
     expect(result.command?.operations[1]).toMatchObject({
       patch: { from: { objectId: null, x: 10, y: 20 }, to: { objectId: null, x: 210, y: 120 } },
     });
+  });
+  it("restores detached endpoint layout without old labels, routing, colors or bindings", () => {
+    const current = object(1, {
+      type: "connector",
+      text: "Current label",
+      lineColor: "blue",
+      routing: "elbow",
+      from: { objectId: null, x: 300, y: 400 },
+      to: { objectId: null, x: 500, y: 600 },
+    });
+    const saved = object(1, {
+      ...current,
+      text: "Old label",
+      lineColor: "pink",
+      routing: "straight",
+      from: { objectId: null, x: 10, y: 20 },
+      to: { objectId: null, x: 100, y: 200 },
+    });
+    const result = plan([current], [saved]);
+    expect(result.command?.operations[0]).toMatchObject({
+      type: "update",
+      id: current.id,
+      patch: { from: { objectId: null, x: 10, y: 20 }, to: { objectId: null, x: 100, y: 200 } },
+    });
+    if (result.command?.operations[0]?.type !== "update") throw new Error("Missing layout update");
+    for (const field of ["text", "lineColor", "routing", "lineStyle", "startMarker", "endMarker"])
+      expect(result.command.operations[0].patch).not.toHaveProperty(field);
   });
   it("rejects over50 updates and cycles formed by current and historical parent relationships", () => {
     const current = Array.from({ length: 51 }, (_, index) => object(index + 1));

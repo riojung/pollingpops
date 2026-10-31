@@ -248,8 +248,8 @@ canvas browser journeys and two legacy workshop journeys pass, including Chromiu
 actions remain available in Object outline. Browser image tests use mocked object storage and
 scanning; this increment does not
 establish a production media-pipeline result, physical-touch acceptance or production load,
-commit-to-peer latency or rendering performance. Order 6 follows below; Order 7's higher-capacity
-and further diagram/integration scope remains deferred.
+commit-to-peer latency or rendering performance. Orders 6 and 7 follow below; higher canvas
+limits remain gated on separate evidence.
 
 ### Canvas facilitation Order 6 October 30 2026
 
@@ -310,6 +310,71 @@ measurement is established for Order 6. Order 7 and AI remain outside this incre
 See the [user guide](user-guide.md#idea-boards-and-shared-canvases),
 [upgrade procedure](runbooks/upgrade.md#canvas-facilitation-exports-and-saved-versions) and
 [architecture decision](decisions/002-idea-board-canvas.md#facilitation-and-historical-views).
+
+### Canvas diagrams, activity references and capacity Order 7 October 30 2026
+
+Implemented on `codex/idea-board-diagrams-and-links` from merged `main` baseline `6a8e828` after
+Order 6/PR #167. This increment adds diamond/parallelogram nodes, visible connector labels,
+cardinal ports, straight/elbow routes, solid/dashed strokes, arrows and palette colors, node
+rotation/layer controls and the original **Flow to action** starter. Shared geometry covers live
+rendering, bounds and authorized SVG/PNG export. Inspector/outline workflows and ten-locale controls
+accompany pointer interactions.
+
+Current Canvas scenes advance to V3, preserving frozen strict V1/V2 inputs and canonical retry
+hashes. Deterministic upcasters cover old scenes and undo history. Saved-version views independently
+advance to V2 with V3 objects; facilitation commands stay V1. Captured template-intent versions keep
+old uncertain retries unchanged. Additive migrations 082/083 require coordinated matching V3
+server/jobs/web images and all existing checkpoint-aware media cleanup guarantees from 081.
+
+Round and Presentation builders can link exact manual saved versions as private authoring aids.
+The independent V1 reference protocol stores IDs, not copied scenes or images. Source owners with
+target edit access create/remove links within one workspace; all metadata, preview and image reads
+intersect current source/target authority and moderation. Read deadlines are checked after the
+outer transaction resolves, including delayed COMMIT responses. Target-scoped image transport,
+source watches, target polling and preview TTLs clear stale content without granting source access.
+There are 20 links and 2,000 operation receipts per target, with deletion headroom, exact retries,
+unique live IDs and target-scoped tombstones. Source/version/target deletion cascades; creator
+deletion clears attribution while organization-owned content remains. Published/participant/live,
+activity/image export and duplication payloads do not include these references. Authorized account
+exports include bounded reference metadata for owned workspaces.
+
+The mixed-scene repository harness and separate production-browser/two-node harness record actual
+profiles, hashes, distributions and correctness. Map-indexed persistence comparisons avoid repeated
+linear scans. A 350→200 ms notification batching experiment worsened the observed run and was reverted;
+stronger coalescing/final-event tests remain. Local 500-object/20-editor production-browser runs
+passed correctness but failed declared acknowledgement smoke gates and the 500 ms peer target.
+The supported setting measured HTTP acknowledgement p95 2,086.80 ms and repository-resolution-to-
+visible-peer-paint-opportunity p95 895.61 ms; this is not exact SQL COMMIT or physical-pixel timing.
+See [capacity evidence](canvas-capacity-evidence.md) for full distributions and limitations.
+
+Higher limits remain gated. The 500-object/2 MiB bound, workshop reserve and all license/grant,
+receipt/history/media allowances are unchanged; 20 editors is a workload target, not an admission
+cap. Physical-device, realistic media, staging topology and sustained saturation evidence remain
+pending. No AI functionality or new external assets/dependencies are introduced.
+
+Validation passes `CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, including
+1,555 web tests, 935 server tests, strict types, lint and production builds. The restricted-PostgreSQL
+core/migration/platform run passes 326 tests with one existing skip. Link-specific contract/API/DB
+verification passes 85 tests with six skips, including 24 new completion-boundary cases that execute
+real PostgreSQL COMMITs before advancing the injected clock.
+
+The original 24 desktop/mobile canvas browser cases pass across the broad run and focused reruns.
+The first run's old V2 expectation was updated to the current scene-version constant. A WebKit
+theme-switch contrast failure combined old light foregrounds with new dark backgrounds; the focused
+case now requires inherited colors to match the active theme before running unchanged full Axe
+checks. No production palette was changed. Visual inspection covers desktop and narrow mobile
+diagram controls, picker/previews, light/dark themes and saved-layout SVG/PNG exports. Browser media
+fixtures still substitute storage/scanning, and neither these results nor the load reports establish
+physical-device, production-media or deployed staging acceptance.
+
+A follow-up review fixed preview resets when the realtime stream is unavailable. Transport failures
+retain a fresh authorized scene while the target proxy refreshes it; denied events, source changes,
+revocation, failed preview reads and the five-second freshness deadline still clear content. Only a
+successful authorized response renews that deadline. All 31 focused snapshot-link unit tests pass,
+including fallback/expiry races and stale-response fencing. Three desktop snapshot journeys pass,
+including the added persistent-503 case that preserves actual scene/outline DOM identity and pan
+position across reconnects and successful reauthorization, then clears the scene on target denial.
+The reviewer independently rechecked the fix without finding a privacy regression.
 
 ### Standalone administrator authentication October 15 2026
 

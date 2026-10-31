@@ -76,6 +76,8 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
   await platform.saveFeaturePolicy({
     expectedRevision: 0,
     features: {
+      uxBeta: { enabled: true, plans: ["free", "pro", "team"] },
+      presentations: { enabled: true, plans: ["free", "pro", "team"] },
       ideaBoards: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoards: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoardSharing: { enabled: true, plans: ["free", "pro", "team"] },

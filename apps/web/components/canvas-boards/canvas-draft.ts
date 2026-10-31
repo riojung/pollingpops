@@ -15,6 +15,17 @@ export interface CanvasObjectDraft {
   rotation: number;
   fromId?: string;
   toId?: string;
+  fromAnchor?: Extract<CanvasObject, { type: "connector" }>["from"]["anchor"];
+  toAnchor?: Extract<CanvasObject, { type: "connector" }>["to"]["anchor"];
+  fromX?: number;
+  fromY?: number;
+  toX?: number;
+  toY?: number;
+  routing?: "straight" | "elbow";
+  lineStyle?: "solid" | "dashed";
+  startMarker?: "none" | "arrow";
+  endMarker?: "none" | "arrow";
+  lineColor?: "neutral" | CanvasObject["color"];
   altText?: string;
   url?: string;
 }
@@ -32,7 +43,21 @@ export function canvasObjectDraft(object: CanvasObject): CanvasObjectDraft {
     visibility: object.visibility,
     rotation: object.rotation,
     ...(object.type === "connector"
-      ? { fromId: object.from.objectId ?? "", toId: object.to.objectId ?? "" }
+      ? {
+          fromId: object.from.objectId ?? "",
+          toId: object.to.objectId ?? "",
+          fromAnchor: object.from.anchor,
+          toAnchor: object.to.anchor,
+          fromX: object.from.x,
+          fromY: object.from.y,
+          toX: object.to.x,
+          toY: object.to.y,
+          routing: object.routing,
+          lineStyle: object.lineStyle,
+          startMarker: object.startMarker,
+          endMarker: object.endMarker,
+          lineColor: object.lineColor,
+        }
       : {}),
     ...(object.type === "image" ? { altText: object.altText } : {}),
     ...(object.type === "link" ? { url: object.url } : {}),

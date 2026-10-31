@@ -8,12 +8,19 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent,
 } from "react";
-import type { CanvasObject, CanvasObjectPatchSchema, IdeaBoardView } from "@openround/contracts";
+import {
+  canvasConnectorGeometry,
+  canvasConnectorLabel,
+  canvasDiagramShapePath,
+  type CanvasObject,
+  type CanvasObjectPatchSchema,
+  type IdeaBoardView,
+} from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import { IdeaContent } from "../idea-boards/idea-content";
 import { CanvasImage } from "./canvas-image";
+import type { CanvasArtifactImageContext } from "./canvas-assets-client";
 import {
-  connectorPoint,
   fitViewport,
   INITIAL_VIEWPORT,
   worldPoint,
@@ -30,7 +37,7 @@ import {
   sampleCanvasStroke,
   type CanvasTransform,
 } from "./canvas-productivity";
-import { canvasModelBounds, canvasSelectionBounds } from "./canvas-hierarchy";
+import { canvasModelBounds, canvasObjectBounds, canvasSelectionBounds } from "./canvas-hierarchy";
 import { followCanvasRegion } from "./canvas-presentation";
 
 export type CanvasPatch = ReturnType<typeof CanvasObjectPatchSchema.parse>;
@@ -46,6 +53,36 @@ const colorValues = {
   purple: "#e5dcf8",
   white: "#ffffff",
 };
+const lineColors = {
+  neutral: "var(--ui-text-subtle)",
+  yellow: "var(--canvas-pen-yellow)",
+  blue: "var(--canvas-pen-blue)",
+  green: "var(--canvas-pen-green)",
+  pink: "var(--canvas-pen-pink)",
+  purple: "var(--canvas-pen-purple)",
+  white: "var(--canvas-pen-white)",
+  selected: "var(--ui-accent-ink)",
+};
+function visibleCanvasObjects(objects: CanvasObject[], source?: IdeaBoardView) {
+  let visible = objects.filter(
+    (object) =>
+      object.type !== "idea_ref" ||
+      (object.idea ?? source?.ideas.find((idea) => idea.id === object.ideaId))?.status ===
+        "approved",
+  );
+  for (let pass = 0; pass < objects.length; pass++) {
+    const ids = new Set(visible.map((object) => object.id));
+    const next = visible.filter(
+      (object) =>
+        object.type !== "connector" ||
+        ((!object.from.objectId || ids.has(object.from.objectId)) &&
+          (!object.to.objectId || ids.has(object.to.objectId))),
+    );
+    if (next.length === visible.length) return visible;
+    visible = next;
+  }
+  return visible;
+}
 
 export function CanvasSurface({
   objects,
@@ -72,6 +109,7 @@ export function CanvasSurface({
   guestToken,
   canvasId,
   versionId,
+  artifactLink,
 }: {
   objects: CanvasObject[];
   viewport: CanvasViewport;
@@ -99,6 +137,7 @@ export function CanvasSurface({
   guestToken?: string;
   canvasId?: string;
   versionId?: string;
+  artifactLink?: CanvasArtifactImageContext;
   onCursor?: (point: CanvasPoint) => void;
   members?: Array<{ userId: string; name: string; cursor: CanvasPoint | null }>;
 }) {
@@ -135,22 +174,17 @@ export function CanvasSurface({
     updatePreview(value);
   }
   const selection = selectedIds ?? (selectedId ? [selectedId] : []);
-  const renderObjects = objects
-    .map((object) =>
+  const renderObjects = visibleCanvasObjects(
+    objects.map((object) =>
       preview.has(object.id) ? ({ ...object, ...preview.get(object.id) } as CanvasObject) : object,
-    )
-    .filter(
-      (object) =>
-        object.type !== "idea_ref" ||
-        (object.idea ?? sourceBoard?.ideas.find((idea) => idea.id === object.ideaId))?.status ===
-          "approved",
-    )
-    .sort(
-      (a, b) =>
-        a.zIndex - b.zIndex ||
-        (a.type === "frame" ? -1 : 0) - (b.type === "frame" ? -1 : 0) ||
-        a.id.localeCompare(b.id),
-    );
+    ),
+    sourceBoard,
+  ).sort(
+    (a, b) =>
+      a.zIndex - b.zIndex ||
+      (a.type === "frame" ? -1 : 0) - (b.type === "frame" ? -1 : 0) ||
+      a.id.localeCompare(b.id),
+  );
   const selectionBounds = canvasSelectionBounds(renderObjects, selection);
   function point(event: { clientX: number; clientY: number }) {
     const box = surface.current?.getBoundingClientRect();
@@ -395,48 +429,73 @@ export function CanvasSurface({
         >
           <circle cx="1" cy="1" r="1" fill="var(--ui-border-strong)" opacity="0.22" />
         </pattern>
-        <marker
-          id={arrowId}
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="7"
-          markerHeight="7"
-          orient="auto"
-        >
-          <path d="M0 0L10 5L0 10z" fill="var(--ui-text-subtle)" />
-        </marker>
+        {Object.entries(lineColors).map(([color, fill]) => (
+          <marker
+            key={color}
+            id={`${arrowId}-${color}`}
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M0 0L10 5L0 10Z" fill={fill} />
+          </marker>
+        ))}
       </defs>
       <rect width="100%" height="100%" fill={`url(#${patternId})`} />
       <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
         {renderObjects.map((object) => {
           const selected = selection.includes(object.id);
           if (object.type === "connector") {
-            const from = connectorPoint(object.from, renderObjects),
-              to = connectorPoint(object.to, renderObjects);
+            const geometry = canvasConnectorGeometry(object, renderObjects);
+            const label = canvasConnectorLabel(object.text, geometry.label);
+            const color = selected ? "selected" : object.lineColor;
             return (
               <g
                 key={object.id}
                 data-testid={`canvas-object-${object.id}`}
                 data-canvas-object={object.id}
               >
-                <line
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                  stroke="transparent"
-                  strokeWidth={18}
-                />
-                <line
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                  stroke={selected ? "var(--ui-accent-ink)" : "var(--ui-text-subtle)"}
+                <title>{object.text}</title>
+                <path d={geometry.path} fill="none" stroke="transparent" strokeWidth={18} />
+                <path
+                  d={geometry.path}
+                  fill="none"
+                  stroke={lineColors[color]}
                   strokeWidth={selected ? 4 : 2}
-                  markerEnd={`url(#${arrowId})`}
+                  strokeDasharray={object.lineStyle === "dashed" ? "8 5" : undefined}
+                  markerStart={
+                    object.startMarker === "arrow" ? `url(#${arrowId}-${color})` : undefined
+                  }
+                  markerEnd={object.endMarker === "arrow" ? `url(#${arrowId}-${color})` : undefined}
                 />
+                {label ? (
+                  <g className={styles.connectorLabel}>
+                    <rect
+                      x={label.x}
+                      y={label.y}
+                      width={label.width}
+                      height={label.height}
+                      rx={4}
+                      fill="#fff"
+                      stroke="#cdd4df"
+                    />
+                    <text
+                      fontSize={13}
+                      fill="#252a33"
+                      pointerEvents="none"
+                      aria-label={object.text}
+                    >
+                      {label.lines.map((line, index) => (
+                        <tspan key={index} x={label.x + 8} y={label.y + 6 + 13 + index * 18}>
+                          {line}
+                        </tspan>
+                      ))}
+                    </text>
+                  </g>
+                ) : null}
               </g>
             );
           }
@@ -498,7 +557,14 @@ export function CanvasSurface({
               data-canvas-object={object.id}
               transform={`translate(${object.x} ${object.y}) rotate(${object.rotation} ${object.width / 2} ${object.height / 2})`}
             >
-              {object.type === "ellipse" ? (
+              {object.type === "diamond" || object.type === "parallelogram" ? (
+                <path
+                  d={canvasDiagramShapePath(object.type, object.width, object.height)}
+                  fill={colorValues[object.color]}
+                  stroke={selected ? "var(--ui-accent-ink)" : "#89919d"}
+                  strokeWidth={selected ? 3 : 1}
+                />
+              ) : object.type === "ellipse" ? (
                 <ellipse
                   cx={object.width / 2}
                   cy={object.height / 2}
@@ -535,6 +601,7 @@ export function CanvasSurface({
                 <CanvasImage
                   canvasId={canvasId}
                   versionId={versionId}
+                  artifactLink={artifactLink}
                   mediaId={object.mediaId}
                   altText={object.altText}
                   width={object.width}
@@ -544,18 +611,40 @@ export function CanvasSurface({
                 />
               ) : (
                 <foreignObject
-                  x={10}
-                  y={10}
-                  width={Math.max(1, object.width - 20)}
-                  height={object.type === "frame" ? 28 : Math.max(1, object.height - 20)}
+                  x={
+                    object.type === "diamond"
+                      ? object.width * 0.25
+                      : object.type === "parallelogram"
+                        ? object.width * 0.2
+                        : 10
+                  }
+                  y={object.type === "diamond" ? object.height * 0.25 : 10}
+                  width={Math.max(
+                    1,
+                    object.type === "diamond"
+                      ? object.width * 0.5
+                      : object.type === "parallelogram"
+                        ? object.width * 0.6
+                        : object.width - 20,
+                  )}
+                  height={
+                    object.type === "frame"
+                      ? 28
+                      : Math.max(
+                          1,
+                          object.type === "diamond" ? object.height * 0.5 : object.height - 20,
+                        )
+                  }
                 >
                   <div className={styles.objectContent} data-type={object.type}>
-                    {idea && sourceBoardId ? (
+                    {idea && (sourceBoardId || artifactLink) ? (
                       <>
                         <small>{t("canvas.protected")}</small>
                         <IdeaContent
-                          boardId={sourceBoardId}
+                          boardId={sourceBoardId ?? canvasId ?? ""}
                           canvasId={guestToken ? undefined : canvasId}
+                          artifactLink={artifactLink}
+                          versionId={versionId}
                           guestToken={guestToken}
                           idea={idea}
                         />
@@ -665,6 +754,7 @@ export function CanvasReadOnlySurface({
   guestToken,
   canvasId,
   versionId,
+  artifactLink,
   label,
   followRegion,
   onInteract,
@@ -675,6 +765,7 @@ export function CanvasReadOnlySurface({
   guestToken?: string;
   canvasId?: string;
   versionId?: string;
+  artifactLink?: CanvasArtifactImageContext;
   label?: string;
   followRegion?: CanvasBounds | null;
   onInteract?: () => void;
@@ -701,16 +792,11 @@ export function CanvasReadOnlySurface({
     observer.observe(element);
     return () => observer.disconnect();
   }, [followRegion, list]);
-  const visible = objects.filter(
-    (object) =>
-      object.type !== "idea_ref" ||
-      (object.idea ?? sourceBoard?.ideas.find((idea) => idea.id === object.ideaId))?.status ===
-        "approved",
-  );
+  const visible = visibleCanvasObjects(objects, sourceBoard);
   const fit = () =>
     setViewport(
       fitViewport(
-        visible,
+        visible.map((object) => canvasObjectBounds(object, visible)),
         container.current?.clientWidth ?? 800,
         container.current?.clientHeight ?? 500,
       ),
@@ -719,7 +805,7 @@ export function CanvasReadOnlySurface({
   useEffect(() => {
     setViewport(
       fitViewport(
-        initialObjects.current,
+        initialObjects.current.map((object) => canvasObjectBounds(object, initialObjects.current)),
         container.current?.clientWidth ?? 800,
         container.current?.clientHeight ?? 500,
       ),
@@ -754,10 +840,12 @@ export function CanvasReadOnlySurface({
         <ol className={styles.readOnlyList}>
           {visible.map((object) => (
             <li key={object.id}>
-              {object.type === "idea_ref" && sourceBoardId ? (
+              {object.type === "idea_ref" && (sourceBoardId || artifactLink) ? (
                 <IdeaContent
-                  boardId={sourceBoardId}
+                  boardId={sourceBoardId ?? canvasId ?? ""}
                   canvasId={guestToken ? undefined : canvasId}
+                  artifactLink={artifactLink}
+                  versionId={versionId}
                   guestToken={guestToken}
                   idea={
                     object.idea ?? sourceBoard!.ideas.find((idea) => idea.id === object.ideaId)!
@@ -799,6 +887,7 @@ export function CanvasReadOnlySurface({
             guestToken={guestToken}
             canvasId={canvasId}
             versionId={versionId}
+            artifactLink={artifactLink}
           />
         </div>
       )}

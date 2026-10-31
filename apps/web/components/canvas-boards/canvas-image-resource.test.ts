@@ -25,6 +25,40 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 describe("canvas image queue", () => {
+  it("isolates target-authorized snapshots from direct board media and other destinations", async () => {
+    fixture.fetch.mockImplementation(
+      (_board: string, _media: string, signal: AbortSignal) =>
+        new Promise<Blob>((_resolve, reject) =>
+          signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))),
+        ),
+    );
+    const scoped = (targetId: string) => {
+      const subscription = readCanvasImage("board", "image", undefined, "version", {
+        kind: "round",
+        targetId,
+        linkId: "link",
+      });
+      subscriptions.push(subscription);
+      void subscription.promise.catch(() => {});
+      return subscription;
+    };
+    const live = read("image", undefined, "version"),
+      first = scoped("target-a"),
+      duplicate = scoped("target-a"),
+      other = scoped("target-b");
+    expect(first.promise).toBe(duplicate.promise);
+    expect(first.promise).not.toBe(live.promise);
+    expect(first.promise).not.toBe(other.promise);
+    expect(fixture.fetch).toHaveBeenCalledTimes(3);
+    expect(fixture.fetch.mock.calls[1]![5]).toMatchObject({ targetId: "target-a" });
+    const firstSignal = fixture.fetch.mock.calls[1]![2] as AbortSignal;
+    first.release();
+    expect(firstSignal.aborted).toBe(false);
+    duplicate.release();
+    expect(firstSignal.aborted).toBe(true);
+    expect((fixture.fetch.mock.calls[0]![2] as AbortSignal).aborted).toBe(false);
+    expect((fixture.fetch.mock.calls[2]![2] as AbortSignal).aborted).toBe(false);
+  });
   it("isolates the same media across live and saved versions while sharing only readers of one version", async () => {
     fixture.fetch.mockImplementation(
       (_board: string, _media: string, signal: AbortSignal) =>

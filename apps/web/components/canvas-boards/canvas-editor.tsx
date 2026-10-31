@@ -60,12 +60,22 @@ import { CanvasExportDialog } from "./canvas-export-dialog";
 import { CanvasPresenterControls } from "./canvas-presenter-controls";
 import { canvasVisibleRegion, followCanvasRegion } from "./canvas-presentation";
 import { canvasFacilitationCopy } from "../../lib/i18n/canvas-facilitation-messages";
+import { canvasDiagramCopy } from "../../lib/i18n/canvas-diagram-messages";
+import { CanvasDiagramInspector } from "./canvas-diagram-inspector";
+import { canvasConnectorDraftPatch } from "./canvas-diagram-model";
+import { planCanvasLayer } from "./canvas-productivity";
 import styles from "./canvas.module.css";
 
 function CanvasEditorContent({ id }: { id: string }) {
   const { t, locale } = useLocale();
   const facilitationCopy = canvasFacilitationCopy(locale);
+  const diagramCopy = canvasDiagramCopy(locale);
   function objectLabel(object: CanvasObject, index: number) {
+    if (object.type === "diamond" || object.type === "parallelogram")
+      return canvasObjectLabel(
+        object,
+        `${diagramCopy[object.type]} ${formatNumber(locale, index + 1)}`,
+      );
     const name = t(
       object.type === "sticky"
         ? "canvas.sticky"
@@ -365,7 +375,9 @@ function CanvasEditorContent({ id }: { id: string }) {
       ),
     );
   }
-  async function add(type: "sticky" | "text" | "rect" | "ellipse" | "frame") {
+  async function add(
+    type: "sticky" | "text" | "rect" | "ellipse" | "frame" | "diamond" | "parallelogram",
+  ) {
     if (
       !board?.capabilities.edit ||
       busy ||
@@ -455,13 +467,29 @@ function CanvasEditorContent({ id }: { id: string }) {
       objectId: from.id,
       x: from.x + from.width / 2,
       y: from.y + from.height / 2,
-      anchor: "center",
+      anchor:
+        Math.abs(to.x + to.width / 2 - from.x - from.width / 2) >=
+        Math.abs(to.y + to.height / 2 - from.y - from.height / 2)
+          ? to.x + to.width / 2 >= from.x + from.width / 2
+            ? "right"
+            : "left"
+          : to.y + to.height / 2 >= from.y + from.height / 2
+            ? "bottom"
+            : "top",
     };
     object.to = {
       objectId: to.id,
       x: to.x + to.width / 2,
       y: to.y + to.height / 2,
-      anchor: "center",
+      anchor:
+        Math.abs(to.x + to.width / 2 - from.x - from.width / 2) >=
+        Math.abs(to.y + to.height / 2 - from.y - from.height / 2)
+          ? to.x + to.width / 2 >= from.x + from.width / 2
+            ? "left"
+            : "right"
+          : to.y + to.height / 2 >= from.y + from.height / 2
+            ? "top"
+            : "bottom",
     };
     if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
       acceptSelection(object.id);
@@ -474,22 +502,26 @@ function CanvasEditorContent({ id }: { id: string }) {
     event.preventDefault();
     if (!board || !selected || !localDraft || !editable || busy) return;
     const value = localDraft;
-    const patchValue: CanvasPatch = resizeCanvasPatch(selected, {
-      x: value.x,
-      y: value.y,
-      width: value.width,
-      height: value.height,
-    });
-    if (selected.type !== "idea_ref") {
+    const connector =
+      selected.type === "connector" ? canvasConnectorDraftPatch(selected, value) : null;
+    if (connector && !connector.success) {
+      setPlanError("bounds");
+      return;
+    }
+    const patchValue: CanvasPatch = connector?.success
+      ? connector.data
+      : resizeCanvasPatch(selected, {
+          x: value.x,
+          y: value.y,
+          width: value.width,
+          height: value.height,
+        });
+    if (selected.type !== "idea_ref" && selected.type !== "connector") {
       patchValue.text = value.text;
       patchValue.color = value.color;
       patchValue.rotation = value.rotation;
     }
     if (canPublishCanvasObject(board, selected)) patchValue.visibility = value.visibility;
-    if (selected.type === "connector") {
-      patchValue.from = { ...selected.from, objectId: value.fromId || null };
-      patchValue.to = { ...selected.to, objectId: value.toId || null };
-    }
     if (selected.type === "image") patchValue.altText = value.altText ?? selected.altText;
     if (selected.type === "link") patchValue.url = value.url ?? selected.url;
     const moved = planCanvasTransform(board, [selected.id], {
@@ -497,7 +529,8 @@ function CanvasEditorContent({ id }: { id: string }) {
       dx: value.x - selected.x,
       dy: value.y - selected.y,
     });
-    const geometryChanged = value.x !== selected.x || value.y !== selected.y;
+    const geometryChanged =
+      selected.type !== "connector" && (value.x !== selected.x || value.y !== selected.y);
     if (geometryChanged && !moved.command) {
       setPlanError(moved.reason);
       return;
@@ -709,27 +742,31 @@ function CanvasEditorContent({ id }: { id: string }) {
           {t("canvas.hand")}
         </button>
         <span className={styles.divider} />
-        {(["sticky", "text", "rect", "ellipse", "frame"] as const).map((type) => (
-          <button
-            type="button"
-            className="button-quiet"
-            key={type}
-            disabled={frozen || uiBusy || creationFull}
-            onClick={() => void add(type)}
-          >
-            {t(
-              type === "sticky"
-                ? "canvas.sticky"
-                : type === "text"
-                  ? "boards.textTool"
-                  : type === "rect"
-                    ? "boards.rectangleTool"
-                    : type === "ellipse"
-                      ? "boards.ellipseTool"
-                      : "canvas.productivity.frame",
-            )}
-          </button>
-        ))}
+        {(["sticky", "text", "rect", "ellipse", "frame", "diamond", "parallelogram"] as const).map(
+          (type) => (
+            <button
+              type="button"
+              className="button-quiet"
+              key={type}
+              disabled={frozen || uiBusy || creationFull}
+              onClick={() => void add(type)}
+            >
+              {type === "diamond" || type === "parallelogram"
+                ? diagramCopy[type]
+                : t(
+                    type === "sticky"
+                      ? "canvas.sticky"
+                      : type === "text"
+                        ? "boards.textTool"
+                        : type === "rect"
+                          ? "boards.rectangleTool"
+                          : type === "ellipse"
+                            ? "boards.ellipseTool"
+                            : "canvas.productivity.frame",
+                  )}
+            </button>
+          ),
+        )}
         <button
           type="button"
           className="button-quiet"
@@ -1080,7 +1117,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                       <p className={styles.protected}>{t("canvas.protected")}</p>
                     ) : selected.type === "image" ? null : (
                       <label>
-                        {t("boards.textTool")}
+                        {selected.type === "connector" ? diagramCopy.label : t("boards.textTool")}
                         <textarea
                           maxLength={2000}
                           value={localDraft.text}
@@ -1130,37 +1167,64 @@ function CanvasEditorContent({ id }: { id: string }) {
                         <p>{t("canvas.conflictHelp")}</p>
                       </div>
                     ) : null}
-                    <div className={styles.numeric}>
-                      {(["x", "y", "width", "height"] as const).map((field) => (
-                        <label key={field}>
-                          {t(
-                            field === "x"
-                              ? "boards.positionX"
-                              : field === "y"
-                                ? "boards.positionY"
-                                : field === "width"
-                                  ? "boards.shapeWidth"
-                                  : "boards.shapeHeight",
-                          )}
-                          <input
-                            type="number"
-                            step="any"
-                            min={field === "width" || field === "height" ? 1 : -100000}
-                            max={field === "width" || field === "height" ? 10000 : 100000}
-                            value={localDraft[field]}
-                            disabled={!editable || uiBusy}
-                            onChange={(event) => {
-                              if (Number.isFinite(event.currentTarget.valueAsNumber))
-                                setDraft({
-                                  ...localDraft,
-                                  [field]: event.currentTarget.valueAsNumber,
-                                });
-                            }}
-                          />
-                        </label>
-                      ))}
+                    {selected.type !== "connector" ? (
+                      <div className={styles.numeric}>
+                        {(["x", "y", "width", "height"] as const).map((field) => (
+                          <label key={field}>
+                            {t(
+                              field === "x"
+                                ? "boards.positionX"
+                                : field === "y"
+                                  ? "boards.positionY"
+                                  : field === "width"
+                                    ? "boards.shapeWidth"
+                                    : "boards.shapeHeight",
+                            )}
+                            <input
+                              type="number"
+                              step="any"
+                              min={field === "width" || field === "height" ? 1 : -100000}
+                              max={field === "width" || field === "height" ? 10000 : 100000}
+                              value={localDraft[field]}
+                              disabled={!editable || uiBusy}
+                              onChange={(event) => {
+                                if (Number.isFinite(event.currentTarget.valueAsNumber))
+                                  setDraft({
+                                    ...localDraft,
+                                    [field]: event.currentTarget.valueAsNumber,
+                                  });
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                    <CanvasDiagramInspector
+                      object={selected}
+                      objects={board.objects}
+                      draft={localDraft}
+                      disabled={!editable || uiBusy}
+                      onChange={setDraft}
+                      label={objectLabel}
+                    />
+                    <div className={styles.actions}>
+                      {(["front", "back"] as const).map((direction) => {
+                        const plan = planCanvasLayer(board, selectedIds, direction);
+                        return (
+                          <button
+                            type="button"
+                            className="button-quiet"
+                            key={direction}
+                            disabled={!editable || uiBusy || dirty || !plan.command}
+                            title={plan.reason ? t(canvasPlanMessage(plan.reason)) : undefined}
+                            onClick={() => void perform(plan)}
+                          >
+                            {diagramCopy[direction]}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {selected.type !== "idea_ref" ? (
+                    {selected.type !== "idea_ref" && selected.type !== "connector" ? (
                       <label>
                         {t("boards.strokeColor")}
                         <select
@@ -1216,32 +1280,6 @@ function CanvasEditorContent({ id }: { id: string }) {
                     {!editable && selected.type !== "idea_ref" ? (
                       <p className={styles.muted}>{t("canvas.readOnly")}</p>
                     ) : null}
-                    {selected.type === "connector"
-                      ? (["fromId", "toId"] as const).map((key) => (
-                          <label key={key}>
-                            {t(key === "fromId" ? "canvas.connectorFrom" : "canvas.connectorTo")}
-                            <select
-                              disabled={!editable || uiBusy}
-                              value={localDraft[key] ?? ""}
-                              onChange={(event) =>
-                                setDraft({ ...localDraft, [key]: event.target.value })
-                              }
-                            >
-                              <option value="">—</option>
-                              {board.objects
-                                .filter(
-                                  (object) =>
-                                    object.id !== selected.id && object.type !== "connector",
-                                )
-                                .map((object, index) => (
-                                  <option key={object.id} value={object.id}>
-                                    {objectLabel(object, index)}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                        ))
-                      : null}
                     <button
                       type="submit"
                       className="button"

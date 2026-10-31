@@ -153,8 +153,23 @@ existing limit of 200 idea cards, leaving up to 300 ordinary canvas objects. Exi
 participant, lifetime and retention limits still apply. Team boards have a recorded retention
 window; deletion requires confirmation. Each board allows up to 100 image upload reservations
 and 200 MiB of reserved image data over its lifetime. Saved versions have a separate 4 MiB total
-allowance and a 2 MiB limit per saved scene. Higher canvas capacity and further roadmap tools
-remain deferred; these tools do not add AI features.
+allowance and a 2 MiB limit per saved scene. Higher canvas capacity remains gated on measured
+evidence; these tools do not add AI features.
+
+Use **Diamond** for a decision and **Parallelogram** for an input/output step, or start from
+**Flow to action**. Select a connector to edit its visible label, straight/elbow route, solid/dashed
+line, palette color and start/end arrows. Choose source and destination objects and their cardinal
+ports in the inspector; detached endpoints use coordinates. Selected nodes also have rotation and
+layer controls. Object outline and numeric fields provide keyboard alternatives to canvas gestures.
+
+In a Round or Presentation builder, open **Canvas snapshots**, choose **Link saved canvas**, then
+select an eligible board and its named saved version. Save a version on the canvas first if none
+is available. The reference keeps that exact layout instead of following later edits. Creation
+requires ownership of the source canvas and editing access to the activity in the same workspace.
+Use **Preview snapshot** to inspect it; viewing requires current access to both. **Remove link**
+leaves the canvas and saved version intact. Deleted, expired or inaccessible sources disappear,
+and current moderation still hides removed guest content. Up to 20 references fit one activity.
+These references are private authoring aids; participants and published activities do not receive them.
 
 ## Standalone Surveys (beta)
 

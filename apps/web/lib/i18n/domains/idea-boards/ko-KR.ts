@@ -1,3 +1,4 @@
+import { canvasDiagramMessages } from "../../canvas-diagram-messages";
 import { canvasAssetsMessages } from "../../canvas-assets-messages";
 import { canvasFacilitationMessages } from "../../canvas-facilitation-messages";
 import { canvasExportMessages } from "../../canvas-export-messages";
@@ -13,6 +14,7 @@ const messages: IdeaBoardMessages = {
   ...canvasFacilitationMessages("ko-KR"),
   ...canvasExportMessages("ko-KR"),
   ...canvasPresenterMessages("ko-KR"),
+  ...canvasDiagramMessages("ko-KR"),
   ...canvasProductivityMessages("ko-KR"),
   ...canvasWorkshopMessages("ko-KR"),
   "boards.more": "보드 더 불러오기",

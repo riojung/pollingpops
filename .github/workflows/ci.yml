@@ -190,8 +190,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Run isolated UX beta browser project
-        run: pnpm test:e2e:beta --project="${{ matrix.project }}"
+        # Keep GitHub annotations and the existing HTML artifact; line also names the active case.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta --project="${{ matrix.project }}" --reporter=github,line,html
         env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-beta
+          PLAYWRIGHT_HTML_OPEN: never
           BETA_E2E_AUTHORING: "true"
           BETA_E2E_ROUND_PROTOCOL: "true"
           BETA_E2E_SESSION_SUMMARIES: "true"
@@ -204,6 +210,7 @@ jobs:
           path: |
             playwright-report-beta/
             test-results-beta/
+            ${{ runner.temp }}/browser-beta-diagnostics/
           if-no-files-found: ignore
           retention-days: 14
 

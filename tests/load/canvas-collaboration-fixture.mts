@@ -213,6 +213,7 @@ export async function createCanvasCollaborationFixture(
         },
       );
       apps.push(built);
+      profiler?.wrapHttpServer(built.app.server);
       const command = built.canvasBoards.command.bind(built.canvasBoards);
       built.canvasBoards.command = async (...args) => {
         const response = await command(...args);

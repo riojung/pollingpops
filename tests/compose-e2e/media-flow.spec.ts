@@ -24,7 +24,12 @@ test("creator uploads scanned media and a guest receives it privately", async ({
     .getByRole("link", { name: "Open account and workspace settings", exact: true })
     .click();
   await expect(creator).toHaveURL(/\/account/);
-  await creator.getByLabel("Organization name").fill("Compose Learning");
+  const appearance = creator.getByRole("tab", { name: "Appearance", exact: true });
+  await appearance.click();
+  await expect(appearance).toHaveAttribute("aria-selected", "true");
+  await creator
+    .getByRole("textbox", { name: "Brand display name", exact: true })
+    .fill("Compose Learning");
   await creator.getByRole("button", { name: "Save theme" }).click();
   await expect(creator.getByRole("status")).toContainText("brand theme was saved");
   await creator
@@ -89,6 +94,9 @@ test("creator uploads scanned media and a guest receives it privately", async ({
   await expect(participant.getByText("Correct", { exact: true })).toBeVisible();
 
   await creator.goto(`${creatorOrigin}/account`);
+  const privacy = creator.getByRole("tab", { name: "Privacy and data", exact: true });
+  await privacy.click();
+  await expect(privacy).toHaveAttribute("aria-selected", "true");
   await creator.getByLabel(/Type DELETE/).fill("DELETE");
   await creator.getByRole("button", { name: "Delete account" }).click();
   await expect(creator).toHaveURL(/\/$/);

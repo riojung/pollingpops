@@ -85,6 +85,42 @@ export class CanvasPresenterService {
     );
   }
 
+  /** The service owns both authority reads and the captured principal. Request
+   * guards supply only feature policy and fresh session identity, never access facts. */
+  async getForRequest(
+    actor: { userId: string },
+    boardId: string,
+    guards: {
+      requireFeature(workspaceId: string): Promise<void>;
+      currentActor(): Promise<{ userId: string }>;
+    },
+  ) {
+    const userId = actor.userId;
+    const initial = await this.canvases.authorize({ userId }, boardId);
+    if (initial.boardId !== boardId)
+      throw new CanvasBoardError("NOT_FOUND", "This canvas is unavailable");
+    await guards.requireFeature(initial.workspaceId);
+    this.available();
+    const record = await this.current(boardId, await this.cache.getCanvasPresenter!(boardId));
+    await guards.requireFeature(initial.workspaceId);
+    const current = await guards.currentActor();
+    if (current.userId !== userId) throw new CanvasBoardError("UNAUTHORIZED", "Sign in required");
+    // Reauthorize the captured principal after every request/cache/frame guard await.
+    const final = await this.canvases.authorize({ userId }, boardId);
+    if (
+      final.boardId !== boardId ||
+      final.workspaceId !== initial.workspaceId ||
+      Date.parse(final.expiresAt) <= Date.now()
+    )
+      throw new CanvasBoardError("NOT_FOUND", "This canvas is unavailable");
+    return view(
+      boardId,
+      initial.canvasSeq === final.canvasSeq && initial.sourceRevision === final.sourceRevision
+        ? record
+        : null,
+    );
+  }
+
   async getGuest(sourceBoardId: string, tokenHash: string) {
     this.available();
     const access = await this.canvases.authorizeGuest(sourceBoardId, tokenHash);

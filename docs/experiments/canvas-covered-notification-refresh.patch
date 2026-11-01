@@ -1,0 +1,797 @@
+diff --git a/apps/web/components/canvas-boards/canvas-client.ts b/apps/web/components/canvas-boards/canvas-client.ts
+--- a/apps/web/components/canvas-boards/canvas-client.ts
++++ b/apps/web/components/canvas-boards/canvas-client.ts
+@@ -105,11 +105,31 @@
+   return { invitation };
+ }
+
+-/** Notifications carry metadata only; every displayed object comes from a fresh authorized read. */
++export interface CanvasNotification {
++  readonly canvasSeq: number;
++  readonly sourceRevision: number | null;
++}
++
++function notification(event: Record<string, unknown>, id: string): CanvasNotification | null {
++  if (
++    event.boardId !== id ||
++    !Number.isSafeInteger(event.canvasSeq) ||
++    (event.canvasSeq as number) < 0 ||
++    (event.sourceRevision !== null &&
++      (!Number.isSafeInteger(event.sourceRevision) || (event.sourceRevision as number) < 0))
++  )
++    return null;
++  return {
++    canvasSeq: event.canvasSeq as number,
++    sourceRevision: event.sourceRevision as number | null,
++  };
++}
++
++/** Metadata can avoid a redundant read; it never supplies document content or authority. */
+ export async function watchCanvas(
+   id: string,
+   signal: AbortSignal,
+-  onChange: () => void,
++  onChange: (hint: CanvasNotification | null) => void,
+   onRevoked: () => void,
+ ) {
+   const response = await fetch(`${API_URL}${canvasPath(id)}/events`, {
+@@ -133,13 +153,14 @@
+         const line = buffer.slice(0, end).trim();
+         buffer = buffer.slice(end + 1);
+         if (line) {
+-          const event = JSON.parse(line) as { type?: string; boardId?: string };
++          const event = JSON.parse(line) as Record<string, unknown>;
+           if (event.boardId && event.boardId !== id) throw new Error("Mismatched canvas event");
+-          if (["access.revoked", "canvas.deleted"].includes(event.type ?? "")) {
++          if (event.type === "access.revoked" || event.type === "canvas.deleted") {
+             onRevoked();
+             return;
+           }
+-          if (["canvas.changed", "canvas.ready"].includes(event.type ?? "")) onChange();
++          if (event.type === "canvas.changed" || event.type === "canvas.ready")
++            onChange(notification(event, id));
+         }
+         end = buffer.indexOf("\n");
+       }
+diff --git a/apps/web/components/canvas-boards/canvas-client.test.ts b/apps/web/components/canvas-boards/canvas-client.test.ts
+--- a/apps/web/components/canvas-boards/canvas-client.test.ts
++++ b/apps/web/components/canvas-boards/canvas-client.test.ts
+@@ -104,6 +104,80 @@
+     await watchCanvas(canvasId, new AbortController().signal, changed, revoked);
+     expect(fetcher.mock.calls[0]![1]).toMatchObject({ credentials: "include", cache: "no-store" });
+     expect(changed).toHaveBeenCalledOnce();
++    expect(changed).toHaveBeenCalledWith(null);
+     expect(revoked).toHaveBeenCalledOnce();
+   });
++  it.each([
++    { canvasSeq: 0, sourceRevision: null },
++    { canvasSeq: 2, sourceRevision: 0 },
++    { canvasSeq: 7, sourceRevision: 4 },
++  ])("retains only validated notification watermarks %j", async (hint) => {
++    const changed = vi.fn();
++    const payload = [
++      { type: "canvas.ready", boardId: canvasId, ...hint, objects: ["never consumed"] },
++      { type: "canvas.changed", boardId: canvasId, ...hint },
++      { type: "access.revoked" },
++    ];
++    vi.stubGlobal(
++      "fetch",
++      vi.fn().mockResolvedValue(
++        new Response(
++          new ReadableStream({
++            start(controller) {
++              controller.enqueue(
++                new TextEncoder().encode(
++                  payload.map((value) => JSON.stringify(value)).join("\n") + "\n",
++                ),
++              );
++              controller.close();
++            },
++          }),
++        ),
++      ),
++    );
++    await watchCanvas(canvasId, new AbortController().signal, changed, vi.fn());
++    expect(changed.mock.calls).toEqual([[hint], [hint]]);
++  });
++  it.each([
++    {},
++    { canvasSeq: 1 },
++    { canvasSeq: "1", sourceRevision: null },
++    { canvasSeq: -1, sourceRevision: null },
++    { canvasSeq: 1.5, sourceRevision: null },
++    { canvasSeq: Number.MAX_SAFE_INTEGER + 1, sourceRevision: null },
++    { canvasSeq: 1, sourceRevision: "2" },
++    { canvasSeq: 1, sourceRevision: -1 },
++    { canvasSeq: 1, sourceRevision: 2.5 },
++    { canvasSeq: 1, sourceRevision: Number.MAX_SAFE_INTEGER + 1 },
++    { canvasSeq: 1, sourceRevision: null, boardId: undefined },
++  ])(
++    "falls back to unconditional notification refresh for malformed metadata %j",
++    async (metadata) => {
++      const changed = vi.fn();
++      const payload = [
++        { type: "canvas.changed", boardId: canvasId, ...metadata },
++        { type: "access.revoked" },
++      ];
++      vi.stubGlobal(
++        "fetch",
++        vi.fn().mockResolvedValue(
++          new Response(
++            new ReadableStream({
++              start(controller) {
++                controller.enqueue(
++                  new TextEncoder().encode(
++                    payload.map((value) => JSON.stringify(value)).join("\n") + "\n",
++                  ),
++                );
++                controller.close();
++              },
++            }),
++          ),
++        ),
++      );
++      await watchCanvas(canvasId, new AbortController().signal, changed, vi.fn());
++      expect(changed).toHaveBeenCalledOnce();
++      expect(changed).toHaveBeenCalledWith(null);
++    },
++  );
+ });
+diff --git a/apps/web/components/canvas-boards/use-canvas-board.ts b/apps/web/components/canvas-boards/use-canvas-board.ts
+--- a/apps/web/components/canvas-boards/use-canvas-board.ts
++++ b/apps/web/components/canvas-boards/use-canvas-board.ts
+@@ -7,13 +7,58 @@
+   CanvasBoardView,
+ } from "@openround/contracts";
+ import { AUTH_CHANGE_EVENT, ApiClientError, humanError } from "../../lib/api";
+-import { canvasIntent, readCanvas, watchCanvas, writeCanvas } from "./canvas-client";
++import {
++  canvasIntent,
++  readCanvas,
++  watchCanvas,
++  writeCanvas,
++  type CanvasNotification,
++} from "./canvas-client";
+
+ interface Snapshot {
+   id: string;
+   board: CanvasBoardView | null;
+   error: string;
+   loading: boolean;
++}
++// undefined: no event; null: a notification without trustworthy metadata.
++type Notifications = CanvasNotification | null | undefined;
++interface SnapshotWatermark extends CanvasNotification {
++  sourceMatches: boolean;
++  validUntil: number;
++}
++function combineNotifications(left: Notifications, right: Notifications): Notifications {
++  if (left === undefined) return right;
++  if (right === undefined) return left;
++  if (left === null || right === null) return null;
++  if ((left.sourceRevision === null) !== (right.sourceRevision === null)) return null;
++  return {
++    canvasSeq: Math.max(left.canvasSeq, right.canvasSeq),
++    sourceRevision:
++      left.sourceRevision === null ? null : Math.max(left.sourceRevision, right.sourceRevision!),
++  };
++}
++function snapshotWatermark(board: CanvasBoardView): SnapshotWatermark {
++  return {
++    canvasSeq: board.canvasSeq,
++    sourceRevision: board.sourceBoard?.revision ?? null,
++    sourceMatches: board.sourceBoardId
++      ? board.sourceBoard?.id === board.sourceBoardId
++      : board.sourceBoard === undefined,
++    validUntil: Math.min(
++      Date.parse(board.expiresAt),
++      board.sourceBoard ? Date.parse(board.sourceBoard.expiresAt) : Infinity,
++    ),
++  };
++}
++function covers(mark: SnapshotWatermark | null, hint: Notifications) {
++  if (!mark?.sourceMatches || !hint || !(Date.now() < mark.validUntil)) return false;
++  return (
++    mark.canvasSeq >= hint.canvasSeq &&
++    (hint.sourceRevision === null
++      ? mark.sourceRevision === null
++      : mark.sourceRevision !== null && mark.sourceRevision >= hint.sourceRevision)
++  );
+ }
+ function retryAfter(milliseconds: number, signal: AbortSignal) {
+   return new Promise<void>((resolve) => {
+@@ -55,12 +100,28 @@
+   const inFlight = useRef(false);
+   const refreshInFlight = useRef<Promise<void> | null>(null);
+   const refreshRequested = useRef(false);
++  const readyNotifications = useRef<Notifications>(undefined);
++  const acceptedWatermark = useRef<SnapshotWatermark | null>(null);
+   const liveState = useRef<"live" | "reconnecting" | "polling">("reconnecting");
+   const snapshotAvailable = useRef(false);
+   const accessRevision = useRef(0);
+   const accept = useCallback(
+-    (board: CanvasBoardView) => {
+-      if (current.current !== board.id || controller.current?.signal.aborted) return;
++    (board: CanvasBoardView, revision: number) => {
++      if (
++        current.current !== board.id ||
++        controller.current?.signal.aborted ||
++        revision !== accessRevision.current
++      )
++        return;
++      const mark = snapshotWatermark(board);
++      const previous = acceptedWatermark.current;
++      if (
++        !previous ||
++        previous.canvasSeq < mark.canvasSeq ||
++        (previous.canvasSeq === mark.canvasSeq &&
++          (previous.sourceRevision ?? 0) <= (mark.sourceRevision ?? 0))
++      )
++        acceptedWatermark.current = mark;
+       setSnapshot((previous) =>
+         previous.id === id &&
+         previous.board &&
+@@ -75,19 +136,33 @@
+     },
+     [id],
+   );
+-  const refresh = useCallback(async () => {
+-    refreshRequested.current = true;
++  const drainRefresh = useCallback(async () => {
++    const active = controller.current;
++    if (current.current !== id || !active || active.signal.aborted) return;
++    if (snapshotAvailable.current && covers(acceptedWatermark.current, readyNotifications.current))
++      readyNotifications.current = undefined;
+     if (refreshInFlight.current) return refreshInFlight.current;
+-    const active = controller.current;
++    if (!refreshRequested.current && readyNotifications.current === undefined) return;
+     const work = (async () => {
+       do {
+         refreshRequested.current = false;
++        readyNotifications.current = undefined;
+         const revision = accessRevision.current;
+         try {
+-          const board = await readCanvas(id, active?.signal);
+-          if (!active?.signal.aborted && revision === accessRevision.current) accept(board);
++          const board = await readCanvas(id, active.signal);
++          if (controller.current !== active || active.signal.aborted || current.current !== id)
++            return;
++          if (revision === accessRevision.current) {
++            accept(board, revision);
++            if (
++              snapshotAvailable.current &&
++              covers(acceptedWatermark.current, readyNotifications.current)
++            )
++              readyNotifications.current = undefined;
++          }
+         } catch (error) {
+-          if (current.current !== id || active?.signal.aborted) return;
++          if (controller.current !== active || current.current !== id || active.signal.aborted)
++            return;
+           if (revision !== accessRevision.current) continue;
+           const denied =
+             error instanceof ApiClientError && [401, 403, 404, 410].includes(error.status);
+@@ -102,22 +177,39 @@
+           if (denied) {
+             pending.current = null;
+             setFailure(null);
+-            active?.abort();
++            acceptedWatermark.current = null;
++            readyNotifications.current = undefined;
++            active.abort();
+           }
+         }
+-      } while (refreshRequested.current && current.current === id && !active?.signal.aborted);
++      } while (
++        (refreshRequested.current || readyNotifications.current !== undefined) &&
++        controller.current === active &&
++        current.current === id &&
++        !active.signal.aborted
++      );
+     })();
+     refreshInFlight.current = work;
+     await work;
+     if (refreshInFlight.current === work) refreshInFlight.current = null;
+   }, [accept, id]);
++  // Public/manual, periodic, recovery and write-failure refreshes always request a read.
++  const refresh = useCallback(async () => {
++    if (current.current !== id || controller.current?.signal.aborted) return;
++    refreshRequested.current = true;
++    return drainRefresh();
++  }, [drainRefresh, id]);
+   useEffect(() => {
+     const active = new AbortController();
+     controller.current = active;
+     let notificationTimer: ReturnType<typeof setTimeout> | undefined;
++    let pendingNotifications: Notifications;
+     pending.current = null;
+     inFlight.current = false;
+     refreshInFlight.current = null;
++    refreshRequested.current = false;
++    readyNotifications.current = undefined;
++    acceptedWatermark.current = null;
+     setFailure(null);
+     setSaving(false);
+     snapshotAvailable.current = false;
+@@ -128,6 +220,7 @@
+     const stopTimers = () => {
+       window.clearInterval(timer);
+       if (notificationTimer) clearTimeout(notificationTimer);
++      pendingNotifications = undefined;
+     };
+     active.signal.addEventListener("abort", stopTimers, { once: true });
+     async function watch() {
+@@ -139,21 +232,34 @@
+           await watchCanvas(
+             id,
+             active.signal,
+-            () => {
++            (hint) => {
+               if (active.signal.aborted) return;
+               retryMs = 1000;
+               liveState.current = "live";
+               setConnection(snapshotAvailable.current ? "saved" : "reconnecting");
++              pendingNotifications = combineNotifications(pendingNotifications, hint ?? null);
+               if (notificationTimer) return;
+               notificationTimer = setTimeout(() => {
+                 notificationTimer = undefined;
+-                void refresh();
++                // Only the timer's bucket can request a followup. Events waiting
++                // for their first 350ms must not start a read when another finishes.
++                readyNotifications.current = combineNotifications(
++                  readyNotifications.current,
++                  pendingNotifications,
++                );
++                pendingNotifications = undefined;
++                void drainRefresh();
+               }, 350);
+             },
+             () => {
+               if (active.signal.aborted) return;
+               revoked = true;
+               accessRevision.current += 1;
++              acceptedWatermark.current = null;
++              readyNotifications.current = undefined;
++              pendingNotifications = undefined;
++              if (notificationTimer) clearTimeout(notificationTimer);
++              notificationTimer = undefined;
+               snapshotAvailable.current = false;
+               setSnapshot({ id, board: null, loading: true, error: "" });
+               pending.current = null;
+@@ -162,6 +268,9 @@
+           );
+         } catch (error) {
+           if (active.signal.aborted) return;
++          // A new stream must recover through a read before its hints can skip one.
++          if (acceptedWatermark.current)
++            acceptedWatermark.current = { ...acceptedWatermark.current, validUntil: 0 };
+           polling = error instanceof ApiClientError && [403, 404].includes(error.status);
+           if (error instanceof ApiClientError && [401, 403, 404, 410].includes(error.status))
+             revoked = true;
+@@ -180,6 +289,9 @@
+     void watch();
+     const authorizationChanged = () => {
+       active.abort();
++      accessRevision.current += 1;
++      acceptedWatermark.current = null;
++      readyNotifications.current = undefined;
+       setSnapshot({ id, board: null, error: "", loading: true });
+       setAuthRevision((value) => value + 1);
+     };
+@@ -189,7 +301,7 @@
+       active.signal.removeEventListener("abort", stopTimers);
+       window.removeEventListener(AUTH_CHANGE_EVENT, authorizationChanged);
+     };
+-  }, [id, refresh, authRevision]);
++  }, [id, refresh, drainRefresh, authRevision]);
+
+   async function execute(command?: CanvasBoardCommand) {
+     if (inFlight.current || current.current !== id || controller.current?.signal.aborted)
+@@ -201,11 +313,12 @@
+     setSaving(true);
+     setFailure(null);
+     const active = controller.current;
++    const revision = accessRevision.current;
+     try {
+       const result = await writeCanvas(id, operation, active?.signal);
+       if (current.current !== id || active?.signal.aborted) return false;
+       pending.current = null;
+-      accept(result.board);
++      accept(result.board, revision);
+       return true;
+     } catch (error) {
+       if (current.current !== id || active?.signal.aborted) return false;
+diff --git a/apps/web/components/canvas-boards/use-canvas-board.test.ts b/apps/web/components/canvas-boards/use-canvas-board.test.ts
+--- a/apps/web/components/canvas-boards/use-canvas-board.test.ts
++++ b/apps/web/components/canvas-boards/use-canvas-board.test.ts
+@@ -4,6 +4,7 @@
+ import { canvasBoard, canvasId, canvasObject } from "./canvas-test-fixtures";
+ import { useCanvasBoard } from "./use-canvas-board";
+ import type * as Client from "./canvas-client";
++import { boardFixture } from "../../test-utils/idea-board";
+ interface Hooks {
+   cursor: number;
+   slots: unknown[];
+@@ -52,12 +53,12 @@
+   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
+   const cleanup: Array<() => void> = [];
+   return {
+-    render() {
++    render(id = canvasId) {
+       hooks.cursor = 0;
+       hooks.effects = [];
+       mocked.hooks = hooks;
+       try {
+-        return useCanvasBoard(canvasId);
++        return useCanvasBoard(id);
+       } finally {
+         mocked.hooks = null;
+       }
+@@ -69,7 +70,7 @@
+       }
+     },
+     unmount() {
+-      cleanup.forEach((value) => value());
++      cleanup.splice(0).forEach((value) => value());
+     },
+   };
+ }
+@@ -78,6 +79,7 @@
+ }
+ beforeEach(() => {
+   vi.useFakeTimers();
++  vi.setSystemTime(new Date("2026-10-31T12:00:00.000Z"));
+   vi.resetAllMocks();
+   const events = new EventTarget();
+   vi.stubGlobal("window", {
+@@ -88,6 +90,350 @@
+     dispatchEvent: events.dispatchEvent.bind(events),
+   });
+   mocked.watch.mockImplementation(() => new Promise(() => undefined));
++});
++
++function deferred<T>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((finish) => {
++    resolve = finish;
++  });
++  return { promise, resolve };
++}
++function notify(index = 0) {
++  return mocked.watch.mock.calls[index]![2] as Parameters<typeof Client.watchCanvas>[2];
++}
++const hint = (canvasSeq = canvasBoard.canvasSeq, sourceRevision: number | null = null) => ({
++  canvasSeq,
++  sourceRevision,
++});
++
++describe("canvas notification watermarks", () => {
++  it("skips covered ready/changed hints but keeps manual and 5s reads unconditional", async () => {
++    mocked.read.mockResolvedValue(canvasBoard);
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    notify()(hint());
++    notify()(hint(0));
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledOnce();
++    await view.render().refresh();
++    expect(mocked.read).toHaveBeenCalledTimes(2);
++    await vi.advanceTimersByTimeAsync(4650);
++    expect(mocked.read).toHaveBeenCalledTimes(3);
++    view.unmount();
++  });
++
++  it("reads newer canvas and source-only hints and skips only covered source revisions", async () => {
++    const workshop = {
++      ...canvasBoard,
++      boardType: "workshop" as const,
++      sourceBoardId: boardFixture.id,
++      sourceBoard: { ...boardFixture, revision: 3 },
++    };
++    mocked.read
++      .mockResolvedValueOnce(workshop)
++      .mockResolvedValueOnce({ ...workshop, canvasSeq: 2 })
++      .mockResolvedValue({
++        ...workshop,
++        canvasSeq: 2,
++        sourceBoard: { ...boardFixture, revision: 4 },
++      });
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    notify()(hint(2, 3));
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(2);
++    notify()(hint(2, 4));
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(3);
++    expect(view.render().board?.sourceBoard?.revision).toBe(4);
++    notify()(hint(2, 3));
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(3);
++    view.unmount();
++  });
++
++  it.each(["missing", "null-transition", "mixed-source-domains"] as const)(
++    "forces a read for %s metadata",
++    async (kind) => {
++      const workshop = {
++        ...canvasBoard,
++        boardType: "workshop" as const,
++        sourceBoardId: boardFixture.id,
++        sourceBoard: { ...boardFixture, revision: 3 },
++      };
++      mocked.read.mockResolvedValue(workshop);
++      const view = harness();
++      view.render();
++      view.mount();
++      await settle();
++      notify()(kind === "missing" ? null : hint(1, null));
++      if (kind === "mixed-source-domains") notify()(hint(1, 3));
++      await vi.advanceTimersByTimeAsync(349);
++      expect(mocked.read).toHaveBeenCalledOnce();
++      await vi.advanceTimersByTimeAsync(1);
++      expect(mocked.read).toHaveBeenCalledTimes(2);
++      view.unmount();
++    },
++  );
++
++  it.each([false, true])(
++    "does not release the batching bucket before350ms (response covered=%s)",
++    async (covered) => {
++      const first = deferred<typeof canvasBoard>();
++      mocked.read
++        .mockReturnValueOnce(first.promise)
++        .mockResolvedValue({ ...canvasBoard, canvasSeq: 3 });
++      const view = harness();
++      view.render();
++      view.mount();
++      notify()(hint(3));
++      await vi.advanceTimersByTimeAsync(200);
++      first.resolve({ ...canvasBoard, canvasSeq: covered ? 3 : 2 });
++      await settle();
++      expect(mocked.read).toHaveBeenCalledOnce();
++      await vi.advanceTimersByTimeAsync(149);
++      expect(mocked.read).toHaveBeenCalledOnce();
++      await vi.advanceTimersByTimeAsync(1);
++      expect(mocked.read).toHaveBeenCalledTimes(covered ? 1 : 2);
++      view.unmount();
++    },
++  );
++
++  it.each(["covered", "newer", "forced"] as const)(
++    "handles a readied in-flight hint without losing a %s followup",
++    async (kind) => {
++      const first = deferred<typeof canvasBoard>();
++      mocked.read
++        .mockReturnValueOnce(first.promise)
++        .mockResolvedValue({ ...canvasBoard, canvasSeq: 3 });
++      const view = harness();
++      view.render();
++      view.mount();
++      notify()(hint(3));
++      await vi.advanceTimersByTimeAsync(350);
++      expect(mocked.read).toHaveBeenCalledOnce();
++      const manual = kind === "forced" ? view.render().refresh() : undefined;
++      first.resolve({ ...canvasBoard, canvasSeq: kind === "newer" ? 2 : 3 });
++      await settle();
++      if (manual) await manual;
++      expect(mocked.read).toHaveBeenCalledTimes(kind === "covered" ? 1 : 2);
++      expect(view.render().board?.canvasSeq).toBe(3);
++      view.unmount();
++    },
++  );
++
++  it("requires a notification read after a transient read failure even for a covered hint", async () => {
++    mocked.read
++      .mockResolvedValueOnce(canvasBoard)
++      .mockRejectedValueOnce(new TypeError("Offline"))
++      .mockResolvedValue(canvasBoard);
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    await view.render().refresh();
++    expect(view.render().board?.id).toBe(canvasId);
++    expect(view.render().error).not.toBe("");
++    notify()(hint());
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(3);
++    expect(view.render().error).toBe("");
++    view.unmount();
++  });
++
++  it("reauthorizes a covered ready hint after a transient stream failure", async () => {
++    const stream = deferred<void>();
++    let fail!: (reason: Error) => void;
++    mocked.watch
++      .mockImplementationOnce(
++        () =>
++          new Promise<void>((_resolve, reject) => {
++            fail = reject;
++          }),
++      )
++      .mockReturnValue(stream.promise);
++    mocked.read.mockResolvedValue(canvasBoard);
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    fail(new TypeError("Connection lost"));
++    await settle();
++    await vi.advanceTimersByTimeAsync(1000);
++    notify(1)(hint());
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(2);
++    expect(view.render().error).toBe("");
++    view.unmount();
++  });
++
++  it("does not use an expired snapshot watermark to suppress reauthorization", async () => {
++    mocked.read.mockResolvedValue({
++      ...canvasBoard,
++      expiresAt: new Date(Date.now() + 200).toISOString(),
++    });
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    notify()(hint());
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(2);
++    view.unmount();
++  });
++
++  it("does not treat a numeric source revision as covered by a team canvas", async () => {
++    mocked.read.mockResolvedValue(canvasBoard);
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    notify()(hint(1, 0));
++    await vi.advanceTimersByTimeAsync(350);
++    expect(mocked.read).toHaveBeenCalledTimes(2);
++    view.unmount();
++  });
++
++  it("does not revalidate an invalid notification using a covering in-flight response", async () => {
++    const first = deferred<typeof canvasBoard>();
++    mocked.read.mockReturnValueOnce(first.promise).mockResolvedValue(canvasBoard);
++    const view = harness();
++    view.render();
++    view.mount();
++    notify()(null);
++    await vi.advanceTimersByTimeAsync(350);
++    first.resolve(canvasBoard);
++    await settle();
++    expect(mocked.read).toHaveBeenCalledTimes(2);
++    view.unmount();
++  });
++
++  it("clears the prior mark immediately on revoke and fences the old in-flight response", async () => {
++    const oldRead = deferred<typeof canvasBoard>();
++    const authorized = deferred<typeof canvasBoard>();
++    let revoke!: () => void;
++    mocked.read
++      .mockResolvedValueOnce(canvasBoard)
++      .mockReturnValueOnce(oldRead.promise)
++      .mockReturnValueOnce(authorized.promise);
++    mocked.watch.mockImplementationOnce(
++      (_id, _signal, _change, revoked) =>
++        new Promise<void>((resolve) => {
++          revoke = () => {
++            revoked();
++            resolve();
++          };
++        }),
++    );
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    const pending = view.render().refresh();
++    notify()(hint(2));
++    await vi.advanceTimersByTimeAsync(350);
++    revoke();
++    expect(view.render().board).toBeNull();
++    oldRead.resolve({ ...canvasBoard, canvasSeq: 2 });
++    await settle();
++    expect(mocked.read).toHaveBeenCalledTimes(3);
++    expect(view.render().board).toBeNull();
++    authorized.resolve(canvasBoard);
++    await pending;
++    await settle();
++    expect(view.render().board?.canvasSeq).toBe(1);
++    view.unmount();
++  });
++
++  it("does not restore content or coverage from a write acknowledgement after revoke", async () => {
++    const recovered = deferred<typeof canvasBoard>();
++    const written = deferred<{ board: typeof canvasBoard }>();
++    let revoke!: () => void;
++    mocked.read.mockResolvedValueOnce(canvasBoard).mockReturnValueOnce(recovered.promise);
++    mocked.write.mockReturnValueOnce(written.promise);
++    mocked.watch.mockImplementationOnce(
++      (_id, _signal, _change, revoked) =>
++        new Promise<void>((resolve) => {
++          revoke = () => {
++            revoked();
++            resolve();
++          };
++        }),
++    );
++    const view = harness();
++    view.render();
++    view.mount();
++    await settle();
++    const pending = view
++      .render()
++      .execute({
++        type: "batch",
++        operations: [
++          {
++            type: "update",
++            id: canvasObject.id,
++            expectedVersion: 1,
++            patch: { text: "Original operation" },
++          },
++        ],
++      });
++    const operation = mocked.write.mock.calls[0]![1];
++    revoke();
++    expect(view.render().board).toBeNull();
++    await settle();
++    written.resolve({ board: { ...canvasBoard, canvasSeq: 2 } });
++    await pending;
++    expect(view.render().board).toBeNull();
++    expect(mocked.write.mock.calls[0]![1]).toBe(operation);
++    recovered.resolve(canvasBoard);
++    await settle();
++    expect(view.render().board?.canvasSeq).toBe(1);
++    view.unmount();
++  });
++
++  it.each(["account", "board"] as const)(
++    "does not reuse watermarks or clear the new generation's ready bucket after %s change",
++    async (change) => {
++      const oldRead = deferred<typeof canvasBoard>();
++      const freshRead = deferred<typeof canvasBoard>();
++      const nextId = change === "board" ? "00000000-0000-4000-8000-000000000096" : canvasId;
++      const nextBoard = { ...canvasBoard, id: nextId };
++      mocked.read
++        .mockResolvedValueOnce(canvasBoard)
++        .mockReturnValueOnce(oldRead.promise)
++        .mockReturnValueOnce(freshRead.promise)
++        .mockResolvedValue({ ...nextBoard, canvasSeq: 2 });
++      const view = harness();
++      view.render();
++      view.mount();
++      await settle();
++      const pending = view.render().refresh();
++      notify()(hint());
++      if (change === "account") window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
++      view.render(nextId);
++      view.unmount();
++      view.mount();
++      await settle();
++      expect(view.render(nextId).board).toBeNull();
++      expect((mocked.watch.mock.calls[0]![1] as AbortSignal).aborted).toBe(true);
++      notify(1)(hint(2));
++      await vi.advanceTimersByTimeAsync(350);
++      oldRead.resolve({ ...canvasBoard, canvasSeq: 9 });
++      await pending;
++      await settle();
++      expect(view.render(nextId).board).toBeNull();
++      freshRead.resolve(nextBoard);
++      await settle();
++      expect(mocked.read).toHaveBeenCalledTimes(4);
++      expect(view.render(nextId).board).toMatchObject({ id: nextId, canvasSeq: 2 });
++      view.unmount();
++    },
++  );
+ });
+ afterEach(() => {
+   mocked.hooks = null;

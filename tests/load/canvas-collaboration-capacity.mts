@@ -677,13 +677,24 @@ async function main() {
   );
   versions[0]!++;
   const reconnectStarted = performance.now();
-  await networkSessions.get(peer)!.send("Network.emulateNetworkConditions", {
-    offline: false,
-    latency: config.latencyMs,
-    downloadThroughput: -1,
-    uploadThroughput: -1,
+  const reconnectAbort = new AbortController();
+  const renewedStream = peer.waitForRequest(/\/canvas-boards\/.*\/events(?:\?|$)/, {
+    timeout: config.timeoutMs,
+    signal: reconnectAbort.signal,
   });
-  await reconnectWatch.promise;
+  // Polling can paint before the fixed stream retry; recovery requires both.
+  void renewedStream.catch(() => {});
+  try {
+    await networkSessions.get(peer)!.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: config.latencyMs,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+    await Promise.all([reconnectWatch.promise, renewedStream]);
+  } finally {
+    reconnectAbort.abort();
+  }
   const reconnectMs = performance.now() - reconnectStarted;
   const streamCountAfter = streamRequests.get(peer) ?? 0;
   assert.ok(streamCountAfter > streamCountBefore, "Offline recovery must open a renewed stream");
@@ -846,7 +857,7 @@ async function main() {
       navigationFrameInterval:
         "Consecutive browser rAF timestamps while real pointer hand-pan gestures cross the already-rendered mixed scene; not presented-frame GPU timing or reference-device FPS",
       reconnect:
-        "Coordinator time from enabling the offline peer context network until its latest authorized matching text plus two rAF; requires a new stream request",
+        "Coordinator time from enabling the offline peer context network until both its latest authorized matching text plus two rAF and a new stream request",
       stalledConsumerAcknowledgement:
         "HTTP acknowledgement samples while an additional authorized raw TCP stream deliberately does not consume its response body; checks isolation, not a forced worst-case backpressure cutoff",
       repositoryProfiling:

@@ -51,11 +51,14 @@ for (const surface of ["desktop", "phone @mobile"]) {
         "background-color",
         mode === "light" ? "rgb(38, 43, 51)" : "rgb(237, 240, 244)",
       );
-      // Wait for inherited text as well as control fills before inspecting contrast.
       await expect(page.getByLabel("Search templates").locator("..").locator("span")).toHaveCSS(
         "color",
         mode === "light" ? "rgb(48, 54, 64)" : "rgb(232, 235, 240)",
       );
+      // Check inherited copy too; the label above has its own foreground token.
+      await expect(
+        page.getByText("Template content is in English and can be edited.", { exact: true }),
+      ).toHaveCSS("color", mode === "light" ? "rgb(88, 97, 110)" : "rgb(184, 192, 203)");
       await expect(page.locator("body")).toHaveCSS("background-image", "none");
       const brandSurface = page.getByRole(surface === "desktop" ? "complementary" : "banner");
       await expect(brandSurface).toHaveCSS("background-image", /radial-gradient/);

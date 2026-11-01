@@ -4115,6 +4115,7 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 .audience-drawer-heading h2 {
+  color: var(--experience-text);
   font-size: 1.1rem;
   line-height: 1.35;
   margin: 4px 0 0;

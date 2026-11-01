@@ -1,0 +1,17 @@
+diff --git a/packages/db/src/canvas-board-store.ts b/packages/db/src/canvas-board-store.ts
+--- a/packages/db/src/canvas-board-store.ts
++++ b/packages/db/src/canvas-board-store.ts
+@@ -523,9 +523,10 @@
+         ]);
+         selectedOrganizations.add(board.organizationId);
+       }
+-      await context(client, "app.organization_id", board.organizationId);
+-      await context(client, "app.workspace_id", board.workspaceId);
+-      await context(client, "app.canvas_board_id", board.id);
++      await client.query(
++        "SELECT set_config('app.organization_id',$1,true),set_config('app.workspace_id',$2,true),set_config('app.canvas_board_id',$3,true)",
++        [board.organizationId, board.workspaceId, board.id],
++      );
+     };
+     const readLockedBoard = async (id: string, lock = false): Promise<CanvasBoardStored | null> => {
+       let candidate = selectedBoards.get(id);

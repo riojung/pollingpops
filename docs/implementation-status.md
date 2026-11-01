@@ -2363,3 +2363,112 @@ profile is one remote VM and therefore has no high availability or SLA. Public p
 ready merely because the containers run: TLS, strict SSH host-key pinning, encrypted off-host
 backups, a clean replacement-VM restore drill, target-host capacity, and every unchecked human,
 legal, security, accessibility, and operational gate above must be evidenced first.
+
+## WebKit Library memory repair — November 1, 2026
+
+The [PR171 WebKit beta job](https://github.com/riojung/pollingpops/actions/runs/41278299784/job/124764865882)
+stopped during Recovery Pack authoring after one tracked process grew from approximately 500 MiB
+to 14.4 GiB RSS in 40 seconds. Host available memory fell to 423 MiB before runner shutdown.
+The captured cgroup OOM counters remained zero; the last resource sample precedes shutdown by
+about eight seconds, so this evidence does not claim a hosted kernel OOM.
+
+An independent, synthetic 23-card Library reproduction isolated the repeated artwork-badge
+`backdrop-filter` as the trigger. Original grid, percentage-height removal alone, and list controls
+hit the deliberate 1 GiB per-process guard and could not complete the navigation click. Removing
+only badge blur, removing both factors, and a 10-card blurred control completed at approximately
+501–525 MiB peak individual RSS. All six accepted controls used fresh headless mobile WebKit
+contexts in a disposable 2 GiB container, which was removed without a captured container OOM.
+The first diagnostic harness attempt had a coordinator error and is excluded. These controls
+are separate from the correlated [upstream WebKit report](https://bugs.webkit.org/show_bug.cgi?id=327701);
+no upstream reproduction HTML or assets were copied.
+
+The production change removes only the badge blur while retaining its existing translucent fill,
+layout, and behavior. A new 23-card browser regression checks light/dark rendering, direct Recovery
+Packs navigation, filters, and grid/list layouts. The focused production WebKit run passed both
+that regression and the unchanged Recovery Pack authoring journey: **2/2**. CI browser matrices,
+feature flags, retry policies, workers, assertions, rate budgets, and deadlines remain unchanged.
+
+The participant-interaction journey also exposed a white-on-white Audience drawer title; a scoped
+rule now uses the existing experience text token. Before readiness preconditions, its full Axe
+audit reported the two page-best-practice findings `landmark-one-main` and `page-has-heading-one`
+while the modal was open. The test now returns the host to the foreground and verifies document
+visibility/focus, modal Close focus, full viewport containment, and the title's themed text color
+before the same unrestricted audit. The entire five-page journey then passed **1/1 in 1.3 minutes**,
+with peak container memory 4,097.1 MiB, peak individual RSS 1,305.9 MiB, minimum VM available memory
+1,131.2 MiB, and no owner guard triggered. The focus-related explanation remains an inference;
+the earlier failed audit did not directly sample document focus/visibility. Background inert
+behavior, heading levels, landmarks, audit scope, and enabled rules were retained.
+
+The complete local WebKit run finished **62/63 in 13.5 minutes**. Its sole failure was the Audience
+drawer Close control focus assertion; the captured inactive result does not distinguish element
+autofocus from document focus. Peak container memory was 2,656.5 MiB, peak individual RSS
+1,331.0 MiB, minimum VM available memory 2,766.4 MiB, and no guard triggered. This is the complete run before the final initial-focus helper; it remains a recorded failure,
+not final-source full-suite acceptance. A prior 63-case attempt in a 3 GiB browser container was
+interrupted by the owned 2.5 GiB guard after 14 passes, with 49 cascading failures. A second attempt
+in a 4 GiB container reached 18 passes and 45 cascading failures after its 3.5 GiB guard. Neither
+captured a kernel OOM or constitutes full-suite acceptance. The completed run used a fresh 5 GiB browser container, a 4.5 GiB total-memory guard, 2 GiB
+individual-RSS guard, 768 MiB minimum VM-available floor, one worker, zero retries, and the
+existing CI `on-first-retry` video policy.
+The initial-focus effect now waits for a connected, visible, non-inert drawer in a foreground
+document, verifies accepted focus, and cancels all work once focus enters any drawer control or
+the drawer closes. This also removes the unconditional 200 ms focus call that could interrupt
+user navigation. Six behavioral unit tests passed. With the final helper, the production-bundle
+Library and five-page participant journeys passed **8/8 across all four browser projects**;
+three additional mobile WebKit repeats passed **3/3**, with exact focus and unrestricted full
+Axe assertions retained. Each project recorded a focused document and active Close control.
+The complete 63-case suite after this helper change has not been rerun. Subsequent hosted
+confirmation, physical-device checks, and production capacity remain separate gates. The [sanitized evidence record](webkit-library-evidence-2026-11-01.json) contains exact source
+hashes, the hosted numeric timeline, all six control outcomes, exclusions, and current validation
+status; it contains no raw logs, credentials, process identifiers, or local user paths.
+
+## Canvas query comparison and CI regression guards — November 1, 2026
+
+A transaction-context batching prototype is **rejected and unapplied**. It reduced three independent
+transaction-local scope-setting queries to one parameterized statement. Profiling verified two
+fewer direct statements per authorize, four per scene read, and six per command (49/50 became
+43/44 for owner/other-editor commands). All role, license, expiry, source, workspace and forced-RLS
+checks, transaction cleanup, lock ordering, cadences, deadlines and limits were retained.
+
+Seven complete current-workload trials used 500 mixed objects, 20 licensed editor browser contexts,
+two API nodes, 200 measured writes per run, 100 guest objects and nominal 100 ms browser latency.
+The first baseline pilot remains disclosed; after a lint-only unit-mock cleanup, all six confirming
+trials used the same freshly built production browser bundle. Heavy tests, builds and trials ran
+serially, with the existing VM allocation and user containers unchanged. These are local,
+headless fixture observations, separate from staging and physical-device qualification.
+
+| Trial, in execution order | Profiling | HTTP acknowledgement p95 ms | Repository resolution to peer paint opportunity p95 ms | Smoke gates           |
+| ------------------------- | --------- | --------------------------: | -----------------------------------------------------: | --------------------- |
+| Baseline pilot            | On        |                      1803.1 |                                                1303.44 | Pass                  |
+| Baseline confirming       | On        |                      2039.0 |                                                1538.00 | Fail: acknowledgement |
+| Batching candidate        | On        |                      1911.5 |                                                1354.63 | Pass                  |
+| Baseline forward pair     | Off       |                      1780.5 |                                                1276.61 | Pass                  |
+| Candidate forward pair    | Off       |                      1871.7 |                                                1199.99 | Pass                  |
+| Candidate reverse pair    | Off       |                      1629.8 |                                                1174.74 | Pass                  |
+| Baseline reverse pair     | Off       |                      1561.6 |                                                1317.71 | Pass                  |
+
+The profiling-disabled pairs show acknowledgement p95 increases of **5.12% and 4.37%**, despite peer
+p95 improvements of 6.00% and 10.85%. No general latency improvement is established, so the
+prototype stays in [an unapplied patch](experiments/canvas-context-batch.patch). The 2,039 ms baseline
+failed both acknowledgement gates, which use the same samples while a stalled reader is present;
+it was retained without changing the 2,000 ms threshold. Every run completed its correctness
+assertions for peer observations, object versions, exact retry, stale edits, outsider access,
+revocation and guest privacy. All raw timing outcomes are represented in the
+[sanitized comparison](canvas-context-batch-comparison-2026-11-01.json), including source/build
+hashes, complete distributions, direct statement counts, censored profiling work and failed gates.
+
+The retained PostgreSQL regression uses one nonprivileged physical connection with forced RLS,
+switches A–B–A across two organizations, and verifies isolation and scope release after commit and
+rollback. Fixed object IDs also reproduced an existing array-order assumption on the unbatched
+code: redo appends restored objects while SQL reads order by ID. The test now sorts copies of only
+the object arrays before exact whole-board equality, preserving every field, count, duplicate,
+permission and actor-owned uppercase history head. Product ordering behavior is unchanged.
+The final unbatched PostgreSQL-enabled conformance passed **169 tests with seven expected skips**.
+The final Node 22.23.4 `pnpm check` passed after restoring that production source: formatting,
+Docker context, lint, types, 950 server tests, 1,560 web tests, 419 database/memory tests,
+304 support tests and production/admin builds. Existing gated skips were retained. The
+changed tracked/untracked tree also passed Gitleaks 8.24.3 with the existing rules and no findings.
+
+The original production database source is restored; the archived query patch is not applied.
+The 500 ms peer target remains unmet. Target staging/TLS, reference devices, realistic media and
+scanner/S3 traffic, and long saturation/all-to-all observations remain pending before capacity can
+be qualified. No object/document limits, actor counts, timing gates or recovery guarantees changed.

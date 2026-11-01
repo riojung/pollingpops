@@ -1,0 +1,390 @@
+{
+  "evidenceSchemaVersion": 1,
+  "date": "2026-11-01",
+  "status": "final-ui-focused-verified-hosted-pending",
+  "capacityIncreaseAuthorized": false,
+  "change": {
+    "file": "apps/web/app/library/library.module.css",
+    "selector": ".artwork span",
+    "removedDeclaration": "backdrop-filter: blur(8px)",
+    "retained": "Existing translucent fill, decoration, layout, card counts, and all functionality.",
+    "regressionFile": "tests/beta-e2e/library-rendering.spec.ts",
+    "coverage": "23 cards with 12 published/11 draft; direct Recovery Packs navigation, light/dark geometry, status/search filters, and grid/list layout.",
+    "matrixRetriesWorkersFeatureFlagsAndDeadlinesChanged": false,
+    "additionalChanges": [
+      {
+        "file": "apps/web/app/globals.css",
+        "selector": ".audience-drawer-heading h2",
+        "declaration": "color: var(--experience-text)",
+        "purpose": "Repair the confirmed white-on-white modal title using the existing experience text token."
+      },
+      {
+        "file": "tests/beta-e2e/participant-interactions.spec.ts",
+        "purpose": "Return the host to the foreground after participant-tab interaction and assert document visibility/focus, focused Close control, full drawer viewport containment with 1px tolerance, and visible title color matching the drawer text.",
+        "fullAxeAuditUnchanged": true,
+        "auditScopeNarrowed": false,
+        "rulesDisabled": [],
+        "actorsTimeoutsRetriesAndRateBudgetsChanged": false
+      },
+      {
+        "files": ["apps/web/lib/modal-initial-focus.ts", "apps/web/app/host/[sessionId]/page.tsx"],
+        "purpose": "Replace one frame plus unconditional 200ms initial-focus attempts with foreground/visibility readiness and accepted-focus verification; cancel all pending work on close or once focus enters any dialog control. Keyboard trapping, Escape and opener restore are retained.",
+        "unitTestsPassed": 6
+      }
+    ]
+  },
+  "sourceProvenance": {
+    "originalCssSha256": {
+      "apps/web/app/globals.css": "36a783450d6b6e13325a0e4cb20c37b22f53fa952701bf27e5739875b4c41947",
+      "apps/web/app/library/library.module.css": "5b56782b41fcdeaf4664bb3039ce5e4072b6ee09c0051eb54c1e342370fa664f",
+      "apps/web/components/workspace/workspace.module.css": "d73ee773a927643ca1b73dd07bd6cefd984b68df64ba5590385b47b24f771859"
+    },
+    "fixedLibraryCssSha256": "df6e295ffee5e00ab43e9bab604830793720758b455f93625f8d4102b3e95466",
+    "standaloneHarnessSha256": "e4a380b3d5e0e3232e79ff08410938118f800d4242886818c6670022d2b49b30",
+    "regressionSha256": "fa5548a3ce0e4f4e0fb1d50332e9df17a96592cac1c779137f765578c5d51149",
+    "diagnosticCodeCommitted": false,
+    "cssTransformation": "Diagnostic CSS retains declarations, prefixes module selectors to avoid global collisions, and applies only the named control overrides.",
+    "fixedGlobalsCssSha256": "45e59855646b859316ae82e251bd836792fd37976a1436217f35b9d425b01fa7",
+    "participantRegressionSha256": "a48d52c24674b5aa77c3a154f904353bf5d1d775660d82438713314dc409be33",
+    "earlierReadinessRegressionSha256": "d019eca7a98261e167d2f29b3879ce14baba2cc4e62171ad42a512ee9a8b38c2",
+    "finalHostSourceSha256": "accdb3a65fe906f0f03bf3dad42bd2176f363b86e991834c5afa8f8bc89476ec",
+    "modalInitialFocusSha256": "9eaf7cf92ee4d1bbe924b628ba99a730a7f500ae9077d0ef3c9770f917147487",
+    "modalInitialFocusUnitTestsSha256": "1b6248e45c77b6b19520eb1f7fec0720b02ea9eac32021121b119f345ca82e45",
+    "browserRunUnitFixtureSha256": "73ad3aa46efc9498f606993a2b08a9f97962c03167ff52d80a79ecde96882865",
+    "afterBrowserRunUnitFixtureChange": "Lint-only recursion replaces a this-alias in the unit mock. Production UI/helper/browser-test bytes are unchanged."
+  },
+  "hosted": {
+    "job": "https://github.com/riojung/pollingpops/actions/runs/41278299784/job/124764865882",
+    "lastActiveCase": {
+      "number": 38,
+      "total": 62,
+      "file": "tests/beta-e2e/recovery-packs.spec.ts",
+      "line": 194,
+      "name": "Recovery Pack authoring and disabled-rollout readability @mobile",
+      "startedAt": "2026-11-01T05:58:59.899Z"
+    },
+    "resourceSampleCount": 65,
+    "hostMemoryTotalKiB": 16365624,
+    "timeline": [
+      {
+        "at": "2026-11-01T05:59:01.065000Z",
+        "largestTrackedProcessRssKiB": 511916,
+        "hostMemAvailableKiB": 13815860,
+        "hostSwapFreeKiB": 3145724,
+        "memoryPressureSomeAvg10Percent": 0,
+        "memoryPressureFullAvg10Percent": 0,
+        "cgroupMemoryCurrentBytes": 6614102016,
+        "cgroupOom": 0,
+        "cgroupOomKill": 0
+      },
+      {
+        "at": "2026-11-01T05:59:11.088000Z",
+        "largestTrackedProcessRssKiB": 4397792,
+        "hostMemAvailableKiB": 10007536,
+        "hostSwapFreeKiB": 3145724,
+        "memoryPressureSomeAvg10Percent": 0,
+        "memoryPressureFullAvg10Percent": 0,
+        "cgroupMemoryCurrentBytes": 10601619456,
+        "cgroupOom": 0,
+        "cgroupOomKill": 0
+      },
+      {
+        "at": "2026-11-01T05:59:21.110000Z",
+        "largestTrackedProcessRssKiB": 8334024,
+        "hostMemAvailableKiB": 6075292,
+        "hostSwapFreeKiB": 3145724,
+        "memoryPressureSomeAvg10Percent": 0,
+        "memoryPressureFullAvg10Percent": 0,
+        "cgroupMemoryCurrentBytes": 14642302976,
+        "cgroupOom": 0,
+        "cgroupOomKill": 0
+      },
+      {
+        "at": "2026-11-01T05:59:31.128000Z",
+        "largestTrackedProcessRssKiB": 12339848,
+        "hostMemAvailableKiB": 2111208,
+        "hostSwapFreeKiB": 3145648,
+        "memoryPressureSomeAvg10Percent": 0,
+        "memoryPressureFullAvg10Percent": 0,
+        "cgroupMemoryCurrentBytes": 15707410432,
+        "cgroupOom": 0,
+        "cgroupOomKill": 0
+      },
+      {
+        "at": "2026-11-01T05:59:41.265000Z",
+        "largestTrackedProcessRssKiB": 15136724,
+        "hostMemAvailableKiB": 432840,
+        "hostSwapFreeKiB": 1566664,
+        "memoryPressureSomeAvg10Percent": 2.72,
+        "memoryPressureFullAvg10Percent": 2.72,
+        "cgroupMemoryCurrentBytes": 15973212160,
+        "cgroupOom": 0,
+        "cgroupOomKill": 0
+      }
+    ],
+    "sameTrackedProcessAcrossGrowthSamples": true,
+    "meanObservedRssGrowthMiBPerSecond": 355.3,
+    "processCountRangeDuringGrowth": [179, 180],
+    "allCapturedCgroupOomAndOomKillCountersZero": true,
+    "runnerShutdownAt": "2026-11-01T05:59:48.983Z",
+    "wrapperFinishSignal": 15,
+    "interpretation": "Runaway per-process resident memory and host pressure precede runner shutdown. No hosted kernel OOM was captured; the final resource sample precedes shutdown by about 7.7 seconds. Executable identity and JavaScript heap usage were not recorded."
+  },
+  "standalone": {
+    "image": "mcr.microsoft.com/playwright:v1.64.1-resolute",
+    "playwright": "1.64.1",
+    "webkit": "27.2",
+    "controller": {
+      "node": "v24.22.1",
+      "platform": "linux",
+      "arch": "arm64"
+    },
+    "device": {
+      "name": "iPhone 15",
+      "width": 390,
+      "height": 844,
+      "dpr": 3,
+      "headless": 1
+    },
+    "container": {
+      "memoryGiB": 2,
+      "cpus": 2,
+      "network": "none",
+      "oomKilled": false,
+      "removed": true
+    },
+    "guards": {
+      "maxIndividualRssKiB": 1048576,
+      "phaseDeadlineMs": 20000,
+      "coordinatorCleanupFallbackMs": 750,
+      "healthyObservationMs": 12000
+    },
+    "diagnosticErrors": 0,
+    "controls": [
+      {
+        "variant": "original",
+        "cards": 23,
+        "layout": "grid",
+        "percentageBodyHeight": true,
+        "badgeBackdropBlur": true,
+        "outcome": "rss_guard",
+        "peakIndividualRssKiB": 1180060,
+        "clickCompleted": false
+      },
+      {
+        "variant": "no-height",
+        "cards": 23,
+        "layout": "grid",
+        "percentageBodyHeight": false,
+        "badgeBackdropBlur": true,
+        "outcome": "rss_guard",
+        "peakIndividualRssKiB": 1079296,
+        "clickCompleted": false
+      },
+      {
+        "variant": "no-blur",
+        "cards": 23,
+        "layout": "grid",
+        "percentageBodyHeight": true,
+        "badgeBackdropBlur": false,
+        "outcome": "completed",
+        "peakIndividualRssKiB": 537732,
+        "clickCompleted": true
+      },
+      {
+        "variant": "neither",
+        "cards": 23,
+        "layout": "grid",
+        "percentageBodyHeight": false,
+        "badgeBackdropBlur": false,
+        "outcome": "completed",
+        "peakIndividualRssKiB": 513220,
+        "clickCompleted": true
+      },
+      {
+        "variant": "list",
+        "cards": 23,
+        "layout": "list",
+        "percentageBodyHeight": false,
+        "badgeBackdropBlur": true,
+        "outcome": "rss_guard",
+        "peakIndividualRssKiB": 1241868,
+        "clickCompleted": false
+      },
+      {
+        "variant": "ten-cards",
+        "cards": 10,
+        "layout": "grid",
+        "percentageBodyHeight": true,
+        "badgeBackdropBlur": true,
+        "outcome": "completed",
+        "peakIndividualRssKiB": 527404,
+        "clickCompleted": true
+      }
+    ],
+    "interpretation": "The original, percentage-height-removal-only, and list controls reach the deliberate RSS guard and cannot complete the click. Removing only badge blur, removing both factors, and the 10-card blurred control complete. This independent application-derived 2x2 comparison isolates repeated badge backdrop layers; height changes alone do not resolve the reproduction.",
+    "limitations": [
+      "Static synthetic markup with repository CSS; no Next.js, React, auth, API, media, or route prefetch.",
+      "Recovery Packs is a fragment-link action, not full application navigation.",
+      "Guard outcomes are bounded diagnostic interruptions, not kernel OOMs, functional passes, capacity results, or physical-device evidence.",
+      "The first harness attempt had a coordinator ReferenceError and is excluded from every comparison above."
+    ]
+  },
+  "upstreamCorrelation": {
+    "url": "https://bugs.webkit.org/show_bug.cgi?id=327701",
+    "title": "[GTK][WPE][Skia] Compositing work grows as 2^n with the number of backdrop-filter layers",
+    "relationship": "Primary upstream corroboration only. The accepted controls use independent repository-derived markup, not upstream HTML; no claim is made that the packaged engine includes the upstream fix."
+  },
+  "applicationValidation": {
+    "focused": {
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "cases": [
+        "New 23-card mobile Library regression",
+        "Unchanged Recovery Pack authoring and disabled-rollout readability mobile journey"
+      ]
+    },
+    "fullSuiteRerun": {
+      "status": "completed-with-modal-focus-failure",
+      "planned": 63,
+      "project": "webkit-beta-mobile",
+      "browserContainerMemoryGiB": 5,
+      "ownerTotalResourceGuardGiB": 4.5,
+      "ownerIndividualProcessGuardGiB": 2,
+      "minimumVmAvailableGuardMiB": 768,
+      "workers": 1,
+      "retries": 0,
+      "videoPolicy": "Existing CI on-first-retry policy; no first-attempt video recording with zero retries.",
+      "results": {
+        "passed": 62,
+        "failed": 1,
+        "skipped": 0,
+        "flaky": 0,
+        "durationMs": 811808.752,
+        "failure": "Audience drawer Close control toBeFocused assertion; document focus and element focus cannot be distinguished from the captured inactive result."
+      },
+      "samples": 736,
+      "peakBrowserContainerMiB": 2656.5,
+      "peakIndividualProcessMiB": 1331.0,
+      "minimumVmAvailableMiB": 2766.4,
+      "ownerGuardTriggered": false
+    },
+    "subsequentHostedConfirmation": "pending",
+    "modalReadinessJourney": {
+      "beforeReadiness": {
+        "status": "failed",
+        "failed": 1,
+        "violations": ["landmark-one-main", "page-has-heading-one"],
+        "context": "Full-page Axe audit with Audience modal open; background main and heading correctly inert."
+      },
+      "afterTitleAndReadinessChanges": {
+        "status": "passed",
+        "passed": 1,
+        "failed": 0,
+        "reportedDuration": "1.3m",
+        "journey": "Entire five-page participant-interaction mobile journey",
+        "peakBrowserContainerMiB": 4097.1,
+        "peakIndividualProcessMiB": 1305.9,
+        "minimumVmAvailableMiB": 1131.2,
+        "ownerGuardTriggered": false,
+        "fullAxeAuditUnchanged": true
+      },
+      "causality": "The scoped title color repair addresses a confirmed visual defect. A foreground/modal-readiness explanation for the two page-best-practice findings remains an inference: focus/visibility before the earlier failed audit were not directly sampled. Background inert behavior and heading/landmark levels were retained."
+    },
+    "resourceInterruptedFullAttempts": [
+      {
+        "status": "interrupted-not-acceptance",
+        "planned": 63,
+        "browserContainerMemoryGiB": 3,
+        "ownerResourceGuardGiB": 2.5,
+        "passed": 14,
+        "cascadeFailures": 49,
+        "kernelOomCaptured": false
+      },
+      {
+        "status": "interrupted-not-acceptance",
+        "planned": 63,
+        "browserContainerMemoryGiB": 4,
+        "ownerResourceGuardGiB": 3.5,
+        "passed": 18,
+        "cascadeFailures": 45,
+        "kernelOomCaptured": false
+      }
+    ],
+    "interruptedAttemptInterpretation": "Both owned resource monitors stopped the browser; subsequent target-closed failures cascaded. Neither attempt establishes a product regression, captured kernel OOM, or full-suite acceptance.",
+    "finalUiMatrix": {
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 155893.494,
+      "projects": ["chromium-beta", "firefox-beta", "chromium-beta-mobile", "webkit-beta-mobile"],
+      "casesPerProject": 2,
+      "coverage": "23-card Library regression and entire five-page participant interaction journey with unchanged full Axe audit.",
+      "postOpenFocusStates": "Each project recorded visible/focused document and Close button as activeElement inside a non-inert visible drawer.",
+      "source": "Final initial-focus helper, title color repair, badge blur removal, readiness preconditions and diagnostic attachment."
+    },
+    "finalWebkitRepeatedJourney": {
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 162138.447,
+      "project": "webkit-beta-mobile",
+      "repeatEach": 3,
+      "retries": 0,
+      "coverage": "Entire five-page participant interaction journey; same exact focus assertion and unrestricted full-page Axe audit.",
+      "afterFinalInitialFocusRepair": true
+    },
+    "finalFocusedResourceObservations": {
+      "covers": "Sequential 8-case four-project matrix and 3-case mobile WebKit repeat run",
+      "samples": 293,
+      "peakBrowserContainerMiB": 4384.5,
+      "peakIndividualProcessMiB": 1332.9,
+      "minimumVmAvailableMiB": 1215.9,
+      "ownerGuardTriggered": false,
+      "browserContainerRemoved": true
+    },
+    "repositoryCheckAttempts": [
+      {
+        "status": "failed-lint",
+        "detail": "Initial unit-test mock used a this-alias rejected by the existing lint rule; corrected without production behavior changes."
+      },
+      {
+        "status": "passed",
+        "command": "CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check",
+        "node": "22.23.4",
+        "serverTestsPassed": 950,
+        "webTestsPassed": 1560,
+        "smokeSupportTestsPassed": 304,
+        "serverTestsSkipped": 13,
+        "dbTestsPassed": 419,
+        "dbTestsSkipped": 300,
+        "restrictedPostgresConformanceRunSeparately": true,
+        "testedCanvasStoreSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea"
+      },
+      {
+        "status": "passed",
+        "command": "CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check",
+        "node": "22.23.4",
+        "testedCanvasStoreSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+        "reason": "Final production source after rejecting and restoring the database query candidate.",
+        "serverTestsPassed": 950,
+        "webTestsPassed": 1560,
+        "smokeSupportTestsPassed": 304,
+        "serverTestsSkipped": 13,
+        "dbTestsPassed": 419,
+        "dbTestsSkipped": 300,
+        "restrictedPostgresConformanceRunSeparately": true
+      }
+    ]
+  },
+  "releaseLimits": [
+    "No renderer flags, browser upgrades, rate-budget changes, assertion relaxations, or application/test deadline increases.",
+    "The complete local pre-helper run remains 62/63 with one modal focus failure. Final-source focused verification passed 8/8 across four projects plus 3/3 repeated WebKit journeys; the complete suite after the helper change and subsequent hosted confirmation have not run.",
+    "No capacity increase, production readiness, physical-device coverage, or hosted SLA is established."
+  ]
+}

@@ -18,6 +18,9 @@ import {
   type CanvasFixtureActor,
 } from "./support/canvas-facilitation-fixture.js";
 
+import { hashToken } from "../src/security.js";
+import { CanvasPresenterService } from "../src/canvas-presenter.js";
+
 afterEach(closeCanvasFacilitationFixtures);
 const viewport = { x: 20, y: 30, width: 800, height: 600 };
 function present(
@@ -300,5 +303,289 @@ describe("ephemeral canvas presentation HTTP boundaries", () => {
       payload: { schemaVersion: 1, format: "svg", region: null },
     });
     expect(exportDenied.statusCode, exportDenied.body).toBe(404);
+  });
+});
+
+function delayedPresenterRead(f: CanvasFacilitationFixture) {
+  let entered!: () => void, release!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const read = f.cache.getCanvasPresenter!.bind(f.cache);
+  vi.spyOn(f.cache, "getCanvasPresenter").mockImplementationOnce(async (id) => {
+    const value = await read(id);
+    entered();
+    await released;
+    return value;
+  });
+  return { reading, release };
+}
+
+describe("creator presenter request-local guard consolidation", () => {
+  it("uses exactly two fresh Canvas authorizations for an inactive creator GET", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    const authorize = vi.spyOn(f.canvasBoards, "authorize");
+    const response = await f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/presenter`,
+      headers: f.owner.headers,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().presenter).toMatchObject({
+      active: false,
+      presenterId: null,
+      viewport: null,
+    });
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(
+      authorize.mock.calls.every(
+        ([actor, id]) => actor.userId === f.owner.userId && id === board.id,
+      ),
+    ).toBe(true);
+  });
+
+  it.each(["session", "grant", "delete", "feature"] as const)(
+    "fails closed when %s changes during a delayed cache read",
+    async (change) => {
+      const f = await fixture(),
+        board = await create(f);
+      await share(f, board, f.editor, "viewer");
+      const input = start();
+      expect((await present(f, board.id, input)).statusCode).toBe(200);
+      const delay = delayedPresenterRead(f);
+      const pending = f.app.inject({
+        url: `/v1/canvas-boards/${board.id}/presenter`,
+        headers: f.editor.headers,
+      });
+      await delay.reading;
+      try {
+        if (change === "session") {
+          const cookie = f.editor.headers.cookie;
+          await f.repository.revokeCreatorSession(hashToken(cookie.slice(cookie.indexOf("=") + 1)));
+        } else if (change === "grant") {
+          await f.canvasBoards.revokeGrant({ userId: f.owner.userId }, board.id, f.editor.userId);
+        } else if (change === "delete") {
+          await f.canvasBoards.delete({ userId: f.owner.userId }, board.id);
+        } else {
+          await f.platform.saveFeaturePolicy({
+            expectedRevision: 1,
+            features: {
+              ...structuredClone(canvasFacilitationFeatures),
+              canvasBoardRealtime: { enabled: false, plans: ["free", "pro", "team"] },
+            },
+          });
+        }
+      } finally {
+        delay.release();
+      }
+      const response = await pending;
+      expect(response.statusCode, response.body).toBe(change === "session" ? 401 : 404);
+      expect(response.body).not.toContain(input.sessionId);
+      expect(response.body).not.toContain("presenterId");
+    },
+  );
+
+  it("rechecks an active presenter's eligibility after the cache await", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    await share(f, board, f.editor, "facilitator");
+    const input = start();
+    expect((await present(f, board.id, input, f.editor)).statusCode).toBe(200);
+    const delay = delayedPresenterRead(f);
+    const pending = f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/presenter`,
+      headers: f.owner.headers,
+    });
+    await delay.reading;
+    try {
+      await f.canvasBoards.revokeGrant({ userId: f.owner.userId }, board.id, f.editor.userId);
+    } finally {
+      delay.release();
+    }
+    const response = await pending;
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().presenter).toMatchObject({
+      active: false,
+      presenterId: null,
+      viewport: null,
+    });
+    expect(response.body).not.toContain(input.sessionId);
+  });
+
+  it("suppresses an expired cached lease even when Redis returned its earlier value", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    expect((await present(f, board.id, start())).statusCode).toBe(200);
+    const delay = delayedPresenterRead(f);
+    const pending = f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/presenter`,
+      headers: f.owner.headers,
+    });
+    await delay.reading;
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 16_000);
+    delay.release();
+    const response = await pending;
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().presenter).toMatchObject({
+      active: false,
+      sessionId: null,
+      viewport: null,
+    });
+  });
+
+  it.each(["canvasSeq", "sourceRevision"] as const)("retains the final %s fence", async (field) => {
+    const f = await fixture(),
+      board = await create(f);
+    const input = start();
+    expect((await present(f, board.id, input)).statusCode).toBe(200);
+    const original = f.canvasBoards.authorize.bind(f.canvasBoards);
+    let calls = 0;
+    vi.spyOn(f.canvasBoards, "authorize").mockImplementation(async (...args) => {
+      const access = await original(...args);
+      // Active team cue has an intervening presenter-owner authorization.
+      if (++calls === 3) return { ...access, [field]: (access[field] ?? 0) + 1 };
+      return access;
+    });
+    const response = await f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/presenter`,
+      headers: f.owner.headers,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().presenter).toMatchObject({ active: false, viewport: null });
+    expect(response.body).not.toContain(input.sessionId);
+  });
+
+  it("checks the board deadline synchronously after the final authorization resolves", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    const original = f.canvasBoards.authorize.bind(f.canvasBoards);
+    let calls = 0;
+    vi.spyOn(f.canvasBoards, "authorize").mockImplementation(async (...args) => {
+      const access = await original(...args);
+      if (++calls === 2) vi.spyOn(Date, "now").mockReturnValue(Date.parse(access.expiresAt));
+      return access;
+    });
+    const response = await f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/presenter`,
+      headers: f.owner.headers,
+    });
+    expect(response.statusCode, response.body).toBe(404);
+  });
+
+  it("suppresses a frame unpublished while its current-scene read is delayed", async () => {
+    const f = await fixture(),
+      workshop = await createFacilitationWorkshop(f);
+    const board = await insertCanvasObjects(f, workshop.board, [
+      { type: "frame", visibility: "published", text: "Current public frame" },
+    ]);
+    const frame = board.objects.find((object) => object.type === "frame")!;
+    const input = start({
+      type: "start",
+      audience: "published",
+      frameId: frame.id,
+      viewport: null,
+    });
+    expect((await present(f, board.id, input)).statusCode).toBe(200);
+    let entered!: () => void, release!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const get = f.canvasBoards.get.bind(f.canvasBoards);
+    vi.spyOn(f.canvasBoards, "get").mockImplementationOnce(async (...args) => {
+      const value = await get(...args);
+      entered();
+      await released;
+      return value;
+    });
+    const pending = f.app.inject({
+      url: `/v1/canvas-boards/${board.id}/presenter`,
+      headers: f.owner.headers,
+    });
+    await reading;
+    try {
+      const changed = await canvasObjectCommand(f, board, {
+        type: "batch",
+        operations: [
+          {
+            type: "update",
+            id: frame.id,
+            expectedVersion: frame.version,
+            patch: { visibility: "team" },
+          },
+        ],
+      });
+      expect(changed.statusCode, changed.body).toBe(200);
+    } finally {
+      release();
+    }
+    const response = await pending;
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().presenter).toMatchObject({
+      active: false,
+      frameId: null,
+      viewport: null,
+    });
+    expect(response.body).not.toContain(frame.id);
+  });
+});
+
+describe("service-owned creator presenter authority", () => {
+  it("rejects a different callback actor without substituting it for the captured principal", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    const service = new CanvasPresenterService(f.canvasBoards, f.cache);
+    const actor = { userId: f.owner.userId };
+    const authorize = vi.spyOn(f.canvasBoards, "authorize");
+    const currentActor = vi.fn(async () => {
+      // Mutating the supplied object must not change the service's captured identity.
+      actor.userId = f.editor.userId;
+      return { userId: f.editor.userId };
+    });
+    await expect(
+      service.getForRequest(actor, board.id, {
+        requireFeature: async () => {},
+        currentActor,
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(currentActor).toHaveBeenCalledTimes(1);
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect(authorize.mock.calls[0]?.[0].userId).toBe(f.owner.userId);
+  });
+
+  it("reauthorizes after grant loss during the final actor callback await", async () => {
+    const f = await fixture(),
+      board = await create(f);
+    await share(f, board, f.editor, "viewer");
+    const service = new CanvasPresenterService(f.canvasBoards, f.cache);
+    let entered!: () => void, release!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = service.getForRequest({ userId: f.editor.userId }, board.id, {
+      requireFeature: async () => {},
+      currentActor: async () => {
+        entered();
+        await released;
+        return { userId: f.editor.userId };
+      },
+    });
+    // Observe rejection immediately so the deliberately delayed request has no unhandled turn.
+    const rejected = expect(pending).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await reading;
+    try {
+      await f.canvasBoards.revokeGrant({ userId: f.owner.userId }, board.id, f.editor.userId);
+    } finally {
+      release();
+    }
+    await rejected;
   });
 });

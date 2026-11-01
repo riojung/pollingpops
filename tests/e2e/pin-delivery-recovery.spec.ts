@@ -283,72 +283,85 @@ test("Use another email explicitly clears the accepted challenge and returns to 
 });
 
 test("an already verified email does not create another workspace or restart onboarding", async ({
-  page,
+  page: signedInPage,
+  browser,
 }, testInfo) => {
   test.setTimeout(120_000);
   const email = testEmail("verified-signup-repeat", testInfo);
-  const { apiOrigin } = await verifyCreatorEmail(page, email, { returnTo: "/account" });
-  const requested = page.waitForResponse(
+  const { apiOrigin } = await verifyCreatorEmail(signedInPage, email, { returnTo: "/account" });
+  const requested = signedInPage.waitForResponse(
     (response) =>
       response.url().endsWith("/v1/auth/pin/request") && response.request().method() === "POST",
   );
-  await startPinRequest(page, email);
+  await startPinRequest(signedInPage, email);
   const { debugPin } = await (await requested).json();
-  await submitCreatorPin(page, debugPin);
-  const original = await (await page.request.get(`${apiOrigin}/v1/auth/me`)).json();
-  const session = (await page.context().cookies()).find(
+  await submitCreatorPin(signedInPage, debugPin);
+  const original = await (await signedInPage.request.get(`${apiOrigin}/v1/auth/me`)).json();
+  const session = (await signedInPage.context().cookies()).find(
     (cookie) => cookie.name === "openround_creator",
   )!;
-  // Keep a separate read-only session to compare the existing identity after the anonymous attempt.
-  await page.context().clearCookies({ name: session.name });
-  await page.goto("/signin?mode=signup&returnTo=%2Faccount");
-  const form = page.getByRole("form", { name: "Create account", exact: true });
-  await form.getByLabel("Email address", { exact: true }).fill(email);
-  await acceptCreatorPolicies(page);
-  const posts: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "POST") posts.push(new URL(request.url()).pathname);
+  // Keep the signed-in control intact; pending account reads must not redirect the anonymous page.
+  const anonymousContext = await browser.newContext({
+    baseURL: new URL(signedInPage.url()).origin,
+    viewport: signedInPage.viewportSize(),
+    userAgent: testInfo.project.use.userAgent,
+    deviceScaleFactor: testInfo.project.use.deviceScaleFactor,
+    isMobile: testInfo.project.use.isMobile,
+    hasTouch: testInfo.project.use.hasTouch,
   });
-  const verification = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/v1/auth/email-verification") &&
-      response.request().method() === "POST",
-  );
-  await form.getByRole("button", { name: "Send verification email", exact: true }).click();
-  let response = await verification;
-  let verificationRequests = 1;
-  if (response.status() === 429) {
-    const retryAfterSeconds = Number(response.headers()["retry-after"]);
-    expect(retryAfterSeconds).toBeGreaterThan(0);
-    // Repeated signup preserves the real verification cooldown for every mailbox.
-    await waitForCooldown(retryAfterSeconds * 1000 + 100);
-    const retry = page.waitForResponse(
-      (candidate) =>
-        candidate.url().endsWith("/v1/auth/email-verification") &&
-        candidate.request().method() === "POST",
+  const page = await anonymousContext.newPage();
+  try {
+    await page.goto("/signin?mode=signup&returnTo=%2Faccount");
+    const form = page.getByRole("form", { name: "Create account", exact: true });
+    await form.getByLabel("Email address", { exact: true }).fill(email);
+    await acceptCreatorPolicies(page);
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(new URL(request.url()).pathname);
+    });
+    const verification = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/v1/auth/email-verification") &&
+        response.request().method() === "POST",
     );
     await form.getByRole("button", { name: "Send verification email", exact: true }).click();
-    response = await retry;
-    verificationRequests += 1;
+    let response = await verification;
+    let verificationRequests = 1;
+    if (response.status() === 429) {
+      const retryAfterSeconds = Number(response.headers()["retry-after"]);
+      expect(retryAfterSeconds).toBeGreaterThan(0);
+      // Repeated signup preserves the real verification cooldown for every mailbox.
+      await waitForCooldown(retryAfterSeconds * 1000 + 100);
+      const retry = page.waitForResponse(
+        (candidate) =>
+          candidate.url().endsWith("/v1/auth/email-verification") &&
+          candidate.request().method() === "POST",
+      );
+      await form.getByRole("button", { name: "Send verification email", exact: true }).click();
+      response = await retry;
+      verificationRequests += 1;
+    }
+    expect(response.status()).toBe(202);
+    expect(await response.json()).toEqual({ accepted: true });
+    await expect(page.getByRole("status")).toContainText("Verification email requested");
+    await expectSignInContinuation(page);
+    await expectAnonymousCreator(page, apiOrigin);
+    const headers = { cookie: `${session.name}=${session.value}` };
+    const retained = await (await page.request.get(`${apiOrigin}/v1/auth/me`, { headers })).json();
+    expect(retained.creator.userId).toBe(original.creator.userId);
+    expect(retained.creator.workspaceId).toBe(original.creator.workspaceId);
+    const workspaces = await (
+      await page.request.get(`${apiOrigin}/v1/workspaces`, { headers })
+    ).json();
+    expect(workspaces.workspaces).toHaveLength(1);
+    expect(posts.filter((path) => path === "/v1/auth/email-verification")).toHaveLength(
+      verificationRequests,
+    );
+    expect(posts.filter((path) => path === "/v1/auth/pin/request")).toHaveLength(0);
+    expect(posts.filter((path) => path === "/v1/customer/setup")).toHaveLength(0);
+  } finally {
+    await anonymousContext.close();
   }
-  expect(response.status()).toBe(202);
-  expect(await response.json()).toEqual({ accepted: true });
-  await expect(page.getByRole("status")).toContainText("Verification email requested");
-  await expectSignInContinuation(page);
-  await expectAnonymousCreator(page, apiOrigin);
-  const headers = { cookie: `${session.name}=${session.value}` };
-  const retained = await (await page.request.get(`${apiOrigin}/v1/auth/me`, { headers })).json();
-  expect(retained.creator.userId).toBe(original.creator.userId);
-  expect(retained.creator.workspaceId).toBe(original.creator.workspaceId);
-  const workspaces = await (
-    await page.request.get(`${apiOrigin}/v1/workspaces`, { headers })
-  ).json();
-  expect(workspaces.workspaces).toHaveLength(1);
-  expect(posts.filter((path) => path === "/v1/auth/email-verification")).toHaveLength(
-    verificationRequests,
-  );
-  expect(posts.filter((path) => path === "/v1/auth/pin/request")).toHaveLength(0);
-  expect(posts.filter((path) => path === "/v1/customer/setup")).toHaveLength(0);
 });
 
 for (const scenario of [

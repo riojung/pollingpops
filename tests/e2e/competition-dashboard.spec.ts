@@ -128,6 +128,7 @@ async function openAudience(
   const popup = host.waitForEvent("popup");
   await host.getByRole("button", { name: "Presenter view", exact: true }).click();
   const presenter = await popup;
+  await presenter.setViewportSize(host.viewportSize()!);
   await expect(presenter).toHaveURL(/\/present\//);
   await expect(presenter.locator(".live-shell")).toBeVisible();
   return { context, participant, presenter };
@@ -381,6 +382,8 @@ test("competition standings release after reveal and remain on the final project
       dashboard(winner).getByTestId("competition-personal").getByTestId("competition-streak"),
     ).toContainText("2");
     await winner.close();
+    // Release the completed host tab before exercising the two audience surfaces.
+    await host.close();
     await presenter.emulateMedia({ reducedMotion: "no-preference" });
     const presenterDashboard = dashboard(presenter);
     await presenterDashboard.getByTestId("competition-display-options").locator("summary").click();

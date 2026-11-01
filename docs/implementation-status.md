@@ -453,6 +453,57 @@ smoke gates. The 500 ms peer roadmap target and staging/device/media/soak qualif
 open, so no capacity increase is authorized. See the [per-run capacity evidence](canvas-capacity-evidence.md#october-31-2026-node-22-comparison)
 for distributions, hashes, limitations and required next measurements.
 
+### Canvas delivery and remaining CI follow-up October 31 2026
+
+This increment starts from merged PR #169 / `7282d5c` on `codex/canvas-delivery-and-ci`.
+It retains authentication budgets, browser assertions and deadlines, contract versions, and
+all product limits.
+
+The verified-signup fixture uses a separate anonymous context while retaining the authenticated
+control session. Competition fixtures match the presenter popup to the host device viewport and
+close the completed host tab before exercising the two audience surfaces. The beta participant
+journey removes an unused synthetic admission while retaining its three distinct real browser
+participants and their saved, unsaved and confidence-first assertions. Production-media settings
+now select Appearance and Privacy and data through the actual tabs. Template filter labels use
+the normal foreground token; the theme test also waits for genuinely inherited copy to reach its
+existing palette before running the unchanged accessibility audit.
+
+The full guarded local production-media Compose path passes image builds, migration, API smoke
+and scanned-media browser flow. Full Linux WebKit core passes all 37 cases with two workers and
+zero retries. The beta broad run passes 60 of 62; its intermediate label-token mismatch is repaired
+and all three affected mobile palette/template cases pass with zero retries. Recovery Pack's
+local library-link stall remains a validation limitation. Both the broad beta run and a controlled
+23-active-Round trial record an owned-container OOM kill. The controlled trial matches 11 drafts
+and 12 published Rounds with one visible, focused page; synthetic content differs. Native launcher
+exit zero does not rule out a killed child. These local observations do not establish the cause of
+the hosted CI failure. Diagnostic resources were removed; the user's existing services were
+preserved. Updated hosted workflows remain required.
+
+Harness-only fixed-origin profiling distinguishes presenter, scene, command and stream work.
+Numeric request groups describe partial measured windows and do not imply HTTP lifetimes.
+The reconnect oracle requires both renewed transport and observed content, independently of their
+arrival order, within its existing budget; it measures the later completion rather than accepting
+polling alone. A pre-fix incomplete reconnect run remains excluded from accepted paired evidence.
+The creator presenter read now owns the requester's two fresh Canvas authorizations, captures the
+original principal, and completes feature/session guards before the final authorization and
+expiry/sequence fences. Active presenter ownership/frame, guest and mutation paths retain their
+existing checks. All 18 focused presenter API cases and server semantic typechecking pass. Three
+profiled confirmations and a profiling-off control pass correctness and smoke gates. Latency ranges
+overlap the baseline; the measured benefit is fewer duplicate authorization calls, not an established
+tail-latency win. The 500 ms peer target remains open and no capacity increase is authorized.
+
+A covered-notification client experiment passed 60 focused client/hook/preview cases and semantic
+typechecking, but peer p95 worsened in all three profiled comparisons and the profiling-off control.
+It is excluded from the production change. Its [archived patch](experiments/canvas-covered-notification-refresh.patch)
+supports reproducing that rejected experiment; the existing 350 ms client batching and
+manual/five-second reads remain. See the [capacity evidence](canvas-capacity-evidence.md) for
+the measurements and still-open deployment, physical-device, realistic-media and soak gates.
+
+The combined retained source passes the full Node 22
+`CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, including production builds.
+All 25 dedicated Canvas desktop/mobile browser cases and both changed core fixtures on desktop
+Chromium pass with zero retries. Existing environment-gated test skips remain.
+
 ### Standalone administrator authentication October 15 2026
 
 Implemented locally on `codex/standalone-admin-console`. Administrators open the separate console

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { AsyncResource } from "node:async_hooks";
 import { describe, expect, it } from "vitest";
 import {
   CanvasCollaborationProfiler,
@@ -384,5 +385,109 @@ describe("opt-in Canvas repository profiling", () => {
       expect.objectContaining({ kind: "query", rows: 5, category: "other" }),
     );
     profile.restore();
+  });
+});
+
+describe("fixed harness-only Canvas call origins", () => {
+  it("keeps parallel HTTP origins isolated and forwards emit/listener behavior unchanged", async () => {
+    const profile = profiler(),
+      server = new EventEmitter();
+    const first = deferred<void>(),
+      second = deferred<void>();
+    const done: Promise<void>[] = [];
+    let next = 0;
+    const repository = {
+      async authorize() {
+        await (next++ === 0 ? first.promise : second.promise);
+      },
+    };
+    const requests = [
+      {
+        method: "GET",
+        url: "/v1/canvas-boards/00000000-0000-4000-8000-000000000001/presenter?token=private-credential",
+      },
+      { method: "GET", url: "/v1/canvas-boards/00000000-0000-4000-8000-000000000002" },
+    ];
+    const response = { body: "private response body" };
+    server.on("request", function (this: EventEmitter, request, suppliedResponse) {
+      expect(this).toBe(server);
+      expect(requests).toContain(request);
+      expect(suppliedResponse).toBe(response);
+      done.push(repository.authorize());
+    });
+    const order: number[] = [];
+    server.once("probe", function (this: EventEmitter, value) {
+      expect(this).toBe(server);
+      expect(value).toBe(response);
+      order.push(1);
+    });
+    server.on("probe", () => order.push(2));
+    const originalEmit = server.emit;
+    profile.wrapHttpServer(server);
+    profile.wrapRepository(repository, 0);
+    profile.start();
+    expect(server.emit("request", requests[0], response)).toBe(true);
+    expect(server.emit("request", requests[1], response)).toBe(true);
+    expect(server.emit("probe", response)).toBe(true);
+    expect(server.emit("probe", response)).toBe(true);
+    expect(order).toEqual([1, 2, 2]);
+    second.resolve();
+    await done[1];
+    first.resolve();
+    await done[0];
+    profile.stop();
+    const operations = profile.report().samples.filter((sample) => sample.kind === "operation");
+    expect(operations).toEqual([
+      expect.objectContaining({ origin: "sceneHttp", request: 2, method: "authorize" }),
+      expect.objectContaining({ origin: "presenterHttp", request: 1, method: "authorize" }),
+    ]);
+    expect(
+      profile.report().distributions.filter((group) => group.kind === "operation"),
+    ).toHaveLength(1);
+    expect(
+      profile.report().originDistributions.filter((group) => group.kind === "operation"),
+    ).toHaveLength(2);
+    for (const secret of [
+      "private-credential",
+      "private response body",
+      requests[0]!.url,
+      requests[1]!.url,
+    ])
+      expect(JSON.stringify(profile.report())).not.toContain(secret);
+    profile.restore();
+    expect(server.emit).toBe(originalEmit);
+  });
+
+  it("measures work inherited from a pre-window stream without retaining its handshake ordinal", async () => {
+    const profile = profiler(),
+      server = new EventEmitter();
+    const repository = { authorize: async () => {}, listOutbox: async () => {} };
+    let recheck!: () => Promise<void>;
+    server.on("request", () => {
+      recheck = AsyncResource.bind(() => repository.authorize());
+    });
+    profile.wrapHttpServer(server);
+    profile.wrapRepository(repository, 1);
+    server.emit("request", {
+      method: "GET",
+      url: "/v1/canvas-boards/00000000-0000-4000-8000-000000000001/events",
+    });
+    profile.start();
+    await recheck();
+    await repository.listOutbox();
+    profile.stop();
+    expect(profile.report().observed.operation).toBe(2);
+    expect(profile.report().samples.filter((sample) => sample.kind === "operation")).toEqual([
+      expect.objectContaining({ origin: "stream", request: null, method: "authorize" }),
+      expect.objectContaining({ origin: "stream", request: null, method: "listOutbox" }),
+    ]);
+  });
+
+  it("installs no HTTP wrapper while disabled", () => {
+    const profile = new CanvasCollaborationProfiler(parseCanvasProfileConfig({}));
+    const server = new EventEmitter(),
+      emit = server.emit;
+    profile.wrapHttpServer(server);
+    expect(server.emit).toBe(emit);
   });
 });

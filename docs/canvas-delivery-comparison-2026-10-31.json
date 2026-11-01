@@ -1,0 +1,3953 @@
+{
+  "schemaVersion": 1,
+  "selectedProductionVariant": "presenterOnly",
+  "capacityIncreaseAuthorized": false,
+  "definitions": {
+    "order": "B1,C1,C2,B2,B3,C3,B-off,C-off, then P1,P2,P3,P-off. P is a separate later phase, not paired/interleaved evidence or a statistical causal comparison.",
+    "latency": "Reported nearest-rank p50/p95/p99/max in milliseconds. Ack includes browser-shaped HTTP/auth/repository/projection work. Peer is repository-resolution to matching SVG plus two rAF, not exact SQL commit or physical display timing.",
+    "origins": "Fixed initiating-route/stream labels; counts are retained measured-window method/query/pool completions. Nested wall times overlap and independent percentiles must not be added.",
+    "partialRequests": "PARTIAL WINDOW: histograms group retained completions by numeric node/request ordinal, then omit those ordinals. Requests may start before or end after the window. Counts do not establish complete requests, per-request SQL totals or HTTP lifetimes. Stream work has no handshake ordinal.",
+    "sql": "Direct wrapped Canvas SQL only; session/auth/feature-policy SQL outside wrapped Canvas methods is excluded. Presenter adds a second feature check outside this SQL profile. Direct query-count distributions join node plus numeric operation ID to retained completed command/get; counts do not describe all system SQL.",
+    "pool": "Wait distributions are driver acquisition waits. Maxima are individual-pool samples at acquisition boundaries, not continuous maxima or total cluster connections.",
+    "calibration": "Actual shaped health-fetch timings include browser/HTTP overhead and are not pure WAN RTT. Each actor p50 must be at least 80% of nominal CDP latency.",
+    "coverage": "Measured writes/peer-paint epoch only; setup/warm-up/pre-window operations excluded. In-flight work is censored; orphan queries lack a retained completed operation. No dropped samples does not imply zero censoring.",
+    "comparison": "Different measured-window durations and polling schedules limit comparisons of counts. No unqualified percentage load or latency improvement is inferred."
+  },
+  "provenance": {
+    "revision": "7282d5ce34a307d099a6b720d2807ab3f8cb37ec",
+    "workingTreeDirty": true,
+    "originSummarizerSha256": "304807e6aea5c97f048c36f24c0459289c7bd3c4127d790f82c0eeb5f83a16ee",
+    "sharedAnalyzerSha256": "411a341a68b80cfbdae87760cc512c1340f5709a6ff672279760ec83d240c43a",
+    "protocolVersion": 3,
+    "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+    "variants": {
+      "baseline": {
+        "apiAndHarnessSha256": "a8a5d19aca67e68895390f41206d9bd35cd74f4f674530d49f53e11e4800a5d3",
+        "browserSourceSha256": "383753e30fedcd3eb24a7c7f5147206f9dd99631298f6321e5804d5175091927",
+        "compiledAt": "2026-10-31T20:27:54.998Z"
+      },
+      "presenterAndClientRejected": {
+        "apiAndHarnessSha256": "4875b37d24cf00ad1d907649ff25ed2a200b9761838dcf7d123c729b4aba6b9e",
+        "browserSourceSha256": "1187c97b4064421319d01737924c8fcaa08687a88e492536ae99b0c0b33b16ce",
+        "compiledAt": "2026-10-31T20:34:53.842Z"
+      },
+      "presenterOnly": {
+        "apiAndHarnessSha256": "4875b37d24cf00ad1d907649ff25ed2a200b9761838dcf7d123c729b4aba6b9e",
+        "browserSourceSha256": "383753e30fedcd3eb24a7c7f5147206f9dd99631298f6321e5804d5175091927",
+        "compiledAt": "2026-10-31T20:27:54.998Z"
+      }
+    },
+    "environment": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "nodeVersion": "22.23.4",
+      "nativeHeadlessChromiumVersion": "156.0.8078.4",
+      "hostMemoryBytes": 25769803776,
+      "hostLogicalCpuCount": 12,
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "databaseVersion": "17.11",
+      "actualValkeyVersion": "8.1.10",
+      "artifactCacheCompatibilityVersion": "7.2.4",
+      "databaseAndCacheVmVcpus": 4,
+      "databaseAndCacheVmTotalMemoryBytes": 8309010432,
+      "servingApiNodesInOneCoordinator": 2,
+      "independentRuntimePools": 2,
+      "maximumConnectionsPerRuntimePool": 15,
+      "restrictedRuntimeRlsChecked": true,
+      "nominalCdpLatencyMs": 100,
+      "clientNotificationCoalescingMs": 350,
+      "existingUserStackIdle": true,
+      "concurrentTaskBuildsOrSuites": false,
+      "observedNoncontinuousMacMemoryPressureLevels": [1, 2],
+      "resourceProvenance": "artifact numeric environment plus run-owner-recorded VM/cache and quiet-host observations"
+    },
+    "workload": {
+      "objects": 500,
+      "licensedEditors": 20,
+      "openEditorBrowserContexts": 20,
+      "updatesPerEditor": 10,
+      "warmupWaves": 1,
+      "measuredCommands": 200,
+      "guestOrdinaryObjects": 100,
+      "fakeImagePlacements": 2,
+      "fakeImageAssets": 1,
+      "fakeImageBytes": 68,
+      "sceneBytes": 313422,
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1"
+    }
+  },
+  "oracleCorrection": {
+    "file": "tests/load/canvas-collaboration-capacity.mts",
+    "sha256": "7717c86434079401cb3a93935a0eaace52af8d9f41678552e5d46c20f5e12d87",
+    "predicate": "Wait for BOTH authorized matching text plus two rAF AND a renewed stream request before measuring reconnect completion; retain final request-count assertion and real offline plus existing-stream interruption.",
+    "timeoutUnchanged": true,
+    "configurationTimeoutMs": 30000,
+    "reconnectSmokeMaximumP95Ms": 12000,
+    "productRetryBackoffUnchanged": true,
+    "artifactTreatment": "All twelve confirmation runs follow this correction. Earlier complete exploratory runs and the incomplete ordering-oracle run are excluded, not relabeled as confirmation evidence."
+  },
+  "rejectedClientExperiment": {
+    "path": "docs/experiments/canvas-covered-notification-refresh.patch",
+    "bytes": 29997,
+    "sha256": "446c64182dcbf6b494ab832a1d135c924866946c696dd6d92caf04627a64e2fe",
+    "appliedToFinalProduction": false,
+    "archiveNormalization": "Three optional blank-context space markers were omitted; applying the archive reproduces all four measured client source/test files byte-for-byte."
+  },
+  "runOrder": [
+    "baseline-confirm-1",
+    "candidate-confirm-1",
+    "candidate-confirm-2",
+    "baseline-confirm-2",
+    "baseline-confirm-3",
+    "candidate-confirm-3",
+    "baseline-confirm-unprofiled",
+    "candidate-confirm-unprofiled",
+    "presenter-confirm-1",
+    "presenter-confirm-2",
+    "presenter-confirm-3",
+    "presenter-confirm-unprofiled"
+  ],
+  "runs": [
+    {
+      "label": "baseline-confirm-1",
+      "variant": "baseline",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "2370df96b8ce4fe05830f61404a4a80cddb693ca5c6b86da6c3c9c616a00a516",
+      "artifactBytes": 21638619,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1293.6,
+          "p95": 1874,
+          "p99": 1952.6,
+          "max": 2066.1
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 565.94,
+          "p95": 1161.96,
+          "p99": 1316.91,
+          "max": 1403.02
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 763.79,
+          "p95": 763.79,
+          "p99": 763.79,
+          "max": 763.79
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1035.2,
+          "p95": 1051.2,
+          "p99": 1068.9,
+          "max": 1068.9
+        },
+        "navigationFrameInterval": {
+          "count": 141,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 33.3
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1183.29,
+          "p95": 1183.29,
+          "p99": 1183.29,
+          "max": 1183.29
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1293.6,
+          "p95": 1874,
+          "p99": 1952.6,
+          "max": 2066.1
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 111.1,
+          "p95": 117.8,
+          "p99": 118.1,
+          "max": 118.1
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [105.1, 111.5],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 20835.76425,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 2369,
+          "query": 64696,
+          "pool": 2385
+        },
+        "retainedCompletions": {
+          "operation": 2369,
+          "query": 64696,
+          "pool": 2385
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 17,
+          "query": 16,
+          "pool": 1
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 297,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 2385,
+            "p50": 22.321,
+            "p95": 255.697,
+            "p99": 505.85,
+            "max": 722.812
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 50
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 84,
+            "queries": 1932,
+            "pools": 84,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 43,
+            "queries": 1376,
+            "pools": 43,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 99,
+            "queries": 2277,
+            "pools": 99,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 112,
+            "queries": 450,
+            "pools": 113,
+            "orphanQueries": 2
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 845,
+            "queries": 20311,
+            "pools": 849,
+            "orphanQueries": 31
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 358,
+            "queries": 12078,
+            "pools": 369,
+            "orphanQueries": 264
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 400,
+            "queries": 9580,
+            "pools": 400,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 28,
+            "queries": 112,
+            "pools": 28,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 21,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 4,
+                "groups": 21
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 43,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 43
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 217,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 2
+              },
+              {
+                "completedAuthorizes": 1,
+                "groups": 3
+              },
+              {
+                "completedAuthorizes": 3,
+                "groups": 6
+              },
+              {
+                "completedAuthorizes": 4,
+                "groups": 206
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 369,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 369
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 53,
+            "exactRetained": 53,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 53,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 548,
+            "exactRetained": 548,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 548,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "candidate-confirm-1",
+      "variant": "presenterAndClientRejected",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "21734c3ba888879448ebd476986e75822ce5801339e2f06facb65ce95136d93f",
+      "artifactBytes": 16567230,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1104.3,
+          "p95": 1506.4,
+          "p99": 1586.2,
+          "max": 1697.1
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 950.61,
+          "p95": 1751.21,
+          "p99": 1869.58,
+          "max": 1948.37
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 488.01,
+          "p95": 488.01,
+          "p99": 488.01,
+          "max": 488.01
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1041.9,
+          "p95": 1052.9,
+          "p99": 1056.8,
+          "max": 1056.8
+        },
+        "navigationFrameInterval": {
+          "count": 144,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 33.3
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 394.61,
+          "p95": 394.61,
+          "p99": 394.61,
+          "max": 394.61
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1104.3,
+          "p95": 1506.4,
+          "p99": 1586.2,
+          "max": 1697.1
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 109.3,
+          "p95": 113.4,
+          "p99": 115.4,
+          "max": 116
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [102.5, 110.8],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 17838.992625000003,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 1787,
+          "query": 49644,
+          "pool": 1788
+        },
+        "retainedCompletions": {
+          "operation": 1787,
+          "query": 49644,
+          "pool": 1788
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 1,
+          "query": 1,
+          "pool": 0
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 19,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 1788,
+            "p50": 20.433,
+            "p95": 238.128,
+            "p99": 348.294,
+            "max": 452.794
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 4,
+              "idleCount": 4,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 48
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 36,
+            "queries": 828,
+            "pools": 36,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 28,
+            "queries": 896,
+            "pools": 28,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 86,
+            "queries": 1978,
+            "pools": 86,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 103,
+            "queries": 412,
+            "pools": 103,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 414,
+            "queries": 9955,
+            "pools": 415,
+            "orphanQueries": 19
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 253,
+            "queries": 8349,
+            "pools": 253,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 440,
+            "queries": 10538,
+            "pools": 440,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 27,
+            "queries": 108,
+            "pools": 27,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 18,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 2,
+                "groups": 18
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 28,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 28
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 211,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 8
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 203
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 253,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 253
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 38,
+            "exactRetained": 38,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 38,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 443,
+            "exactRetained": 443,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 443,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "candidate-confirm-2",
+      "variant": "presenterAndClientRejected",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "181dcce174daa1097596ecccfdd99034c6b52a3711f2b1ccc1be6af55cf173e8",
+      "artifactBytes": 16940217,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1029.7,
+          "p95": 1519.6,
+          "p99": 1691.3,
+          "max": 1747.8
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 732.7,
+          "p95": 1340.96,
+          "p99": 1490.77,
+          "max": 1601.56
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 537.56,
+          "p95": 537.56,
+          "p99": 537.56,
+          "max": 537.56
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1034.9,
+          "p95": 1059.7,
+          "p99": 1064.4,
+          "max": 1064.4
+        },
+        "navigationFrameInterval": {
+          "count": 142,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 993.78,
+          "p95": 993.78,
+          "p99": 993.78,
+          "max": 993.78
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1029.7,
+          "p95": 1519.6,
+          "p99": 1691.3,
+          "max": 1747.8
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 110.2,
+          "p95": 113.4,
+          "p99": 113.9,
+          "max": 114
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [102.2, 112.8],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 17639.439250000003,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 1838,
+          "query": 50734,
+          "pool": 1840
+        },
+        "retainedCompletions": {
+          "operation": 1838,
+          "query": 50734,
+          "pool": 1840
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 2,
+          "query": 2,
+          "pool": 0
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 40,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 1840,
+            "p50": 17.134,
+            "p95": 162.939,
+            "p99": 248.608,
+            "max": 295.405
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 51
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 35,
+            "queries": 805,
+            "pools": 35,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 26,
+            "queries": 832,
+            "pools": 26,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 90,
+            "queries": 2070,
+            "pools": 90,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 103,
+            "queries": 412,
+            "pools": 103,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 426,
+            "queries": 10234,
+            "pools": 427,
+            "orphanQueries": 10
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 247,
+            "queries": 8181,
+            "pools": 248,
+            "orphanQueries": 30
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 480,
+            "queries": 11496,
+            "pools": 480,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 31,
+            "queries": 124,
+            "pools": 31,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 18,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 17
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 26,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 26
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 215,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 4
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 211
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 248,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 248
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 36,
+            "exactRetained": 36,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 36,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 437,
+            "exactRetained": 437,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 437,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "baseline-confirm-2",
+      "variant": "baseline",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "68d34429aadd4a6fca16d424c3575cac1fdd4c43b23e6648af154eae582bbf13",
+      "artifactBytes": 19879908,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1243.9,
+          "p95": 1798,
+          "p99": 1886.3,
+          "max": 1969.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 643.19,
+          "p95": 1252.16,
+          "p99": 1381.75,
+          "max": 1471.5
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 493.45,
+          "p95": 493.45,
+          "p99": 493.45,
+          "max": 493.45
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1035.8,
+          "p95": 1051,
+          "p99": 1051.1,
+          "max": 1051.1
+        },
+        "navigationFrameInterval": {
+          "count": 158,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 977.35,
+          "p95": 977.35,
+          "p99": 977.35,
+          "max": 977.35
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1243.9,
+          "p95": 1798,
+          "p99": 1886.3,
+          "max": 1969.6
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 107.3,
+          "p95": 113.6,
+          "p99": 113.8,
+          "max": 113.9
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [104.2, 109.7],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 18739.254874999995,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 2160,
+          "query": 59454,
+          "pool": 2171
+        },
+        "retainedCompletions": {
+          "operation": 2160,
+          "query": 59454,
+          "pool": 2171
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 19,
+          "query": 11,
+          "pool": 8
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 228,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 2171,
+            "p50": 31.696,
+            "p95": 272.817,
+            "p99": 447.571,
+            "max": 522.405
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 6,
+              "idleCount": 6,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 53
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 76,
+            "queries": 1748,
+            "pools": 76,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 37,
+            "queries": 1184,
+            "pools": 37,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 91,
+            "queries": 2093,
+            "pools": 91,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 105,
+            "queries": 420,
+            "pools": 105,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 754,
+            "queries": 18246,
+            "pools": 762,
+            "orphanQueries": 150
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 315,
+            "queries": 10473,
+            "pools": 318,
+            "orphanQueries": 78
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 360,
+            "queries": 8622,
+            "pools": 360,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 22,
+            "queries": 88,
+            "pools": 22,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 19,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 4,
+                "groups": 19
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 37,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 37
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 203,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 18
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 3,
+                "groups": 2
+              },
+              {
+                "completedAuthorizes": 4,
+                "groups": 182
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 318,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 318
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 47,
+            "exactRetained": 47,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 47,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 505,
+            "exactRetained": 505,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 505,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "baseline-confirm-3",
+      "variant": "baseline",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "c865f7c6cc582854e610ec7116971cd6bdaaa1d3514a6eeee21354ed0dc8dbb7",
+      "artifactBytes": 20746203,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1209.9,
+          "p95": 1740.6,
+          "p99": 2050.1,
+          "max": 2211.3
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 591.96,
+          "p95": 1179.38,
+          "p99": 1342.12,
+          "max": 1489.65
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 510.11,
+          "p95": 510.11,
+          "p99": 510.11,
+          "max": 510.11
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1036,
+          "p95": 1051.5,
+          "p99": 1080,
+          "max": 1080
+        },
+        "navigationFrameInterval": {
+          "count": 148,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1258.84,
+          "p95": 1258.84,
+          "p99": 1258.84,
+          "max": 1258.84
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1209.9,
+          "p95": 1740.6,
+          "p99": 2050.1,
+          "max": 2211.3
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 112.7,
+          "p95": 118.2,
+          "p99": 118.6,
+          "max": 118.6
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [101.9, 113],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 19575.508874999996,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 2264,
+          "query": 62032,
+          "pool": 2271
+        },
+        "retainedCompletions": {
+          "operation": 2264,
+          "query": 62032,
+          "pool": 2271
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 7,
+          "query": 7,
+          "pool": 0
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 119,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 2271,
+            "p50": 31.397,
+            "p95": 272.736,
+            "p99": 417.099,
+            "max": 769.697
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 50
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 77,
+            "queries": 1771,
+            "pools": 77,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 40,
+            "queries": 1280,
+            "pools": 40,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 90,
+            "queries": 2070,
+            "pools": 90,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 108,
+            "queries": 433,
+            "pools": 109,
+            "orphanQueries": 1
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 830,
+            "queries": 19920,
+            "pools": 830,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 338,
+            "queries": 11271,
+            "pools": 343,
+            "orphanQueries": 117
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 360,
+            "queries": 8622,
+            "pools": 360,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 21,
+            "queries": 85,
+            "pools": 22,
+            "orphanQueries": 1
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 20,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 4,
+                "groups": 19
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 40,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 40
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 211,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 3
+              },
+              {
+                "completedAuthorizes": 3,
+                "groups": 5
+              },
+              {
+                "completedAuthorizes": 4,
+                "groups": 203
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 343,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 343
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 50,
+            "exactRetained": 50,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 50,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 528,
+            "exactRetained": 528,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 528,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "candidate-confirm-3",
+      "variant": "presenterAndClientRejected",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "c1c759fab371872c292be68daf67f8dc2714c2534fa0b7dc3053492fec7ae16b",
+      "artifactBytes": 16577232,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1049.3,
+          "p95": 1457,
+          "p99": 1541.8,
+          "max": 1675.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 856.17,
+          "p95": 1422.95,
+          "p99": 1567.56,
+          "max": 1663.46
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 523.96,
+          "p95": 523.96,
+          "p99": 523.96,
+          "max": 523.96
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1046.4,
+          "p95": 1052.5,
+          "p99": 1061.9,
+          "max": 1061.9
+        },
+        "navigationFrameInterval": {
+          "count": 136,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 789.11,
+          "p95": 789.11,
+          "p99": 789.11,
+          "max": 789.11
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1049.3,
+          "p95": 1457,
+          "p99": 1541.8,
+          "max": 1675.6
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 107.6,
+          "p95": 111.4,
+          "p99": 111.5,
+          "max": 111.5
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [105.4, 108.5],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 17406.062375,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 1793,
+          "query": 49645,
+          "pool": 1793
+        },
+        "retainedCompletions": {
+          "operation": 1793,
+          "query": 49645,
+          "pool": 1793
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "truncated": false,
+        "censored": false,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 0,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 1793,
+            "p50": 14.669,
+            "p95": 170.831,
+            "p99": 334.841,
+            "max": 449.601
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 46
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 36,
+            "queries": 828,
+            "pools": 36,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 23,
+            "queries": 736,
+            "pools": 23,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 87,
+            "queries": 2001,
+            "pools": 87,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 100,
+            "queries": 400,
+            "pools": 100,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 430,
+            "queries": 10320,
+            "pools": 430,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 246,
+            "queries": 8118,
+            "pools": 246,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 440,
+            "queries": 10538,
+            "pools": 440,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 31,
+            "queries": 124,
+            "pools": 31,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 18,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 2,
+                "groups": 18
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 23,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 23
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 217,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 4
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 213
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 246,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 246
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 33,
+            "exactRetained": 33,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 33,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 436,
+            "exactRetained": 436,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 436,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "baseline-confirm-unprofiled",
+      "variant": "baseline",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "267fc8a2f6a2b6af3829a31cb9603778b7db9e9d1d0ef62892707b6e6feeb917",
+      "artifactBytes": 66181,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1154.5,
+          "p95": 1760.9,
+          "p99": 1835.5,
+          "max": 1877.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 710.93,
+          "p95": 1151.36,
+          "p99": 1248.21,
+          "max": 1391.28
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 486.15,
+          "p95": 486.15,
+          "p99": 486.15,
+          "max": 486.15
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1040.6,
+          "p95": 1049.4,
+          "p99": 1051,
+          "max": 1051
+        },
+        "navigationFrameInterval": {
+          "count": 136,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 975.86,
+          "p95": 975.86,
+          "p99": 975.86,
+          "max": 975.86
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1154.5,
+          "p95": 1760.9,
+          "p99": 1835.5,
+          "max": 1877.6
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 107.5,
+          "p95": 111.7,
+          "p99": 112.5,
+          "max": 112.7
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [104.6, 109.4],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "disabled"
+      }
+    },
+    {
+      "label": "candidate-confirm-unprofiled",
+      "variant": "presenterAndClientRejected",
+      "phase": "interleavedBaselineAndCombined",
+      "artifactSha256": "589ee2159460281d03cf10f321ea3afbd8d3bbdfd48f08fbc5dfe09ab96ef9ae",
+      "artifactBytes": 66257,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1074.2,
+          "p95": 1621.2,
+          "p99": 1789.8,
+          "max": 1906.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 842.66,
+          "p95": 1431.8,
+          "p99": 1660.32,
+          "max": 1791.05
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 510.09,
+          "p95": 510.09,
+          "p99": 510.09,
+          "max": 510.09
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1048.8,
+          "p95": 1057.6,
+          "p99": 1095.9,
+          "max": 1095.9
+        },
+        "navigationFrameInterval": {
+          "count": 134,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 33.4
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 999.06,
+          "p95": 999.06,
+          "p99": 999.06,
+          "max": 999.06
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1074.2,
+          "p95": 1621.2,
+          "p99": 1789.8,
+          "max": 1906.6
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 108.3,
+          "p95": 110,
+          "p99": 111.1,
+          "max": 111.2
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [102.5, 108.8],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "disabled"
+      }
+    },
+    {
+      "label": "presenter-confirm-1",
+      "variant": "presenterOnly",
+      "phase": "laterPresenterOnly",
+      "artifactSha256": "f80f5a34da3a9fb384662a299e99597e39acc91cf756c12a667185eb09895815",
+      "artifactBytes": 16494318,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1209.3,
+          "p95": 1779.2,
+          "p99": 1999.6,
+          "max": 2071
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 524.33,
+          "p95": 1073.9,
+          "p99": 1239.2,
+          "max": 1252.36
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 468.51,
+          "p95": 468.51,
+          "p99": 468.51,
+          "max": 468.51
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1041.8,
+          "p95": 1070.8,
+          "p99": 1071,
+          "max": 1071
+        },
+        "navigationFrameInterval": {
+          "count": 136,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 33.4
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 984.29,
+          "p95": 984.29,
+          "p99": 984.29,
+          "max": 984.29
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1209.3,
+          "p95": 1779.2,
+          "p99": 1999.6,
+          "max": 2071
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 114.2,
+          "p95": 120.4,
+          "p99": 120.5,
+          "max": 120.9
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [105.1, 115.1],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 18997.753584,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 1744,
+          "query": 49576,
+          "pool": 1754
+        },
+        "retainedCompletions": {
+          "operation": 1744,
+          "query": 49576,
+          "pool": 1754
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 11,
+          "query": 10,
+          "pool": 1
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 173,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 1754,
+            "p50": 26.23,
+            "p95": 341.856,
+            "p99": 617.99,
+            "max": 648.861
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 60
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 37,
+            "queries": 855,
+            "pools": 38,
+            "orphanQueries": 4
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 38,
+            "queries": 1216,
+            "pools": 38,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 91,
+            "queries": 2093,
+            "pools": 91,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 105,
+            "queries": 420,
+            "pools": 105,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 340,
+            "queries": 8160,
+            "pools": 340,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 330,
+            "queries": 11059,
+            "pools": 339,
+            "orphanQueries": 169
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 380,
+            "queries": 9101,
+            "pools": 380,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 23,
+            "queries": 92,
+            "pools": 23,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 20,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 1,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 18
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 38,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 38
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 175,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 10
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 165
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 339,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 339
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 48,
+            "exactRetained": 48,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 48,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 520,
+            "exactRetained": 520,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 520,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "presenter-confirm-2",
+      "variant": "presenterOnly",
+      "phase": "laterPresenterOnly",
+      "artifactSha256": "64ed273c6b3b1032549f3b85c67299d1e60f32289fc8894f0beed4639bc223a6",
+      "artifactBytes": 16265201,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1227.4,
+          "p95": 1756.4,
+          "p99": 1958.1,
+          "max": 2251.9
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 643.75,
+          "p95": 1277.95,
+          "p99": 1462.28,
+          "max": 1693.3
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 501.72,
+          "p95": 501.72,
+          "p99": 501.72,
+          "max": 501.72
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1043.1,
+          "p95": 1049.8,
+          "p99": 1051.5,
+          "max": 1051.5
+        },
+        "navigationFrameInterval": {
+          "count": 144,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1039.83,
+          "p95": 1039.83,
+          "p99": 1039.83,
+          "max": 1039.83
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1227.4,
+          "p95": 1756.4,
+          "p99": 1958.1,
+          "max": 2251.9
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 112.1,
+          "p95": 117.5,
+          "p99": 117.6,
+          "max": 117.6
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [102.9, 112.7],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 18458.140291,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 1727,
+          "query": 48832,
+          "pool": 1740
+        },
+        "retainedCompletions": {
+          "operation": 1727,
+          "query": 48832,
+          "pool": 1740
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 14,
+          "query": 13,
+          "pool": 1
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 176,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 1740,
+            "p50": 21.469,
+            "p95": 289.152,
+            "p99": 466.988,
+            "max": 711.482
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 52
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 38,
+            "queries": 874,
+            "pools": 38,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 39,
+            "queries": 1248,
+            "pools": 39,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 92,
+            "queries": 2116,
+            "pools": 92,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 106,
+            "queries": 424,
+            "pools": 106,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 360,
+            "queries": 8644,
+            "pools": 361,
+            "orphanQueries": 4
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 296,
+            "queries": 9940,
+            "pools": 308,
+            "orphanQueries": 172
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 372,
+            "queries": 8910,
+            "pools": 372,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 24,
+            "queries": 96,
+            "pools": 24,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 19,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 2,
+                "groups": 19
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 39,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 39
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 182,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 1,
+                "groups": 2
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 179
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 308,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 308
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 49,
+            "exactRetained": 49,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 49,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 486,
+            "exactRetained": 486,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 486,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "presenter-confirm-3",
+      "variant": "presenterOnly",
+      "phase": "laterPresenterOnly",
+      "artifactSha256": "4329b64d74f78fe81c717ab8436e2c1f72dca468094d81307f4d7b2152e819e6",
+      "artifactBytes": 17441186,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1223.3,
+          "p95": 1772.5,
+          "p99": 1908.5,
+          "max": 1961.3
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 629.14,
+          "p95": 1198.79,
+          "p99": 1420.07,
+          "max": 1474.36
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 508.12,
+          "p95": 508.12,
+          "p99": 508.12,
+          "max": 508.12
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1040.4,
+          "p95": 1057.1,
+          "p99": 1059.5,
+          "max": 1059.5
+        },
+        "navigationFrameInterval": {
+          "count": 165,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 33.3
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 974.19,
+          "p95": 974.19,
+          "p99": 974.19,
+          "max": 974.19
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1223.3,
+          "p95": 1772.5,
+          "p99": 1908.5,
+          "max": 1961.3
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 108.5,
+          "p95": 112.8,
+          "p99": 113,
+          "max": 122.3
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [104.9, 111],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "complete-window",
+        "durationMs": 20410.678957999997,
+        "maxSamples": 100000,
+        "observedCompletions": {
+          "operation": 1849,
+          "query": 52416,
+          "pool": 1863
+        },
+        "retainedCompletions": {
+          "operation": 1849,
+          "query": 52416,
+          "pool": 1863
+        },
+        "droppedCompletions": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 15,
+          "query": 14,
+          "pool": 1
+        },
+        "truncated": false,
+        "censored": true,
+        "countsConsistent": true,
+        "invalidSamples": 0,
+        "unsupportedQueryReturns": 0,
+        "orphanQuerySamples": 218,
+        "failures": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "pool": {
+          "acquisitionWaitMs": {
+            "count": 1863,
+            "p50": 25.339,
+            "p95": 333.943,
+            "p99": 449.261,
+            "max": 554.426
+          },
+          "failedAcquisitions": 0,
+          "individualPoolBoundaryMaximaByNode": [
+            {
+              "node": 0,
+              "totalCount": 5,
+              "idleCount": 5,
+              "waitingCount": 0
+            },
+            {
+              "node": 1,
+              "totalCount": 15,
+              "idleCount": 15,
+              "waitingCount": 53
+            }
+          ]
+        },
+        "byNodeOriginMethod": [
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 10,
+            "queries": 490,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 10,
+            "queries": 320,
+            "pools": 10,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 41,
+            "queries": 943,
+            "pools": 41,
+            "orphanQueries": 0
+          },
+          {
+            "node": 0,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 40,
+            "queries": 1308,
+            "pools": 41,
+            "orphanQueries": 28
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 92,
+            "queries": 2126,
+            "pools": 93,
+            "orphanQueries": 10
+          },
+          {
+            "node": 0,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 104,
+            "queries": 416,
+            "pools": 104,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "command",
+            "completedMethods": 190,
+            "queries": 9500,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "commandHttp",
+            "method": "get",
+            "completedMethods": 190,
+            "queries": 6270,
+            "pools": 190,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "presenterHttp",
+            "method": "authorize",
+            "completedMethods": 385,
+            "queries": 9342,
+            "pools": 394,
+            "orphanQueries": 102
+          },
+          {
+            "node": 1,
+            "origin": "sceneHttp",
+            "method": "get",
+            "completedMethods": 366,
+            "queries": 12156,
+            "pools": 369,
+            "orphanQueries": 78
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "authorize",
+            "completedMethods": 394,
+            "queries": 9437,
+            "pools": 394,
+            "orphanQueries": 0
+          },
+          {
+            "node": 1,
+            "origin": "stream",
+            "method": "listOutbox",
+            "completedMethods": 27,
+            "queries": 108,
+            "pools": 27,
+            "orphanQueries": 0
+          }
+        ],
+        "partialRequestHistograms": [
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "commandHttp",
+            "observedRequestGroups": 10,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 10
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 21,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 1
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 20
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 0,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 41,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 41
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "commandHttp",
+            "observedRequestGroups": 190,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 190
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "presenterHttp",
+            "observedRequestGroups": 201,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 1,
+                "groups": 17
+              },
+              {
+                "completedAuthorizes": 2,
+                "groups": 184
+              }
+            ]
+          },
+          {
+            "coverage": "PARTIAL WINDOW",
+            "node": 1,
+            "origin": "sceneHttp",
+            "observedRequestGroups": 369,
+            "completedAuthorizeHistogram": [
+              {
+                "completedAuthorizes": 0,
+                "groups": 369
+              }
+            ]
+          }
+        ],
+        "sqlPerCompletedCommandOrGet": [
+          {
+            "node": 0,
+            "method": "command",
+            "retainedCompleted": 10,
+            "exactRetained": 10,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 10,
+              "p50": 49,
+              "p95": 49,
+              "p99": 49,
+              "max": 49
+            }
+          },
+          {
+            "node": 0,
+            "method": "get",
+            "retainedCompleted": 50,
+            "exactRetained": 50,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 50,
+              "p50": 32,
+              "p95": 32,
+              "p99": 32,
+              "max": 32
+            }
+          },
+          {
+            "node": 1,
+            "method": "command",
+            "retainedCompleted": 190,
+            "exactRetained": 190,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 190,
+              "p50": 50,
+              "p95": 50,
+              "p99": 50,
+              "max": 50
+            }
+          },
+          {
+            "node": 1,
+            "method": "get",
+            "retainedCompleted": 556,
+            "exactRetained": 556,
+            "failedCompleted": 0,
+            "excludedQueryCountMismatch": 0,
+            "directQueryCount": {
+              "count": 556,
+              "p50": 33,
+              "p95": 33,
+              "p99": 33,
+              "max": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "label": "presenter-confirm-unprofiled",
+      "variant": "presenterOnly",
+      "phase": "laterPresenterOnly",
+      "artifactSha256": "d303ea9b5fccfc712e3a052b1590db460e8135c451e659d986cf22c8e2e63a06",
+      "artifactBytes": 66216,
+      "complete": true,
+      "correctnessPassed": true,
+      "applicationPageErrors": 0,
+      "harnessGatesPassed": true,
+      "defaultThresholdsUnchanged": true,
+      "peer500msP95Passed": false,
+      "capacityIncreaseAuthorized": false,
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1135.2,
+          "p95": 1619.2,
+          "p99": 1730.5,
+          "max": 1779.9
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 632.81,
+          "p95": 1179.34,
+          "p99": 1288.47,
+          "max": 1327.98
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 488.15,
+          "p95": 488.15,
+          "p99": 488.15,
+          "max": 488.15
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1033.3,
+          "p95": 1051.4,
+          "p99": 1174,
+          "max": 1174
+        },
+        "navigationFrameInterval": {
+          "count": 137,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1274.5,
+          "p95": 1274.5,
+          "p99": 1274.5,
+          "max": 1274.5
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1135.2,
+          "p95": 1619.2,
+          "p99": 1730.5,
+          "max": 1779.9
+        }
+      },
+      "networkCalibration": {
+        "nominalCdpLatencyMs": 100,
+        "actualHealthFetchMs": {
+          "count": 100,
+          "p50": 108,
+          "p95": 112,
+          "p99": 112.3,
+          "max": 112.4
+        },
+        "actorContexts": 20,
+        "actorP50RangeMs": [107.4, 108.8],
+        "actorThresholdPassed": true
+      },
+      "profile": {
+        "status": "disabled"
+      }
+    }
+  ],
+  "excludedArtifacts": [
+    {
+      "label": "candidate-pair-2",
+      "artifactSha256": "b7dac3d69c136e237ce7c8bfd58d3e2c8db6dd37e53132c5cd1d94063909e9bb",
+      "artifactBytes": 16152182,
+      "complete": false,
+      "reason": "incomplete-pre-oracle-fix",
+      "stage": "offline-reconnect",
+      "detail": "Offline recovery must open a renewed stream",
+      "completedSampleCounts": {
+        "httpAcknowledgement": 200,
+        "peerPaintOpportunity": 200,
+        "initialRender": 20
+      }
+    },
+    {
+      "label": "baseline-pair-1",
+      "artifactSha256": "7d6e2db198a95a76abfc792bd4f726748ef15df7415a9b5e2f21139c485c2598",
+      "artifactBytes": 21165652,
+      "complete": true,
+      "reason": "pre-oracle-fix-exploratory-not-confirmation"
+    },
+    {
+      "label": "presenter-exploratory",
+      "artifactSha256": "27450a8616d58339cd0e025d35d38d46fc92ee99142b90a47c98923c1860053b",
+      "artifactBytes": 17295314,
+      "complete": true,
+      "reason": "pre-oracle-fix-exploratory-not-confirmation"
+    },
+    {
+      "label": "candidate-pair-1",
+      "artifactSha256": "54a88d948e9781ca35ad8334f018a0c28414aa920f674b9bc0f3aea643da0297",
+      "artifactBytes": 17249095,
+      "complete": true,
+      "reason": "pre-oracle-fix-exploratory-not-confirmation"
+    }
+  ],
+  "interpretation": {
+    "allConfirmationRunsComplete": true,
+    "allCorrectnessChecksPassed": true,
+    "allDefaultHarnessSmokeGatesPassed": true,
+    "allPeer500msP95TargetsFailed": true,
+    "rejectedCombinedClientPeerP95WorseInAllThreeComparisonsAndUnprofiled": true,
+    "presenterMeasuredLaterInSeparatePhase": true,
+    "presenterLatencyRangesOverlapBaseline": true,
+    "presenterLatencyWinEstablished": false,
+    "productionCapacityAccepted": false,
+    "limitsRaised": false
+  },
+  "limitations": [
+    "Local ARM64 Mac, native headless desktop Chromium, PostgreSQL/cache in a shared 4-vCPU 8-GB VM; not target deployed topology.",
+    "Two API nodes share one coordinator process and monotonic clock; independently serving processes/hosts, proxy/TLS and WAN remain unmeasured.",
+    "Tiny synthetic 68-byte image and substituted in-memory image reads; real S3/scanner/full-media decoding and memory costs remain unmeasured.",
+    "Physical desktop/mobile/touch and physical presented-frame performance remain unmeasured; two rAF is only a paint opportunity.",
+    "Short closed-loop waves and one observing peer/guest do not establish sustained soak, all-to-all delivery or near-limit history/comments/receipts capacity.",
+    "Mac memory-pressure levels were occasional observations, not a continuous trace. No concurrent task build/suite ran during timing; the existing user stack was idle.",
+    "Profiling is bounded and omits non-Canvas SQL; retained completions can have censored in-flight work at stop. Profiling-disabled confirmations do not provide SQL/origin counts.",
+    "Every peer p95 exceeds 500 ms. The 20-editor workload is not an admission cap, and 500 objects/2 MiB/50 affected objects/64 KiB operations/5000 receipts remain unchanged."
+  ]
+}

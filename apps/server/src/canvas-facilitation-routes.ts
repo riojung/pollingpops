@@ -130,9 +130,11 @@ export async function registerCanvasFacilitationRoutes(
   routes.get("/v1/canvas-boards/:id/presenter", options, async (request) => {
     const actor = await guards.user(request),
       { id } = Id.parse(request.params);
-    await feature(actor, id, true);
-    const presenter = await presenters.get(actor, id);
-    await deps.canvases.authorize(await guards.sameUser(request, actor.userId), id);
+    const originalId = actor.userId;
+    const presenter = await presenters.getForRequest(actor, id, {
+      requireFeature: (workspaceId) => guards.requireFeature(workspaceId, "canvasBoardRealtime"),
+      currentActor: () => guards.sameUser(request, originalId),
+    });
     return { presenter };
   });
   routes.post("/v1/canvas-boards/:id/presenter", options, async (request) => {

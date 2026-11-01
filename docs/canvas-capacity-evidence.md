@@ -134,6 +134,11 @@ stream response. A paused raw TCP consumer supplies an isolation observation, no
 proof. Two placements share tiny synthetic clean PNG bytes through the authorized media endpoint;
 S3, scanning and realistic media decode cost are substituted.
 
+Reconnect completion requires both the latest authorized text plus two animation frames and a
+renewed stream request. Polling can restore content before the fixed stream retry; neither
+observation alone completes recovery. The existing request timeout and 12-second smoke threshold
+remain, and reconnect timing includes the later observation.
+
 Reports retain source/build hashes, actual RTT calibration, distributions and sample counts,
 correctness, stream recovery, screenshots and limitations. Default smoke p95 gates are 2,000 ms
 HTTP/stalled-consumer acknowledgement, 3,000 ms peer/guest, 15,000 ms initial render, 100 ms navigation
@@ -164,6 +169,14 @@ is sampled at acquisition boundaries; its high-water values are individual-pool 
 not continuous maxima or a sum across nodes. Only work inside wrapped Canvas methods is attributed;
 credential/policy queries outside them remain excluded. Nested method wall times overlap and direct
 SQL belongs to the innermost method, so do not add their durations or independent p95 values.
+
+Fixed initiating-origin labels distinguish presenter HTTP polls, scene reads, facilitation,
+commands, stream work and other/unscoped work. HTTP requests have numeric ordinals; stream and
+outbox samples deliberately have no handshake request ordinal. The separate origin context does
+not own the measured epoch: work that began before warm-up finished remains excluded. Paths and
+query strings are inspected only to select a fixed label and are never retained. Grouped method
+completions describe a partial measured window, not complete HTTP request counts or lifetimes.
+This can identify repeated presenter checks without mislabeling them as stream reauthorization.
 
 The report records API/DB/harness source hashes alongside browser-build provenance. Compare equally
 instrumented variants with unchanged scene, actor count, network calibration and batching; then
@@ -379,3 +392,137 @@ a time. Any object-cap change also needs compatible current/frozen contract read
 SQL constraints and deployment coordination. Editor workload increases remain subject to existing
 licenses, grants, presence/connection limits, database resources and abuse controls. No such limits
 are raised by this evidence tooling.
+
+## October 31, 2026 delivery confirmation: presenter only retained
+
+The retained change consolidates the creator presenter GET guards. The client covered-notification
+refresh experiment was rejected and its four client files reverted: it produced fewer observed
+scene reads and faster acknowledgements, but worse peer p95 in all three profiled comparisons and
+the profiling-disabled comparison. The separate presenter-only phase does **not** establish a
+latency win: its ranges overlap the baseline, and its unprofiled peer p95 is slightly higher.
+All twelve confirmation runs completed and passed correctness and every unchanged harness smoke
+gate. **Every peer p95 still exceeds the 500 ms roadmap target; capacity acceptance remains open.**
+
+[The durable numeric/provenance summary](canvas-delivery-comparison-2026-10-31.json) records every
+run's p50/p95/p99/max/count, calibration, origin counts, partial request histograms, pool boundaries,
+censoring and artifact hashes. The rejected client patch is preserved in
+[the experiment archive](experiments/canvas-covered-notification-refresh.patch): 29,997 bytes,
+SHA-256 `446c64182dcbf6b494ab832a1d135c924866946c696dd6d92caf04627a64e2fe`.
+
+The archive omits three optional blank-context space markers to pass whitespace checks; its
+applied client source/test bytes match the measured variant exactly.
+
+### Corrected recovery oracle and confirmation order
+
+The earlier `candidate-pair-2.json` remains **incomplete**, at `offline-reconnect`, with detail
+`Offline recovery must open a renewed stream`. It already had 200 acknowledgement samples,
+200 peer-paint samples and 20 initial-render samples, but polling could paint before the fixed
+one-second stream retry. Its SHA-256 is
+`b7dac3d69c136e237ce7c8bfd58d3e2c8db6dd37e53132c5cd1d94063909e9bb`;
+it is excluded from accepted confirmation results. The harness now awaits **both** matching text
+plus two rAF and a renewed stream request, and reconnect timing ends after both. It retains the
+same configured timeout, final stream-count assertion, real offline/existing-stream interruption
+and 12,000 ms reconnect smoke gate. Product retries and 350 ms notification batching are unchanged.
+The complete earlier `baseline-pair-1`, `presenter-exploratory` and `candidate-pair-1` artifacts are
+also excluded as pre-oracle-fix exploratory runs; their hashes remain in the durable summary.
+
+Confirmation order was **B1, C1, C2, B2, B3, C3, B-off, C-off**, then **P1, P2, P3, P-off**.
+B is the current-main baseline, C combines presenter and rejected client changes, and P retains
+only presenter. P is a later separate phase, not an interleaved pair or a statistical causal
+comparison. Each run uses a fresh disposable database/cache namespace and browser process,
+500 mixed objects (313,422 scene bytes), 20 licensed contexts, one warm-up and ten measured waves
+(200 commands), 100 ordinary guest objects and one 68-byte synthetic image placed twice.
+Twenty editors describes this workload, not an admission cap. Source revision is dirty-tree
+`7282d5ce34a307d099a6b720d2807ab3f8cb37ec`; the variant hashes identify the actual measured bytes:
+
+| Variant      | API/DB/harness SHA-256                                             | Browser-source SHA-256                                             |
+| ------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| B            | `a8a5d19aca67e68895390f41206d9bd35cd74f4f674530d49f53e11e4800a5d3` | `383753e30fedcd3eb24a7c7f5147206f9dd99631298f6321e5804d5175091927` |
+| C (rejected) | `4875b37d24cf00ad1d907649ff25ed2a200b9761838dcf7d123c729b4aba6b9e` | `1187c97b4064421319d01737924c8fcaa08687a88e492536ae99b0c0b33b16ce` |
+| P (retained) | `4875b37d24cf00ad1d907649ff25ed2a200b9761838dcf7d123c729b4aba6b9e` | `383753e30fedcd3eb24a7c7f5147206f9dd99631298f6321e5804d5175091927` |
+
+The fixture hash is unchanged:
+`da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1`.
+B/P reuse the browser compiled at `2026-10-31T20:27:54.998Z`; C uses its own browser compiled at
+`2026-10-31T20:34:53.842Z`. Both API variants share the corrected harness. Artifact hashes and
+compiled/source checks are retained in the JSON, without raw sample IDs, URLs or application content.
+
+### End-to-end observations
+
+Times below are **p50 / p95 / p99 / maximum in ms**, with 200 samples per cell. Ack includes shaped
+browser HTTP/auth/repository/projection work. Peer is repository resolution to matching SVG plus
+two rAF, not an exact database commit timestamp or a physical presented frame.
+
+| Run              | HTTP acknowledgement                  | Repository resolution to peer paint opportunity |
+| ---------------- | ------------------------------------- | ----------------------------------------------- |
+| B1               | 1,293.6 / 1,874 / 1,952.6 / 2,066.1   | 565.94 / 1,161.96 / 1,316.91 / 1,403.02         |
+| C1 (rejected)    | 1,104.3 / 1,506.4 / 1,586.2 / 1,697.1 | 950.61 / 1,751.21 / 1,869.58 / 1,948.37         |
+| C2 (rejected)    | 1,029.7 / 1,519.6 / 1,691.3 / 1,747.8 | 732.7 / 1,340.96 / 1,490.77 / 1,601.56          |
+| B2               | 1,243.9 / 1,798 / 1,886.3 / 1,969.6   | 643.19 / 1,252.16 / 1,381.75 / 1,471.5          |
+| B3               | 1,209.9 / 1,740.6 / 2,050.1 / 2,211.3 | 591.96 / 1,179.38 / 1,342.12 / 1,489.65         |
+| C3 (rejected)    | 1,049.3 / 1,457 / 1,541.8 / 1,675.6   | 856.17 / 1,422.95 / 1,567.56 / 1,663.46         |
+| B-off            | 1,154.5 / 1,760.9 / 1,835.5 / 1,877.6 | 710.93 / 1,151.36 / 1,248.21 / 1,391.28         |
+| C-off (rejected) | 1,074.2 / 1,621.2 / 1,789.8 / 1,906.6 | 842.66 / 1,431.8 / 1,660.32 / 1,791.05          |
+| P1               | 1,209.3 / 1,779.2 / 1,999.6 / 2,071   | 524.33 / 1,073.9 / 1,239.2 / 1,252.36           |
+| P2               | 1,227.4 / 1,756.4 / 1,958.1 / 2,251.9 | 643.75 / 1,277.95 / 1,462.28 / 1,693.3          |
+| P3               | 1,223.3 / 1,772.5 / 1,908.5 / 1,961.3 | 629.14 / 1,198.79 / 1,420.07 / 1,474.36         |
+| P-off            | 1,135.2 / 1,619.2 / 1,730.5 / 1,779.9 | 632.81 / 1,179.34 / 1,288.47 / 1,327.98         |
+
+Initial render has 20 samples/run; guest publication and reconnect each have only one, so their
+reported p95 does not establish a tail distribution. Their complete quantiles, navigation rAF
+samples and stalled-consumer acknowledgements are retained in the JSON. Across all twelve runs,
+100 health fetches/run produced p50 107.3–114.2 ms, p95 110–120.4 ms and maximum 111.2–122.3 ms;
+actor p50 values were 101.9–115.1 ms. Every actor passed the unchanged calibration check against
+nominal 100 ms CDP latency. These health fetches include browser/HTTP overhead, not pure WAN RTT.
+
+### Origin and pool observations
+
+The inactive creator presenter GET has two direct Canvas `authorize` calls after consolidation,
+compared with four before. Active presenter owner/frame validation can add work. Initial access,
+feature checks before/after cache and owner/frame awaits, fresh same-session identity, final
+captured-principal authorization, expiry and board/source-sequence fences remain required.
+The extra final feature-policy lookup is **outside** wrapped Canvas SQL profiling: lower profiled
+query totals do not establish a percentage reduction in all SQL or system load.
+
+| Run           | Wrapped SQL completions | Presenter-origin authorize completions | Scene-origin get completions | Pool wait p95 / max ms | In flight: operation / query / pool | Orphan queries |
+| ------------- | ----------------------- | -------------------------------------- | ---------------------------- | ---------------------- | ----------------------------------- | -------------- |
+| B1            | 64,696                  | 929                                    | 401                          | 255.697 / 722.812      | 17 / 16 / 1                         | 297            |
+| C1 (rejected) | 49,644                  | 450                                    | 281                          | 238.128 / 452.794      | 1 / 1 / 0                           | 19             |
+| C2 (rejected) | 50,734                  | 461                                    | 273                          | 162.939 / 295.405      | 2 / 2 / 0                           | 40             |
+| B2            | 59,454                  | 830                                    | 352                          | 272.817 / 522.405      | 19 / 11 / 8                         | 228            |
+| B3            | 62,032                  | 907                                    | 378                          | 272.736 / 769.697      | 7 / 7 / 0                           | 119            |
+| C3 (rejected) | 49,645                  | 466                                    | 269                          | 170.831 / 449.601      | 0 / 0 / 0                           | 0              |
+| P1            | 49,576                  | 377                                    | 368                          | 341.856 / 648.861      | 11 / 10 / 1                         | 173            |
+| P2            | 48,832                  | 398                                    | 335                          | 289.152 / 711.482      | 14 / 13 / 1                         | 176            |
+| P3            | 52,416                  | 426                                    | 406                          | 333.943 / 554.426      | 15 / 14 / 1                         | 218            |
+
+All nine profiled runs retained every completed sample: **zero drops**, no invalid or unsupported
+observations, and no recorded operation/query/pool failures. The bound was 100,000 completions;
+eight runs still had in-flight work when the epoch stopped (C3 had none). Orphan query samples
+lack a retained completed operation and remain disclosed. Every retained exact completed command
+used 49 direct queries on node A or 50 on B; scene/projecting `get` used 32 or 33 respectively.
+Those counts do not include SQL outside the wrapped method. The JSON retains counts by node,
+fixed origin and method, and **PARTIAL WINDOW** authorize histograms; requests may cross epoch
+boundaries, so these are neither complete HTTP request counts nor request lifetimes. Nested
+method wall times and independent p95 values are never added.
+
+Individual pool acquisition-boundary samples reached 15 connections on node B (its configured
+maximum), with up to 60 queued acquisitions in P1; node A reached 4–6 connections with no observed
+queue. These are individual-pool boundary maxima, not continuous maxima or cluster connection
+totals. C's completed scene reads were 269–281 versus B's 352–401, while P observed 335–406;
+window durations and polling schedules differ, so these counts are not a throughput/load claim.
+
+### Resource and acceptance limits
+
+Node 22.23.4 and native headless Chromium 156.0.8078.4 ran on ARM64 macOS with 24 GiB RAM.
+PostgreSQL 17.11 and Valkey 8.1.10 ran in the same 4-vCPU VM reporting 8,309,010,432 bytes RAM
+(the artifact records Redis compatibility 7.2.4). Two API nodes share one coordinator with
+independent 15-connection pools; the restricted runtime RLS check passed. The existing user stack
+was idle and no other task build/suite ran during timing. macOS memory-pressure levels 1–2 were
+observed intermittently, not continuously sampled.
+
+Physical desktop/mobile/touch and presented-frame acceptance, real media/S3/scanner decoding,
+independently serving API processes/hosts, deployed proxy/TLS, sustained soak, all-to-all delivery
+and near-limit retained history/comments/receipts remain unmeasured. This is local current-cap
+evidence only. The **500-object, 2 MiB, 50-affected-object, 64 KiB-operation and 5,000-receipt limits
+remain unchanged**, and every report retains `capacityIncreaseAuthorized: false`.

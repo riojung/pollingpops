@@ -16,6 +16,30 @@ const methods = [
 ] as const;
 type Method = (typeof methods)[number];
 type Node = 0 | 1;
+type Origin =
+  | "presenterHttp"
+  | "sceneHttp"
+  | "facilitationHttp"
+  | "commandHttp"
+  | "stream"
+  | "otherHttp"
+  | "unscoped";
+interface OriginContext {
+  origin: Origin;
+  request: number | null;
+}
+function requestOrigin(method: unknown, url: unknown): Origin {
+  if (typeof url !== "string") return "otherHttp";
+  const path = url.split("?", 1)[0] ?? "";
+  const board = "/v1/canvas-boards/(?:[a-f0-9-]{36}|workshop/[a-f0-9-]{36}(?:/guest)?)";
+  if (new RegExp(`^${board}/events$`, "i").test(path)) return "stream";
+  if (new RegExp(`^${board}/presenter$`, "i").test(path)) return "presenterHttp";
+  if (new RegExp(`^${board}/facilitation(?:/commands)?$`, "i").test(path))
+    return "facilitationHttp";
+  if (method === "POST" && new RegExp(`^${board}/commands$`, "i").test(path)) return "commandHttp";
+  if (method === "GET" && new RegExp(`^${board}$`, "i").test(path)) return "sceneHttp";
+  return "otherHttp";
+}
 type Kind = "operation" | "query" | "pool";
 type Category =
   | "transaction"
@@ -57,7 +81,7 @@ interface Pressure {
   idle: number;
   waiting: number;
 }
-interface Sample {
+interface Sample extends OriginContext {
   kind: Kind;
   node: Node;
   method: Method;
@@ -85,7 +109,7 @@ interface Window {
   unsupportedQueryReturns: number;
   pressure: Pressure;
 }
-interface Context {
+interface Context extends OriginContext {
   window: Window | undefined;
   node: Node;
   method: Method;
@@ -187,6 +211,9 @@ function distribution(values: number[]) {
 /** Harness-only observation. Disabled mode does not wrap methods or allocate async contexts. */
 export class CanvasCollaborationProfiler {
   private readonly storage = new AsyncLocalStorage<Context | undefined>();
+  // Origin is attribution only: it never owns or filters the measured-window epoch.
+  private readonly origins = new AsyncLocalStorage<OriginContext>();
+  private nextRequest = 1;
   private readonly restoreMethods: Array<() => void> = [];
   private readonly clients = new WeakSet<object>();
   private window: Window | undefined;
@@ -253,6 +280,8 @@ export class CanvasCollaborationProfiler {
   private sample(ctx: Context, kind: Kind, started: number, ok: boolean): Sample {
     return {
       kind,
+      origin: ctx.origin,
+      request: ctx.request,
       node: ctx.node,
       method: ctx.method,
       operation: ctx.operation,
@@ -260,6 +289,20 @@ export class CanvasCollaborationProfiler {
       ms: Math.max(0, this.now() - started),
       ok,
     };
+  }
+  /** Harness-only boundary. Existing request listeners and once-order are untouched. */
+  wrapHttpServer(server: object) {
+    if (!this.config.enabled) return;
+    const original = Reflect.get(server, "emit");
+    if (typeof original !== "function") throw new Error("Profile HTTP server needs emit()");
+    this.replace(server, "emit", (receiver, args) => {
+      if (args[0] !== "request") return Reflect.apply(original, receiver, args);
+      const request = args[1] as { method?: unknown; url?: unknown } | undefined;
+      const origin = requestOrigin(request?.method, request?.url);
+      // Timers inherit the stream handshake context: never retain its HTTP ordinal.
+      const context = { origin, request: origin === "stream" ? null : this.nextRequest++ };
+      return this.origins.run(context, () => Reflect.apply(original, receiver, args));
+    });
   }
   wrapRepository(repository: object, node: Node) {
     if (!this.config.enabled) return;
@@ -271,7 +314,15 @@ export class CanvasCollaborationProfiler {
         // An operation started before the window keeps its excluded context across awaits.
         const window = parent ? parent.window : this.window;
         const measured = window?.open ? window : undefined;
+        const origin =
+          method === "listOutbox"
+            ? { origin: "stream" as const, request: null }
+            : (this.origins.getStore() ?? {
+                origin: parent?.origin ?? "unscoped",
+                request: parent?.request ?? null,
+              });
         const ctx: Context = {
+          ...origin,
           window: measured,
           node,
           method,
@@ -430,11 +481,16 @@ export class CanvasCollaborationProfiler {
     const window = this.window;
     const samples = window?.samples.map((sample) => ({ ...sample })) ?? [];
     const groups = new Map<string, Sample[]>();
+    const originGroups = new Map<string, Sample[]>();
     for (const sample of samples) {
       const key = `${sample.node}:${sample.method}:${sample.kind}:${sample.category ?? "none"}`;
       const group = groups.get(key) ?? [];
       group.push(sample);
       groups.set(key, group);
+      const originKey = `${sample.origin}:${key}`;
+      const originGroup = originGroups.get(originKey) ?? [];
+      originGroup.push(sample);
+      originGroups.set(originKey, originGroup);
     }
     return {
       schemaVersion: 1,
@@ -458,9 +514,23 @@ export class CanvasCollaborationProfiler {
         rows: group.reduce((sum, sample) => sum + (sample.rows ?? 0), 0),
         milliseconds: distribution(group.map((sample) => sample.ms)),
       })),
+      originDistributions: [...originGroups.values()].map((group) => ({
+        origin: group[0]!.origin,
+        node: group[0]!.node,
+        method: group[0]!.method,
+        kind: group[0]!.kind,
+        category: group[0]!.category ?? null,
+        requests: new Set(
+          group.flatMap((sample) => (sample.request === null ? [] : [sample.request])),
+        ).size,
+        failures: group.filter((sample) => !sample.ok).length,
+        rows: group.reduce((sum, sample) => sum + (sample.rows ?? 0), 0),
+        milliseconds: distribution(group.map((sample) => sample.ms)),
+      })),
       limitations: [
         "Opt-in observer overhead; compare equally instrumented variants and confirm the end-to-end result with profiling disabled",
-        "Only SQL/pool work inside wrapped Canvas repository methods is attributed; HTTP credential/policy work outside those methods is excluded",
+        "Fixed origins classify the initiating HTTP route or stream callback, not request completion timing; stream/outbox work carries no handshake request ordinal",
+        "Only SQL/pool work inside wrapped Canvas repository methods is attributed; HTTP credential/policy work outside those methods is still excluded",
         "Client-observed SQL elapsed time includes driver/network/lock waits and is not database CPU or an exact server COMMIT timestamp",
         "Rows are driver rowCount totals, including writes; row contents and byte sizes are never inspected",
         "Samples retain the first maxSamples completions across all kinds; dropped counts disclose truncation and retained quantiles can be biased",

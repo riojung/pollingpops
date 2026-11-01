@@ -200,19 +200,12 @@ for (const suffix of ["desktop", "@mobile"]) {
       await confidenceFirst.getByRole("textbox", { name: /^Nickname/ }).fill("Confidence First");
       await confidenceFirst.getByRole("button", { name: "Join Round", exact: true }).click();
       await expect(confidenceFirst).toHaveURL(/\/play\//);
-      // Four admissions here plus one in the single-tap case keep all four browser projects
-      // within the public join endpoint's twenty-request window, even on a fast production build.
-      expect(
-        (
-          await host.request.post(`${apiUrl}/v1/sessions/join`, {
-            data: { code: session.code, nickname: "Oak Example" },
-          })
-        ).status(),
-      ).toBe(201);
       await host.getByRole("button", { name: "Audience", exact: true }).click();
       const drawer = host.getByTestId("audience-drawer");
       await expect(drawer).toBeVisible();
       const table = drawer.locator(".participant-activity-table");
+      // Each browser participant covers a distinct saved, unsaved, or confidence-first path.
+      await expect(table.locator("tbody tr")).toHaveCount(3);
       await expect(table).toContainText("UnsavedDraftWithLongNickname");
       const drawerGeometry = await drawer.evaluate((element) => {
         const header = element.querySelector(".audience-drawer-heading")!.getBoundingClientRect();

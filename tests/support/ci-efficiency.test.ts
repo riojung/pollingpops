@@ -183,9 +183,13 @@ describe("CI efficiency without coverage bypasses", () => {
       ).toHaveLength(1);
     }
     const betaRun = beta.steps.find((step) => step.name === "Run isolated UX beta browser project");
-    expect(betaRun?.run).toBe('pnpm test:e2e:beta --project="${{ matrix.project }}"');
+    expect(betaRun?.run).toBe(
+      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --reporter=github,line,html',
+    );
     expect(betaRun?.if).toBeUndefined();
     expect(betaRun?.env).toEqual({
+      PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-beta",
+      PLAYWRIGHT_HTML_OPEN: "never",
       BETA_E2E_AUTHORING: "true",
       BETA_E2E_ROUND_PROTOCOL: "true",
       BETA_E2E_SESSION_SUMMARIES: "true",
@@ -202,7 +206,9 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(coreArtifacts?.with?.path).toBe(
       "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
     );
-    expect(betaArtifacts?.with?.path).toBe("playwright-report-beta/\ntest-results-beta/\n");
+    expect(betaArtifacts?.with?.path).toBe(
+      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\n",
+    );
     for (const artifacts of [coreArtifacts, betaArtifacts]) {
       // A passing retry must not discard the first attempt's failure evidence.
       expect(artifacts?.if).toBe("${{ always() }}");

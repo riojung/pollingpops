@@ -1,0 +1,16 @@
+title = "Polling Pops secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Verified public source checksums in the October 31 canvas evidence"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^docs/canvas-delivery-comparison-2026-10-31\.json$''']
+# These are source fingerprints, not credentials. Keep the exception restricted
+# to this field, this file, and these two exact values; all default rules remain.
+regexes = ['''^\s*"apiAndHarnessSha256": "(?:a8a5d19aca67e68895390f41206d9bd35cd74f4f674530d49f53e11e4800a5d3|4875b37d24cf00ad1d907649ff25ed2a200b9761838dcf7d123c729b4aba6b9e)",?\s*$''']

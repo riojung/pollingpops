@@ -526,3 +526,64 @@ independently serving API processes/hosts, deployed proxy/TLS, sustained soak, a
 and near-limit retained history/comments/receipts remain unmeasured. This is local current-cap
 evidence only. The **500-object, 2 MiB, 50-affected-object, 64 KiB-operation and 5,000-receipt limits
 remain unchanged**, and every report retains `capacityIncreaseAuthorized: false`.
+
+## October 31, 2026 independent stream-check experiment: rejected
+
+This follow-up starts at merged PR #170 / `c041b40`. Both measured variants include the same PDF
+export optimization. The only differing production source is `canvas-board-live.ts`; the original
+stream scheduler is retained. [The numeric summary](canvas-stream-comparison-2026-10-31.json)
+preserves all eight complete runs, including failed smoke gates, calibration, source/build hashes,
+distributions, correctness, profiling censoring and raw-report/artifact hashes.
+
+The experiment releases the node-wide polling guard before awaiting connection authorization.
+Each connection serializes its own checks and retains one pending-change bit. Twelve new expanded
+unit cases and five unchanged real-HTTP cases pass (25 cases including the existing unit cases).
+A red check against the original source confirms that a held authorization can defer a fast
+peer's later invalidation. The candidate preserves fresh authorizer callbacks, completion-based
+250/1,000 ms creator/guest rechecks, the 150 ms ticker, two-second bounds, expiry/revocation and
+late-completion fences, 32 KiB backpressure guard, metadata-only events and admission limits.
+
+The unchanged workload is 500 mixed objects, 20 licensed browser editors, one warm-up, ten measured
+updates per editor (200 acknowledgement and peer observations), 100 ordinary guest objects, and
+nominal 100 ms CDP latency. Health-fetch p50 is 105.4–109.2 ms across runs; every calibration passes.
+The same production browser bundle is source-verified and reused. Three paired profiled runs
+retain up to 100,000 samples, followed by a profiling-disabled pair. No other agent build, browser
+suite or database test runs during these measurements.
+
+| Run                      | HTTP acknowledgement p95 ms | Repository-resolution-to-peer paint opportunity p95 ms | Original smoke gates   |
+| ------------------------ | --------------------------: | -----------------------------------------------------: | ---------------------- |
+| Baseline 1               |                     2,267.2 |                                               1,605.71 | Failed acknowledgement |
+| Candidate 1              |                     2,215.6 |                                               1,467.22 | Failed acknowledgement |
+| Baseline 2               |                     1,715.6 |                                               1,251.21 | Passed                 |
+| Candidate 2              |                     1,999.8 |                                               1,454.90 | Passed                 |
+| Baseline 3               |                     1,796.9 |                                               1,192.37 | Passed                 |
+| Candidate 3              |                     2,116.7 |                                               1,276.24 | Failed acknowledgement |
+| Baseline, profiling off  |                     1,591.5 |                                               1,321.01 | Passed                 |
+| Candidate, profiling off |                     1,824.3 |                                               1,229.43 | Passed                 |
+
+All eight runs pass every correctness check, with zero application page errors. The failed
+acknowledgement threshold also fails the harness's stalled-consumer acknowledgement check, which
+uses the same acknowledgement samples. Those failures remain recorded; no threshold is raised.
+All eight peer p95 values exceed the separate 500 ms roadmap target.
+
+The profiling-off peer improvement is modest, while acknowledgement p95 worsens by 232.8 ms.
+Profiled peer results are mixed and two candidate runs miss the two-second acknowledgement smoke
+threshold. Node B outbox completions increase from 24–26 to 80–90 within the differing measured
+windows (19.7–24.2 versus 20.1–22.2 seconds). Independent scheduling increases database work rather
+than removing it; shared-pool contention remains. Completion counts and boundary-only pool
+observations do not establish causality or production tail distributions. The tradeoff does not
+justify retaining this candidate, and its production/test changes are reverted.
+
+The [archived patch](experiments/canvas-independent-stream-checks.patch) reproduces both tested
+candidate files exactly from `c041b40`: 19,682 bytes, SHA-256
+`eaa681e8fd711f8b6c09533bf5044d3757d9b4395adc5652a601633e7bf44d1f`. Five optional blank-context
+space markers are normalized; no candidate source bytes change. The original patch hash is in
+the numeric summary. Dedicated PostgreSQL/cache containers and forwarding processes were removed
+after measurement; existing user services were preserved.
+
+Keep the current scheduler, 350 ms client batching, five-second/manual HTTP recovery and all caps.
+Next performance work must reduce authorization/query and shared-pool cost with fresh authority
+checks intact, then repeat the current-cap workload. These local headless results use synthetic
+media and two API nodes in one coordinator process. Physical devices, target-host topology,
+realistic media, sustained saturation and independent acceptance remain open. No capacity increase
+is authorized.

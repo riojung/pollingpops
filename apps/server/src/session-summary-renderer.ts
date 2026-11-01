@@ -121,7 +121,13 @@ function textWidth(text: string, size: number, locale: SummaryLocale) {
   return width;
 }
 
-function wrapText(text: string, size: number, width: number, locale: SummaryLocale): string[] {
+function wrapText(
+  text: string,
+  size: number,
+  width: number,
+  locale: SummaryLocale,
+  measure = textWidth,
+): string[] {
   const output: string[] = [];
   for (const paragraph of text
     .replaceAll("\r\n", "\n")
@@ -130,7 +136,7 @@ function wrapText(text: string, size: number, width: number, locale: SummaryLoca
     .split("\n")) {
     let line = "";
     for (const { segment } of segmenter(locale, "word").segment(paragraph)) {
-      if (textWidth(line + segment, size, locale) <= width) {
+      if (measure(line + segment, size, locale) <= width) {
         line += segment;
         continue;
       }
@@ -138,12 +144,12 @@ function wrapText(text: string, size: number, width: number, locale: SummaryLoca
         output.push(line.trimEnd());
         line = "";
       }
-      if (textWidth(segment, size, locale) <= width) {
+      if (measure(segment, size, locale) <= width) {
         line = segment.trimStart();
         continue;
       }
       for (const { segment: grapheme } of segmenter(locale, "grapheme").segment(segment)) {
-        if (line && textWidth(line + grapheme, size, locale) > width) {
+        if (line && measure(line + grapheme, size, locale) > width) {
           output.push(line);
           line = "";
         }
@@ -312,6 +318,21 @@ async function renderPdf(summary: AggregateSessionSummary, options: SessionSumma
   ) => void;
   register("SummaryCJK", localizedFont(fonts().cjk, options.locale));
   register("SummaryEmoji", fonts().emoji);
+  const widths = new Map<string, number>();
+  const measurePdfText = (text: string, size: number) => {
+    const key = `${size}:${text}`;
+    const cached = widths.get(key);
+    if (cached !== undefined) return cached;
+    // Reuse PDFKit's word-layout cache and the same localized fonts as drawing.
+    // Shaping whole candidate lines separately repeats long words for each prefix.
+    const width = fontRuns(text, options.locale).reduce(
+      (total, run) => total + doc.font(run.family).fontSize(size).widthOfString(run.text),
+      0,
+    );
+    if (widths.size >= 8192) widths.clear();
+    widths.set(key, width);
+    return width;
+  };
   const chunks: Buffer[] = [];
   let outputSize = 0;
   const completed = new Promise<Buffer>((resolve, reject) => {
@@ -357,7 +378,7 @@ async function renderPdf(summary: AggregateSessionSummary, options: SessionSumma
     for (const block of allBlocks(summary, options)) {
       const size = { title: 24, heading: 15, body: 11, muted: 9 }[block.role];
       const lineHeight = size * 1.65;
-      const lines = wrapText(block.text, size, 516, options.locale);
+      const lines = wrapText(block.text, size, 516, options.locale, measurePdfText);
       if (block.role === "heading" && y + lineHeight * 3 > 728) page();
       const element = doc.struct(
         block.role === "title" ? "H1" : block.role === "heading" ? "H2" : "P",
@@ -374,7 +395,7 @@ async function renderPdf(summary: AggregateSessionSummary, options: SessionSumma
             .fontSize(size)
             .fillColor(block.role === "muted" ? "#56606e" : "#17253c")
             .text(run.text, x, y, { lineBreak: false });
-          x += textWidth(run.text, size, options.locale);
+          x += measurePdfText(run.text, size);
         }
         doc.endMarkedContent();
         y += lineHeight;

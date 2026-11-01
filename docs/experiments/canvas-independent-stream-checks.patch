@@ -1,0 +1,517 @@
+diff --git a/apps/server/src/canvas-board-live.ts b/apps/server/src/canvas-board-live.ts
+--- a/apps/server/src/canvas-board-live.ts
++++ b/apps/server/src/canvas-board-live.ts
+@@ -32,6 +32,8 @@
+   checkedAt: number;
+   heartbeatAt: number;
+   recheckMs: number;
++  checking: boolean;
++  pendingChange: boolean;
+ }
+
+ async function bounded<T>(promise: Promise<T>, milliseconds = 2_000): Promise<T> {
+@@ -80,9 +82,9 @@
+     const access = await bounded(authorize());
+     if (request.raw.aborted || reply.raw.destroyed) return reply;
+     if (Date.parse(access.expiresAt) <= Date.now())
+-      return reply
+-        .code(404)
+-        .send({ error: { code: "NOT_FOUND", message: "This canvas has expired" } });
++      return reply.code(404).send({
++        error: { code: "NOT_FOUND", message: "This canvas has expired" },
++      });
+     if (
+       this.closed ||
+       this.connections.size >= 1_000 ||
+@@ -92,7 +94,10 @@
+         .code(429)
+         .header("retry-after", "5")
+         .send({
+-          error: { code: "RATE_LIMITED", message: "Too many live board connections" },
++          error: {
++            code: "RATE_LIMITED",
++            message: "Too many live board connections",
++          },
+         });
+     }
+     const now = Date.now();
+@@ -106,6 +111,8 @@
+       checkedAt: now,
+       heartbeatAt: now,
+       recheckMs,
++      checking: false,
++      pendingChange: false,
+     };
+     reply.header("content-type", "application/x-ndjson; charset=utf-8");
+     reply.header("cache-control", "private, no-store");
+@@ -156,9 +163,55 @@
+     else if (!stream.destroyed && !stream.writableEnded) stream.end();
+   }
+
++  private async check(connection: Connection) {
++    try {
++      const access = await bounded(connection.authorize());
++      // Authorization itself can wait past board expiry or connection cancellation.
++      if (!this.connections.has(connection.id)) return;
++      if (Date.parse(access.expiresAt) <= Date.now())
++        throw Object.assign(new Error("Expired"), { code: "NOT_FOUND" });
++      connection.checkedAt = Date.now();
++      const differs =
++        access.canvasSeq !== connection.access.canvasSeq ||
++        access.sourceRevision !== connection.access.sourceRevision;
++      connection.access = access;
++      if (differs) {
++        this.write(connection, {
++          type: "canvas.changed",
++          boardId: access.boardId,
++          canvasSeq: access.canvasSeq,
++          sourceRevision: access.sourceRevision,
++        });
++      } else if (Date.now() - connection.heartbeatAt >= 5_000) {
++        connection.heartbeatAt = Date.now();
++        this.write(connection, {
++          type: "heartbeat",
++          canvasSeq: access.canvasSeq,
++        });
++      }
++    } catch (error) {
++      if (!this.connections.has(connection.id)) return;
++      const denied =
++        error &&
++        typeof error === "object" &&
++        "code" in error &&
++        ["NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN"].includes(String(error.code));
++      try {
++        this.write(connection, {
++          type: denied ? "access.revoked" : "reconnect",
++        });
++      } finally {
++        this.disconnect(connection, false, denied ? "revoked" : "unavailable");
++      }
++    } finally {
++      connection.checking = false;
++    }
++  }
++
+   async tick() {
+     if (this.closed || this.running || !this.connections.size) return;
+     this.running = true;
++    const checks: Array<Promise<void>> = [];
+     try {
+       const changed = new Set<string>();
+       // A per-node cursor is deliberately independent of any worker consumer group.
+@@ -169,52 +222,24 @@
+       }
+       this.cursor = page.cursor;
+       const now = Date.now();
+-      await Promise.all(
+-        [...this.connections.values()].map(async (connection) => {
+-          if (!this.connections.has(connection.id)) return;
+-          if (now - connection.openedAt >= this.lifetimeMs) {
+-            this.write(connection, { type: "reconnect" });
+-            this.disconnect(connection, false, "reconnect_requested");
+-            return;
+-          }
+-          if (
+-            !changed.has(connection.access.boardId) &&
+-            now - connection.checkedAt < connection.recheckMs
+-          )
+-            return;
+-          try {
+-            const access = await bounded(connection.authorize());
+-            // Authorization itself can wait past board expiry or connection cancellation.
+-            if (!this.connections.has(connection.id)) return;
+-            if (Date.parse(access.expiresAt) <= Date.now())
+-              throw Object.assign(new Error("Expired"), { code: "NOT_FOUND" });
+-            connection.checkedAt = Date.now();
+-            const differs =
+-              access.canvasSeq !== connection.access.canvasSeq ||
+-              access.sourceRevision !== connection.access.sourceRevision;
+-            connection.access = access;
+-            if (differs) {
+-              this.write(connection, {
+-                type: "canvas.changed",
+-                boardId: access.boardId,
+-                canvasSeq: access.canvasSeq,
+-                sourceRevision: access.sourceRevision,
+-              });
+-            } else if (Date.now() - connection.heartbeatAt >= 5_000) {
+-              connection.heartbeatAt = Date.now();
+-              this.write(connection, { type: "heartbeat", canvasSeq: access.canvasSeq });
+-            }
+-          } catch (error) {
+-            const denied =
+-              error &&
+-              typeof error === "object" &&
+-              "code" in error &&
+-              ["NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN"].includes(String(error.code));
+-            this.write(connection, { type: denied ? "access.revoked" : "reconnect" });
+-            this.disconnect(connection, false, denied ? "revoked" : "unavailable");
+-          }
+-        }),
+-      );
++      for (const connection of [...this.connections.values()]) {
++        if (!this.connections.has(connection.id)) continue;
++        if (now - connection.openedAt >= this.lifetimeMs) {
++          this.write(connection, { type: "reconnect" });
++          this.disconnect(connection, false, "reconnect_requested");
++          continue;
++        }
++        // A busy check cannot consume a later notification without a follow-up.
++        if (changed.has(connection.access.boardId)) connection.pendingChange = true;
++        if (
++          connection.checking ||
++          (!connection.pendingChange && now - connection.checkedAt < connection.recheckMs)
++        )
++          continue;
++        connection.pendingChange = false;
++        connection.checking = true;
++        checks.push(this.check(connection));
++      }
+     } catch {
+       // A failed metadata read must not leave subscriptions authorized indefinitely.
+       // Clients fall back to authorized HTTP reads while reconnecting.
+@@ -223,8 +248,12 @@
+         this.disconnect(connection, false, "unavailable");
+       }
+     } finally {
++      // Only the outbox poll/cursor/dispatch phase is node-wide single-flight.
+       this.running = false;
+     }
++    // Keep explicit tick callers awaitable without coupling future interval ticks.
++    // Each check closes its own failed connection, including a failed terminal write.
++    await Promise.allSettled(checks);
+   }
+
+   close() {
+diff --git a/apps/server/test/canvas-board-live.test.ts b/apps/server/test/canvas-board-live.test.ts
+--- a/apps/server/test/canvas-board-live.test.ts
++++ b/apps/server/test/canvas-board-live.test.ts
+@@ -10,6 +10,16 @@
+   for (const relay of relays.splice(0)) relay.close();
+   vi.useRealTimers();
+ });
++
++function deferred<T>() {
++  let resolve!: (value: T | PromiseLike<T>) => void;
++  let reject!: (reason: Error) => void;
++  const promise = new Promise<T>((done, fail) => {
++    resolve = done;
++    reject = fail;
++  });
++  return { promise, resolve, reject };
++}
+
+ function response() {
+   const raw = Object.assign(new EventEmitter(), {
+@@ -198,6 +208,310 @@
+     expect(client.events().at(-1)).toEqual({ type: "reconnect" });
+     expect(client.raw.end).toHaveBeenCalledOnce();
+   });
++  it("keeps fast peers current across ticks and retains one pending change for a busy peer", async () => {
++    vi.useFakeTimers();
++    const f = fixture(),
++      slow = response(),
++      fast = response();
++    const authorizeSlow = vi.fn(async () => ({ ...f.metadata }));
++    await f.relay.connect(slow.request, slow.reply, "slow", authorizeSlow, 250);
++    await f.relay.connect(fast.request, fast.reply, "fast", f.authorize, 250);
++    const held = deferred<CanvasStreamAccess>(),
++      entered = deferred<void>();
++    authorizeSlow.mockImplementationOnce(() => {
++      entered.resolve();
++      return held.promise;
++    });
++    f.metadata.canvasSeq = 2;
++    const first = f.relay.tick();
++    try {
++      await entered.promise;
++      await vi.advanceTimersByTimeAsync(0);
++      expect(fast.events().at(-1)).toMatchObject({
++        type: "canvas.changed",
++        canvasSeq: 2,
++      });
++      for (const seq of [3, 4]) {
++        f.metadata.canvasSeq = seq;
++        await f.relay.tick();
++        expect(fast.events().at(-1)).toMatchObject({
++          type: "canvas.changed",
++          canvasSeq: seq,
++        });
++        expect(authorizeSlow).toHaveBeenCalledTimes(2);
++      }
++      held.resolve({ ...f.metadata, canvasSeq: 2 });
++      await first;
++      // The cursor already passed both changes; completion-based cadence is not due yet.
++      const fastCalls = f.authorize.mock.calls.length;
++      await f.relay.tick();
++      expect(authorizeSlow).toHaveBeenCalledTimes(3);
++      expect(slow.events().at(-1)).toMatchObject({
++        type: "canvas.changed",
++        canvasSeq: 4,
++      });
++      expect(f.authorize).toHaveBeenCalledTimes(fastCalls);
++      await f.relay.tick();
++      expect(authorizeSlow).toHaveBeenCalledTimes(3);
++    } finally {
++      held.resolve({ ...f.metadata });
++      await first;
++    }
++  });
++
++  it.each([250, 1_000])(
++    "retains the %i ms recheck interval from authorization completion",
++    async (cadence) => {
++      vi.useFakeTimers();
++      const f = fixture(),
++        client = response();
++      await f.relay.connect(client.request, client.reply, "user", f.authorize, cadence);
++      await f.relay.tick();
++      await vi.advanceTimersByTimeAsync(cadence);
++      const held = deferred<CanvasStreamAccess>(),
++        entered = deferred<void>();
++      f.authorize.mockImplementationOnce(() => {
++        entered.resolve();
++        return held.promise;
++      });
++      const checking = f.relay.tick();
++      try {
++        await entered.promise;
++        await vi.advanceTimersByTimeAsync(100);
++        held.resolve({ ...f.metadata });
++        await checking;
++        const calls = f.authorize.mock.calls.length;
++        await vi.advanceTimersByTimeAsync(cadence - 1);
++        await f.relay.tick();
++        expect(f.authorize).toHaveBeenCalledTimes(calls);
++        await vi.advanceTimersByTimeAsync(1);
++        await f.relay.tick();
++        expect(f.authorize).toHaveBeenCalledTimes(calls + 1);
++      } finally {
++        held.resolve({ ...f.metadata });
++        await checking;
++      }
++    },
++  );
++
++  it("serializes outbox pages and advances the cursor once before the next read", async () => {
++    vi.useFakeTimers();
++    const f = fixture(),
++      client = response();
++    await f.relay.connect(client.request, client.reply, "user", f.authorize);
++    const held = deferred<{ events: []; cursor: number }>(),
++      entered = deferred<void>();
++    f.outbox.listOutbox.mockImplementation(async (after) => ({
++      events: [],
++      cursor: after,
++    }));
++    f.outbox.listOutbox.mockImplementationOnce(() => {
++      entered.resolve();
++      return held.promise;
++    });
++    const first = f.relay.tick();
++    try {
++      await entered.promise;
++      await Promise.all([f.relay.tick(), f.relay.tick()]);
++      expect(f.outbox.listOutbox).toHaveBeenCalledOnce();
++      expect(f.outbox.listOutbox).toHaveBeenLastCalledWith(0, 200);
++      held.resolve({ events: [], cursor: 7 });
++      await first;
++      await f.relay.tick();
++      await f.relay.tick();
++      expect(f.outbox.listOutbox).toHaveBeenNthCalledWith(2, 7, 200);
++      expect(f.outbox.listOutbox).toHaveBeenNthCalledWith(3, 7, 200);
++    } finally {
++      held.resolve({ events: [], cursor: 7 });
++      await first;
++    }
++  });
++
++  it("does not let an old authorization completion unlock a later pending outbox poll", async () => {
++    vi.useFakeTimers();
++    const f = fixture(),
++      client = response();
++    await f.relay.connect(client.request, client.reply, "user", f.authorize);
++    const authorization = deferred<CanvasStreamAccess>(),
++      entered = deferred<void>();
++    const page = deferred<{ events: []; cursor: number }>();
++    f.authorize.mockImplementationOnce(() => {
++      entered.resolve();
++      return authorization.promise;
++    });
++    const first = f.relay.tick();
++    let second: Promise<void> | undefined;
++    try {
++      await entered.promise;
++      f.outbox.listOutbox.mockImplementationOnce(() => page.promise);
++      second = f.relay.tick();
++      await vi.advanceTimersByTimeAsync(0);
++      expect(f.outbox.listOutbox).toHaveBeenCalledTimes(2);
++      authorization.resolve({ ...f.metadata });
++      await first;
++      await f.relay.tick();
++      expect(f.outbox.listOutbox).toHaveBeenCalledTimes(2);
++      page.resolve({ events: [], cursor: f.metadata.canvasSeq });
++      await second;
++      await f.relay.tick();
++      expect(f.outbox.listOutbox).toHaveBeenCalledTimes(3);
++      expect(f.outbox.listOutbox).toHaveBeenLastCalledWith(f.metadata.canvasSeq, 200);
++    } finally {
++      authorization.resolve({ ...f.metadata });
++      page.resolve({ events: [], cursor: f.metadata.canvasSeq });
++      await Promise.all([first, second]);
++    }
++  });
++
++  it.each(["disconnect", "outbox failure", "shutdown"])(
++    "ignores late successful and denied checks after %s",
++    async (cancellation) => {
++      vi.useFakeTimers();
++      for (const denied of [false, true]) {
++        const f = fixture(),
++          client = response();
++        await f.relay.connect(client.request, client.reply, "user", f.authorize);
++        const held = deferred<CanvasStreamAccess>(),
++          entered = deferred<void>();
++        f.authorize.mockImplementationOnce(() => {
++          entered.resolve();
++          return held.promise;
++        });
++        f.metadata.canvasSeq = 2;
++        const checking = f.relay.tick();
++        try {
++          await entered.promise;
++          if (cancellation === "disconnect") client.raw.emit("close");
++          else if (cancellation === "shutdown") f.relay.close();
++          else {
++            f.outbox.listOutbox.mockRejectedValueOnce(new Error("Database unavailable"));
++            await f.relay.tick();
++            expect(client.events().at(-1)).toEqual({ type: "reconnect" });
++          }
++          expect(client.raw.end).toHaveBeenCalledOnce();
++          const events = client.events();
++          if (denied) held.reject(Object.assign(new Error("Removed grant"), { code: "FORBIDDEN" }));
++          else held.resolve({ ...f.metadata });
++          await checking;
++          expect(client.events()).toEqual(events);
++          expect(client.raw.end).toHaveBeenCalledOnce();
++        } finally {
++          held.resolve({ ...f.metadata });
++          await checking;
++          f.relay.close();
++        }
++      }
++    },
++  );
++
++  it("rechecks idle revocation while another peer waits and ignores its completion after two seconds", async () => {
++    vi.useFakeTimers();
++    const f = fixture(),
++      slow = response(),
++      fast = response();
++    const authorizeSlow = vi.fn(async () => ({ ...f.metadata }));
++    await f.relay.connect(slow.request, slow.reply, "slow", authorizeSlow, 250);
++    await f.relay.connect(fast.request, fast.reply, "fast", f.authorize, 250);
++    const held = deferred<CanvasStreamAccess>(),
++      entered = deferred<void>();
++    authorizeSlow.mockImplementationOnce(() => {
++      entered.resolve();
++      return held.promise;
++    });
++    const first = f.relay.tick();
++    try {
++      await entered.promise;
++      await vi.advanceTimersByTimeAsync(0);
++      f.revoke();
++      await vi.advanceTimersByTimeAsync(250);
++      await f.relay.tick();
++      expect(fast.events().at(-1)).toEqual({ type: "access.revoked" });
++      expect(slow.raw.end).not.toHaveBeenCalled();
++      expect(authorizeSlow).toHaveBeenCalledTimes(2);
++      await vi.advanceTimersByTimeAsync(1_751);
++      await first;
++      expect(slow.events().at(-1)).toEqual({ type: "reconnect" });
++      expect(slow.raw.end).toHaveBeenCalledOnce();
++      const events = slow.events();
++      held.resolve({ ...f.metadata, canvasSeq: 2 });
++      await vi.advanceTimersByTimeAsync(0);
++      expect(slow.events()).toEqual(events);
++    } finally {
++      held.resolve({ ...f.metadata });
++      await first;
++    }
++  });
++
++  it("rechecks actual clock expiry after a held authorization finishes", async () => {
++    vi.useFakeTimers();
++    const f = fixture(),
++      client = response();
++    await f.relay.connect(client.request, client.reply, "user", f.authorize);
++    const held = deferred<CanvasStreamAccess>(),
++      entered = deferred<void>();
++    f.authorize.mockImplementationOnce(() => {
++      entered.resolve();
++      return held.promise;
++    });
++    const access = {
++      ...f.metadata,
++      canvasSeq: 2,
++      expiresAt: new Date(Date.now() + 10).toISOString(),
++    };
++    const checking = f.relay.tick();
++    try {
++      await entered.promise;
++      await vi.advanceTimersByTimeAsync(11);
++      held.resolve(access);
++      await checking;
++      expect(client.events().at(-1)).toEqual({ type: "access.revoked" });
++      expect(client.events().some((event) => event.type === "canvas.changed")).toBe(false);
++    } finally {
++      held.resolve(access);
++      await checking;
++    }
++  });
++
++  it.each(["write false", "buffer full"])(
++    "isolates %s backpressure during another peer's pending check",
++    async (pressure) => {
++      vi.useFakeTimers();
++      const f = fixture(),
++        heldClient = response(),
++        slow = response(),
++        fast = response();
++      const authorizeHeld = vi.fn(async () => ({ ...f.metadata }));
++      await f.relay.connect(heldClient.request, heldClient.reply, "held", authorizeHeld);
++      await f.relay.connect(slow.request, slow.reply, "slow", f.authorize);
++      await f.relay.connect(fast.request, fast.reply, "fast", f.authorize);
++      const held = deferred<CanvasStreamAccess>(),
++        entered = deferred<void>();
++      authorizeHeld.mockImplementationOnce(() => {
++        entered.resolve();
++        return held.promise;
++      });
++      if (pressure === "write false") slow.raw.write.mockReturnValueOnce(false);
++      else slow.raw.writableLength = 32 * 1024 + 1;
++      f.metadata.canvasSeq = 2;
++      const checking = f.relay.tick();
++      try {
++        await entered.promise;
++        await vi.advanceTimersByTimeAsync(0);
++        expect(slow.raw.destroy).toHaveBeenCalledOnce();
++        f.metadata.canvasSeq = 3;
++        await f.relay.tick();
++        expect(fast.events().at(-1)).toMatchObject({
++          type: "canvas.changed",
++          canvasSeq: 3,
++        });
++        expect(fast.raw.destroy).not.toHaveBeenCalled();
++        expect(authorizeHeld).toHaveBeenCalledTimes(2);
++      } finally {
++        held.resolve({ ...f.metadata });
++        await checking;
++      }
++    },
++  );
+ });
+
+ describe("ephemeral named canvas presence", () => {

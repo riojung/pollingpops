@@ -504,6 +504,52 @@ The combined retained source passes the full Node 22
 All 25 dedicated Canvas desktop/mobile browser cases and both changed core fixtures on desktop
 Chromium pass with zero retries. Existing environment-gated test skips remain.
 
+### Export deadline and browser CI diagnostics October 31 2026
+
+Merged [PR #170](https://github.com/riojung/pollingpops/pull/170), `c041b40`, passes all four
+hosted core-browser projects and three beta-browser projects. Its package check times out on the
+200-checkpoint PDF export; the security job flags three occurrences of two public source
+fingerprints; mobile WebKit stops on a runner shutdown signal without a reported assertion or
+retained trace. These are separate observations, and the earlier local OOM does not establish
+the cause of that hosted shutdown.
+
+PDF wrapping and drawing now share PDFKit's existing word-layout cache through its public
+measurement API and the same registered localized fonts. PNG measurement is unchanged. One
+local cold, CPU-profiled comparison under the existing 128/32 MiB worker heap limits reduces
+rendering from 4.70 seconds to 1.16 seconds. Both outputs have 157 pages and 910,942 bytes with
+identical extracted text and geometry, including the final checkpoint. Raw PDF bytes differ.
+All 15 export tests pass, including ten locales, CJK/emoji, tagging, output caps and queue/timeout
+behavior. The production ten-second deadline, outer test budget and complete fixture remain.
+This single comparison is not a hosted tail-latency guarantee.
+
+Secret scanning retains the default detectors. The generic-key exception requires the exact
+historical evidence file, checksum field and either of two independently recomputed source
+fingerprints. Native Gitleaks 8.24.3 accepts the original PR range and detects all four negative
+controls: another value, another field, another file and a synthetic provider token.
+
+Beta CI retains its complete matrix, feature flags, retries, workers and deadlines. Active-case
+line progress supplements GitHub annotations and the existing HTML reports. A wrapper records
+numeric memory, pressure, cgroup and process-resource observations every ten seconds, capped at
+181 samples and 2 MiB, without process names, command lines or environments. It preserves child
+exit codes/cancellation and cleans its sampler timer and signal handlers. All 12 focused helper
+and workflow guard tests pass. Updated hosted evidence is still required to diagnose WebKit.
+
+Eight new production-browser collaboration runs preserve every correctness invariant. The
+independent stream-check experiment passes 25 focused cases, but profiling-off acknowledgement
+p95 worsens from 1,591.5 to 1,824.3 ms while peer p95 improves only from 1,321.01 to 1,229.43 ms.
+Profiled results are mixed, and two candidate runs miss the unchanged acknowledgement smoke
+threshold. Its production and test changes are reverted; the reproducible patch and all outcomes
+are retained in the [capacity evidence](canvas-capacity-evidence.md#october-31-2026-independent-stream-check-experiment-rejected)
+and [numeric summary](canvas-stream-comparison-2026-10-31.json). The 500 ms peer target, deployed
+and physical-device evidence remain open. All product limits and client batching remain unchanged.
+
+The retained source passes the full Node 22
+`CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check`, including 950 server tests,
+1,554 web tests, 304 smoke-support tests and production builds. Existing environment-gated skips
+remain. The eleven-file changed-tree snapshot has no native secret-scan findings. The scanner
+also discovers the root configuration automatically for the original PR range. No updated hosted
+run is claimed.
+
 ### Standalone administrator authentication October 15 2026
 
 Implemented locally on `codex/standalone-admin-console`. Administrators open the separate console

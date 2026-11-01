@@ -29,10 +29,15 @@ async function pdfContents(bytes: Buffer) {
     const pages = [];
     for (let index = 1; index <= document.numPages; index++) {
       const page = await document.getPage(index);
+      const content = await page.getTextContent();
       pages.push({
-        text: (await page.getTextContent()).items
-          .flatMap((item) => ("str" in item ? [item.str] : []))
-          .join(" "),
+        text: content.items.flatMap((item) => ("str" in item ? [item.str] : [])).join(" "),
+        rightEdge: Math.max(
+          0,
+          ...content.items.flatMap((item) =>
+            "str" in item ? [(item.transform[4] ?? 0) + item.width] : [],
+          ),
+        ),
         structure: await page.getStructTree(),
       });
     }
@@ -170,6 +175,7 @@ describe("aggregate session summary downloads", () => {
       const contents = await pdfContents(result.bytes);
       expect(contents.pageCount).toBeLessThanOrEqual(256);
       expect(contents.pages.map((page) => page.text).join(" ")).toContain("LAST_RESULT_199");
+      for (const page of contents.pages) expect(page.rightEdge).toBeLessThanOrEqual(565);
       expect(result.bytes.length).toBeLessThan(MAX_SUMMARY_OUTPUT_BYTES);
     } finally {
       await service.close();

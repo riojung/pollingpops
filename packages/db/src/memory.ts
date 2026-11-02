@@ -241,6 +241,8 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  deleteCollaborationGroupMetadata?(groupId: string): void;
+  deleteCanvasBoardMetadata?(boardId: string): void;
   syncCanvasArtifactLinks?(boardId: string, versionIds: ReadonlySet<string>): void;
   deleteIdeaBoardMetadata?(sourceBoardId: string): void;
   updateIdeaBoardMetadata?(sourceBoardId: string): void;
@@ -494,8 +496,21 @@ export class MemoryRepository implements Repository {
   }
 
   deleteIdeaBoardCanvasMetadata(sourceBoardId: string) {
+    this.deletedIdeaBoardIds.add(sourceBoardId);
     for (const { lifecycle } of this.lifecycleExtensions.values())
       lifecycle.deleteIdeaBoardMetadata?.(sourceBoardId);
+  }
+  private readonly deletedIdeaBoardIds = new Set<string>();
+  isIdeaBoardDeleted(sourceBoardId: string) {
+    return this.deletedIdeaBoardIds.has(sourceBoardId);
+  }
+  deleteCollaborationGroupMetadata(groupId: string) {
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.deleteCollaborationGroupMetadata?.(groupId);
+  }
+  deleteCanvasBoardMetadata(boardId: string) {
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.deleteCanvasBoardMetadata?.(boardId);
   }
   updateIdeaBoardCanvasMetadata(sourceBoardId: string) {
     for (const { lifecycle } of this.lifecycleExtensions.values())

@@ -10,6 +10,8 @@ export * from "./qna-policy";
 export * from "./text-opinions";
 export * from "./session-summaries";
 export * from "./canvas-boards";
+export * from "./canvas-sharing";
+export * from "./board-invitations";
 export * from "./canvas-facilitation";
 export * from "./canvas-diagram-geometry";
 export * from "./canvas-artifact-links";

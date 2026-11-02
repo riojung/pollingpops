@@ -7669,6 +7669,22 @@ export class PostgresRepository implements Repository {
             ) AS facilitation
            FROM canvas_boards board WHERE board.workspace_id=ANY($1::uuid[]) AND board.expires_at>clock_timestamp() ORDER BY board.id`,
         );
+        const canvasGroupGrants = await queryWorkspaceData(
+          `SELECT grant_row.board_id AS "boardId", grant_row.group_id AS "groupId",
+                  grant_row.role, grant_row.created_at AS "createdAt"
+           FROM canvas_board_group_grants grant_row
+           JOIN canvas_boards board ON board.id=grant_row.board_id
+           WHERE grant_row.workspace_id=ANY($1::uuid[]) AND board.expires_at>clock_timestamp()
+           ORDER BY grant_row.board_id,grant_row.group_id`,
+        );
+        await client.query("SELECT set_config('app.board_invitation_lifecycle','on',true)");
+        const invitationDeliveries = await client.query(
+          `SELECT data FROM board_invitation_deliveries
+           WHERE expires_at>clock_timestamp() AND (actor_id=$1 OR workspace_id=ANY($2::uuid[]))
+           ORDER BY expires_at,id`,
+          [userId, workspaceIds],
+        );
+        await client.query("SELECT set_config('app.board_invitation_lifecycle','off',true)");
         const canvasArtifactLinks = await queryWorkspaceData(
           `SELECT link.id,link.workspace_id AS "workspaceId",link.target_kind AS "targetKind",
             link.target_id AS "targetId",link.board_id AS "boardId",link.version_id AS "versionId",
@@ -8054,6 +8070,18 @@ export class PostgresRepository implements Repository {
             (row) => new Date(row.expiresAt).getTime() > Date.now(),
           ),
           canvasArtifactLinks: canvasArtifactLinks.rows,
+          canvasGroupGrants: canvasGroupGrants.rows,
+          boardInvitationDeliveries: invitationDeliveries.rows.map(({ data }) => ({
+            batchId: data.batchId,
+            resourceKind: data.resourceKind,
+            resourceId: data.resourceId,
+            createdAt: data.createdAt,
+            expiresAt: data.expiresAt,
+            results: data.recipients.map((recipient: { email: string; status: string }) => ({
+              email: recipient.email,
+              status: recipient.status,
+            })),
+          })),
           ideaBoards: ideaBoards.rows.flatMap((row) => {
             const board = IdeaBoardStoredSchema.parse(row.data);
             const now = new Date();

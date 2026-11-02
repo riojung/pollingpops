@@ -2,12 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type {
+  CanvasBoardRepository,
+  IdeaBoardRepository,
   CollaborationGroupMemberRecord,
   CollaborationGroupRepository,
   CreatorContext,
   PresentationRepository,
   Repository,
 } from "@openround/db";
+import { IdeaBoardError } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import { professionalFeatureUnavailable } from "./workspace-rollout.js";
 
@@ -22,7 +25,7 @@ const CreateGroupSchema = z.object({
 });
 const AddMemberSchema = z.object({ userId: z.string().uuid() });
 const AddArtifactSchema = z.object({
-  artifactType: z.enum(["round", "presentation"]),
+  artifactType: z.enum(["round", "presentation", "idea_board"]),
   artifactId: z.string().uuid(),
 });
 const AddMessageSchema = z.object({ body: z.string().trim().min(1).max(2000) });
@@ -61,9 +64,27 @@ function canEdit(creator: CreatorContext) {
 async function artifactView(
   repository: Repository,
   presentations: PresentationRepository,
+  boards: IdeaBoardRepository,
   workspaceId: string,
   artifact: Awaited<ReturnType<CollaborationGroupRepository["listArtifacts"]>>[number],
 ) {
+  if (artifact.artifactType === "idea_board") {
+    try {
+      const board = await boards.getModerator(workspaceId, artifact.artifactId);
+      return {
+        ...artifact,
+        title: board.title,
+        status: board.status,
+        published: false,
+        editHref: `/boards/${board.id}`,
+        hostHref: `/boards/${board.id}`,
+        assignHref: null,
+      };
+    } catch (error) {
+      if (error instanceof IdeaBoardError && error.code === "NOT_FOUND") return null;
+      throw error;
+    }
+  }
   if (artifact.artifactType === "round") {
     const round = await repository.getQuiz(workspaceId, artifact.artifactId);
     return round
@@ -98,13 +119,27 @@ export async function registerGroupRoutes(
     repository: Repository;
     presentations: PresentationRepository;
     groups: CollaborationGroupRepository;
+    boards: IdeaBoardRepository;
+    canvases: CanvasBoardRepository;
     auth: AuthService;
     workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
     presentationsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
+    ideaBoardsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
+    canvasEnabled: (workspaceId: string) => boolean | Promise<boolean>;
   },
 ) {
-  const { repository, presentations, groups, auth, workspaceEnabled, presentationsEnabled } =
-    dependencies;
+  const {
+    repository,
+    presentations,
+    groups,
+    boards,
+    canvases,
+    auth,
+    workspaceEnabled,
+    presentationsEnabled,
+    ideaBoardsEnabled,
+    canvasEnabled,
+  } = dependencies;
 
   async function requireGroupsWorkspace(
     creator: CreatorContext,
@@ -142,6 +177,19 @@ export async function registerGroupRoutes(
     reply: FastifyReply,
     requestId: string,
   ) {
+    if (input.artifactType === "idea_board") {
+      if (!(await ideaBoardsEnabled(creator.workspaceId))) {
+        apiError(reply, 404, "NOT_FOUND", "Artifact not found", requestId);
+        return null;
+      }
+      try {
+        return await boards.getModerator(creator.workspaceId, input.artifactId);
+      } catch (error) {
+        if (!(error instanceof IdeaBoardError) || error.code !== "NOT_FOUND") throw error;
+        apiError(reply, 404, "NOT_FOUND", "Artifact not found", requestId);
+        return null;
+      }
+    }
     if (
       input.artifactType === "presentation" &&
       !(await presentationsEnabled(creator.workspaceId))
@@ -165,6 +213,8 @@ export async function registerGroupRoutes(
     if (!creator) return;
     if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const workspacePresentationsEnabled = await presentationsEnabled(creator.workspaceId);
+    const workspaceIdeasEnabled = await ideaBoardsEnabled(creator.workspaceId);
+    const workspaceCanvasEnabled = await canvasEnabled(creator.workspaceId);
     const records = await groups.listGroups(creator.workspaceId, creator.userId);
     const groupViews = await Promise.all(
       records.map(async (group) => {
@@ -174,7 +224,10 @@ export async function registerGroupRoutes(
           groups.listSchedule(group.id),
         ]);
         const artifacts = artifactRecords.filter(
-          (artifact) => artifact.artifactType === "round" || workspacePresentationsEnabled,
+          (artifact) =>
+            artifact.artifactType === "round" ||
+            (artifact.artifactType === "presentation" && workspacePresentationsEnabled) ||
+            (artifact.artifactType === "idea_board" && workspaceIdeasEnabled),
         );
         const schedule = scheduleRecords.filter(
           (item) => item.artifactType === "round" || workspacePresentationsEnabled,
@@ -183,7 +236,11 @@ export async function registerGroupRoutes(
           ...group,
           role: members.find((member) => member.userId === creator.userId)?.role ?? "member",
           memberCount: members.length,
-          artifactCount: artifacts.length,
+          artifactCount:
+            artifacts.length +
+            (workspaceCanvasEnabled
+              ? (await canvases.groupBoards(creator, creator.workspaceId, group.id)).length
+              : 0),
           upcomingCount: schedule.filter((item) => item.scheduledFor.getTime() >= Date.now())
             .length,
         };
@@ -243,6 +300,8 @@ export async function registerGroupRoutes(
     if (!creator) return;
     if ((await requireGroupsWorkspace(creator, reply, request.id)) !== true) return;
     const workspacePresentationsEnabled = await presentationsEnabled(creator.workspaceId);
+    const workspaceIdeasEnabled = await ideaBoardsEnabled(creator.workspaceId);
+    const workspaceCanvasEnabled = await canvasEnabled(creator.workspaceId);
     const { id } = GroupParamsSchema.parse(request.params);
     const access = await requireMembership(creator, id, reply, request.id);
     if (!access) return;
@@ -254,7 +313,10 @@ export async function registerGroupRoutes(
     ]);
     const byUserId = new Map(workspaceMembers.map((member) => [member.userId, member]));
     const visibleArtifactRecords = artifactRecords.filter(
-      (artifact) => artifact.artifactType === "round" || workspacePresentationsEnabled,
+      (artifact) =>
+        artifact.artifactType === "round" ||
+        (artifact.artifactType === "presentation" && workspacePresentationsEnabled) ||
+        (artifact.artifactType === "idea_board" && workspaceIdeasEnabled),
     );
     const visibleSchedule = schedule.filter(
       (item) => item.artifactType === "round" || workspacePresentationsEnabled,
@@ -262,7 +324,7 @@ export async function registerGroupRoutes(
     const artifactViews = (
       await Promise.all(
         visibleArtifactRecords.map((artifact) =>
-          artifactView(repository, presentations, creator.workspaceId, artifact),
+          artifactView(repository, presentations, boards, creator.workspaceId, artifact),
         ),
       )
     ).filter((artifact) => artifact !== null);
@@ -288,6 +350,9 @@ export async function registerGroupRoutes(
               )
             : [],
         artifacts: artifactViews,
+        canvasBoards: workspaceCanvasEnabled
+          ? await canvases.groupBoards(creator, creator.workspaceId, id)
+          : [],
         messages: messages.map((message) => ({
           ...message,
           authorEmail: byUserId.get(message.authorId)?.email ?? "Former workspace member",
@@ -427,7 +492,7 @@ export async function registerGroupRoutes(
     const input = AddScheduleSchema.parse(request.body);
     const artifact = await requireArtifact(creator, input, reply, request.id);
     if (!artifact) return;
-    if (!artifact.currentVersionId) {
+    if (!("currentVersionId" in artifact) || !artifact.currentVersionId) {
       return apiError(
         reply,
         409,

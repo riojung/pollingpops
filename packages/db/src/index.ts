@@ -8,6 +8,7 @@ export * from "./presentation-session-types.js";
 export * from "./presentation-sessions.js";
 export * from "./group-types.js";
 export * from "./groups.js";
+export * from "./board-invitations.js";
 export * from "./media-references.js";
 export * from "./library-metadata.js";
 export * from "./artifact-schemas.js";

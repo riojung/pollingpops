@@ -18,6 +18,9 @@ import type {
   CanvasFacilitationResponse,
   CanvasVersionView,
   CanvasGuestFacilitationView,
+  CanvasBoardGroupGrant,
+  CanvasBoardSharing,
+  CanvasBoardShareGroups,
 } from "@openround/contracts";
 import type {
   OrganizationRecord,
@@ -84,6 +87,7 @@ export interface CanvasState {
     label?: string;
   }>;
   invitations: CanvasBoardInvitation[];
+  groupGrants?: CanvasBoardGroupGrant[];
   receipts: CanvasReceipt[];
   facilitation?: CanvasFacilitationStored;
 }
@@ -131,6 +135,11 @@ export interface CanvasAccessContext {
   workspaceDeleting: boolean;
   workspaceLicensed: boolean;
 }
+export interface CanvasSharingGroup {
+  id: string;
+  name: string;
+  memberCount: number;
+}
 export interface CanvasTransaction {
   /** Internal shared transaction for same-workspace authoring link authorization. */
   sqlClient?: PoolClient;
@@ -139,6 +148,9 @@ export interface CanvasTransaction {
   countWorkspace(workspaceId: string, now: Date): Promise<number>;
   timer(boardId: string, lock?: boolean): Promise<CanvasTimer>;
   grant(boardId: string, userId: string): Promise<CanvasState["grants"][number] | null>;
+  groupRoles(boardId: string, userId: string, lock?: boolean): Promise<CanvasBoardGroupGrant[]>;
+  sharingGroups(workspaceId: string, userId: string): Promise<CanvasSharingGroup[]>;
+  sharingGroup(workspaceId: string, groupId: string): Promise<CanvasSharingGroup | null>;
   sourceMetadata(
     id: string,
     guestHash?: string,
@@ -184,6 +196,26 @@ export type CanvasRun = <T>(
   work: (tx: CanvasTransaction) => Promise<T>,
 ) => Promise<T>;
 export interface CanvasBoardRepositoryApi {
+  sharing(actor: CanvasActor, id: string, clock?: CanvasClock): Promise<CanvasBoardSharing>;
+  shareGroups(
+    actor: CanvasActor,
+    id: string,
+    input: CanvasBoardShareGroups,
+    clock?: CanvasClock,
+  ): Promise<CanvasBoardSharing>;
+  revokeGroup(
+    actor: CanvasActor,
+    id: string,
+    groupId: string,
+    operationId: string,
+    clock?: CanvasClock,
+  ): Promise<CanvasBoardSharing>;
+  groupBoards(
+    actor: CanvasActor,
+    workspaceId: string,
+    groupId: string,
+    clock?: CanvasClock,
+  ): Promise<CanvasBoardView[]>;
   getFacilitation(
     actor: CanvasActor,
     id: string,

@@ -52,19 +52,30 @@ test("separate licensed workspaces coauthor a shared board and lose live access 
       .getByRole("textbox", { name: "Teammate's verified email", exact: true })
       .fill(editor.email);
     await sharing.getByRole("combobox", { name: "Board role", exact: true }).selectOption("editor");
-    await sharing.getByRole("button", { name: "Invite teammate", exact: true }).click();
-    const invitationLink = sharing.getByRole("textbox", { name: "Participant link", exact: true });
-    await expect(invitationLink).toHaveValue(/\/canvas\/invitations\//);
-    const invitationRow = sharing.getByRole("listitem").filter({ hasText: editor.email });
+    await sharing.getByRole("button", { name: "Send invitations", exact: true }).click();
+    const invitationRow = sharing
+      .getByRole("listitem")
+      .filter({ hasText: editor.email })
+      .filter({
+        has: owner.getByRole("button", { name: "Revoke invitation", exact: true }),
+      });
+    const invitationLink = invitationRow.getByRole("link", {
+      name: "Participant link",
+      exact: true,
+    });
+    await expect(invitationLink).toHaveAttribute("href", /\/canvas\/invitations\//);
     await invitationRow.getByRole("button", { name: "Revoke invitation", exact: true }).click();
     await expect(invitationRow).toHaveCount(0);
     await expect(invitationLink).toHaveCount(0);
     await sharing
+      .getByRole("button", { name: "Start a new invitation batch", exact: true })
+      .click();
+    await sharing
       .getByRole("textbox", { name: "Teammate's verified email", exact: true })
       .fill(editor.email);
-    await sharing.getByRole("button", { name: "Invite teammate", exact: true }).click();
-    await expect(invitationLink).toHaveValue(/\/canvas\/invitations\//);
-    await editor.page.goto(await invitationLink.inputValue());
+    await sharing.getByRole("button", { name: "Send invitations", exact: true }).click();
+    await expect(invitationLink).toHaveAttribute("href", /\/canvas\/invitations\//);
+    await editor.page.goto(new URL((await invitationLink.getAttribute("href"))!, web).href);
     await editor.page.getByRole("button", { name: "Accept board invitation", exact: true }).click();
     await expect(editor.page).toHaveURL(`${web}/canvas/${id}`);
     await expect(editor.page.getByTestId(`canvas-object-${ownerNote.id}`)).toBeVisible();
@@ -74,7 +85,7 @@ test("separate licensed workspaces coauthor a shared board and lose live access 
     await expect(editor.page.getByRole("button", { name: "Share board", exact: true })).toHaveCount(
       0,
     );
-    await sharing.getByRole("button", { name: "Cancel", exact: true }).click();
+    await sharing.getByRole("button", { name: "Close sharing", exact: true }).click();
 
     await editor.page.getByRole("button", { name: "Sticky note", exact: true }).click();
     await saveText(editor.page, "A teammate contribution");

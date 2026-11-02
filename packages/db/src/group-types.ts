@@ -22,7 +22,7 @@ export interface CollaborationGroupArtifactRecord {
   id: string;
   workspaceId: string;
   groupId: string;
-  artifactType: ArtifactType;
+  artifactType: ArtifactType | "idea_board";
   artifactId: string;
   addedBy: string;
   createdAt: Date;

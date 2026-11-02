@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
+import { listIdeaBoards } from "../../lib/idea-board-client";
+import { canvasSharingMessages } from "../../lib/i18n/canvas-sharing-messages";
 import styles from "./groups.module.css";
 
-type ArtifactType = "round" | "presentation";
+type ArtifactType = "round" | "presentation" | "idea_board";
 
 interface GroupSummary {
   id: string;
@@ -42,7 +44,7 @@ interface GroupArtifact {
   artifactType: ArtifactType;
   artifactId: string;
   title: string;
-  status: "draft" | "published" | "archived";
+  status: "draft" | "published" | "archived" | "collecting" | "voting" | "closed";
   published: boolean;
   editHref: string;
   hostHref: string;
@@ -75,6 +77,15 @@ interface GroupDetail extends GroupSummary {
   artifacts: GroupArtifact[];
   messages: GroupMessage[];
   schedule: GroupScheduleItem[];
+  canvasBoards?: Array<{
+    id: string;
+    title: string;
+    boardType: "team" | "workshop";
+    status: "active" | "archived" | "frozen" | "closed";
+    role: "owner" | "editor" | "viewer" | "facilitator";
+    workspaceId: string;
+    expiresAt: string;
+  }>;
 }
 
 interface LibraryArtifact {
@@ -100,19 +111,25 @@ function readArtifactKey(value: string): { artifactType: ArtifactType; artifactI
   if (divider < 0) return null;
   const artifactType = value.slice(0, divider);
   const artifactId = value.slice(divider + 1);
-  if ((artifactType !== "round" && artifactType !== "presentation") || !artifactId) return null;
-  return { artifactType, artifactId };
+  if (!["round", "presentation", "idea_board"].includes(artifactType) || !artifactId) return null;
+  return { artifactType: artifactType as ArtifactType, artifactId };
 }
 
 function GroupsContent() {
   const { locale, t } = useLocale();
   const { canEdit, creator, productFeatures } = useWorkspace();
   const presentationsEnabled = productFeatures?.presentations === true;
+  const ideaBoardsEnabled = productFeatures?.ideaBoards === true;
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [rounds, setRounds] = useState<LibraryArtifact[]>([]);
   const [presentations, setPresentations] = useState<LibraryArtifact[]>([]);
+  const [ideaBoards, setIdeaBoards] = useState<LibraryArtifact[]>([]);
+  const [ideaBoardCursor, setIdeaBoardCursor] = useState<string | null>(null);
+  const [ideaBoardLoading, setIdeaBoardLoading] = useState(false);
+  const moreController = useRef<AbortController | null>(null);
+  useEffect(() => () => moreController.current?.abort(), []);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState("");
@@ -148,7 +165,9 @@ function GroupsContent() {
         ? group
         : {
             ...group,
-            artifacts: group.artifacts.filter((artifact) => artifact.artifactType === "round"),
+            artifacts: group.artifacts.filter(
+              (artifact) => artifact.artifactType !== "presentation",
+            ),
             schedule: group.schedule.filter((item) => item.artifactType === "round"),
           },
     [presentationsEnabled],
@@ -194,6 +213,20 @@ function GroupsContent() {
           );
         }),
       );
+      if (ideaBoardsEnabled)
+        requests.push(
+          listIdeaBoards("", controller.signal).then((result) => {
+            setIdeaBoards(
+              result.boards.map((board) => ({
+                id: board.id,
+                title: board.title,
+                status: "draft" as const,
+                currentVersionId: null,
+              })),
+            );
+            setIdeaBoardCursor(result.nextCursor);
+          }),
+        );
     }
     void Promise.all(requests)
       .catch((caught) => {
@@ -203,7 +236,7 @@ function GroupsContent() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [canEdit, presentationsEnabled]);
+  }, [canEdit, presentationsEnabled, ideaBoardsEnabled]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -250,8 +283,11 @@ function GroupsContent() {
         ...artifact,
         artifactType: "presentation" as const,
       })),
+      ...(ideaBoardsEnabled
+        ? ideaBoards.map((artifact) => ({ ...artifact, artifactType: "idea_board" as const }))
+        : []),
     ].filter((artifact) => !shared.has(artifactKey(artifact.artifactType, artifact.id)));
-  }, [detail?.artifacts, presentations, rounds]);
+  }, [detail?.artifacts, presentations, rounds, ideaBoards, ideaBoardsEnabled]);
 
   const scheduledArtifact = detail?.artifacts.find(
     (artifact) => artifactKey(artifact.artifactType, artifact.artifactId) === scheduleKey,
@@ -319,6 +355,35 @@ function GroupsContent() {
     });
   }
 
+  async function moreIdeaBoards() {
+    if (!ideaBoardCursor || ideaBoardLoading) return;
+    setIdeaBoardLoading(true);
+    const active = new AbortController();
+    moreController.current = active;
+    try {
+      const result = await listIdeaBoards("", active.signal, ideaBoardCursor);
+      if (active.signal.aborted) return;
+      setIdeaBoards((current) => [
+        ...new Map(
+          [
+            ...current,
+            ...result.boards.map((board) => ({
+              id: board.id,
+              title: board.title,
+              status: "draft" as const,
+              currentVersionId: null,
+            })),
+          ].map((board) => [board.id, board]),
+        ).values(),
+      ]);
+      setIdeaBoardCursor(result.nextCursor);
+    } catch (caught) {
+      if (!active.signal.aborted) setError(humanError(caught));
+    } finally {
+      if (!active.signal.aborted) setIdeaBoardLoading(false);
+    }
+  }
+
   async function removeArtifact(artifact: GroupArtifact) {
     if (!detail) return;
     await runMutation(`remove:${artifact.id}`, async () => {
@@ -349,7 +414,7 @@ function GroupsContent() {
     event.preventDefault();
     if (!detail || !scheduledFor) return;
     const artifact = readArtifactKey(scheduleKey);
-    if (!artifact) return;
+    if (!artifact || artifact.artifactType === "idea_board") return;
     await runMutation("schedule", async () => {
       await apiFetch(`/v1/groups/${detail.id}/schedule`, {
         method: "POST",
@@ -530,7 +595,12 @@ function GroupsContent() {
                 setShareKey={setShareKey}
                 shareCandidates={shareCandidates}
                 shareKey={shareKey}
+                moreIdeaBoards={ideaBoardCursor ? moreIdeaBoards : undefined}
+                ideaBoardLoading={ideaBoardLoading}
               />
+              {detail.canvasBoards?.length ? (
+                <GroupCanvasBoards boards={detail.canvasBoards} />
+              ) : null}
               <div className={styles.collaborationGrid}>
                 <MembersPanel
                   busy={busy}
@@ -601,7 +671,7 @@ function GroupOverview({ detail }: { detail: GroupDetail }) {
         </div>
         <div>
           <dt>{t("pages.groups.shared")}</dt>
-          <dd>{detail.artifacts.length}</dd>
+          <dd>{detail.artifacts.length + (detail.canvasBoards?.length ?? 0)}</dd>
         </div>
         <div>
           <dt>{t("pages.common.upcoming")}</dt>
@@ -623,6 +693,8 @@ interface SharedArtifactsProps {
   setShareKey: (value: string) => void;
   shareCandidates: Array<LibraryArtifact & { artifactType: ArtifactType }>;
   shareKey: string;
+  moreIdeaBoards?: () => Promise<void>;
+  ideaBoardLoading?: boolean;
 }
 
 function SharedArtifacts({
@@ -634,8 +706,11 @@ function SharedArtifacts({
   setShareKey,
   shareCandidates,
   shareKey,
+  moreIdeaBoards,
+  ideaBoardLoading,
 }: SharedArtifactsProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = canvasSharingMessages(locale);
   return (
     <section className={styles.panel}>
       <SectionHeading
@@ -655,13 +730,17 @@ function SharedArtifacts({
                   lang=""
                   value={artifactKey(artifact.artifactType, artifact.id)}
                 >
-                  {t(
-                    artifact.artifactType === "round"
-                      ? "pages.common.round"
-                      : "pages.common.presentation",
-                  )}{" "}
+                  {artifact.artifactType === "idea_board"
+                    ? copy.ideaBoard
+                    : t(
+                        artifact.artifactType === "round"
+                          ? "pages.common.round"
+                          : "pages.common.presentation",
+                      )}{" "}
                   · {artifact.title}
-                  {artifact.currentVersionId ? "" : ` (${t("pages.common.status.draft")})`}
+                  {artifact.artifactType === "idea_board" || artifact.currentVersionId
+                    ? ""
+                    : ` (${t("pages.common.status.draft")})`}
                 </option>
               ))}
             </select>
@@ -675,6 +754,16 @@ function SharedArtifacts({
           </button>
         </form>
       ) : null}
+      {moreIdeaBoards ? (
+        <button
+          type="button"
+          className="button-quiet small-button"
+          disabled={ideaBoardLoading}
+          onClick={() => void moreIdeaBoards()}
+        >
+          {t("boards.more")}
+        </button>
+      ) : null}
       {detail.artifacts.length ? (
         <div className={styles.artifactGrid}>
           {detail.artifacts.map((artifact) => (
@@ -684,19 +773,31 @@ function SharedArtifacts({
                 data-type={artifact.artifactType}
                 aria-hidden="true"
               >
-                {artifact.artifactType === "round" ? "R" : "P"}
+                {artifact.artifactType === "round"
+                  ? "R"
+                  : artifact.artifactType === "presentation"
+                    ? "P"
+                    : "B"}
               </div>
               <div className={styles.artifactCopy}>
                 <div className={styles.inlineMeta}>
                   <span>
-                    {t(
-                      artifact.artifactType === "round"
-                        ? "pages.common.round"
-                        : "pages.common.presentation",
-                    )}
+                    {artifact.artifactType === "idea_board"
+                      ? copy.ideaBoard
+                      : t(
+                          artifact.artifactType === "round"
+                            ? "pages.common.round"
+                            : "pages.common.presentation",
+                        )}
                   </span>
                   <span className={styles.statusBadge} data-status={artifact.status}>
-                    {t(`pages.common.status.${artifact.status}`)}
+                    {artifact.artifactType === "idea_board"
+                      ? t(
+                          `boards.${artifact.status as "draft" | "collecting" | "voting" | "closed"}`,
+                        )
+                      : t(
+                          `pages.common.status.${artifact.status as "draft" | "published" | "archived"}`,
+                        )}
                   </span>
                 </div>
                 <h3 lang="">{artifact.title}</h3>
@@ -704,12 +805,15 @@ function SharedArtifacts({
                   <Link className="button-quiet small-button" href={artifact.editHref}>
                     {canEdit ? t("pages.library.edit") : t("pages.library.view")}
                   </Link>
-                  {canEdit && artifact.published ? (
+                  {canEdit && artifact.artifactType !== "idea_board" && artifact.published ? (
                     <Link className="button small-button" href={artifact.hostHref}>
                       {t("pages.library.host")}
                     </Link>
                   ) : null}
-                  {canEdit && artifact.published && artifact.assignHref ? (
+                  {canEdit &&
+                  artifact.artifactType !== "idea_board" &&
+                  artifact.published &&
+                  artifact.assignHref ? (
                     <Link className="button-quiet small-button" href={artifact.assignHref}>
                       {t("pages.library.assign")}
                     </Link>
@@ -735,6 +839,37 @@ function SharedArtifacts({
           text={t("pages.groups.artifacts.emptyDescription")}
         />
       )}
+    </section>
+  );
+}
+
+function GroupCanvasBoards({ boards }: { boards: NonNullable<GroupDetail["canvasBoards"]> }) {
+  const { locale, t } = useLocale();
+  const copy = canvasSharingMessages(locale);
+  return (
+    <section className={styles.panel} aria-label={copy.canvasBoards}>
+      <SectionHeading
+        count={boards.length}
+        eyebrow={t("pages.groups.facilitatorGroup")}
+        title={copy.canvasBoards}
+      />
+      <div className={styles.canvasBoardGrid}>
+        {boards.map((board) => (
+          <article key={board.id} className={styles.canvasBoardCard}>
+            <p className={styles.inlineMeta}>
+              <span>{t(board.boardType === "team" ? "canvas.team" : "canvas.workshop")}</span>
+              <span>{t(board.role === "owner" ? "role.owner" : `canvas.${board.role}`)}</span>
+            </p>
+            <h3 lang="">{board.title}</h3>
+            <p className={styles.helpText}>
+              {t("canvas.retention", { date: formatDateTime(locale, board.expiresAt) })}
+            </p>
+            <Link className="button-quiet small-button" href={`/canvas/${board.id}`}>
+              {copy.openBoard}
+            </Link>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -913,7 +1048,9 @@ function SchedulePanel({
         title={t("pages.groups.schedule.title")}
       />
       {canEdit ? (
-        detail.artifacts.some((artifact) => artifact.published) ? (
+        detail.artifacts.some(
+          (artifact) => artifact.artifactType !== "idea_board" && artifact.published,
+        ) ? (
           <form className={styles.scheduleForm} onSubmit={onSchedule}>
             <label className={styles.field}>
               <span>{t("pages.groups.schedule.publishedArtifact")}</span>
@@ -929,7 +1066,9 @@ function SchedulePanel({
               >
                 <option value="">{t("pages.groups.schedule.chooseArtifact")}</option>
                 {detail.artifacts
-                  .filter((artifact) => artifact.published)
+                  .filter(
+                    (artifact) => artifact.artifactType !== "idea_board" && artifact.published,
+                  )
                   .map((artifact) => (
                     <option
                       key={artifactKey(artifact.artifactType, artifact.artifactId)}
@@ -1087,7 +1226,12 @@ function PanelEmpty({ strong, text }: { strong: string; text: string }) {
 export default function GroupsPage() {
   return (
     <WorkspaceProvider>
-      <GroupsContent />
+      <GroupsContext />
     </WorkspaceProvider>
   );
+}
+
+function GroupsContext() {
+  const { creator } = useWorkspace();
+  return <GroupsContent key={`${creator?.userId}:${creator?.workspaceId}`} />;
 }

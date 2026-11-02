@@ -1,5 +1,6 @@
 import {
   createFeedbackRepository,
+  createBoardInvitationRepository,
   MEDIA_DELETION_TOMBSTONE_HOLD_MS,
   type Repository,
 } from "@openround/db";
@@ -52,6 +53,7 @@ export class RetentionService {
     const purgedAuditEvents = await this.repository.purgeAuditEvents(auditCutoff);
     const purgedProductEvents = await this.repository.purgeProductEvents(now);
     await createFeedbackRepository(this.repository).purge(now);
+    await createBoardInvitationRepository(this.repository).purgeExpired(now);
     const cutoff = new Date(now.getTime() - this.quarantineRetentionHours * 60 * 60 * 1_000);
     const unattachedCutoff = new Date(
       now.getTime() - this.unattachedMediaGraceDays * 24 * 60 * 60 * 1_000,

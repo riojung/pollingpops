@@ -3,6 +3,7 @@ import { z, ZodError } from "zod";
 import {
   CanvasBoardCreateSchema,
   CanvasBoardInviteSchema,
+  CanvasBoardShareGroupsSchema,
   CanvasBoardMutationSchema,
   MediaUploadRequestSchema,
   type ProductFeatureKey,
@@ -263,6 +264,63 @@ export async function registerCanvasBoardRoutes(
       await requireFeature(access.workspaceId, "canvasBoardSharing");
       return sameUser(request, userId);
     };
+
+    routes.get("/v1/canvas-boards/:id/sharing", routeOptions, async (request) => {
+      const actor = await user(request);
+      const { id } = Id.parse(request.params);
+      const current = await sharing(request, actor.userId, id);
+      await requireFeature(
+        (await deps.canvases.authorize(current, id, clock)).workspaceId,
+        "groups",
+      );
+      return deps.canvases.sharing(current, id, clock);
+    });
+    routes.post(
+      "/v1/canvas-boards/:id/group-grants",
+      { ...routeOptions, bodyLimit: 4096 },
+      async (request) => {
+        const actor = await user(request);
+        const { id } = Id.parse(request.params);
+        const input = CanvasBoardShareGroupsSchema.parse(request.body);
+        if (
+          !(await deps.cache.consumeIdempotentRateLimit(
+            `canvas-group-share:${actor.userId}`,
+            `${id}:${input.operationId}`,
+            30,
+            60_000,
+          ))
+        )
+          throw new CanvasBoardError("RATE_LIMITED", "Too many sharing changes. Wait and retry");
+        const current = await sharing(request, actor.userId, id);
+        await requireFeature(
+          (await deps.canvases.authorize(current, id, clock)).workspaceId,
+          "groups",
+        );
+        const result = await deps.canvases.shareGroups(current, id, input, clock);
+        await freshBoard(request, actor.userId, id);
+        return result;
+      },
+    );
+    routes.delete(
+      "/v1/canvas-boards/:id/group-grants/:groupId",
+      { ...routeOptions, bodyLimit: 1024 },
+      async (request) => {
+        const actor = await user(request);
+        const { id, groupId } = Id.extend({ groupId: z.string().uuid() }).parse(request.params);
+        const { operationId } = z
+          .object({ operationId: z.string().uuid() })
+          .strict()
+          .parse(request.body);
+        const current = await sharing(request, actor.userId, id);
+        await requireFeature(
+          (await deps.canvases.authorize(current, id, clock)).workspaceId,
+          "groups",
+        );
+        const result = await deps.canvases.revokeGroup(current, id, groupId, operationId, clock);
+        await clearPresence(id);
+        return result;
+      },
+    );
 
     routes.get("/v1/canvas-boards", routeOptions, async (request) => {
       const actor = await user(request);

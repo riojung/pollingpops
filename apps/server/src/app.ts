@@ -17,6 +17,7 @@ import {
   createSurveyRepository,
   createIdeaBoardRepository,
   createCanvasBoardRepository,
+  createBoardInvitationRepository,
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
@@ -69,6 +70,7 @@ import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
 import { registerIdeaBoardRoutes } from "./idea-board-routes.js";
 import { registerCanvasBoardRoutes } from "./canvas-board-routes.js";
+import { registerBoardInvitationRoutes } from "./board-invitation-routes.js";
 import { registerSessionSummaryRoutes } from "./session-summary-routes.js";
 import { createSessionSummaryExportService } from "./session-summary-export.js";
 import { registerFeedbackRoutes } from "./feedback-routes.js";
@@ -525,11 +527,12 @@ export async function buildApp(
     surveys: createSurveyRepository(repository),
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
+  const ideaBoards = createIdeaBoardRepository(repository);
   await registerIdeaBoardRoutes(app, {
     repository,
     auth,
     config,
-    boards: createIdeaBoardRepository(repository),
+    boards: ideaBoards,
     storage,
     metrics,
     consumeAdmission: cache.consumeRateLimit.bind(cache),
@@ -546,6 +549,17 @@ export async function buildApp(
     cache,
     storage,
     metrics,
+  });
+  await registerBoardInvitationRoutes(app, {
+    auth,
+    config,
+    repository,
+    canvases: canvasBoards,
+    boards: ideaBoards,
+    deliveries: createBoardInvitationRepository(repository),
+    mailer,
+    cache,
+    deliveryAvailable: Boolean(config.SMTP_URL || overrides.mailer?.sendBoardInvitation),
   });
   const summaryExports = overrides.summaryExports ?? createSessionSummaryExportService();
   await registerSessionSummaryRoutes(app, {
@@ -594,6 +608,12 @@ export async function buildApp(
       auth,
       workspaceEnabled: groupsEnabled,
       presentationsEnabled,
+      boards: ideaBoards,
+      canvases: canvasBoards,
+      ideaBoardsEnabled: (workspaceId) =>
+        workspaceFeatureEnabled(repository, config, workspaceId, "ideaBoards"),
+      canvasEnabled: (workspaceId) =>
+        workspaceFeatureEnabled(repository, config, workspaceId, "canvasBoards"),
     });
   }
   await registerHomeRoutes(app, {

@@ -264,7 +264,9 @@ export async function registerHomeRoutes(
           await Promise.all(
             artifacts
               .filter(
-                (artifact) => artifact.artifactType === "round" || workspacePresentationsEnabled,
+                (artifact) =>
+                  artifact.artifactType === "round" ||
+                  (artifact.artifactType === "presentation" && workspacePresentationsEnabled),
               )
               .map(async (artifact) => {
                 const record =

@@ -23,6 +23,7 @@ import { buildApp } from "../../src/app.js";
 import { ConfigSchema } from "../../src/config.js";
 import { entitlementsFor } from "../../src/entitlements.js";
 import { ConsoleMailer } from "../../src/mailer.js";
+import type { BoardInvitationMail } from "../../src/mailer.js";
 import { attachRealtime } from "../../src/realtime.js";
 import { hashToken } from "../../src/security.js";
 import { installCanvasBrowserImages } from "./canvas-browser-images.js";
@@ -61,8 +62,16 @@ if (process.env.CONTROL_AUTH_MODE === "password" || process.env.CANVAS_BROWSER_F
   ConsoleMailer.prototype.sendOrganizationInvitation = async () => {};
 }
 const repository = new MemoryRepository();
+// Synthetic, loopback-only browser delivery capture; this never connects to SMTP.
+const boardMail: Array<{ email: string; kind: BoardInvitationMail["kind"]; url: string }> = [];
+const browserMailer = new ConsoleMailer();
+if (process.env.CANVAS_BROWSER_FIXTURE === "true")
+  browserMailer.sendBoardInvitation = async (email, mail) => {
+    boardMail.push({ email, kind: mail.kind, url: mail.url });
+  };
 const built = await buildApp(config, {
   repository,
+  ...(process.env.CANVAS_BROWSER_FIXTURE === "true" ? { mailer: browserMailer } : {}),
   ...(process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_IMAGES === "true"
     ? {
         scanner: { scan: async () => ({ clean: true as const, signature: null }) },
@@ -77,12 +86,22 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
     expectedRevision: 0,
     features: {
       uxBeta: { enabled: true, plans: ["free", "pro", "team"] },
+      workspaceShell: { enabled: true, plans: ["free", "pro", "team"] },
+      groups: { enabled: true, plans: ["free", "pro", "team"] },
       presentations: { enabled: true, plans: ["free", "pro", "team"] },
       ideaBoards: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoards: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoardSharing: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoardRealtime: { enabled: true, plans: ["free", "pro", "team"] },
     },
+  });
+  built.app.get("/__test/canvas/board-mail", async (request, reply) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
+      return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
+    const token = request.cookies[config.COOKIE_NAME];
+    const actor = token ? await repository.getCreatorBySession(hashToken(token), new Date()) : null;
+    if (!actor) return reply.code(401).send({ error: { message: "Sign in required" } });
+    return { messages: boardMail };
   });
   // Seed a paginated library without relaxing the production 20/minute creation budget.
   built.app.post("/__test/canvas/library", async (request, reply) => {

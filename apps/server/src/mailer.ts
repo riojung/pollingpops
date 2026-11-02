@@ -1,15 +1,31 @@
 import nodemailer from "nodemailer";
+import { parseConnectionUrl } from "nodemailer/lib/shared";
+import { Socket } from "node:net";
 import { PRODUCT_BRAND } from "@openround/contracts";
 import type { AppConfig } from "./config.js";
+
+export interface BoardInvitationMail {
+  title: string;
+  url: string;
+  kind: "canvas" | "idea_board";
+  messageId: string;
+  /** The HTTP caller's remaining delivery budget, never a new per-phase timeout. */
+  timeoutMs?: number;
+}
 
 export interface Mailer {
   sendAccountVerification(email: string, verifyUrl: string): Promise<void>;
   sendSignInPin(email: string, pin: string): Promise<void>;
   sendWorkspaceInvitation(email: string, acceptUrl: string): Promise<void>;
   sendOrganizationInvitation?(email: string, acceptUrl: string): Promise<void>;
+  sendBoardInvitation?(email: string, invitation: BoardInvitationMail): Promise<void>;
 }
 
 export class ConsoleMailer implements Mailer {
+  async sendBoardInvitation(_email: string, _invitation: BoardInvitationMail): Promise<void> {
+    // An invitation must never be reported sent merely because a console fixture is active.
+    throw new Error("Board invitation email delivery is unavailable");
+  }
   async sendOrganizationInvitation(email: string, acceptUrl: string) {
     process.stdout.write(`Organization invitation for ${email}: ${acceptUrl}\n`);
   }
@@ -35,6 +51,56 @@ export class SmtpMailer implements Mailer {
 
   constructor(private readonly config: AppConfig) {
     this.transport = nodemailer.createTransport(config.SMTP_URL!);
+  }
+
+  async sendBoardInvitation(email: string, invitation: BoardInvitationMail) {
+    // Own the public SMTP socket so the absolute HTTP deadline can destroy an active
+    // connection too; SMTPTransport.close() alone only releases auth resources.
+    const timeout = Math.max(1, Math.min(5_000, invitation.timeoutMs ?? 5_000));
+    const socket = new Socket();
+    const transport = nodemailer.createTransport({
+      ...parseConnectionUrl(this.config.SMTP_URL!),
+      socket,
+      pool: false,
+      logger: false,
+      debug: false,
+      connectionTimeout: timeout,
+      greetingTimeout: timeout,
+      socketTimeout: timeout,
+    });
+    const title = invitation.title.replace(/[\r\n]/g, " ");
+    const guidance =
+      invitation.kind === "idea_board"
+        ? "Join as a guest. You do not need an account. This join link can be forwarded; closing the board stops participation."
+        : "Review this invitation using your verified organization account. Your current organization access and license determine available collaboration.";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        transport.sendMail({
+          from: this.config.EMAIL_FROM,
+          to: email,
+          messageId: invitation.messageId,
+          subject: `You are invited to a ${PRODUCT_BRAND.name} board`,
+          text: `You have been invited to ${title}.\n\n${guidance}\n\n${invitation.url}`,
+          html: emailHtml(
+            "You are invited to a board",
+            `<p>${escapeHtml(title)}</p><p>${escapeHtml(guidance)}</p><p><a href="${escapeHtml(invitation.url)}">Open board invitation</a></p>`,
+          ),
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            socket.destroy();
+            transport.close();
+            reject(new Error("Board invitation email acknowledgement is unknown"));
+          }, timeout);
+          timer.unref();
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      socket.destroy();
+      transport.close();
+    }
   }
 
   async sendMagicLink(email: string, verifyUrl: string) {

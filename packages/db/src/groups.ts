@@ -89,7 +89,16 @@ export class MemoryCollaborationGroupRepository
   private readonly messages = new Map<string, CollaborationGroupMessageRecord>();
   private readonly schedule = new Map<string, CollaborationGroupScheduleRecord>();
 
-  constructor(private readonly repository?: Pick<MemoryRepository, "isLibraryArtifactDeleted">) {}
+  constructor(
+    private readonly repository?: Pick<MemoryRepository, "isLibraryArtifactDeleted"> &
+      Partial<Pick<MemoryRepository, "deleteCollaborationGroupMetadata" | "isIdeaBoardDeleted">>,
+  ) {}
+
+  deleteIdeaBoardMetadata(sourceBoardId: string) {
+    for (const [id, artifact] of this.artifacts)
+      if (artifact.artifactType === "idea_board" && artifact.artifactId === sourceBoardId)
+        this.artifacts.delete(id);
+  }
 
   deleteLibraryArtifactMetadata(
     workspaceId: string,
@@ -168,6 +177,7 @@ export class MemoryCollaborationGroupRepository
   }
 
   private deleteGroupTree(groupId: string) {
+    this.repository?.deleteCollaborationGroupMetadata?.(groupId);
     this.groups.delete(groupId);
     for (const [id, member] of this.members) {
       if (member.groupId === groupId) this.members.delete(id);
@@ -226,6 +236,11 @@ export class MemoryCollaborationGroupRepository
   }
 
   async addArtifact(artifact: CollaborationGroupArtifactRecord) {
+    if (
+      artifact.artifactType === "idea_board" &&
+      this.repository?.isIdeaBoardDeleted?.(artifact.artifactId)
+    )
+      throw new Error("Workshop not found");
     const existing = [...this.artifacts.values()].find(
       (candidate) =>
         candidate.groupId === artifact.groupId &&
@@ -234,6 +249,7 @@ export class MemoryCollaborationGroupRepository
     );
     if (existing) return clone(existing);
     if (
+      artifact.artifactType !== "idea_board" &&
       this.repository?.isLibraryArtifactDeleted(
         artifact.workspaceId,
         artifact.artifactType,

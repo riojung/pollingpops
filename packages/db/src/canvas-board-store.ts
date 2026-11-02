@@ -23,6 +23,7 @@ import type {
 } from "./canvas-board-types.js";
 import { CanvasBoardError } from "./canvas-board-error.js";
 import { canvasHistoryHeads } from "./canvas-snapshot.js";
+import { createCollaborationGroupRepository } from "./groups.js";
 import {
   canvasDefaultTimer,
   canvasFacilitation,
@@ -63,6 +64,7 @@ function normalizedCanvasState(
       uploadBytes: state.board.uploadBytes ?? 0,
     },
     objects: state.objects,
+    groupGrants: state.groupGrants ?? [],
     receipts: state.receipts.map((receipt) => ({
       ...receipt,
       before: receipt.before.map((object) => CanvasObjectSchema.parse(object)),
@@ -133,6 +135,48 @@ export class MemoryCanvasBoards {
           structuredClone(current(id)?.facilitation?.timer ?? canvasDefaultTimer()),
         grant: async (id, userId) =>
           structuredClone(current(id)?.grants.find((grant) => grant.userId === userId) ?? null),
+        groupRoles: async (id, userId) => {
+          const state = current(id);
+          if (
+            !state ||
+            !this.repository.workspaceMembers.has(`${state.board.workspaceId}:${userId}`)
+          )
+            return [];
+          const groups = await createCollaborationGroupRepository(this.repository).listGroups(
+            state.board.workspaceId,
+            userId,
+          );
+          const joined = new Set(groups.map((group) => group.id));
+          return structuredClone(
+            (state.groupGrants ?? []).filter((grant) => joined.has(grant.groupId)),
+          );
+        },
+        sharingGroups: async (workspaceId, userId) => {
+          if (!this.repository.workspaceMembers.has(`${workspaceId}:${userId}`)) return [];
+          const groups = createCollaborationGroupRepository(this.repository);
+          return Promise.all(
+            (await groups.listGroups(workspaceId, userId)).slice(0, 1000).map(async (group) => ({
+              id: group.id,
+              name: group.name,
+              memberCount: (await groups.listMembers(group.id)).filter((member) =>
+                this.repository.workspaceMembers.has(`${workspaceId}:${member.userId}`),
+              ).length,
+            })),
+          );
+        },
+        sharingGroup: async (workspaceId, groupId) => {
+          const groups = createCollaborationGroupRepository(this.repository);
+          const group = await groups.getGroup(workspaceId, groupId);
+          return group
+            ? {
+                id: group.id,
+                name: group.name,
+                memberCount: (await groups.listMembers(groupId)).filter((member) =>
+                  this.repository.workspaceMembers.has(`${workspaceId}:${member.userId}`),
+                ).length,
+              }
+            : null;
+        },
         sourceMetadata: async (id, guestHash) => {
           const source = sources.get(id) ?? memoryIdeaBoardCanvasSource(this.repository, id);
           return source
@@ -320,9 +364,7 @@ export class MemoryCanvasBoards {
             new Set(state.facilitation?.versions.map((saved) => saved.metadata.id) ?? []),
           );
         } else {
-          this.rows.delete(id);
-          this.repository.syncCanvasArtifactLinks(id, new Set());
-          this.removeMedia(id);
+          this.removeStoredBoard(id);
           for (let index = this.events.length - 1; index >= 0; index--)
             if (this.events[index]!.boardId === id && this.events[index]!.type !== "canvas.deleted")
               this.events.splice(index, 1);
@@ -370,6 +412,12 @@ export class MemoryCanvasBoards {
       this.repository.canvasBoardMediaOwners.delete(mediaId);
     }
   }
+  private removeStoredBoard(boardId: string, now = new Date()) {
+    this.removeMedia(boardId, now);
+    this.rows.delete(boardId);
+    this.repository.syncCanvasArtifactLinks(boardId, new Set());
+    this.repository.deleteCanvasBoardMetadata(boardId);
+  }
   exportAccount({ ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
     const now = Date.now();
     return {
@@ -378,7 +426,7 @@ export class MemoryCanvasBoards {
           ({ board }) =>
             ownedWorkspaceIds.has(board.workspaceId) && Date.parse(board.expiresAt) > now,
         )
-        .map(({ board, objects, facilitation }) => {
+        .map(({ board, objects, facilitation, groupGrants }) => {
           const { creationKey, creationHash, ...metadata } = board;
           void creationKey;
           void creationHash;
@@ -387,6 +435,7 @@ export class MemoryCanvasBoards {
           );
           return {
             ...metadata,
+            groupGrants: structuredClone(groupGrants ?? []),
             objects: objects.filter((object) => object.type !== "idea_ref"),
             ...(facilitation
               ? {
@@ -406,6 +455,10 @@ export class MemoryCanvasBoards {
         }),
     };
   }
+  deleteCollaborationGroupMetadata(groupId: string) {
+    for (const state of this.rows.values())
+      state.groupGrants = (state.groupGrants ?? []).filter((grant) => grant.groupId !== groupId);
+  }
   deleteAccount({ userId, ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
     const removedIds = new Set(
       [...this.rows.values()]
@@ -414,9 +467,7 @@ export class MemoryCanvasBoards {
     );
     for (const [id, state] of this.rows) {
       if (ownedWorkspaceIds.has(state.board.workspaceId)) {
-        this.removeMedia(id);
-        this.rows.delete(id);
-        this.repository.syncCanvasArtifactLinks(id, new Set());
+        this.removeStoredBoard(id);
       } else {
         state.grants = state.grants.filter((grant) => grant.userId !== userId);
         state.invitations = state.invitations.filter(
@@ -444,9 +495,7 @@ export class MemoryCanvasBoards {
         (state.board.sourceBoardId &&
           !memoryIdeaBoardCanvasSource(this.repository, state.board.sourceBoardId))
       ) {
-        this.removeMedia(id, now);
-        this.rows.delete(id);
-        this.repository.syncCanvasArtifactLinks(id, new Set());
+        this.removeStoredBoard(id, now);
         removed.push(id);
       } else {
         const retained = new Set(canvasMediaIds(state));
@@ -471,9 +520,7 @@ export class MemoryCanvasBoards {
         .map(({ board }) => board.id),
     );
     for (const id of ids) {
-      this.removeMedia(id);
-      this.rows.delete(id);
-      this.repository.syncCanvasArtifactLinks(id, new Set());
+      this.removeStoredBoard(id);
     }
     for (let index = this.events.length - 1; index >= 0; index--)
       if (ids.has(this.events[index]!.boardId)) this.events.splice(index, 1);
@@ -633,6 +680,52 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               }
             : null;
         },
+        groupRoles: async (id, userId, lock = false) => {
+          const result = await client.query(
+            `SELECT grant_row.group_id,grant_row.role,grant_row.created_at
+             FROM canvas_board_group_grants grant_row
+             JOIN collaboration_groups groups ON groups.id=grant_row.group_id AND groups.workspace_id=grant_row.workspace_id
+             JOIN collaboration_group_members membership ON membership.group_id=groups.id AND membership.workspace_id=groups.workspace_id AND membership.user_id=$2
+             JOIN workspace_members workspace_member ON workspace_member.workspace_id=groups.workspace_id AND workspace_member.user_id=membership.user_id
+             WHERE grant_row.board_id=$1
+             ORDER BY grant_row.group_id${lock ? " FOR SHARE OF grant_row,groups,membership,workspace_member" : ""}`,
+            [id, userId],
+          );
+          return result.rows.map((row) => ({
+            groupId: String(row.group_id),
+            role: row.role,
+            createdAt: new Date(row.created_at).toISOString(),
+          }));
+        },
+        sharingGroups: async (workspaceId, userId) => {
+          const result = await client.query(
+            `SELECT groups.id,groups.name,
+              (SELECT count(*)::integer FROM collaboration_group_members members JOIN workspace_members current_member ON current_member.workspace_id=members.workspace_id AND current_member.user_id=members.user_id WHERE members.group_id=groups.id AND members.workspace_id=groups.workspace_id) AS member_count
+             FROM collaboration_groups groups
+             JOIN collaboration_group_members membership ON membership.group_id=groups.id AND membership.workspace_id=groups.workspace_id AND membership.user_id=$2
+             JOIN workspace_members workspace_member ON workspace_member.workspace_id=groups.workspace_id AND workspace_member.user_id=membership.user_id
+             WHERE groups.workspace_id=$1 ORDER BY groups.updated_at DESC,groups.id LIMIT 1000
+             FOR SHARE OF groups,membership,workspace_member`,
+            [workspaceId, userId],
+          );
+          return result.rows.map((row) => ({
+            id: String(row.id),
+            name: String(row.name),
+            memberCount: Number(row.member_count),
+          }));
+        },
+        sharingGroup: async (workspaceId, groupId) => {
+          const result = await client.query(
+            `SELECT groups.id,groups.name,
+              (SELECT count(*)::integer FROM collaboration_group_members members JOIN workspace_members current_member ON current_member.workspace_id=members.workspace_id AND current_member.user_id=members.user_id WHERE members.group_id=groups.id AND members.workspace_id=groups.workspace_id) AS member_count
+             FROM collaboration_groups groups WHERE groups.workspace_id=$1 AND groups.id=$2 FOR SHARE OF groups`,
+            [workspaceId, groupId],
+          );
+          const row = result.rows[0];
+          return row
+            ? { id: String(row.id), name: String(row.name), memberCount: Number(row.member_count) }
+            : null;
+        },
         sourceMetadata: async (id, guestHash, lock = false) => {
           const result = await client.query(
             `SELECT id,workspace_id,data->>'revision' AS revision,data->>'status' AS status,data->>'closesAt' AS closes_at,data->>'expiresAt' AS expires_at,EXISTS(SELECT 1 FROM jsonb_array_elements(data->'guests') guest WHERE guest->>'tokenHash'=$2) AS guest_present FROM idea_boards WHERE id=$1${lock ? " FOR SHARE" : ""}`,
@@ -737,6 +830,16 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
               [id],
             )
           ).rows.map((entry) => entry.data);
+          const groupGrants = (
+            await client.query(
+              "SELECT group_id,role,created_at FROM canvas_board_group_grants WHERE board_id=$1 ORDER BY group_id",
+              [id],
+            )
+          ).rows.map((entry) => ({
+            groupId: String(entry.group_id),
+            role: entry.role,
+            createdAt: new Date(entry.created_at).toISOString(),
+          }));
           const threadRows = await client.query(
             "SELECT data FROM canvas_board_comment_threads WHERE board_id=$1 ORDER BY created_at,id",
             [id],
@@ -766,6 +869,7 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             objects,
             grants,
             invitations,
+            groupGrants,
             receipts,
             facilitation: { threads, timer, versions },
           });
@@ -857,6 +961,24 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
                   grant.label ?? null,
                 ],
               );
+          }
+          if (
+            JSON.stringify(previous?.groupGrants ?? []) !== JSON.stringify(state.groupGrants ?? [])
+          ) {
+            const nextGroups = state.groupGrants ?? [];
+            await client.query(
+              "DELETE FROM canvas_board_group_grants WHERE board_id=$1 AND NOT(group_id=ANY($2::uuid[]))",
+              [board.id, nextGroups.map((grant) => grant.groupId)],
+            );
+            const oldGroups = new Map(
+              (previous?.groupGrants ?? []).map((grant) => [grant.groupId, grant]),
+            );
+            for (const grant of nextGroups)
+              if (JSON.stringify(oldGroups.get(grant.groupId)) !== JSON.stringify(grant))
+                await client.query(
+                  "INSERT INTO canvas_board_group_grants(workspace_id,board_id,group_id,role,created_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(board_id,group_id) DO UPDATE SET role=EXCLUDED.role",
+                  [board.workspaceId, board.id, grant.groupId, grant.role, grant.createdAt],
+                );
           }
           for (const receipt of state.receipts)
             if (

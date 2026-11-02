@@ -7,6 +7,9 @@ import {
   CanvasBoardCreateSchema,
   CanvasBoardCommandSchema,
   CanvasBoardGuestViewSchema,
+  CanvasBoardShareGroupsSchema,
+  CanvasBoardSharingSchema,
+  CANVAS_MAX_GROUP_GRANTS,
   CanvasBoardInviteSchema,
   CanvasBoardMutationSchema,
   CanvasBoardViewSchema,
@@ -29,6 +32,9 @@ import {
   type IdeaBoardStored,
   type CanvasFacilitationMutation,
   type CanvasFacilitationResponse,
+  type CanvasBoardShareGroups,
+  type CanvasBoardSharing,
+  type CanvasBoardGroupGrant,
 } from "@openround/contracts";
 import { MemoryRepository } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
@@ -106,13 +112,22 @@ function roleFor(
   state: Pick<CanvasSceneRead, "board" | "grants">,
   actor: CanvasActor,
   access: CanvasAccessContext,
+  groupGrants: CanvasBoardGroupGrant[] = [],
 ): CanvasBoardRole | null {
   if (
     (state.board.ownerUserId === actor.userId && access.workspace.membership) ||
     (access.workspace.ownerId === actor.userId && access.workspace.membership === "owner")
   )
     return "owner";
-  return state.grants.find((grant) => grant.userId === actor.userId)?.role ?? null;
+  const ranks = { viewer: 1, editor: 2, facilitator: 3 };
+  const roles = [
+    ...state.grants.filter((grant) => grant.userId === actor.userId).map((grant) => grant.role),
+    ...groupGrants.map((grant) => grant.role),
+  ];
+  return roles.reduce<CanvasBoardRole | null>(
+    (best, role) => (!best || (best !== "owner" && ranks[role] > ranks[best]) ? role : best),
+    null,
+  );
 }
 function currentSeat(access: CanvasAccessContext, userId: string, now: Date) {
   if (access.organization?.licenseUnit !== "user") return true;
@@ -360,12 +375,12 @@ export class CanvasBoardRepository {
     lock = false,
   ): Promise<CanvasCheckedRead<T>> {
     // Both loaders refuse unaccepted, revoked or foreign grants before private rows.
-    const preflight = await this.authorizedMetadata(tx, actor, id, clock);
+    const preflight = await this.authorizedMetadata(tx, actor, id, clock, false);
     const state = await load();
     if (!state) fail();
     const access = preflight.access;
     notExpired(state.board, instant(clock));
-    const role = roleFor(state, actor, access);
+    const role = roleFor(state, actor, access, await tx.groupRoles(id, actor.userId, true));
     if (!role || (access.member?.role === "billing" && role !== "viewer")) fail();
     if (
       access.organization?.licenseUnit === "user" &&
@@ -386,7 +401,7 @@ export class CanvasBoardRepository {
     const capabilities = {
       edit: role !== "viewer" && writable,
       facilitate: (role === "owner" || role === "facilitator") && seat && originSeat,
-      share: role === "owner" && seat && originSeat,
+      share: (role === "owner" || role === "facilitator") && seat && originSeat,
       delete: role === "owner" && seat,
       archive: role === "owner" && seat && state.board.boardType === "team",
     };
@@ -620,6 +635,7 @@ export class CanvasBoardRepository {
     actor: CanvasActor,
     id: string,
     clock: CanvasClock,
+    lockGroups = true,
   ) {
     const board = await tx.metadata(id);
     if (!board) fail();
@@ -635,7 +651,12 @@ export class CanvasBoardRepository {
     )
       fail();
     const grant = await tx.grant(id, actor.userId);
-    const role = roleFor({ board, grants: grant ? [grant] : [] }, actor, access);
+    const role = roleFor(
+      { board, grants: grant ? [grant] : [] },
+      actor,
+      access,
+      await tx.groupRoles(id, actor.userId, lockGroups),
+    );
     if (!role || (access.member?.role === "billing" && role !== "viewer")) fail();
     if (
       access.organization?.licenseUnit === "user" &&
@@ -672,7 +693,7 @@ export class CanvasBoardRepository {
             originSeat &&
             status(board, source, instant(clock)) === "active",
           facilitate: (role === "owner" || role === "facilitator") && seat && originSeat,
-          share: role === "owner" && seat && originSeat,
+          share: (role === "owner" || role === "facilitator") && seat && originSeat,
           delete: role === "owner" && seat,
           archive: role === "owner" && seat && board.boardType === "team",
         },
@@ -1905,6 +1926,215 @@ export class CanvasBoardRepository {
     if (!board) fail();
     return this.get(actor, board.id, clock);
   }
+  private async sharingView(
+    tx: CanvasTransaction,
+    checked: Awaited<ReturnType<CanvasBoardRepository["checked"]>>,
+    actor: CanvasActor,
+    clock: CanvasClock,
+  ): Promise<CanvasBoardSharing> {
+    const effective = await tx.groupRoles(checked.state.board.id, actor.userId, true);
+    const role = roleFor(checked.state, actor, checked.access, effective);
+    const seat =
+      this.options.communityMode || currentSeat(checked.access, actor.userId, instant(clock));
+    const originSeat =
+      this.options.communityMode ||
+      checked.access.organization?.licenseUnit !== "user" ||
+      checked.access.workspaceLicensed;
+    // A successful mutation may remove its caller's last sharing authority. Acknowledge it
+    // without returning the roster/available-group metadata that is now private.
+    if ((role !== "owner" && role !== "facilitator") || !seat || !originSeat)
+      return { groups: [], availableGroups: [], effectiveGroupIds: [] };
+    const groups: CanvasBoardSharing["groups"] = [];
+    for (const grant of checked.state.groupGrants ?? []) {
+      const group = await tx.sharingGroup(checked.state.board.workspaceId, grant.groupId);
+      if (group) groups.push({ ...grant, name: group.name, memberCount: group.memberCount });
+    }
+    notExpired(checked.state.board, instant(clock));
+    return CanvasBoardSharingSchema.parse({
+      groups,
+      availableGroups: await tx.sharingGroups(checked.state.board.workspaceId, actor.userId),
+      effectiveGroupIds: effective.map((grant) => grant.groupId),
+    });
+  }
+  sharing(
+    actor: CanvasActor,
+    id: string,
+    clock: CanvasClock = () => new Date(),
+  ): Promise<CanvasBoardSharing> {
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const checked = await this.checked(tx, actor, id, clock);
+      if (!checked.capabilities.share)
+        throw new CanvasBoardError(
+          "FORBIDDEN",
+          "A board owner or facilitator is required to manage sharing",
+        );
+      return this.sharingView(tx, checked, actor, clock);
+    });
+  }
+  shareGroups(
+    actor: CanvasActor,
+    id: string,
+    input: CanvasBoardShareGroups,
+    clock: CanvasClock = () => new Date(),
+  ): Promise<CanvasBoardSharing> {
+    const parsed = CanvasBoardShareGroupsSchema.parse(input);
+    // The request is a set of groups, so reordering that set does not change an exact retry.
+    const request = { ...parsed, groupIds: parsed.groupIds.toSorted(), type: "group_share" };
+    return this.changeGroupSharing(
+      actor,
+      id,
+      request,
+      async (tx, state) => {
+        const available = new Set(
+          (await tx.sharingGroups(state.board.workspaceId, actor.userId)).map((group) => group.id),
+        );
+        for (const groupId of request.groupIds)
+          if (!available.has(groupId) || !(await tx.sharingGroup(state.board.workspaceId, groupId)))
+            fail("Choose a current group in the board's owning workspace");
+        const retained = new Map((state.groupGrants ?? []).map((grant) => [grant.groupId, grant]));
+        for (const groupId of request.groupIds)
+          retained.set(groupId, {
+            groupId,
+            role: request.role,
+            createdAt: retained.get(groupId)?.createdAt ?? instant(clock).toISOString(),
+          });
+        assert(retained.size <= CANVAS_MAX_GROUP_GRANTS, "Use up to 20 shared groups per board");
+        state.groupGrants = [...retained.values()].sort((a, b) =>
+          a.groupId.localeCompare(b.groupId),
+        );
+      },
+      clock,
+    );
+  }
+  revokeGroup(
+    actor: CanvasActor,
+    id: string,
+    groupId: string,
+    operationId: string,
+    clock: CanvasClock = () => new Date(),
+  ): Promise<CanvasBoardSharing> {
+    // Reuse the bounded identifier validation without adding another mutation document version.
+    groupId = CanvasBoardShareGroupsSchema.parse({
+      operationId,
+      groupIds: [groupId],
+      role: "viewer",
+    }).groupIds[0]!;
+    return this.changeGroupSharing(
+      actor,
+      id,
+      { operationId, groupId, type: "group_revoke" },
+      async (_tx, state) => {
+        state.groupGrants = (state.groupGrants ?? []).filter((grant) => grant.groupId !== groupId);
+      },
+      clock,
+    );
+  }
+  private changeGroupSharing(
+    actor: CanvasActor,
+    id: string,
+    request: { operationId: string; type: string; [key: string]: unknown },
+    apply: (tx: CanvasTransaction, state: CanvasState) => Promise<void>,
+    clock: CanvasClock,
+  ): Promise<CanvasBoardSharing> {
+    return this.run(actor, { boardId: id }, async (tx) => {
+      const checked = await this.checked(tx, actor, id, clock, true);
+      if (!checked.capabilities.share)
+        throw new CanvasBoardError(
+          "FORBIDDEN",
+          "A board owner or facilitator is required to manage sharing",
+        );
+      const prior = checked.state.receipts.find(
+        (receipt) =>
+          receipt.actorId === actor.userId && receipt.operationId === request.operationId,
+      );
+      if (prior) {
+        if (prior.hash !== fingerprint(request))
+          throw new CanvasBoardError(
+            "IDEMPOTENCY_CONFLICT",
+            "This operation identifier was used for another change",
+          );
+        return this.sharingView(tx, checked, actor, clock);
+      }
+      if (checked.state.receipts.length >= 5000)
+        throw new CanvasBoardError(
+          "ENTITLEMENT_LIMIT",
+          "This canvas has reached its durable operation limit",
+        );
+      await apply(tx, checked.state);
+      const seat =
+        this.options.communityMode || currentSeat(checked.access, actor.userId, instant(clock));
+      if (!seat)
+        throw new CanvasBoardError("FORBIDDEN", "Sharing requires an active creator license");
+      checked.state.receipts.push({
+        actorId: actor.userId,
+        operationId: request.operationId,
+        hash: fingerprint(request),
+        canvasSeq: checked.state.board.canvasSeq + 1,
+        type: request.type,
+        before: [],
+        after: [],
+        undone: false,
+        undoable: false,
+      });
+      await this.commit(tx, checked.state, clock);
+      return this.sharingView(tx, checked, actor, clock);
+    });
+  }
+  groupBoards(
+    actor: CanvasActor,
+    workspaceId: string,
+    groupId: string,
+    clock: CanvasClock = () => new Date(),
+  ): Promise<CanvasBoardView[]> {
+    groupId = CanvasBoardShareGroupsSchema.parse({
+      operationId: groupId,
+      groupIds: [groupId],
+      role: "viewer",
+    }).groupIds[0]!;
+    return this.run(actor, { workspaceId }, async (tx) => {
+      const groups = await tx.sharingGroups(workspaceId, actor.userId);
+      if (!groups.some((group) => group.id === groupId))
+        fail("Group access is no longer available");
+      const result: CanvasBoardView[] = [];
+      for (const row of await tx.list()) {
+        if (row.workspaceId !== workspaceId || row.status === "archived") continue;
+        try {
+          const checked = await this.authorizedMetadata(tx, actor, row.id, clock);
+          if (
+            !(await tx.groupRoles(row.id, actor.userId, true)).some(
+              (grant) => grant.groupId === groupId,
+            )
+          )
+            continue;
+          const { creationKey, creationHash, uploadCount, uploadBytes, ...metadata } =
+            checked.board;
+          void creationKey;
+          void creationHash;
+          void uploadCount;
+          void uploadBytes;
+          result.push(
+            CanvasBoardViewSchema.parse({
+              ...metadata,
+              schemaVersion: CANVAS_SCHEMA_VERSION,
+              workspaceName: checked.access.workspace.name,
+              organizationName: checked.access.organization?.name,
+              status: status(checked.board, checked.source, instant(clock)),
+              role: checked.authorization.role,
+              capabilities: checked.authorization.capabilities,
+              objects: [],
+              grants: [],
+              invitations: [],
+              undoOperationId: null,
+              redoOperationId: null,
+            }),
+          );
+        } catch (error) {
+          if (!(error instanceof CanvasBoardError && error.code === "NOT_FOUND")) throw error;
+        }
+      }
+      return result;
+    });
+  }
   invite(
     actor: CanvasActor,
     id: string,
@@ -2187,7 +2417,7 @@ export function createCanvasBoardRepository(
         if (
           candidate.code === "23514" &&
           candidate.message &&
-          /Canvas (discussion|retained message|retained checkpoint) limit reached/.test(
+          /Canvas (discussion|retained message|retained checkpoint|group sharing) limit reached/.test(
             candidate.message,
           )
         )

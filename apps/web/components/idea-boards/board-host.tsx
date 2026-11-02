@@ -20,6 +20,8 @@ import { IdeaBoardIdeas } from "./idea-list";
 import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
 import { WorkshopCanvasLauncher } from "../canvas-boards/workshop-canvas-bridge";
+import { GuestInvitationDialog } from "./guest-invitation-dialog";
+import { canvasSharingMessages } from "../../lib/i18n/canvas-sharing-messages";
 
 function BoardDeletionDialog({
   busy,
@@ -76,6 +78,7 @@ function BoardDeletionDialog({
 
 export function BoardHost({ id }: { id: string }) {
   const { t, locale } = useLocale();
+  const sharingCopy = canvasSharingMessages(locale);
   const { creator, canEdit } = useWorkspace();
   const router = useRouter();
   const workspaceId = creator?.workspaceId;
@@ -86,6 +89,7 @@ export function BoardHost({ id }: { id: string }) {
   >(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [link, setLink] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -102,6 +106,7 @@ export function BoardHost({ id }: { id: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     setLink(`${window.location.origin}/board/${id}`);
     pending.current = null;
+    setInviting(false);
     needsRebase.current = false;
     setBusy(false);
     setError(false);
@@ -276,6 +281,16 @@ export function BoardHost({ id }: { id: string }) {
               <button type="button" className="button-quiet" onClick={() => void copy()}>
                 {t("boards.copy")}
               </button>
+              {canEdit && board.status !== "closed" ? (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={locked}
+                  onClick={() => setInviting(true)}
+                >
+                  {sharingCopy.guestTitle}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="button-quiet"
@@ -333,6 +348,13 @@ export function BoardHost({ id }: { id: string }) {
               <p className={styles.muted}>{t("boards.countsHidden")}</p>
             ) : null}
           </section>
+          {inviting && canEdit && board.status !== "closed" ? (
+            <GuestInvitationDialog
+              sourceBoardId={board.id}
+              title={board.title}
+              onClose={() => setInviting(false)}
+            />
+          ) : null}
           {canEdit && collecting ? (
             <div className={styles.layout}>
               <section className={styles.panel}>

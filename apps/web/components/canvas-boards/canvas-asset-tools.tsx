@@ -105,11 +105,16 @@ export function CanvasAssetTools({
         text: kind === "link" ? label.trim() : "",
         ...(media ? { mediaId: media.mediaId, altText: media.altText } : { url: url.trim() }),
       });
-      // The editor retains an uncertain mutation for its normal exact-retry/conflict UI.
-      const accepted = await onCreate(object);
-      if (active.current && accepted) {
+      // Once handed off, the editor owns success or the retained mutation's exact retry.
+      // Close the modal in both cases so its recovery controls stay reachable.
+      await onCreate(object);
+      if (active.current) {
         setKind(null);
         setFile(null);
+        setDescription("");
+        setUrl("");
+        setLabel("");
+        setFailed(false);
       }
     } catch {
       if (active.current && !abort.signal.aborted) setFailed(true);

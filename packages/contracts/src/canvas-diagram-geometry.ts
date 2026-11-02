@@ -199,6 +199,123 @@ export function canvasShapeVariantPath(variant: CanvasShapeVariant, width: numbe
       ]);
   }
 }
+type CanvasSideAnchor = Exclude<CanvasDiagramEndpoint["anchor"], "center" | undefined>;
+type CanvasOutlineSegment = readonly CanvasDiagramPoint[];
+const outlineTolerance = 1e-12;
+const variantPorts = new Map<CanvasShapeVariant, Record<CanvasSideAnchor, CanvasDiagramPoint>>();
+
+/** Parse only our generated, absolute path commands, never user-supplied SVG. */
+function variantOutline(variant: CanvasShapeVariant): CanvasOutlineSegment[] {
+  const tokens = canvasShapeVariantPath(variant, 1, 1).match(
+    /[MLHVQCZ]|[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/g,
+  )!;
+  const segments: CanvasOutlineSegment[] = [];
+  let cursor = 0;
+  const next = () => Number(tokens[cursor++]);
+  const point = () => ({ x: next(), y: next() });
+  let current = { x: 0, y: 0 },
+    start = current;
+  while (cursor < tokens.length) {
+    const command = tokens[cursor++];
+    if (command === "M") {
+      current = point();
+      start = current;
+    } else if (command === "Z") {
+      segments.push([current, start]);
+      // The first closed subpath is the silhouette. Later subpaths, such as
+      // the cylinder's cap seam, decorate its interior and are not ports.
+      break;
+    } else {
+      const controls = command === "Q" ? [point()] : command === "C" ? [point(), point()] : [];
+      const end =
+        command === "H"
+          ? { x: next(), y: current.y }
+          : command === "V"
+            ? { x: current.x, y: next() }
+            : point();
+      segments.push([current, ...controls, end]);
+      current = end;
+    }
+  }
+  return segments;
+}
+function segmentPolynomial(segment: CanvasOutlineSegment, axis: "x" | "y") {
+  const [a = 0, b = 0, c = 0, d = 0] = segment.map((point) => point[axis]);
+  if (segment.length === 2) return [a, b - a];
+  if (segment.length === 3) return [a, 2 * (b - a), a - 2 * b + c];
+  return [a, 3 * (b - a), 3 * (a - 2 * b + c), -a + 3 * b - 3 * c + d];
+}
+function polynomialAt(coefficients: readonly number[], t: number) {
+  return coefficients.reduceRight((value, coefficient) => value * t + coefficient, 0);
+}
+function derivative(coefficients: readonly number[]) {
+  return coefficients.slice(1).map((value, index) => value * (index + 1));
+}
+/** Degree <= 3: derivative roots split the curve into bounded monotone intervals. */
+function unitRoots(input: readonly number[]): number[] {
+  const coefficients = [...input];
+  while (coefficients.length > 1 && Math.abs(coefficients.at(-1)!) <= outlineTolerance)
+    coefficients.pop();
+  if (coefficients.length === 1) return [];
+  if (coefficients.length === 2) {
+    const root = -coefficients[0]! / coefficients[1]!;
+    return root >= -outlineTolerance && root <= 1 + outlineTolerance
+      ? [Math.max(0, Math.min(1, root))]
+      : [];
+  }
+  const stops = [0, ...unitRoots(derivative(coefficients)), 1].sort((a, b) => a - b);
+  const roots = stops.filter((t) => Math.abs(polynomialAt(coefficients, t)) <= outlineTolerance);
+  for (let index = 1; index < stops.length; index++) {
+    let low = stops[index - 1]!,
+      high = stops[index]!;
+    let lowValue = polynomialAt(coefficients, low);
+    if (lowValue * polynomialAt(coefficients, high) >= 0) continue;
+    for (let iteration = 0; iteration < 48; iteration++) {
+      const middle = (low + high) / 2;
+      const value = polynomialAt(coefficients, middle);
+      if (value === 0) {
+        low = high = middle;
+        break;
+      }
+      if (lowValue * value < 0) high = middle;
+      else {
+        low = middle;
+        lowValue = value;
+      }
+    }
+    roots.push((low + high) / 2);
+  }
+  return roots;
+}
+function variantOutlinePort(variant: CanvasShapeVariant, anchor: CanvasSideAnchor) {
+  let ports = variantPorts.get(variant);
+  if (!ports) {
+    const outline = variantOutline(variant);
+    ports = {} as Record<CanvasSideAnchor, CanvasDiagramPoint>;
+    for (const side of ["left", "right", "top", "bottom"] as const) {
+      const horizontal = side === "left" || side === "right";
+      const direction = side === "left" || side === "top" ? -1 : 1;
+      let distance = Infinity;
+      for (const segment of outline) {
+        const across = segmentPolynomial(segment, horizontal ? "y" : "x");
+        const along = segmentPolynomial(segment, horizontal ? "x" : "y");
+        across[0] = across[0]! - 0.5;
+        const roots = across.every((value) => Math.abs(value) <= outlineTolerance)
+          ? [0, ...unitRoots(derivative(along)), 1]
+          : unitRoots(across);
+        for (const t of roots) {
+          const candidate = direction * (polynomialAt(along, t) - 0.5);
+          if (candidate >= -outlineTolerance) distance = Math.min(distance, Math.max(0, candidate));
+        }
+      }
+      // All current silhouettes enclose their centre and meet each cardinal ray.
+      const offset = direction * (Number.isFinite(distance) ? distance : 0);
+      ports[side] = horizontal ? { x: 0.5 + offset, y: 0.5 } : { x: 0.5, y: 0.5 + offset };
+    }
+    variantPorts.set(variant, ports);
+  }
+  return ports[anchor];
+}
 export function canvasDiagramPort(
   endpoint: CanvasDiagramEndpoint,
   objects: readonly CanvasDiagramNode[],
@@ -222,20 +339,19 @@ export function canvasDiagramPort(
     (endpoint.anchor === "left" || endpoint.anchor === "right")
   )
     x *= 0.8;
-  if (object.type === "rect") {
-    if (
-      object.shapeVariant === "triangle" &&
-      (endpoint.anchor === "left" || endpoint.anchor === "right")
-    )
-      x *= 0.5;
-    if (object.shapeVariant === "chevron" && endpoint.anchor === "left") x *= 0.4;
-    if (
-      object.shapeVariant === "speech_bubble" &&
-      (endpoint.anchor === "left" || endpoint.anchor === "right")
-    )
-      y = -object.height * 0.11;
-    if (object.shapeVariant === "document" && endpoint.anchor === "bottom")
-      y = object.height * 0.38;
+  if (
+    object.type === "rect" &&
+    object.shapeVariant &&
+    object.shapeVariant !== "rectangle" &&
+    object.shapeVariant !== "rounded_rectangle" &&
+    endpoint.anchor &&
+    endpoint.anchor !== "center"
+  ) {
+    // Variants scale with their bounds. Rounded rectangles keep the exact old
+    // cardinal midpoints: their capped corner radius cannot reach those points.
+    const port = variantOutlinePort(object.shapeVariant, endpoint.anchor);
+    x = (port.x - 0.5) * object.width;
+    y = (port.y - 0.5) * object.height;
   }
   const angle = ((object.rotation ?? 0) * Math.PI) / 180;
   return {

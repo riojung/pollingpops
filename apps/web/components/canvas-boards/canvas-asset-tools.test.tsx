@@ -92,6 +92,43 @@ function harness(props: Partial<Parameters<typeof CanvasAssetTools>[0]> = {}) {
     },
   };
 }
+type AssetKind = "image" | "svg" | "link";
+function fillAssetDraft(view: ReturnType<typeof harness>, kind: AssetKind) {
+  const tree = view.render();
+  const change = (element: ReactElement<Record<string, unknown>>, value: string) =>
+    (element.props.onChange as (event: unknown) => void)({ target: { value } });
+  if (kind === "link") {
+    change(
+      find(tree, (element) => element.type === "input" && element.props.type === "url")!,
+      "https://example.test/drawing",
+    );
+    change(
+      find(tree, (element) => element.type === "input" && element.props.maxLength === 2000)!,
+      "Drawing reference",
+    );
+    return null;
+  }
+  const source = new File(
+    [kind === "svg" ? "<svg/>" : "png"],
+    kind === "svg" ? "drawing.svg" : "drawing.png",
+    { type: kind === "svg" ? "image/svg+xml" : "image/png" },
+  );
+  const file = find(tree, (element) => element.type === "input" && element.props.type === "file")!;
+  (file.props.onChange as (event: unknown) => void)({ target: { files: [source] } });
+  change(
+    find(tree, (element) => element.type === "textarea")!,
+    "A drawing",
+  );
+  return source;
+}
+function submitDraft(view: ReturnType<typeof harness>) {
+  const form = find(view.render(), (element) => element.type === "form")!;
+  (form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() });
+  return form;
+}
+async function settle() {
+  for (let index = 0; index < 20; index++) await Promise.resolve();
+}
 beforeEach(() => {
   vi.stubGlobal("document", { activeElement: null });
   mocks.upload.mockReset();
@@ -146,5 +183,167 @@ describe("canvas asset palette requests", () => {
     view.render();
     expect(find(view.render(), (element) => element.type === "dialog")).toBeUndefined();
     expect(mocks.rasterize).not.toHaveBeenCalled();
+  });
+});
+
+describe("asset mutation handoff", () => {
+  it.each(["image", "svg", "link"] as const)(
+    "closes and clears the %s draft when the editor retains an uncertain create",
+    async (kind) => {
+      const props: Partial<Parameters<typeof CanvasAssetTools>[0]> = {
+        openRequest: { kind, id: 1 },
+        hideButtons: true,
+      };
+      const view = harness(props);
+      let finish!: (result: boolean) => void;
+      view.onCreate.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      mocks.rasterize.mockResolvedValue(new File(["png"], "drawing.png", { type: "image/png" }));
+      mocks.upload.mockResolvedValue({
+        mediaId: "00000000-0000-4000-8000-000000000099",
+        altText: "A drawing",
+      });
+      view.render();
+      fillAssetDraft(view, kind);
+      // Rapid submit events must hand off only one object/upload.
+      const form = submitDraft(view);
+      (form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() });
+      await settle();
+      expect(view.onCreate).toHaveBeenCalledOnce();
+      expect(mocks.upload).toHaveBeenCalledTimes(kind === "link" ? 0 : 1);
+      expect(find(view.render(), (element) => element.type === "dialog")).toBeDefined();
+      finish(false);
+      await settle();
+      expect(find(view.render(), (element) => element.type === "dialog")).toBeUndefined();
+      // The retained editor mutation disables new dialogs until its retry/discard resolves.
+      props.disabled = true;
+      props.openRequest = { kind, id: 2 };
+      view.render();
+      expect(find(view.render(), (element) => element.type === "dialog")).toBeUndefined();
+      props.disabled = false;
+      props.openRequest = { kind, id: 3 };
+      view.render();
+      const fresh = view.render();
+      expect(find(fresh, (element) => element.type === "dialog")).toBeDefined();
+      expect(find(fresh, (element) => element.props.role === "alert")).toBeUndefined();
+      if (kind === "link") {
+        expect(
+          find(fresh, (element) => element.type === "input" && element.props.type === "url")!.props
+            .value,
+        ).toBe("");
+        expect(
+          find(fresh, (element) => element.type === "input" && element.props.maxLength === 2000)!
+            .props.value,
+        ).toBe("");
+      } else {
+        expect(find(fresh, (element) => element.type === "textarea")!.props.value).toBe("");
+        expect(
+          find(fresh, (element) => element.type === "button" && element.props.type === "submit")!
+            .props.disabled,
+        ).toBe(true);
+        submitDraft(view);
+        await settle();
+      }
+      expect(view.onCreate).toHaveBeenCalledOnce();
+      expect(mocks.upload).toHaveBeenCalledTimes(kind === "link" ? 0 : 1);
+      expect(mocks.rasterize).toHaveBeenCalledTimes(kind === "svg" ? 1 : 0);
+    },
+  );
+  it.each(["image", "link"] as const)("closes a successful %s create", async (kind) => {
+    const view = harness({ openRequest: { kind, id: 1 }, hideButtons: true });
+    mocks.upload.mockResolvedValue({
+      mediaId: "00000000-0000-4000-8000-000000000099",
+      altText: "A drawing",
+    });
+    view.render();
+    fillAssetDraft(view, kind);
+    submitDraft(view);
+    await settle();
+    expect(view.onCreate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        type: kind,
+        ...(kind === "link"
+          ? { url: "https://example.test/drawing", text: "Drawing reference" }
+          : {}),
+      }),
+    );
+    expect(find(view.render(), (element) => element.type === "dialog")).toBeUndefined();
+  });
+  it.each(["image", "svg"] as const)(
+    "retains a recoverable %s draft when upload or SVG conversion fails before handoff",
+    async (kind) => {
+      const view = harness({ openRequest: { kind, id: 1 }, hideButtons: true });
+      if (kind === "image") mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
+      else mocks.rasterize.mockRejectedValueOnce(new Error("Unsupported SVG"));
+      view.render();
+      const source = fillAssetDraft(view, kind);
+      submitDraft(view);
+      await settle();
+      const failed = view.render();
+      expect(find(failed, (element) => element.type === "dialog")).toBeDefined();
+      expect(find(failed, (element) => element.props.role === "alert")).toBeDefined();
+      expect(find(failed, (element) => element.type === "textarea")!.props.value).toBe("A drawing");
+      expect(
+        find(failed, (element) => element.type === "button" && element.props.type === "submit")!
+          .props.disabled,
+      ).toBe(false);
+      expect(view.onCreate).not.toHaveBeenCalled();
+      mocks.rasterize.mockResolvedValue(new File(["png"], "drawing.png", { type: "image/png" }));
+      mocks.upload.mockResolvedValue({
+        mediaId: "00000000-0000-4000-8000-000000000099",
+        altText: "A drawing",
+      });
+      // The same retained file can be retried without choosing it again.
+      submitDraft(view);
+      await settle();
+      if (kind === "svg")
+        expect(mocks.rasterize).toHaveBeenLastCalledWith(source, expect.any(AbortSignal));
+      else
+        expect(mocks.upload).toHaveBeenLastCalledWith(
+          canvasBoard.id,
+          source,
+          "A drawing",
+          expect.any(AbortSignal),
+        );
+      expect(view.onCreate).toHaveBeenCalledOnce();
+      expect(find(view.render(), (element) => element.type === "dialog")).toBeUndefined();
+    },
+  );
+  it("retains invalid link fields for correction before any mutation handoff", async () => {
+    const view = harness({ openRequest: { kind: "link", id: 1 }, hideButtons: true });
+    view.render();
+    fillAssetDraft(view, "link");
+    const url = find(
+      view.render(),
+      (element) => element.type === "input" && element.props.type === "url",
+    )!;
+    (url.props.onChange as (event: unknown) => void)({
+      target: { value: "https://user:password@example.test/drawing" },
+    });
+    submitDraft(view);
+    await settle();
+    const failed = view.render();
+    expect(find(failed, (element) => element.props.role === "alert")).toBeDefined();
+    expect(
+      find(failed, (element) => element.type === "input" && element.props.type === "url")!.props
+        .value,
+    ).toBe("https://user:password@example.test/drawing");
+    expect(
+      find(failed, (element) => element.type === "input" && element.props.maxLength === 2000)!.props
+        .value,
+    ).toBe("Drawing reference");
+    expect(view.onCreate).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    (url.props.onChange as (event: unknown) => void)({
+      target: { value: "https://example.test/drawing" },
+    });
+    submitDraft(view);
+    await settle();
+    expect(view.onCreate).toHaveBeenCalledOnce();
+    expect(find(view.render(), (element) => element.type === "dialog")).toBeUndefined();
   });
 });

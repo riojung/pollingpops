@@ -5,6 +5,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   CANVAS_SCHEMA_VERSION,
   CanvasColorSchema,
+  CanvasShapeVariantSchema,
 } from "../../packages/contracts/src/canvas-boards";
 import { api, fits, newTeamCanvas, organization, snapshot } from "./support";
 
@@ -499,6 +500,191 @@ test("canvas tools persist selection formatting, shape presets, port drags and w
   await expect(page.getByTestId("canvas-surface")).toBeVisible();
   expect((await snapshot(page, id)).objects.some((object) => object.type === "pen")).toBe(false);
   await fits(page);
+});
+
+test("image mutation handoff leaves exact retry accessible after a lost acknowledgement", async ({
+  page,
+}, testInfo) => {
+  await organization(page, testInfo);
+  const id = await newTeamCanvas(page);
+  const imageData = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 40;
+    canvas.height = 30;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#147d76";
+    context.fillRect(0, 0, 40, 30);
+    return canvas.toDataURL("image/png").split(",")[1]!;
+  });
+  const writes: string[] = [];
+  const uploads: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "PUT" &&
+      new URL(request.url()).pathname.startsWith("/__test/canvas/storage/")
+    )
+      uploads.push(request.url());
+  });
+  await page.route(`${api}/v1/canvas-boards/${id}/commands`, async (route) => {
+    writes.push(route.request().postData()!);
+    const response = await route.fetch();
+    expect(response.status(), await response.text()).toBe(200);
+    if (writes.length === 1) await route.abort("connectionreset");
+    else await route.fulfill({ response });
+  });
+  const addImage = page.getByRole("button", { name: "Image", exact: true });
+  await addImage.click();
+  const dialog = page.getByRole("dialog", { name: "Add image", exact: true });
+  await dialog.getByLabel("Choose an image", { exact: true }).setInputFiles({
+    name: "retry-sketch.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(imageData, "base64"),
+  });
+  await dialog
+    .getByRole("textbox", { name: "Image description", exact: true })
+    .fill("Retry sketch");
+  await dialog.getByRole("button", { name: "Upload and add", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const retry = page.getByRole("button", { name: "Retry", exact: true });
+  await expect(retry).toBeEnabled();
+  await expect(addImage).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  expect(uploads).toHaveLength(1);
+  const saved = (await snapshot(page, id)).objects;
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({ type: "image", altText: "Retry sketch" });
+  await page.screenshot({ path: testInfo.outputPath("image-exact-retry-accessible.png") });
+  await retry.click();
+  await expect(retry).toHaveCount(0);
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toBe(writes[0]);
+  expect(uploads).toHaveLength(1);
+  expect((await snapshot(page, id)).objects).toEqual(saved);
+  await addImage.click();
+  await expect(dialog.getByLabel("Choose an image", { exact: true })).toHaveValue("");
+  await expect(dialog.getByRole("textbox", { name: "Image description", exact: true })).toHaveValue(
+    "",
+  );
+  await expect(dialog.getByRole("button", { name: "Upload and add", exact: true })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.reload();
+  expect((await snapshot(page, id)).objects).toEqual(saved);
+  expect(uploads).toHaveLength(1);
+  expect(writes).toHaveLength(2);
+});
+
+test("all shape ports and exported connectors meet their rendered outlines", async ({
+  page,
+}, testInfo) => {
+  await organization(page, testInfo);
+  const boardId = await newTeamCanvas(page);
+  const shapes = CanvasShapeVariantSchema.options.map((shapeVariant, index) => ({
+    id: randomUUID(),
+    type: "rect",
+    shapeVariant,
+    text: shapeVariant,
+    x: 100 + (index % 4) * 300,
+    y: 100 + Math.floor(index / 4) * 240,
+    width: 200,
+    height: 160,
+    rotation: index % 3 === 0 ? 27 : 0,
+    zIndex: index,
+  }));
+  const connectors = shapes.flatMap((shape, index) =>
+    (["top", "right", "bottom", "left"] as const).map((anchor, anchorIndex) => ({
+      id: randomUUID(),
+      type: "connector",
+      text: `Port ${index} ${anchor}`,
+      x: shape.x,
+      y: shape.y,
+      width: 200,
+      height: 160,
+      zIndex: 100 + index * 4 + anchorIndex,
+      from: { objectId: shape.id, anchor, x: 0, y: 0 },
+      to: {
+        objectId: null,
+        x: shape.x + 100 + (anchor === "left" ? -320 : anchor === "right" ? 320 : 0),
+        y: shape.y + 80 + (anchor === "top" ? -250 : anchor === "bottom" ? 250 : 0),
+      },
+      endMarker: "none",
+    })),
+  );
+  const objects = [...shapes, ...connectors];
+  for (let offset = 0; offset < objects.length; offset += 40) {
+    const seeded = await page.request.post(`${api}/v1/canvas-boards/${boardId}/commands`, {
+      data: {
+        schemaVersion: CANVAS_SCHEMA_VERSION,
+        operationId: randomUUID(),
+        command: {
+          type: "batch",
+          operations: objects
+            .slice(offset, offset + 40)
+            .map((object) => ({ type: "create", object })),
+        },
+      },
+    });
+    expect(seeded.status(), await seeded.text()).toBe(200);
+  }
+  await page.reload();
+  await expect(page.getByTestId(`canvas-object-${connectors.at(-1)!.id}`)).toBeAttached();
+  const expected = connectors.map((connector) => ({ label: connector.text, attached: true }));
+  const live = await page.evaluate(
+    ({ connectors }) => {
+      return connectors.map((connector) => {
+        const shape = document.querySelector(
+          `[data-testid="canvas-object-${connector.from.objectId}"] path, [data-testid="canvas-object-${connector.from.objectId}"] rect`,
+        ) as SVGGeometryElement;
+        const route = document.querySelector(
+          `[data-testid="canvas-object-${connector.id}"] path`,
+        ) as SVGGeometryElement;
+        const screen = route.getPointAtLength(0).matrixTransform(route.getScreenCTM()!);
+        const local = screen.matrixTransform(shape.getScreenCTM()!.inverse());
+        return { label: connector.text, attached: shape.isPointInStroke(local) };
+      });
+    },
+    { connectors },
+  );
+  expect(live).toEqual(expected);
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Export board", exact: true });
+  await dialog.getByRole("combobox", { name: "File format", exact: true }).selectOption("svg");
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Download", exact: true }).click();
+  const file = testInfo.outputPath("outline-aware-ports.svg");
+  await (await download).saveAs(file);
+  const svg = await readFile(file, "utf8");
+  const exported = await page.evaluate(
+    ({ svg, shapes, connectors }) => {
+      const documentSvg = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+      const imported = document.importNode(documentSvg, true) as unknown as SVGSVGElement;
+      // Preserve native geometry scale: subpixel-sized SVGs flatten curves too coarsely
+      // for the browser's independent stroke hit-testing oracle.
+      imported.style.cssText = "position:fixed;left:-10000px;top:0;opacity:0;pointer-events:none";
+      document.body.append(imported);
+      try {
+        return connectors.map((connector) => {
+          const node = shapes.find((shape) => shape.id === connector.from.objectId)!;
+          const group = [...imported.querySelectorAll("g")].find(
+            (g) =>
+              g.getAttribute("transform") ===
+              `translate(${node.x} ${node.y}) rotate(${node.rotation} 100 80)`,
+          )!;
+          const shape = group.querySelector("path") as SVGGeometryElement;
+          const connectorGroup = [...imported.querySelectorAll("g")].find(
+            (g) => g.querySelector(":scope > title")?.textContent === connector.text,
+          )!;
+          const route = connectorGroup.querySelector("path") as SVGGeometryElement;
+          const screen = route.getPointAtLength(0).matrixTransform(route.getScreenCTM()!);
+          const local = screen.matrixTransform(shape.getScreenCTM()!.inverse());
+          return { label: connector.text, attached: shape.isPointInStroke(local) };
+        });
+      } finally {
+        imported.remove();
+      }
+    },
+    { svg, shapes, connectors },
+  );
+  expect(exported).toEqual(expected);
 });
 
 test("SVG palette imports a real image and rejects external references without changing the board", async ({

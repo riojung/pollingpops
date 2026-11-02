@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "local-readiness-engineering-checks",
+  "date": "2026-11-01",
+  "baseRevision": "3c536ca3ece7d6552b5857b405f3152da84836dc",
+  "branch": "codex/canvas-capacity-and-readiness",
+  "workingTreeDirty": true,
+  "node": "v22.23.4",
+  "checks": [
+    {
+      "command": "CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check",
+      "result": {
+        "label": "repository-check-final",
+        "exitCode": 0,
+        "elapsedSeconds": 83.77
+      },
+      "scope": "Formatting, Docker context, package lint/types/tests, root smoke-support, production builds and admin bundle. Root support333pass1existing skip. PostgreSQL/real-media opt-in suites skip without environment; their dedicated local checks below remain separate."
+    },
+    {
+      "command": "Explicit ESLint with .mts for new/changed load drivers, config and helper tests",
+      "exitCode": 0
+    },
+    {
+      "command": "Focused helper regressions before direct Results extension",
+      "testsPassed": 31,
+      "exitCode": 0
+    },
+    {
+      "command": "Final auth destination and Phase0 evidence-contract regressions",
+      "testsPassed": 24,
+      "exitCode": 0
+    },
+    {
+      "command": "Restricted PostgreSQL original-baseline bootstrap regression",
+      "exitCode": 0,
+      "originalDeadlineMs": 5000,
+      "assertionsRetained": true
+    },
+    {
+      "command": "pnpm test:alerts",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm test:alert-routing",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm readiness:check",
+      "exitCode": 0,
+      "completeGates": 0,
+      "pendingGates": 15
+    }
+  ],
+  "relatedEvidence": {
+    "continuous": "../canvas-local-rehearsal-2026-11-01.json",
+    "targetDriver": "canvas-target-local-2026-11-01.json",
+    "realMedia": "canvas-media-pipeline-2026-11-01.json",
+    "browserFixture": "ci-fixture-rehearsal-2026-11-01.json",
+    "hostedMergedBaseline": "engineering-ci-checkpoint-2026-11-01.json"
+  },
+  "preservedFailures": [
+    "Initial full repository run failed because newly added local checkpoint digest violated the engineering-only hosted-run evidence convention. Removed the digest references while retaining checkpoint documentation and all historical/direct current run links; original assertion retained. Final check passes.",
+    "Initial new direct-return helper used a root-unavailable workspace package import. Changed to the established relative contracts source import; final24focused cases and6browserrepetitions pass.",
+    "Initial focused WebKit run reproduced9Results prefetch page errors; subsequent direct-Results fixture confirmation passes6cases without retries.",
+    "Fifteen-minute canvas diagnostic completes all3600writes/correctness but fails acknowledgementp95 and records substantial stream unavailability. It does not accept sustained performance or stable transport."
+  ],
+  "cleanup": {
+    "ownedPostgresAndValkeyStopped": true,
+    "ownedMediaServicesStoppedAndDataPurged": true,
+    "ownedBrowserContainerAndTunnelRemoved": true,
+    "allElevenTaskLoopbackPortsClosed": true,
+    "existingUserContainersPreserved": true
+  },
+  "unaccepted": [
+    "Fresh hosted main-push checks for this reviewed increment",
+    "Staging deployment/access, target-host topology/load/soak and operational acceptance",
+    "Named physical devices and independent manual accessibility review",
+    "Canvas acknowledgement/500ms peer/stable transport performance and capacity acceptance"
+  ],
+  "releaseGatesAcceptedByThisArtifact": 0,
+  "stagingAcceptanceComplete": false,
+  "capacityIncreaseAuthorized": false
+}

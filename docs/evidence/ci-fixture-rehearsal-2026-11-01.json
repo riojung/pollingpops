@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "local-ci-fixture-rehearsal",
+  "date": "2026-11-01",
+  "baseRevision": "3c536ca3ece7d6552b5857b405f3152da84836dc",
+  "diagnosis": {
+    "observation": {
+      "test": "Results mobile WebKit",
+      "unexpectedErrors": 9,
+      "errorKind": "same-web-origin RSC prefetch access-control messages",
+      "errorMonotonicMs": [80016.097, 80023.376],
+      "dashboardDocumentStartMs": 78453.951,
+      "networkIdleCompletedMs": 79340.624,
+      "routeRegistrationWindowMs": [79340.86, 79848.792],
+      "newPrefetchStartWindowMs": [79839.923, 79848.011],
+      "initialResultsGotoStartMs": 79853.753,
+      "initialResultsDocumentStartMs": 80014.168,
+      "laterReloadStartMs": 91640.376,
+      "laterModeChangeGotoStartMs": 98582.773
+    },
+    "interpretation": "Strong temporal association with discarding the dashboard while fresh prefetch work begins. Cancellation is inferred, not proven: failing URL records and matching requestfailed events were absent. Nearby authenticated API reads returned 200; no account/mode failure is evidenced at this transition.",
+    "fix": "Install Results mocks before authentication and request the supported Results return path for both fresh verified email/PIN and cached-session branches. Other callers keep the dashboard default. Cache identity remains web origin, API origin and email, independent of destination.",
+    "retained": {
+      "emptyErrorAssertionAndCancelFilterByteIdentical": true,
+      "axeAuditCount": 2,
+      "functionalReloadAndFeatureOffDeepLinkRetained": true,
+      "gatesRetriesAndTimeoutsChanged": false
+    }
+  },
+  "attempts": [
+    {
+      "label": "initial-focused",
+      "stats": {
+        "startTime": "2026-11-02T05:25:34.001Z",
+        "duration": 91428.404,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "rawReportSha256": "d4045398b3425a2609a34b3876c142f869b93ab244b08546f9a8817b5e4f01a2",
+      "unexpectedFailure": "Results: nine same-origin RSC prefetch access-control page errors; Sessions passed",
+      "resourceGuardTriggered": false
+    },
+    {
+      "label": "direct-results-confirmation",
+      "stats": {
+        "startTime": "2026-11-02T05:35:45.997Z",
+        "duration": 101553.734,
+        "expected": 6,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "rawReportSha256": "f12e7ac06335c2070b99020b4e5afa1df465abc2a81cb0c9027c45691886f25c",
+      "repeatEach": 3,
+      "retries": 0,
+      "expected": 6,
+      "unexpected": 0,
+      "flaky": 0,
+      "resourceGuardTriggered": false,
+      "sampledContainerMemoryHighBytes": 1981579264,
+      "sampledVmAvailableLowBytes": 3926159360,
+      "sampledIndividualRssHighKiB": 939004,
+      "resourceSamples": 142
+    }
+  ],
+  "confirmationPending": false,
+  "stagingAcceptanceComplete": false,
+  "capacityIncreaseAuthorized": false,
+  "confirmationPassed": true,
+  "environment": {
+    "node": "v22.23.4",
+    "browserImage": "mcr.microsoft.com/playwright:v1.64.1-resolute",
+    "browser": "Linux WebKit",
+    "project": "webkit-beta-mobile",
+    "productionNextBuild": true,
+    "workers": 1,
+    "containerMemoryGiB": 5,
+    "containerCpus": 2,
+    "memoryGuardGiB": 4.5,
+    "individualRssGuardGiB": 2,
+    "minimumVmAvailableMiB": 768
+  },
+  "sourceSha256": {
+    "tests/beta-e2e/sign-in.ts": "5535f9f2709d68c6844b8c316c9328bb4989d1a3e31ac7830c50f5ceefe190ef",
+    "tests/beta-e2e/results-layout.spec.ts": "6f3af87e7904af2df708bf750aebc1e2a66089c81a4d082443b72140e281e7f4",
+    "tests/support/beta-signin-behavior.test.ts": "662699c591c8da46954f13b0e239a836e9aef46cdf1bdad7d4ab9a9d2d1fcca0",
+    "tests/support/beta-signin.test.ts": "a1c890c8d15cd50daa7a2c5cd1f9c54166b34caab603b82dff07a933015a9bc4"
+  }
+}

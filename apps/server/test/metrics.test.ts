@@ -1,7 +1,97 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MetricsService } from "../src/metrics.js";
 
 describe("MetricsService", () => {
+  it("omits scanner metrics when no real scanner probe is bound", async () => {
+    const metrics = new MetricsService();
+    expect(await metrics.render()).not.toContain("openround_malware_");
+  });
+
+  it("reports active signature metadata without identifiers or arbitrary labels", async () => {
+    const metrics = new MetricsService();
+    let fresh = true;
+    metrics.bindScannerHealth(async () => ({
+      available: true,
+      fresh,
+      databaseVersion: 28_000,
+      databaseTimestampSeconds: 1_793_530_800,
+      checkedAtSeconds: 1_793_534_400,
+      ignoredPrivateField: "private-scanner-reply",
+    }));
+    const rendered = await metrics.render();
+    expect(rendered).toContain("openround_malware_scanner_available 1");
+    expect(rendered).toContain("openround_malware_scanner_fresh 1");
+    expect(rendered).toContain("openround_malware_signature_database_version 28000");
+    expect(rendered).toContain("openround_malware_signature_database_timestamp_seconds 1793530800");
+    expect(rendered).toContain("openround_malware_scanner_last_check_timestamp_seconds 1793534400");
+    expect(rendered).toContain("openround_malware_signature_max_age_seconds 172800");
+    expect(rendered).not.toContain("private-scanner-reply");
+    expect(rendered).not.toMatch(/openround_malware_[a-z_]+\{/);
+    fresh = false;
+    expect(await metrics.render()).toContain("openround_malware_scanner_fresh 0");
+  });
+
+  it("keeps the metrics scrape available when scanner health fails and clears prior success", async () => {
+    const metrics = new MetricsService();
+    const collect = vi
+      .fn()
+      .mockResolvedValueOnce({
+        available: true,
+        fresh: true,
+        databaseVersion: 28_000,
+        databaseTimestampSeconds: 1_793_530_800,
+        checkedAtSeconds: 1_793_534_400,
+      })
+      .mockRejectedValueOnce(new Error("private-probe-failure"))
+      .mockResolvedValueOnce({
+        available: true,
+        fresh: true,
+        databaseVersion: 28_001,
+        databaseTimestampSeconds: 1_793_534_400,
+        checkedAtSeconds: 1_793_534_500,
+      });
+    metrics.bindScannerHealth(collect);
+    expect(await metrics.render()).toContain("openround_malware_scanner_fresh 1");
+    const unavailable = await metrics.render();
+    expect(unavailable).toContain("openround_malware_scanner_available 0");
+    expect(unavailable).toContain("openround_malware_scanner_fresh 0");
+    expect(unavailable).toContain("openround_malware_signature_database_version 0");
+    expect(unavailable).toContain("openround_malware_signature_database_timestamp_seconds 0");
+    expect(unavailable).not.toContain("private-probe-failure");
+    const recovered = await metrics.render();
+    expect(recovered).toContain("openround_malware_scanner_available 1");
+    expect(recovered).toContain("openround_malware_scanner_fresh 1");
+    expect(recovered).toContain("openround_malware_signature_database_version 28001");
+  });
+
+  it("shares an in-flight scanner probe across concurrent metrics scrapes", async () => {
+    const metrics = new MetricsService();
+    let finish!: (health: {
+      available: boolean;
+      fresh: boolean;
+      databaseVersion: number;
+      databaseTimestampSeconds: number;
+      checkedAtSeconds: number;
+    }) => void;
+    const pending = new Promise<Parameters<typeof finish>[0]>((resolve) => {
+      finish = resolve;
+    });
+    const collect = vi.fn(() => pending);
+    metrics.bindScannerHealth(collect);
+    const first = metrics.render();
+    const second = metrics.render();
+    expect(collect).toHaveBeenCalledTimes(1);
+    finish({
+      available: true,
+      fresh: false,
+      databaseVersion: 28_000,
+      databaseTimestampSeconds: 1,
+      checkedAtSeconds: 2,
+    });
+    const rendered = await Promise.all([first, second]);
+    expect(rendered.every((text) => text.includes("openround_malware_scanner_fresh 0"))).toBe(true);
+  });
+
   it("omits projection availability when business health is not enabled", async () => {
     const metrics = new MetricsService();
     expect(await metrics.render()).not.toContain("openround_business_projection_up");

@@ -14,6 +14,7 @@ import {
 } from "../../lib/canvas-creation-storage";
 import { workshopTemplateIntent } from "./canvas-template-creation";
 import { CanvasTemplateChooser } from "./canvas-template-chooser";
+import { CanvasTemplateBrowserDialog, CanvasTemplateStrip } from "./canvas-template-library";
 import { BoardLibrary } from "./board-library";
 
 interface EffectSlot {
@@ -161,8 +162,11 @@ function harness() {
     find,
     click(label: string) {
       (
-        find((element) => element.type === "button" && element.props.children === label).props
-          .onClick as () => void
+        find(
+          (element) =>
+            element.type === "button" &&
+            (element.props["aria-label"] ?? element.props.children) === label,
+        ).props.onClick as () => void
       )();
     },
     selectStarter() {
@@ -203,6 +207,107 @@ afterEach(() => {
 });
 
 describe("board library starter creation", () => {
+  it("opens setup from quick starters and template browsing without creating a board", () => {
+    const view = harness();
+    view.render();
+    view.render();
+    const strip = view.find((element) => element.type === CanvasTemplateStrip);
+    (strip.props.onExplore as () => void)();
+    view.render();
+    const browser = view.find((element) => element.type === CanvasTemplateBrowserDialog);
+    (browser.props.onUse as (id: string) => void)("project-kickoff");
+    const markup = view.render();
+    expect(markup).toContain('id="new-board-heading"');
+    expect(markup).toContain('value="Project kickoff"');
+    expect(markup).not.toContain('data-testid="canvas-template-browser"');
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.click("Cancel");
+    view.render();
+    const availableStrip = view.find((element) => element.type === CanvasTemplateStrip);
+    (availableStrip.props.onChoose as (id: string | null) => void)(null);
+    const blank = view.render();
+    expect(blank).toContain('id="new-board-heading"');
+    expect(blank).not.toContain('value="Project kickoff"');
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("keeps an unfinished workshop setup intact when a quick starter is requested", () => {
+    const setup = workshopTemplateIntent(
+      mocked.creator.userId,
+      mocked.creator.workspaceId,
+      {
+        schemaVersion: 1,
+        title: "Unfinished workshop",
+        description: "An unfinished prompt",
+        identityMode: "anonymous",
+        moderationEnabled: true,
+        ideasVisible: false,
+        voteBudget: 3,
+        windowDays: 7,
+      },
+      "project-kickoff",
+    );
+    saveCanvasCreationSetup(mocked.creator.userId, mocked.creator.workspaceId, setup);
+    const view = harness();
+    view.render();
+    view.render();
+    const strip = view.find((element) => element.type === CanvasTemplateStrip);
+    expect(strip.props.disabled).toBe(true);
+    (strip.props.onChoose as (id: string | null) => void)(null);
+    (strip.props.onExplore as () => void)();
+    const markup = view.render();
+    expect(markup).toContain('value="Unfinished workshop"');
+    expect(markup).not.toContain('data-testid="canvas-template-browser"');
+    expect(readCanvasCreationSetup(mocked.creator.userId, mocked.creator.workspaceId)).toEqual(
+      setup,
+    );
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("explains the disabled Team option inside the dialog and keeps guided creation available", async () => {
+    mocked.features = { canvasBoards: false, ideaBoards: true };
+    const view = harness();
+    view.render();
+    view.render();
+    view.click("New board");
+    view.render();
+    const team = view.find(
+      (element) => element.type === "button" && element.props["aria-label"] === "Team canvas",
+    );
+    const guided = view.find(
+      (element) => element.type === "button" && element.props["aria-label"] === "Guided workshop",
+    );
+    expect(team.props.disabled).toBe(true);
+    expect(team.props["aria-describedby"]).toBe("canvas-team-description canvas-team-availability");
+    expect(guided.props.disabled).toBe(false);
+    expect(guided.props["aria-pressed"]).toBe(true);
+    expect(guided.props["aria-describedby"]).toBe("canvas-workshop-description");
+    const dialog = view.find((element) => element.type === "dialog");
+    const dialogMarkup = renderToStaticMarkup(dialog);
+    expect(dialogMarkup).toContain('id="canvas-team-availability"');
+    expect(dialogMarkup).toContain(english["canvas.creationPaused"]);
+    expect(mocked.fetch).not.toHaveBeenCalled();
+
+    const title = view.find(
+      (element) =>
+        element.type === "input" &&
+        element.props.maxLength === 160 &&
+        element.props.type !== "search",
+    );
+    (title.props.onChange as (event: unknown) => void)({
+      target: { value: "Available guided workshop" },
+    });
+    mocked.fetch.mockResolvedValueOnce({ board: boardFixture });
+    view.render();
+    view.submit();
+    await settle();
+    expect(mocked.fetch.mock.calls.map(([path]) => path)).toEqual(["/v1/idea-boards"]);
+    expect(JSON.parse(mocked.fetch.mock.calls[0]![1].body).title).toBe("Available guided workshop");
+    view.unmount();
+  });
+
   it("creates a team starter in one current request with an editable title", async () => {
     mocked.fetch.mockRejectedValueOnce(new ApiClientError("Paused", "NOT_FOUND", 404));
     const view = harness();

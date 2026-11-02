@@ -22,6 +22,7 @@ import {
   canvasCreationSetupEpoch,
 } from "../../lib/canvas-creation-storage";
 import { canvasTemplateMessages } from "../../lib/i18n/canvas-template-messages";
+import { canvasCreationMessages } from "../../lib/i18n/canvas-creation-messages";
 import {
   finishWorkshopTemplate,
   parseWorkshopTemplateIntent,
@@ -29,6 +30,7 @@ import {
   type WorkshopTemplateIntent,
 } from "./canvas-template-creation";
 import { CanvasTemplateChooser } from "./canvas-template-chooser";
+import { CanvasTemplateBrowserDialog, CanvasTemplateStrip } from "./canvas-template-library";
 import { useBoardLibrary, type BoardLibraryScope } from "./use-board-library";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
@@ -36,6 +38,7 @@ import { WorkspaceShell } from "../workspace/workspace-shell";
 import styles from "./boards.module.css";
 import canvasStyles from "../canvas-boards/canvas.module.css";
 import templateStyles from "./canvas-templates.module.css";
+import creationStyles from "./board-creation.module.css";
 
 type Intent =
   | { kind: "team"; value: CanvasBoardCreate }
@@ -53,9 +56,28 @@ const defaults: IdeaBoardCreate = {
   ideasVisible: false,
 };
 
+function BoardKindIcon({ workshop = false }: { workshop?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+      {workshop ? (
+        <>
+          <path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 4v-4H5A1.5 1.5 0 0 1 3.5 14V6A1.5 1.5 0 0 1 5 4.5Z" />
+          <path d="M8 8.5h8M8 11.5h5" />
+        </>
+      ) : (
+        <>
+          <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
+          <path d="M3.5 9h17M10 9v11.5M6.5 6.5h.01M9 6.5h.01M13.5 13h3.5M13.5 16h2" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 export function BoardLibrary() {
   const { t, locale } = useLocale();
   const copy = canvasTemplateMessages(locale);
+  const creationCopy = canvasCreationMessages(locale);
   const router = useRouter();
   const { creator, canEdit, productFeatures } = useWorkspace();
   const workspaceId = creator?.workspaceId;
@@ -69,6 +91,7 @@ export function BoardLibrary() {
   const [setupError, setSetupError] = useState<"storage" | "invalid" | "context" | null>(null);
   const [formContext, setFormContext] = useState(contextKey);
   const [creating, setCreating] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -79,6 +102,7 @@ export function BoardLibrary() {
   currentContext.current = contextKey;
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLInputElement>(null);
+  const templateOpener = useRef<HTMLElement | null>(null);
   const canCreate = canEdit && (productFeatures?.canvasBoards || productFeatures?.ideaBoards);
   const library = useBoardLibrary({
     workspaceId,
@@ -98,6 +122,8 @@ export function BoardLibrary() {
     setBusy(false);
     setError(false);
     setCreating(false);
+    setBrowsing(false);
+    templateOpener.current = null;
     setInput(defaults);
     setTemplateId(null);
     setSetupError(null);
@@ -130,14 +156,18 @@ export function BoardLibrary() {
     }
   }, [contextKey, userId, workspaceId]);
   useEffect(() => {
+    if (!canCreate || !productFeatures?.canvasBoards) setBrowsing(false);
+  }, [canCreate, productFeatures?.canvasBoards]);
+  useEffect(() => {
     if (!creating || formContext !== contextKey) return;
-    const previous = document.activeElement;
+    const previous = templateOpener.current ?? document.activeElement;
     const node = dialog.current;
     node?.showModal();
     title.current?.focus();
     return () => {
       node?.close();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      templateOpener.current = null;
     };
   }, [creating, formContext, contextKey]);
   const current = library.data;
@@ -165,6 +195,27 @@ export function BoardLibrary() {
       description: template.prompt,
       ...template.workshop,
     });
+  }
+
+  function startTemplate(id: CanvasTemplateId | null) {
+    if (
+      !canCreate ||
+      !productFeatures?.canvasBoards ||
+      busy ||
+      pending.current ||
+      setupError === "invalid" ||
+      formContext !== contextKey
+    )
+      return;
+    chooseTemplate(id);
+    setKind("team");
+    setBrowsing(false);
+    setCreating(true);
+  }
+
+  function rememberTemplateOpener(opener?: HTMLElement) {
+    const element = opener ?? document.activeElement;
+    templateOpener.current = element instanceof HTMLElement ? element : null;
   }
 
   function keepWorkshop() {
@@ -306,6 +357,22 @@ export function BoardLibrary() {
       requireBeta={false}
       translationLevel="full"
     >
+      {canCreate && productFeatures?.canvasBoards ? (
+        <CanvasTemplateStrip
+          disabled={busy || pending.current !== null || setupError === "invalid"}
+          inactive={creating || browsing}
+          onChoose={(id, opener) => {
+            rememberTemplateOpener(opener);
+            startTemplate(id);
+          }}
+          onExplore={(opener) => {
+            if (!busy && !pending.current && setupError !== "invalid") {
+              rememberTemplateOpener(opener);
+              setBrowsing(true);
+            }
+          }}
+        />
+      ) : null}
       <div className={canvasStyles.libraryToolbar}>
         <label>
           {t("canvas.search")}
@@ -434,25 +501,48 @@ export function BoardLibrary() {
       {!productFeatures?.canvasBoards ? (
         <p className={styles.muted}>{t("canvas.creationPaused")}</p>
       ) : null}
+      {browsing && formContext === contextKey && canCreate && productFeatures?.canvasBoards ? (
+        <CanvasTemplateBrowserDialog
+          returnFocus={templateOpener.current}
+          onClose={() => {
+            templateOpener.current = null;
+            setBrowsing(false);
+          }}
+          onUse={startTemplate}
+        />
+      ) : null}
       {creating && formContext === contextKey ? (
         <dialog
           ref={dialog}
-          className={canvasStyles.dialog}
+          className={creationStyles.dialog}
+          data-testid="board-creation-dialog"
           aria-labelledby="new-board-heading"
+          aria-describedby="new-board-description"
           onCancel={(event) => {
             event.preventDefault();
             if (!busy) setCreating(false);
           }}
         >
-          <header className={canvasStyles.dialogHeader}>
-            <h2 id="new-board-heading">{t("canvas.create")}</h2>
+          <header className={creationStyles.header}>
+            <div className={creationStyles.heading}>
+              <span className={creationStyles.headingIcon}>
+                <BoardKindIcon />
+              </span>
+              <div>
+                <h2 id="new-board-heading">{t("canvas.create")}</h2>
+                <p id="new-board-description">{creationCopy.subtitle}</p>
+              </div>
+            </div>
             <button
               type="button"
-              className="button-quiet"
+              className={creationStyles.close}
+              aria-label={pending.current ? copy.closePending : t("boards.cancel")}
               disabled={busy}
               onClick={() => setCreating(false)}
             >
-              {pending.current ? copy.closePending : t("boards.cancel")}
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="m7 7 10 10M17 7 7 17" />
+              </svg>
             </button>
           </header>
           {error ? (
@@ -518,137 +608,203 @@ export function BoardLibrary() {
               </button>
             </aside>
           ) : null}
-          <form className={styles.form} onSubmit={(event) => void create(event)}>
+          <form className={creationStyles.form} onSubmit={(event) => void create(event)}>
             <fieldset
-              className={styles.form}
+              className={creationStyles.fields}
               disabled={busy || pending.current !== null || setupError === "invalid"}
             >
               <div
-                className={canvasStyles.typeChoices}
+                className={creationStyles.typeChoices}
                 role="group"
                 aria-label={t("canvas.create")}
               >
                 <button
                   type="button"
-                  className="button-quiet"
+                  aria-label={t("canvas.team")}
                   aria-pressed={kind === "team"}
+                  aria-describedby={
+                    !productFeatures?.canvasBoards
+                      ? "canvas-team-description canvas-team-availability"
+                      : "canvas-team-description"
+                  }
                   disabled={!productFeatures?.canvasBoards}
                   onClick={() => setKind("team")}
                 >
-                  {t("canvas.team")}
+                  <span className={creationStyles.typeIcon}>
+                    <BoardKindIcon />
+                  </span>
+                  <span className={creationStyles.typeCopy}>
+                    <strong>{t("canvas.team")}</strong>
+                    <span id="canvas-team-description">{creationCopy.teamDescription}</span>
+                  </span>
+                  <span className={creationStyles.selectionMark} aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none">
+                      <path d="m4 8 3 3 5-6" />
+                    </svg>
+                  </span>
                 </button>
                 <button
                   type="button"
-                  className="button-quiet"
+                  aria-label={t("canvas.workshop")}
                   aria-pressed={kind === "workshop"}
+                  aria-describedby="canvas-workshop-description"
                   disabled={!productFeatures?.ideaBoards}
                   onClick={() => setKind("workshop")}
                 >
-                  {t("canvas.workshop")}
+                  <span className={creationStyles.typeIcon}>
+                    <BoardKindIcon workshop />
+                  </span>
+                  <span className={creationStyles.typeCopy}>
+                    <strong>{t("canvas.workshop")}</strong>
+                    <span id="canvas-workshop-description">{creationCopy.workshopDescription}</span>
+                  </span>
+                  <span className={creationStyles.selectionMark} aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none">
+                      <path d="m4 8 3 3 5-6" />
+                    </svg>
+                  </span>
                 </button>
               </div>
-              {productFeatures?.canvasBoards ? (
-                <CanvasTemplateChooser value={templateId} onChange={chooseTemplate} />
+              {!productFeatures?.canvasBoards ? (
+                <p id="canvas-team-availability" className={creationStyles.availability}>
+                  {t("canvas.creationPaused")}
+                </p>
               ) : null}
-              <label>
-                {t("boards.boardTitle")}
-                <input
-                  ref={title}
-                  required
-                  maxLength={160}
-                  value={input.title}
-                  onChange={(event) => setInput({ ...input, title: event.target.value })}
-                />
-              </label>
-              {kind === "workshop" ? (
-                <>
-                  <label>
-                    {t("boards.prompt")}
-                    <textarea
-                      maxLength={2000}
-                      value={input.description}
-                      onChange={(event) => setInput({ ...input, description: event.target.value })}
+              <div
+                className={creationStyles.body}
+                data-testid="board-creation-body"
+                data-templates={Boolean(productFeatures?.canvasBoards)}
+              >
+                <div className={creationStyles.settings}>
+                  <label className={creationStyles.titleField}>
+                    {t("boards.boardTitle")}
+                    <input
+                      ref={title}
+                      required
+                      maxLength={160}
+                      placeholder={creationCopy.titlePlaceholder}
+                      value={input.title}
+                      onChange={(event) => setInput({ ...input, title: event.target.value })}
                     />
                   </label>
-                  <details>
-                    <summary>{t("canvas.workshopSettings")}</summary>
-                    <div className={styles.form}>
+                  {kind === "workshop" ? (
+                    <>
                       <label>
-                        {t("boards.identity")}
-                        <select
-                          value={input.identityMode}
+                        {t("boards.prompt")}
+                        <textarea
+                          maxLength={2000}
+                          value={input.description}
                           onChange={(event) =>
-                            setInput({
-                              ...input,
-                              identityMode: event.target.value as "anonymous" | "alias",
-                            })
-                          }
-                        >
-                          <option value="anonymous">{t("boards.anonymous")}</option>
-                          <option value="alias">{t("boards.alias")}</option>
-                        </select>
-                      </label>
-                      <p className={styles.muted}>{t("boards.identityNote")}</p>
-                      <label className={styles.check}>
-                        <input
-                          type="checkbox"
-                          checked={input.moderationEnabled}
-                          onChange={(event) =>
-                            setInput({ ...input, moderationEnabled: event.target.checked })
-                          }
-                        />
-                        {t("boards.moderation")}
-                      </label>
-                      <label className={styles.check}>
-                        <input
-                          type="checkbox"
-                          checked={input.ideasVisible}
-                          onChange={(event) =>
-                            setInput({ ...input, ideasVisible: event.target.checked })
-                          }
-                        />
-                        {t("boards.visible")}
-                      </label>
-                      <label>
-                        {t("boards.budget")}
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          max={10}
-                          value={input.voteBudget}
-                          onChange={(event) =>
-                            setInput({ ...input, voteBudget: Number(event.target.value) })
+                            setInput({ ...input, description: event.target.value })
                           }
                         />
                       </label>
-                      <label>
-                        {t("boards.days")}
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          max={30}
-                          value={input.windowDays}
-                          onChange={(event) =>
-                            setInput({ ...input, windowDays: Number(event.target.value) })
-                          }
-                        />
-                      </label>
+                      <details className={creationStyles.advanced}>
+                        <summary>{t("canvas.workshopSettings")}</summary>
+                        <div className={styles.form}>
+                          <label>
+                            {t("boards.identity")}
+                            <select
+                              value={input.identityMode}
+                              onChange={(event) =>
+                                setInput({
+                                  ...input,
+                                  identityMode: event.target.value as "anonymous" | "alias",
+                                })
+                              }
+                            >
+                              <option value="anonymous">{t("boards.anonymous")}</option>
+                              <option value="alias">{t("boards.alias")}</option>
+                            </select>
+                          </label>
+                          <p className={styles.muted}>{t("boards.identityNote")}</p>
+                          <label className={styles.check}>
+                            <input
+                              type="checkbox"
+                              checked={input.moderationEnabled}
+                              onChange={(event) =>
+                                setInput({ ...input, moderationEnabled: event.target.checked })
+                              }
+                            />
+                            {t("boards.moderation")}
+                          </label>
+                          <label className={styles.check}>
+                            <input
+                              type="checkbox"
+                              checked={input.ideasVisible}
+                              onChange={(event) =>
+                                setInput({ ...input, ideasVisible: event.target.checked })
+                              }
+                            />
+                            {t("boards.visible")}
+                          </label>
+                          <label>
+                            {t("boards.budget")}
+                            <input
+                              type="number"
+                              required
+                              min={1}
+                              max={10}
+                              value={input.voteBudget}
+                              onChange={(event) =>
+                                setInput({ ...input, voteBudget: Number(event.target.value) })
+                              }
+                            />
+                          </label>
+                          <label>
+                            {t("boards.days")}
+                            <input
+                              type="number"
+                              required
+                              min={1}
+                              max={30}
+                              value={input.windowDays}
+                              onChange={(event) =>
+                                setInput({ ...input, windowDays: Number(event.target.value) })
+                              }
+                            />
+                          </label>
+                        </div>
+                      </details>
+                    </>
+                  ) : (
+                    <div className={creationStyles.scopeNote}>
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                        <rect x="5.5" y="10" width="13" height="10" rx="2" />
+                        <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+                      </svg>
+                      <p>{t("canvas.shareScope")}</p>
                     </div>
-                  </details>
-                </>
-              ) : (
-                <p>{t("canvas.shareScope")}</p>
-              )}
+                  )}
+                </div>
+                {productFeatures?.canvasBoards ? (
+                  <div className={creationStyles.gallery} data-testid="board-starters-scroll">
+                    <CanvasTemplateChooser value={templateId} onChange={chooseTemplate} />
+                  </div>
+                ) : null}
+              </div>
             </fieldset>
-            <button
-              className="button"
-              type="submit"
-              disabled={busy || !input.title.trim() || setupError === "invalid"}
-            >
-              {t(pending.current ? "boards.retry" : "boards.create")}
-            </button>
+            <footer className={creationStyles.footer}>
+              <p className={creationStyles.summary}>
+                <BoardKindIcon workshop={kind === "workshop"} />
+                <span>
+                  <strong>{t(kind === "team" ? "canvas.team" : "canvas.workshop")}</strong>
+                  <span lang={templateId ? "en" : undefined}>
+                    {templateId ? getCanvasTemplate(templateId).title : copy.blank}
+                  </span>
+                </span>
+              </p>
+              <button
+                className={`button ${creationStyles.create}`}
+                type="submit"
+                disabled={busy || !input.title.trim() || setupError === "invalid"}
+              >
+                {t(pending.current ? "boards.retry" : "boards.create")}
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                  <path d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </button>
+            </footer>
           </form>
         </dialog>
       ) : null}

@@ -379,3 +379,80 @@ tests:
             exp_annotations:
               summary: Empty expired rooms still reserve event credits
               runbook: docs/business-management.md
+
+  - name: fresh scanner signatures do not page
+    interval: 1m
+    input_series:
+      - series: "openround_malware_scanner_available"
+        values: "1+0x10"
+      - series: "openround_malware_scanner_fresh"
+        values: "1+0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts: []
+
+  - name: stale active scanner signatures page after the hold period
+    interval: 1m
+    input_series:
+      - series: "openround_malware_scanner_available"
+        values: "1+0x10"
+      - series: "openround_malware_scanner_fresh"
+        values: "0+0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: Malware scanning cannot verify fresh active signatures
+              runbook: docs/runbooks/observability.md
+
+  - name: unavailable scanner metadata pages while other metrics remain available
+    interval: 1m
+    input_series:
+      - series: "openround_malware_scanner_available"
+        values: "0+0x10"
+      - series: "openround_malware_scanner_fresh"
+        values: "0+0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: Malware scanning cannot verify fresh active signatures
+              runbook: docs/runbooks/observability.md
+
+  - name: disabled scanner modes do not create a scanner alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="openround"}'
+        values: "1+0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts: []
+
+  - name: scanner freshness recovery resolves the page
+    interval: 1m
+    input_series:
+      - series: "openround_malware_scanner_fresh"
+        values: "0+0x6 1+0x4"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: Malware scanning cannot verify fresh active signatures
+              runbook: docs/runbooks/observability.md
+      - eval_time: 8m
+        alertname: OpenRoundMalwareScannerNotReady
+        exp_alerts: []

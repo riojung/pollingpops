@@ -222,6 +222,9 @@ services:
 
   clamav:
     image: clamav/clamav@sha256:cc16781fe005e49de6a8fc1231b63b265f74b18fc2a6347c670c35716914c3b6
+    environment:
+      # Match the API's strict UTC interpretation of clamd VERSION timestamps.
+      TZ: UTC
     healthcheck:
       test: ["CMD-SHELL", "clamdscan --ping=1 >/dev/null 2>&1"]
       interval: 20s

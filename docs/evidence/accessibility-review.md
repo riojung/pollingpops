@@ -46,6 +46,33 @@ cannot convert a known WCAG 2.2 AA failure on a critical journey into a pass.
 | Decision timeline availability and incomplete capture               | Authorized report user, when enabled | Logical reading order, legacy unavailable state, truncation explanation, no color-only meaning        | Pending |                                   |
 | Permanent deletion confirmation and partial failure                 | Workspace owner                      | Archived per-item/bulk delete, finished/expired session delete, cancel/focus/status, dependency error | Pending |                                   |
 
+## Canvas coverage when enabled
+
+Freeze the applicable supported device, browser, input, assistive-technology and locale matrix
+before execution. Test both the team canvas and guided guest view on the exact deployed candidate.
+Role restrictions are expected behavior: a viewer remains read-only and a guest never receives
+team editing, comments or history. These rows supplement the critical-journey matrix above;
+automated axe and touch emulation cannot replace their manual or physical-device results.
+
+| Scenario                                                      | Role/surface                               | Required coverage                                                                                                                                             | Result  | Evidence, WCAG criteria, or issue |
+| ------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------- |
+| Discover, select, create and connect objects without dragging | Eligible team editor                       | Keyboard-only toolbar, Object outline, connector source/destination ports and numeric geometry; clear names, focus and selection announcements                | Pending |                                   |
+| Group/frame, rotated move/resize, arrange, lock and undo/redo | Eligible team editor                       | Keyboard/numeric alternatives, protected-object restrictions, understandable disabled actions and recoverable conflicts                                       | Pending |                                   |
+| Canvas reading, text editing and image alternatives           | Team editor/viewer with VoiceOver and NVDA | Supported Safari and Chrome/Edge combinations; useful object names/alt text, text/composition input, logical outline and non-color-only geometry              | Pending |                                   |
+| Physical touch and narrow/reflow alternatives                 | Supported mobile author and guest          | Actual touch targets, pan/pinch/drawing, portrait/landscape, inspector/dialog fit, zoom and usable non-drag controls                                          | Pending |                                   |
+| Unsaved proposal recovery and deleted target                  | Team editor                                | Announced stale/save/retry state, retained copyable proposal, explicit discard, navigation confirmation, focus recovery; no automatic overwrite or recreation | Pending |                                   |
+| Anchored comments and server-clock timer                      | Team roles and guided guest                | Thread/reply reading order, edit/resolve status, read-only role boundaries, timer state without excessive announcements or automatic phase change             | Pending |                                   |
+| Optional presenter follow and exit                            | Team viewer/editor and guided guest        | Explicit opt-in, discoverable exit, keyboard pan/zoom and Escape exit, reduced motion; no trapped input or private frame disclosure                           | Pending |                                   |
+| Scanned images, saved versions, linked previews and exports   | Authorized creator/viewer                  | Alternative text, history/preview dialog focus, permission loss and unavailable media status, understandable SVG/PNG and region controls                      | Pending |                                   |
+| Guided submission, moderation, publication and voting         | Accountless guest and facilitator          | Own pending content, review/vote limits, explicit publication/removal, protected approved cards; no team comments/history/identities in the guest outline     | Pending |                                   |
+| Board sharing, revocation and permanent deletion              | Permitted team roles                       | Clear board role and origin-workspace distinction, confirmation/cancel/focus/status, stale-page clearing and safe return navigation                           | Pending |                                   |
+
+Record exact hardware/network rows in the [physical-device record](device-matrix.md), including the
+timing method and its limitations. A geometric canvas may require two-dimensional navigation, but
+that does not waive reflow or keyboard access for its surrounding controls and object alternatives.
+Apply the same blocker/major decision rule and independent acceptance to all in-scope Canvas rows.
+All Canvas manual and physical-device acceptance remains pending until that evidence exists.
+
 ## Experience-preset coverage
 
 Verify Focus, Campus, Studio, Blueprint, Signal, and Spark on authoring preview, participant

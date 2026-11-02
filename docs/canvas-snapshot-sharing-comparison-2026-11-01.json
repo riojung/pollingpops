@@ -1,0 +1,1405 @@
+{
+  "evidenceSchemaVersion": 1,
+  "date": "2026-11-01",
+  "baseRevision": "3c536ca3ece7d6552b5857b405f3152da84836dc",
+  "status": "candidate-not-retained-no-consistent-latency-benefit",
+  "candidateApplied": false,
+  "capacityIncreaseAuthorized": false,
+  "unappliedCandidate": {
+    "archive": "docs/experiments/canvas-snapshot-sharing.patch",
+    "patchSha256": "2ff81a10123855157d40568e661ae15ac3a763a3b6db3d838a59f04a23c3e310",
+    "description": "Use fresh preflight owner role as a projection-only flag. Non-owner snapshots load only the fresh actor grant and omit invitations; owners keep full sharing lists even when licensing suppresses public sharing. Full mutation/history hydration, fresh authorization and RLS remain unchanged."
+  },
+  "workload": {
+    "objects": 500,
+    "licensedEditors": 20,
+    "updatesPerEditor": 10,
+    "warmupWaves": 1,
+    "measuredCommands": 200,
+    "guestOrdinaryObjects": 100,
+    "objectCounts": {
+      "sticky": 63,
+      "rect": 43,
+      "ellipse": 63,
+      "text": 43,
+      "diamond": 62,
+      "parallelogram": 43,
+      "frame": 2,
+      "image": 2,
+      "connector": 119,
+      "pen": 60
+    },
+    "sceneBytes": 313422,
+    "fakeImageBytes": 68
+  },
+  "environment": {
+    "browser": "156.0.8078.4",
+    "node": "v22.23.4",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "logicalCpuCount": 12,
+    "hostMemoryBytes": 25769803776,
+    "databaseVersion": "17.11",
+    "cacheVersion": "7.2.4",
+    "runtimePoolMaximum": 15,
+    "nominalCdpNetworkLatencyMs": 100,
+    "apiNodeMode": "NODE_ENV=test production route implementations, relaxed global loopback IP budget; not a production deployment"
+  },
+  "runs": [
+    {
+      "label": "baseline-profile-1",
+      "variant": "baseline",
+      "complete": true,
+      "startedAt": "2026-11-02T04:27:29.371Z",
+      "rawReportSha256": "86864f45698b067cab98ce98eec0fa3f54face9a37b16c201f889b1992dd581b",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1220.6,
+          "p95": 1749.7,
+          "p99": 1888,
+          "max": 2076.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 599.06,
+          "p95": 1174.35,
+          "p99": 1313.15,
+          "max": 1400.34
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 531.74,
+          "p95": 531.74,
+          "p99": 531.74,
+          "max": 531.74
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1043.6,
+          "p95": 1051.7,
+          "p99": 1097.6,
+          "max": 1097.6
+        },
+        "navigationFrameInterval": {
+          "count": 137,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 975.44,
+          "p95": 975.44,
+          "p99": 975.44,
+          "max": 975.44
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1220.6,
+          "p95": 1749.7,
+          "p99": 1888,
+          "max": 2076.6
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1174.35,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 531.74,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1051.7,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 499,
+        "directQueryCounts": {
+          "33": 499
+        },
+        "grants": {
+          "queries": 998,
+          "rowsPerQuery": {
+            "1": 499,
+            "19": 499
+          }
+        },
+        "invitations": {
+          "queries": 499,
+          "rowsPerQuery": {
+            "19": 499
+          }
+        }
+      },
+      "profiling": {
+        "enabled": true,
+        "observed": {
+          "operation": 1777,
+          "query": 50103,
+          "pool": 1791
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 14,
+          "query": 14,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 60
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "baseline-profile-off",
+      "variant": "baseline",
+      "complete": true,
+      "startedAt": "2026-11-02T04:30:22.121Z",
+      "rawReportSha256": "876e5437c1c07755fea639844ec1461bbee4a6650782ee2afb54ec9fc2f56f8e",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 2207.9,
+          "p95": 4110.9,
+          "p99": 4914.2,
+          "max": 5067.2
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 1090.87,
+          "p95": 2732.01,
+          "p99": 3187.04,
+          "max": 3344.72
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 504.16,
+          "p95": 504.16,
+          "p99": 504.16,
+          "max": 504.16
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1049,
+          "p95": 1093.3,
+          "p99": 1123.4,
+          "max": 1123.4
+        },
+        "navigationFrameInterval": {
+          "count": 161,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 992.48,
+          "p95": 992.48,
+          "p99": 992.48,
+          "max": 992.48
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 2207.9,
+          "p95": 4110.9,
+          "p99": 4914.2,
+          "max": 5067.2
+        }
+      },
+      "smokeGatesPassed": false,
+      "failedSmokeGates": ["httpAcknowledgement", "stalledConsumerAcknowledgement"],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 2732.01,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 504.16,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1093.3,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 0,
+        "directQueryCounts": {},
+        "grants": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        },
+        "invitations": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        }
+      },
+      "profiling": {
+        "enabled": false,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "candidate-profile-1",
+      "variant": "candidate",
+      "complete": true,
+      "startedAt": "2026-11-02T04:37:45.079Z",
+      "rawReportSha256": "94f325dea3f3ec696a8e60b0efa1bd536f351748e19f788623a8df0191f11edd",
+      "serverAndHarnessSourceSha256": "376388c07effbd34260ff92a30e73eeb19b4ea6008354ed6dafc765aeb370d91",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1509.3,
+          "p95": 2483.6,
+          "p99": 2710.4,
+          "max": 2849.3
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 678.24,
+          "p95": 1528.87,
+          "p99": 1905.93,
+          "max": 2011.68
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 395.79,
+          "p95": 395.79,
+          "p99": 395.79,
+          "max": 395.79
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1044.9,
+          "p95": 1059.1,
+          "p99": 1096.6,
+          "max": 1096.6
+        },
+        "navigationFrameInterval": {
+          "count": 160,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1138.11,
+          "p95": 1138.11,
+          "p99": 1138.11,
+          "max": 1138.11
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1509.3,
+          "p95": 2483.6,
+          "p99": 2710.4,
+          "max": 2849.3
+        }
+      },
+      "smokeGatesPassed": false,
+      "failedSmokeGates": ["httpAcknowledgement", "stalledConsumerAcknowledgement"],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1528.87,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 395.79,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1059.1,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 573,
+        "directQueryCounts": {
+          "32": 573
+        },
+        "grants": {
+          "queries": 1146,
+          "rowsPerQuery": {
+            "1": 1146
+          }
+        },
+        "invitations": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        }
+      },
+      "profiling": {
+        "enabled": true,
+        "observed": {
+          "operation": 2119,
+          "query": 57730,
+          "pool": 2124
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 5,
+          "query": 5,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 53
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "candidate-profile-off",
+      "variant": "candidate",
+      "complete": true,
+      "startedAt": "2026-11-02T04:40:00.894Z",
+      "rawReportSha256": "62bc8a4adc0bbf00feff2bfd78c327ad7c880a7449aa7d5ac4b3d28ea3eaa024",
+      "serverAndHarnessSourceSha256": "376388c07effbd34260ff92a30e73eeb19b4ea6008354ed6dafc765aeb370d91",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1583,
+          "p95": 2381.3,
+          "p99": 2522.3,
+          "max": 2856
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 769.99,
+          "p95": 1766.62,
+          "p99": 2150.73,
+          "max": 2324.96
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 357.46,
+          "p95": 357.46,
+          "p99": 357.46,
+          "max": 357.46
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1026.6,
+          "p95": 1044.4,
+          "p99": 1045.1,
+          "max": 1045.1
+        },
+        "navigationFrameInterval": {
+          "count": 177,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1123.53,
+          "p95": 1123.53,
+          "p99": 1123.53,
+          "max": 1123.53
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1583,
+          "p95": 2381.3,
+          "p99": 2522.3,
+          "max": 2856
+        }
+      },
+      "smokeGatesPassed": false,
+      "failedSmokeGates": ["httpAcknowledgement", "stalledConsumerAcknowledgement"],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1766.62,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 357.46,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1044.4,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 0,
+        "directQueryCounts": {},
+        "grants": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        },
+        "invitations": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        }
+      },
+      "profiling": {
+        "enabled": false,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "candidate-profile-off-2",
+      "variant": "candidate",
+      "complete": true,
+      "startedAt": "2026-11-02T04:42:28.594Z",
+      "rawReportSha256": "74dc36245a74ba4c795fde457c15969987c054d52dd3344b01d2e0b9490a0ad6",
+      "serverAndHarnessSourceSha256": "376388c07effbd34260ff92a30e73eeb19b4ea6008354ed6dafc765aeb370d91",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1447.4,
+          "p95": 1990.7,
+          "p99": 2291,
+          "max": 2410.4
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 707.72,
+          "p95": 1373.76,
+          "p99": 1665.82,
+          "max": 1817.12
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 464.85,
+          "p95": 464.85,
+          "p99": 464.85,
+          "max": 464.85
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1027.5,
+          "p95": 1058.6,
+          "p99": 1063.1,
+          "max": 1063.1
+        },
+        "navigationFrameInterval": {
+          "count": 162,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1050.48,
+          "p95": 1050.48,
+          "p99": 1050.48,
+          "max": 1050.48
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1447.4,
+          "p95": 1990.7,
+          "p99": 2291,
+          "max": 2410.4
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1373.76,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 464.85,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1058.6,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 0,
+        "directQueryCounts": {},
+        "grants": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        },
+        "invitations": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        }
+      },
+      "profiling": {
+        "enabled": false,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "baseline-profile-off-2",
+      "variant": "baseline",
+      "complete": true,
+      "startedAt": "2026-11-02T04:44:55.040Z",
+      "rawReportSha256": "c718fac369d3a83dda820e945387fc14295d9213256012cd8e5be0228286d3fa",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1282.1,
+          "p95": 2065,
+          "p99": 2237.4,
+          "max": 2397.4
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 646.89,
+          "p95": 1315.05,
+          "p99": 1441.42,
+          "max": 1479.75
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 450.66,
+          "p95": 450.66,
+          "p99": 450.66,
+          "max": 450.66
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1027,
+          "p95": 1050.6,
+          "p99": 1059.3,
+          "max": 1059.3
+        },
+        "navigationFrameInterval": {
+          "count": 148,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1228.23,
+          "p95": 1228.23,
+          "p99": 1228.23,
+          "max": 1228.23
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1282.1,
+          "p95": 2065,
+          "p99": 2237.4,
+          "max": 2397.4
+        }
+      },
+      "smokeGatesPassed": false,
+      "failedSmokeGates": ["httpAcknowledgement", "stalledConsumerAcknowledgement"],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1315.05,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 450.66,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1050.6,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 0,
+        "directQueryCounts": {},
+        "grants": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        },
+        "invitations": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        }
+      },
+      "profiling": {
+        "enabled": false,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "baseline-profile-2",
+      "variant": "baseline",
+      "complete": true,
+      "startedAt": "2026-11-02T04:46:01.859Z",
+      "rawReportSha256": "e7e9d8751f4c20586fae8bb70e15f36c244fe5458721b90447c64493126b13a2",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1237,
+          "p95": 1709.3,
+          "p99": 1803.7,
+          "max": 1857.3
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 640.26,
+          "p95": 1329.1,
+          "p99": 1488.59,
+          "max": 1586.65
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 484.56,
+          "p95": 484.56,
+          "p99": 484.56,
+          "max": 484.56
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1026.6,
+          "p95": 1050.4,
+          "p99": 1062.4,
+          "max": 1062.4
+        },
+        "navigationFrameInterval": {
+          "count": 152,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1208.86,
+          "p95": 1208.86,
+          "p99": 1208.86,
+          "max": 1208.86
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1237,
+          "p95": 1709.3,
+          "p99": 1803.7,
+          "max": 1857.3
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1329.1,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 484.56,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1050.4,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 488,
+        "directQueryCounts": {
+          "33": 488
+        },
+        "grants": {
+          "queries": 976,
+          "rowsPerQuery": {
+            "1": 488,
+            "19": 488
+          }
+        },
+        "invitations": {
+          "queries": 488,
+          "rowsPerQuery": {
+            "19": 488
+          }
+        }
+      },
+      "profiling": {
+        "enabled": true,
+        "observed": {
+          "operation": 1799,
+          "query": 50498,
+          "pool": 1807
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 8,
+          "query": 8,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 52
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    },
+    {
+      "label": "candidate-profile-2",
+      "variant": "candidate",
+      "complete": true,
+      "startedAt": "2026-11-02T04:47:54.618Z",
+      "rawReportSha256": "daf2e6f48655f4813873f641f0f9d9eda87b837a97ca1ee334a3c5f232aa6f47",
+      "serverAndHarnessSourceSha256": "376388c07effbd34260ff92a30e73eeb19b4ea6008354ed6dafc765aeb370d91",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1333.5,
+          "p95": 2653.4,
+          "p99": 2725.6,
+          "max": 3053.1
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 622.51,
+          "p95": 1427.96,
+          "p99": 1553.45,
+          "max": 1656.66
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 451.52,
+          "p95": 451.52,
+          "p99": 451.52,
+          "max": 451.52
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1028.1,
+          "p95": 1048.3,
+          "p99": 1121.1,
+          "max": 1121.1
+        },
+        "navigationFrameInterval": {
+          "count": 162,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 33.2
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 545.24,
+          "p95": 545.24,
+          "p99": 545.24,
+          "max": 545.24
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1333.5,
+          "p95": 2653.4,
+          "p99": 2725.6,
+          "max": 3053.1
+        }
+      },
+      "smokeGatesPassed": false,
+      "failedSmokeGates": ["httpAcknowledgement", "stalledConsumerAcknowledgement"],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1427.96,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 451.52,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1048.3,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "nonOwnerCompletedGetObservations": {
+        "operations": 551,
+        "directQueryCounts": {
+          "32": 551
+        },
+        "grants": {
+          "queries": 1102,
+          "rowsPerQuery": {
+            "1": 1102
+          }
+        },
+        "invitations": {
+          "queries": 0,
+          "rowsPerQuery": {}
+        }
+      },
+      "profiling": {
+        "enabled": true,
+        "observed": {
+          "operation": 1793,
+          "query": 50489,
+          "pool": 1804
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 11,
+          "query": 11,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 63
+        }
+      },
+      "observerMix": {
+        "observerActorIndex": 1,
+        "selfObservations": 10,
+        "sameLogicalNodeOtherActorObservations": 180,
+        "differentLogicalNodeObservations": 10
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "profiled-forward",
+      "baseline": "baseline-profile-1",
+      "candidate": "candidate-profile-1",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 1749.7,
+          "candidateP95Ms": 2483.6,
+          "deltaPercent": 41.94
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1174.35,
+          "candidateP95Ms": 1528.87,
+          "deltaPercent": 30.19
+        }
+      }
+    },
+    {
+      "kind": "profiled-repeat",
+      "baseline": "baseline-profile-2",
+      "candidate": "candidate-profile-2",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 1709.3,
+          "candidateP95Ms": 2653.4,
+          "deltaPercent": 55.23
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1329.1,
+          "candidateP95Ms": 1427.96,
+          "deltaPercent": 7.44
+        }
+      }
+    },
+    {
+      "kind": "off-forward",
+      "baseline": "baseline-profile-off",
+      "candidate": "candidate-profile-off",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 4110.9,
+          "candidateP95Ms": 2381.3,
+          "deltaPercent": -42.07
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 2732.01,
+          "candidateP95Ms": 1766.62,
+          "deltaPercent": -35.34
+        }
+      }
+    },
+    {
+      "kind": "off-reverse",
+      "baseline": "baseline-profile-off-2",
+      "candidate": "candidate-profile-off-2",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 2065,
+          "candidateP95Ms": 1990.7,
+          "deltaPercent": -3.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1315.05,
+          "candidateP95Ms": 1373.76,
+          "deltaPercent": 4.46
+        }
+      }
+    }
+  ],
+  "candidateConformance": {
+    "passed": 177,
+    "skipped": 7,
+    "scope": "Memory plus forced-RLS PostgreSQL-enabled scene/artifact-link conformance, including fresh role/revocation, workspace ownership and uppercase actor history."
+  },
+  "decision": [
+    "Both profiled comparisons raised acknowledgement p95 materially; off comparisons were mixed and one baseline had an unexplained large timing increase. No robust end-to-end benefit is established.",
+    "The candidate did reduce observed non-owner scene-get statements from 33 to 32, post-load grants from 19 to 1 and invitations from 19 to 0. Less work alone does not qualify latency or increased limits.",
+    "All eight timing runs and every failed gate are retained. No workload, cadence, authority deadline or threshold was loosened. Local machine contention/variance was not independently attributed; no causal production regression or general speedup is claimed."
+  ],
+  "measurementCorrection": {
+    "metric": "repositoryResolutionToPeerPaintOpportunity",
+    "definition": "One coordinator monotonic clock from repository return to matching on-screen text and two rAF in the designated actor 1 browser. This is a paint opportunity upper bound, not SQL COMMIT or physical pixels.",
+    "legacyObserverMix": "At 20 writers and 10 waves: 10 self, 180 same-logical-node other-actor, 10 different-logical-node observations. The inherited different-node wording was too broad.",
+    "notes": "Two API nodes share one coordinator process. Preserve the raw measurement for comparability; new continuous mode and prepared-target driver explicitly distinguish observer identity/topology."
+  },
+  "limitations": [
+    "Local headless Chromium and two in-process API nodes, not staging/TLS, physical touch hardware, independent hosts or realistic full-size storage/scanner traffic.",
+    "One designated observer and closed-loop waves; no all-to-all matrix or sustained saturation acceptance.",
+    "Guest publication/reconnect have one observation per run; rAF quantiles are browser timestamp diagnostics.",
+    "All profiles retain censored in-flight work and zero dropped samples. Total query counts vary with concurrent stream/read completions and cannot be subtracted as fixed-workload savings.",
+    "The 500 ms peer target and complete production capacity qualification remain open."
+  ]
+}

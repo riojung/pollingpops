@@ -1,0 +1,284 @@
+diff --git a/packages/db/src/canvas-board-store.ts b/packages/db/src/canvas-board-store.ts
+index fdb0408..b3f8fb8 100644
+--- a/packages/db/src/canvas-board-store.ts
++++ b/packages/db/src/canvas-board-store.ts
+@@ -151,7 +151,7 @@ export class MemoryCanvasBoards {
+         },
+         get: async (id) =>
+           current(id) ? normalizedCanvasState(structuredClone(current(id)!)) : null,
+-        snapshot: async (id, actorId) => {
++        snapshot: async (id, actorId, includeSharing = true) => {
+           const state = current(id);
+           if (!state) return null;
+           const read = structuredClone({
+@@ -162,8 +162,10 @@ export class MemoryCanvasBoards {
+               uploadBytes: state.board.uploadBytes ?? 0,
+             },
+             objects: state.objects,
+-            grants: state.grants,
+-            invitations: state.invitations,
++            grants: includeSharing
++              ? state.grants
++              : state.grants.filter((grant) => grant.userId === actorId),
++            invitations: includeSharing ? state.invitations : [],
+             historyHeads: canvasHistoryHeads(state.receipts, actorId),
+           });
+           return {
+@@ -655,7 +657,7 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
+           (
+             await client.query("SELECT * FROM canvas_boards ORDER BY updated_at DESC,id LIMIT 1000")
+           ).rows.map(boardRow),
+-        snapshot: async (id, actorId) => {
++        snapshot: async (id, actorId, includeSharing = true) => {
+           const board = await readLockedBoard(id);
+           if (!board) return null;
+           const objects = (
+@@ -666,8 +668,10 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
+           ).rows.map((entry) => CanvasObjectSchema.parse(entry.data));
+           const grants = (
+             await client.query(
+-              "SELECT user_id,role,created_at,label FROM canvas_board_grants WHERE board_id=$1 ORDER BY user_id",
+-              [id],
++              includeSharing
++                ? "SELECT user_id,role,created_at,label FROM canvas_board_grants WHERE board_id=$1 ORDER BY user_id"
++                : "SELECT user_id,role,created_at,label FROM canvas_board_grants WHERE board_id=$1 AND user_id=$2 ORDER BY user_id",
++              includeSharing ? [id] : [id, actorId],
+             )
+           ).rows.map((entry) => ({
+             userId: entry.user_id,
+@@ -675,12 +679,14 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
+             createdAt: new Date(entry.created_at).toISOString(),
+             ...(entry.label ? { label: entry.label } : {}),
+           }));
+-          const invitations = (
+-            await client.query(
+-              "SELECT data FROM canvas_board_invitations WHERE board_id=$1 ORDER BY id",
+-              [id],
+-            )
+-          ).rows.map((entry) => entry.data);
++          const invitations = includeSharing
++            ? (
++                await client.query(
++                  "SELECT data FROM canvas_board_invitations WHERE board_id=$1 ORDER BY id",
++                  [id],
++                )
++              ).rows.map((entry) => entry.data)
++            : [];
+           // Board FOR SHARE excludes concurrent commands/undo. Return the accepted JSON
+           // identifier, not PostgreSQL's lowercase UUID column representation.
+           const heads = await client.query<{ undone: boolean; operationId: string }>(
+diff --git a/packages/db/src/canvas-board-types.ts b/packages/db/src/canvas-board-types.ts
+index e95a9d7..2fae580 100644
+--- a/packages/db/src/canvas-board-types.ts
++++ b/packages/db/src/canvas-board-types.ts
+@@ -152,7 +152,12 @@ export interface CanvasTransaction {
+   >;
+   list(): Promise<CanvasBoardStored[]>;
+   get(id: string, lock?: boolean): Promise<CanvasState | null>;
+-  snapshot(id: string, actorId: string): Promise<CanvasSnapshotRead | null>;
++  /** Defaults to full sharing lists; false still reads the actor's fresh grant. */
++  snapshot(
++    id: string,
++    actorId: string,
++    includeSharing?: boolean,
++  ): Promise<CanvasSnapshotRead | null>;
+   put(state: CanvasState, insert?: boolean): Promise<void>;
+   remove(id: string): Promise<void>;
+   access(workspaceId: string, userId: string): Promise<CanvasAccessContext | null>;
+diff --git a/packages/db/src/canvas-boards.ts b/packages/db/src/canvas-boards.ts
+index 5ecf4b2..70b7310 100644
+--- a/packages/db/src/canvas-boards.ts
++++ b/packages/db/src/canvas-boards.ts
+@@ -356,12 +356,12 @@ export class CanvasBoardRepository {
+     actor: CanvasActor,
+     id: string,
+     clock: CanvasClock,
+-    load: () => Promise<T | null>,
++    load: (includeSharing: boolean) => Promise<T | null>,
+     lock = false,
+   ): Promise<CanvasCheckedRead<T>> {
+     // Both loaders refuse unaccepted, revoked or foreign grants before private rows.
+     const preflight = await this.authorizedMetadata(tx, actor, id, clock);
+-    const state = await load();
++    const state = await load(preflight.authorization.role === "owner");
+     if (!state) fail();
+     const access = preflight.access;
+     notExpired(state.board, instant(clock));
+@@ -561,8 +561,8 @@ export class CanvasBoardRepository {
+   }
+   get(actor: CanvasActor, id: string, clock: CanvasClock = () => new Date()) {
+     return this.run(actor, { boardId: id }, async (tx) => {
+-      const checked = await this.checkedRead(tx, actor, id, clock, () =>
+-        tx.snapshot(id, actor.userId),
++      const checked = await this.checkedRead(tx, actor, id, clock, (includeSharing) =>
++        tx.snapshot(id, actor.userId, includeSharing),
+       );
+       return this.projectView(checked, checked.state.historyHeads, clock);
+     });
+diff --git a/packages/db/test/canvas-boards.test.ts b/packages/db/test/canvas-boards.test.ts
+index 7e3ce9c..ee770c1 100644
+--- a/packages/db/test/canvas-boards.test.ts
++++ b/packages/db/test/canvas-boards.test.ts
+@@ -503,8 +503,18 @@ for (const backend of ["memory", "postgres"] as const)
+         const fullOwner = (await change(owner, board.id, undoCommand, undone.receipt.operationId))
+           .board;
+         const fullEditor = (await change(editor, board.id, editorCommand, editorId)).board;
++        const loadedSharing = new Map<
++          string,
++          { grants: CanvasState["grants"]; invitations: CanvasState["invitations"] }
++        >();
+         const snapshots = withReadTransaction((tx) => ({
+           ...tx,
++          snapshot: async (id, actorId, includeSharing) => {
++            const read = await tx.snapshot(id, actorId, includeSharing);
++            if (read)
++              loadedSharing.set(actorId, { grants: read.grants, invitations: read.invitations });
++            return read;
++          },
+           get: async () => {
+             throw new Error("Ordinary reads must not hydrate full state");
+           },
+@@ -528,6 +538,15 @@ for (const backend of ["memory", "postgres"] as const)
+         expect(editorRead).toMatchObject({ undoOperationId: editorId, redoOperationId: null });
+         expect(ownerRead.grants).toHaveLength(1);
+         expect(editorRead.grants).toEqual([]);
++        expect(editorRead.invitations).toEqual([]);
++        expect(loadedSharing.get(owner.userId)).toEqual({
++          grants: fullOwner.grants,
++          invitations: fullOwner.invitations,
++        });
++        expect(
++          loadedSharing.get(editor.userId)?.grants.map(({ userId, role }) => ({ userId, role })),
++        ).toEqual([{ userId: editor.userId, role: "editor" }]);
++        expect(loadedSharing.get(editor.userId)?.invitations).toEqual([]);
+         const redone = await change(owner, board.id, {
+           type: "redo",
+           targetOperationId: ownerRead.redoOperationId!,
+@@ -535,6 +554,127 @@ for (const backend of ["memory", "postgres"] as const)
+         expect(orderedObjects(await snapshots.get(owner, board.id))).toEqual(
+           orderedObjects(redone.board),
+         );
++        // Licensing can suppress public sharing without changing the owner's snapshot shape.
++        await platform.setOrganizationCommercialHold(org, true, "Snapshot sharing projection");
++        const heldOwner = await snapshots.get(owner, board.id);
++        expect(heldOwner.capabilities.share).toBe(false);
++        expect(heldOwner.grants).toEqual([]);
++        expect(heldOwner.invitations).toEqual([]);
++        expect(loadedSharing.get(owner.userId)).toEqual({
++          grants: fullOwner.grants,
++          invitations: fullOwner.invitations,
++        });
++      });
++      it.each(["viewer", "facilitator", "editor"] as const)(
++        "keeps a fresh own grant for %s snapshots without loading other sharing metadata",
++        async (role) => {
++          const board = await create();
++          await share(board.id, role);
++          let expectedRole: "viewer" | "facilitator" | "editor" = role;
++          const snapshots = withReadTransaction((tx) => ({
++            ...tx,
++            snapshot: async (id, actorId, includeSharing) => {
++              const read = await tx.snapshot(id, actorId, includeSharing);
++              expect(read?.grants.map(({ userId, role }) => ({ userId, role }))).toEqual([
++                { userId: editor.userId, role: expectedRole },
++              ]);
++              expect(read?.invitations).toEqual([]);
++              return read;
++            },
++            get: async () => {
++              throw new Error("An ordinary snapshot must not load full state");
++            },
++            put: async () => {
++              throw new Error("An ordinary snapshot must not write state");
++            },
++          }));
++          // Omitting the new option retains the former full-sharing snapshot behavior.
++          const fullLists = withReadTransaction((tx) => ({
++            ...tx,
++            snapshot: (id, actorId) => tx.snapshot(id, actorId),
++          }));
++          const first = await snapshots.get(editor, board.id);
++          expect(first).toEqual(await fullLists.get(editor, board.id));
++          expect(first).toMatchObject({ role, grants: [], invitations: [] });
++          expectedRole =
++            role === "viewer" ? "editor" : role === "editor" ? "facilitator" : "viewer";
++          await change(owner, board.id, {
++            type: "grant",
++            userId: editor.userId,
++            role: expectedRole,
++          });
++          const changed = await snapshots.get(editor, board.id);
++          expect(changed).toEqual(await fullLists.get(editor, board.id));
++          expect(changed).toMatchObject({
++            role: expectedRole,
++            capabilities: {
++              edit: expectedRole !== "viewer",
++              facilitate: expectedRole === "facilitator",
++              share: false,
++            },
++            grants: [],
++            invitations: [],
++          });
++          await canvases.revokeGrant(owner, board.id, editor.userId);
++          await expect(snapshots.get(editor, board.id)).rejects.toMatchObject({
++            code: "NOT_FOUND",
++          });
++        },
++      );
++      it("preserves complete sharing lists for a workspace owner who did not create the board", async () => {
++        const now = new Date(),
++          tokenHash = randomUUID();
++        await repository.createWorkspaceInvitation({
++          id: randomUUID(),
++          workspaceId: owner.workspaceId,
++          email: editor.email,
++          role: "editor",
++          tokenHash,
++          invitedBy: owner.userId,
++          expiresAt: new Date(now.getTime() + 60_000),
++          acceptedAt: null,
++          revokedAt: null,
++          createdAt: now,
++        });
++        expect(await repository.acceptWorkspaceInvitation(tokenHash, now, "test")).toMatchObject({
++          userId: editor.userId,
++          workspaceId: owner.workspaceId,
++          role: "editor",
++        });
++        const board = await canvases.create(
++          editor,
++          CanvasBoardCreateSchema.parse({
++            workspaceId: owner.workspaceId,
++            title: "Editor-created workspace board",
++            boardType: "team",
++            operationId: randomUUID(),
++          }),
++        );
++        expect(board.ownerUserId).toBe(editor.userId);
++        const invitation = await canvases.invite(editor, board.id, {
++          email: owner.email,
++          role: "viewer",
++          operationId: randomUUID(),
++        });
++        let loadedInvitations: CanvasState["invitations"] = [];
++        const snapshots = withReadTransaction((tx) => ({
++          ...tx,
++          snapshot: async (id, actorId, includeSharing) => {
++            const read = await tx.snapshot(id, actorId, includeSharing);
++            loadedInvitations = read?.invitations ?? [];
++            return read;
++          },
++          get: async () => {
++            throw new Error("An ordinary snapshot must not load full state");
++          },
++          put: async () => {
++            throw new Error("An ordinary snapshot must not write state");
++          },
++        }));
++        const read = await snapshots.get(owner, board.id);
++        expect(read).toMatchObject({ role: "owner", capabilities: { share: true } });
++        expect(read.invitations).toEqual([invitation]);
++        expect(loadedInvitations).toEqual([invitation]);
+       });
+       it("keeps preflight before snapshot rows and rechecks the loaded role and expiry", async () => {
+         const board = await create();

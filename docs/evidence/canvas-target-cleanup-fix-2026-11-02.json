@@ -1,0 +1,397 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "canvas-target-cleanup-fix-validation",
+  "date": "2026-11-02",
+  "baseRevision": "3c536ca3ece7d6552b5857b405f3152da84836dc",
+  "fix": "Cleanup requires an acknowledged expectedVersion write even when text is unchanged; it never infers completion from a read or browser shutdown. One definite409 race may be retried only after a fresh authorized read identifies the exact own pending proposal. Lost acknowledgements and competing edits remain unresolved.",
+  "sourceSha256": {
+    "tests/load/canvas-target-capacity.mts": "a1349243df424bc79eb8b36ae6c509316c9c1dbbcc7fb2402d716fdd4b70db9b",
+    "tests/load/canvas-target-restore.ts": "2f5a526a892c01d437dcef3008c3e21eb0051b68d72e9bddf5dc300400209131",
+    "tests/support/canvas-target-restore.test.ts": "48cb9385a694c3a33ee1b74868963a264411effa4ed097d430125bd637a861a4"
+  },
+  "localFunctionality": {
+    "rawReportSha256": "c7663e8c9fa5b5ee7a7c0ee922d837d51d89aea50aab65b82e7cbd58f372e7e5",
+    "adapterReportSha256": "c003e4886edd34799881b1e32adebe3ddbe0ab61b7087116c8ff190d6dc5b7e0",
+    "driver": {
+      "schemaVersion": 1,
+      "artifactType": "canvas-preprovisioned-target-rehearsal",
+      "complete": true,
+      "passed": true,
+      "stage": "final-authority-and-build-check",
+      "mode": "local-rehearsal",
+      "expectedBuildId": "unversioned",
+      "buildIdentity": {
+        "successfulApiAndWebMarkerChecks": 2,
+        "matchingMarkersBeforeAndAfter": true,
+        "immutableMarker": false,
+        "provenanceIndependentlyVerified": false
+      },
+      "configSha256": "d64ede5065263d3d07ad981f1169bee3153f18b47238c18badc47934f262f142",
+      "startedAt": "2026-11-02T06:21:53.075Z",
+      "finishedAt": "2026-11-02T06:22:23.446Z",
+      "node": "v22.23.4",
+      "client": {
+        "platform": "darwin",
+        "architecture": "arm64",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "headless": true,
+        "reducedMotion": "reduce"
+      },
+      "browser": "156.0.8078.4",
+      "profile": "smoke",
+      "requestedDurationSeconds": 30,
+      "measuredElapsedMs": 30000.146834,
+      "waveIntervalMs": 5000,
+      "actorCount": 2,
+      "preparedBoards": 1,
+      "peerFanout": 1,
+      "peerObservationBudget": {
+        "plannedPeerObservations": 12,
+        "maximumPeerObservations": 100,
+        "mode": "all-to-all"
+      },
+      "budget": {
+        "ceiling": 4500,
+        "hardReceiptLimit": 5000,
+        "requestedWaves": 6,
+        "boards": [
+          {
+            "sequenceUpperBound": 3,
+            "restoreReserve": 2,
+            "driftReserve": 100,
+            "maximumWaves": 2197,
+            "assignedWaves": 6,
+            "maximumSequenceAfterRestore": 17
+          }
+        ]
+      },
+      "latencyMs": {
+        "acknowledgement": {
+          "count": 12,
+          "p50": 56.78450000000157,
+          "p95": 68.46883399999933,
+          "p99": 68.46883399999933,
+          "max": 68.46883399999933
+        },
+        "requestStartToPeerPaintOpportunity": {
+          "count": 12,
+          "p50": 519.1941250000018,
+          "p95": 624.0328340000005,
+          "p99": 624.0328340000005,
+          "max": 624.0328340000005
+        },
+        "initialAuthorizedRender": {
+          "count": 2,
+          "p50": 180.58008299999983,
+          "p95": 377.72166600000014,
+          "p99": 377.72166600000014,
+          "max": 377.72166600000014
+        }
+      },
+      "smokeGates": {
+        "passed": true,
+        "checks": [
+          {
+            "metric": "httpAcknowledgement",
+            "maximumMs": 2000,
+            "observedMs": 68.46883399999933,
+            "status": "passed"
+          },
+          {
+            "metric": "requestStartToPeerPaintOpportunity",
+            "maximumMs": 3000,
+            "observedMs": 624.0328340000005,
+            "status": "passed"
+          }
+        ]
+      },
+      "roadmapAssessment": {
+        "peerP95MaximumMs": 500,
+        "peerObservedP95Ms": 624.0328340000005,
+        "status": "failed",
+        "capacityIncreaseAuthorized": false
+      },
+      "samples": [
+        {
+          "wave": 0,
+          "actorIndex": 1,
+          "boardIndex": 0,
+          "acknowledgementMs": 62.694540999999845,
+          "peers": [
+            {
+              "actorIndex": 0,
+              "requestStartToPaintMs": 181.47699999999986
+            }
+          ]
+        },
+        {
+          "wave": 0,
+          "actorIndex": 0,
+          "boardIndex": 0,
+          "acknowledgementMs": 58.225958999999875,
+          "peers": [
+            {
+              "actorIndex": 1,
+              "requestStartToPaintMs": 366.67941699999983
+            }
+          ]
+        },
+        {
+          "wave": 1,
+          "actorIndex": 1,
+          "boardIndex": 0,
+          "acknowledgementMs": 56.75275000000056,
+          "peers": [
+            {
+              "actorIndex": 0,
+              "requestStartToPaintMs": 608.5071250000001
+            }
+          ]
+        },
+        {
+          "wave": 1,
+          "actorIndex": 0,
+          "boardIndex": 0,
+          "acknowledgementMs": 47.157084000000395,
+          "peers": [
+            {
+              "actorIndex": 1,
+              "requestStartToPaintMs": 624.0328340000005
+            }
+          ]
+        },
+        {
+          "wave": 2,
+          "actorIndex": 1,
+          "boardIndex": 0,
+          "acknowledgementMs": 58.50016700000015,
+          "peers": [
+            {
+              "actorIndex": 0,
+              "requestStartToPaintMs": 587.741
+            }
+          ]
+        },
+        {
+          "wave": 2,
+          "actorIndex": 0,
+          "boardIndex": 0,
+          "acknowledgementMs": 50.003458999999566,
+          "peers": [
+            {
+              "actorIndex": 1,
+              "requestStartToPaintMs": 604.1643750000003
+            }
+          ]
+        },
+        {
+          "wave": 3,
+          "actorIndex": 0,
+          "boardIndex": 0,
+          "acknowledgementMs": 58.65599999999904,
+          "peers": [
+            {
+              "actorIndex": 1,
+              "requestStartToPaintMs": 516.1063340000001
+            }
+          ]
+        },
+        {
+          "wave": 3,
+          "actorIndex": 1,
+          "boardIndex": 0,
+          "acknowledgementMs": 68.46883399999933,
+          "peers": [
+            {
+              "actorIndex": 0,
+              "requestStartToPaintMs": 516.0090840000012
+            }
+          ]
+        },
+        {
+          "wave": 4,
+          "actorIndex": 0,
+          "boardIndex": 0,
+          "acknowledgementMs": 56.78450000000157,
+          "peers": [
+            {
+              "actorIndex": 1,
+              "requestStartToPaintMs": 519.1941250000018
+            }
+          ]
+        },
+        {
+          "wave": 4,
+          "actorIndex": 1,
+          "boardIndex": 0,
+          "acknowledgementMs": 60.74825000000055,
+          "peers": [
+            {
+              "actorIndex": 0,
+              "requestStartToPaintMs": 518.7393330000014
+            }
+          ]
+        },
+        {
+          "wave": 5,
+          "actorIndex": 0,
+          "boardIndex": 0,
+          "acknowledgementMs": 45.128083999999944,
+          "peers": [
+            {
+              "actorIndex": 1,
+              "requestStartToPaintMs": 523.1606250000004
+            }
+          ]
+        },
+        {
+          "wave": 5,
+          "actorIndex": 1,
+          "boardIndex": 0,
+          "acknowledgementMs": 50.58612500000163,
+          "peers": [
+            {
+              "actorIndex": 0,
+              "requestStartToPaintMs": 524.3898750000008
+            }
+          ]
+        }
+      ],
+      "streams": [
+        {
+          "requests": 1,
+          "closed": 0,
+          "failed": 0,
+          "renewals": 0,
+          "verifiedRecoveries": 0,
+          "httpErrors": {},
+          "recoveryPaintOpportunityMs": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          }
+        },
+        {
+          "requests": 1,
+          "closed": 0,
+          "failed": 0,
+          "renewals": 0,
+          "verifiedRecoveries": 0,
+          "httpErrors": {},
+          "recoveryPaintOpportunityMs": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "boardIndex": 0,
+          "actorIndex": 0,
+          "outcome": "restored"
+        },
+        {
+          "boardIndex": 0,
+          "actorIndex": 1,
+          "outcome": "restored"
+        }
+      ],
+      "failures": [],
+      "correctness": {
+        "interrupted": false,
+        "applicationErrors": 0,
+        "streamHttpErrors": 0,
+        "allAttemptedWritesAcknowledged": true,
+        "allSampledPeersObserved": true,
+        "safeTextRestorationComplete": true,
+        "boardsCreated": 0,
+        "boardsDeleted": 0
+      },
+      "measurementDefinitions": {
+        "acknowledgement": "Coordinator monotonic time immediately before the normal authenticated browser fetch until receipt/schema/target validation. Includes browser dispatch, network and response processing.",
+        "peer": "Same coordinator request-start until a different actor's matching on-screen SVG foreignObject text passes hit testing and two animation frames. Upper bound on a paint opportunity, NOT remote database COMMIT-to-peer or physical pixel timing. Never subtract acknowledgement from peer time.",
+        "initialRender": "Sequential navigation to the production app until every prepared target is visible and passes two-rAF checks; caches may be warm.",
+        "streamRecovery": "Natural same-board renewed stream request plus subsequent matching visible text and two-rAF observation. Gaps begin at an observed prior stream end, or renewed request when end was not observed; no induced outage or backpressure saturation claim.",
+        "receiptBudget": "canvasSeq is a conservative upper bound, not an exact receipt count: all three scene/facilitation/invitation receipt insertions commit with a sequence increment. Plan stays\u22644500 including per-actor restore and100 drift reserve, preserving\u2265500 below5000. Rechecked each wave and each restoration; pre-provisioned rotation only."
+      },
+      "limitations": [
+        "Only operator-attested dedicated synthetic boards/accounts; no database seeding, auth/rate-limit bypass, storage replacement or automatic resource provisioning.",
+        "Headless desktop Chromium and the target's normal configured APIs; no physical hardware/input/display acceptance or automatic network shaping. Configured all-to-all means only the prepared actors/text targets within the explicit observation budget.",
+        "Only configured peer fan-out and target text updates; this does not saturate every facilitation/history/media/guest workflow or prove scanner freshness. Large fan-out adds client-side observation overhead.",
+        "No guest publication timing, forced reconnect, slow-consumer saturation or navigation frame-rate qualification is measured by this driver.",
+        "A local-rehearsal artifact can NEVER satisfy staging acceptance. Target-mode observations still require independently reviewed topology, saturation, media, device, soak and operational evidence.",
+        "Conflicting, deleted, locked, revoked or unverifiable targets are not recreated or overwritten; safe cleanup may require operator review. Uncertain mutations require acknowledged versioned cleanup fences; unresolved cleanup requires operator review."
+      ],
+      "stagingAcceptanceComplete": false,
+      "capacityIncreaseAuthorized": false
+    },
+    "adapter": {
+      "schemaVersion": 1,
+      "complete": true,
+      "driverExit": 0,
+      "phase": "verified-original-text-before-delete",
+      "restoredVerified": true,
+      "normalApiExtraBoardDeleted": true,
+      "actorCount": 2,
+      "preparedTargetObjects": 2,
+      "mode": "local-rehearsal",
+      "immutableBuildIdentity": false,
+      "stagingAcceptanceComplete": false,
+      "capacityIncreaseAuthorized": false,
+      "limitations": [
+        "Functionality adapter uses disposable seeded test repositories/sessions and the existing substituted-storage fixture; this is NOT production authentication/rate-budget/media/capacity or deployed staging proof.",
+        "The EXTRA tiny marked board, explicit sharing and target objects were prepared through normal HTTP APIs; the target driver itself creates/deletes no resources."
+      ]
+    }
+  },
+  "raceRegressionVerification": {
+    "result": {
+      "label": "cleanup-race-tests",
+      "exitCode": 0,
+      "elapsedSeconds": 4.09
+    },
+    "testFiles": 3,
+    "testsPassed": 25,
+    "newRepositoryRaceCases": 18,
+    "testLogSha256": "f22a21a024b4c356f6c362d7f6267dc9e5f3290a3a3e69f71ecd8156e79aefb6",
+    "coverage": [
+      "Fence wins, delayed first proposal rejected by actual version check",
+      "Pending proposal wins; definite409 followed by one accepted cleanup receipt",
+      "Later-wave timeout with prior acknowledged version in both commit orders",
+      "Third-party edits including original-looking text at unfamiliar versions preserved",
+      "Committed fence with lost/malformed acknowledgement remains unresolved without retry",
+      "No retry around401/403/429 or a second409; budget and deadline rechecked before retry",
+      "A valid fence acknowledgement permits a later fresh board projection after unrelated commit"
+    ]
+  },
+  "repositoryCheck": {
+    "label": "cleanup-repository-check",
+    "exitCode": 0,
+    "elapsedSeconds": 64.98
+  },
+  "limitations": [
+    "The local adapter uses two targets/actors with seeded synthetic credentials, restricted PostgreSQL/real Valkey and the existing production browser bundle. Fixture storage/scanning is substituted; this is not deployed staging or capacity proof.",
+    "Historical November1 target evidence describes the earlier driver and does not validate the new cleanup fence.",
+    "Previous sustained latency/stream-churn failures, release gates and capacity limits remain unchanged."
+  ],
+  "stagingAcceptanceComplete": false,
+  "capacityIncreaseAuthorized": false,
+  "lint": {
+    "exitCode": 0,
+    "includesExplicitMts": true
+  },
+  "cleanup": {
+    "ownedPostgresValkeyAndForwardRemoved": true,
+    "productionWebAndBrowserClosed": true,
+    "ownedSyntheticFixtureBoardDeletedByAdapter": true,
+    "taskPortsClosed": true
+  }
+}

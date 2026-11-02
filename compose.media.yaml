@@ -1,6 +1,9 @@
 services:
   clamav:
     image: clamav/clamav:1.5.4-debian13-slim
+    environment:
+      # clamd VERSION formats active database time in the daemon's local timezone.
+      TZ: UTC
     healthcheck:
       test: ["CMD-SHELL", "clamdscan --ping=1 >/dev/null 2>&1"]
       interval: 15s

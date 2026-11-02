@@ -1,5 +1,6 @@
 import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from "@prometheus-io/client";
 import type { BusinessHealth, ProductQueueHealth } from "@openround/db";
+import { CLAMAV_MAX_SIGNATURE_AGE_SECONDS, type ScannerDatabaseHealth } from "./malware-scanner.js";
 
 type OperationalHealth = BusinessHealth & { productQueues?: ProductQueueHealth[] };
 
@@ -87,6 +88,38 @@ export class MetricsService {
   readonly registry = new Registry();
   private pool: DatabasePoolMetrics | null = null;
   private businessHealth: (() => Promise<OperationalHealth>) | null = null;
+  private scannerHealth: (() => Promise<ScannerDatabaseHealth>) | null = null;
+  private scannerHealthCollection: Promise<void> | null = null;
+  private readonly scannerAvailable = new Gauge({
+    name: "openround_malware_scanner_available",
+    help: "Whether the active malware scanner returned valid signature metadata",
+    registers: [],
+  });
+  private readonly scannerFresh = new Gauge({
+    name: "openround_malware_scanner_fresh",
+    help: "Whether active scanner signatures satisfy the bounded freshness and clock policy",
+    registers: [],
+  });
+  private readonly scannerDatabaseVersion = new Gauge({
+    name: "openround_malware_signature_database_version",
+    help: "Active signature database generation; zero when unavailable",
+    registers: [],
+  });
+  private readonly scannerDatabaseTimestamp = new Gauge({
+    name: "openround_malware_signature_database_timestamp_seconds",
+    help: "Active signature database creation time as a Unix timestamp; zero when unavailable",
+    registers: [],
+  });
+  private readonly scannerLastCheck = new Gauge({
+    name: "openround_malware_scanner_last_check_timestamp_seconds",
+    help: "Unix timestamp of the latest active-scanner metadata check",
+    registers: [],
+  });
+  private readonly scannerMaximumAge = new Gauge({
+    name: "openround_malware_signature_max_age_seconds",
+    help: "Maximum accepted age of the active signature database",
+    registers: [],
+  });
   private readonly businessProjection = new Gauge({
     name: "openround_business_projection_up",
     help: "Whether the durable business health projection can be read",
@@ -468,6 +501,47 @@ export class MetricsService {
     this.businessHealth = collect;
   }
 
+  bindScannerHealth(collect: () => Promise<ScannerDatabaseHealth>) {
+    if (!this.scannerHealth) {
+      for (const metric of [
+        this.scannerAvailable,
+        this.scannerFresh,
+        this.scannerDatabaseVersion,
+        this.scannerDatabaseTimestamp,
+        this.scannerLastCheck,
+        this.scannerMaximumAge,
+      ])
+        this.registry.registerMetric(metric);
+    }
+    this.scannerHealth = collect;
+    this.scannerMaximumAge.set(CLAMAV_MAX_SIGNATURE_AGE_SECONDS);
+  }
+
+  private async collectScannerHealth() {
+    if (!this.scannerHealth) return;
+    if (this.scannerHealthCollection) return this.scannerHealthCollection;
+    const collect = this.scannerHealth;
+    this.scannerHealthCollection = (async () => {
+      try {
+        const health = await collect();
+        this.scannerAvailable.set(health.available ? 1 : 0);
+        this.scannerFresh.set(health.available && health.fresh ? 1 : 0);
+        this.scannerDatabaseVersion.set(health.databaseVersion);
+        this.scannerDatabaseTimestamp.set(health.databaseTimestampSeconds);
+        this.scannerLastCheck.set(health.checkedAtSeconds);
+      } catch {
+        this.scannerAvailable.set(0);
+        this.scannerFresh.set(0);
+        this.scannerDatabaseVersion.set(0);
+        this.scannerDatabaseTimestamp.set(0);
+        this.scannerLastCheck.set(Date.now() / 1000);
+      }
+    })().finally(() => {
+      this.scannerHealthCollection = null;
+    });
+    return this.scannerHealthCollection;
+  }
+
   private async collectBusinessHealth() {
     if (!this.businessHealth) return;
     try {
@@ -806,7 +880,7 @@ export class MetricsService {
   }
 
   async render() {
-    await this.collectBusinessHealth();
+    await Promise.all([this.collectBusinessHealth(), this.collectScannerHealth()]);
     if (this.pool) {
       this.databaseConnections.set({ state: "total" }, this.pool.totalCount);
       this.databaseConnections.set({ state: "idle" }, this.pool.idleCount);

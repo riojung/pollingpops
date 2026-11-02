@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "local-real-canvas-media-pipeline",
+  "date": "2026-11-01",
+  "baseRevision": "3c536ca3ece7d6552b5857b405f3152da84836dc",
+  "sourceSha256": {
+    "apps/server/test/canvas-media.integration.test.ts": "aae1d47983f2f45019c09609083bca4b412d1641604c31f2e6cd23bdb9510b9f",
+    "apps/server/test/support/generated-canvas-media.ts": "e712b74a3a0a027a09ed53e8573cb4ce81cc30fedeb62ee02973a0ffc9a35eb3",
+    "apps/server/test/idea-board-media.integration.test.ts": "5afc54e9dbe05568e8d96033f6477cd5fd1115e8cc2991ee3e2b98a9dacb4e42",
+    "apps/server/src/malware-scanner.ts": "d14979d8c4352595030cc364d33d992386eaec6943188346b87d4ad377e1433e"
+  },
+  "command": "pnpm --filter @openround/server exec vitest run test/idea-board-media.integration.test.ts test/canvas-media.integration.test.ts --maxWorkers=1",
+  "result": {
+    "exitCode": 0,
+    "filesPassed": 2,
+    "testsPassed": 3,
+    "durationSeconds": 7.0
+  },
+  "services": {
+    "minioImage": "cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1",
+    "clamavImage": "clamav/clamav@sha256:cc16781fe005e49de6a8fc1231b63b265f74b18fc2a6347c670c35716914c3b6",
+    "isolatedOwnedData": true,
+    "daemonTimezone": "UTC",
+    "activeProbe": {
+      "ownedServicesVerified": true,
+      "realCleanScanPassed": true,
+      "realEicarRejected": true,
+      "utcDaemon": true,
+      "minioReady": true,
+      "scannerFresh": true,
+      "databaseVersion": 28171,
+      "databaseTimestampSeconds": 1793514454,
+      "ageSeconds": 82642,
+      "fresh": true,
+      "maximumAgeSeconds": 172800
+    },
+    "ownedServicesStoppedAndDataPurged": true
+  },
+  "canvasImage": {
+    "originalGeneratedPixels": true,
+    "width": 1280,
+    "height": 720,
+    "minimumEncodedBytesExclusive": 1048576,
+    "maximumEncodedBytesExclusive": 5242880,
+    "nativeDecodeAndDigestAsserted": true
+  },
+  "verifiedBoundaries": [
+    "Real presigned S3 PUT and active-daemon scan before clean private delivery",
+    "EICAR rejected and pending media read/placement denied",
+    "Cross-board and outsider references denied; unsigned object storage denied",
+    "Authorized exact bytes in a closed SVG export",
+    "Saved-version image retained after live removal and retention sweep",
+    "Revoked shared editor denied; explicit workshop publication/unpublication and guest credential boundaries",
+    "Owned synthetic board and object cleanup"
+  ],
+  "limitations": [
+    "MemoryRepository supplies disposable tenancy. Real restricted PostgreSQL conformance is a separate gate.",
+    "Local application injection and real loopback MinIO/ClamAV; no production TLS/proxy deployment or browser decode-at-capacity proof.",
+    "Three pipeline tests do not accept physical devices, all-to-all collaboration, target-host saturation or independent release review."
+  ],
+  "stagingAcceptanceComplete": false,
+  "capacityIncreaseAuthorized": false,
+  "runs": [
+    {
+      "node": "v26.10.0",
+      "testsPassed": 3,
+      "filesPassed": 2,
+      "durationSeconds": 7.0,
+      "exitCode": 0
+    },
+    {
+      "node": "v22.23.4",
+      "testsPassed": 3,
+      "filesPassed": 2,
+      "durationSeconds": 6.48,
+      "exitCode": 0
+    }
+  ]
+}

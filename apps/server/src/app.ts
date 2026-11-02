@@ -358,6 +358,7 @@ export async function buildApp(
       : config.MEDIA_SCAN_MODE === "clamav"
         ? new ClamAvScanner(config.CLAMAV_HOST!, config.CLAMAV_PORT, config.CLAMAV_TIMEOUT_MS)
         : null;
+  if (scanner instanceof ClamAvScanner) metrics.bindScannerHealth(() => scanner.checkHealth());
   const authoringAssistant =
     overrides.authoringAssistant !== undefined
       ? overrides.authoringAssistant

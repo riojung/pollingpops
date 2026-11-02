@@ -171,12 +171,10 @@ for (const mobile of [false, true]) {
     page.on("pageerror", (error) => {
       pageErrors.push({ message: error.message, at: Date.now() });
     });
-    await signInBeta(page);
-    // Let the auth landing page finish its reads and Next prefetches before
-    // replacing the document; WebKit otherwise reports aborted reads as errors.
-    await page.waitForLoadState("networkidle");
+    // Install history routes before entering Results. Both real sign-in and session reuse
+    // land here directly, without loading and discarding a dashboard that starts prefetches.
     const fixture = await mockHistory(page);
-    await page.goto("/results");
+    await signInBeta(page, undefined, { returnTo: "/results" });
     await expect(page.getByRole("heading", { name: "Results", level: 1 })).toBeVisible();
     const views = page.getByRole("navigation", { name: "Evidence views" });
     await expect(views.getByRole("link", { name: "Rounds", exact: true })).toHaveAttribute(

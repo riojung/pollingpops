@@ -532,6 +532,15 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
     await expect(page.locator("footer label")).toHaveCSS("color", theme.expectedMuted);
     await expect(page.locator("header p span[lang]")).toHaveCSS("color", theme.expectedMuted);
     await fits(page);
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await fits(page);
+      for (const name of ["Text, images, drawings and links", "Canvas zoom"]) {
+        const buttons = page.getByRole("group", { name, exact: true }).getByRole("button");
+        await expect(buttons.first()).toBeVisible();
+        for (const button of await buttons.all()) await expect(button).toBeInViewport({ ratio: 1 });
+      }
+    }
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath(`canvas-mobile-${mode}.png`),
@@ -540,6 +549,14 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
   }
   await page.setViewportSize({ width: 320, height: 844 });
   await fits(page);
+  const outline = page.getByRole("button", { name: "Object outline", exact: true });
+  await outline.tap();
+  await expect(outline).toHaveAttribute("aria-expanded", "true");
+  const beforeInspectorZoom = await zoom.textContent();
+  await page.getByRole("button", { name: "Canvas zoom +", exact: true }).tap();
+  await expect(zoom).not.toHaveText(beforeInspectorZoom!);
+  await outline.tap();
+  await expect(outline).toHaveAttribute("aria-expanded", "false");
   await page.reload();
   await expect(page.getByTestId(`canvas-object-${note.id}`)).toContainText(
     "A mobile planning note",

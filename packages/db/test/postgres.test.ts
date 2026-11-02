@@ -160,7 +160,31 @@ function publishableRound(title: string): QuizDraft {
 describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
   it.skipIf(!runtimeUrl)(
     "bootstraps the original untracked baseline without changing another database's runtime privileges",
-    async () => {
+    async ({ onTestFailed }) => {
+      const started = performance.now();
+      let currentPhase = "fixture-setup";
+      let phaseStarted = started;
+      const completedPhases: Array<{ phase: string; durationMs: number }> = [];
+      const phase = (next: string) => {
+        const now = performance.now();
+        completedPhases.push({ phase: currentPhase, durationMs: Math.round(now - phaseStarted) });
+        currentPhase = next;
+        phaseStarted = now;
+      };
+      const diagnostic = () => ({
+        currentPhase,
+        currentPhaseElapsedMs: Math.round(performance.now() - phaseStarted),
+        elapsedMs: Math.round(performance.now() - started),
+        completedPhases: [...completedPhases],
+      });
+      let failure: ReturnType<typeof diagnostic> | undefined;
+      onTestFailed(() => {
+        // Fixed labels and elapsed times only: no query text, identities or connection details.
+        console.error(
+          "PostgreSQL baseline bootstrap phases",
+          JSON.stringify(failure ?? diagnostic()),
+        );
+      });
       const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
       const baselineDirectory = await mkdtemp(join(tmpdir(), "openround-baseline-"));
       const database = `baseline_${randomUUID().replaceAll("-", "")}`;
@@ -169,7 +193,9 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       const runtimePool = new Pool({ connectionString: runtimeUrl });
       let pool: Pool | undefined;
       try {
+        phase("runtime-bootstrap");
         await preparePostgresTestRuntime(adminUrl!, runtimeUrl!);
+        phase("runtime-principal-check");
         const principal = await runtimePool.query<{
           username: string;
           rolsuper: boolean;
@@ -183,6 +209,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
           rolbypassrls: false,
           runtime_member: true,
         });
+        phase("sentinel-setup");
         await adminPool.query(`CREATE TABLE public."${sentinel}" (id integer)`);
         await adminPool.query(`REVOKE ALL ON public."${sentinel}" FROM openround_runtime`);
         await adminPool.query(`GRANT SELECT, INSERT ON public."${sentinel}" TO openround_runtime`);
@@ -216,6 +243,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
             )
           ).rows,
         });
+        phase("initial-privilege-check");
         const before = await publicPrivileges();
         expect(before.tables.find((table) => table.relname === sentinel)).toMatchObject({
           can_select: true,
@@ -223,18 +251,25 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
           can_update: false,
           can_delete: false,
         });
+        phase("migration-file-setup");
         const migrations = await discoverMigrations(directory);
         await writeFile(join(baselineDirectory, migrations[0]!.fileName), migrations[0]!.sql);
         // Migration 001 grants CRUD on public explicitly, so search_path isolation would
         // broaden another fixture's runtime grants. Keep the entire legacy baseline separate.
+        phase("database-create");
         await adminPool.query(`CREATE DATABASE "${database}"`);
         const url = new URL(adminUrl!);
         url.pathname = `/${database}`;
         pool = new Pool({ connectionString: url.toString(), max: 1 });
+        phase("legacy-baseline-install");
         await runMigrations(pool, baselineDirectory);
+        phase("legacy-tracker-removal");
         await pool.query("DROP TABLE _openround_migrations");
+        phase("baseline-upgrade");
         await runMigrations(pool, directory);
+        phase("idempotence-check");
         await runMigrations(pool, directory);
+        phase("upgrade-assertions");
         expect(
           (await pool.query("SELECT count(*)::integer AS count FROM _openround_migrations")).rows[0]
             .count,
@@ -243,14 +278,20 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
           "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='media_references'::regclass AND conname='media_references_owner_type_check'",
         );
         expect(constraint.rows[0].definition).toContain("canvas_board");
+        phase("privilege-preservation-check");
         expect(await publicPrivileges()).toEqual(before);
+      } catch (error) {
+        failure = diagnostic();
+        throw error;
       } finally {
+        phase("cleanup");
         await pool?.end();
         await adminPool.query(`DROP DATABASE IF EXISTS "${database}"`);
         await adminPool.query(`DROP TABLE IF EXISTS public."${sentinel}"`);
         await runtimePool.end();
         await adminPool.end();
         await rm(baselineDirectory, { recursive: true, force: true });
+        phase("complete");
       }
     },
   );

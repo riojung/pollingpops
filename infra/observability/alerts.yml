@@ -215,6 +215,15 @@ groups:
 
   - name: openround-dependencies
     rules:
+      - alert: OpenRoundMalwareScannerNotReady
+        expr: openround_malware_scanner_fresh == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Malware scanning cannot verify fresh active signatures
+          runbook: docs/runbooks/observability.md
+
       - alert: OpenRoundDatabasePoolWaiting
         expr: openround_database_connections{state="waiting"} > 0
         for: 5m

@@ -587,3 +587,87 @@ checks intact, then repeat the current-cap workload. These local headless result
 media and two API nodes in one coordinator process. Physical devices, target-host topology,
 realistic media, sustained saturation and independent acceptance remain open. No capacity increase
 is authorized.
+
+## November 1, 2026 snapshot projection experiment and measurement correction
+
+The [eight-run comparison](canvas-snapshot-sharing-comparison-2026-11-01.json) retains all 1,600
+measured writes, failed smoke gates, source hashes and profiling coverage. The candidate omitted
+other users’ grants and invitations from non-owner snapshot projections while retaining fresh
+own-grant authorization. PostgreSQL conformance passed, but acknowledgement and paint results
+were inconsistent across profiled and profiling-disabled pairs. Five runs missed the unchanged
+two-second acknowledgement gate. The candidate is **rejected**; the original database implementation
+is retained. The [unapplied patch](experiments/canvas-snapshot-sharing.patch) preserves the exact
+candidate and its tests. No capacity increase or production performance improvement is established.
+
+**Historical observer correction:** the original burst harness designates actor 1 as observer for
+all writers. At 20 actors and ten waves, its 200 samples contain ten self-observations, 180
+same-logical-node other-actor observations and ten cross-logical-node observations. Earlier wording
+that described every sample as a different-node peer is inaccurate. Raw timings and original
+reports remain unchanged; the comparison discloses the corrected topology. These measurements do
+not establish all-to-all or exclusively cross-node latency. New continuous mode selects a distinct
+actor on the opposite logical API node for every update. Both APIs still share one coordinator
+process, so this does not supply independent-host evidence.
+
+The optional continuous workload holds 20 browser contexts for the requested window, paces waves
+without catch-up bursts, reserves lifetime receipt headroom, checks natural stream reopening, and
+samples coordinator memory, both PostgreSQL pools and fixed stream counters every 30 seconds.
+It interleaves bounded comment, timer and saved-version lifecycle commands. Durations below 15
+minutes are rehearsals; 15–60 minutes are local diagnostics. Profiling must be disabled. The
+5,000-receipt product limit and all latency gates remain unchanged. Use
+`CANVAS_COLLAB_SOAK_SECONDS=30` for the first rehearsal and `900` for a 15-minute run, with the same
+disposable loopback database/cache configuration as the burst harness. The 60-minute mode uses
+bounded synthetic credential lifetime and slower pacing, without changing production policy.
+
+The [prepared-target runbook](runbooks/canvas-target-capacity.md) separately describes normal-API
+validation against an already running deployment. It requires dedicated synthetic actors and
+boards, a private configuration and cookie environment variables. Its request-start-to-visible-paint
+metric differs from repository-resolution timing and must not be compared as the same latency.
+Local loopback rehearsals do not accept staging, physical-device, realistic-media-at-capacity or
+independent-review gates.
+
+### Continuous local rehearsal results
+
+The [retained diagnostic summary](canvas-local-rehearsal-2026-11-01.json) records both the short
+rehearsal and the complete fifteen-minute run. At 500 objects and 20 licensed editors, the long
+run holds all contexts for 902.12 seconds and completes 180 waves / 3,600 measured writes plus
+12 bounded facilitation commands. Every measured update uses a different actor on the opposite
+logical API node. Exact retry, stale-version rejection, outsider/revoked access, final object
+versions, guest publication and cookie omission pass, with zero application page errors.
+
+Acknowledgement p95 **fails** the unchanged 2,000 ms gate at **3,502.4 ms**. Cross-logical-node
+repository-resolution-to-paint-opportunity p95 is **1,902.57 ms**, passing the 3,000 ms diagnostic
+gate while missing the separate 500 ms roadmap target. The stalled-consumer acknowledgement
+metric reuses those same acknowledgements; its paused consumer expires after five minutes and
+does not establish full-window saturation. The nonzero exit and failed gates are retained.
+
+All actors successfully reopen streams at least three times; the observed range is 3–70.
+These are successful authorized HTTP200 opens, not attribution to lifetime expiry alone: timeout
+or availability churn can also reopen streams. The final measured sample records 1,233 opens and
+1,201 unavailable events, so stable transport is not accepted. Acknowledgement p95 rises from
+2,155.2 ms to 3,780.8 ms across successive 36-wave groups; the association does not establish a
+production cause. Thirty-second resource sampling retains 32 samples
+without drops/unavailability, with sampled coordinator RSS up to 1,540,898,816 bytes and one pool
+showing up to 53 waiting acquisitions. Point samples are not continuous maxima or a leak/cause
+diagnosis. Final sequence 3,683 stays within the preflight bound 3,881 including postlude reserve,
+without changing the 5,000-receipt limit. The short rehearsal passes its unchanged diagnostic
+gates, but cannot override the long run’s failure.
+
+A separate [two-actor prepared-target functionality rehearsal](evidence/canvas-target-local-2026-11-01.json)
+passes twelve text commands, matching API/web markers and guarded original-text restoration.
+Its adapter prepares/deletes only its own extra two-object board through normal APIs. The driver
+creates/deletes no boards and uses fresh board authority. This tiny loopback run uses seeded
+synthetic credentials, substituted fixture storage and an `unversioned` local build marker;
+it does not prove production sign-in/rate budgets, media, current-cap performance or staging.
+
+### Real media lifecycle checkpoint
+
+The [real media evidence](evidence/canvas-media-pipeline-2026-11-01.json) records three passing
+pipeline cases across two suites, repeated on Node 22.23.4 after the initial runtime pass. The
+owned MinIO/ClamAV services use fresh downloaded signatures, a UTC daemon, real clean and EICAR
+scans and original generated 1280×720 PNGs larger than one MiB. Application assertions cover
+pending-read/placement denial, exact private bytes, cross-board/outsider fences, closed SVG bytes,
+manual-version retention, workshop publication, shared-access revocation and deletion cleanup.
+The disposable services and data are removed afterward. In-memory tenancy is disclosed;
+restricted PostgreSQL, browser decoding at capacity, deployed TLS/proxy and hardware acceptance
+remain separate. This closes the local media lifecycle rehearsal, not realistic-media-at-capacity
+or staging gates.

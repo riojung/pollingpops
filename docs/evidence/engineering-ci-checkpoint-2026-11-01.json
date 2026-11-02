@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "recordedClientDate": "2026-11-01",
+  "candidateBuildId": "3c536ca3ece7d6552b5857b405f3152da84836dc",
+  "scope": "Merged main baseline before the current capacity/readiness increment; not acceptance of unmerged changes or a deployment.",
+  "checks": [
+    {
+      "workflow": "CI",
+      "runId": 41378479660,
+      "url": "https://github.com/riojung/pollingpops/actions/runs/41378479660",
+      "conclusion": "success",
+      "successfulJobs": 11,
+      "postgresMigration": "success",
+      "webkitBetaMobile": "success",
+      "browserAggregate": "success"
+    },
+    {
+      "workflow": "Security",
+      "runId": 41378479815,
+      "url": "https://github.com/riojung/pollingpops/actions/runs/41378479815",
+      "conclusion": "success"
+    },
+    {
+      "workflow": "Production-path smoke",
+      "runId": 41378479781,
+      "url": "https://github.com/riojung/pollingpops/actions/runs/41378479781",
+      "conclusion": "success"
+    }
+  ],
+  "externalAcceptance": "pending",
+  "currentUnmergedIncrementAccepted": false,
+  "capacityIncreaseAuthorized": false,
+  "note": "The older PR172 check failures are historical; passing main-push runs above accept only this exact baseline. New code requires its own successful checks and reviewed merged candidate. Human, staging, device, restore and target-load gates are unchanged."
+}

@@ -39,6 +39,16 @@ import {
   CanvasCollaborationProfiler,
   parseCanvasProfileConfig,
 } from "./canvas-collaboration-profile.ts";
+import {
+  canvasSoakReceiptPlan,
+  minimumSoakStreamOpens,
+  parseCanvasSoakConfig,
+} from "./canvas-soak-config.ts";
+import type { PostgresRepository } from "../../packages/db/src/index.ts";
+import type {
+  CanvasFacilitationCommand,
+  CanvasFacilitationView,
+} from "../../packages/contracts/src/canvas-facilitation.ts";
 
 declare global {
   interface Window {
@@ -50,6 +60,7 @@ declare global {
 
 const root = resolve(import.meta.dirname, "../..");
 const config = parseCanvasCollaborationConfig(process.env);
+const soak = parseCanvasSoakConfig(process.env, config.editors);
 const profiler = new CanvasCollaborationProfiler(parseCanvasProfileConfig(process.env));
 const output = resolve(
   process.env.CANVAS_COLLAB_OUTPUT ?? `/tmp/pollingpops-canvas-collaboration-${Date.now()}.json`,
@@ -164,6 +175,7 @@ let server: ChildProcess | undefined;
 let stalled: Awaited<ReturnType<typeof stalledCanvasConsumer>> | undefined;
 const contexts: BrowserContext[] = [];
 const streamRequests = new Map<Page, number>();
+const successfulStreamOpens = new Map<Page, number>();
 const networkSessions = new Map<Page, CDPSession>();
 const measured: Partial<
   Record<CollaborationMetric, ReturnType<typeof canvasCapacityDistribution>>
@@ -178,12 +190,127 @@ const sampleRecords: Array<{
   wave: number;
   acknowledgementMs: number;
   repositoryResolutionToPaintOpportunityMs: number;
+  observerActorIndex: number;
+  writerLogicalNode: 0 | 1;
+  observerLogicalNode: 0 | 1;
+  crossNode: boolean;
+  selfObservation: boolean;
 }> = [];
+const peerObservationCounts = { crossNode: 0, sameNodePeer: 0, self: 0 };
 const rssHighWater = { rss: 0, heapUsed: 0 };
 function observeMemory() {
   const memory = process.memoryUsage();
   rssHighWater.rss = Math.max(rssHighWater.rss, memory.rss);
   rssHighWater.heapUsed = Math.max(rssHighWater.heapUsed, memory.heapUsed);
+}
+
+const sampledStreamEvents = [
+  "opened",
+  "closed",
+  "backpressure",
+  "revoked",
+  "unavailable",
+  "reconnect_requested",
+] as const;
+interface SoakResourceSample {
+  elapsedMs: number;
+  rssBytes: number;
+  heapUsedBytes: number;
+  pools: Array<{ node: number; total: number; idle: number; waiting: number }>;
+  streamEvents: Record<(typeof sampledStreamEvents)[number], number>;
+}
+function newSoakObservation(receiptBudget: ReturnType<typeof canvasSoakReceiptPlan>) {
+  return {
+    mode: soak.mode,
+    requestedDurationMs: soak.seconds * 1000,
+    syntheticCreatorSessionLifetimeMs: soak.creatorSessionLifetimeMs,
+    observedDurationMs: 0,
+    waveIntervalMs: soak.waveIntervalMs,
+    plannedWaves: soak.plannedWaves,
+    observedWaves: 0,
+    startedWaves: 0,
+    observedCommands: 0,
+    durationOverrunMs: 0,
+    observedWaveStartIntervalsMs: [] as number[],
+    churn: {
+      intervalMs: soak.churnIntervalMs,
+      commandsPerRound: 6,
+      completedRounds: 0,
+      completedCommands: 0,
+      maximumRetainedThreads: receiptBudget.churnRounds,
+      maximumConcurrentSavedVersions: 1,
+    },
+    resources: {
+      intervalMs: soak.sampleIntervalMs,
+      maximumSamples: Math.ceil((soak.seconds * 1000) / soak.sampleIntervalMs) + 2,
+      droppedSamples: 0,
+      unavailableSamples: 0,
+      samples: [] as SoakResourceSample[],
+    },
+    streamReopens: {
+      existingLifetimeMs: 300_000,
+      finalBoundaryMarginMs: 10_000,
+      minimumSuccessfulReopensPerActor: minimumSoakStreamOpens(soak.seconds) - 1,
+      lifetimeReconnectRequestsAtStart: 0,
+      lifetimeReconnectRequestsAtEnd: 0,
+      actors: [] as Array<{
+        actorIndex: number;
+        successfulOpensAtStart: number;
+        successfulOpensAtEnd: number;
+        successfulReopensDuringWindow: number;
+      }>,
+      passed: false,
+      scope:
+        "Successful HTTP 200 stream responses per actor; counts do not attribute each reopen to a particular disconnect reason",
+    },
+    receiptBudget: {
+      ...receiptBudget,
+      observedSequenceBeforePostlude: null as number | null,
+      observedFinalSequence: null as number | null,
+    },
+    allEditorContextsHeld: false,
+    durationCompleted: false,
+    observersPerUpdate: 1,
+    designatedObserverActors: [0, 1],
+    peerObservationCounts,
+    allToAllObserved: false,
+    fullWindowStalledConsumerClaimed: false,
+    soakAcceptanceClaimed: false,
+    deployedCapacityAccepted: false,
+    capacityIncreaseAuthorized: false,
+  };
+}
+let soakObservation: ReturnType<typeof newSoakObservation> | undefined;
+let soakWindowStarted: number | undefined;
+let soakSampler: ReturnType<typeof setInterval> | undefined;
+function stopSoakSampler() {
+  if (soakSampler !== undefined) clearInterval(soakSampler);
+  soakSampler = undefined;
+}
+function sampleSoakResources() {
+  if (!soakObservation || soakWindowStarted === undefined || !fixture) return;
+  if (soakObservation.resources.samples.length >= soakObservation.resources.maximumSamples) {
+    soakObservation.resources.droppedSamples++;
+    return;
+  }
+  try {
+    const memory = process.memoryUsage();
+    soakObservation.resources.samples.push({
+      elapsedMs: Math.round(performance.now() - soakWindowStarted),
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed,
+      pools: fixture.apps.map((built, node) => {
+        const pool = (built.repository as PostgresRepository).pool;
+        return { node, total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount };
+      }),
+      streamEvents: Object.fromEntries(
+        sampledStreamEvents.map((event) => [event, fixture!.streamEvents[event] ?? 0]),
+      ) as SoakResourceSample["streamEvents"],
+    });
+    observeMemory();
+  } catch {
+    soakObservation.resources.unavailableSamples++;
+  }
 }
 
 async function pageFor(index: number, token: string, cookie = true) {
@@ -220,6 +347,11 @@ async function pageFor(index: number, token: string, cookie = true) {
     if (/\/canvas-boards\/.*\/events(?:\?|$)/.test(request.url()))
       streamRequests.set(page, (streamRequests.get(page) ?? 0) + 1);
   });
+  if (soak.mode !== "disabled")
+    page.on("response", (response) => {
+      if (response.status() === 200 && /\/canvas-boards\/.*\/events(?:\?|$)/.test(response.url()))
+        successfulStreamOpens.set(page, (successfulStreamOpens.get(page) ?? 0) + 1);
+    });
   const cdp = await context.newCDPSession(page);
   networkSessions.set(page, cdp);
   await cdp.send("Network.enable");
@@ -260,7 +392,7 @@ async function watch(
   }, config.timeoutMs);
   waits.set(operationId, { promise, resolve: resolveWait, reject: rejectWait, timer });
   await page.evaluate(
-    ({ operationId, objectId, token, guest }) => {
+    ({ operationId, objectId, token, guest, continuous }) => {
       let scheduled = false;
       const observe = () => {
         const scope = guest
@@ -291,6 +423,7 @@ async function watch(
               return;
             }
             observer.disconnect();
+            if (continuous && expiry !== undefined) clearTimeout(expiry);
             void window.__canvasCapacityPaint(operationId);
           }),
         );
@@ -298,9 +431,9 @@ async function watch(
       const observer = new MutationObserver(observe);
       observer.observe(document.body, { childList: true, characterData: true, subtree: true });
       observe();
-      setTimeout(() => observer.disconnect(), 120000);
+      const expiry = setTimeout(() => observer.disconnect(), 120000);
     },
-    { operationId, objectId, token, guest },
+    { operationId, objectId, token, guest, continuous: soak.mode !== "disabled" },
   );
   return { promise };
 }
@@ -310,13 +443,14 @@ async function browserCommand(
   boardId = fixture!.board.id,
 ) {
   return page.evaluate(
-    async ({ api, boardId, mutation }) => {
+    async ({ api, boardId, mutation, timeoutMs }) => {
       const before = performance.now();
       const response = await fetch(`${api}/v1/canvas-boards/${boardId}/commands`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(mutation),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       const body = await response.json();
       if (!response.ok)
@@ -330,9 +464,99 @@ async function browserCommand(
         canvasSeq: body.board.canvasSeq as number,
       };
     },
-    { api, boardId, mutation },
+    { api, boardId, mutation, timeoutMs: config.timeoutMs },
   );
 }
+async function soakFacilitation(page: Page, command?: CanvasFacilitationCommand) {
+  const operationId = randomUUID();
+  const view = (await page.evaluate(
+    async ({ api, boardId, command, operationId, timeoutMs }) => {
+      const response = await fetch(
+        `${api}/v1/canvas-boards/${boardId}/facilitation${command ? "/commands" : ""}`,
+        {
+          method: command ? "POST" : "GET",
+          credentials: "include",
+          headers: command ? { "content-type": "application/json" } : undefined,
+          body: command ? JSON.stringify({ schemaVersion: 1, operationId, command }) : undefined,
+          signal: AbortSignal.timeout(timeoutMs),
+        },
+      );
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(
+          `Soak facilitation rejected ${response.status} ${body.error?.code ?? "unknown"}`,
+        );
+      if (
+        command &&
+        (body.receipt.operationId !== operationId ||
+          body.receipt.canvasSeq !== body.facilitation.canvasSeq)
+      )
+        throw new Error("Unexpected soak facilitation receipt");
+      return body.facilitation;
+    },
+    { api, boardId: fixture!.board.id, command, operationId, timeoutMs: config.timeoutMs },
+  )) as CanvasFacilitationView;
+  if (command) {
+    soakObservation!.churn.completedCommands++;
+    assert.ok(
+      view.canvasSeq <=
+        soakObservation!.receiptBudget.maximumSequence -
+          soakObservation!.receiptBudget.postludeReserve,
+      "Soak facilitation exceeded its preflight operation budget",
+    );
+  }
+  return view;
+}
+async function soakChurn(owner: Page) {
+  const before = await soakFacilitation(owner);
+  assert.equal(before.versions.length, 0, "Soak must not accumulate saved versions");
+  const threadId = randomUUID(),
+    messageId = randomUUID(),
+    versionId = randomUUID();
+  const created = await soakFacilitation(owner, {
+    type: "comment_thread_create",
+    threadId,
+    messageId,
+    objectId: fixture!.scene.editorTargetIds[0]!,
+    text: "Synthetic continuous-workload facilitation check",
+  });
+  const thread = created.threads.find((entry) => entry.id === threadId);
+  assert.ok(thread);
+  const resolved = await soakFacilitation(owner, {
+    type: "comment_resolve",
+    threadId,
+    expectedVersion: thread.version,
+    resolved: true,
+  });
+  assert.equal(resolved.threads.find((entry) => entry.id === threadId)?.resolved, true);
+  const started = await soakFacilitation(owner, {
+    type: "timer_start",
+    expectedRevision: resolved.timer.revision,
+    durationSeconds: 300,
+  });
+  const paused = await soakFacilitation(owner, {
+    type: "timer_pause",
+    expectedRevision: started.timer.revision,
+  });
+  assert.equal(paused.timer.status, "paused");
+  const saved = await soakFacilitation(owner, {
+    type: "version_create",
+    versionId,
+    name: "Synthetic soak checkpoint",
+  });
+  assert.equal(saved.versions.length, 1);
+  const version = saved.versions.find((entry) => entry.id === versionId);
+  assert.ok(version);
+  const deleted = await soakFacilitation(owner, {
+    type: "version_delete",
+    versionId,
+    expectedVersion: version.version,
+  });
+  assert.equal(deleted.versions.length, 0);
+  assert.ok(deleted.threads.length <= soakObservation!.churn.maximumRetainedThreads);
+  soakObservation!.churn.completedRounds++;
+}
+
 async function main() {
   const startedAt = new Date().toISOString(),
     started = performance.now();
@@ -380,7 +604,7 @@ async function main() {
     return;
   }
   stage = "disposable-postgres-two-node-fixture";
-  fixture = await createCanvasCollaborationFixture(config, profiler);
+  fixture = await createCanvasCollaborationFixture(config, profiler, soak.creatorSessionLifetimeMs);
   stage = "production-web-start";
   server = startNext(
     ["start", "--hostname", "127.0.0.1", "--port", String(config.webPort)],
@@ -444,13 +668,14 @@ async function main() {
       actorIndex,
       servingNode: actorIndex === 0 ? "nodeA" : "nodeB",
       samples: await page.evaluate(
-        async ({ api }) => {
+        async ({ api, timeoutMs }) => {
           const values: number[] = [];
           for (let index = 0; index < 5; index++) {
             const started = performance.now();
             const response = await fetch(`${api}/health/live?sample=${index}`, {
               cache: "no-store",
               credentials: "omit",
+              signal: AbortSignal.timeout(timeoutMs),
             });
             if (!response.ok) throw new Error("Calibration failed");
             await response.text();
@@ -458,7 +683,7 @@ async function main() {
           }
           return values;
         },
-        { api },
+        { api, timeoutMs: config.timeoutMs },
       ),
     })),
   );
@@ -495,6 +720,25 @@ async function main() {
   await peer.getByRole("button", { name: "Hand", exact: true }).click();
   await peer.locator('[data-testid="canvas-surface"] image').first().waitFor({ state: "visible" });
   await peer.screenshot({ path: resolve(evidenceDir, "peer-mixed-scene.png") });
+  if (soak.mode !== "disabled") {
+    // A node-A observer must see every node-B writer in the new continuous mode.
+    // Use the same real outline/selection/fit controls as the legacy peer viewport.
+    const ownerOutline = owner.getByRole("button", { name: "Object outline", exact: true });
+    if ((await ownerOutline.getAttribute("aria-expanded")) !== "true") await ownerOutline.click();
+    const ownerCheckboxes = owner.locator('input[type="checkbox"][aria-label^="Select "]');
+    for (let index = 0; index < config.editors; index++) await ownerCheckboxes.nth(index).check();
+    await ownerCheckboxes.nth(config.editors + 2).check();
+    await ownerCheckboxes.nth(config.editors + 3).check();
+    await owner.getByRole("button", { name: "Fit selection", exact: true }).click();
+    await ownerOutline.click();
+    await owner.getByRole("button", { name: "Hand", exact: true }).click();
+    await owner
+      .locator('[data-testid="canvas-surface"] image')
+      .first()
+      .waitFor({ state: "visible" });
+    await owner.screenshot({ path: resolve(evidenceDir, "owner-observer-mixed-scene.png") });
+  }
+
   const slowEventsBefore = fixture.streamEvents.backpressure ?? 0;
   stalled = await stalledCanvasConsumer(
     `${fixture.peerApi}/v1/canvas-boards/${fixture.board.id}/events`,
@@ -522,14 +766,27 @@ async function main() {
           },
           operationId,
         );
+        // Burst retains actor1 exactly. Continuous mode always uses the other logical API node.
+        const observerActorIndex = soakObservation && index !== 0 ? 0 : 1;
+        const writerLogicalNode: 0 | 1 = index === 0 ? 0 : 1;
+        const observerLogicalNode: 0 | 1 = observerActorIndex === 0 ? 0 : 1;
+        const crossNode = writerLogicalNode !== observerLogicalNode;
+        const selfObservation = index === observerActorIndex;
         const observer = await watch(
-          peer,
+          pages[observerActorIndex]!,
           operationId,
           fixture!.scene.editorTargetIds[index]!,
           token,
         );
         const ack = await browserCommand(page, mutation);
         versions[index]!++;
+        if (soakObservation)
+          assert.ok(
+            ack.canvasSeq <=
+              soakObservation.receiptBudget.maximumSequence -
+                soakObservation.receiptBudget.postludeReserve,
+            "Soak update exceeded its preflight operation budget",
+          );
         await observer.promise;
         if (measuredWave) {
           const painted = fixture!.ledger.sample(operationId);
@@ -541,7 +798,22 @@ async function main() {
             wave: number,
             acknowledgementMs: ack.milliseconds,
             repositoryResolutionToPaintOpportunityMs: painted,
+            observerActorIndex,
+            writerLogicalNode,
+            observerLogicalNode,
+            crossNode,
+            selfObservation,
           });
+          peerObservationCounts[
+            crossNode ? "crossNode" : selfObservation ? "self" : "sameNodePeer"
+          ]++;
+          if (soakObservation) {
+            assert.ok(
+              crossNode && !selfObservation,
+              "Continuous observations must use another logical node and actor",
+            );
+            soakObservation.observedCommands = sampleRecords.length;
+          }
           if (index === 0 && number === 0) {
             exactMutation = mutation;
             exactSeq = ack.canvasSeq;
@@ -552,29 +824,160 @@ async function main() {
     );
     return entries;
   }
+  if (soak.mode !== "disabled")
+    soakObservation = newSoakObservation(
+      canvasSoakReceiptPlan(soak, fixture.board.canvasSeq, config.editors, config.warmup),
+    );
   stage = "warmup-concurrent-http-writes";
   for (let index = 0; index < config.warmup; index++) await wave(index, false);
+  if (soakObservation) {
+    stage = "continuous-initial-stream-readiness";
+    const until = performance.now() + config.timeoutMs;
+    while (pages.some((page) => (successfulStreamOpens.get(page) ?? 0) < 1)) {
+      assert.ok(
+        performance.now() < until,
+        "Each continuous-workload actor needs a successful stream",
+      );
+      await pause(50);
+    }
+    soakObservation.streamReopens.lifetimeReconnectRequestsAtStart =
+      fixture.streamEvents.reconnect_requested ?? 0;
+    soakObservation.streamReopens.actors = pages.map((page, actorIndex) => ({
+      actorIndex,
+      successfulOpensAtStart: successfulStreamOpens.get(page) ?? 0,
+      successfulOpensAtEnd: 0,
+      successfulReopensDuringWindow: 0,
+    }));
+  }
   stage = "measured-concurrent-http-writes-and-peer-paint";
   const writesStarted = performance.now();
-  profiler.start();
-  try {
-    for (let index = 0; index < config.updates; index++) await wave(index, true);
-  } finally {
-    profiler.stop();
+  let observedWaves = 0;
+  if (!soakObservation) {
+    profiler.start();
+    try {
+      for (let index = 0; index < config.updates; index++) await wave(index, true);
+      observedWaves = config.updates;
+    } finally {
+      profiler.stop();
+    }
+  } else {
+    stage = "continuous-paced-http-writes-and-peer-paint";
+    soakWindowStarted = writesStarted;
+    const deadline = writesStarted + soak.seconds * 1000;
+    let nextWaveAt = writesStarted,
+      nextChurnAt = writesStarted + soak.churnIntervalMs;
+    let previousWaveStarted: number | undefined;
+    sampleSoakResources();
+    soakSampler = setInterval(sampleSoakResources, soak.sampleIntervalMs);
+    soakSampler.unref();
+    try {
+      while (performance.now() < deadline) {
+        if (observedWaves < soak.plannedWaves && performance.now() >= nextWaveAt) {
+          const waveStarted = performance.now();
+          if (previousWaveStarted !== undefined)
+            soakObservation.observedWaveStartIntervalsMs.push(waveStarted - previousWaveStarted);
+          previousWaveStarted = waveStarted;
+          soakObservation.startedWaves++;
+          await wave(observedWaves, true);
+          observedWaves++;
+          soakObservation.observedWaves = observedWaves;
+          // No queued catch-up burst: successive starts are at least one interval apart.
+          nextWaveAt = waveStarted + soak.waveIntervalMs;
+        }
+        if (
+          performance.now() < deadline &&
+          performance.now() >= nextChurnAt &&
+          soakObservation.churn.completedRounds < soakObservation.receiptBudget.churnRounds
+        ) {
+          const churnStarted = performance.now();
+          stage = "continuous-bounded-facilitation-churn";
+          await soakChurn(owner);
+          stage = "continuous-paced-http-writes-and-peer-paint";
+          nextChurnAt = churnStarted + soak.churnIntervalMs;
+        }
+        const now = performance.now();
+        const nextDue = Math.min(
+          deadline,
+          observedWaves < soak.plannedWaves ? nextWaveAt : deadline,
+          soakObservation.churn.completedRounds < soakObservation.receiptBudget.churnRounds
+            ? nextChurnAt
+            : deadline,
+        );
+        if (nextDue > now) await pause(nextDue - now);
+      }
+      assert.ok(
+        pages.every((page) => !page.isClosed()),
+        "Hold every editor context for the full duration",
+      );
+      soakObservation.allEditorContextsHeld = pages.length === config.editors;
+      soakObservation.durationCompleted = performance.now() - writesStarted >= soak.seconds * 1000;
+      for (const actor of soakObservation.streamReopens.actors) {
+        actor.successfulOpensAtEnd = successfulStreamOpens.get(pages[actor.actorIndex]!) ?? 0;
+        actor.successfulReopensDuringWindow =
+          actor.successfulOpensAtEnd - actor.successfulOpensAtStart;
+      }
+      soakObservation.streamReopens.passed = soakObservation.streamReopens.actors.every(
+        (actor) =>
+          actor.successfulReopensDuringWindow >=
+          soakObservation!.streamReopens.minimumSuccessfulReopensPerActor,
+      );
+      assert.ok(
+        soakObservation.streamReopens.passed,
+        "Each actor must successfully reopen across the existing stream lifetime",
+      );
+      assert.ok(observedWaves > 0, "Continuous workload must measure at least one wave");
+      assert.ok(
+        soakObservation.churn.completedRounds > 0,
+        "Continuous workload must exercise facilitation churn",
+      );
+      assert.equal(
+        soakObservation.churn.completedCommands,
+        soakObservation.churn.completedRounds * 6,
+      );
+    } finally {
+      stopSoakSampler();
+      soakObservation.observedDurationMs = performance.now() - writesStarted;
+      soakObservation.durationOverrunMs = Math.max(
+        0,
+        soakObservation.observedDurationMs - soak.seconds * 1000,
+      );
+      soakObservation.durationCompleted = soakObservation.observedDurationMs >= soak.seconds * 1000;
+      soakObservation.allEditorContextsHeld =
+        pages.length === config.editors && pages.every((page) => !page.isClosed());
+      // Preserve true partial reopen counts too when a wave or churn action failed.
+      soakObservation.streamReopens.lifetimeReconnectRequestsAtEnd =
+        fixture.streamEvents.reconnect_requested ?? 0;
+      for (const actor of soakObservation.streamReopens.actors) {
+        actor.successfulOpensAtEnd = successfulStreamOpens.get(pages[actor.actorIndex]!) ?? 0;
+        actor.successfulReopensDuringWindow =
+          actor.successfulOpensAtEnd - actor.successfulOpensAtStart;
+      }
+      soakObservation.streamReopens.passed =
+        soakObservation.streamReopens.actors.length === config.editors &&
+        soakObservation.streamReopens.actors.every(
+          (actor) =>
+            actor.successfulReopensDuringWindow >=
+            soakObservation!.streamReopens.minimumSuccessfulReopensPerActor,
+        );
+      sampleSoakResources();
+    }
   }
   const measuredWritesElapsedMs = performance.now() - writesStarted;
   await peer.screenshot({ path: resolve(evidenceDir, "peer-after-measured-updates.png") });
   const slowState = stalled.state();
   stalled.close();
   stalled = undefined;
-  assert.equal(sampleRecords.length, config.editors * config.updates);
+  assert.equal(sampleRecords.length, config.editors * observedWaves);
   stage = "retry-and-authorization-correctness";
   assert.ok(exactMutation && exactSeq !== undefined);
   const beforeRetry = (await (
     await fetch(`${fixture.api}/v1/canvas-boards/${fixture.board.id}`, {
       headers: { cookie: `openround_creator=${fixture.sessions[0]!.token}` },
+      signal: AbortSignal.timeout(config.timeoutMs),
     })
   ).json()) as { board: { canvasSeq: number } };
+  if (soakObservation)
+    soakObservation.receiptBudget.observedSequenceBeforePostlude = beforeRetry.board.canvasSeq;
   const exact = await browserCommand(owner, exactMutation);
   assert.equal(
     exact.canvasSeq,
@@ -601,6 +1004,7 @@ async function main() {
     (
       await fetch(`${fixture.peerApi}/v1/canvas-boards/${fixture.board.id}`, {
         headers: { cookie: `openround_creator=${outsider.token}` },
+        signal: AbortSignal.timeout(config.timeoutMs),
       })
     ).status,
     404,
@@ -763,10 +1167,24 @@ async function main() {
     (
       await fetch(`${fixture.peerApi}/v1/canvas-boards/${fixture.board.id}`, {
         headers: { cookie: `openround_creator=${fixture.sessions[config.editors - 1]!.token}` },
+        signal: AbortSignal.timeout(config.timeoutMs),
       })
     ).status,
     404,
   );
+  if (soakObservation) {
+    const afterPostlude = await fixture.apps[0]!.canvasBoards.get(
+      fixture.actors[0]!,
+      fixture.board.id,
+    );
+    soakObservation.receiptBudget.observedFinalSequence = afterPostlude.canvasSeq;
+    assert.ok(
+      afterPostlude.canvasSeq <= soakObservation.receiptBudget.maximumSequence,
+      "Soak must preserve postlude operation headroom",
+    );
+    assert.ok(afterPostlude.canvasSeq <= soakObservation.receiptBudget.conservativeCeiling);
+    assert.ok(soakObservation.durationCompleted && soakObservation.allEditorContextsHeld);
+  }
   assert.deepEqual(browserErrors, [], "No application errors during measured journeys");
   observeMemory();
   measured.httpAcknowledgement = canvasCapacityDistribution(allAck);
@@ -791,6 +1209,7 @@ async function main() {
         "tests/load/canvas-collaboration-fixture.mts",
         "tests/load/canvas-collaboration-config.ts",
         "tests/load/canvas-collaboration-profile.ts",
+        "tests/load/canvas-soak-config.ts",
         "tests/load/canvas-capacity.ts",
         "package.json",
         "pnpm-lock.yaml",
@@ -801,7 +1220,7 @@ async function main() {
       objects: config.objects,
       licensedEditors: config.editors,
       openEditorBrowserContexts: pages.length,
-      updatesPerEditor: config.updates,
+      updatesPerEditor: observedWaves,
       warmupWaves: config.warmup,
       measuredCommands: sampleRecords.length,
       guestOrdinaryObjects: config.guestObjects,
@@ -811,8 +1230,18 @@ async function main() {
       fakeImagePlacements: 2,
       fakeImageAssets: 1,
       fakeImageBytes: fixture.syntheticImageBytes,
-      pacing:
-        "Concurrent independent-object waves; each wave waits for every HTTP acknowledgement and peer paint opportunity before its successor",
+      pacing: soakObservation
+        ? "Continuous bounded-duration local workload; wave starts are spaced at least the configured interval, with six sequential facilitation commands between due waves. Every update still waits for acknowledgement and one authorized peer paint opportunity; no catch-up burst."
+        : "Concurrent independent-object waves; each wave waits for every HTTP acknowledgement and peer paint opportunity before its successor",
+      peerObservationTopology: {
+        observersPerUpdate: 1,
+        observerActors: soakObservation ? [0, 1] : [1],
+        counts: peerObservationCounts,
+        allToAllObserved: false,
+        scope:
+          "Two logical API nodes share one coordinator process; these are not separate physical hosts",
+      },
+      ...(soakObservation ? { continuous: soakObservation } : {}),
     },
     environment: {
       productionBrowserBundle: true,
@@ -848,8 +1277,9 @@ async function main() {
     measurementDefinitions: {
       httpAcknowledgement:
         "Browser performance.now immediately before authenticated fetch to after response JSON/receipt validation; includes browser-emulated latency and HTTP/auth/repository/projection costs",
-      repositoryResolutionToPeerPaintOpportunity:
-        "One coordinator monotonic clock: command repository promise resolution after its transaction returns, to an authorized different-node observer binding after matching on-screen SVG text and two requestAnimationFrames. Includes CDP binding delivery; an upper bound on a paint opportunity, not database COMMIT instant or physical pixel/monitor latency",
+      repositoryResolutionToPeerPaintOpportunity: soakObservation
+        ? "One coordinator monotonic clock: repository command resolution to an authorized different-actor browser binding after matching SVG text and two requestAnimationFrames. Actor1/nodeB observes writer0/nodeA; actor0/nodeA observes every nodeB writer. One observer per update, not all-to-all, physical hosts, exact database COMMIT time or physical pixels."
+        : "One coordinator monotonic clock: repository command resolution to designated actor1 after matching SVG text and two requestAnimationFrames. At 20 actors x 10 waves this is 10 self, 10 cross-logical-node and 180 same-node-peer samples. Per-sample observer/node flags disclose actual topology. Logical nodes share one process; not all-to-all, exact database COMMIT time or physical pixels.",
       guestPublication:
         "Same resolution-to-two-rAF observation for an ordinary private object explicitly published by the facilitator; measured in the Bearer-only guest canvas served by the other node",
       initialRender:
@@ -858,8 +1288,9 @@ async function main() {
         "Consecutive browser rAF timestamps while real pointer hand-pan gestures cross the already-rendered mixed scene; not presented-frame GPU timing or reference-device FPS",
       reconnect:
         "Coordinator time from enabling the offline peer context network until both its latest authorized matching text plus two rAF and a new stream request",
-      stalledConsumerAcknowledgement:
-        "HTTP acknowledgement samples while an additional authorized raw TCP stream deliberately does not consume its response body; checks isolation, not a forced worst-case backpressure cutoff",
+      stalledConsumerAcknowledgement: soakObservation
+        ? "The same measured acknowledgement samples; an additional raw TCP consumer starts paused but retains the existing five-minute stream lifetime. No full-window stalled-consumer or saturation claim."
+        : "HTTP acknowledgement samples while an additional authorized raw TCP stream deliberately does not consume its response body; checks isolation, not a forced worst-case backpressure cutoff",
       repositoryProfiling:
         "Optional CANVAS_COLLAB_PROFILE=true instance/SQL/pool observations during measured write-and-peer-paint waves only; setup/warm-up and operations begun before that window are excluded. Monotonic client elapsed times, numeric correlation and fixed method/SQL categories only. CANVAS_COLLAB_PROFILE_MAX_SAMPLES bounds retained completions (default20000,max100000); truncation and in-flight observations are disclosed. No authority cache or production behavior changes; gates remain independent.",
     },
@@ -895,7 +1326,9 @@ async function main() {
         "Reference physical desktop/mobile rendering and input",
         "Production-size media/S3/scanner pipeline",
         "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
-        "Long-duration/full collaboration saturation and all-to-all observations",
+        soakObservation
+          ? "Target-host long-duration/full collaboration saturation and all-to-all observations"
+          : "Long-duration/full collaboration saturation and all-to-all observations",
       ],
       networkCalibrationPassed: nominalLatencyObserved,
       capacityGatePassed: false,
@@ -924,11 +1357,15 @@ async function main() {
       streamEvents: fixture.streamEvents,
       backpressureDisconnectionsObserved:
         (fixture.streamEvents.backpressure ?? 0) - slowEventsBefore,
-      cutoffUnderSaturatedBuffer:
-        "unassessed: bounded coalesced notifications may fit kernel buffers during this short run",
+      cutoffUnderSaturatedBuffer: soakObservation
+        ? "unassessed: the lifetime-bounded raw consumer is not held stalled for the full continuous window; no saturation cutoff claim"
+        : "unassessed: bounded coalesced notifications may fit kernel buffers during this short run",
     },
     correctness: {
-      allMeasuredUpdatesObservedByAuthorizedPeer: true,
+      allMeasuredUpdatesObservedByDesignatedAuthorizedActor: true,
+      noMeasuredSelfObservations: peerObservationCounts.self === 0,
+      allMeasuredObservationsCrossLogicalNode:
+        peerObservationCounts.crossNode === sampleRecords.length,
       finalObjectVersionsRetained: true,
       exactRetryNoSequenceAdvance: true,
       staleVersionRejected: true,
@@ -946,7 +1383,9 @@ async function main() {
       "CDP nominal latency applies to browser network requests; actual measured health-fetch calibration is reported; local Node setup/correctness requests are not shaped",
       "Tiny synthetic PNG bytes and in-memory storage.readImage replace S3/scanner/full-size decoding; no production media pipeline or realistic image memory claim",
       "SVG DOM and two animation frames establish a paint opportunity, not physical display capture timing; screenshots verify representative output only",
-      "Short burst/wave workload with a single observing peer, unsaturated comments/history/receipts and a single guest; no long-duration soak, worst-case moderation/facilitation saturation, or all-to-all peer latency matrix",
+      soakObservation
+        ? "Local continuous workload with one cross-logical-node observer per update selected from two browsers and bounded facilitation churn, not all-to-all, realistic media, near-limit history saturation, physical hosts or deployed soak acceptance. Runs shorter than fifteen minutes are rehearsal only."
+        : "Short burst/wave workload with designated observing actor1 (including its own writes), unsaturated comments/history/receipts and a single guest; no long-duration soak, worst-case moderation/facilitation saturation, or all-to-all peer latency matrix",
       "Stalled TCP consumer isolation does not establish saturation/backpressure cutoff unless observed; API nodes and Chromium contend for this host's resources",
     ],
     totalMs: Math.round(performance.now() - started),
@@ -986,12 +1425,14 @@ try {
       initialRender: initialRender.length,
     },
     artifactDirectory: evidenceDir,
+    ...(soakObservation ? { continuousWorkload: soakObservation } : {}),
     repositoryProfiling: profiler.report(),
   };
   await writeFile(output, `${JSON.stringify(failure, null, 2)}\n`);
   process.stderr.write(`${JSON.stringify(failure)}\n`);
   process.exitCode = 1;
 } finally {
+  stopSoakSampler();
   for (const wait of waits.values()) {
     clearTimeout(wait.timer);
     wait.reject(new Error("Evidence run ended"));

@@ -184,6 +184,57 @@ and single-VM pinned templates. These catch configuration regressions; none prov
 human-owned paging destination. Record that separately with the
 [operations rehearsal template](../evidence/operations-rehearsal.md).
 
+## Active malware signatures
+
+A container `clamdscan --ping` health check establishes daemon liveness only. It does not
+establish signature freshness. The API checks the daemon with NUL-framed `VERSION` commands;
+ClamAV 1.5.4 reports the version and creation time stored in its active engine. Updated files on
+disk alone do not satisfy this check. See the [ClamD protocol](https://docs.clamav.net/manual/Usage/ClamdProtocol.html#version)
+and the pinned [active-engine VERSION implementation](https://github.com/Cisco-Talos/clamav/blob/clamav-1.5.4/clamd/session.c#L462-L476).
+
+The supported scanner must run in UTC. Both scanner Compose profiles set `TZ=UTC`, because
+ClamAV formats this date with timezone-free `ctime` output. External scanners must use the same
+UTC contract; the API parses and validates the calendar date explicitly in UTC. Do not infer a
+timezone from the API process or parse an arbitrary locale date. This follows the pinned
+[date formatter](https://github.com/Cisco-Talos/clamav/blob/clamav-1.5.4/libclamav/others_common.c#L353-L394).
+
+Before streaming content, active signatures must be at most 48 hours old and no more than five
+minutes ahead of the API clock. Clean results require a second fresh `VERSION` check with the
+same database generation and timestamp. A concurrent reload therefore defers finalization for
+retry instead of attesting to different engine generations. Missing, disabled, malformed,
+stale, future-dated, disconnected, oversized or incomplete replies prevent promotion. Errors
+contain fixed messages, never raw daemon output, uploaded contents or connection details.
+
+All three exchanges share the existing `CLAMAV_TIMEOUT_MS` scan budget. A total deadline also
+bounds a daemon that sends partial replies without completing a record. Scanner failures leave
+uploads private under the existing claim/release/retry flow; they do not mark an unscanned file
+clean. File-based authoring uses the same scanner and therefore also fails closed. Stub scanners
+and disabled fixture modes retain their existing behavior.
+
+Authenticated metrics scrapes probe active metadata within two seconds, independently of upload
+traffic. Concurrent scrapes share an in-flight probe. Real-scanner deployments expose these
+unlabelled numeric series; disabled and stub modes omit them:
+
+- `openround_malware_scanner_available`: 1 for parsed active metadata, otherwise 0.
+- `openround_malware_scanner_fresh`: 1 only when parsed metadata satisfies the clock/age policy.
+- `openround_malware_signature_database_version`: numeric generation; 0 when unavailable.
+- `openround_malware_signature_database_timestamp_seconds`: database creation epoch; 0 when unavailable.
+- `openround_malware_scanner_last_check_timestamp_seconds`: latest probe epoch.
+- `openround_malware_signature_max_age_seconds`: the fixed 172,800-second age limit.
+
+`OpenRoundMalwareScannerNotReady` pages when freshness cannot be verified for five minutes.
+The existing metrics-target alert covers failed or missing scrapes. Public `/health/ready`
+continues checking database and coordination availability; its media `enabled` value reports
+configuration, not scanner freshness, so a scanner outage does not evict unrelated live sessions.
+
+On this page, check private numeric probe results, API/daemon UTC clocks, freshclam update/reload
+health, and the active generation after recovery. Restore active freshness and retry private
+uploads; do not bypass scanning, relax the freshness boundary, mark quarantined rows clean, or
+publish the scanner socket. Before release, qualify real-daemon clean/EICAR scans, stale loaded
+signatures despite a successful ping, malformed/unavailable metadata, reload deferral, and the
+hosted alert receiver. Unit fixtures and protocol source inspection do not establish those
+operational results.
+
 ## Initial alert candidates
 
 Tune every threshold in staging and assign an owner before paid beta. Suggested starting

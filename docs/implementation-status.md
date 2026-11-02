@@ -8,6 +8,76 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Target cleanup review follow-up November 2, 2026
+
+The prepared-target driver now requires an acknowledged versioned cleanup write, including when
+its initial read shows unchanged original text. That fences a timed-out server command that can
+outlive browser shutdown. A definite 409 permits one further authorized read/write only when the
+exact own pending proposal won the race; lost acknowledgements, unknown versions and competing
+edits remain unresolved. Existing receipt reserves, rate limits and deadlines are unchanged.
+
+The [follow-up evidence](evidence/canvas-target-cleanup-fix-2026-11-02.json) records 18 deterministic
+cases using real repository version checks and a passing local two-actor driver rehearsal with
+verified original-text restoration. The November 1 driver evidence below is historical for this
+cleanup path. Sustained latency/transport and external acceptance gates remain open.
+
+### Canvas readiness and local rehearsal checkpoint November 1, 2026
+
+Merged baseline `3c536ca3ece7d6552b5857b405f3152da84836dc` has successful hosted CI, Security
+and production-path smoke runs, recorded in the
+[engineering checkpoint](evidence/engineering-ci-checkpoint-2026-11-01.json). The October 21
+engineering-failure paragraph below is historical. The current unmerged increment still needs
+fresh checks on its reviewed candidate; all fifteen release-ledger gates remain pending.
+
+The remaining work targets evidence and operational readiness: continuous current-cap browser
+soak tooling, a prepared-target normal-API runner, actual Canvas image/storage/scanner boundaries,
+active ClamAV signature freshness checks and private health telemetry, and Canvas-specific device
+and accessibility protocols. Account sign-in fixtures avoid a discarded page navigation, with
+behavioral regressions preserving session validation and fallback. PostgreSQL bootstrap failures
+now report fixed phase durations while retaining the original deadline and assertions.
+
+The snapshot projection optimization was rejected after eight inconsistent timing trials; its
+unapplied patch and all outcomes are archived. The capacity evidence also corrects the inherited
+burst observer topology: its designated actor observes itself for one writer, and most samples
+share the writer’s logical node. The new continuous mode uses another actor on the opposite
+logical node. Neither local mode establishes independent-host or all-to-all delivery.
+
+Local continuous validation completes 3,600 writes over fifteen minutes with all correctness
+checks passing, but acknowledgement p95 is 3,502.4 ms against the unchanged 2,000 ms gate.
+Cross-logical-node paint-opportunity p95 is 1,902.57 ms and still misses the separate 500 ms
+roadmap target. The two-actor prepared-target functionality rehearsal passes and restores its
+original synthetic text. These measured outcomes are retained in the capacity evidence; the
+performance gate remains open.
+
+The real Canvas/Idea Board media pipeline passes three cases across two suites, including a
+Node 22.23.4 confirmation, against disposable MinIO and a fresh active ClamAV engine. It verifies
+representative private image bytes, saved-version retention, export, sharing/guest fences and
+cleanup with in-memory tenancy. The [media evidence](evidence/canvas-media-pipeline-2026-11-01.json)
+keeps that boundary separate from deployed and at-capacity browser acceptance.
+
+The CI fixture rehearsal reproduces the intermittent WebKit Results failure, then avoids its
+discarded dashboard by installing history mocks before sign-in and landing directly on Results.
+Fresh and cached paths share a validated local return destination; other callers keep the dashboard
+default. The original empty-error assertion, cancellation filter and accessibility audits remain.
+Three repetitions each of Results and Sessions pass in Linux WebKit with no retries or resource
+guard stops. The [CI fixture evidence](evidence/ci-fixture-rehearsal-2026-11-01.json) retains the
+initial failure, sanitized trace correlation and successful confirmation separately. Cancellation
+is inferred from timing; no generic console-error suppression is introduced.
+
+Final Node 22 repository verification passes formatting, lint, types, tests and production builds,
+including 333 passing smoke-support cases and one existing skip. Alert rules/routing, the
+unchanged-deadline PostgreSQL bootstrap case and readiness-ledger validation pass. The
+[local validation record](evidence/local-readiness-validation-2026-11-01.json) distinguishes those
+checks from the sustained performance failure and the remaining external gates. All owned local
+services/tunnels and media data are removed; the existing user stack is preserved.
+
+The user selected local rehearsals while staging access is arranged. Actual target deployment,
+physical devices, human accessibility review, operational exercises and independent acceptance
+remain pending. No limits are raised, no remote environment is provisioned, and local results do
+not turn those gates into accepted evidence. See the
+[capacity evidence](canvas-capacity-evidence.md) and
+[target rehearsal runbook](runbooks/canvas-target-capacity.md).
+
 ### Competition dashboard October 27 2026
 
 The product-owner-selected IDEA-016 extends the existing Round leaderboard into a shared host,

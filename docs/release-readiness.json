@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-21",
+  "updatedAt": "2026-11-01",
   "releaseTarget": "single-vm-beta",
   "gates": [
     {
@@ -19,9 +19,11 @@
         "https://github.com/riojung/pollingpops/actions/runs/36052921874",
         "https://github.com/riojung/pollingpops/actions/runs/35868559946",
         "https://github.com/riojung/pollingpops/actions/runs/39557976752",
-        "https://github.com/riojung/pollingpops/actions/runs/39557976778"
+        "https://github.com/riojung/pollingpops/actions/runs/39557976778",
+        "https://github.com/riojung/pollingpops/actions/runs/41378479660",
+        "https://github.com/riojung/pollingpops/actions/runs/41378479815"
       ],
-      "nextAction": "Review and merge codex/recent-changes-catchup, then retain passing CI and Security workflows for the exact resulting main commit. Historical passing runs and local branch checks do not establish readiness for the merged candidate."
+      "nextAction": "Merged baseline 3c536ca3ece7d6552b5857b405f3152da84836dc passes CI and Security, recorded in the November 1 checkpoint. Verify the current capacity/readiness increment and retain successful main-push checks for its exact reviewed merged candidate before accepting that candidate; baseline evidence does not accept new code."
     },
     {
       "id": "local-production-smoke",
@@ -33,9 +35,10 @@
       "evidence": [
         "https://github.com/riojung/pollingpops/actions/runs/36173765942",
         "https://github.com/riojung/pollingpops/actions/runs/36073327273",
-        "https://github.com/riojung/pollingpops/actions/runs/39557976777"
+        "https://github.com/riojung/pollingpops/actions/runs/39557976777",
+        "https://github.com/riojung/pollingpops/actions/runs/41378479781"
       ],
-      "nextAction": "The isolated local production-path checks passed; after review and merge, retain a complete passing Production-path smoke workflow for the exact resulting main commit, including observability, process-loss recovery, backup/restore, and the 100-client restart exercise."
+      "nextAction": "Merged baseline 3c536ca3ece7d6552b5857b405f3152da84836dc passes Production-path smoke. Retain a fresh successful production-path run for the current increment after review/merge, including media, observability, process loss, restore and 100-client restart; local checks do not establish deployment readiness."
     },
     {
       "id": "single-vm-staging",
@@ -135,7 +138,7 @@
       "status": "pending",
       "criterion": "Supported mobile and desktop devices complete QR join, play, reconnect, and report flows on representative Wi-Fi and cellular networks.",
       "evidence": [],
-      "nextAction": "Execute the device evidence template against single-VM staging."
+      "nextAction": "Freeze supported physical hardware/networks and execute the Round, Presentation and enabled Canvas matrix in docs/runbooks/device-matrix.md, including touch/keyboard, reconnect, privacy, retained images/history and report reconciliation; retain owner and independent-reviewer decisions. Emulated browsers do not close this gate."
     },
     {
       "id": "design-partners",

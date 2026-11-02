@@ -54,6 +54,47 @@ function mockClient(storage: StorageService, send: ReturnType<typeof vi.fn>) {
 }
 
 describe("storage media fencing", () => {
+  it.each([
+    "ClamAV signature database is not fresh",
+    "ClamAV active signature metadata is unavailable",
+    "ClamAV scanner is unavailable",
+  ])(
+    "keeps scanned media private when finalization cannot verify the scanner: %s",
+    async (message) => {
+      const asset = media();
+      const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const send = vi.fn(async (command: unknown) => {
+        if (command instanceof HeadObjectCommand)
+          return {
+            ContentLength: asset.sizeBytes,
+            ContentType: asset.mimeType,
+            Metadata: { mediaid: asset.id },
+          };
+        if (command instanceof GetObjectCommand)
+          return {
+            Body: {
+              transformToWebStream: () =>
+                new ReadableStream({
+                  start(controller) {
+                    controller.enqueue(bytes);
+                    controller.close();
+                  },
+                }),
+            },
+          };
+        throw new Error("Unexpected storage command");
+      });
+      const scan = vi.fn().mockRejectedValue(new Error(message));
+      const storage = new StorageService(config(), { scan });
+      mockClient(storage, send);
+      await expect(storage.finalize(asset, randomUUID())).rejects.toThrow(message);
+      expect(scan).toHaveBeenCalledExactlyOnceWith(Buffer.from(bytes));
+      expect(send.mock.calls.some(([command]) => command instanceof PutObjectCommand)).toBe(false);
+      expect(asset.objectKey).toMatch(/^quarantine\//);
+      expect(asset.scanStatus).toBe("finalizing");
+    },
+  );
+
   it("publishes only scanned bytes to the finalization token's candidate despite a quarantine overwrite", async () => {
     const asset = media();
     const token = randomUUID();

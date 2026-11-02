@@ -46,23 +46,112 @@
 }
 .toolbar {
   display: flex;
-  gap: 6px;
+  flex: 0 0 auto;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 8px 16px;
+  padding: 7px 20px;
   border-bottom: 1px solid var(--ui-border);
-  background: var(--ui-surface-raised);
+  background: var(--ui-surface);
 }
-.toolbar button {
-  padding: 7px 10px;
-  min-height: 40px;
+.historyControls,
+.assetActions,
+.panelActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.assetActions > button {
+  padding: 8px 12px;
+  min-block-size: 44px;
   font-size: 12px;
 }
-.toolbar button[aria-pressed="true"],
+.panelActions {
+  margin-inline-start: auto;
+}
+.chromeButton {
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
+  box-sizing: border-box;
+  inline-size: 44px;
+  block-size: 44px;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--ui-text-subtle);
+  background: transparent;
+  cursor: pointer;
+}
+.chromeButton svg {
+  display: block;
+  inline-size: 22px;
+  block-size: 22px;
+}
+.chromeButton:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+  color: var(--ui-text-strong);
+}
+.chromeButton:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.chromeButton:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.chromeButton[aria-pressed="true"],
+.chromeButton[aria-expanded="true"],
 .outline button[aria-pressed="true"] {
   background: var(--ui-accent-soft);
   color: var(--ui-accent-ink);
   border-color: var(--ui-accent-ink);
+}
+.workArea {
+  --canvas-tool-gutter: 138px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+.toolRail {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 16px;
+  inset-inline-start: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  gap: 4px;
+  box-sizing: border-box;
+  max-block-size: calc(100% - 32px);
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  box-shadow: 0 6px 24px rgb(16 32 27 / 12%);
+}
+.toolDivider {
+  grid-column: 1 / -1;
+  block-size: 1px;
+  margin: 4px 5px;
+  background: var(--ui-border);
+}
+@media (min-width: 761px) and (min-height: 900px) {
+  .workArea {
+    --canvas-tool-gutter: 90px;
+  }
+  .toolRail {
+    grid-template-columns: 44px;
+  }
 }
 .divider {
   width: 1px;
@@ -74,8 +163,10 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  padding-inline-start: var(--canvas-tool-gutter);
   overflow: hidden;
   position: relative;
+  background: var(--ui-surface-soft);
 }
 .stage {
   flex: 1;
@@ -83,6 +174,9 @@
   min-height: 0;
   position: relative;
   background: var(--ui-surface-soft);
+}
+.stage > .surface {
+  min-height: 0;
 }
 .surface {
   display: block;
@@ -407,26 +501,24 @@
 }
 .navigation {
   position: absolute;
-  bottom: 18px;
-  left: 18px;
+  inset-block-end: 16px;
+  inset-inline-end: 16px;
   display: flex;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
-  flex-wrap: wrap;
-  padding: 6px;
+  max-inline-size: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 5px;
   border: 1px solid var(--ui-border);
-  border-radius: 13px;
-  background: var(--ui-surface-translucent);
-  box-shadow: 0 5px 20px #00000010;
-}
-.navigation button {
-  min-height: 38px;
-  padding: 6px 9px;
-  font-size: 11px;
+  border-radius: 14px;
+  background: var(--ui-surface);
+  box-shadow: 0 5px 20px rgb(16 32 27 / 10%);
 }
 .navigation output {
+  color: var(--ui-text);
   font-size: 11px;
-  min-width: 42px;
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 44px;
   text-align: center;
 }
 .footer {
@@ -669,6 +761,9 @@
   cursor: not-allowed;
 }
 @media (max-width: 760px) {
+  .workArea {
+    --canvas-tool-gutter: 0px;
+  }
   .header {
     padding: 10px 12px;
     gap: 8px;
@@ -692,34 +787,44 @@
     font-size: 12px;
   }
   .toolbar {
+    padding: 6px 10px;
+    gap: 6px 10px;
+  }
+  .assetActions > button {
+    padding: 7px 9px;
+  }
+  .toolRail {
+    position: static;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-block-size: 148px;
+    margin: 8px;
     padding: 6px;
-    gap: 4px;
-    max-height: 110px;
     overflow-y: auto;
   }
-  .toolbar button {
-    font-size: 11px;
-    padding: 7px 9px;
-    min-height: 44px;
+  .toolDivider {
+    display: none;
   }
   .sidebar {
     position: absolute;
     right: 0;
     top: 0;
-    bottom: 0;
+    bottom: 72px;
     width: min(285px, calc(100% - 45px));
     box-shadow: -10px 0 30px #00000020;
     z-index: 3;
   }
   .navigation {
-    left: 8px;
-    bottom: 8px;
-    right: 8px;
-    width: max-content;
-    max-width: calc(100% - 30px);
+    inset-block-end: 8px;
+    inset-inline-end: 8px;
+    max-inline-size: calc(100% - 16px);
+    gap: 0;
+    padding: 4px;
   }
-  .navigation button {
-    min-height: 44px;
+  .navigation .divider {
+    margin-inline: 2px;
   }
   .footer {
     padding: 6px 10px;

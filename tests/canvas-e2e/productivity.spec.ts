@@ -7,6 +7,7 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
   page,
 }, testInfo) => {
   test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await organization(page, testInfo);
   await page.goto("/boards");
   await page.getByRole("button", { name: "New board", exact: true }).click();
@@ -23,6 +24,23 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
   const initial = await snapshot(page, id);
   expect(initial.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
   expect(initial.objects.length).toBeGreaterThan(10);
+  await expect(page.getByTestId(`canvas-object-${initial.objects[0]!.id}`)).toBeVisible();
+  for (const name of ["Text, images, drawings and links", "Canvas zoom"]) {
+    const buttons = page.getByRole("group", { name, exact: true }).getByRole("button");
+    await expect(buttons.first()).toBeVisible();
+    for (const button of await buttons.all()) {
+      await expect(button).toHaveAccessibleName(/\S/);
+      await expect(button).toHaveAttribute("title", /\S/);
+      await expect(button).toBeInViewport({ ratio: 1 });
+    }
+  }
+  await page.getByRole("button", { name: "Fit board", exact: true }).click();
+  for (const frame of initial.objects.filter((object) => object.type === "frame"))
+    await expect(page.getByTestId(`canvas-object-${frame.id}`)).toBeInViewport({ ratio: 1 });
+  await page.screenshot({
+    path: testInfo.outputPath("initial-template-desktop-tool-rail.png"),
+    fullPage: true,
+  });
   const frames = initial.objects.filter((object) => object.type === "frame");
   expect(frames.length).toBeGreaterThanOrEqual(3);
   const notes = initial.objects

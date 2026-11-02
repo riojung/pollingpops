@@ -90,6 +90,18 @@ or physical-pixel measurement. Current-cap results and unresolved gates are reco
 [capacity evidence](canvas-capacity-evidence.md). Twenty editors is a workload target, not a new
 hard admission limit. No object, license, grant, operation or workshop allowance is increased.
 
+### Readiness follow-up November 1, 2026
+
+The local evidence follow-up adds bounded continuous collaboration diagnostics and a separate
+[prepared-target runner](runbooks/canvas-target-capacity.md), actual Canvas MinIO/ClamAV lifecycle
+tests, active scanner-signature freshness enforcement and private telemetry, and explicit Canvas
+[device](runbooks/device-matrix.md#canvas-scenarios-when-enabled) and human accessibility scenarios.
+The [capacity evidence](canvas-capacity-evidence.md#november-1-2026-snapshot-projection-experiment-and-measurement-correction)
+corrects the older designated-observer topology and archives a rejected snapshot projection
+experiment. Diagnostic tooling and passing local tests do not accept the 500 ms roadmap target,
+physical-device performance, target-host soak or release gates. The user selected local rehearsals
+while staging access is arranged; no production quota or deployment configuration is increased.
+
 ## Baseline capabilities and gaps
 
 Before the canvas pilot, the implementation was a moderated idea collection and prioritization

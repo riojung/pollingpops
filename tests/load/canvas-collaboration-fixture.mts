@@ -85,7 +85,15 @@ function loopbackUrl(raw: string | undefined, protocols: string[]) {
 export async function createCanvasCollaborationFixture(
   config: CanvasCollaborationConfig,
   profiler?: CanvasCollaborationProfiler,
+  creatorSessionLifetimeMs = 3_600_000,
 ) {
+  // Synthetic credentials only: leave production auth policy and every stream/request deadline intact.
+  assert.ok(
+    Number.isSafeInteger(creatorSessionLifetimeMs) &&
+      creatorSessionLifetimeMs >= 3_600_000 &&
+      creatorSessionLifetimeMs <= 4_500_000,
+    "Use the bounded local fixture credential lifetime",
+  );
   const adminUrl = loopbackUrl(process.env.CANVAS_COLLAB_DATABASE_ADMIN_URL, [
     "postgres:",
     "postgresql:",
@@ -351,7 +359,7 @@ export async function createCanvasCollaborationFixture(
         userId: actor.userId,
         tokenHash: hashToken(token),
         activeWorkspaceId,
-        expiresAt: new Date(Date.now() + 3600000),
+        expiresAt: new Date(Date.now() + creatorSessionLifetimeMs),
       });
       sessions.push({ actor, token, workspaceId: activeWorkspaceId });
     }
@@ -440,6 +448,7 @@ export async function createCanvasCollaborationFixture(
           "content-type": "application/json",
         },
         body: JSON.stringify(mutation),
+        signal: AbortSignal.timeout(config.timeoutMs),
       });
     }
     return {

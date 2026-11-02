@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ButtonHTMLAttributes,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -64,7 +65,29 @@ import { canvasDiagramCopy } from "../../lib/i18n/canvas-diagram-messages";
 import { CanvasDiagramInspector } from "./canvas-diagram-inspector";
 import { canvasConnectorDraftPatch } from "./canvas-diagram-model";
 import { planCanvasLayer } from "./canvas-productivity";
+import { CanvasToolIcon, type CanvasToolIconName } from "./canvas-tool-icon";
 import styles from "./canvas.module.css";
+
+function CanvasChromeButton({
+  label,
+  icon,
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "children" | "title" | "aria-label"> & {
+  label: string;
+  icon: CanvasToolIconName;
+}) {
+  return (
+    <button
+      {...props}
+      type="button"
+      className={styles.chromeButton}
+      aria-label={label}
+      title={label}
+    >
+      <CanvasToolIcon name={icon} />
+    </button>
+  );
+}
 
 function CanvasEditorContent({ id }: { id: string }) {
   const { t, locale } = useLocale();
@@ -724,143 +747,65 @@ function CanvasEditorContent({ id }: { id: string }) {
           </button>
         ) : null}
       </header>
-      <div className={styles.toolbar} role="group" aria-label={t("boards.richTypes")}>
-        <button
-          type="button"
-          className="button-quiet"
-          aria-pressed={tool === "select"}
-          onClick={() => setTool("select")}
-        >
-          {t("boards.selectTool")}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          aria-pressed={tool === "hand"}
-          onClick={() => setTool("hand")}
-        >
-          {t("canvas.hand")}
-        </button>
-        <span className={styles.divider} />
-        {(["sticky", "text", "rect", "ellipse", "frame", "diamond", "parallelogram"] as const).map(
-          (type) => (
-            <button
-              type="button"
-              className="button-quiet"
-              key={type}
-              disabled={frozen || uiBusy || creationFull}
-              onClick={() => void add(type)}
-            >
-              {type === "diamond" || type === "parallelogram"
-                ? diagramCopy[type]
-                : t(
-                    type === "sticky"
-                      ? "canvas.sticky"
-                      : type === "text"
-                        ? "boards.textTool"
-                        : type === "rect"
-                          ? "boards.rectangleTool"
-                          : type === "ellipse"
-                            ? "boards.ellipseTool"
-                            : "canvas.productivity.frame",
-                  )}
-            </button>
-          ),
-        )}
-        <button
-          type="button"
-          className="button-quiet"
-          aria-pressed={tool === "connector"}
-          disabled={frozen || uiBusy || dirty}
-          onClick={() => {
-            setTool("connector");
-            setConnectorFrom(selectedId);
-          }}
-        >
-          {t("canvas.connector")}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          aria-pressed={tool === "marquee"}
-          onClick={() => setTool("marquee")}
-        >
-          {t("canvas.productivity.area")}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          disabled={frozen || uiBusy || dirty || creationFull}
-          aria-pressed={tool === "pen"}
-          onClick={() => setTool("pen")}
-        >
-          {t("canvas.productivity.pen")}
-        </button>
-        <CanvasAssetTools
-          board={board}
-          disabled={frozen || uiBusy || dirty || gestureActive || creationFull}
-          onCreate={createObject}
-        />
-        <span className={styles.divider} />
-        <button
-          type="button"
-          className="button-quiet"
-          disabled={frozen || uiBusy || dirty || !board.undoOperationId}
-          onClick={() =>
-            board.undoOperationId &&
-            void state.execute({ type: "undo", targetOperationId: board.undoOperationId })
-          }
-        >
-          {t("boards.undo")}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          disabled={frozen || uiBusy || dirty || !board.redoOperationId}
-          onClick={() =>
-            board.redoOperationId &&
-            void state.execute({ type: "redo", targetOperationId: board.redoOperationId })
-          }
-        >
-          {t("boards.redo")}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          aria-expanded={outline}
-          onClick={() => setOutline(!outline)}
-        >
-          {t("canvas.objects")}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          aria-expanded={facilitation}
-          onClick={() => {
-            setFacilitationMounted(true);
-            setFacilitation((visible) => !visible);
-          }}
-        >
-          {facilitationCopy.title}
-        </button>
-        <button
-          type="button"
-          className="button-quiet"
-          disabled={uiBusy || dirty || gestureActive}
-          onClick={() => setExporting(true)}
-        >
-          {t("canvas.export.open")}
-        </button>
-        {board.boardType === "workshop" && board.capabilities.facilitate ? (
-          <button
-            className="button-quiet"
-            type="button"
-            aria-expanded={workshop}
-            onClick={() => setWorkshop(!workshop)}
-          >
-            {t("canvas.workshop.controls")}
-          </button>
-        ) : null}
+      <div className={styles.toolbar}>
+        <div className={styles.historyControls}>
+          <CanvasChromeButton
+            icon="undo"
+            label={t("boards.undo")}
+            disabled={frozen || uiBusy || dirty || !board.undoOperationId}
+            onClick={() =>
+              board.undoOperationId &&
+              void state.execute({ type: "undo", targetOperationId: board.undoOperationId })
+            }
+          />
+          <CanvasChromeButton
+            icon="redo"
+            label={t("boards.redo")}
+            disabled={frozen || uiBusy || dirty || !board.redoOperationId}
+            onClick={() =>
+              board.redoOperationId &&
+              void state.execute({ type: "redo", targetOperationId: board.redoOperationId })
+            }
+          />
+        </div>
+        <div className={styles.assetActions}>
+          <CanvasAssetTools
+            board={board}
+            disabled={frozen || uiBusy || dirty || gestureActive || creationFull}
+            onCreate={createObject}
+          />
+        </div>
+        <div className={styles.panelActions}>
+          <CanvasChromeButton
+            icon="objects"
+            label={t("canvas.objects")}
+            aria-expanded={outline}
+            onClick={() => setOutline(!outline)}
+          />
+          <CanvasChromeButton
+            icon="facilitation"
+            label={facilitationCopy.title}
+            aria-expanded={facilitation}
+            onClick={() => {
+              setFacilitationMounted(true);
+              setFacilitation((visible) => !visible);
+            }}
+          />
+          <CanvasChromeButton
+            icon="export"
+            label={t("canvas.export.open")}
+            disabled={uiBusy || dirty || gestureActive}
+            onClick={() => setExporting(true)}
+          />
+          {board.boardType === "workshop" && board.capabilities.facilitate ? (
+            <CanvasChromeButton
+              icon="workshop"
+              label={t("canvas.workshop.controls")}
+              aria-expanded={workshop}
+              onClick={() => setWorkshop(!workshop)}
+            />
+          ) : null}
+        </div>
       </div>
       <CanvasPresenterControls
         boardId={board.id}
@@ -940,404 +885,467 @@ function CanvasEditorContent({ id }: { id: string }) {
           onDiscard={discardPending}
         />
       ) : null}
-      <div className={styles.workspace}>
-        <div className={styles.stage} ref={stage}>
-          <CanvasSurface
-            objects={board.objects}
-            viewport={viewport}
-            onViewport={setViewport}
-            onInteract={stopFollowing}
-            selectedId={selectedId}
-            selectedIds={selectedIds}
-            onSelectMany={(ids, additive) => selectMany(ids, additive, false)}
-            onTransform={transform}
-            onCreatePen={createPen}
-            onGestureActive={setGestureActive}
-            onSelect={changeSelection}
-            tool={tool}
-            canEdit={
-              board.capabilities.edit && !uiBusy && !dirty && (tool !== "pen" || !creationFull)
-            }
-            canFacilitate={board.capabilities.facilitate}
-            isObjectEditable={(object) => canChangeObject(board, object)}
-            onConnect={(next) => void connect(next)}
-            onCursor={(point) => {
-              cursor.current = point;
-            }}
-            members={members}
-            canvasId={board.id}
-            sourceBoardId={board.sourceBoardId ?? undefined}
-            sourceBoard={board.sourceBoard}
+      <div className={styles.workArea}>
+        <div className={styles.toolRail} role="group" aria-label={t("boards.richTypes")}>
+          <CanvasChromeButton
+            icon="select"
+            label={t("boards.selectTool")}
+            aria-pressed={tool === "select"}
+            onClick={() => setTool("select")}
           />
-          {!board.objects.length ? <p className={styles.emptyCanvas}>{t("canvas.empty")}</p> : null}
-          <div
-            className={styles.navigation}
-            role="group"
-            aria-label={t("canvas.zoom")}
-            onClickCapture={stopFollowing}
-          >
-            <button className="button-quiet" type="button" onClick={() => fit()}>
-              {t("canvas.fit")}
-            </button>
-            <button
-              className="button-quiet"
-              type="button"
-              disabled={!selected}
-              onClick={() => fit(true)}
-            >
-              {t("canvas.fitSelection")}
-            </button>
-            <button
-              className="button-quiet"
-              type="button"
-              aria-label={t("canvas.zoom") + " −"}
-              onClick={() =>
-                setViewport(
-                  zoomAt(
-                    viewport,
-                    {
-                      x: (stage.current?.clientWidth ?? 900) / 2,
-                      y: (stage.current?.clientHeight ?? 650) / 2,
-                    },
-                    viewport.zoom / 1.25,
-                  ),
-                )
+          <CanvasChromeButton
+            icon="hand"
+            label={t("canvas.hand")}
+            aria-pressed={tool === "hand"}
+            onClick={() => setTool("hand")}
+          />
+          <span className={styles.toolDivider} aria-hidden="true" />
+          {(
+            ["sticky", "text", "rect", "ellipse", "frame", "diamond", "parallelogram"] as const
+          ).map((type) => (
+            <CanvasChromeButton
+              key={type}
+              icon={type}
+              label={
+                type === "diamond" || type === "parallelogram"
+                  ? diagramCopy[type]
+                  : t(
+                      type === "sticky"
+                        ? "canvas.sticky"
+                        : type === "text"
+                          ? "boards.textTool"
+                          : type === "rect"
+                            ? "boards.rectangleTool"
+                            : type === "ellipse"
+                              ? "boards.ellipseTool"
+                              : "canvas.productivity.frame",
+                    )
               }
-            >
-              −
-            </button>
-            <output>
-              {formatNumber(locale, viewport.zoom, { style: "percent", maximumFractionDigits: 0 })}
-            </output>
-            <button
-              className="button-quiet"
-              type="button"
-              aria-label={t("canvas.zoom") + " +"}
-              onClick={() =>
-                setViewport(
-                  zoomAt(
-                    viewport,
-                    {
-                      x: (stage.current?.clientWidth ?? 900) / 2,
-                      y: (stage.current?.clientHeight ?? 650) / 2,
-                    },
-                    viewport.zoom * 1.25,
-                  ),
-                )
-              }
-            >
-              +
-            </button>
-          </div>
+              disabled={frozen || uiBusy || creationFull}
+              onClick={() => void add(type)}
+            />
+          ))}
+          <CanvasChromeButton
+            icon="connector"
+            label={t("canvas.connector")}
+            aria-pressed={tool === "connector"}
+            disabled={frozen || uiBusy || dirty}
+            onClick={() => {
+              setTool("connector");
+              setConnectorFrom(selectedId);
+            }}
+          />
+          <CanvasChromeButton
+            icon="marquee"
+            label={t("canvas.productivity.area")}
+            aria-pressed={tool === "marquee"}
+            onClick={() => setTool("marquee")}
+          />
+          <CanvasChromeButton
+            icon="pen"
+            label={t("canvas.productivity.pen")}
+            disabled={frozen || uiBusy || dirty || creationFull}
+            aria-pressed={tool === "pen"}
+            onClick={() => setTool("pen")}
+          />
         </div>
-        {outline || workshop || facilitationMounted ? (
-          <aside className={styles.sidebar} hidden={!outline && !workshop && !facilitation}>
-            {facilitationMounted ? (
-              <div hidden={!facilitation}>
-                <CanvasFacilitationPanel
+        <div className={styles.workspace}>
+          <div className={styles.stage} ref={stage}>
+            <CanvasSurface
+              objects={board.objects}
+              viewport={viewport}
+              onViewport={setViewport}
+              onInteract={stopFollowing}
+              selectedId={selectedId}
+              selectedIds={selectedIds}
+              onSelectMany={(ids, additive) => selectMany(ids, additive, false)}
+              onTransform={transform}
+              onCreatePen={createPen}
+              onGestureActive={setGestureActive}
+              onSelect={changeSelection}
+              tool={tool}
+              canEdit={
+                board.capabilities.edit && !uiBusy && !dirty && (tool !== "pen" || !creationFull)
+              }
+              canFacilitate={board.capabilities.facilitate}
+              isObjectEditable={(object) => canChangeObject(board, object)}
+              onConnect={(next) => void connect(next)}
+              onCursor={(point) => {
+                cursor.current = point;
+              }}
+              members={members}
+              canvasId={board.id}
+              sourceBoardId={board.sourceBoardId ?? undefined}
+              sourceBoard={board.sourceBoard}
+            />
+            {!board.objects.length ? (
+              <p className={styles.emptyCanvas}>{t("canvas.empty")}</p>
+            ) : null}
+            <div
+              className={styles.navigation}
+              role="group"
+              aria-label={t("canvas.zoom")}
+              onClickCapture={stopFollowing}
+            >
+              <CanvasChromeButton icon="fit" label={t("canvas.fit")} onClick={() => fit()} />
+              <CanvasChromeButton
+                icon="fit-selection"
+                label={t("canvas.fitSelection")}
+                disabled={!selected}
+                onClick={() => fit(true)}
+              />
+              <span className={styles.divider} aria-hidden="true" />
+              <CanvasChromeButton
+                icon="minus"
+                label={t("canvas.zoom") + " −"}
+                onClick={() =>
+                  setViewport(
+                    zoomAt(
+                      viewport,
+                      {
+                        x: (stage.current?.clientWidth ?? 900) / 2,
+                        y: (stage.current?.clientHeight ?? 650) / 2,
+                      },
+                      viewport.zoom / 1.25,
+                    ),
+                  )
+                }
+              />
+              <output>
+                {formatNumber(locale, viewport.zoom, {
+                  style: "percent",
+                  maximumFractionDigits: 0,
+                })}
+              </output>
+              <CanvasChromeButton
+                icon="plus"
+                label={t("canvas.zoom") + " +"}
+                onClick={() =>
+                  setViewport(
+                    zoomAt(
+                      viewport,
+                      {
+                        x: (stage.current?.clientWidth ?? 900) / 2,
+                        y: (stage.current?.clientHeight ?? 650) / 2,
+                      },
+                      viewport.zoom * 1.25,
+                    ),
+                  )
+                }
+              />
+            </div>
+          </div>
+          {outline || workshop || facilitationMounted ? (
+            <aside className={styles.sidebar} hidden={!outline && !workshop && !facilitation}>
+              {facilitationMounted ? (
+                <div hidden={!facilitation}>
+                  <CanvasFacilitationPanel
+                    board={board}
+                    selectedIds={selectedIds}
+                    disabled={uiBusy || dirty || gestureActive}
+                    onPlan={perform}
+                    onRefresh={() => void state.refresh()}
+                    onSelectObject={(objectId) => changeSelection(objectId)}
+                  />
+                </div>
+              ) : null}
+              {selectedIds.length ? (
+                <CanvasSelectionTools
                   board={board}
-                  selectedIds={selectedIds}
+                  ids={selectedIds}
                   disabled={uiBusy || dirty || gestureActive}
                   onPlan={perform}
-                  onRefresh={() => void state.refresh()}
-                  onSelectObject={(objectId) => changeSelection(objectId)}
+                  onAll={() => selectMany(board.objects.map((object) => object.id))}
+                  onClear={() => selectMany([])}
                 />
-              </div>
-            ) : null}
-            {selectedIds.length ? (
-              <CanvasSelectionTools
-                board={board}
-                ids={selectedIds}
-                disabled={uiBusy || dirty || gestureActive}
-                onPlan={perform}
-                onAll={() => selectMany(board.objects.map((object) => object.id))}
-                onClear={() => selectMany([])}
-              />
-            ) : null}
-            {workshop ? (
-              <CanvasWorkshopControls
-                board={board}
-                onRefresh={() => void state.refresh()}
-                disabled={uiBusy || dirty}
-              />
-            ) : null}
-            {outline ? (
-              <>
-                <details open>
-                  <summary>
-                    {t("canvas.objects")} · {formatNumber(locale, board.objects.length)}
-                  </summary>
-                  <ol className={styles.outline}>
-                    {board.objects.map((object, index) => (
-                      <li key={object.id} className={styles.outlineRow}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(object.id)}
-                          disabled={state.saving || deleting}
-                          aria-label={t("canvas.productivity.select", {
-                            label: objectLabel(object, index),
-                          })}
-                          onChange={() => changeSelection(object.id, true)}
-                        />
-                        <button
-                          type="button"
-                          aria-pressed={selectedIds.includes(object.id)}
-                          onClick={() =>
-                            tool === "connector"
-                              ? void connect(object.id)
-                              : changeSelection(object.id)
-                          }
-                        >
-                          {object.type === "idea_ref"
-                            ? (object.idea?.body ??
-                              board.sourceBoard?.ideas.find((idea) => idea.id === object.ideaId)
-                                ?.body ??
-                              t("canvas.protected"))
-                            : objectLabel(object, index)}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-                {selected && localDraft && !recovery ? (
-                  <form
-                    className={styles.inspector}
-                    onSubmit={(event) => void saveProperties(event)}
-                  >
-                    <h2>
-                      {t("boards.elementSettings")} ·{" "}
-                      <span lang="" dir="auto">
-                        {objectLabel(
-                          selected,
-                          board.objects.findIndex((object) => object.id === selected.id),
-                        )}
-                      </span>
-                    </h2>
-                    {selected.type === "idea_ref" ? (
-                      <p className={styles.protected}>{t("canvas.protected")}</p>
-                    ) : selected.type === "image" ? null : (
-                      <label>
-                        {selected.type === "connector" ? diagramCopy.label : t("boards.textTool")}
-                        <textarea
-                          maxLength={2000}
-                          value={localDraft.text}
-                          disabled={!editable || uiBusy}
-                          dir="auto"
-                          lang=""
-                          onChange={(event) =>
-                            setDraft({ ...localDraft, text: event.target.value })
-                          }
-                        />
-                      </label>
-                    )}
-                    {selected.type === "image" ? (
-                      <label>
-                        {t("canvas.assets.altText")}
-                        <input
-                          required
-                          maxLength={300}
-                          value={localDraft.altText ?? selected.altText}
-                          disabled={!editable || uiBusy}
-                          onChange={(event) =>
-                            setDraft({ ...localDraft, altText: event.target.value })
-                          }
-                        />
-                      </label>
-                    ) : null}
-                    {selected.type === "link" ? (
-                      <label>
-                        {t("canvas.assets.url")}
-                        <input
-                          type="url"
-                          pattern={"https?://[^\\s/@]+(?:[/?#][^\\s]*)?"}
-                          required
-                          maxLength={2048}
-                          value={localDraft.url ?? selected.url}
-                          disabled={!editable || uiBusy}
-                          onChange={(event) => setDraft({ ...localDraft, url: event.target.value })}
-                        />
-                      </label>
-                    ) : null}
-                    {dirty && draft!.version !== selected.version ? (
-                      <div className={styles.draftConflict}>
-                        <strong>{t("canvas.currentVersion")}</strong>
-                        <p lang="" dir="auto">
-                          {selected.text}
-                        </p>
-                        <p>{t("canvas.conflictHelp")}</p>
-                      </div>
-                    ) : null}
-                    {selected.type !== "connector" ? (
-                      <div className={styles.numeric}>
-                        {(["x", "y", "width", "height"] as const).map((field) => (
-                          <label key={field}>
-                            {t(
-                              field === "x"
-                                ? "boards.positionX"
-                                : field === "y"
-                                  ? "boards.positionY"
-                                  : field === "width"
-                                    ? "boards.shapeWidth"
-                                    : "boards.shapeHeight",
-                            )}
-                            <input
-                              type="number"
-                              step="any"
-                              min={field === "width" || field === "height" ? 1 : -100000}
-                              max={field === "width" || field === "height" ? 10000 : 100000}
-                              value={localDraft[field]}
-                              disabled={!editable || uiBusy}
-                              onChange={(event) => {
-                                if (Number.isFinite(event.currentTarget.valueAsNumber))
-                                  setDraft({
-                                    ...localDraft,
-                                    [field]: event.currentTarget.valueAsNumber,
-                                  });
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    ) : null}
-                    <CanvasDiagramInspector
-                      object={selected}
-                      objects={board.objects}
-                      draft={localDraft}
-                      disabled={!editable || uiBusy}
-                      onChange={setDraft}
-                      label={objectLabel}
-                    />
-                    <div className={styles.actions}>
-                      {(["front", "back"] as const).map((direction) => {
-                        const plan = planCanvasLayer(board, selectedIds, direction);
-                        return (
+              ) : null}
+              {workshop ? (
+                <CanvasWorkshopControls
+                  board={board}
+                  onRefresh={() => void state.refresh()}
+                  disabled={uiBusy || dirty}
+                />
+              ) : null}
+              {outline ? (
+                <>
+                  <details open>
+                    <summary>
+                      {t("canvas.objects")} · {formatNumber(locale, board.objects.length)}
+                    </summary>
+                    <ol className={styles.outline}>
+                      {board.objects.map((object, index) => (
+                        <li key={object.id} className={styles.outlineRow}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(object.id)}
+                            disabled={state.saving || deleting}
+                            aria-label={t("canvas.productivity.select", {
+                              label: objectLabel(object, index),
+                            })}
+                            onChange={() => changeSelection(object.id, true)}
+                          />
                           <button
                             type="button"
-                            className="button-quiet"
-                            key={direction}
-                            disabled={!editable || uiBusy || dirty || !plan.command}
-                            title={plan.reason ? t(canvasPlanMessage(plan.reason)) : undefined}
-                            onClick={() => void perform(plan)}
+                            aria-pressed={selectedIds.includes(object.id)}
+                            onClick={() =>
+                              tool === "connector"
+                                ? void connect(object.id)
+                                : changeSelection(object.id)
+                            }
                           >
-                            {diagramCopy[direction]}
+                            {object.type === "idea_ref"
+                              ? (object.idea?.body ??
+                                board.sourceBoard?.ideas.find((idea) => idea.id === object.ideaId)
+                                  ?.body ??
+                                t("canvas.protected"))
+                              : objectLabel(object, index)}
                           </button>
-                        );
-                      })}
-                    </div>
-                    {selected.type !== "idea_ref" && selected.type !== "connector" ? (
-                      <label>
-                        {t("boards.strokeColor")}
-                        <select
-                          disabled={!editable || uiBusy}
-                          value={localDraft.color}
-                          onChange={(event) =>
-                            setDraft({
-                              ...localDraft,
-                              color: event.target.value as CanvasObject["color"],
-                            })
-                          }
-                        >
-                          {(["yellow", "blue", "green", "pink", "purple", "white"] as const).map(
-                            (color) => (
-                              <option key={color} value={color}>
-                                {t(
-                                  color === "yellow" || color === "pink" || color === "white"
-                                    ? `canvas.color.${color}`
-                                    : color === "blue"
-                                      ? "boards.colorBlue"
-                                      : color === "green"
-                                        ? "boards.colorGreen"
-                                        : "boards.colorPurple",
-                                )}
-                              </option>
-                            ),
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                  {selected && localDraft && !recovery ? (
+                    <form
+                      className={styles.inspector}
+                      onSubmit={(event) => void saveProperties(event)}
+                    >
+                      <h2>
+                        {t("boards.elementSettings")} ·{" "}
+                        <span lang="" dir="auto">
+                          {objectLabel(
+                            selected,
+                            board.objects.findIndex((object) => object.id === selected.id),
                           )}
-                        </select>
-                      </label>
-                    ) : null}
-                    {canPublishCanvasObject(board, selected) ? (
-                      <>
+                        </span>
+                      </h2>
+                      {selected.type === "idea_ref" ? (
+                        <p className={styles.protected}>{t("canvas.protected")}</p>
+                      ) : selected.type === "image" ? null : (
                         <label>
-                          {t("canvas.visibility")}
+                          {selected.type === "connector" ? diagramCopy.label : t("boards.textTool")}
+                          <textarea
+                            maxLength={2000}
+                            value={localDraft.text}
+                            disabled={!editable || uiBusy}
+                            dir="auto"
+                            lang=""
+                            onChange={(event) =>
+                              setDraft({ ...localDraft, text: event.target.value })
+                            }
+                          />
+                        </label>
+                      )}
+                      {selected.type === "image" ? (
+                        <label>
+                          {t("canvas.assets.altText")}
+                          <input
+                            required
+                            maxLength={300}
+                            value={localDraft.altText ?? selected.altText}
+                            disabled={!editable || uiBusy}
+                            onChange={(event) =>
+                              setDraft({ ...localDraft, altText: event.target.value })
+                            }
+                          />
+                        </label>
+                      ) : null}
+                      {selected.type === "link" ? (
+                        <label>
+                          {t("canvas.assets.url")}
+                          <input
+                            type="url"
+                            pattern={"https?://[^\\s/@]+(?:[/?#][^\\s]*)?"}
+                            required
+                            maxLength={2048}
+                            value={localDraft.url ?? selected.url}
+                            disabled={!editable || uiBusy}
+                            onChange={(event) =>
+                              setDraft({ ...localDraft, url: event.target.value })
+                            }
+                          />
+                        </label>
+                      ) : null}
+                      {dirty && draft!.version !== selected.version ? (
+                        <div className={styles.draftConflict}>
+                          <strong>{t("canvas.currentVersion")}</strong>
+                          <p lang="" dir="auto">
+                            {selected.text}
+                          </p>
+                          <p>{t("canvas.conflictHelp")}</p>
+                        </div>
+                      ) : null}
+                      {selected.type !== "connector" ? (
+                        <div className={styles.numeric}>
+                          {(["x", "y", "width", "height"] as const).map((field) => (
+                            <label key={field}>
+                              {t(
+                                field === "x"
+                                  ? "boards.positionX"
+                                  : field === "y"
+                                    ? "boards.positionY"
+                                    : field === "width"
+                                      ? "boards.shapeWidth"
+                                      : "boards.shapeHeight",
+                              )}
+                              <input
+                                type="number"
+                                step="any"
+                                min={field === "width" || field === "height" ? 1 : -100000}
+                                max={field === "width" || field === "height" ? 10000 : 100000}
+                                value={localDraft[field]}
+                                disabled={!editable || uiBusy}
+                                onChange={(event) => {
+                                  if (Number.isFinite(event.currentTarget.valueAsNumber))
+                                    setDraft({
+                                      ...localDraft,
+                                      [field]: event.currentTarget.valueAsNumber,
+                                    });
+                                }}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+                      <CanvasDiagramInspector
+                        object={selected}
+                        objects={board.objects}
+                        draft={localDraft}
+                        disabled={!editable || uiBusy}
+                        onChange={setDraft}
+                        label={objectLabel}
+                      />
+                      <div className={styles.actions}>
+                        {(["front", "back"] as const).map((direction) => {
+                          const plan = planCanvasLayer(board, selectedIds, direction);
+                          return (
+                            <button
+                              type="button"
+                              className="button-quiet"
+                              key={direction}
+                              disabled={!editable || uiBusy || dirty || !plan.command}
+                              title={plan.reason ? t(canvasPlanMessage(plan.reason)) : undefined}
+                              onClick={() => void perform(plan)}
+                            >
+                              {diagramCopy[direction]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selected.type !== "idea_ref" && selected.type !== "connector" ? (
+                        <label>
+                          {t("boards.strokeColor")}
                           <select
-                            aria-describedby="canvas-visibility-help"
-                            value={localDraft.visibility}
-                            disabled={uiBusy}
+                            disabled={!editable || uiBusy}
+                            value={localDraft.color}
                             onChange={(event) =>
                               setDraft({
                                 ...localDraft,
-                                visibility: event.target.value as CanvasObject["visibility"],
+                                color: event.target.value as CanvasObject["color"],
                               })
                             }
                           >
-                            <option value="team">{t("canvas.teamOnly")}</option>
-                            <option value="published">{t("canvas.published")}</option>
+                            {(["yellow", "blue", "green", "pink", "purple", "white"] as const).map(
+                              (color) => (
+                                <option key={color} value={color}>
+                                  {t(
+                                    color === "yellow" || color === "pink" || color === "white"
+                                      ? `canvas.color.${color}`
+                                      : color === "blue"
+                                        ? "boards.colorBlue"
+                                        : color === "green"
+                                          ? "boards.colorGreen"
+                                          : "boards.colorPurple",
+                                  )}
+                                </option>
+                              ),
+                            )}
                           </select>
                         </label>
-                        <small id="canvas-visibility-help">{t("canvas.publishHelp")}</small>
-                      </>
-                    ) : null}
-                    {!editable && selected.type !== "idea_ref" ? (
-                      <p className={styles.muted}>{t("canvas.readOnly")}</p>
-                    ) : null}
-                    <button
-                      type="submit"
-                      className="button"
-                      disabled={!editable || uiBusy || !dirty}
-                    >
-                      {t("canvas.saveChanges")}
-                    </button>
-                    {dirty ? (
+                      ) : null}
+                      {canPublishCanvasObject(board, selected) ? (
+                        <>
+                          <label>
+                            {t("canvas.visibility")}
+                            <select
+                              aria-describedby="canvas-visibility-help"
+                              value={localDraft.visibility}
+                              disabled={uiBusy}
+                              onChange={(event) =>
+                                setDraft({
+                                  ...localDraft,
+                                  visibility: event.target.value as CanvasObject["visibility"],
+                                })
+                              }
+                            >
+                              <option value="team">{t("canvas.teamOnly")}</option>
+                              <option value="published">{t("canvas.published")}</option>
+                            </select>
+                          </label>
+                          <small id="canvas-visibility-help">{t("canvas.publishHelp")}</small>
+                        </>
+                      ) : null}
+                      {!editable && selected.type !== "idea_ref" ? (
+                        <p className={styles.muted}>{t("canvas.readOnly")}</p>
+                      ) : null}
                       <button
-                        type="button"
-                        className="button-quiet"
-                        disabled={state.saving}
-                        onClick={() => setDraft(null)}
+                        type="submit"
+                        className="button"
+                        disabled={!editable || uiBusy || !dirty}
                       >
-                        {t("canvas.discard")}
+                        {t("canvas.saveChanges")}
                       </button>
-                    ) : null}
-                  </form>
-                ) : (
-                  <p className={styles.muted}>{t("boards.noElements")}</p>
-                )}
-                <p className={styles.keyboardHelp}>{t("canvas.keyboard")}</p>
-                <p className={styles.muted}>
-                  {t("canvas.retention", { date: formatDateTime(locale, board.expiresAt) })}
-                </p>
-                {board.capabilities.archive ? (
-                  <button
-                    type="button"
-                    className="button-quiet"
-                    disabled={uiBusy || dirty}
-                    onClick={() =>
-                      void state.execute({
-                        type: board.status === "archived" ? "restore" : "archive",
-                      })
-                    }
-                  >
-                    {t(board.status === "archived" ? "canvas.restore" : "canvas.archive")}
-                  </button>
-                ) : null}
-                {board.boardType === "team" && board.capabilities.delete ? (
-                  <button
-                    type="button"
-                    className="button-quiet"
-                    disabled={uiBusy || dirty}
-                    onClick={() => void deleteBoard()}
-                  >
-                    {t("canvas.delete")}
-                  </button>
-                ) : null}
-                {deleteError ? (
-                  <p className="error" role="alert" lang="en-CA">
-                    {deleteError}
+                      {dirty ? (
+                        <button
+                          type="button"
+                          className="button-quiet"
+                          disabled={state.saving}
+                          onClick={() => setDraft(null)}
+                        >
+                          {t("canvas.discard")}
+                        </button>
+                      ) : null}
+                    </form>
+                  ) : (
+                    <p className={styles.muted}>{t("boards.noElements")}</p>
+                  )}
+                  <p className={styles.keyboardHelp}>{t("canvas.keyboard")}</p>
+                  <p className={styles.muted}>
+                    {t("canvas.retention", { date: formatDateTime(locale, board.expiresAt) })}
                   </p>
-                ) : null}
-              </>
-            ) : null}
-          </aside>
-        ) : null}
+                  {board.capabilities.archive ? (
+                    <button
+                      type="button"
+                      className="button-quiet"
+                      disabled={uiBusy || dirty}
+                      onClick={() =>
+                        void state.execute({
+                          type: board.status === "archived" ? "restore" : "archive",
+                        })
+                      }
+                    >
+                      {t(board.status === "archived" ? "canvas.restore" : "canvas.archive")}
+                    </button>
+                  ) : null}
+                  {board.boardType === "team" && board.capabilities.delete ? (
+                    <button
+                      type="button"
+                      className="button-quiet"
+                      disabled={uiBusy || dirty}
+                      onClick={() => void deleteBoard()}
+                    >
+                      {t("canvas.delete")}
+                    </button>
+                  ) : null}
+                  {deleteError ? (
+                    <p className="error" role="alert" lang="en-CA">
+                      {deleteError}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </aside>
+          ) : null}
+        </div>
       </div>
       {exporting ? (
         <CanvasExportDialog

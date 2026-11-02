@@ -282,6 +282,162 @@ for (const backend of ["memory", "postgres"] as const)
           height: 160,
           text,
         });
+      it.skipIf(backend !== "postgres")(
+        "isolates switched canvas scopes on one pooled connection after commit and rollback",
+        async () => {
+          const first = await create();
+          const otherOrg = await platform.createOrganization({
+            name: "Other canvas scope",
+            actorId: owner.userId,
+            accountType: "organization",
+            licenseUnit: "user",
+          });
+          await platform.applySubscriptionSnapshot({
+            organizationId: otherOrg.id,
+            customerId: null,
+            subscriptionId: null,
+            status: "active",
+            licenseQuantity: 1,
+            licenseUnit: "user",
+            offerId: null,
+            paidThrough: null,
+            graceUntil: null,
+            legacyPlan: "team",
+          });
+          const otherWorkspaceId = (
+            await platform.getOrganizationUserLicenses(otherOrg.id, owner.userId)
+          ).assignments.find((assignment) => assignment.userId === owner.userId)!.workspaceId;
+          expect(otherWorkspaceId).not.toBe(workspaceId);
+          const second = await canvases.create(
+            owner,
+            CanvasBoardCreateSchema.parse({
+              workspaceId: otherWorkspaceId,
+              title: "Other organization board",
+              boardType: "team",
+              operationId: randomUUID(),
+            }),
+          );
+          const firstObject = note("First workspace object"),
+            secondObject = note("Other organization object");
+          await change(owner, first.id, {
+            type: "batch",
+            operations: [{ type: "create", object: firstObject }],
+          });
+          await change(owner, second.id, {
+            type: "batch",
+            operations: [{ type: "create", object: secondObject }],
+          });
+          const targets = [
+            { board: first, object: firstObject, organizationId: org },
+            { board: second, object: secondObject, organizationId: otherOrg.id },
+          ];
+          const isolated = new PostgresRepository(runtimeDatabaseUrl!);
+          isolated.pool.options.max = 1;
+          isolated.pool.options.idleTimeoutMillis = 0;
+          try {
+            await expect(isolated.inspectRuntimeDatabasePrincipal()).resolves.toMatchObject({
+              runtimeRoleMember: true,
+              superuser: false,
+              bypassRls: false,
+              ownerRoleMember: false,
+            });
+            const tables = [
+              "organizations",
+              "workspaces",
+              "canvas_boards",
+              "canvas_board_objects",
+              "canvas_board_receipts",
+            ];
+            const forced = await isolated.pool.query(
+              "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[])",
+              [tables],
+            );
+            expect(forced.rows).toHaveLength(tables.length);
+            expect(forced.rows.every((row) => row.relrowsecurity && row.relforcerowsecurity)).toBe(
+              true,
+            );
+            const pid = (await isolated.pool.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
+            const run = postgresCanvasRun(isolated);
+            const boardIds = targets.map((target) => target.board.id);
+            const workspaceIds = targets.map((target) => target.board.workspaceId);
+            const organizationIds = targets.map((target) => target.organizationId);
+            const assertSelected = async (
+              tx: CanvasTransaction,
+              target: (typeof targets)[number],
+            ) => {
+              const state = await tx.get(target.board.id);
+              expect(state?.board.id).toBe(target.board.id);
+              expect(state?.objects.map((object) => object.id)).toEqual([target.object.id]);
+              const client = tx.sqlClient!;
+              expect((await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid).toBe(pid);
+              expect(
+                (
+                  await client.query("SELECT id FROM organizations WHERE id=ANY($1::uuid[])", [
+                    organizationIds,
+                  ])
+                ).rows,
+              ).toEqual([{ id: target.organizationId }]);
+              expect(
+                (
+                  await client.query("SELECT id FROM workspaces WHERE id=ANY($1::uuid[])", [
+                    workspaceIds,
+                  ])
+                ).rows,
+              ).toEqual([{ id: target.board.workspaceId }]);
+              expect(
+                (
+                  await client.query(
+                    "SELECT board_id,id FROM canvas_board_objects WHERE board_id=ANY($1::uuid[])",
+                    [boardIds],
+                  )
+                ).rows,
+              ).toEqual([{ board_id: target.board.id, id: target.object.id }]);
+              expect(
+                (
+                  await client.query(
+                    "SELECT board_id FROM canvas_board_receipts WHERE board_id=ANY($1::uuid[])",
+                    [boardIds],
+                  )
+                ).rows,
+              ).toEqual([{ board_id: target.board.id }]);
+            };
+            const assertReleasedScope = async () => {
+              const client = await isolated.pool.connect();
+              try {
+                expect((await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid).toBe(
+                  pid,
+                );
+                for (const table of tables)
+                  expect((await client.query(`SELECT * FROM ${table}`)).rows).toEqual([]);
+              } finally {
+                client.release();
+              }
+            };
+            for (const rollback of [false, true]) {
+              const aborted = new Error("Intentional canvas transaction rollback");
+              const result = run(owner, { boardId: first.id }, async (tx) => {
+                await assertSelected(tx, targets[0]!);
+                await assertSelected(tx, targets[1]!);
+                await assertSelected(tx, targets[0]!);
+                const updated = await tx.sqlClient!.query(
+                  "UPDATE canvas_boards SET title=$2 WHERE id=$1 RETURNING id",
+                  [first.id, rollback ? "Rolled back scope title" : "Committed scope title"],
+                );
+                expect(updated.rows).toEqual([{ id: first.id }]);
+                if (rollback) throw aborted;
+              });
+              if (rollback) await expect(result).rejects.toBe(aborted);
+              else await result;
+              await assertReleasedScope();
+              await expect(canvases.get(owner, first.id)).resolves.toMatchObject({
+                title: "Committed scope title",
+              });
+            }
+          } finally {
+            await isolated.close();
+          }
+        },
+      );
       function withReadTransaction(transform: (tx: CanvasTransaction) => CanvasTransaction) {
         const store =
           repository instanceof MemoryRepository
@@ -298,8 +454,8 @@ for (const backend of ["memory", "postgres"] as const)
       }
       it("matches the full-state response with exact actor-owned uppercase history heads", async () => {
         const board = await create();
-        const a = note("Owner note"),
-          b = note("Independent editor note");
+        const a = { ...note("Owner note"), id: "00000000-0000-4000-8000-000000000001" },
+          b = { ...note("Independent editor note"), id: "00000000-0000-4000-8000-000000000002" };
         const creationId = "ABCDEF01-2345-4ABC-8DEF-0123456789AB";
         const editId = "ABCDEF02-2345-4ABC-8DEF-0123456789AB";
         const editorId = "ABCDEF03-2345-4ABC-8DEF-0123456789AB";
@@ -361,8 +517,13 @@ for (const backend of ["memory", "postgres"] as const)
         }));
         const ownerRead = await snapshots.get(owner, board.id);
         const editorRead = await snapshots.get(editor, board.id);
-        expect(ownerRead).toEqual(fullOwner);
-        expect(editorRead).toEqual(fullEditor);
+        // Reloads may reorder objects; retain exact content, counts, metadata and history heads.
+        const orderedObjects = (view: typeof fullOwner) => ({
+          ...view,
+          objects: view.objects.toSorted((a, b) => a.id.localeCompare(b.id)),
+        });
+        expect(orderedObjects(ownerRead)).toEqual(orderedObjects(fullOwner));
+        expect(orderedObjects(editorRead)).toEqual(orderedObjects(fullEditor));
         expect(ownerRead).toMatchObject({ undoOperationId: creationId, redoOperationId: editId });
         expect(editorRead).toMatchObject({ undoOperationId: editorId, redoOperationId: null });
         expect(ownerRead.grants).toHaveLength(1);
@@ -371,7 +532,9 @@ for (const backend of ["memory", "postgres"] as const)
           type: "redo",
           targetOperationId: ownerRead.redoOperationId!,
         });
-        expect(await snapshots.get(owner, board.id)).toEqual(redone.board);
+        expect(orderedObjects(await snapshots.get(owner, board.id))).toEqual(
+          orderedObjects(redone.board),
+        );
       });
       it("keeps preflight before snapshot rows and rechecks the loaded role and expiry", async () => {
         const board = await create();

@@ -1,0 +1,1390 @@
+{
+  "evidenceSchemaVersion": 1,
+  "date": "2026-11-01",
+  "baseRevision": "e41d7d73cb513ceda34bb53ee2325a95bd0559ea",
+  "status": "rejected-candidate-not-applied",
+  "candidateApplied": false,
+  "capacityIncreaseAuthorized": false,
+  "unappliedCandidate": {
+    "archive": "docs/experiments/canvas-context-batch.patch",
+    "patchSha256": "be17ef6a1ed34a4bd8c5136e7fc2240f71766d361555891f8034af64558dd554",
+    "file": "packages/db/src/canvas-board-store.ts",
+    "function": "selectBoard",
+    "baselineSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+    "candidateSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea",
+    "description": "Three sequential parameterized transaction-local scope-setting calls become one parameterized SELECT with the same independent keys, values and local=true.",
+    "unchanged": [
+      "Principal and organization shared fences",
+      "Workspace, canvas and source lock order",
+      "Fresh session, role, license, grant and expiry checks",
+      "Forced RLS",
+      "COMMIT, ROLLBACK and connection release",
+      "Stream/client cadences, recovery and authority deadlines",
+      "Object, document, editor and guest limits",
+      "All harness gates and workload"
+    ]
+  },
+  "protocol": {
+    "change": "Three independent transaction-local scope settings in selectBoard: sequential statements to one parameterized SELECT.",
+    "variantFile": "packages/db/src/canvas-board-store.ts",
+    "originalSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+    "candidateSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea",
+    "retainedPilot": "baseline-profile-1",
+    "confirmingRunOrder": [
+      "baseline-profile-2",
+      "candidate-profile-1",
+      "baseline-profile-off",
+      "candidate-profile-off"
+    ],
+    "pilotNote": "Before lint-only unit mock cleanup; production browser, server and harness source unchanged. A new build with current full source provenance is required for confirming pairs. Keep pilot observations disclosed.",
+    "workload": {
+      "objects": 500,
+      "licensedEditors": 20,
+      "apiNodes": 2,
+      "warmupWaves": 1,
+      "updatesPerEditor": 10,
+      "measuredCommands": 200,
+      "guestObjects": 100,
+      "nominalLatencyMs": 100
+    },
+    "profiling": {
+      "profilePairs": true,
+      "maxSamples": 100000,
+      "offPair": false
+    },
+    "limitsChanged": false,
+    "gatesChanged": false,
+    "capacityIncreaseAuthorized": false,
+    "acceptance": "Every completed run retained, including failed gates. No dropped profiling samples for direct-query count comparison. Distinguish direct operation statement counts from total workload SQL and latency. Expand equally instrumented comparisons if observed tail regression is unresolved.",
+    "additionalRunOrder": ["candidate-profile-off-2", "baseline-profile-off-2"],
+    "extensionReason": "First off pair improved peer p95 but raised acknowledgement p95 by5.1 percent. Reverse-order off pair checks whether a consistent acknowledgement regression is observed; retain every outcome and unchanged gates."
+  },
+  "workload": {
+    "objects": 500,
+    "licensedEditors": 20,
+    "openEditorBrowserContexts": 20,
+    "updatesPerEditor": 10,
+    "warmupWaves": 1,
+    "measuredCommands": 200,
+    "guestOrdinaryObjects": 100,
+    "objectCounts": {
+      "sticky": 63,
+      "rect": 43,
+      "ellipse": 63,
+      "text": 43,
+      "diamond": 62,
+      "parallelogram": 43,
+      "frame": 2,
+      "image": 2,
+      "connector": 119,
+      "pen": 60
+    },
+    "sceneBytes": 313422,
+    "fakeImagePlacements": 2,
+    "fakeImageAssets": 1,
+    "fakeImageBytes": 68,
+    "pacing": "Concurrent independent-object waves; each wave waits for every HTTP acknowledgement and peer paint opportunity before its successor"
+  },
+  "environment": {
+    "productionBrowserBundle": true,
+    "headless": true,
+    "browser": "156.0.8078.4",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "reducedMotion": true,
+    "node": "v22.23.4",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "kernel": "27.0.0",
+    "logicalCpuCount": 12,
+    "hostMemoryBytes": 25769803776,
+    "databaseVersion": "17.11",
+    "cacheVersion": "7.2.4",
+    "restrictedRuntimeRlsChecked": true,
+    "servingApiNodes": 2,
+    "independentRepositoryPools": 2,
+    "independentRedisCacheClients": 2,
+    "runtimePoolMaximum": 15,
+    "nominalCdpNetworkLatencyMs": 100,
+    "apiNodeMode": "NODE_ENV=test production route implementations, relaxed global loopback IP budget; not a production deployment"
+  },
+  "environmentNotes": [
+    "Local headless Chromium and native Node coordinator; PostgreSQL and Valkey in the same existing Colima VM.",
+    "Container tags postgres:17-alpine and valkey/valkey:8-alpine. cacheVersion is the Redis-compatible version reported by INFO, not the Valkey release number.",
+    "All heavy checks, builds and browser trials ran serially; user containers and VM allocation were unchanged."
+  ],
+  "measurementDefinitions": {
+    "httpAcknowledgement": "Browser performance.now immediately before authenticated fetch to after response JSON/receipt validation; includes browser-emulated latency and HTTP/auth/repository/projection costs",
+    "repositoryResolutionToPeerPaintOpportunity": "One coordinator monotonic clock: command repository promise resolution after its transaction returns, to an authorized different-node observer binding after matching on-screen SVG text and two requestAnimationFrames. Includes CDP binding delivery; an upper bound on a paint opportunity, not database COMMIT instant or physical pixel/monitor latency",
+    "guestPublication": "Same resolution-to-two-rAF observation for an ordinary private object explicitly published by the facilitator; measured in the Bearer-only guest canvas served by the other node",
+    "initialRender": "Browser navigation performance.now to expected complete SVG object count and visible authorized text plus two requestAnimationFrames; sequential fresh browser contexts, server/OS caches warm after the first navigation",
+    "navigationFrameInterval": "Consecutive browser rAF timestamps while real pointer hand-pan gestures cross the already-rendered mixed scene; not presented-frame GPU timing or reference-device FPS",
+    "reconnect": "Coordinator time from enabling the offline peer context network until both its latest authorized matching text plus two rAF and a new stream request",
+    "stalledConsumerAcknowledgement": "HTTP acknowledgement samples while an additional authorized raw TCP stream deliberately does not consume its response body; checks isolation, not a forced worst-case backpressure cutoff",
+    "repositoryProfiling": "Optional CANVAS_COLLAB_PROFILE=true instance/SQL/pool observations during measured write-and-peer-paint waves only; setup/warm-up and operations begun before that window are excluded. Monotonic client elapsed times, numeric correlation and fixed method/SQL categories only. CANVAS_COLLAB_PROFILE_MAX_SAMPLES bounds retained completions (default20000,max100000); truncation and in-flight observations are disclosed. No authority cache or production behavior changes; gates remain independent."
+  },
+  "smokeGateThresholds": {
+    "httpAcknowledgement": 2000,
+    "repositoryResolutionToPeerPaintOpportunity": 3000,
+    "guestPublication": 3000,
+    "initialRender": 15000,
+    "navigationFrameInterval": 100,
+    "reconnect": 12000,
+    "stalledConsumerAcknowledgement": 2000
+  },
+  "runs": [
+    {
+      "label": "baseline-profile-1",
+      "complete": true,
+      "startedAt": "2026-11-01T07:48:11.119Z",
+      "variant": "baseline",
+      "storeSourceSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+      "rawReportSha256": "3d2e4974e4773b6abc4678bd4cc6db05d1d2149d7b5a310aa4f8d12ad723843c",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "71d0e0ae8bff8c9f70cc5718465b20da4621f22083ef5524a80263fcb3e04449",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1368.6,
+          "p95": 1803.1,
+          "p99": 1952.5,
+          "max": 1976.1
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 689.59,
+          "p95": 1303.44,
+          "p99": 1675.67,
+          "max": 1767.62
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 486.4,
+          "p95": 486.4,
+          "p99": 486.4,
+          "max": 486.4
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1045,
+          "p95": 1052.9,
+          "p99": 1111.5,
+          "max": 1111.5
+        },
+        "navigationFrameInterval": {
+          "count": 137,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 973.21,
+          "p95": 973.21,
+          "p99": 973.21,
+          "max": 973.21
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1368.6,
+          "p95": 1803.1,
+          "p99": 1952.5,
+          "max": 1976.1
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1303.44,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 486.4,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1052.9,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 114.3,
+        "p95": 122.2,
+        "p99": 122.4,
+        "max": 122.5
+      },
+      "profiling": {
+        "enabled": true,
+        "durationMs": 21126.363165999996,
+        "observed": {
+          "operation": 1882,
+          "query": 52975,
+          "pool": 1894
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 18,
+          "query": 12,
+          "pool": 6
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 56
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {
+        "authorize": {
+          "24": 793,
+          "23": 158
+        },
+        "get": {
+          "32": 51,
+          "33": 544
+        },
+        "command": {
+          "49": 10,
+          "50": 190
+        }
+      },
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 566820864,
+        "heapUsed": 744203888
+      }
+    },
+    {
+      "label": "baseline-profile-2",
+      "complete": true,
+      "startedAt": "2026-11-01T08:00:36.923Z",
+      "variant": "baseline",
+      "storeSourceSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+      "rawReportSha256": "ba000e0b48384499bad4d19078204d4f1d39870f79e479883bd7a5d75148d511",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1443.5,
+          "p95": 2039,
+          "p99": 2333.7,
+          "max": 2462.6
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 760.43,
+          "p95": 1538,
+          "p99": 1716.75,
+          "max": 1789.1
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 774.47,
+          "p95": 774.47,
+          "p99": 774.47,
+          "max": 774.47
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1046.9,
+          "p95": 1065,
+          "p99": 1068.6,
+          "max": 1068.6
+        },
+        "navigationFrameInterval": {
+          "count": 149,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1571.51,
+          "p95": 1571.51,
+          "p99": 1571.51,
+          "max": 1571.51
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1443.5,
+          "p95": 2039,
+          "p99": 2333.7,
+          "max": 2462.6
+        }
+      },
+      "smokeGatesPassed": false,
+      "failedSmokeGates": ["httpAcknowledgement", "stalledConsumerAcknowledgement"],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1538,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 774.47,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1065,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 107.9,
+        "p95": 114.5,
+        "p99": 114.8,
+        "max": 114.9
+      },
+      "profiling": {
+        "enabled": true,
+        "durationMs": 24258.41425,
+        "observed": {
+          "operation": 2017,
+          "query": 56117,
+          "pool": 2029
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 12,
+          "query": 12,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 54
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {
+        "authorize": {
+          "24": 898,
+          "23": 148
+        },
+        "command": {
+          "49": 10,
+          "50": 190
+        },
+        "get": {
+          "32": 55,
+          "33": 565
+        }
+      },
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 481837056,
+        "heapUsed": 711648576
+      }
+    },
+    {
+      "label": "candidate-profile-1",
+      "complete": true,
+      "startedAt": "2026-11-01T08:02:20.619Z",
+      "variant": "candidate",
+      "storeSourceSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea",
+      "rawReportSha256": "99dd658152fef6aa9bf38c52b37826a3b28d4396475a679fde8d1adb87dbd6da",
+      "serverAndHarnessSourceSha256": "e4631ce0c3181524a0949e29b48295da4294826e12e0a67d26667124acffa559",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1267.8,
+          "p95": 1911.5,
+          "p99": 2034.6,
+          "max": 2095.8
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 664.03,
+          "p95": 1354.63,
+          "p99": 1434.66,
+          "max": 1531.51
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 519.79,
+          "p95": 519.79,
+          "p99": 519.79,
+          "max": 519.79
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1049.2,
+          "p95": 1054.9,
+          "p99": 1075.3,
+          "max": 1075.3
+        },
+        "navigationFrameInterval": {
+          "count": 136,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1371.08,
+          "p95": 1371.08,
+          "p99": 1371.08,
+          "max": 1371.08
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1267.8,
+          "p95": 1911.5,
+          "p99": 2034.6,
+          "max": 2095.8
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1354.63,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 519.79,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1054.9,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 110.6,
+        "p95": 115.6,
+        "p99": 115.8,
+        "max": 115.8
+      },
+      "profiling": {
+        "enabled": true,
+        "durationMs": 20084.926,
+        "observed": {
+          "operation": 1785,
+          "query": 45479,
+          "pool": 1799
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 14,
+          "query": 14,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 15,
+          "idle": 15,
+          "waiting": 55
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {
+        "authorize": {
+          "22": 725,
+          "21": 150
+        },
+        "get": {
+          "29": 534,
+          "28": 49
+        },
+        "command": {
+          "43": 10,
+          "44": 190
+        }
+      },
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 542998528,
+        "heapUsed": 814588912
+      }
+    },
+    {
+      "label": "baseline-profile-off",
+      "complete": true,
+      "startedAt": "2026-11-01T08:03:50.790Z",
+      "variant": "baseline",
+      "storeSourceSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+      "rawReportSha256": "134ae42e03d4cd8e18dd3d24b5e96f240d3500afcfc5172dc18e46362e3aa09c",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1221.7,
+          "p95": 1780.5,
+          "p99": 1880.6,
+          "max": 1910.8
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 549.08,
+          "p95": 1276.61,
+          "p99": 1538.27,
+          "max": 1665.53
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 547.32,
+          "p95": 547.32,
+          "p99": 547.32,
+          "max": 547.32
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1047.3,
+          "p95": 1076.8,
+          "p99": 1096.2,
+          "max": 1096.2
+        },
+        "navigationFrameInterval": {
+          "count": 158,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1261.9,
+          "p95": 1261.9,
+          "p99": 1261.9,
+          "max": 1261.9
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1221.7,
+          "p95": 1780.5,
+          "p99": 1880.6,
+          "max": 1910.8
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1276.61,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 547.32,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1076.8,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 114.1,
+        "p95": 117.5,
+        "p99": 118.1,
+        "max": 118.2
+      },
+      "profiling": {
+        "enabled": false,
+        "durationMs": null,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {},
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 569720832,
+        "heapUsed": 750281400
+      }
+    },
+    {
+      "label": "candidate-profile-off",
+      "complete": true,
+      "startedAt": "2026-11-01T08:05:11.293Z",
+      "variant": "candidate",
+      "storeSourceSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea",
+      "rawReportSha256": "c66462b79e36258037aab321b402b0adec9773f975e0e62ec3b9b4f5e097bda8",
+      "serverAndHarnessSourceSha256": "e4631ce0c3181524a0949e29b48295da4294826e12e0a67d26667124acffa559",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1192.7,
+          "p95": 1871.7,
+          "p99": 1942.3,
+          "max": 2019.5
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 615.84,
+          "p95": 1199.99,
+          "p99": 1339.65,
+          "max": 1389.91
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 489.55,
+          "p95": 489.55,
+          "p99": 489.55,
+          "max": 489.55
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1045,
+          "p95": 1053.1,
+          "p99": 1125.7,
+          "max": 1125.7
+        },
+        "navigationFrameInterval": {
+          "count": 142,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 1303.08,
+          "p95": 1303.08,
+          "p99": 1303.08,
+          "max": 1303.08
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1192.7,
+          "p95": 1871.7,
+          "p99": 1942.3,
+          "max": 2019.5
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1199.99,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 489.55,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1053.1,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 108.2,
+        "p95": 113.4,
+        "p99": 113.5,
+        "max": 114
+      },
+      "profiling": {
+        "enabled": false,
+        "durationMs": null,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {},
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 537690112,
+        "heapUsed": 751193808
+      }
+    },
+    {
+      "label": "candidate-profile-off-2",
+      "complete": true,
+      "startedAt": "2026-11-01T08:06:42.257Z",
+      "variant": "candidate",
+      "storeSourceSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea",
+      "rawReportSha256": "91a118e26af99d6e608d505b804de1cde2fc0c91035b1ef89c84d93c5a6e70c3",
+      "serverAndHarnessSourceSha256": "e4631ce0c3181524a0949e29b48295da4294826e12e0a67d26667124acffa559",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1080.9,
+          "p95": 1629.8,
+          "p99": 1788.8,
+          "max": 1909.7
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 632.38,
+          "p95": 1174.74,
+          "p99": 1289.06,
+          "max": 1374.33
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 535.93,
+          "p95": 535.93,
+          "p99": 535.93,
+          "max": 535.93
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1046.7,
+          "p95": 1053.6,
+          "p99": 1071.1,
+          "max": 1071.1
+        },
+        "navigationFrameInterval": {
+          "count": 135,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 981.23,
+          "p95": 981.23,
+          "p99": 981.23,
+          "max": 981.23
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1080.9,
+          "p95": 1629.8,
+          "p99": 1788.8,
+          "max": 1909.7
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1174.74,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 535.93,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1053.6,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.8,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "failed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 110.4,
+        "p95": 111.9,
+        "p99": 112.2,
+        "max": 112.2
+      },
+      "profiling": {
+        "enabled": false,
+        "durationMs": null,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {},
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 558153728,
+        "heapUsed": 731508760
+      }
+    },
+    {
+      "label": "baseline-profile-off-2",
+      "complete": true,
+      "startedAt": "2026-11-01T08:08:30.676Z",
+      "variant": "baseline",
+      "storeSourceSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f",
+      "rawReportSha256": "7cd893587e29e7e228e39c3843e51ccff8c06f6d8c4ec0a1077f366d2177dbe9",
+      "serverAndHarnessSourceSha256": "0bd49834a1e917c0d2ada5b8c074cf0b6f850e18ccde20dc63f8b1688c2c1585",
+      "browserBuildSourceFingerprint": "b988a5bb57859b65d5899357d8a38bcbb2663b2840eefc99d88781ec24d4c1e5",
+      "fixtureSha256": "da58ab23444f9aff8669e35d6baa9b5d98ca31993f764c745627937bf79346f1",
+      "latencyMs": {
+        "httpAcknowledgement": {
+          "count": 200,
+          "p50": 1074.2,
+          "p95": 1561.6,
+          "p99": 1670.1,
+          "max": 1747.5
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "count": 200,
+          "p50": 675.62,
+          "p95": 1317.71,
+          "p99": 1449.15,
+          "max": 1500.3
+        },
+        "guestPublication": {
+          "count": 1,
+          "p50": 513.14,
+          "p95": 513.14,
+          "p99": 513.14,
+          "max": 513.14
+        },
+        "initialRender": {
+          "count": 20,
+          "p50": 1033.5,
+          "p95": 1049.5,
+          "p99": 1075.3,
+          "max": 1075.3
+        },
+        "navigationFrameInterval": {
+          "count": 138,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "max": 16.8
+        },
+        "reconnect": {
+          "count": 1,
+          "p50": 981.01,
+          "p95": 981.01,
+          "p99": 981.01,
+          "max": 981.01
+        },
+        "stalledConsumerAcknowledgement": {
+          "count": 200,
+          "p50": 1074.2,
+          "p95": 1561.6,
+          "p99": 1670.1,
+          "max": 1747.5
+        }
+      },
+      "smokeGatesPassed": true,
+      "failedSmokeGates": [],
+      "correctness": {
+        "allMeasuredUpdatesObservedByAuthorizedPeer": true,
+        "finalObjectVersionsRetained": true,
+        "exactRetryNoSequenceAdvance": true,
+        "staleVersionRejected": true,
+        "outsiderDeniedAcrossNode": true,
+        "revokedPeerClearedAndDenied": true,
+        "guestPrivateTextAbsentBeforePublication": true,
+        "guestRequestsBearerOnlyNoCreatorCookie": true,
+        "applicationPageErrors": 0
+      },
+      "roadmapAssessment": {
+        "numericTargets": [
+          {
+            "metric": "repositoryResolutionToPeerPaintOpportunity",
+            "maximumP95Ms": 500,
+            "observedP95Ms": 1317.71,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "failed"
+          },
+          {
+            "metric": "guestPublication",
+            "maximumP95Ms": 2000,
+            "observedP95Ms": 513.14,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "initialRender",
+            "maximumP95Ms": 3000,
+            "observedP95Ms": 1049.5,
+            "interpretation": "Roadmap numeric target; additional deployment/device evidence remains required",
+            "status": "passed"
+          },
+          {
+            "metric": "navigationFrameInterval",
+            "maximumP95Ms": 16.7,
+            "observedP95Ms": 16.7,
+            "interpretation": "Literal16.7ms diagnostic with browser timestamp quantization; roadmap60fps is not a formal rAF-p95 service-level objective",
+            "status": "passed"
+          }
+        ],
+        "requiredUnmeasuredEvidence": [
+          "Reference physical desktop/mobile rendering and input",
+          "Production-size media/S3/scanner pipeline",
+          "Target staging topology, reverse proxy/TLS and independently serving processes/hosts",
+          "Long-duration/full collaboration saturation and all-to-all observations"
+        ],
+        "networkCalibrationPassed": true,
+        "capacityGatePassed": false,
+        "capacityIncreaseAuthorized": false
+      },
+      "measuredHealthFetchMs": {
+        "count": 100,
+        "p50": 111,
+        "p95": 112.7,
+        "p99": 113,
+        "max": 113.5
+      },
+      "profiling": {
+        "enabled": false,
+        "durationMs": null,
+        "observed": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "dropped": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "inFlightAtStop": {
+          "operation": 0,
+          "query": 0,
+          "pool": 0
+        },
+        "sampledPoolHighWater": {
+          "total": 0,
+          "idle": 0,
+          "waiting": 0
+        },
+        "unsupportedQueryReturns": 0
+      },
+      "directQueriesPerCompletedOperation": {},
+      "sampledCoordinatorProcessMemoryHighWaterBytes": {
+        "rss": 566837248,
+        "heapUsed": 755308376
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "profiled",
+      "baseline": "baseline-profile-2",
+      "candidate": "candidate-profile-1",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 2039,
+          "candidateP95Ms": 1911.5,
+          "deltaMs": -127.5,
+          "deltaPercent": -6.25
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1538,
+          "candidateP95Ms": 1354.63,
+          "deltaMs": -183.37,
+          "deltaPercent": -11.92
+        }
+      }
+    },
+    {
+      "name": "profiling-disabled-forward-order",
+      "baseline": "baseline-profile-off",
+      "candidate": "candidate-profile-off",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 1780.5,
+          "candidateP95Ms": 1871.7,
+          "deltaMs": 91.2,
+          "deltaPercent": 5.12
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1276.61,
+          "candidateP95Ms": 1199.99,
+          "deltaMs": -76.62,
+          "deltaPercent": -6.0
+        }
+      }
+    },
+    {
+      "name": "profiling-disabled-reverse-order",
+      "baseline": "baseline-profile-off-2",
+      "candidate": "candidate-profile-off-2",
+      "metrics": {
+        "httpAcknowledgement": {
+          "baselineP95Ms": 1561.6,
+          "candidateP95Ms": 1629.8,
+          "deltaMs": 68.2,
+          "deltaPercent": 4.37
+        },
+        "repositoryResolutionToPeerPaintOpportunity": {
+          "baselineP95Ms": 1317.71,
+          "candidateP95Ms": 1174.74,
+          "deltaMs": -142.97,
+          "deltaPercent": -10.85
+        }
+      }
+    }
+  ],
+  "provenanceNotes": [
+    "The first baseline pilot is retained, including its timing. A lint-only unit mock cleanup changed the browser source fingerprint before a fresh confirming build; production browser, server and harness code did not change.",
+    "All six confirming runs use the same production browser build provenance. Each API variant is started in a fresh process from hash-checked source; ports must be closed before switching.",
+    "Raw reports, traces and numeric samples remain local. This summary includes every complete timing run, including failed smoke gates."
+  ],
+  "functionalValidation": {
+    "baselineRestrictedPostgres": {
+      "passed": 169,
+      "skipped": 7
+    },
+    "initialCandidateRestrictedPostgres": {
+      "passed": 168,
+      "failed": 1,
+      "skipped": 7,
+      "failure": "Existing full-state comparison assumed stable object-array order after redo."
+    },
+    "fixedIdsUnbatchedReproduction": {
+      "passed": 1,
+      "failed": 1,
+      "filteredOrSkipped": 94
+    },
+    "correctedUnbatchedFocusedTest": {
+      "passed": 2,
+      "filteredOrSkipped": 94
+    },
+    "finalCandidateRestrictedPostgres": {
+      "passed": 169,
+      "skipped": 7
+    },
+    "orderAssertionCorrection": "Fixed IDs make reload order differences deterministic. Sort copies of only objects arrays before exact whole-board equality; every field, duplicate/count, metadata, permission and actor-owned uppercase history head remains checked. No production ordering change.",
+    "poolIsolationRegression": "One nonprivileged physical connection with forced RLS, scopes A-B-A across two organizations, commit and rollback, no unscoped rows after release, committed title persists and rolled-back title does not.",
+    "testSourceSha256": "c800d79d2081eeedca66895f06e1fa8c17d0db78419d0d9522b9360df39c7e35",
+    "repositoryCheck": {
+      "command": "CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check",
+      "status": "passed",
+      "node": "22.23.4",
+      "serverPassed": 950,
+      "webPassed": 1560,
+      "dbMemoryAndOtherPassed": 419,
+      "smokeSupportPassed": 304,
+      "gatedSkipsRetained": true,
+      "restrictedPostgresRunSeparately": true,
+      "testedStoreSourceSha256": "e227d213f25c3bf4f0f5de88e53cb37ecf9cbe6ca719db0b8e6b63e225ccf0ea"
+    },
+    "startupAttemptExcluded": "An initial isolated test failed to connect while the disposable PostgreSQL service was restarting after initialization. TCP readiness was corrected before every accepted conformance or capacity run; no timing report existed for that attempt.",
+    "finalUnbatchedPostgresEnabledConformance": {
+      "passed": 169,
+      "skipped": 7
+    },
+    "finalUnbatchedRepositoryCheck": {
+      "status": "passed",
+      "command": "CI=true TURBO_ENV_MODE=loose VITEST_MAX_WORKERS=1 pnpm check",
+      "node": "22.23.4",
+      "serverPassed": 950,
+      "webPassed": 1560,
+      "dbMemoryAndOtherPassed": 419,
+      "smokeSupportPassed": 304,
+      "gatedSkipsRetained": true,
+      "testedStoreSourceSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f"
+    }
+  },
+  "interpretation": [
+    "The fixed measured paths save two direct statements per authorize, four per get, and six per command. Both owner and other-editor distributions confirm the counts; this is not a total-system SQL percentage or guaranteed latency win.",
+    "Reject the candidate: acknowledgement p95 is higher in both profiling-disabled comparisons, despite lower peer p95 and fewer statements. Keep the patch unapplied, preserve the regression tests, and continue staging qualification before limits change.",
+    "The second baseline failed both acknowledgement gates at 2,039 ms. They use the same acknowledgement samples under the stalled-reader condition and are not independent failures.",
+    "All completed workloads passed their correctness assertions. No failed timing result was discarded and no gate, limit, actor count, pacing or deadline was relaxed."
+  ],
+  "limitations": [
+    "Localhost, two serving API nodes in ONE coordinator process/monotonic clock; no separate hosts, reverse proxy/TLS, WAN, OS network shaping, or independently skewed clocks",
+    "Production Next build and headless desktop Chromium on the current machine, not a deployed production API configuration or reference mobile/physical touch device",
+    "CDP nominal latency applies to browser network requests; actual measured health-fetch calibration is reported; local Node setup/correctness requests are not shaped",
+    "Tiny synthetic PNG bytes and in-memory storage.readImage replace S3/scanner/full-size decoding; no production media pipeline or realistic image memory claim",
+    "SVG DOM and two animation frames establish a paint opportunity, not physical display capture timing; screenshots verify representative output only",
+    "Short burst/wave workload with a single observing peer, unsaturated comments/history/receipts and a single guest; no long-duration soak, worst-case moderation/facilitation saturation, or all-to-all peer latency matrix",
+    "Stalled TCP consumer isolation does not establish saturation/backpressure cutoff unless observed; API nodes and Chromium contend for this host's resources",
+    "Only one profiled comparison and two off pairs plus the retained baseline pilot; no statistical confidence or production latency guarantee is claimed.",
+    "Profiles censor work crossing the measured-window end; disclose in-flight counts. Nested method wall times overlap; direct query counts belong to their innermost operation.",
+    "Total query counts depend on stream/read work completed during each measured window and cannot be subtracted as fixed-workload savings.",
+    "Guest publication and reconnect each have one observation per run. Literal 16.7 ms rAF quantiles reflect timestamp quantization, not physical 60 fps proof.",
+    "The 500 ms peer roadmap target remains unmet. Physical devices, realistic media/scanner/S3, target staging topology/TLS and long saturation/all-to-all work remain open."
+  ],
+  "finalProductionStoreSha256": "2a0ef5d197f6dbaac24379289deb6f6435bcc5f3424dbd8be44ddff522cbf10f"
+}

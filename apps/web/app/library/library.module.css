@@ -388,8 +388,8 @@
   color: #ffffff;
   font-size: 28px;
   font-weight: 950;
+  /* Repeated backdrop layers can exhaust WebKit's compositor in populated libraries. */
   background: rgb(255 255 255 / 16%);
-  backdrop-filter: blur(8px);
 }
 
 .artwork div {

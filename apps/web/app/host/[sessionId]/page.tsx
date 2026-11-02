@@ -58,6 +58,7 @@ import {
 } from "../../../lib/realtime-mutation-recovery";
 import { experienceThemeStyle } from "../../../lib/theme";
 import { clientUuid } from "../../../lib/uuid";
+import { startModalInitialFocus } from "../../../lib/modal-initial-focus";
 import { createHostCommandController, type HostPhaseCommand } from "../../../lib/host-phase";
 import {
   getLegacyPhaseActions,
@@ -416,9 +417,10 @@ export default function HostPage() {
 
   useEffect(() => {
     if (!audienceOpen) return;
-    const focusCloseControl = () => audienceCloseRef.current?.focus();
-    const focusFrame = window.requestAnimationFrame(focusCloseControl);
-    const focusFallback = window.setTimeout(focusCloseControl, 200);
+    const cancelInitialFocus = startModalInitialFocus({
+      dialog: () => audienceDrawerRef.current,
+      target: () => audienceCloseRef.current,
+    });
     const manageDrawerFocus = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -448,8 +450,7 @@ export default function HostPage() {
     };
     window.addEventListener("keydown", manageDrawerFocus);
     return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.clearTimeout(focusFallback);
+      cancelInitialFocus();
       window.removeEventListener("keydown", manageDrawerFocus);
     };
   }, [audienceOpen]);

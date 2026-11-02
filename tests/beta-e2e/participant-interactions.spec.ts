@@ -200,9 +200,87 @@ for (const suffix of ["desktop", "@mobile"]) {
       await confidenceFirst.getByRole("textbox", { name: /^Nickname/ }).fill("Confidence First");
       await confidenceFirst.getByRole("button", { name: "Join Round", exact: true }).click();
       await expect(confidenceFirst).toHaveURL(/\/play\//);
+      // Return to the host after interacting with the participant tabs.
+      await host.bringToFront();
+      await expect
+        .poll(() =>
+          host.evaluate(() => ({
+            visibility: document.visibilityState,
+            focused: document.hasFocus(),
+          })),
+        )
+        .toEqual({ visibility: "visible", focused: true });
       await host.getByRole("button", { name: "Audience", exact: true }).click();
       const drawer = host.getByTestId("audience-drawer");
       await expect(drawer).toBeVisible();
+      try {
+        await expect(
+          drawer.getByRole("button", { name: "Close audience tools", exact: true }),
+        ).toBeFocused();
+      } finally {
+        // Diagnostic only: preserve the focus assertion if the browser closes before sampling.
+        await drawer
+          .evaluate((element) => {
+            const close = element.querySelector('[aria-label="Close audience tools"]');
+            const opener = document.querySelector('[aria-controls="host-audience-drawer"]');
+            const active = document.activeElement;
+            const style = getComputedStyle(element);
+            const box = element.getBoundingClientRect();
+            return {
+              visibility: document.visibilityState,
+              documentFocused: document.hasFocus(),
+              activeIsClose: active === close,
+              activeInsideDrawer: element.contains(active),
+              activeIsOpener: active === opener,
+              activeTag: active?.tagName ?? null,
+              drawerInert: element.hasAttribute("inert"),
+              drawerVisibility: style.visibility,
+              drawerTransform: style.transform,
+              left: box.left,
+              right: box.right,
+              top: box.top,
+              bottom: box.bottom,
+            };
+          })
+          .then((state) =>
+            test.info().attach("audience-open-focus-state", {
+              body: JSON.stringify(state),
+              contentType: "application/json",
+            }),
+          )
+          .catch(() => undefined);
+      }
+      await expect
+        .poll(() =>
+          drawer.evaluate((element) => {
+            const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+            return {
+              left,
+              right,
+              top,
+              bottom,
+              viewportWidth: window.innerWidth,
+              viewportHeight: window.innerHeight,
+              withinViewport:
+                width > 0 &&
+                height > 0 &&
+                left >= -1 &&
+                top >= -1 &&
+                right <= window.innerWidth + 1 &&
+                bottom <= window.innerHeight + 1,
+            };
+          }),
+        )
+        .toMatchObject({ withinViewport: true });
+      const drawerTitle = drawer.getByRole("heading", {
+        name: "Participants and conversation",
+        exact: true,
+      });
+      await expect(drawerTitle).toBeVisible();
+      await expect(drawerTitle).toHaveCSS(
+        "color",
+        await drawer.evaluate((element) => getComputedStyle(element).color),
+      );
       const table = drawer.locator(".participant-activity-table");
       // Each browser participant covers a distinct saved, unsaved, or confidence-first path.
       await expect(table.locator("tbody tr")).toHaveCount(3);

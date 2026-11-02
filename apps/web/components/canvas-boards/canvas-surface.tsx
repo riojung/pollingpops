@@ -12,11 +12,16 @@ import {
   canvasConnectorGeometry,
   canvasConnectorLabel,
   canvasDiagramShapePath,
+  canvasDiagramPort,
+  canvasShapeVariantPath,
+  CANVAS_FILL_COLORS,
+  CANVAS_STROKE_COLORS,
   type CanvasObject,
   type CanvasObjectPatchSchema,
   type IdeaBoardView,
 } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
+import { canvasToolCopy } from "../../lib/i18n/canvas-tool-messages";
 import { IdeaContent } from "../idea-boards/idea-content";
 import { CanvasImage } from "./canvas-image";
 import type { CanvasArtifactImageContext } from "./canvas-assets-client";
@@ -32,6 +37,7 @@ import {
 import styles from "./canvas.module.css";
 import {
   canvasDragRect,
+  canvasPenHits,
   canvasObjectsInRect,
   canvasTransformPatches,
   sampleCanvasStroke,
@@ -41,28 +47,25 @@ import { canvasModelBounds, canvasObjectBounds, canvasSelectionBounds } from "./
 import { followCanvasRegion } from "./canvas-presentation";
 
 export type CanvasPatch = ReturnType<typeof CanvasObjectPatchSchema.parse>;
-export type CanvasTool = "select" | "hand" | "connector" | "marquee" | "pen";
+export type CanvasTool = "select" | "hand" | "connector" | "marquee" | "pen" | "eraser";
 export function editableCanvasObject(object: CanvasObject, edit: boolean, facilitate: boolean) {
   return edit && !object.locked && (object.type !== "idea_ref" || facilitate);
 }
-const colorValues = {
-  yellow: "#fff1a8",
-  blue: "#cde7ff",
-  green: "#ccebdc",
-  pink: "#f9d9e4",
-  purple: "#e5dcf8",
-  white: "#ffffff",
-};
+const colorValues = CANVAS_FILL_COLORS;
 const lineColors = {
-  neutral: "var(--ui-text-subtle)",
-  yellow: "var(--canvas-pen-yellow)",
-  blue: "var(--canvas-pen-blue)",
-  green: "var(--canvas-pen-green)",
-  pink: "var(--canvas-pen-pink)",
-  purple: "var(--canvas-pen-purple)",
-  white: "var(--canvas-pen-white)",
+  ...CANVAS_STROKE_COLORS,
+  neutral: "#697384",
   selected: "var(--ui-accent-ink)",
 };
+const fontFamilies = { sans: "Arial, sans-serif", serif: "Georgia, serif", mono: "monospace" };
+const objectTextLineHeight = 1.45;
+export type CanvasEndpoint = Extract<CanvasObject, { type: "connector" }>["from"];
+const ports = ["top", "right", "bottom", "left"] as const;
+function textEditable(object: CanvasObject) {
+  return ["sticky", "text", "rect", "ellipse", "diamond", "parallelogram", "frame"].includes(
+    object.type,
+  );
+}
 function visibleCanvasObjects(objects: CanvasObject[], source?: IdeaBoardView) {
   let visible = objects.filter(
     (object) =>
@@ -95,9 +98,18 @@ export function CanvasSurface({
   onSelectMany,
   onTransform,
   onCreatePen,
+  onCreateConnector,
+  onErasePen,
+  penColor = "black",
+  penWidth = 3,
+  penOpacity = 1,
+  onCommitText,
+  onTextEditingChange,
+  editTextRequest,
   onGestureActive,
   tool = "hand",
   canEdit = false,
+  canCreate = canEdit,
   canFacilitate = false,
   isObjectEditable,
   onPatch,
@@ -125,9 +137,18 @@ export function CanvasSurface({
     originalObjects: CanvasObject[],
   ) => Promise<boolean>;
   onCreatePen?: (points: [number, number][]) => Promise<boolean>;
+  onCreateConnector?: (from: CanvasEndpoint, to: CanvasEndpoint) => Promise<boolean>;
+  onErasePen?: (objects: Extract<CanvasObject, { type: "pen" }>[]) => Promise<boolean>;
+  penColor?: CanvasObject["color"];
+  penWidth?: number;
+  penOpacity?: number;
+  onCommitText?: (originalObject: CanvasObject, text: string) => Promise<boolean>;
+  onTextEditingChange?: (active: boolean) => void;
+  editTextRequest?: { id: string; nonce: number };
   onGestureActive?: (active: boolean) => void;
   tool?: CanvasTool;
   canEdit?: boolean;
+  canCreate?: boolean;
   canFacilitate?: boolean;
   isObjectEditable?: (object: CanvasObject) => boolean;
   onPatch?: (object: CanvasObject, patch: CanvasPatch) => Promise<boolean>;
@@ -141,22 +162,34 @@ export function CanvasSurface({
   onCursor?: (point: CanvasPoint) => void;
   members?: Array<{ userId: string; name: string; cursor: CanvasPoint | null }>;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = canvasToolCopy(locale ?? "en-CA");
   const surface = useRef<SVGSVGElement>(null);
   const patternId = useId();
   const arrowId = useId();
   const gestureObserver = useRef(onGestureActive);
   gestureObserver.current = onGestureActive;
-  useEffect(() => () => gestureObserver.current?.(false), []);
+  const textObserver = useRef(onTextEditingChange);
+  textObserver.current = onTextEditingChange;
+  useEffect(
+    () => () => {
+      gestureObserver.current?.(false);
+      textObserver.current?.(false);
+    },
+    [],
+  );
   const pointers = useRef(new Map<number, CanvasPoint>());
   const gesture = useRef<{
-    kind: "pan" | "move" | "resize" | "marquee" | "pen";
+    kind: "pan" | "move" | "resize" | "marquee" | "pen" | "connect" | "erase";
     start: CanvasPoint;
     viewport: CanvasViewport;
     ids: string[];
     objects: CanvasObject[];
     additive: boolean;
     bounds?: CanvasBounds;
+    from?: CanvasEndpoint;
+    last?: CanvasPoint;
+    erased?: Set<string>;
   } | null>(null);
   const pinch = useRef<{
     distance: number;
@@ -169,13 +202,95 @@ export function CanvasSurface({
   const [stroke, setStroke] = useState<[number, number][]>([]);
   const strokeRef = useRef<[number, number][]>([]);
   const finalTransform = useRef<CanvasTransform | null>(null);
+  const [connectorPreview, setConnectorPreview] = useState<{
+    from: CanvasEndpoint;
+    to: CanvasEndpoint;
+  } | null>(null);
+  const [erasedIds, setErasedIds] = useState<Set<string>>(new Set());
+  type TextEdit = {
+    original: CanvasObject;
+    text: string;
+    busy: boolean;
+    failed: boolean;
+    changed: boolean;
+  };
+  const [editing, updateEditing] = useState<TextEdit | null>(null);
+  const editingRef = useRef<TextEdit | null>(null);
+  const textInput = useRef<HTMLTextAreaElement>(null);
+  function setEditing(value: TextEdit | null) {
+    editingRef.current = value;
+    updateEditing(value);
+  }
+  function allowed(object: CanvasObject) {
+    return (
+      editableCanvasObject(object, canEdit, canFacilitate) &&
+      (!isObjectEditable || isObjectEditable(object))
+    );
+  }
+  function beginTextEdit(object: CanvasObject) {
+    if (
+      editingRef.current ||
+      gesture.current ||
+      pinch.current ||
+      !onCommitText ||
+      !textEditable(object) ||
+      !allowed(object)
+    )
+      return;
+    onSelect?.(object.id);
+    setEditing({ original: object, text: object.text, busy: false, failed: false, changed: false });
+    onTextEditingChange?.(true);
+  }
+  function closeTextEdit() {
+    setEditing(null);
+    onTextEditingChange?.(false);
+    surface.current?.focus();
+  }
+  async function saveTextEdit() {
+    const active = editingRef.current;
+    if (!active || active.busy || !onCommitText) return;
+    if (active.text === active.original.text) {
+      closeTextEdit();
+      return;
+    }
+    const latest = objects.find((object) => object.id === active.original.id);
+    if (!latest || latest.version !== active.original.version || !allowed(latest)) {
+      setEditing({ ...active, changed: true, failed: true });
+      return;
+    }
+    setEditing({ ...active, busy: true, failed: false });
+    try {
+      const saved = await onCommitText(active.original, active.text);
+      if (editingRef.current?.original === active.original) {
+        if (saved) closeTextEdit();
+        else setEditing({ ...active, busy: false, failed: true });
+      }
+    } catch {
+      if (editingRef.current?.original === active.original)
+        setEditing({ ...active, busy: false, failed: true });
+    }
+  }
+  useEffect(() => {
+    if (editing) textInput.current?.focus();
+  }, [editing?.original.id]);
+  useEffect(() => {
+    if (!editTextRequest) return;
+    const object = objects.find((entry) => entry.id === editTextRequest.id);
+    if (object) beginTextEdit(object);
+    // A request is consumed once, even when subsequent board state changes.
+  }, [editTextRequest?.nonce]);
   function setPreview(value: Map<string, CanvasPatch>) {
     previewRef.current = value;
     updatePreview(value);
   }
   const selection = selectedIds ?? (selectedId ? [selectedId] : []);
   const renderObjects = visibleCanvasObjects(
-    objects.map((object) =>
+    [
+      ...objects,
+      ...(editing && !objects.some((object) => object.id === editing.original.id)
+        ? [editing.original]
+        : []),
+    ].map((object) =>
       preview.has(object.id) ? ({ ...object, ...preview.get(object.id) } as CanvasObject) : object,
     ),
     sourceBoard,
@@ -206,9 +321,68 @@ export function CanvasSurface({
     setArea(null);
     strokeRef.current = [];
     setStroke([]);
+    setConnectorPreview(null);
+    setErasedIds(new Set());
     onGestureActive?.(false);
   }
+  function endpoint(
+    position: CanvasPoint,
+    candidates: CanvasObject[],
+    sourceId?: string,
+  ): CanvasEndpoint {
+    const available = candidates.filter(
+      (object) =>
+        object.type !== "connector" &&
+        object.type !== "pen" &&
+        object.id !== sourceId &&
+        allowed(object),
+    );
+    for (const object of [...available].reverse()) {
+      const points = ports.map((anchor) => ({
+        anchor,
+        ...canvasDiagramPort({ objectId: object.id, anchor, x: object.x, y: object.y }, candidates),
+      }));
+      const nearest = points.sort(
+        (a, b) =>
+          Math.hypot(position.x - a.x, position.y - a.y) -
+          Math.hypot(position.x - b.x, position.y - b.y),
+      )[0]!;
+      const bounds = canvasObjectBounds(object, candidates);
+      if (
+        Math.hypot(position.x - nearest.x, position.y - nearest.y) <= 24 / viewport.zoom ||
+        (position.x >= bounds.x &&
+          position.x <= bounds.x + bounds.width &&
+          position.y >= bounds.y &&
+          position.y <= bounds.y + bounds.height)
+      )
+        return { objectId: object.id, anchor: nearest.anchor, x: nearest.x, y: nearest.y };
+    }
+    return {
+      objectId: null,
+      anchor: "center",
+      x: Math.max(-100_000, Math.min(100_000, position.x)),
+      y: Math.max(-100_000, Math.min(100_000, position.y)),
+    };
+  }
+  function eraseSegment(active: NonNullable<typeof gesture.current>, end: CanvasPoint) {
+    const hits = active.erased ?? new Set<string>();
+    for (const object of active.objects)
+      if (
+        object.type === "pen" &&
+        allowed(object) &&
+        canvasPenHits(object, active.last ?? end, end, 10 / active.viewport.zoom)
+      )
+        hits.add(object.id);
+    active.erased = hits;
+    active.last = end;
+    setErasedIds(new Set(hits));
+  }
   function start(event: ReactPointerEvent<SVGSVGElement>) {
+    if (editingRef.current) {
+      if (!(event.target instanceof Element && event.target.closest("textarea,button")))
+        event.preventDefault();
+      return;
+    }
     if (
       event.button !== 0 ||
       (event.target instanceof Element && event.target.closest("button,a,input,textarea,select"))
@@ -235,13 +409,47 @@ export function CanvasSurface({
       objects,
       additive: event.shiftKey || event.metaKey || event.ctrlKey,
     };
-    if (tool === "pen" && canEdit && onCreatePen) {
+    if ((tool === "pen" || tool === "connector") && !canCreate) return;
+    if (tool === "eraser" && (!canEdit || !onErasePen)) return;
+    const port =
+      event.target instanceof Element ? event.target.getAttribute("data-canvas-port") : null;
+    if (
+      onCreateConnector &&
+      canEdit &&
+      canCreate &&
+      ((port && object && allowed(object)) || (tool === "connector" && !object))
+    ) {
+      const world = worldPoint(position, viewport);
+      const from =
+        object && port
+          ? {
+              objectId: object.id,
+              anchor: port as (typeof ports)[number],
+              ...canvasDiagramPort(
+                {
+                  objectId: object.id,
+                  anchor: port as (typeof ports)[number],
+                  x: world.x,
+                  y: world.y,
+                },
+                objects,
+              ),
+            }
+          : endpoint(world, objects);
+      gesture.current = { ...common, kind: "connect", from };
+      setConnectorPreview({ from, to: { objectId: null, anchor: "center", ...world } });
+      onGestureActive?.(true);
+    } else if (tool === "eraser" && canEdit && onErasePen) {
+      gesture.current = { ...common, kind: "erase", erased: new Set() };
+      eraseSegment(gesture.current, worldPoint(position, viewport));
+      onGestureActive?.(true);
+    } else if (tool === "pen" && canEdit && canCreate && onCreatePen) {
       const world = worldPoint(position, viewport);
       strokeRef.current = [[world.x, world.y]];
       setStroke(strokeRef.current);
       gesture.current = { ...common, kind: "pen" };
       onGestureActive?.(true);
-    } else if (tool === "connector" && object && canEdit) {
+    } else if (tool === "connector" && canCreate && object && allowed(object)) {
       onConnect?.(object.id);
     } else if (tool === "hand") gesture.current = { ...common, kind: "pan" };
     else if (tool === "marquee" || !object) {
@@ -301,6 +509,17 @@ export function CanvasSurface({
       return;
     }
     const world = worldPoint(current, active.viewport);
+    if (active.kind === "connect" && active.from) {
+      setConnectorPreview({
+        from: active.from,
+        to: endpoint(world, active.objects, active.from.objectId ?? undefined),
+      });
+      return;
+    }
+    if (active.kind === "erase") {
+      eraseSegment(active, world);
+      return;
+    }
     if (active.kind === "pen") {
       const last = strokeRef.current.at(-1)!;
       if (Math.hypot(world.x - last[0], world.y - last[1]) < 2) return;
@@ -339,12 +558,30 @@ export function CanvasSurface({
     }
     if (!active) return;
     try {
-      if (active.kind === "pen") {
+      if (active.kind === "connect" && active.from) {
+        const world = worldPoint(point(event), active.viewport);
+        const fromPoint = canvasDiagramPort(active.from, active.objects);
+        if (
+          canCreate &&
+          Math.hypot(world.x - fromPoint.x, world.y - fromPoint.y) >= 5 / active.viewport.zoom
+        )
+          await onCreateConnector?.(
+            active.from,
+            endpoint(world, active.objects, active.from.objectId ?? undefined),
+          );
+      } else if (active.kind === "erase") {
+        eraseSegment(active, worldPoint(point(event), active.viewport));
+        const erased = active.objects.filter(
+          (object): object is Extract<CanvasObject, { type: "pen" }> =>
+            object.type === "pen" && Boolean(active.erased?.has(object.id)) && allowed(object),
+        );
+        if (erased.length) await onErasePen?.(erased);
+      } else if (active.kind === "pen") {
         const last = strokeRef.current.at(-1),
           end = worldPoint(point(event), active.viewport);
         if (last && Math.hypot(last[0] - end.x, last[1] - end.y) > 0.5)
           strokeRef.current = sampleCanvasStroke([...strokeRef.current, [end.x, end.y]]);
-        if (strokeRef.current.length >= 2) await onCreatePen?.(strokeRef.current);
+        if (canCreate && strokeRef.current.length >= 2) await onCreatePen?.(strokeRef.current);
       } else if (active.kind === "marquee") {
         const rect = canvasDragRect(
           worldPoint(active.start, active.viewport),
@@ -389,7 +626,8 @@ export function CanvasSurface({
     clearPreview();
   }
   function wheel(event: WheelEvent<SVGSVGElement>) {
-    if (event.ctrlKey || event.metaKey || gesture.current || pinch.current) return;
+    if (event.ctrlKey || event.metaKey || gesture.current || pinch.current || editingRef.current)
+      return;
     event.preventDefault();
     if (event.shiftKey)
       onViewport({ ...viewport, x: viewport.x - event.deltaY, y: viewport.y - event.deltaX });
@@ -414,6 +652,25 @@ export function CanvasSurface({
       onPointerMove={move}
       onPointerUp={(event) => void end(event)}
       onPointerCancel={cancel}
+      onDoubleClick={(event) => {
+        const element =
+          event.target instanceof Element ? event.target.closest("[data-canvas-object]") : null;
+        const object = objects.find(
+          (entry) => entry.id === element?.getAttribute("data-canvas-object"),
+        );
+        if (object) beginTextEdit(object);
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || editingRef.current) return;
+        if (event.key === "F2" || event.key === "Enter") {
+          const object =
+            selection.length === 1 ? objects.find((entry) => entry.id === selection[0]) : undefined;
+          if (object && textEditable(object) && allowed(object) && onCommitText) {
+            event.preventDefault();
+            beginTextEdit(object);
+          }
+        } else if (event.key === "Escape") cancel();
+      }}
       onWheel={wheel}
       onWheelCapture={() => onInteract?.()}
       data-tool={tool}
@@ -450,13 +707,14 @@ export function CanvasSurface({
           const selected = selection.includes(object.id);
           if (object.type === "connector") {
             const geometry = canvasConnectorGeometry(object, renderObjects);
-            const label = canvasConnectorLabel(object.text, geometry.label);
+            const label = canvasConnectorLabel(object.text, geometry.label, object.fontSize);
             const color = selected ? "selected" : object.lineColor;
             return (
               <g
                 key={object.id}
                 data-testid={`canvas-object-${object.id}`}
                 data-canvas-object={object.id}
+                opacity={object.opacity}
               >
                 <title>{object.text}</title>
                 <path d={geometry.path} fill="none" stroke="transparent" strokeWidth={18} />
@@ -464,7 +722,7 @@ export function CanvasSurface({
                   d={geometry.path}
                   fill="none"
                   stroke={lineColors[color]}
-                  strokeWidth={selected ? 4 : 2}
+                  strokeWidth={object.strokeWidth}
                   strokeDasharray={object.lineStyle === "dashed" ? "8 5" : undefined}
                   markerStart={
                     object.startMarker === "arrow" ? `url(#${arrowId}-${color})` : undefined
@@ -483,13 +741,34 @@ export function CanvasSurface({
                       stroke="#cdd4df"
                     />
                     <text
-                      fontSize={13}
+                      fontSize={object.fontSize}
+                      fontFamily={fontFamilies[object.fontFamily]}
+                      fontWeight={object.fontWeight}
+                      fontStyle={object.fontStyle}
+                      textDecoration={object.textDecoration}
                       fill="#252a33"
                       pointerEvents="none"
                       aria-label={object.text}
                     >
                       {label.lines.map((line, index) => (
-                        <tspan key={index} x={label.x + 8} y={label.y + 6 + 13 + index * 18}>
+                        <tspan
+                          key={index}
+                          x={
+                            object.textAlign === "center"
+                              ? label.x + label.width / 2
+                              : object.textAlign === "right"
+                                ? label.x + label.width - 8
+                                : label.x + 8
+                          }
+                          textAnchor={
+                            object.textAlign === "center"
+                              ? "middle"
+                              : object.textAlign === "right"
+                                ? "end"
+                                : "start"
+                          }
+                          y={label.y + 6 + object.fontSize + (index * 18 * object.fontSize) / 13}
+                        >
                           {line}
                         </tspan>
                       ))}
@@ -505,16 +784,13 @@ export function CanvasSurface({
                 key={object.id}
                 data-testid={`canvas-object-${object.id}`}
                 data-canvas-object={object.id}
+                opacity={erasedIds.has(object.id) ? object.opacity * 0.2 : object.opacity}
               >
                 <polyline
                   points={object.points.map((pair) => pair.join(",")).join(" ")}
                   fill="none"
-                  stroke={
-                    selected
-                      ? "var(--ui-accent-ink)"
-                      : `var(--canvas-pen-${object.color}, var(--ui-text))`
-                  }
-                  strokeWidth={3}
+                  stroke={CANVAS_STROKE_COLORS[object.color]}
+                  strokeWidth={object.strokeWidth}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -555,14 +831,21 @@ export function CanvasSurface({
               key={object.id}
               data-testid={`canvas-object-${object.id}`}
               data-canvas-object={object.id}
+              opacity={object.opacity}
               transform={`translate(${object.x} ${object.y}) rotate(${object.rotation} ${object.width / 2} ${object.height / 2})`}
             >
-              {object.type === "diamond" || object.type === "parallelogram" ? (
+              {object.type === "diamond" ||
+              object.type === "parallelogram" ||
+              (object.type === "rect" && object.shapeVariant !== "rectangle") ? (
                 <path
-                  d={canvasDiagramShapePath(object.type, object.width, object.height)}
+                  d={
+                    object.type === "rect"
+                      ? canvasShapeVariantPath(object.shapeVariant, object.width, object.height)
+                      : canvasDiagramShapePath(object.type, object.width, object.height)
+                  }
                   fill={colorValues[object.color]}
-                  stroke={selected ? "var(--ui-accent-ink)" : "#89919d"}
-                  strokeWidth={selected ? 3 : 1}
+                  stroke={selected ? "var(--ui-accent-ink)" : CANVAS_STROKE_COLORS[object.color]}
+                  strokeWidth={object.strokeWidth}
                 />
               ) : object.type === "ellipse" ? (
                 <ellipse
@@ -571,14 +854,14 @@ export function CanvasSurface({
                   rx={object.width / 2}
                   ry={object.height / 2}
                   fill={colorValues[object.color]}
-                  stroke={selected ? "var(--ui-accent-ink)" : "#89919d"}
-                  strokeWidth={selected ? 3 : 1}
+                  stroke={selected ? "var(--ui-accent-ink)" : CANVAS_STROKE_COLORS[object.color]}
+                  strokeWidth={object.strokeWidth}
                 />
               ) : (
                 <rect
                   width={object.width}
                   height={object.height}
-                  rx={object.type === "sticky" ? 3 : 10}
+                  rx={object.type === "sticky" ? 3 : object.type === "rect" ? 0 : 10}
                   fill={
                     object.type === "text" || object.type === "idea_ref"
                       ? "var(--ui-surface-raised)"
@@ -591,13 +874,85 @@ export function CanvasSurface({
                       ? "var(--ui-accent-ink)"
                       : object.type === "text"
                         ? "transparent"
-                        : "#89919d"
+                        : CANVAS_STROKE_COLORS[object.color]
                   }
-                  strokeWidth={selected ? 3 : 1}
+                  strokeWidth={object.strokeWidth}
                   strokeDasharray={object.type === "frame" ? "7 5" : undefined}
                 />
               )}
-              {object.type === "image" && canvasId ? (
+              {editing?.original.id === object.id ? (
+                <foreignObject
+                  x={6}
+                  y={6}
+                  width={Math.max(260, object.width - 12)}
+                  height={Math.max(200, object.height - 12)}
+                  overflow="visible"
+                >
+                  <div
+                    data-canvas-inline-editor="true"
+                    className={styles.inlineEditor}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && !editingRef.current?.busy) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeTextEdit();
+                      }
+                    }}
+                  >
+                    <textarea
+                      ref={textInput}
+                      aria-label={copy.editText}
+                      value={editing.text}
+                      maxLength={2000}
+                      disabled={editing.busy}
+                      style={{
+                        fontSize: object.fontSize,
+                        fontFamily: fontFamilies[object.fontFamily],
+                        fontWeight: object.fontWeight,
+                        fontStyle: object.fontStyle,
+                        textDecoration: object.textDecoration,
+                        textAlign: object.textAlign,
+                      }}
+                      onChange={(event) =>
+                        setEditing({ ...editing, text: event.target.value, failed: false })
+                      }
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === "Escape" && !editing.busy) {
+                          event.preventDefault();
+                          closeTextEdit();
+                        } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                          event.preventDefault();
+                          void saveTextEdit();
+                        }
+                      }}
+                      onBlur={(event) => {
+                        if (
+                          event.relatedTarget instanceof Element &&
+                          event.relatedTarget.closest("[data-canvas-inline-editor]")
+                        )
+                          return;
+                        if (!editingRef.current?.busy) void saveTextEdit();
+                      }}
+                    />
+                    {editing.failed ? (
+                      <p role="alert">{editing.changed ? copy.textChanged : copy.textSaveFailed}</p>
+                    ) : null}
+                    <div className={styles.inlineEditorActions}>
+                      <button
+                        type="button"
+                        disabled={editing.busy}
+                        onClick={() => void saveTextEdit()}
+                      >
+                        {copy.saveText}
+                      </button>
+                      <button type="button" disabled={editing.busy} onClick={closeTextEdit}>
+                        {copy.cancelText}
+                      </button>
+                    </div>
+                  </div>
+                </foreignObject>
+              ) : object.type === "image" && canvasId ? (
                 <CanvasImage
                   canvasId={canvasId}
                   versionId={versionId}
@@ -629,14 +984,36 @@ export function CanvasSurface({
                   )}
                   height={
                     object.type === "frame"
-                      ? 28
+                      ? Math.min(
+                          Math.max(1, object.height - 20),
+                          Math.max(28, Math.ceil(object.fontSize * objectTextLineHeight)),
+                        )
                       : Math.max(
                           1,
                           object.type === "diamond" ? object.height * 0.5 : object.height - 20,
                         )
                   }
                 >
-                  <div className={styles.objectContent} data-type={object.type}>
+                  <div
+                    className={styles.objectContent}
+                    data-type={object.type}
+                    style={{
+                      fontSize: object.fontSize,
+                      fontFamily: fontFamilies[object.fontFamily],
+                      fontWeight: object.fontWeight,
+                      fontStyle: object.fontStyle,
+                      textDecoration: object.textDecoration,
+                      textAlign: object.textAlign,
+                      lineHeight: objectTextLineHeight,
+                      ...(object.type === "text"
+                        ? { color: `var(--canvas-text-${object.color})` }
+                        : object.color === "black" &&
+                            object.type !== "frame" &&
+                            object.type !== "idea_ref"
+                          ? { color: "#ffffff" }
+                          : {}),
+                    }}
+                  >
                     {idea && (sourceBoardId || artifactLink) ? (
                       <>
                         <small>{t("canvas.protected")}</small>
@@ -668,6 +1045,7 @@ export function CanvasSurface({
                 </foreignObject>
               )}
               {selected &&
+              !editing &&
               selection.length === 1 &&
               editableCanvasObject(object, canEdit, canFacilitate) &&
               (!isObjectEditable || isObjectEditable(object)) ? (
@@ -685,6 +1063,52 @@ export function CanvasSurface({
             </g>
           );
         })}
+        {!editing &&
+        canEdit &&
+        canCreate &&
+        onCreateConnector &&
+        (tool === "select" || tool === "connector")
+          ? renderObjects
+              .filter(
+                (object) =>
+                  selection.includes(object.id) &&
+                  object.type !== "pen" &&
+                  object.type !== "connector" &&
+                  allowed(object),
+              )
+              .flatMap((object) =>
+                ports.map((anchor) => {
+                  const position = canvasDiagramPort(
+                    { objectId: object.id, anchor, x: object.x, y: object.y },
+                    renderObjects,
+                  );
+                  return (
+                    <circle
+                      key={`${object.id}-${anchor}`}
+                      data-canvas-object={object.id}
+                      data-canvas-port={anchor}
+                      cx={position.x}
+                      cy={position.y}
+                      r={6 / viewport.zoom}
+                      fill="var(--ui-surface)"
+                      stroke="var(--ui-accent-ink)"
+                      strokeWidth={2 / viewport.zoom}
+                      className={styles.connectorPort}
+                    />
+                  );
+                }),
+              )
+          : null}
+        {connectorPreview ? (
+          <path
+            d={canvasConnectorGeometry(connectorPreview, renderObjects).path}
+            fill="none"
+            stroke="var(--ui-accent-ink)"
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            pointerEvents="none"
+          />
+        ) : null}
         {selection.length > 1 && selectionBounds ? (
           <rect
             {...selectionBounds}
@@ -709,8 +1133,9 @@ export function CanvasSurface({
           <polyline
             points={stroke.map((point) => point.join(",")).join(" ")}
             fill="none"
-            stroke="var(--ui-accent-ink)"
-            strokeWidth={3}
+            stroke={CANVAS_STROKE_COLORS[penColor]}
+            strokeWidth={penWidth}
+            opacity={penOpacity}
             strokeLinecap="round"
             pointerEvents="none"
           />

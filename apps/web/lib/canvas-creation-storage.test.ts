@@ -1,3 +1,4 @@
+import { CANVAS_SCHEMA_VERSION } from "@openround/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearCanvasCreationSetups,
@@ -28,6 +29,33 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("tab-scoped canvas setup storage", () => {
+  it.each([undefined, 2, 3, CANVAS_SCHEMA_VERSION])(
+    "preserves a schema %s uncertain checkpoint without changing its local envelope or retry keys",
+    (canvasSchemaVersion) => {
+      const checkpoint = {
+        version: 1,
+        ...(canvasSchemaVersion === undefined ? {} : { canvasSchemaVersion }),
+        userId: "00000000-0000-4000-8000-000000000001",
+        workspaceId: "00000000-0000-4000-8000-000000000002",
+        canvasOperationId: "00000000-0000-4000-8000-000000000010",
+        source: {
+          idempotencyKey: "00000000-0000-4000-8000-000000000011",
+          title: "Recover exact setup",
+        },
+        sourceBoardId: "00000000-0000-4000-8000-000000000012",
+        templateId: "project-kickoff",
+      };
+      const raw = JSON.stringify(checkpoint);
+      saveCanvasCreationSetup(checkpoint.userId, checkpoint.workspaceId, checkpoint);
+      expect(
+        entries.get(`pollingpops:canvas-setup:v1:${checkpoint.userId}:${checkpoint.workspaceId}`),
+      ).toBe(raw);
+      expect(readCanvasCreationSetup(checkpoint.userId, checkpoint.workspaceId)).toEqual(
+        checkpoint,
+      );
+      expect(entries.size).toBe(1);
+    },
+  );
   it("keeps workspace setups separate and clears only the signed-out user's setup", () => {
     saveCanvasCreationSetup("alice", "one", { setup: "first" });
     saveCanvasCreationSetup("alice", "two", { setup: "second" });

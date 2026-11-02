@@ -9,6 +9,8 @@ import {
   nextCanvasPosition,
   reviewedCanvasCommand,
 } from "./canvas-model";
+import { canvasObjectDraft, resolveCanvasDraft } from "./canvas-draft";
+import { resizeCanvasPatch } from "./canvas-productivity";
 import { canvasBoard, canvasObject } from "./canvas-test-fixtures";
 
 describe("canvas draft and object permissions", () => {
@@ -142,5 +144,54 @@ describe("canvas draft and object permissions", () => {
         [60, 55],
       ],
     });
+  });
+});
+
+describe("canvas V4 object style retention", () => {
+  it("keeps every style and shape variant through duplication, resize and draft recovery", () => {
+    const object = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "rect",
+      version: 12,
+      shapeVariant: "cloud",
+      color: "teal",
+      fontSize: 28,
+      fontFamily: "serif",
+      fontWeight: "bold",
+      fontStyle: "italic",
+      textDecoration: "underline",
+      textAlign: "right",
+      strokeWidth: 7,
+      opacity: 0.4,
+    });
+    const styles = {
+      shapeVariant: "cloud",
+      color: "teal",
+      fontSize: 28,
+      fontFamily: "serif",
+      fontWeight: "bold",
+      fontStyle: "italic",
+      textDecoration: "underline",
+      textAlign: "right",
+      strokeWidth: 7,
+      opacity: 0.4,
+    };
+    expect(duplicateCanvasObject(object)).toMatchObject(styles);
+    const resized = {
+      ...object,
+      ...resizeCanvasPatch(object, { x: 10, y: 20, width: 440, height: 320 }),
+    };
+    expect(resized).toMatchObject({ ...styles, version: 12 });
+    const draft = { ...canvasObjectDraft(object), text: "Local wording" };
+    expect(draft).toMatchObject({ ...styles, version: 12 });
+    const recovered = resolveCanvasDraft(
+      { ...canvasBoard, objects: [{ ...object, version: 13 }] },
+      object.id,
+      draft,
+    );
+    expect(recovered.localDraft).toEqual(draft);
+    expect(resolveCanvasDraft({ ...canvasBoard, objects: [] }, object.id, draft).recovery).toBe(
+      "missing",
+    );
   });
 });

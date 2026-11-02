@@ -55,7 +55,7 @@ describe("Canvas V3 manual diagrams and frozen requests", () => {
   });
 
   it("requires V3 for diagram shapes and styles while retaining explicit bounds", () => {
-    expect(CANVAS_SCHEMA_VERSION).toBe(3);
+    expect(CANVAS_SCHEMA_VERSION).toBe(4);
     const styled = {
       ...connector,
       routing: "elbow",
@@ -123,7 +123,7 @@ describe("Canvas V3 manual diagrams and frozen requests", () => {
       redoOperationId: null,
     });
     const current = CanvasBoardViewSchema.parse(legacy);
-    expect(current.schemaVersion).toBe(3);
+    expect(current.schemaVersion).toBe(4);
     expect(current.objects[0]).toMatchObject({
       routing: "straight",
       lineStyle: "solid",
@@ -147,7 +147,7 @@ describe("Canvas V3 manual diagrams and frozen requests", () => {
       },
       objects: [old],
     });
-    expect(saved.schemaVersion).toBe(2);
+    expect(saved.schemaVersion).toBe(3);
     expect(saved.objects[0]).toMatchObject({ routing: "straight", lineColor: "neutral" });
   });
 });

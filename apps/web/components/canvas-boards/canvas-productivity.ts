@@ -549,7 +549,10 @@ export function sampleCanvasStroke(points: readonly [number, number][]): [number
     .slice(0, 128)
     .map((index) => [points[index]![0], points[index]![1]]);
 }
-export function newCanvasPen(points: readonly [number, number][]): CanvasObjectCreate | null {
+export function newCanvasPen(
+  points: readonly [number, number][],
+  style: Partial<Pick<CanvasObject, "color" | "strokeWidth" | "opacity">> = {},
+): CanvasObjectCreate | null {
   if (points.length < 2) return null;
   const sampled = sampleCanvasStroke(points),
     x = Math.min(...sampled.map((point) => point[0])),
@@ -563,6 +566,7 @@ export function newCanvasPen(points: readonly [number, number][]): CanvasObjectC
     height: Math.max(1, Math.max(...sampled.map((point) => point[1])) - y),
     points: sampled,
     color: "blue",
+    ...style,
   });
 }
 export function canvasObjectsInRect(objects: CanvasObject[], rect: CanvasBounds) {
@@ -585,4 +589,43 @@ export function canvasDragRect(a: CanvasPoint, b: CanvasPoint): CanvasBounds {
     width: Math.abs(a.x - b.x),
     height: Math.abs(a.y - b.y),
   };
+}
+
+/** Whole-stroke hit testing in world coordinates; an eraser never changes other objects. */
+export function canvasPenHits(
+  object: Extract<CanvasObject, { type: "pen" }>,
+  start: CanvasPoint,
+  end: CanvasPoint,
+  radius: number,
+): boolean {
+  const distance = (point: CanvasPoint, a: CanvasPoint, b: CanvasPoint) => {
+    const dx = b.x - a.x,
+      dy = b.y - a.y;
+    const t = Math.max(
+      0,
+      Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy || 1)),
+    );
+    return Math.hypot(point.x - a.x - t * dx, point.y - a.y - t * dy);
+  };
+  const cross = (a: CanvasPoint, b: CanvasPoint, c: CanvasPoint) =>
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const limit = radius + object.strokeWidth / 2;
+  return object.points.some(([x, y], index) => {
+    const a = { x, y },
+      previous = object.points[Math.max(0, index - 1)]!,
+      b = { x: previous[0], y: previous[1] };
+    if (
+      Math.min(
+        distance(a, start, end),
+        distance(b, start, end),
+        distance(start, a, b),
+        distance(end, a, b),
+      ) <= limit
+    )
+      return true;
+    // Strict crossing also catches fast pointer motion through a long stroke.
+    return (
+      cross(start, end, a) * cross(start, end, b) < 0 && cross(a, b, start) * cross(a, b, end) < 0
+    );
+  });
 }

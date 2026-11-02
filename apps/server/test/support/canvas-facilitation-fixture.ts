@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { expect, vi } from "vitest";
 import {
+  CANVAS_SCHEMA_VERSION,
   CanvasBoardViewSchema,
   CanvasObjectCreateSchema,
   type CanvasBoardCommand,
@@ -125,7 +126,7 @@ export async function createFacilitationCanvas(
     url: "/v1/canvas-boards",
     headers: f.owner.headers,
     payload: {
-      schemaVersion: 2,
+      schemaVersion: CANVAS_SCHEMA_VERSION,
       workspaceId: f.workspaceId,
       title: "Synthetic facilitation board",
       boardType: "team",
@@ -168,7 +169,7 @@ export function canvasObjectCommand(
     method: "POST",
     url: `/v1/canvas-boards/${board.id}/commands`,
     headers: actor.headers,
-    payload: { schemaVersion: 2, operationId, command },
+    payload: { schemaVersion: CANVAS_SCHEMA_VERSION, operationId, command },
   });
 }
 export function facilitateCanvas(

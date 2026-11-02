@@ -14,6 +14,7 @@ import {
   CanvasBoardMutationSchema,
   CanvasBoardViewSchema,
   CanvasObjectSchema,
+  CanvasSimpleTypeSchema,
   CanvasFacilitationMutationSchema,
   CanvasFacilitationViewSchema,
   CanvasVersionViewSchema,
@@ -1244,7 +1245,7 @@ export class CanvasBoardRepository {
     notExpired(checked.state.board, instant(clock));
     if (checked.source) sourceCurrent(checked.source, instant(clock));
     return CanvasVersionViewSchema.parse({
-      schemaVersion: 2,
+      schemaVersion: 3,
       boardId: checked.state.board.id,
       version: { ...saved.metadata, objectCount: objects.length },
       objects,
@@ -1347,7 +1348,9 @@ export class CanvasBoardRepository {
           "ENTITLEMENT_LIMIT",
           "This canvas has reached its durable operation limit",
         );
-      const command = mutation.command;
+      // Hash the frozen request above and below, then upcast only the execution plan.
+      // Adding V4 create defaults to legacy requests would invalidate accepted receipts.
+      const command = CanvasBoardCommandSchema.parse(mutation.command);
       const before: CanvasObject[] = [],
         after: CanvasObject[] = [];
       if (
@@ -1672,11 +1675,26 @@ export class CanvasBoardRepository {
                     "FORBIDDEN",
                     "Only facilitators can publish objects to guests",
                   );
-                const updated = CanvasObjectSchema.parse({
+                if (operation.patch.type !== undefined)
+                  assert(
+                    CanvasSimpleTypeSchema.safeParse(existing.type).success,
+                    "Only simple visual objects can change type",
+                  );
+                const candidate: Record<string, unknown> = {
                   ...existing,
                   ...operation.patch,
                   version: existing.version + 1,
-                });
+                };
+                // A conversion preserves the identity/attachments but cannot carry a
+                // rectangle-only variant into another strict object schema.
+                if (operation.patch.type && operation.patch.type !== "rect") {
+                  assert(
+                    operation.patch.shapeVariant === undefined,
+                    "Shape variants require a rectangle",
+                  );
+                  delete candidate.shapeVariant;
+                }
+                const updated = CanvasObjectSchema.parse(candidate);
                 if (ancestors(originalObjects, updated).some((parent) => parent.locked))
                   throw new CanvasBoardError("FORBIDDEN", "Unlock the containing frame first");
                 state.objects[index] = updated;

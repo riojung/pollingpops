@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CANVAS_SCHEMA_VERSION,
   CanvasBoardViewSchema,
   CanvasObjectCreateSchema,
   type CanvasBoardCommand,
@@ -169,7 +170,7 @@ async function command(
     method: "POST",
     url: `/v1/canvas-boards/${board.id}/commands`,
     headers,
-    payload: { schemaVersion: 2, operationId, command: value },
+    payload: { schemaVersion: CANVAS_SCHEMA_VERSION, operationId, command: value },
   });
 }
 
@@ -730,7 +731,7 @@ describe("board-scoped canvas HTTP boundaries", () => {
       operations: [
         {
           type: "create",
-          object: {
+          object: CanvasObjectCreateSchema.parse({
             id: objectId,
             type: "sticky",
             x: 10,
@@ -745,7 +746,7 @@ describe("board-scoped canvas HTTP boundaries", () => {
             locked: false,
             parentId: null,
             geometricGroupId: null,
-          },
+          }),
         },
       ],
     };

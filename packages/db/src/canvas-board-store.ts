@@ -4,6 +4,7 @@ import {
   CanvasCommentThreadSchema,
   CanvasTimerSchema,
   CanvasVersionMetadataSchema,
+  type CanvasObject,
   type CanvasBoardEvent,
   type IdeaBoardStored,
 } from "@openround/contracts";
@@ -79,7 +80,10 @@ function normalizedCanvasState(
         metadata: CanvasVersionMetadataSchema.parse(saved.metadata),
         objects: saved.objects.map(({ idea: _idea, ...object }) => {
           void _idea;
-          return CanvasObjectSchema.parse(object);
+          // Validate saved JSON without materializing new format defaults into an
+          // immutable checkpoint. Outward version projections upcast separately.
+          CanvasObjectSchema.parse(object);
+          return object as CanvasObject;
         }),
       })),
     },
@@ -534,7 +538,7 @@ export class MemoryCanvasBoards {
 
 function boardRow(row: Record<string, unknown>): CanvasBoardStored {
   return {
-    schemaVersion: Number(row.schema_version ?? 1) as 1 | 2 | 3,
+    schemaVersion: Number(row.schema_version ?? 1) as 1 | 2 | 3 | 4,
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     organizationId: String(row.organization_id),

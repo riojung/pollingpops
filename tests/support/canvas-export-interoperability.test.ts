@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CanvasObjectSchema, type CanvasObject } from "../../packages/contracts/src/index.ts";
+import {
+  CanvasObjectSchema,
+  CanvasColorSchema,
+  CanvasShapeVariantSchema,
+  type CanvasObject,
+} from "../../packages/contracts/src/index.ts";
 import { renderCanvasSvg } from "../../apps/server/src/canvas-export.ts";
 import { validateClosedCanvasSvg } from "../../apps/web/components/canvas-boards/canvas-export-client.ts";
 
@@ -79,5 +84,64 @@ describe("server SVG and browser closed-document interoperability", () => {
     expect(svg).toContain('marker-end="url(#export-arrow-blue)"');
     expect(svg).toContain("stroke-dasharray=");
     expect(svg).toContain("Synthetic &lt;route&gt;");
+  });
+});
+
+describe("Canvas V4 SVG language interoperability", () => {
+  it("accepts every shared shape variant with bounded text, stroke and opacity styles", async () => {
+    const colors = CanvasColorSchema.options;
+    const objects = CanvasShapeVariantSchema.options.map((shapeVariant, index) =>
+      CanvasObjectSchema.parse({
+        ...base,
+        id: id(300 + index),
+        type: "rect",
+        shapeVariant,
+        width: 137.5,
+        height: 93.25,
+        x: index * 160,
+        color: colors[index % colors.length],
+        fontFamily: ["sans", "serif", "mono"][index % 3],
+        fontSize: 10 + index * 4,
+        fontWeight: index % 2 ? "normal" : "bold",
+        fontStyle: index % 2 ? "normal" : "italic",
+        textDecoration: index % 2 ? "none" : "underline",
+        textAlign: ["left", "center", "right"][index % 3],
+        opacity: index % 2 ? 1 : 0.35,
+        strokeWidth: index + 1,
+      }),
+    );
+    const svg = await acceptsRendererOutput(objects);
+    expect(svg).toContain('font-family="Georgia, serif"');
+    expect(svg).toContain('font-family="Courier New, monospace"');
+    expect(svg).toContain('text-anchor="middle"');
+    expect(svg).toContain('text-anchor="end"');
+    expect(svg).toContain('opacity="0.35"');
+  });
+  it("accepts every palette's local start/end marker and styled connector label", async () => {
+    const objects = CanvasColorSchema.options.map((lineColor, index) =>
+      CanvasObjectSchema.parse({
+        ...base,
+        id: id(400 + index),
+        type: "connector",
+        text: "Styled route",
+        from: { objectId: null, x: 0, y: index * 40 },
+        to: { objectId: null, x: 300, y: index * 40 + 25 },
+        lineColor,
+        startMarker: "arrow",
+        endMarker: "arrow",
+        fontFamily: "serif",
+        fontWeight: "bold",
+        fontStyle: "italic",
+        textDecoration: "underline",
+        textAlign: "right",
+        opacity: 0.1,
+        strokeWidth: 24,
+      }),
+    );
+    const svg = await acceptsRendererOutput(objects);
+    for (const color of CanvasColorSchema.options) {
+      expect(svg).toContain(`marker-start="url(#export-arrow-${color})"`);
+      expect(svg).toContain(`marker-end="url(#export-arrow-${color})"`);
+    }
   });
 });

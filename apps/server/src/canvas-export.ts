@@ -1,5 +1,8 @@
 import {
   CANVAS_MAX_OBJECTS,
+  CANVAS_FILL_COLORS,
+  CANVAS_STROKE_COLORS,
+  canvasShapeVariantPath,
   canvasDiagramPort,
   canvasDiagramShapePath,
   canvasConnectorGeometry,
@@ -16,22 +19,13 @@ export const CANVAS_EXPORT_MAX_PIXELS = 4096;
 export const CANVAS_EXPORT_TIMEOUT_MS = 15_000;
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_WORLD = 100_000;
-const fills = {
-  yellow: "#fff1a8",
-  blue: "#cde7ff",
-  green: "#ccebdc",
-  pink: "#f9d9e4",
-  purple: "#e5dcf8",
-  white: "#ffffff",
-};
-const inks = {
-  yellow: "#886800",
-  blue: "#175ca5",
-  green: "#24744a",
-  pink: "#b03765",
-  purple: "#7040aa",
-  white: "#202938",
-};
+const fills = CANVAS_FILL_COLORS;
+const inks = CANVAS_STROKE_COLORS;
+const fontFamilies = {
+  sans: "Arial, sans-serif",
+  serif: "Georgia, serif",
+  mono: "Courier New, monospace",
+} as const;
 export type CanvasExportErrorCode =
   | "INVALID_EXPORT"
   | "EXPORT_LIMIT"
@@ -127,17 +121,26 @@ function bounds(
       to = endpoint(object.to, objects);
     return from && to ? canvasConnectorGeometry(object, [...objects.values()]).bounds : null;
   }
-  if (object.type === "pen") return pointBounds(object.points.map(([x, y]) => ({ x, y })));
+  if (object.type === "pen") {
+    const box = pointBounds(object.points.map(([x, y]) => ({ x, y })));
+    const padding = Math.max(0, object.strokeWidth / 2 - 2);
+    return {
+      x: box.x - padding,
+      y: box.y - padding,
+      width: box.width + padding * 2,
+      height: box.height + padding * 2,
+    };
+  }
   const angle = (object.rotation * Math.PI) / 180;
   const width =
     Math.abs(object.width * Math.cos(angle)) + Math.abs(object.height * Math.sin(angle));
   const height =
     Math.abs(object.width * Math.sin(angle)) + Math.abs(object.height * Math.cos(angle));
   return {
-    x: object.x + (object.width - width) / 2 - 1,
-    y: object.y + (object.height - height) / 2 - 1,
-    width: width + 2,
-    height: height + 2,
+    x: object.x + (object.width - width) / 2 - object.strokeWidth / 2,
+    y: object.y + (object.height - height) / 2 - object.strokeWidth / 2,
+    width: width + object.strokeWidth,
+    height: height + object.strokeWidth,
   };
 }
 function intersects(a: CanvasExportRegion, b: CanvasExportRegion) {
@@ -172,8 +175,8 @@ function nativeImage(bytes: Buffer, mime: string) {
     bytes.toString("ascii", 8, 12) === "WEBP"
   );
 }
-function textLines(value: string, width: number) {
-  const columns = Math.max(1, Math.floor(width / 8));
+function textLines(value: string, width: number, fontSize: number) {
+  const columns = Math.max(1, Math.floor(width / (fontSize * 0.5)));
   return value
     .replace(/\r\n?/g, "\n")
     .split("\n")
@@ -297,18 +300,35 @@ export async function renderCanvasSvg(input: {
     y: number,
     availableWidth: number,
     availableHeight: number,
+    object: CanvasObject,
   ) {
     textBytes += Buffer.byteLength(value);
     if (textBytes > MAX_TEXT_BYTES) throw new CanvasExportError("EXPORT_LIMIT");
-    const lines = textLines(value, availableWidth).slice(
+    const lineHeight = object.fontSize * 1.25;
+    const lines = textLines(value, availableWidth, object.fontSize).slice(
       0,
-      Math.max(0, Math.floor(availableHeight / 20)),
+      Math.max(0, Math.floor(availableHeight / lineHeight)),
     );
+    const anchor =
+      object.textAlign === "center" ? "middle" : object.textAlign === "right" ? "end" : "start";
+    const textX =
+      x +
+      (object.textAlign === "center"
+        ? availableWidth / 2
+        : object.textAlign === "right"
+          ? availableWidth
+          : 0);
+    const ink =
+      object.type === "text"
+        ? inks[object.color]
+        : object.color === "black"
+          ? "#ffffff"
+          : "#202938";
     append(
-      `<text x="${n(x)}" y="${n(y)}" font-family="Arial, sans-serif" font-size="16" fill="#202938" xml:space="preserve">`,
+      `<text x="${n(textX)}" y="${n(y)}" text-anchor="${anchor}" font-family="${fontFamilies[object.fontFamily]}" font-size="${n(object.fontSize)}" font-weight="${object.fontWeight}" font-style="${object.fontStyle}" text-decoration="${object.textDecoration}" fill="${ink}" xml:space="preserve">`,
     );
     lines.forEach((line, index) =>
-      append(`<tspan x="${n(x)}" dy="${index ? 20 : 0}">${xml(line)}</tspan>`),
+      append(`<tspan x="${n(textX)}" dy="${index ? n(lineHeight) : 0}">${xml(line)}</tspan>`),
     );
     append("</text>");
   }
@@ -367,19 +387,19 @@ export async function renderCanvasSvg(input: {
         const marker =
           object.lineColor === "neutral" ? "export-arrow" : `export-arrow-${object.lineColor}`;
         append(
-          `<g><title>${xml(object.text)}</title><path d="${path}" fill="none" stroke="${ink}" stroke-width="2"${object.lineStyle === "dashed" ? ' stroke-dasharray="8 6"' : ""}${object.startMarker === "arrow" ? ` marker-start="url(#${marker})"` : ""}${object.endMarker === "arrow" ? ` marker-end="url(#${marker})"` : ""}/>`,
+          `<g opacity="${n(object.opacity)}"><title>${xml(object.text)}</title><path d="${path}" fill="none" stroke="${ink}" stroke-width="${n(object.strokeWidth)}"${object.lineStyle === "dashed" ? ' stroke-dasharray="8 6"' : ""}${object.startMarker === "arrow" ? ` marker-start="url(#${marker})"` : ""}${object.endMarker === "arrow" ? ` marker-end="url(#${marker})"` : ""}/>`,
         );
-        const label = canvasConnectorLabel(object.text, geometry.label);
+        const label = canvasConnectorLabel(object.text, geometry.label, object.fontSize);
         if (label) {
           append(
             `<rect x="${n(label.x)}" y="${n(label.y)}" width="${n(label.width)}" height="${n(label.height)}" rx="4" fill="#ffffff" stroke="#cdd4df"/>`,
           );
           append(
-            `<text fill="#202938" font-family="Arial, sans-serif" font-size="13" xml:space="preserve">`,
+            `<text fill="#202938" font-family="${fontFamilies[object.fontFamily]}" font-size="${n(object.fontSize)}" font-weight="${object.fontWeight}" font-style="${object.fontStyle}" text-decoration="${object.textDecoration}" text-anchor="${object.textAlign === "center" ? "middle" : object.textAlign === "right" ? "end" : "start"}" xml:space="preserve">`,
           );
           label.lines.forEach((line, lineIndex) =>
             append(
-              `<tspan x="${n(label.x + 8)}" y="${n(label.y + 19 + lineIndex * 18)}">${xml(line)}</tspan>`,
+              `<tspan x="${n(label.x + (object.textAlign === "center" ? label.width / 2 : object.textAlign === "right" ? label.width - 8 : 8))}" y="${n(label.y + 6 + object.fontSize + (lineIndex * 18 * object.fontSize) / 13)}">${xml(line)}</tspan>`,
             ),
           );
           append("</text>");
@@ -389,25 +409,32 @@ export async function renderCanvasSvg(input: {
       }
       if (object.type === "pen") {
         append(
-          `<polyline points="${object.points.map(([x, y]) => `${n(x)},${n(y)}`).join(" ")}" fill="none" stroke="${inks[object.color]}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`,
+          `<polyline points="${object.points.map(([x, y]) => `${n(x)},${n(y)}`).join(" ")}" fill="none" stroke="${inks[object.color]}" stroke-width="${n(object.strokeWidth)}" opacity="${n(object.opacity)}" stroke-linecap="round" stroke-linejoin="round"/>`,
         );
         return;
       }
       append(
-        `<g transform="translate(${n(object.x)} ${n(object.y)}) rotate(${n(object.rotation)} ${n(object.width / 2)} ${n(object.height / 2)})">`,
+        `<g opacity="${n(object.opacity)}" transform="translate(${n(object.x)} ${n(object.y)}) rotate(${n(object.rotation)} ${n(object.width / 2)} ${n(object.height / 2)})">`,
       );
       const fill = object.type === "frame" || object.type === "text" ? "none" : fills[object.color];
-      if (object.type === "ellipse")
+      const stroke = ["rect", "ellipse", "diamond", "parallelogram"].includes(object.type)
+        ? inks[object.color]
+        : "#89919d";
+      if (object.type === "rect")
         append(
-          `<ellipse cx="${n(object.width / 2)}" cy="${n(object.height / 2)}" rx="${n(object.width / 2)}" ry="${n(object.height / 2)}" fill="${fill}" stroke="#89919d"/>`,
+          `<path d="${canvasShapeVariantPath(object.shapeVariant, object.width, object.height)}" fill="${fill}" stroke="${stroke}" stroke-width="${n(object.strokeWidth)}"/>`,
+        );
+      else if (object.type === "ellipse")
+        append(
+          `<ellipse cx="${n(object.width / 2)}" cy="${n(object.height / 2)}" rx="${n(object.width / 2)}" ry="${n(object.height / 2)}" fill="${fill}" stroke="${stroke}" stroke-width="${n(object.strokeWidth)}"/>`,
         );
       else if (object.type === "diamond" || object.type === "parallelogram")
         append(
-          `<path d="${canvasDiagramShapePath(object.type, object.width, object.height)}" fill="${fill}" stroke="#89919d"/>`,
+          `<path d="${canvasDiagramShapePath(object.type, object.width, object.height)}" fill="${fill}" stroke="${stroke}" stroke-width="${n(object.strokeWidth)}"/>`,
         );
       else
         append(
-          `<rect width="${n(object.width)}" height="${n(object.height)}" rx="${object.type === "sticky" ? 3 : 10}" fill="${fill}" stroke="${object.type === "text" ? "none" : "#89919d"}"${object.type === "frame" ? ' stroke-dasharray="7 5"' : ""}/>`,
+          `<rect width="${n(object.width)}" height="${n(object.height)}" rx="${object.type === "sticky" ? 3 : 10}" fill="${fill}" stroke="${object.type === "text" ? "none" : stroke}" stroke-width="${n(object.strokeWidth)}"${object.type === "frame" ? ' stroke-dasharray="7 5"' : ""}/>`,
         );
       append(
         `<defs><clipPath id="export-object-${index}"><rect width="${n(object.width)}" height="${n(object.height)}"/></clipPath></defs><g clip-path="url(#export-object-${index})">`,
@@ -423,6 +450,7 @@ export async function renderCanvasSvg(input: {
           26,
           Math.max(1, object.width - 20),
           object.height - imageHeight - 20,
+          object,
         );
         attachments.forEach((attachment, attachmentIndex) =>
           image(
@@ -449,9 +477,12 @@ export async function renderCanvasSvg(input: {
         text(
           label,
           insetX,
-          insetY + 16,
+          insetY + object.fontSize,
           Math.max(1, object.width - insetX * 2),
-          object.type === "frame" ? 28 : object.height - insetY * 2,
+          object.type === "frame"
+            ? Math.max(28, object.fontSize * 1.25)
+            : object.height - insetY * 2,
+          object,
         );
       }
       append("</g></g>");

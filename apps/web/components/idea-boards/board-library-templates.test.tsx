@@ -1,3 +1,4 @@
+import { CANVAS_SCHEMA_VERSION } from "@openround/contracts";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as ApiModule from "../../lib/api";
@@ -327,7 +328,7 @@ describe("board library starter creation", () => {
     expect(mocked.fetch).toHaveBeenCalledTimes(1);
     expect(mocked.fetch.mock.calls[0]![0]).toBe("/v1/canvas-boards");
     expect(JSON.parse(mocked.fetch.mock.calls[0]![1].body)).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: CANVAS_SCHEMA_VERSION,
       title: "My kickoff",
       templateId: "project-kickoff",
       boardType: "team",

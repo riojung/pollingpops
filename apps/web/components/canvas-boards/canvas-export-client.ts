@@ -1,5 +1,6 @@
 import {
   CanvasExportRequestSchema,
+  CanvasColorSchema,
   type CanvasExportRegion,
   type CanvasObject,
 } from "@openround/contracts";
@@ -41,6 +42,52 @@ function invalid(): never {
 }
 const numeric = /^-?(?:\d+\.?\d*|\.\d+)$/;
 const numberList = /^-?[\d.]+(?:[ ,]-?[\d.]+)*$/;
+const localExportId = new RegExp(
+  `^export-(?:region|arrow(?:-(?:${CanvasColorSchema.options.join("|")}))?|object-\\d+)$`,
+);
+const pathNumber = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+/** Only absolute, bounded commands emitted by the shared original shape geometry. */
+function validateExportPath(value: string) {
+  const commands = value
+    .trim()
+    .split(/(?=[MLHVCQZ])/)
+    .map((command) => command.trim());
+  if (!commands.length || commands.length > 32 || !commands[0]!.startsWith("M")) invalid();
+  let open = false,
+    segments = 0,
+    curved = false;
+  const counts: Record<string, number> = { M: 2, L: 2, H: 1, V: 1, Q: 4, C: 6 };
+  for (const command of commands) {
+    const kind = command[0]!;
+    if (kind === "Z") {
+      if (command !== "Z" || !open || !segments) invalid();
+      open = false;
+      continue;
+    }
+    if (!(kind in counts) || (kind === "M" ? open : !open)) invalid();
+    const values = command.slice(1).trim().split(/\s+/);
+    if (
+      values.length !== counts[kind] ||
+      !values.every(
+        (number) =>
+          pathNumber.test(number) &&
+          Number.isFinite(Number(number)) &&
+          Math.abs(Number(number)) <= 1_000_000,
+      )
+    )
+      invalid();
+    if (kind === "M") {
+      open = true;
+      segments = 0;
+    } else {
+      segments++;
+      if (kind !== "L") curved = true;
+    }
+  }
+  // Open M/L paths are connectors and arrow markers. Curves belong to closed shapes only.
+  if (!segments || (curved && open)) invalid();
+}
+
 const names = new Set([
   "svg",
   "title",
@@ -126,19 +173,10 @@ export function validateClosedCanvasSvg(svg: string): { width: number; height: n
       } else if (key === "xmlns") {
         if (name !== "svg" || value !== "http://www.w3.org/2000/svg") invalid();
       } else if (key === "id") {
-        if (
-          !/^export-(?:region|arrow(?:-(?:yellow|blue|green|pink|purple|white))?|object-\d+)$/.test(
-            value,
-          )
-        )
-          invalid();
+        if (!localExportId.test(value)) invalid();
       } else if (key === "clip-path" || key === "marker-end" || key === "marker-start") {
-        if (
-          !/^url\(#export-(?:region|arrow(?:-(?:yellow|blue|green|pink|purple|white))?|object-\d+)\)$/.test(
-            value,
-          )
-        )
-          invalid();
+        const reference = /^url\(#([^()]+)\)$/.exec(value);
+        if (!reference || !localExportId.test(reference[1]!)) invalid();
       } else if (key === "href") {
         if (
           name !== "image" ||
@@ -151,25 +189,20 @@ export function validateClosedCanvasSvg(svg: string): { width: number; height: n
         if (!/^translate\(-?[\d.]+ -?[\d.]+\) rotate\(-?[\d.]+ [\d.]+ [\d.]+\)$/.test(value))
           invalid();
       } else if (key === "d") {
-        const commands = value
-          .trim()
-          .split(/(?=[MLZ])/)
-          .map((command) => command.trim());
-        if (!commands.length || commands.length > 32 || !commands[0]!.startsWith("M")) invalid();
-        for (const [index, command] of commands.entries()) {
-          if (command === "Z" && index === commands.length - 1 && index >= 2) continue;
-          const match = /^(M|L)(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)$/.exec(command);
-          if (
-            !match ||
-            (index > 0 && match[1] !== "L") ||
-            ![match[2], match[3]].every(
-              (number) => Number.isFinite(Number(number)) && Math.abs(Number(number)) <= 1_000_000,
-            )
-          )
-            invalid();
-        }
+        validateExportPath(value);
+      } else if (key === "opacity") {
+        if (!numeric.test(value) || Number(value) < 0.1 || Number(value) > 1) invalid();
       } else if (key === "font-family") {
-        if (value !== "Arial, sans-serif") invalid();
+        if (!["Arial, sans-serif", "Georgia, serif", "Courier New, monospace"].includes(value))
+          invalid();
+      } else if (key === "font-weight") {
+        if (!["normal", "bold"].includes(value)) invalid();
+      } else if (key === "font-style") {
+        if (!["normal", "italic"].includes(value)) invalid();
+      } else if (key === "text-decoration") {
+        if (!["none", "underline"].includes(value)) invalid();
+      } else if (key === "text-anchor") {
+        if (!["start", "middle", "end"].includes(value)) invalid();
       } else if (key === "xml:space") {
         if (value !== "preserve") invalid();
       } else if (key === "preserveAspectRatio") {

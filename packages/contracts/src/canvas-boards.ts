@@ -52,7 +52,29 @@ export {
 };
 export type CanvasObjectCreateV2 = z.infer<typeof FrozenObjectCreateV2Schema>;
 export type CanvasObjectV2 = z.infer<typeof FrozenObjectV2Schema>;
-export const CANVAS_SCHEMA_VERSION = 3 as const;
+import {
+  CanvasObjectCreateV3Schema as FrozenObjectCreateV3Schema,
+  CanvasObjectV3Schema as FrozenObjectV3Schema,
+  CanvasObjectPatchV3Schema as FrozenObjectPatchV3Schema,
+  CanvasBoardCommandV3Schema as FrozenCommandV3Schema,
+  CanvasBoardMutationV3Schema as FrozenMutationV3Schema,
+  CanvasBoardCreateV3Schema as FrozenCreateV3Schema,
+  CanvasBoardViewV3Schema as FrozenViewV3Schema,
+  CanvasBoardGuestViewV3Schema as FrozenGuestViewV3Schema,
+} from "./canvas-boards-v3";
+export {
+  FrozenObjectCreateV3Schema as CanvasObjectCreateV3Schema,
+  FrozenObjectV3Schema as CanvasObjectV3Schema,
+  FrozenObjectPatchV3Schema as CanvasObjectPatchV3Schema,
+  FrozenCommandV3Schema as CanvasBoardCommandV3Schema,
+  FrozenMutationV3Schema as CanvasBoardMutationV3Schema,
+  FrozenCreateV3Schema as CanvasBoardCreateV3Schema,
+  FrozenViewV3Schema as CanvasBoardViewV3Schema,
+  FrozenGuestViewV3Schema as CanvasBoardGuestViewV3Schema,
+};
+export type CanvasObjectCreateV3 = z.infer<typeof FrozenObjectCreateV3Schema>;
+export type CanvasObjectV3 = z.infer<typeof FrozenObjectV3Schema>;
+export const CANVAS_SCHEMA_VERSION = 4 as const;
 
 export const CANVAS_MAX_OBJECTS = 500;
 export const CANVAS_MAX_OPERATION_BYTES = 64 * 1024;
@@ -76,7 +98,95 @@ const coordinate = z.number().finite().min(-100_000).max(100_000);
 export const CanvasBoardRoleSchema = z.enum(["owner", "facilitator", "editor", "viewer"]);
 export type CanvasBoardRole = z.infer<typeof CanvasBoardRoleSchema>;
 export const CanvasBoardGrantRoleSchema = z.enum(["facilitator", "editor", "viewer"]);
-export const CanvasColorSchema = z.enum(["yellow", "blue", "green", "pink", "purple", "white"]);
+export const CanvasColorSchema = z.enum([
+  "yellow",
+  "blue",
+  "green",
+  "pink",
+  "purple",
+  "white",
+  "orange",
+  "red",
+  "teal",
+  "lime",
+  "gray",
+  "black",
+  "amber",
+  "lavender",
+  "mint",
+  "sky",
+]);
+export type CanvasColor = z.infer<typeof CanvasColorSchema>;
+/** Closed palette values shared by CSS/SVG renderers; user CSS is never accepted. */
+export const CANVAS_FILL_COLORS: Readonly<Record<CanvasColor, string>> = Object.freeze({
+  yellow: "#fff1a8",
+  blue: "#cde7ff",
+  green: "#ccebdc",
+  pink: "#f9d9e4",
+  purple: "#e5dcf8",
+  white: "#ffffff",
+  orange: "#ffdbb5",
+  red: "#ffd1cc",
+  teal: "#bce9e4",
+  lime: "#e4f2b3",
+  gray: "#e6e9ee",
+  black: "#3b4351",
+  amber: "#ffe3a1",
+  lavender: "#ede3ff",
+  mint: "#d6f5e7",
+  sky: "#d9f0ff",
+});
+export const CANVAS_STROKE_COLORS: Readonly<Record<CanvasColor, string>> = Object.freeze({
+  yellow: "#886800",
+  blue: "#175ca5",
+  green: "#24744a",
+  pink: "#b03765",
+  purple: "#7040aa",
+  white: "#202938",
+  orange: "#a75113",
+  red: "#b6342a",
+  teal: "#147d76",
+  lime: "#657d18",
+  gray: "#606a79",
+  black: "#202938",
+  amber: "#956300",
+  lavender: "#7951af",
+  mint: "#247a58",
+  sky: "#246f9b",
+});
+export const CanvasShapeVariantSchema = z.enum([
+  "rectangle",
+  "rounded_rectangle",
+  "triangle",
+  "star",
+  "pentagon",
+  "hexagon",
+  "octagon",
+  "cylinder",
+  "speech_bubble",
+  "cloud",
+  "cross",
+  "chevron",
+  "document",
+  "trapezoid",
+  "arrow_right",
+  "arrow_left",
+  "arrow_double",
+]);
+export type CanvasShapeVariant = z.infer<typeof CanvasShapeVariantSchema>;
+export const CanvasSimpleTypeSchema = z.enum([
+  "sticky",
+  "text",
+  "rect",
+  "ellipse",
+  "diamond",
+  "parallelogram",
+]);
+export const CanvasFontFamilySchema = z.enum(["sans", "serif", "mono"]);
+export const CanvasFontWeightSchema = z.enum(["normal", "bold"]);
+export const CanvasFontStyleSchema = z.enum(["normal", "italic"]);
+export const CanvasTextDecorationSchema = z.enum(["none", "underline"]);
+export const CanvasTextAlignSchema = z.enum(["left", "center", "right"]);
 export const CanvasEndpointSchema = z
   .object({
     objectId: id.nullable(),
@@ -85,6 +195,7 @@ export const CanvasEndpointSchema = z
     anchor: z.enum(["center", "top", "right", "bottom", "left"]).default("center"),
   })
   .strict();
+export type CanvasEndpoint = z.infer<typeof CanvasEndpointSchema>;
 const common = {
   id,
   x: coordinate,
@@ -95,6 +206,14 @@ const common = {
   zIndex: z.number().int().min(-10_000).max(10_000).default(0),
   color: CanvasColorSchema.default("yellow"),
   text: text(2_000).default(""),
+  fontSize: z.number().finite().min(10).max(96).default(16),
+  fontFamily: CanvasFontFamilySchema.default("sans"),
+  fontWeight: CanvasFontWeightSchema.default("normal"),
+  fontStyle: CanvasFontStyleSchema.default("normal"),
+  textDecoration: CanvasTextDecorationSchema.default("none"),
+  textAlign: CanvasTextAlignSchema.default("left"),
+  strokeWidth: z.number().finite().min(1).max(24).default(2),
+  opacity: z.number().finite().min(0.1).max(1).default(1),
   parentId: id.nullable().default(null),
   geometricGroupId: id.nullable().default(null),
   locked: z.boolean().default(false),
@@ -131,7 +250,7 @@ export const CanvasConnectorLineColorSchema = z.enum(["neutral", ...CanvasColorS
 export const CanvasObjectCreateSchema = z.discriminatedUnion("type", [
   simple("sticky"),
   simple("text"),
-  simple("rect"),
+  simple("rect").extend({ shapeVariant: CanvasShapeVariantSchema.default("rectangle") }),
   simple("ellipse"),
   simple("frame"),
   z
@@ -151,6 +270,7 @@ export const CanvasObjectCreateSchema = z.discriminatedUnion("type", [
     .object({
       ...common,
       type: z.literal("pen"),
+      strokeWidth: common.strokeWidth.default(3),
       points: z
         .array(z.tuple([coordinate, coordinate]))
         .min(2)
@@ -173,8 +293,8 @@ export const CanvasObjectCreateSchema = z.discriminatedUnion("type", [
   simple("parallelogram"),
 ]);
 export type CanvasObjectCreate = z.infer<typeof CanvasObjectCreateSchema>;
-export const CanvasObjectCreateV3Schema = CanvasObjectCreateSchema;
-export type CanvasObjectCreateV3 = CanvasObjectCreate;
+export const CanvasObjectCreateV4Schema = CanvasObjectCreateSchema;
+export type CanvasObjectCreateV4 = CanvasObjectCreate;
 const versioned = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
   schema.extend({ version: z.number().int().positive(), idea: IdeaBoardIdeaSchema.optional() });
 export const CanvasObjectSchema = z.discriminatedUnion("type", [
@@ -192,10 +312,20 @@ export const CanvasObjectSchema = z.discriminatedUnion("type", [
   versioned(CanvasObjectCreateSchema.options[11]),
 ]);
 export type CanvasObject = z.infer<typeof CanvasObjectSchema>;
-export const CanvasObjectV3Schema = CanvasObjectSchema;
-export type CanvasObjectV3 = CanvasObject;
+export const CanvasObjectV4Schema = CanvasObjectSchema;
+export type CanvasObjectV4 = CanvasObject;
 export const CanvasObjectPatchSchema = z
   .object({
+    type: CanvasSimpleTypeSchema.optional(),
+    shapeVariant: CanvasShapeVariantSchema.optional(),
+    fontSize: common.fontSize.unwrap().optional(),
+    fontFamily: CanvasFontFamilySchema.optional(),
+    fontWeight: CanvasFontWeightSchema.optional(),
+    fontStyle: CanvasFontStyleSchema.optional(),
+    textDecoration: CanvasTextDecorationSchema.optional(),
+    textAlign: CanvasTextAlignSchema.optional(),
+    strokeWidth: common.strokeWidth.unwrap().optional(),
+    opacity: common.opacity.unwrap().optional(),
     x: coordinate.optional(),
     y: coordinate.optional(),
     width: common.width.optional(),
@@ -225,7 +355,7 @@ export const CanvasObjectPatchSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "Change at least one field");
-export const CanvasObjectPatchV3Schema = CanvasObjectPatchSchema;
+export const CanvasObjectPatchV4Schema = CanvasObjectPatchSchema;
 export const CanvasObjectOperationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create"), object: CanvasObjectCreateSchema }).strict(),
   z
@@ -266,9 +396,9 @@ export const CanvasBoardCommandSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 export type CanvasBoardCommand = z.infer<typeof CanvasBoardCommandSchema>;
-export const CanvasBoardCommandV3Schema = CanvasBoardCommandSchema;
-export const CanvasBoardMutationV3Schema = z
-  .object({ schemaVersion: z.literal(3), operationId: id, command: CanvasBoardCommandSchema })
+export const CanvasBoardCommandV4Schema = CanvasBoardCommandSchema;
+export const CanvasBoardMutationV4Schema = z
+  .object({ schemaVersion: z.literal(4), operationId: id, command: CanvasBoardCommandSchema })
   .strict()
   .superRefine((value, ctx) => {
     if (new TextEncoder().encode(JSON.stringify(value)).byteLength > CANVAS_MAX_OPERATION_BYTES)
@@ -277,12 +407,13 @@ export const CanvasBoardMutationV3Schema = z
 export const CanvasBoardMutationSchema = z.union([
   CanvasBoardMutationV1Schema,
   FrozenMutationV2Schema,
-  CanvasBoardMutationV3Schema,
+  FrozenMutationV3Schema,
+  CanvasBoardMutationV4Schema,
 ]);
 export type CanvasBoardMutation = z.infer<typeof CanvasBoardMutationSchema>;
-export const CanvasBoardCreateV3Schema = z
+export const CanvasBoardCreateV4Schema = z
   .object({
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     workspaceId: id,
     title: text(160).pipe(z.string().trim().min(1)),
     boardType: z.enum(["team", "workshop"]),
@@ -298,7 +429,8 @@ export const CanvasBoardCreateV3Schema = z
 export const CanvasBoardCreateSchema = z.union([
   CanvasBoardCreateV1Schema,
   FrozenCreateV2Schema,
-  CanvasBoardCreateV3Schema,
+  FrozenCreateV3Schema,
+  CanvasBoardCreateV4Schema,
 ]);
 export type CanvasBoardCreate = z.infer<typeof CanvasBoardCreateSchema>;
 export const CanvasBoardCapabilitiesSchema = z
@@ -334,9 +466,9 @@ export const CanvasBoardInviteSchema = z
   .object({ email: z.string().email().max(320), role: CanvasBoardGrantRoleSchema, operationId: id })
   .strict();
 export type CanvasBoardInvitation = z.infer<typeof CanvasBoardInvitationSchema>;
-export const CanvasBoardViewV3Schema = z
+export const CanvasBoardViewV4Schema = z
   .object({
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     id,
     workspaceId: id,
     organizationId: id,
@@ -363,26 +495,33 @@ export const CanvasBoardViewV3Schema = z
   })
   .strict();
 export const CanvasBoardViewSchema = z.union([
-  CanvasBoardViewV3Schema,
-  FrozenViewV2Schema.transform((value) =>
-    CanvasBoardViewV3Schema.parse({
+  CanvasBoardViewV4Schema,
+  FrozenViewV3Schema.transform((value) =>
+    CanvasBoardViewV4Schema.parse({
       ...value,
-      schemaVersion: 3,
+      schemaVersion: 4,
+      objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
+    }),
+  ),
+  FrozenViewV2Schema.transform((value) =>
+    CanvasBoardViewV4Schema.parse({
+      ...value,
+      schemaVersion: 4,
       objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
     }),
   ),
   CanvasBoardViewV1Schema.transform((value) =>
-    CanvasBoardViewV3Schema.parse({
+    CanvasBoardViewV4Schema.parse({
       ...value,
-      schemaVersion: 3,
+      schemaVersion: 4,
       objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
     }),
   ),
 ]);
-export type CanvasBoardView = z.infer<typeof CanvasBoardViewV3Schema>;
-export const CanvasBoardGuestViewV3Schema = z
+export type CanvasBoardView = z.infer<typeof CanvasBoardViewV4Schema>;
+export const CanvasBoardGuestViewV4Schema = z
   .object({
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     id,
     sourceBoardId: id,
     canvasSeq: z.number().int().nonnegative(),
@@ -392,23 +531,30 @@ export const CanvasBoardGuestViewV3Schema = z
   })
   .strict();
 export const CanvasBoardGuestViewSchema = z.union([
-  CanvasBoardGuestViewV3Schema,
-  FrozenGuestViewV2Schema.transform((value) =>
-    CanvasBoardGuestViewV3Schema.parse({
+  CanvasBoardGuestViewV4Schema,
+  FrozenGuestViewV3Schema.transform((value) =>
+    CanvasBoardGuestViewV4Schema.parse({
       ...value,
-      schemaVersion: 3,
+      schemaVersion: 4,
+      objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
+    }),
+  ),
+  FrozenGuestViewV2Schema.transform((value) =>
+    CanvasBoardGuestViewV4Schema.parse({
+      ...value,
+      schemaVersion: 4,
       objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
     }),
   ),
   CanvasBoardGuestViewV1Schema.transform((value) =>
-    CanvasBoardGuestViewV3Schema.parse({
+    CanvasBoardGuestViewV4Schema.parse({
       ...value,
-      schemaVersion: 3,
+      schemaVersion: 4,
       objects: value.objects.map((object) => CanvasObjectSchema.parse(object)),
     }),
   ),
 ]);
-export type CanvasBoardGuestView = z.infer<typeof CanvasBoardGuestViewV3Schema>;
+export type CanvasBoardGuestView = z.infer<typeof CanvasBoardGuestViewV4Schema>;
 export const CanvasBoardReceiptSchema = z
   .object({ operationId: id, canvasSeq: z.number().int().nonnegative(), type: z.string().max(40) })
   .strict();

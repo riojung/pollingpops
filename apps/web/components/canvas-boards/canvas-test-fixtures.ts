@@ -1,4 +1,8 @@
-import { CanvasBoardViewSchema, CanvasObjectSchema } from "@openround/contracts";
+import {
+  CANVAS_SCHEMA_VERSION,
+  CanvasBoardViewSchema,
+  CanvasObjectSchema,
+} from "@openround/contracts";
 
 export const canvasId = "00000000-0000-4000-8000-000000000091";
 export const canvasObject = CanvasObjectSchema.parse({
@@ -12,7 +16,7 @@ export const canvasObject = CanvasObjectSchema.parse({
   text: "Synthetic canvas note",
 });
 export const canvasBoard = CanvasBoardViewSchema.parse({
-  schemaVersion: 2,
+  schemaVersion: CANVAS_SCHEMA_VERSION,
   id: canvasId,
   workspaceId: "00000000-0000-4000-8000-000000000093",
   organizationId: "00000000-0000-4000-8000-000000000094",

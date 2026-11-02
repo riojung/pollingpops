@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CanvasBoardViewSchema } from "@openround/contracts";
+import { CANVAS_SCHEMA_VERSION, CanvasBoardViewSchema } from "@openround/contracts";
 import type * as ApiModule from "../../lib/api";
 import { ApiClientError } from "../../lib/api";
 import { boardFixture } from "../../test-utils/idea-board";
@@ -76,24 +76,69 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("guided starter creation checkpoints", () => {
-  it("resumes a pre-V3 uncertain creation using the original V2 envelope and keys", async () => {
-    const legacy = intent();
-    delete legacy.canvasSchemaVersion;
-    legacy.sourceBoardId = boardFixture.id;
-    const resumed = parseWorkshopTemplateIntent(legacy, userId, workspaceId);
-    expect(resumed.canvasSchemaVersion).toBe(2);
-    api.fetch.mockResolvedValueOnce(canvasResponse());
-    await finishWorkshopTemplate(resumed, vi.fn());
-    expect(api.fetch).toHaveBeenCalledOnce();
-    expect(JSON.parse(api.fetch.mock.calls[0]![1].body)).toMatchObject({
-      schemaVersion: 2,
-      operationId: legacy.canvasOperationId,
-      sourceBoardId: boardFixture.id,
-      templateId: "experience-retro",
-    });
-  });
+  it.each([undefined, 2, 3] as const)(
+    "retries a frozen schema %s checkpoint after a lost canvas ACK with its original envelope and keys",
+    async (canvasSchemaVersion) => {
+      // These are persisted legacy values, independent of the current intent factory.
+      const legacy: WorkshopTemplateIntent = {
+        version: 1,
+        ...(canvasSchemaVersion === undefined ? {} : { canvasSchemaVersion }),
+        userId,
+        workspaceId,
+        source: {
+          schemaVersion: 1,
+          title: "Our chosen title",
+          description: "Our edited prompt",
+          identityMode: "alias",
+          moderationEnabled: false,
+          voteBudget: 5,
+          windowDays: 2,
+          ideasVisible: true,
+          idempotencyKey: "00000000-0000-4000-8000-000000000010",
+        },
+        canvasOperationId: "00000000-0000-4000-8000-000000000011",
+        templateId: "experience-retro",
+        sourceBoardId: boardFixture.id,
+      };
+      const resumed = parseWorkshopTemplateIntent(
+        JSON.parse(JSON.stringify(legacy)),
+        userId,
+        workspaceId,
+      );
+      expect(resumed.canvasSchemaVersion).toBe(canvasSchemaVersion ?? 2);
+      const storage = checkpoints();
+      api.fetch.mockRejectedValueOnce(new TypeError("Lost legacy canvas ACK"));
+      await expect(finishWorkshopTemplate(resumed, storage.checkpoint)).rejects.toThrow(
+        "Lost legacy canvas ACK",
+      );
+      const retry = parseWorkshopTemplateIntent(
+        JSON.parse(JSON.stringify(storage.saved.at(-1))),
+        userId,
+        workspaceId,
+      );
+      api.fetch.mockResolvedValueOnce(canvasResponse());
+      await finishWorkshopTemplate(retry, storage.checkpoint);
+      expect(api.fetch.mock.calls.map(([path]) => path)).toEqual([
+        "/v1/canvas-boards",
+        "/v1/canvas-boards",
+      ]);
+      expect(api.fetch.mock.calls[1]![1].body).toBe(api.fetch.mock.calls[0]![1].body);
+      expect(JSON.parse(api.fetch.mock.calls[1]![1].body)).toEqual({
+        schemaVersion: canvasSchemaVersion ?? 2,
+        workspaceId,
+        title: "Our chosen title",
+        boardType: "workshop",
+        sourceBoardId: boardFixture.id,
+        operationId: legacy.canvasOperationId,
+        templateId: "experience-retro",
+        setupContext: { userId, workspaceId },
+      });
+      expect(retry.source.idempotencyKey).toBe(legacy.source.idempotencyKey);
+    },
+  );
   it("preserves the complete edited setup and distinct exact retry keys", async () => {
     const pending = intent();
+    expect(pending.canvasSchemaVersion).toBe(CANVAS_SCHEMA_VERSION);
     const storage = checkpoints();
     api.fetch
       .mockResolvedValueOnce({ board: boardFixture })
@@ -117,7 +162,7 @@ describe("guided starter creation checkpoints", () => {
       ideasVisible: true,
     });
     expect(JSON.parse(api.fetch.mock.calls[1]![1].body)).toEqual({
-      schemaVersion: 3,
+      schemaVersion: CANVAS_SCHEMA_VERSION,
       workspaceId,
       title: "Our chosen title",
       boardType: "workshop",
@@ -221,6 +266,7 @@ describe("guided starter creation checkpoints", () => {
       { ...pending, workspaceId: userId },
       { ...pending, bearer: "never-store-this" },
       { ...pending, templateId: "unknown" },
+      ...[null, 1, 5, "4"].map((canvasSchemaVersion) => ({ ...pending, canvasSchemaVersion })),
       { ...pending, sourceBoardId: "../../other" },
       { ...pending, source: { ...pending.source, description: "x".repeat(2001) } },
     ])

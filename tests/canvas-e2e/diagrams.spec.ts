@@ -1,3 +1,4 @@
+import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
 import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
@@ -6,7 +7,14 @@ import { fits, newTeamCanvas, organization, saveText, snapshot } from "./support
 async function selectObject(page: Page, name: string) {
   const outline = page.getByRole("button", { name: "Object outline", exact: true });
   if ((await outline.getAttribute("aria-expanded")) === "false") await outline.click();
-  await page.getByRole("button", { name, exact: true }).click();
+  await page.getByRole("complementary").getByRole("button", { name, exact: true }).click();
+  if ((await outline.getAttribute("aria-expanded")) === "false") {
+    await page
+      .getByRole("toolbar", { name: "Selection formatting", exact: true })
+      .getByRole("button", { name: "More actions", exact: true })
+      .click();
+  }
+  await expect(outline).toHaveAttribute("aria-expanded", "true");
 }
 async function save(page: Page) {
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
@@ -31,7 +39,7 @@ test("manual flow diagrams keep styled routes, ports, layer order and exported g
   const id = new URL(page.url()).pathname.split("/").at(-1)!;
   await expect(page.getByTestId("canvas-surface")).toBeVisible();
   const initial = await snapshot(page, id);
-  expect(initial.schemaVersion).toBe(3);
+  expect(initial.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
   expect(initial.objects.some((object) => object.type === "diamond")).toBe(true);
   expect(initial.objects.some((object) => object.type === "parallelogram")).toBe(true);
   const connector = initial.objects.find(

@@ -191,6 +191,23 @@
   --canvas-pen-pink: #a73562;
   --canvas-pen-purple: #7544a0;
   --canvas-pen-white: var(--ui-text);
+  /* Text sits on a themed surface; its display ink follows the same theme. */
+  --canvas-text-yellow: #886800;
+  --canvas-text-blue: #175ca5;
+  --canvas-text-green: #24744a;
+  --canvas-text-pink: #b03765;
+  --canvas-text-purple: #7040aa;
+  --canvas-text-white: var(--ui-text-strong);
+  --canvas-text-orange: #a75113;
+  --canvas-text-red: #b6342a;
+  --canvas-text-teal: #147d76;
+  --canvas-text-lime: #657d18;
+  --canvas-text-gray: #606a79;
+  --canvas-text-black: var(--ui-text-strong);
+  --canvas-text-amber: #956300;
+  --canvas-text-lavender: #7951af;
+  --canvas-text-mint: #247a58;
+  --canvas-text-sky: #246f9b;
 }
 :global([data-color-mode="dark"]) .surface {
   --canvas-pen-yellow: #f5d76e;
@@ -198,6 +215,20 @@
   --canvas-pen-green: #8ed8b2;
   --canvas-pen-pink: #f0a1bf;
   --canvas-pen-purple: #c5abed;
+  --canvas-text-yellow: #fff1a8;
+  --canvas-text-blue: #cde7ff;
+  --canvas-text-green: #ccebdc;
+  --canvas-text-pink: #f9d9e4;
+  --canvas-text-purple: #e5dcf8;
+  --canvas-text-orange: #ffdbb5;
+  --canvas-text-red: #ffd1cc;
+  --canvas-text-teal: #bce9e4;
+  --canvas-text-lime: #e4f2b3;
+  --canvas-text-gray: #e6e9ee;
+  --canvas-text-amber: #ffe3a1;
+  --canvas-text-lavender: #ede3ff;
+  --canvas-text-mint: #d6f5e7;
+  --canvas-text-sky: #d9f0ff;
 }
 .surface[data-tool="pen"] {
   cursor: crosshair;
@@ -844,4 +875,60 @@
   .readOnlyStage {
     height: 390px;
   }
+}
+
+.surface[data-tool="eraser"] {
+  cursor: crosshair;
+}
+.connectorPort {
+  cursor: crosshair;
+}
+.connectorPort:hover {
+  fill: var(--ui-accent-soft);
+}
+.inlineEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 2px solid var(--ui-accent-ink);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 15%);
+  user-select: text;
+}
+.inlineEditor textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  padding: 4px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface);
+  border: 0;
+  white-space: pre-wrap;
+}
+.inlineEditor textarea:focus {
+  outline: 0;
+}
+.inlineEditor p {
+  margin: 0;
+  font-size: 12px;
+}
+.inlineEditorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inlineEditorActions button {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  cursor: pointer;
 }

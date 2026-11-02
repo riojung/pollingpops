@@ -44,7 +44,7 @@ export interface CanvasBoardAuthorization {
   expiresAt: string;
 }
 export interface CanvasBoardStored {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   id: string;
   workspaceId: string;
   organizationId: string;

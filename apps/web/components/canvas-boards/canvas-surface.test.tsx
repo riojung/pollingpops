@@ -1,6 +1,13 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CanvasObjectSchema } from "@openround/contracts";
+import {
+  CanvasObjectSchema,
+  CANVAS_FILL_COLORS,
+  CANVAS_STROKE_COLORS,
+  CanvasShapeVariantSchema,
+  canvasShapeVariantPath,
+} from "@openround/contracts";
 import english from "../../lib/i18n/domains/idea-boards/en-CA";
 import { boardFixture } from "../../test-utils/idea-board";
 import { CanvasSurface } from "./canvas-surface";
@@ -120,5 +127,209 @@ describe("canvas visual privacy and normalized content", () => {
     expect(html).not.toContain("removed synthetic secret");
     expect(html).toContain("approved synthetic secret");
     expect(html).not.toContain("data-canvas-resize");
+  });
+});
+
+describe("V4 canvas rendering", () => {
+  it("renders the full bounded shape library with the same paths as export", () => {
+    for (const shapeVariant of CanvasShapeVariantSchema.options) {
+      const object = CanvasObjectSchema.parse({
+        ...canvasObject,
+        type: "rect",
+        shapeVariant,
+        color: "orange",
+        fontSize: 24,
+        fontFamily: "mono",
+        fontWeight: "bold",
+        fontStyle: "italic",
+        textDecoration: "underline",
+        textAlign: "center",
+        strokeWidth: 6,
+        opacity: 0.5,
+      });
+      const html = renderToStaticMarkup(
+        <CanvasSurface
+          objects={[object]}
+          viewport={{ x: 0, y: 0, zoom: 1 }}
+          onViewport={() => undefined}
+        />,
+      );
+      if (shapeVariant !== "rectangle")
+        expect(html).toContain(
+          `d="${canvasShapeVariantPath(shapeVariant, object.width, object.height)}"`,
+        );
+      expect(html).toContain(`fill="${CANVAS_FILL_COLORS.orange}"`);
+      expect(html).toContain('stroke-width="6"');
+      expect(html).toContain('opacity="0.5"');
+      expect(html).toContain("font-size:24px");
+      expect(html).toContain("font-family:monospace");
+      expect(html).toContain("text-decoration:underline");
+      expect(html).toContain("text-align:center");
+    }
+  });
+  it("renders every fill/stroke color and white text on black notes", () => {
+    for (const color of Object.keys(CANVAS_FILL_COLORS) as (keyof typeof CANVAS_FILL_COLORS)[]) {
+      const note = CanvasObjectSchema.parse({ ...canvasObject, color });
+      const pen = CanvasObjectSchema.parse({
+        ...canvasObject,
+        id: "00000000-0000-4000-8000-000000000099",
+        type: "pen",
+        color,
+        strokeWidth: 12,
+        opacity: 0.35,
+        points: [
+          [0, 0],
+          [100, 20],
+        ],
+      });
+      const html = renderToStaticMarkup(
+        <CanvasSurface
+          objects={[note, pen]}
+          viewport={{ x: 0, y: 0, zoom: 1 }}
+          onViewport={() => undefined}
+        />,
+      );
+      expect(html).toContain(`fill="${CANVAS_FILL_COLORS[color]}"`);
+      expect(html).toContain(`stroke="${CANVAS_STROKE_COLORS[color]}"`);
+      expect(html).toContain('stroke-width="12"');
+      expect(html).toContain('opacity="0.35"');
+      if (color === "black") expect(html).toContain("color:#ffffff");
+    }
+  });
+  it("shows neither connector handles nor inline inputs to viewers or locked objects", () => {
+    for (const props of [
+      { canEdit: false, objects: [canvasObject] },
+      { canEdit: true, objects: [{ ...canvasObject, locked: true }] },
+    ]) {
+      const html = renderToStaticMarkup(
+        <CanvasSurface
+          {...props}
+          selectedIds={[canvasObject.id]}
+          onCreateConnector={async () => true}
+          onCommitText={async () => true}
+          viewport={{ x: 0, y: 0, zoom: 1 }}
+          onViewport={() => undefined}
+        />,
+      );
+      expect(html).not.toContain("data-canvas-port");
+      expect(html).not.toContain("<textarea");
+    }
+  });
+});
+
+const surfaceCss = readFileSync(new URL("./canvas.module.css", import.meta.url), "utf8");
+const themeCss = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+function declarations(css: string, selector: string) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const rule = css.match(new RegExp(`^${escaped}\\s*\\{([^}]+)\\}`, "m"))?.[1];
+  if (!rule) throw new Error(`Missing CSS rule ${selector}`);
+  return Object.fromEntries(
+    [...rule.matchAll(/([\w-]+):\s*([^;]+);/g)].map((match) => [match[1]!, match[2]!.trim()]),
+  );
+}
+function contrast(a: string, b: string) {
+  const luminance = (hex: string) => {
+    if (!/^#[\da-f]{6}$/i.test(hex)) throw new Error(`Expected an opaque RGB token: ${hex}`);
+    const channels = [1, 3, 5].map((offset) => {
+      const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+  };
+  const first = luminance(a),
+    second = luminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+describe("canvas text contrast and frame typography", () => {
+  it.each(["light", "dark"] as const)(
+    "keeps all text colors readable on the %s raised surface without changing persisted ink",
+    (mode) => {
+      const theme = declarations(
+        themeCss,
+        mode === "dark" ? 'html[data-color-mode="dark"]' : ":root",
+      );
+      const displayInk = {
+        ...declarations(surfaceCss, ".surface"),
+        ...(mode === "dark"
+          ? declarations(surfaceCss, ':global([data-color-mode="dark"]) .surface')
+          : {}),
+      };
+      for (const color of Object.keys(
+        CANVAS_STROKE_COLORS,
+      ) as (keyof typeof CANVAS_STROKE_COLORS)[]) {
+        const object = CanvasObjectSchema.parse({ ...canvasObject, type: "text", color });
+        const html = renderToStaticMarkup(
+          <CanvasSurface
+            objects={[object]}
+            viewport={{ x: 0, y: 0, zoom: 1 }}
+            onViewport={() => undefined}
+          />,
+        );
+        expect(html).toContain(`color:var(--canvas-text-${color})`);
+        expect(html).toContain('fill="var(--ui-surface-raised)"');
+        const token = displayInk[`--canvas-text-${color}`]!;
+        const ink = token === "var(--ui-text-strong)" ? theme["--ui-text-strong"]! : token;
+        expect(contrast(ink, theme["--ui-surface-raised"]!)).toBeGreaterThanOrEqual(4.5);
+        if (color === "white" || color === "black") expect(token).toBe("var(--ui-text-strong)");
+        else
+          expect(token).toBe(
+            mode === "dark" ? CANVAS_FILL_COLORS[color] : CANVAS_STROKE_COLORS[color],
+          );
+        expect(object.color).toBe(color);
+      }
+    },
+  );
+  it("keeps inline editing on theme text and surface tokens", () => {
+    const editor = declarations(surfaceCss, ".inlineEditor textarea");
+    expect(editor.color).toBe("var(--ui-text-strong)");
+    expect(editor.background).toBe("var(--ui-surface)");
+    for (const selector of [":root", 'html[data-color-mode="dark"]']) {
+      const theme = declarations(themeCss, selector);
+      expect(contrast(theme["--ui-text-strong"]!, theme["--ui-surface"]!)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
+  it.each([
+    [10, 28],
+    [16, 28],
+    [48, 70],
+    [96, 140],
+  ])("allocates an unclipped frame title line at font size %s", (fontSize, height) => {
+    const object = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "frame",
+      width: 600,
+      height: 260,
+      fontSize,
+      text: "Frame title",
+    });
+    const html = renderToStaticMarkup(
+      <CanvasSurface
+        objects={[object]}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onViewport={() => undefined}
+      />,
+    );
+    expect(html).toContain(`<foreignObject x="10" y="10" width="580" height="${height}">`);
+    expect(html).toContain("line-height:1.45");
+    expect(height).toBeGreaterThanOrEqual(fontSize! * 1.45);
+  });
+  it("bounds a large frame title viewport to the available frame height", () => {
+    const object = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "frame",
+      height: 36,
+      fontSize: 96,
+    });
+    const html = renderToStaticMarkup(
+      <CanvasSurface
+        objects={[object]}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onViewport={() => undefined}
+      />,
+    );
+    expect(html).toContain('<foreignObject x="10" y="10" width="180" height="16">');
   });
 });

@@ -13,6 +13,15 @@ export interface CanvasObjectDraft {
   color: CanvasObject["color"];
   visibility: CanvasObject["visibility"];
   rotation: number;
+  fontSize: CanvasObject["fontSize"];
+  fontFamily: CanvasObject["fontFamily"];
+  fontWeight: CanvasObject["fontWeight"];
+  fontStyle: CanvasObject["fontStyle"];
+  textDecoration: CanvasObject["textDecoration"];
+  textAlign: CanvasObject["textAlign"];
+  strokeWidth: CanvasObject["strokeWidth"];
+  opacity: CanvasObject["opacity"];
+  shapeVariant?: Extract<CanvasObject, { type: "rect" }>["shapeVariant"];
   fromId?: string;
   toId?: string;
   fromAnchor?: Extract<CanvasObject, { type: "connector" }>["from"]["anchor"];
@@ -42,6 +51,15 @@ export function canvasObjectDraft(object: CanvasObject): CanvasObjectDraft {
     color: object.color,
     visibility: object.visibility,
     rotation: object.rotation,
+    fontSize: object.fontSize,
+    fontFamily: object.fontFamily,
+    fontWeight: object.fontWeight,
+    fontStyle: object.fontStyle,
+    textDecoration: object.textDecoration,
+    textAlign: object.textAlign,
+    strokeWidth: object.strokeWidth,
+    opacity: object.opacity,
+    ...(object.type === "rect" ? { shapeVariant: object.shapeVariant } : {}),
     ...(object.type === "connector"
       ? {
           fromId: object.from.objectId ?? "",

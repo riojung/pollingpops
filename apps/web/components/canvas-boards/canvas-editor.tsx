@@ -10,11 +10,20 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import type { CanvasObject, CanvasObjectCreate, CanvasExportRegion } from "@openround/contracts";
+import {
+  CANVAS_MAX_OBJECTS,
+  CANVAS_MAX_OPERATIONS,
+  CanvasObjectCreateSchema,
+  CanvasColorSchema,
+  type CanvasTemplateId,
+  type CanvasObject,
+  type CanvasObjectCreate,
+  type CanvasExportRegion,
+} from "@openround/contracts";
 import { Brand } from "../brand";
 import { useLocale } from "../locale-provider";
 import { GuardedLink, NavigationGuardProvider, useNavigationBlocker } from "../navigation-guard";
-import { apiFetch, humanError } from "../../lib/api";
+import { apiFetch, humanError, AUTH_CHANGE_EVENT } from "../../lib/api";
 import { formatDateTime, formatNumber } from "../../lib/i18n/format";
 import { CanvasSurface, type CanvasPatch, type CanvasTool } from "./canvas-surface";
 import {
@@ -51,6 +60,7 @@ import {
   planCanvasDuplicate,
   planCanvasDelete,
   planCanvasTransform,
+  planCanvasLock,
   resizeCanvasPatch,
   type CanvasPlan,
   type CanvasTransform,
@@ -66,6 +76,24 @@ import { CanvasDiagramInspector } from "./canvas-diagram-inspector";
 import { canvasConnectorDraftPatch } from "./canvas-diagram-model";
 import { planCanvasLayer } from "./canvas-productivity";
 import { CanvasToolIcon, type CanvasToolIconName } from "./canvas-tool-icon";
+import { CanvasToolPalette } from "./canvas-tool-palette";
+import { canvasShapeCatalog } from "./canvas-tool-catalog";
+import type {
+  CanvasDrawSettings,
+  CanvasPaletteObjectType,
+  CanvasToolColor,
+  CanvasPaletteShapeVariant,
+} from "./canvas-tool-catalog";
+import { CanvasContextToolbar, type CanvasConvertibleType } from "./canvas-context-toolbar";
+import {
+  planCanvasQuickStyle,
+  planCanvasStickyStack,
+  planCanvasTemplateInsert,
+  planCanvasEraseStrokes,
+} from "./canvas-tool-actions";
+import { CanvasTemplateChooser } from "../idea-boards/canvas-template-chooser";
+import { canvasToolCopy } from "../../lib/i18n/canvas-tool-messages";
+import experience from "./canvas-context-toolbar.module.css";
 import styles from "./canvas.module.css";
 
 function CanvasChromeButton({
@@ -93,7 +121,18 @@ function CanvasEditorContent({ id }: { id: string }) {
   const { t, locale } = useLocale();
   const facilitationCopy = canvasFacilitationCopy(locale);
   const diagramCopy = canvasDiagramCopy(locale);
+  const toolCopy = canvasToolCopy(locale);
   function objectLabel(object: CanvasObject, index: number) {
+    if (object.type === "rect" && object.shapeVariant !== "rectangle") {
+      const shape = canvasShapeCatalog.find(
+        (entry) => entry.type === "rect" && entry.shapeVariant === object.shapeVariant,
+      );
+      if (shape)
+        return canvasObjectLabel(
+          object,
+          `${toolCopy[shape.label]} ${formatNumber(locale, index + 1)}`,
+        );
+    }
     if (object.type === "diamond" || object.type === "parallelogram")
       return canvasObjectLabel(
         object,
@@ -130,6 +169,22 @@ function CanvasEditorContent({ id }: { id: string }) {
   const [planError, setPlanError] = useState<CanvasPlan["reason"]>(null);
   const [revealIds, setRevealIds] = useState<string[]>([]);
   const [tool, setTool] = useState<CanvasTool>("select");
+  const [drawSettings, setDrawSettings] = useState<CanvasDrawSettings>({
+    mode: "pen",
+    color: "blue",
+    width: 3,
+  });
+  const [stickyColor, setStickyColor] = useState<CanvasToolColor>("yellow");
+  const [connectorPreset, setConnectorPreset] = useState<"line" | "arrow" | "elbow">("arrow");
+  const [assetRequest, setAssetRequest] = useState<{
+    kind: "image" | "link" | "svg";
+    id: number;
+  }>();
+  const [inlineEditing, setInlineEditing] = useState(false);
+  const [editTextRequest, setEditTextRequest] = useState<{ id: string; nonce: number }>();
+  const [templates, setTemplates] = useState(false);
+  const [templateId, setTemplateId] = useState<CanvasTemplateId | null>(null);
+  const templateDialog = useRef<HTMLDialogElement>(null);
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT);
   const [sharing, setSharing] = useState(false);
   const [outline, setOutline] = useState(true);
@@ -231,12 +286,17 @@ function CanvasEditorContent({ id }: { id: string }) {
   const blocked = useCallback(
     () =>
       !deleted.current &&
-      (dirty || state.saving || state.failure !== null || deleting || gestureActive),
-    [dirty, state.saving, state.failure, deleting, gestureActive],
+      (dirty ||
+        state.saving ||
+        state.failure !== null ||
+        deleting ||
+        gestureActive ||
+        inlineEditing),
+    [dirty, state.saving, state.failure, deleting, gestureActive, inlineEditing],
   );
   useNavigationBlocker(blocked);
   const busy = state.saving || state.failure !== null || deleting;
-  const uiBusy = busy || gestureActive;
+  const uiBusy = busy || gestureActive || inlineEditing;
   const editable = Boolean(board && selected && canChangeObject(board, selected));
   useEffect(() => {
     active.current = true;
@@ -254,8 +314,35 @@ function CanvasEditorContent({ id }: { id: string }) {
     setViewport(INITIAL_VIEWPORT);
   }, [id]);
   useEffect(() => {
+    function closeTools() {
+      setTemplates(false);
+      setTemplateId(null);
+      setAssetRequest(undefined);
+      setEditTextRequest(undefined);
+    }
+    window.addEventListener(AUTH_CHANGE_EVENT, closeTools);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, closeTools);
+  }, []);
+  useEffect(() => {
+    if (!board) {
+      setTemplates(false);
+      setEditTextRequest(undefined);
+      setAssetRequest(undefined);
+    }
+  }, [Boolean(board)]);
+  useEffect(() => {
     if (board?.boardType === "workshop") setWorkshop(true);
   }, [board?.id, board?.boardType]);
+  useEffect(() => {
+    if (!templates) return;
+    const element = templateDialog.current;
+    const previous = document.activeElement;
+    element?.showModal();
+    return () => {
+      element?.close();
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, [templates]);
   useEffect(() => {
     if (!presence || !board) {
       setMembers([]);
@@ -293,8 +380,9 @@ function CanvasEditorContent({ id }: { id: string }) {
     };
   }, [id, presence, Boolean(board)]);
 
-  function selectMany(ids: string[], additive = false, reveal = true) {
-    if (!board || state.saving || deleting) return;
+  function selectMany(ids: string[], additive = false, reveal = true, fromGesture = false) {
+    if (!board || state.saving || deleting || inlineEditing || (gestureActive && !fromGesture))
+      return;
     const peers = canvasSelectionPeers(board.objects, ids);
     const next = additive ? [...new Set([...selectedIds, ...peers])] : peers;
     if (next.length === selectedIds.length && next.every((id) => selectedIds.includes(id))) return;
@@ -374,7 +462,11 @@ function CanvasEditorContent({ id }: { id: string }) {
       return false;
     }
     try {
-      const object = newCanvasPen(points);
+      const object = newCanvasPen(points, {
+        color: drawSettings.color,
+        strokeWidth: drawSettings.width,
+        opacity: drawSettings.mode === "highlighter" ? 0.35 : 1,
+      });
       if (!object) return false;
       if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
         acceptSelection(object.id);
@@ -399,7 +491,8 @@ function CanvasEditorContent({ id }: { id: string }) {
     );
   }
   async function add(
-    type: "sticky" | "text" | "rect" | "ellipse" | "frame" | "diamond" | "parallelogram",
+    type: CanvasPaletteObjectType,
+    options?: { color?: CanvasToolColor; shapeVariant?: CanvasPaletteShapeVariant },
   ) {
     if (
       !board?.capabilities.edit ||
@@ -415,7 +508,7 @@ function CanvasEditorContent({ id }: { id: string }) {
       },
       viewport,
     );
-    const object = newCanvasObject(
+    const seed = newCanvasObject(
       type,
       nextCanvasPosition(
         board.objects,
@@ -429,6 +522,16 @@ function CanvasEditorContent({ id }: { id: string }) {
           ? t("canvas.productivity.frame")
           : "",
     );
+    const object = CanvasObjectCreateSchema.parse({
+      ...seed,
+      ...(options?.color
+        ? { color: options.color }
+        : type === "sticky"
+          ? { color: stickyColor }
+          : {}),
+      ...(type === "rect" && options?.shapeVariant ? { shapeVariant: options.shapeVariant } : {}),
+    });
+    if (type === "sticky" && options?.color) setStickyColor(options.color);
     if (type === "frame") {
       object.width = 440;
       object.height = 300;
@@ -474,7 +577,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     }
   }
   async function connect(next: string) {
-    if (!board?.capabilities.edit || busy || dirty) return;
+    if (!board?.capabilities.edit || busy || dirty || creationFull) return;
     if (!connectorFrom) {
       setConnectorFrom(next);
       changeSelection(next);
@@ -514,12 +617,78 @@ function CanvasEditorContent({ id }: { id: string }) {
             ? "top"
             : "bottom",
     };
+    object.routing = connectorPreset === "elbow" ? "elbow" : "straight";
+    object.endMarker = connectorPreset === "line" ? "none" : "arrow";
     if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
       acceptSelection(object.id);
       setRevealIds([object.id]);
       setConnectorFrom(null);
       setTool("select");
     }
+  }
+  async function createConnector(
+    from: Extract<CanvasObject, { type: "connector" }>["from"],
+    to: Extract<CanvasObject, { type: "connector" }>["to"],
+  ) {
+    if (!board?.capabilities.edit || busy || dirty || creationFull) return false;
+    const object = CanvasObjectCreateSchema.parse({
+      ...newCanvasObject("connector", { x: Math.min(from.x, to.x), y: Math.min(from.y, to.y) }),
+      from,
+      to,
+      routing: connectorPreset === "elbow" ? "elbow" : "straight",
+      endMarker: connectorPreset === "line" ? "none" : "arrow",
+    });
+    if (await state.execute({ type: "batch", operations: [{ type: "create", object }] })) {
+      acceptSelection(object.id);
+      setConnectorFrom(null);
+      return true;
+    }
+    return false;
+  }
+  async function quickStyle(patch: CanvasPatch) {
+    if (board) await perform(planCanvasQuickStyle(board, selectedIds, patch));
+  }
+  async function eraseStrokes(strokes: Extract<CanvasObject, { type: "pen" }>[]) {
+    if (!board || inlineEditing) return false;
+    const plan = planCanvasEraseStrokes(board, strokes);
+    const erased = new Set(strokes.map((object) => object.id));
+    return perform({ ...plan, selection: selectedIds.filter((id) => !erased.has(id)) });
+  }
+  async function commitText(original: CanvasObject, text: string) {
+    if (!board || busy || dirty) return false;
+    const current = board.objects.find((object) => object.id === original.id);
+    if (!current || !canChangeObject(board, current) || current.type === "idea_ref") return false;
+    return state.execute({
+      type: "batch",
+      operations: [
+        { type: "update", id: original.id, expectedVersion: original.version, patch: { text } },
+      ],
+    });
+  }
+  function creationPoint() {
+    return worldPoint(
+      {
+        x: (stage.current?.clientWidth ?? 900) / 2 - 110,
+        y: (stage.current?.clientHeight ?? 650) / 2 - 80,
+      },
+      viewport,
+    );
+  }
+  async function addStack(count: number, color: CanvasToolColor) {
+    if (!board) return;
+    setStickyColor(color);
+    await perform(planCanvasStickyStack(board, creationPoint(), count, color));
+  }
+  async function insertTemplate() {
+    if (!board || !templateId || busy || dirty) return;
+    const plan = planCanvasTemplateInsert(board, creationPoint(), templateId);
+    if (!plan.command) {
+      setPlanError(plan.reason);
+      return;
+    }
+    const success = await perform(plan);
+    setTemplates(false);
+    if (success) setOutline(false);
   }
   async function saveProperties(event: FormEvent) {
     event.preventDefault();
@@ -544,6 +713,19 @@ function CanvasEditorContent({ id }: { id: string }) {
       patchValue.color = value.color;
       patchValue.rotation = value.rotation;
     }
+    if (selected.type !== "idea_ref")
+      Object.assign(patchValue, {
+        fontSize: value.fontSize,
+        fontFamily: value.fontFamily,
+        fontWeight: value.fontWeight,
+        fontStyle: value.fontStyle,
+        textDecoration: value.textDecoration,
+        textAlign: value.textAlign,
+        strokeWidth: value.strokeWidth,
+        opacity: value.opacity,
+      });
+    if (selected.type === "rect" && value.shapeVariant)
+      patchValue.shapeVariant = value.shapeVariant;
     if (canPublishCanvasObject(board, selected)) patchValue.visibility = value.visibility;
     if (selected.type === "image") patchValue.altText = value.altText ?? selected.altText;
     if (selected.type === "link") patchValue.url = value.url ?? selected.url;
@@ -585,7 +767,7 @@ function CanvasEditorContent({ id }: { id: string }) {
         (event.target.matches("input,textarea,select") || event.target.isContentEditable))
     )
       return;
-    if (gestureActive) return;
+    if (gestureActive || inlineEditing) return;
     if (event.code === "Space" && !event.repeat && event.target instanceof SVGElement) {
       event.preventDefault();
       restoredTool.current = tool;
@@ -771,6 +953,7 @@ function CanvasEditorContent({ id }: { id: string }) {
         <div className={styles.assetActions}>
           <CanvasAssetTools
             board={board}
+            openRequest={assetRequest}
             disabled={frozen || uiBusy || dirty || gestureActive || creationFull}
             onCreate={createObject}
           />
@@ -885,70 +1068,62 @@ function CanvasEditorContent({ id }: { id: string }) {
           onDiscard={discardPending}
         />
       ) : null}
-      <div className={styles.workArea}>
-        <div className={styles.toolRail} role="group" aria-label={t("boards.richTypes")}>
-          <CanvasChromeButton
-            icon="select"
-            label={t("boards.selectTool")}
-            aria-pressed={tool === "select"}
-            onClick={() => setTool("select")}
-          />
-          <CanvasChromeButton
-            icon="hand"
-            label={t("canvas.hand")}
-            aria-pressed={tool === "hand"}
-            onClick={() => setTool("hand")}
-          />
-          <span className={styles.toolDivider} aria-hidden="true" />
-          {(
-            ["sticky", "text", "rect", "ellipse", "frame", "diamond", "parallelogram"] as const
-          ).map((type) => (
-            <CanvasChromeButton
-              key={type}
-              icon={type}
-              label={
-                type === "diamond" || type === "parallelogram"
-                  ? diagramCopy[type]
-                  : t(
-                      type === "sticky"
-                        ? "canvas.sticky"
-                        : type === "text"
-                          ? "boards.textTool"
-                          : type === "rect"
-                            ? "boards.rectangleTool"
-                            : type === "ellipse"
-                              ? "boards.ellipseTool"
-                              : "canvas.productivity.frame",
-                    )
-              }
-              disabled={frozen || uiBusy || creationFull}
-              onClick={() => void add(type)}
-            />
-          ))}
-          <CanvasChromeButton
-            icon="connector"
-            label={t("canvas.connector")}
-            aria-pressed={tool === "connector"}
-            disabled={frozen || uiBusy || dirty}
-            onClick={() => {
+      <div
+        className={`${styles.workArea} ${experience.workArea}`}
+        data-sidebar-open={outline || workshop || facilitation}
+      >
+        <CanvasToolPalette
+          activeTool={tool}
+          disabled={uiBusy || dirty}
+          readOnly={frozen}
+          creationFull={creationFull}
+          drawSettings={drawSettings}
+          selectedStickyColor={stickyColor}
+          stickyStackLimit={Math.max(
+            0,
+            Math.min(
+              20,
+              CANVAS_MAX_OBJECTS - board.objects.length,
+              board.boardType === "workshop"
+                ? 300 - board.objects.filter((object) => object.type !== "idea_ref").length
+                : 20,
+            ),
+          )}
+          svgUploadDisabled={!board.imageUploadsAvailable}
+          onAdd={(type, options) => void add(type, options)}
+          onTool={(next) => {
+            if (!uiBusy) {
+              setTool(next);
+              if (next !== "connector") setConnectorFrom(null);
+            }
+          }}
+          onConnector={(preset) => {
+            if (!frozen && !uiBusy && !dirty && !creationFull) {
+              setConnectorPreset(preset);
               setTool("connector");
               setConnectorFrom(selectedId);
-            }}
-          />
-          <CanvasChromeButton
-            icon="marquee"
-            label={t("canvas.productivity.area")}
-            aria-pressed={tool === "marquee"}
-            onClick={() => setTool("marquee")}
-          />
-          <CanvasChromeButton
-            icon="pen"
-            label={t("canvas.productivity.pen")}
-            disabled={frozen || uiBusy || dirty || creationFull}
-            aria-pressed={tool === "pen"}
-            onClick={() => setTool("pen")}
-          />
-        </div>
+            }
+          }}
+          onDrawSettings={(settings) => {
+            if (
+              !frozen &&
+              !uiBusy &&
+              Number.isFinite(settings.width) &&
+              settings.width >= 1 &&
+              settings.width <= 24
+            )
+              setDrawSettings(settings);
+          }}
+          onUploadSvg={() =>
+            setAssetRequest((previous) => ({ kind: "svg", id: (previous?.id ?? 0) + 1 }))
+          }
+          onTemplates={() => {
+            setPlanError(null);
+            setTemplateId(null);
+            setTemplates(true);
+          }}
+          onStickyStack={(count, color) => void addStack(count, color)}
+        />
         <div className={styles.workspace}>
           <div className={styles.stage} ref={stage}>
             <CanvasSurface
@@ -958,15 +1133,22 @@ function CanvasEditorContent({ id }: { id: string }) {
               onInteract={stopFollowing}
               selectedId={selectedId}
               selectedIds={selectedIds}
-              onSelectMany={(ids, additive) => selectMany(ids, additive, false)}
+              onSelectMany={(ids, additive) => selectMany(ids, additive, false, true)}
               onTransform={transform}
               onCreatePen={createPen}
+              onCreateConnector={createConnector}
+              onErasePen={eraseStrokes}
+              penColor={drawSettings.color}
+              penWidth={drawSettings.width}
+              penOpacity={drawSettings.mode === "highlighter" ? 0.35 : 1}
+              onCommitText={commitText}
+              onTextEditingChange={setInlineEditing}
+              editTextRequest={editTextRequest}
               onGestureActive={setGestureActive}
               onSelect={changeSelection}
               tool={tool}
-              canEdit={
-                board.capabilities.edit && !uiBusy && !dirty && (tool !== "pen" || !creationFull)
-              }
+              canEdit={board.capabilities.edit && !busy && !dirty}
+              canCreate={board.capabilities.edit && !busy && !dirty && !creationFull}
               canFacilitate={board.capabilities.facilitate}
               isObjectEditable={(object) => canChangeObject(board, object)}
               onConnect={(next) => void connect(next)}
@@ -978,6 +1160,58 @@ function CanvasEditorContent({ id }: { id: string }) {
               sourceBoardId={board.sourceBoardId ?? undefined}
               sourceBoard={board.sourceBoard}
             />
+            {selectedIds.length && !inlineEditing ? (
+              <div className={experience.dock}>
+                <CanvasContextToolbar
+                  objects={board.objects.filter((object) => selectedIds.includes(object.id))}
+                  disabled={uiBusy || dirty}
+                  editable={
+                    selectedIds.length <= CANVAS_MAX_OPERATIONS &&
+                    board.objects
+                      .filter((object) => selectedIds.includes(object.id))
+                      .every((object) => canChangeObject(board, object))
+                  }
+                  canLock={Boolean(
+                    planCanvasLock(
+                      board,
+                      selectedIds,
+                      !board.objects
+                        .filter((object) => selectedIds.includes(object.id))
+                        .every((object) => object.locked),
+                    ).command,
+                  )}
+                  canDuplicate={
+                    selectedIds.length <= CANVAS_MAX_OPERATIONS &&
+                    board.objects
+                      .filter((object) => selectedIds.includes(object.id))
+                      .every(
+                        (object) => object.type !== "idea_ref" && canChangeObject(board, object),
+                      )
+                  }
+                  canDelete={
+                    selectedIds.length <= CANVAS_MAX_OPERATIONS &&
+                    board.objects
+                      .filter((object) => selectedIds.includes(object.id))
+                      .every(
+                        (object) => object.type !== "idea_ref" && canChangeObject(board, object),
+                      )
+                  }
+                  onPatch={(patch) => void quickStyle(patch)}
+                  onConvert={(type: CanvasConvertibleType) => void quickStyle({ type })}
+                  onLock={(locked) => void perform(planCanvasLock(board, selectedIds, locked))}
+                  onDuplicate={() => void duplicate()}
+                  onDelete={() => void remove()}
+                  onEditText={() =>
+                    selected &&
+                    setEditTextRequest((previous) => ({
+                      id: selected.id,
+                      nonce: (previous?.nonce ?? 0) + 1,
+                    }))
+                  }
+                  onMore={() => setOutline(true)}
+                />
+              </div>
+            ) : null}
             {!board.objects.length ? (
               <p className={styles.emptyCanvas}>{t("canvas.empty")}</p>
             ) : null}
@@ -1078,7 +1312,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(object.id)}
-                            disabled={state.saving || deleting}
+                            disabled={uiBusy}
                             aria-label={t("canvas.productivity.select", {
                               label: objectLabel(object, index),
                             })}
@@ -1086,6 +1320,7 @@ function CanvasEditorContent({ id }: { id: string }) {
                           />
                           <button
                             type="button"
+                            disabled={uiBusy}
                             aria-pressed={selectedIds.includes(object.id)}
                             onClick={() =>
                               tool === "connector"
@@ -1244,21 +1479,11 @@ function CanvasEditorContent({ id }: { id: string }) {
                               })
                             }
                           >
-                            {(["yellow", "blue", "green", "pink", "purple", "white"] as const).map(
-                              (color) => (
-                                <option key={color} value={color}>
-                                  {t(
-                                    color === "yellow" || color === "pink" || color === "white"
-                                      ? `canvas.color.${color}`
-                                      : color === "blue"
-                                        ? "boards.colorBlue"
-                                        : color === "green"
-                                          ? "boards.colorGreen"
-                                          : "boards.colorPurple",
-                                  )}
-                                </option>
-                              ),
-                            )}
+                            {CanvasColorSchema.options.map((color) => (
+                              <option key={color} value={color}>
+                                {toolCopy.colors[color]}
+                              </option>
+                            ))}
                           </select>
                         </label>
                       ) : null}
@@ -1376,6 +1601,47 @@ function CanvasEditorContent({ id }: { id: string }) {
           {t("boards.refresh")}
         </button>
       </footer>
+      {templates ? (
+        <dialog
+          ref={templateDialog}
+          className={experience.templateDialog}
+          aria-label={toolCopy.templates}
+          onCancel={(event) => {
+            event.preventDefault();
+            if (!busy) setTemplates(false);
+          }}
+        >
+          <header className={experience.templateHeader}>
+            <h2>{toolCopy.templates}</h2>
+            <button
+              type="button"
+              className="button-quiet"
+              disabled={busy}
+              onClick={() => setTemplates(false)}
+            >
+              {toolCopy.close}
+            </button>
+          </header>
+          <div className={experience.templateBody}>
+            <CanvasTemplateChooser value={templateId} onChange={setTemplateId} browse />
+          </div>
+          <footer className={experience.templateFooter}>
+            {planError ? (
+              <p role="alert">{t(canvasPlanMessage(planError))}</p>
+            ) : (
+              <span>{toolCopy.shapeHelp}</span>
+            )}
+            <button
+              type="button"
+              className="button"
+              disabled={!templateId || busy || dirty || creationFull || frozen}
+              onClick={() => void insertTemplate()}
+            >
+              {toolCopy.insertTemplate}
+            </button>
+          </footer>
+        </dialog>
+      ) : null}
       {sharing && board.capabilities.share ? (
         <CanvasShareDialog
           board={board}

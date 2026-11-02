@@ -20,7 +20,26 @@ export type CanvasToolIconName =
   | "fit"
   | "fit-selection"
   | "minus"
-  | "plus";
+  | "plus"
+  | "shapes"
+  | "sliders"
+  | "templates"
+  | "upload-svg"
+  | "highlighter"
+  | "eraser"
+  | "close"
+  | "bold"
+  | "italic"
+  | "underline"
+  | "align-left"
+  | "align-center"
+  | "align-right"
+  | "palette"
+  | "lock"
+  | "unlock"
+  | "copy"
+  | "trash"
+  | "more";
 
 const paths: Record<CanvasToolIconName, string> = {
   select: "m5 3 14 9-7 1.5L9 20 5 3Z",
@@ -45,6 +64,27 @@ const paths: Record<CanvasToolIconName, string> = {
   "fit-selection": "M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4M8 12h8m-4-4v8",
   minus: "M5 12h14",
   plus: "M5 12h14M12 5v14",
+  shapes: "M3 3h8v8H3Zm13 0 5 8H11Zm5 14a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM3 15h7v7H3Z",
+  sliders: "M4 6h5m4 0h7M4 12h9m4 0h3M4 18h3m4 0h9M9 3v6m4 0V3m0 6v6m4-6v6M7 15v6m4-6v6",
+  templates: "M3 4h18v16H3Zm0 5h18M10 9v11M6 6h.1M9 6h.1",
+  "upload-svg": "M4 6v14h16V6M12 14V2m-4 4 4-4 4 4M7 17l3-3 3 2 3-3 2 4",
+  highlighter: "m7 13 8-9 5 5-9 8-4-4Zm1 1-3 3 3 3 3-3M3 22h13",
+  eraser:
+    "m3 14 10-10a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3L11 22H7l-4-4a3 3 0 0 1 0-4Zm5-5 9 9M11 22h10",
+  close: "m6 6 12 12M18 6 6 18",
+  bold: "M7 3h6a4.5 4.5 0 0 1 0 9H7V3Zm0 9h7a4.5 4.5 0 0 1 0 9H7v-9Z",
+  italic: "M10 3h9M5 21h9M15 3 9 21",
+  underline: "M6 3v9a6 6 0 0 0 12 0V3M4 22h16",
+  "align-left": "M4 5h16M4 10h10M4 15h16M4 20h10",
+  "align-center": "M4 5h16M7 10h10M4 15h16M7 20h10",
+  "align-right": "M4 5h16M10 10h10M4 15h16M10 20h10",
+  palette:
+    "M12 3C6 3 2 7 2 12s4 9 9 9h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h3c6 0 4-11-6-11ZM7 8h.1M12 6h.1M17 9h.1M6 13h.1",
+  lock: "M6 10h12v11H6V10Zm3 0V6a3 3 0 0 1 6 0v4m-3 5v2",
+  unlock: "M6 10h12v11H6V10Zm3 0V6a3 3 0 0 1 6 0m-3 9v2",
+  copy: "M8 8h13v13H8V8ZM4 16H3V3h13v1",
+  trash: "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7",
+  more: "M5 12h.1M12 12h.1M19 12h.1",
 };
 
 /** Decorative, locally authored line icons; the parent button supplies its localized name. */

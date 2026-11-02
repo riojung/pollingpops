@@ -232,6 +232,37 @@ describe("canvas export download boundary", () => {
     ).toThrow();
   });
 
+  it("accepts only the exact V4 style values and bounded closed curve commands", () => {
+    const shape =
+      '<g opacity="0.35"><path d="M0 5 C0 0 40 0 40 5 V30 Q20 40 0 30 Z" fill="#ccebdc" stroke="#287654" stroke-width="12"/><text font-family="Georgia, serif" font-weight="bold" font-style="italic" text-decoration="underline" text-anchor="middle">Styled</text></g>';
+    expect(validateClosedCanvasSvg(svg.replace("</svg>", shape + "</svg>"))).toEqual({
+      width: 800,
+      height: 600,
+    });
+    for (const content of [
+      shape.replace('opacity="0.35"', 'opacity="0"'),
+      shape.replace('opacity="0.35"', 'opacity="1.01"'),
+      shape.replace('font-family="Georgia, serif"', 'font-family="Remote Font"'),
+      shape.replace('font-family="Georgia, serif"', 'font-family="url(https://example.test/font)"'),
+      shape.replace('font-weight="bold"', 'font-weight="900"'),
+      shape.replace('font-style="italic"', 'font-style="oblique"'),
+      shape.replace(
+        'text-decoration="underline"',
+        'text-decoration="url(https://example.test/style)"',
+      ),
+      shape.replace('text-anchor="middle"', 'text-anchor="arbitrary"'),
+      shape.replace("M0 5 C0 0 40 0 40 5 V30 Q20 40 0 30 Z", "M0 0 C0 0 1e999 0 40 5 Z"),
+      shape.replace("M0 5 C0 0 40 0 40 5 V30 Q20 40 0 30 Z", "M0 0 C0 0 1000001 0 40 5 Z"),
+      shape.replace("M0 5 C0 0 40 0 40 5 V30 Q20 40 0 30 Z", "M0 0 C0 0 40 5 Z"),
+      shape.replace("M0 5 C0 0 40 0 40 5 V30 Q20 40 0 30 Z", "M0 0 c0 0 40 0 40 5 Z"),
+      shape.replace("M0 5 C0 0 40 0 40 5 V30 Q20 40 0 30 Z", "M0 0 A20 20 0 0 0 40 5 Z"),
+      '<marker id="export-arrow-custom"/>',
+      '<path d="M0 0 L1 1" marker-end="url(#export-arrow-custom)"/>',
+      '<path d="M0 0 L1 1" marker-end="url(https://example.test/#export-arrow-orange)"/>',
+    ])
+      expect(() => validateClosedCanvasSvg(svg.replace("</svg>", content + "</svg>"))).toThrow();
+  });
+
   it("creates an explicit local file download with a fixed safe filename and cleans up", async () => {
     vi.useFakeTimers();
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-download");

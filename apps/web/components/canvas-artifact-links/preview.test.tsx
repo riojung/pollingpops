@@ -33,9 +33,9 @@ const link: CanvasArtifactLink = {
   revision: 1 as const,
   canDelete: true,
 };
-const scene = () =>
+const scene = (schemaVersion: 1 | 2 | 3 = 3) =>
   CanvasVersionViewSchema.parse({
-    schemaVersion: 2,
+    schemaVersion,
     boardId: canvasId,
     version: {
       id: link.versionId,
@@ -46,7 +46,28 @@ const scene = () =>
       canvasSeq: 1,
       objectCount: 1,
     },
-    objects: [{ ...canvasObject, text: "Authorized synthetic body" }],
+    objects: [
+      schemaVersion === 3
+        ? { ...canvasObject, text: "Authorized synthetic body" }
+        : {
+            // Legacy saved scenes contain only the fields accepted by frozen Canvas V2/V3 objects.
+            id: canvasObject.id,
+            type: "sticky",
+            version: 1,
+            x: 20,
+            y: 30,
+            width: 200,
+            height: 160,
+            text: "Authorized synthetic body",
+            rotation: 0,
+            zIndex: 0,
+            color: "yellow",
+            parentId: null,
+            geometricGroupId: null,
+            locked: false,
+            visibility: "team",
+          },
+    ],
   });
 const mounted: Array<{ unmount: () => void }> = [];
 function mount() {
@@ -85,6 +106,23 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("authorized snapshot preview lifetime", () => {
+  it.each([1, 2] as const)(
+    "renders an authorized frozen saved-scene envelope %s after normalization",
+    async (schemaVersion) => {
+      const saved = scene(schemaVersion);
+      mocked.read.mockResolvedValue(saved);
+      const view = mount();
+      await flushPromises();
+      expect(saved.schemaVersion).toBe(3);
+      expect(view.html()).toContain("Authorized synthetic body");
+      expect(mocked.surface.mock.calls.at(-1)![0]).toMatchObject({
+        objects: [{ id: canvasObject.id, version: 1, fontSize: 16, strokeWidth: 2, opacity: 1 }],
+        artifactLink: { ...target, linkId: link.id },
+        canvasId,
+        versionId: link.versionId,
+      });
+    },
+  );
   it.each([
     ["disabled realtime", new ApiClientError("Live updates unavailable", "UNAVAILABLE", 503)],
     ["interrupted transport", new Error("Canvas live updates interrupted")],

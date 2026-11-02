@@ -1,4 +1,5 @@
 import {
+  CANVAS_FILL_COLORS,
   canvasConnectorGeometry,
   canvasDiagramShapePath,
   instantiateCanvasTemplate,
@@ -10,14 +11,7 @@ export function CanvasFlowTemplatePreview() {
     "flow-to-action",
     () => `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`,
   );
-  const fills = {
-    yellow: "#fff1a8",
-    blue: "#cde7ff",
-    green: "#ccebdc",
-    pink: "#f9d9e4",
-    purple: "#e5dcf8",
-    white: "var(--ui-surface)",
-  };
+  const fills = { ...CANVAS_FILL_COLORS, white: "var(--ui-surface)" };
   return (
     <svg viewBox="0 0 1440 850" aria-hidden="true">
       {objects.map((object) => {

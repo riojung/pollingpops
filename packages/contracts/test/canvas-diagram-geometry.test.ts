@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { CanvasShapeVariantSchema } from "../src/canvas-boards";
 import {
   canvasConnectorGeometry,
   canvasConnectorLabel,
   canvasDiagramPort,
   canvasDiagramShapePath,
+  canvasShapeVariantPath,
 } from "../src/canvas-diagram-geometry";
 describe("shared manual diagram geometry", () => {
   it("places polygon ports on the real edge and rotates them about the model centre", () => {
@@ -64,5 +66,38 @@ describe("shared manual diagram geometry", () => {
     expect(canvasDiagramShapePath("parallelogram", 200, 100)).toBe(
       "M40 0 L200 0 L160 100 L0 100 Z",
     );
+  });
+  it("constructs every bounded variant locally and keeps converted shape ports attached", () => {
+    for (const variant of CanvasShapeVariantSchema.options) {
+      const path = canvasShapeVariantPath(variant, 240, 120);
+      expect(path).toMatch(/^M/);
+      expect(path).toMatch(/Z$/);
+      expect(path).not.toMatch(/NaN|Infinity|undefined|<|>|url|href/);
+      expect(path).toMatch(/^[MLHVQCZ0-9e. +-]+$/);
+    }
+    const object = {
+      id: "shape",
+      type: "rect",
+      shapeVariant: "triangle" as const,
+      x: 10,
+      y: 20,
+      width: 200,
+      height: 100,
+    };
+    expect(
+      canvasDiagramPort({ objectId: object.id, anchor: "left", x: -1, y: -1 }, [object]),
+    ).toEqual({ x: 60, y: 70 });
+    const label = canvasConnectorLabel("Large label", { x: 0, y: 0 }, 32)!;
+    const geometry = canvasConnectorGeometry(
+      {
+        from: { objectId: null, x: 0, y: 0 },
+        to: { objectId: null, x: 120, y: 60 },
+        fontSize: 32,
+        text: "Large label",
+      },
+      [],
+    );
+    expect(label.height).toBeGreaterThan(30);
+    expect(geometry.bounds.height).toBeGreaterThanOrEqual(label.height);
   });
 });

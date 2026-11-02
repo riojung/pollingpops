@@ -3,11 +3,12 @@ import { readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { CanvasBoardView } from "@openround/contracts";
+import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
 import { api, fits, newTeamCanvas, organization, saveText, snapshot, teammate } from "./support";
 
 async function command(page: Page, boardId: string, value: unknown): Promise<CanvasBoardView> {
   const response = await page.request.post(`${api}/v1/canvas-boards/${boardId}/commands`, {
-    data: { schemaVersion: 2, operationId: randomUUID(), command: value },
+    data: { schemaVersion: CANVAS_SCHEMA_VERSION, operationId: randomUUID(), command: value },
   });
   expect(response.status(), await response.text()).toBe(200);
   return (await response.json()).board;
@@ -32,7 +33,14 @@ async function seedObjects(page: Page, boardId: string, objects: Record<string, 
 async function selectObject(page: Page, label: string) {
   const outline = page.getByRole("button", { name: "Object outline", exact: true });
   if ((await outline.getAttribute("aria-expanded")) === "false") await outline.click();
-  await page.getByRole("button", { name: label, exact: true }).click();
+  await page.getByRole("complementary").getByRole("button", { name: label, exact: true }).click();
+  if ((await outline.getAttribute("aria-expanded")) === "false") {
+    await page
+      .getByRole("toolbar", { name: "Selection formatting", exact: true })
+      .getByRole("button", { name: "More actions", exact: true })
+      .click();
+  }
+  await expect(outline).toHaveAttribute("aria-expanded", "true");
 }
 async function openFacilitation(page: Page) {
   const toggle = page.getByRole("button", { name: "Facilitation", exact: true });

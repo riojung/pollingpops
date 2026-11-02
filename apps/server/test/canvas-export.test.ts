@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CanvasObjectSchema, type CanvasObject } from "@openround/contracts";
+import {
+  CanvasObjectSchema,
+  CanvasShapeVariantSchema,
+  CANVAS_FILL_COLORS,
+  canvasShapeVariantPath,
+  type CanvasObject,
+} from "@openround/contracts";
 import {
   CANVAS_EXPORT_MAX_BYTES,
   CANVAS_EXPORT_MAX_IMAGE_BYTES,
@@ -61,6 +67,100 @@ describe("closed current-scene canvas SVG export", () => {
     expect(svg).not.toMatch(/<script|<foreignObject|<style|<a\b|\sonload="|href="https?:/);
     expect(result.width).toBe(800);
     expect(result.height).toBe(600);
+  });
+
+  it("exports every new closed shape variant using the shared palette and geometry", async () => {
+    const objects = CanvasShapeVariantSchema.options.map((shapeVariant, index) =>
+      object({
+        id: id(100 + index),
+        type: "rect",
+        shapeVariant,
+        x: (index % 5) * 140,
+        y: Math.floor(index / 5) * 100,
+        width: 120,
+        height: 80,
+        color: "lavender",
+        strokeWidth: 4,
+        text: "",
+      }),
+    );
+    const result = await renderCanvasSvg({ objects, region, loadImage: unavailable });
+    const svg = result.svg.toString();
+    for (const shapeVariant of CanvasShapeVariantSchema.options)
+      expect(svg).toContain(`d="${canvasShapeVariantPath(shapeVariant, 120, 80)}"`);
+    expect(svg).toContain(`fill="${CANVAS_FILL_COLORS.lavender}"`);
+    expect(svg).toContain('stroke-width="4"');
+    expect(svg).not.toMatch(/<foreignObject|<style|href="https?:|javascript:|onload=/);
+  });
+
+  it("reproduces bounded typography, alignment, stroke widths and opacity without external styles", async () => {
+    const result = await renderCanvasSvg({
+      objects: [
+        object({
+          color: "black",
+          text: "Styled note",
+          fontSize: 24,
+          fontFamily: "serif",
+          fontWeight: "bold",
+          fontStyle: "italic",
+          textDecoration: "underline",
+          textAlign: "center",
+          opacity: 0.6,
+          strokeWidth: 5,
+        }),
+        object({
+          id: id(2),
+          type: "pen",
+          color: "red",
+          points: [
+            [250, 20],
+            [400, 60],
+          ],
+          strokeWidth: 12,
+          opacity: 0.3,
+        }),
+        object({
+          id: id(3),
+          type: "connector",
+          lineColor: "teal",
+          lineStyle: "dashed",
+          from: { objectId: null, x: 20, y: 240 },
+          to: { objectId: null, x: 500, y: 240 },
+          text: "Mono label",
+          fontSize: 22,
+          fontFamily: "mono",
+          fontWeight: "bold",
+          fontStyle: "italic",
+          textDecoration: "underline",
+          textAlign: "right",
+          strokeWidth: 8,
+          opacity: 0.5,
+        }),
+      ],
+      region,
+      loadImage: unavailable,
+    });
+    const svg = result.svg.toString();
+    expect(svg).toContain('opacity="0.6"');
+    expect(svg).toContain(
+      'font-family="Georgia, serif" font-size="24" font-weight="bold" font-style="italic" text-decoration="underline" fill="#ffffff"',
+    );
+    expect(svg).toContain('text-anchor="middle"');
+    expect(svg).toContain('stroke="#b6342a" stroke-width="12" opacity="0.3"');
+    expect(svg).toContain('stroke="#147d76" stroke-width="8" stroke-dasharray="8 6"');
+    expect(svg).toContain('font-family="Courier New, monospace" font-size="22"');
+    expect(svg).toContain('text-anchor="end"');
+    expect(svg).toContain('opacity="0.5"');
+    expect(svg).not.toMatch(/<style|<foreignObject|font-face|href="https?:/);
+    await expect(
+      renderCanvasSvg({
+        objects: [
+          { ...object(), fontFamily: "url(https://example.test/font)" } as unknown as CanvasObject,
+        ],
+        region,
+        loadImage: unavailable,
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_EXPORT" });
   });
 
   it("omits unpublished idea content and never resolves missing or private endpoint fallbacks", async () => {

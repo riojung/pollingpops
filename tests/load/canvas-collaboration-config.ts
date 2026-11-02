@@ -104,8 +104,13 @@ export function canvasCollaborationScene(config: CanvasCollaborationConfig, medi
   // Two placements share one synthetic asset, exercising authorized transport/cache reuse.
   for (let offset = 0; offset < 2; offset++) {
     const index = config.editors + 2 + offset;
+    const previous = scene.objects[index]!;
+    // Reuse stable placement identity/size, then let the image schema apply its
+    // common defaults without carrying rectangle-only fields into another type.
     scene.objects[index] = CanvasObjectCreateSchema.parse({
-      ...scene.objects[index],
+      id: previous.id,
+      width: previous.width,
+      height: previous.height,
       type: "image",
       mediaId,
       altText: "Synthetic capacity fixture PNG",

@@ -26,11 +26,36 @@ const version = {
 };
 const view = () =>
   CanvasVersionViewSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     boardId: canvasId,
     version,
     objects: [canvasObject],
   });
+// Genuine saved-scene V1/V2 bodies predate all Canvas V4 text/stroke styles.
+const frozenView = (schemaVersion: 1 | 2) => ({
+  schemaVersion,
+  boardId: canvasId,
+  version,
+  objects: [
+    {
+      id: canvasObject.id,
+      type: "sticky",
+      version: 1,
+      x: 20,
+      y: 30,
+      width: 200,
+      height: 160,
+      text: "Synthetic canvas note",
+      rotation: 0,
+      zIndex: 0,
+      color: "yellow",
+      parentId: null,
+      geometricGroupId: null,
+      locked: false,
+      visibility: "team",
+    },
+  ],
+});
 afterEach(() => {
   vi.resetAllMocks();
   vi.useRealTimers();
@@ -95,14 +120,19 @@ describe("creator artifact link transport", () => {
   it("parses current and frozen saved-scene envelopes and rejects an unrelated scene", async () => {
     api.fetch
       .mockResolvedValueOnce(view())
-      .mockResolvedValueOnce({ ...view(), schemaVersion: 1 })
+      .mockResolvedValueOnce(frozenView(1))
+      .mockResolvedValueOnce(frozenView(2))
       .mockResolvedValueOnce({ ...view(), boardId: id(9) });
     await expect(readCanvasArtifactPreview(target, link)).resolves.toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
-    await expect(readCanvasArtifactPreview(target, link)).resolves.toMatchObject({
-      schemaVersion: 2,
-    });
+    for (const schemaVersion of [1, 2] as const) {
+      expect(frozenView(schemaVersion).objects[0]).not.toHaveProperty("fontSize");
+      await expect(readCanvasArtifactPreview(target, link)).resolves.toMatchObject({
+        schemaVersion: 3,
+        objects: [{ id: canvasObject.id, version: 1, fontSize: 16, strokeWidth: 2, opacity: 1 }],
+      });
+    }
     await expect(readCanvasArtifactPreview(target, link)).rejects.toThrow("Mismatched");
     expect(
       api.fetch.mock.calls.every(
@@ -110,6 +140,13 @@ describe("creator artifact link transport", () => {
       ),
     ).toBe(true);
   });
+  it.each([1, 2])(
+    "rejects current object styles in frozen saved-scene envelope %s",
+    async (schemaVersion) => {
+      api.fetch.mockResolvedValue({ ...view(), schemaVersion });
+      await expect(readCanvasArtifactPreview(target, link)).rejects.toThrow();
+    },
+  );
   it.each(["../private", "", `${id(1)}/preview`])(
     "rejects invalid path segments before network access: %s",
     async (invalid) => {

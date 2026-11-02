@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CANVAS_SCHEMA_VERSION,
   CanvasObjectCreateSchema,
   CanvasBoardMutationSchema,
 } from "../../packages/contracts/src/index.ts";
@@ -48,6 +49,8 @@ describe("bounded browser collaboration evidence", () => {
     const scene = canvasCollaborationScene(config, mediaId);
     expect(scene.objects).toHaveLength(500);
     expect(scene.counts.image).toBe(2);
+    for (const object of scene.objects.filter((object) => object.type === "image"))
+      expect(object).not.toHaveProperty("shapeVariant");
     expect(scene.sha256).toBe(canvasCollaborationScene(config, mediaId).sha256);
     expect(new Set(scene.objects.map((object) => object.id)).size).toBe(500);
     for (const object of scene.objects)
@@ -62,7 +65,7 @@ describe("bounded browser collaboration evidence", () => {
     for (const objects of canvasCapacitySeedBatches(scene.objects))
       expect(
         CanvasBoardMutationSchema.safeParse({
-          schemaVersion: 3,
+          schemaVersion: CANVAS_SCHEMA_VERSION,
           operationId: mediaId,
           command: {
             type: "batch",

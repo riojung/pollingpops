@@ -62,7 +62,7 @@ describe("bounded current-protocol canvas capacity fixtures", () => {
       expect(() => parseCanvasCapacityConfig(env)).toThrow();
   });
 
-  it("builds deterministic mixed V3 diagrams with valid endpoints, coherent groups and independent editor targets", () => {
+  it("builds deterministic mixed current-protocol diagrams with valid endpoints, coherent groups and independent editor targets", () => {
     const config = tiny(),
       first = buildCanvasCapacityScene(config),
       second = buildCanvasCapacityScene(config);
@@ -104,7 +104,7 @@ describe("bounded current-protocol canvas capacity fixtures", () => {
     expect(first.serializedBytes).toBeLessThanOrEqual(CANVAS_MAX_DOCUMENT_BYTES);
   });
 
-  it("never wraps current objects in a frozen V1 request", () => {
+  it("never wraps current objects in a frozen legacy request", () => {
     const scene = buildCanvasCapacityScene(tiny());
     const command = {
       type: "batch" as const,
@@ -112,11 +112,11 @@ describe("bounded current-protocol canvas capacity fixtures", () => {
     };
     const mutation = canvasCapacityMutation(command, operationId);
     expect(mutation.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
-    expect(mutation.schemaVersion).toBe(3);
     expect(CanvasBoardMutationSchema.safeParse(mutation).success).toBe(true);
-    expect(CanvasBoardMutationSchema.safeParse({ ...mutation, schemaVersion: 1 }).success).toBe(
-      false,
-    );
+    for (const schemaVersion of [1, 2, 3])
+      expect(CanvasBoardMutationSchema.safeParse({ ...mutation, schemaVersion }).success).toBe(
+        false,
+      );
   });
 
   it("packs a large Unicode/path fixture by both operation and serialized-byte caps", () => {

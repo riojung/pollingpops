@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CanvasObjectSchema } from "../../packages/contracts/src/index.ts";
+import { CANVAS_SCHEMA_VERSION, CanvasObjectSchema } from "../../packages/contracts/src/index.ts";
 import {
   assertCanvasTargetWaveBudget,
   canvasTargetBudget,
@@ -32,7 +32,7 @@ function input() {
 }
 function view(config: ReturnType<typeof parseCanvasTargetConfig>) {
   return {
-    schemaVersion: 3,
+    schemaVersion: CANVAS_SCHEMA_VERSION,
     id: config.boards[0]!.boardId,
     workspaceId: config.workspaceId,
     organizationId: randomUUID(),

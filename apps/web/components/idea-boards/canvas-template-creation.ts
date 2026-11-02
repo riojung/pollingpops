@@ -13,7 +13,7 @@ import { createCanvas } from "../canvas-boards/canvas-client";
 
 export interface WorkshopTemplateIntent {
   version: 1;
-  canvasSchemaVersion?: 2 | 3;
+  canvasSchemaVersion?: 2 | 3 | 4;
   userId: string;
   workspaceId: string;
   source: ReturnType<typeof ideaBoardCreateIntent>;
@@ -66,7 +66,8 @@ export function parseWorkshopTemplateIntent(
     record.version !== 1 ||
     (record.canvasSchemaVersion !== undefined &&
       record.canvasSchemaVersion !== 2 &&
-      record.canvasSchemaVersion !== 3) ||
+      record.canvasSchemaVersion !== 3 &&
+      record.canvasSchemaVersion !== 4) ||
     record.userId !== userId ||
     record.workspaceId !== workspaceId ||
     !uuid.test(userId) ||
@@ -100,7 +101,7 @@ export function parseWorkshopTemplateIntent(
     userId,
     workspaceId,
     source: { ...input, idempotencyKey },
-    canvasSchemaVersion: canvasSchemaVersion as 2 | 3,
+    canvasSchemaVersion: canvasSchemaVersion as 2 | 3 | 4,
     canvasOperationId: record.canvasOperationId,
     templateId: record.templateId as CanvasTemplateId,
     ...(record.sourceBoardId ? { sourceBoardId: record.sourceBoardId as string } : {}),

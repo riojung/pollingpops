@@ -224,21 +224,158 @@ describe("bounded board invitation email delivery", () => {
     expect(f.canvases.invite).toHaveBeenCalledOnce();
     expect((await f.post({ ...f.payload, role: "viewer" })).statusCode).toBe(409);
   });
-  it("returns generic rejections for ineligible collaborator addresses without sending mail", async () => {
+  it.each(["NOT_FOUND", "VALIDATION_ERROR"] as const)(
+    "returns generic %s recipient rejections without sending mail",
+    async (code) => {
+      const f = await fixture("canvas");
+      f.canvases.invite.mockRejectedValueOnce(
+        new CanvasBoardError(code, "sensitive eligibility detail"),
+      );
+      const result = await f.post();
+      expect(result.json()).toMatchObject({
+        complete: true,
+        results: [{ status: "rejected", errorCode: "RECIPIENT_UNAVAILABLE" }],
+      });
+      expect(result.body).not.toContain("sensitive");
+      expect(f.send).not.toHaveBeenCalled();
+      await f.post();
+      expect(f.canvases.invite).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["canvas", "idea_board"] as const)(
+    "defers a transient %s authorization read after claiming and sends only once on the original operation retry",
+    async (kind) => {
+      const f = await fixture(kind);
+      const read = kind === "canvas" ? f.canvases.get : f.boards.getModerator;
+      read
+        .mockResolvedValueOnce(f.board)
+        .mockResolvedValueOnce(f.board)
+        .mockRejectedValueOnce(new Error("private authorization dependency detail"));
+      const defer = vi.spyOn(f.deliveries, "defer");
+      const finish = vi.spyOn(f.deliveries, "finish");
+      const unavailable = await f.post();
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json()).toMatchObject({ error: { code: "DEPENDENCY_UNAVAILABLE" } });
+      expect(unavailable.body).not.toContain("private authorization dependency detail");
+      expect(f.send).not.toHaveBeenCalled();
+      expect(finish).not.toHaveBeenCalled();
+      expect(defer).toHaveBeenCalledOnce();
+      const [scope, batchId] = defer.mock.calls[0]!;
+      expect(await f.deliveries.response(scope, batchId)).toMatchObject({
+        complete: false,
+        results: [{ status: "pending" }],
+      });
+      const retried = await f.post();
+      expect(retried.statusCode).toBe(200);
+      expect(retried.json()).toMatchObject({
+        batchId,
+        complete: true,
+        results: [{ status: "sent" }],
+      });
+      expect((await f.post()).json()).toEqual(retried.json());
+      expect(f.send).toHaveBeenCalledOnce();
+      expect(f.canvases.invite).toHaveBeenCalledTimes(kind === "canvas" ? 1 : 0);
+    },
+  );
+  it("defers a transient collaborator invitation failure and retries its deterministic invitation identifier before sending", async () => {
     const f = await fixture("canvas");
-    f.canvases.invite.mockRejectedValueOnce(
-      new CanvasBoardError("NOT_FOUND", "sensitive eligibility detail"),
-    );
-    const result = await f.post();
-    expect(result.json()).toMatchObject({
-      complete: true,
-      results: [{ status: "rejected", errorCode: "RECIPIENT_UNAVAILABLE" }],
-    });
-    expect(result.body).not.toContain("sensitive");
+    f.canvases.invite.mockRejectedValueOnce(new Error("private invitation dependency detail"));
+    const defer = vi.spyOn(f.deliveries, "defer");
+    const unavailable = await f.post();
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toMatchObject({ error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect(unavailable.body).not.toContain("private invitation dependency detail");
     expect(f.send).not.toHaveBeenCalled();
-    await f.post();
-    expect(f.canvases.invite).toHaveBeenCalledOnce();
+    const invitationId = f.canvases.invite.mock.calls[0]![2].operationId;
+    const [scope, batchId] = defer.mock.calls[0]!;
+    expect(await f.deliveries.response(scope, batchId)).toMatchObject({
+      complete: false,
+      results: [{ status: "pending" }],
+    });
+    const retried = await f.post();
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json()).toMatchObject({
+      batchId,
+      complete: true,
+      results: [{ status: "sent", invitationId }],
+    });
+    expect(f.canvases.invite.mock.calls[1]![2].operationId).toBe(invitationId);
+    expect((await f.post()).json()).toEqual(retried.json());
+    expect(f.canvases.invite).toHaveBeenCalledTimes(2);
+    expect(f.send).toHaveBeenCalledOnce();
   });
+  it("retains a created invitation when its final authorization read fails and reuses it on the same operation retry", async () => {
+    const f = await fixture("canvas");
+    f.canvases.get
+      .mockResolvedValueOnce(f.board)
+      .mockResolvedValueOnce(f.board)
+      .mockResolvedValueOnce(f.board)
+      .mockRejectedValueOnce(new Error("private final authorization detail"));
+    const defer = vi.spyOn(f.deliveries, "defer");
+    const unavailable = await f.post();
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain("private final authorization detail");
+    expect(f.canvases.invite).toHaveBeenCalledOnce();
+    expect(f.send).not.toHaveBeenCalled();
+    expect(defer).toHaveBeenCalledOnce();
+    const invitationId = f.canvases.invite.mock.calls[0]![2].operationId;
+    expect((await f.post()).json()).toMatchObject({
+      complete: true,
+      results: [{ status: "sent", invitationId }],
+    });
+    expect(f.canvases.invite.mock.calls[1]![2].operationId).toBe(invitationId);
+    await f.post();
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+  it("keeps expected access loss terminal instead of deferring it", async () => {
+    const f = await fixture("canvas");
+    f.canvases.get
+      .mockResolvedValueOnce(f.board)
+      .mockResolvedValueOnce(f.board)
+      .mockRejectedValueOnce(new CanvasBoardError("FORBIDDEN", "private access detail"));
+    const defer = vi.spyOn(f.deliveries, "defer");
+    const rejected = await f.post();
+    expect(rejected.json()).toMatchObject({
+      complete: true,
+      results: [{ status: "failed", errorCode: "ACCESS_CHANGED" }],
+    });
+    expect(rejected.body).not.toContain("private access detail");
+    expect(defer).not.toHaveBeenCalled();
+    await f.post();
+    expect(f.send).not.toHaveBeenCalled();
+  });
+  it.each(["write fails", "fence refuses"] as const)(
+    "returns unavailable and keeps the claim fenced when pre-SMTP deferral %s",
+    async (failure) => {
+      const f = await fixture("canvas");
+      const now = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now);
+      f.canvases.invite.mockRejectedValueOnce(new Error("private invitation failure"));
+      const defer = vi.spyOn(f.deliveries, "defer");
+      if (failure === "write fails")
+        defer.mockRejectedValueOnce(new Error("private receipt failure"));
+      else defer.mockResolvedValueOnce(false);
+      const unavailable = await f.post();
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json()).toMatchObject({ error: { code: "DEPENDENCY_UNAVAILABLE" } });
+      expect(unavailable.body).not.toContain("private invitation failure");
+      expect(unavailable.body).not.toContain("private receipt failure");
+      expect(f.send).not.toHaveBeenCalled();
+      expect((await f.post()).json()).toMatchObject({
+        complete: false,
+        results: [{ status: "pending" }],
+      });
+      expect(f.canvases.invite).toHaveBeenCalledOnce();
+      expect(f.send).not.toHaveBeenCalled();
+      vi.setSystemTime(now + 10_001);
+      expect((await f.post()).json()).toMatchObject({
+        complete: true,
+        results: [{ status: "unknown", errorCode: "DELIVERY_UNKNOWN" }],
+      });
+      expect(f.send).not.toHaveBeenCalled();
+    },
+  );
   it("records ambiguous SMTP failures as terminal unknown and resends only through a new explicit operation", async () => {
     const f = await fixture();
     f.send.mockRejectedValueOnce(new Error("private provider response"));

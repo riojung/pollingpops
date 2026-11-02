@@ -50,6 +50,14 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const expectedAccessFailure = (error: unknown) =>
   (error instanceof CanvasBoardError || error instanceof IdeaBoardError) &&
   (error.code === "NOT_FOUND" || error.code === "FORBIDDEN");
+const expectedDeliveryAccessFailure = (error: unknown) =>
+  (error instanceof InvitationRequestError &&
+    (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN")) ||
+  ((error instanceof CanvasBoardError || error instanceof IdeaBoardError) &&
+    ["NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "ROOM_CLOSED"].includes(error.code));
+const expectedRecipientFailure = (error: unknown) =>
+  error instanceof CanvasBoardError &&
+  (error.code === "NOT_FOUND" || error.code === "VALIDATION_ERROR");
 
 /** Await acknowledgement only within this HTTP request. A timed-out send is never replayed. */
 async function sendWithin(
@@ -294,12 +302,14 @@ export async function registerBoardInvitationRoutes(
           if (!claim) continue;
           let invitationId: string | undefined;
           let currentBoard: AuthorizedBoard;
+          let inviting = false;
           try {
             currentBoard = await fresh(request, scope);
             if (canvasInput) {
               const actor = await deps.auth.userFromRequest(request);
               if (!actor || actor.userId !== scope.actorId)
                 throw new InvitationRequestError("FORBIDDEN");
+              inviting = true;
               const invitation = await deps.canvases.invite(
                 actor,
                 id,
@@ -310,6 +320,7 @@ export async function registerBoardInvitationRoutes(
                 },
                 () => new Date(),
               );
+              inviting = false;
               if (
                 invitation.revokedAt ||
                 invitation.acceptedAt ||
@@ -322,15 +333,27 @@ export async function registerBoardInvitationRoutes(
               currentBoard = await fresh(request, scope);
             }
           } catch (error) {
+            const rejected = inviting && expectedRecipientFailure(error);
+            if (!rejected && !expectedDeliveryAccessFailure(error)) {
+              // SMTP has not started. Retry the same deterministic invitation intent
+              // after a transient dependency failure instead of making it terminal.
+              try {
+                await deps.deliveries.defer(
+                  scope,
+                  batch.batchId,
+                  recipient.email,
+                  claim.claimToken,
+                );
+              } catch {
+                // Failed cleanup leaves the original claim fenced. Never acknowledge
+                // completion or reset it without a successful token-checked write.
+                throw new InvitationRequestError("DEPENDENCY_UNAVAILABLE");
+              }
+              throw new InvitationRequestError("DEPENDENCY_UNAVAILABLE");
+            }
             await deps.deliveries.finish(scope, batch.batchId, recipient.email, claim.claimToken, {
-              status:
-                kind === "canvas" && !(error instanceof InvitationRequestError)
-                  ? "rejected"
-                  : "failed",
-              errorCode:
-                kind === "canvas" && !(error instanceof InvitationRequestError)
-                  ? "RECIPIENT_UNAVAILABLE"
-                  : "ACCESS_CHANGED",
+              status: rejected ? "rejected" : "failed",
+              errorCode: rejected ? "RECIPIENT_UNAVAILABLE" : "ACCESS_CHANGED",
             });
             continue;
           }

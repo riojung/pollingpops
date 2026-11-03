@@ -211,6 +211,8 @@ test("hidden facilitation retains drafts, navigation protection and the original
     await expect(page.getByRole("textbox", { name: "Version name", exact: true })).toHaveCount(0);
     await toggle.focus();
     await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Quick timer", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Export", exact: true })).toBeFocused();
     expect(await retained.evaluate((element) => element.contains(document.activeElement))).toBe(
       false,
@@ -634,7 +636,10 @@ test("@mobile facilitation and export controls fit 320px screens in light and da
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", colorScheme);
     await fitsHorizontally(page, panel);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // Wait for inherited text colors to settle after WebKit changes the theme.
+    await expect
+      .poll(async () => (await new AxeBuilder({ page }).analyze()).violations)
+      .toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`facilitation-320-${colorScheme}.png`) });
   }
   await (await canvasAction(page, "Export")).tap();
@@ -650,7 +655,10 @@ test("@mobile facilitation and export controls fit 320px screens in light and da
       .boundingBox();
     expect(download!.width).toBeGreaterThanOrEqual(44);
     expect(download!.height).toBeGreaterThanOrEqual(44);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // Wait for inherited text colors to settle after WebKit changes the theme.
+    await expect
+      .poll(async () => (await new AxeBuilder({ page }).analyze()).violations)
+      .toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`export-320-${colorScheme}.png`) });
   }
   await modal.getByRole("button", { name: "Cancel", exact: true }).tap();

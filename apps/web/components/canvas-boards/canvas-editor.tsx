@@ -9,6 +9,7 @@ import {
   type ButtonHTMLAttributes,
   type FormEvent,
   type KeyboardEvent,
+  type Ref,
 } from "react";
 import {
   CANVAS_MAX_OBJECTS,
@@ -71,6 +72,7 @@ import { CanvasExportDialog } from "./canvas-export-dialog";
 import { CanvasPresenterControls } from "./canvas-presenter-controls";
 import { canvasVisibleRegion, followCanvasRegion } from "./canvas-presentation";
 import { canvasFacilitationCopy } from "../../lib/i18n/canvas-facilitation-messages";
+import { canvasFacilitationUiCopy } from "../../lib/i18n/canvas-facilitation-ui-messages";
 import { canvasDiagramCopy } from "../../lib/i18n/canvas-diagram-messages";
 import { CanvasDiagramInspector } from "./canvas-diagram-inspector";
 import { canvasConnectorDraftPatch } from "./canvas-diagram-model";
@@ -102,14 +104,17 @@ import styles from "./canvas.module.css";
 function CanvasChromeButton({
   label,
   icon,
+  controlRef,
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "children" | "title" | "aria-label"> & {
   label: string;
   icon: CanvasToolIconName;
+  controlRef?: Ref<HTMLButtonElement>;
 }) {
   return (
     <button
       {...props}
+      ref={controlRef}
       type="button"
       className={styles.chromeButton}
       aria-label={label}
@@ -123,6 +128,7 @@ function CanvasChromeButton({
 function CanvasEditorContent({ id }: { id: string }) {
   const { t, locale } = useLocale();
   const facilitationCopy = canvasFacilitationCopy(locale);
+  const facilitationUiCopy = canvasFacilitationUiCopy(locale);
   const diagramCopy = canvasDiagramCopy(locale);
   const toolCopy = canvasToolCopy(locale);
   const chromeCopy = canvasChromeCopy(locale);
@@ -196,6 +202,8 @@ function CanvasEditorContent({ id }: { id: string }) {
   const [compactViewport, setCompactViewport] = useState(false);
   const inspectorReturnFocus = useRef<HTMLElement | null>(null);
   const [facilitationMounted, setFacilitationMounted] = useState(false);
+  const [quickTimerOpen, setQuickTimerOpen] = useState(false);
+  const quickTimerTrigger = useRef<HTMLButtonElement>(null);
   const [exporting, setExporting] = useState(false);
   const [visibleRegion, setVisibleRegion] = useState<CanvasExportRegion | null>(null);
   const [navigation, setNavigation] = useState(0);
@@ -322,6 +330,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     setInspectorOpen(false);
     setInspectorTab("objects");
     setFacilitationMounted(false);
+    setQuickTimerOpen(false);
     setSharing(false);
     setViewport(INITIAL_VIEWPORT);
   }, [id]);
@@ -329,6 +338,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     function closeTools() {
       setInspectorOpen(false);
       setFacilitationMounted(false);
+      setQuickTimerOpen(false);
       setTemplates(false);
       setTemplateId(null);
       setAssetRequest(undefined);
@@ -341,6 +351,7 @@ function CanvasEditorContent({ id }: { id: string }) {
     if (!board) {
       setInspectorOpen(false);
       setFacilitationMounted(false);
+      setQuickTimerOpen(false);
       setTemplates(false);
       setEditTextRequest(undefined);
       setAssetRequest(undefined);
@@ -401,12 +412,35 @@ function CanvasEditorContent({ id }: { id: string }) {
 
   function showInspector(tab: string) {
     if (inlineEditing || gestureActive) return;
+    setQuickTimerOpen(false);
     if (!inspectorOpen)
       inspectorReturnFocus.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (tab === "facilitation") setFacilitationMounted(true);
     setInspectorTab(tab);
     setInspectorOpen(true);
+  }
+  function showQuickTimer() {
+    if (inlineEditing || gestureActive) return;
+    const opener = document.activeElement;
+    if (inspectorOpen) {
+      // The Float button is about to become inert with the closed inspector.
+      // Return to the visible toolbar action, including its narrow-screen opener.
+      const timer = quickTimerTrigger.current;
+      inspectorReturnFocus.current = timer?.getClientRects().length
+        ? timer
+        : (Array.from(
+            timer?.closest("header")?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+          ).find(
+            (button) =>
+              button.getAttribute("aria-label") === chromeCopy.more &&
+              button.getClientRects().length > 0,
+          ) ?? null);
+    } else if (opener instanceof HTMLElement && opener !== document.body)
+      inspectorReturnFocus.current = opener;
+    setFacilitationMounted(true);
+    setInspectorOpen(false);
+    setQuickTimerOpen(true);
   }
   function closeInspector() {
     if (!inlineEditing && !gestureActive) setInspectorOpen(false);
@@ -1045,6 +1079,14 @@ function CanvasEditorContent({ id }: { id: string }) {
               onClick={() => toggleInspector("facilitation")}
             />
             <CanvasChromeButton
+              icon="timer"
+              controlRef={quickTimerTrigger}
+              label={facilitationUiCopy.quickTimer}
+              disabled={inlineEditing || gestureActive}
+              aria-expanded={quickTimerOpen}
+              onClick={() => (quickTimerOpen ? setQuickTimerOpen(false) : showQuickTimer())}
+            />
+            <CanvasChromeButton
               icon="export"
               label={t("canvas.export.open")}
               disabled={uiBusy || dirty}
@@ -1661,6 +1703,10 @@ function CanvasEditorContent({ id }: { id: string }) {
                 content: facilitationMounted ? (
                   <CanvasFacilitationPanel
                     board={board}
+                    quickTimerOpen={quickTimerOpen}
+                    onOpenQuickTimer={showQuickTimer}
+                    onCloseQuickTimer={() => setQuickTimerOpen(false)}
+                    quickTimerReturnFocusRef={inspectorReturnFocus}
                     selectedIds={selectedIds}
                     disabled={uiBusy || dirty || gestureActive}
                     onPlan={perform}

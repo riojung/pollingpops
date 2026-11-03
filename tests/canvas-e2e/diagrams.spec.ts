@@ -139,7 +139,10 @@ test("manual flow diagrams keep styled routes, ports, layer order and exported g
     await page.emulateMedia({ colorScheme: mode });
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
     await fits(page);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // Wait for inherited text colors to settle after WebKit changes the theme.
+    await expect
+      .poll(async () => (await new AxeBuilder({ page }).analyze()).violations)
+      .toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath(`diagrams-desktop-${mode}.png`),
       fullPage: true,
@@ -199,7 +202,10 @@ test("@mobile manual diagram controls remain usable through the outline at320px"
     await page.emulateMedia({ colorScheme: mode });
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
     await fits(page);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // Wait for inherited text colors to settle after WebKit changes the theme.
+    await expect
+      .poll(async () => (await new AxeBuilder({ page }).analyze()).violations)
+      .toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath(`diagrams-${width}-${mode}.png`),
       fullPage: true,

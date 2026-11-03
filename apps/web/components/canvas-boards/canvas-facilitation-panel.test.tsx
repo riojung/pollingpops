@@ -3,6 +3,7 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CanvasFacilitationPanel } from "./canvas-facilitation-panel";
+import { CanvasQuickTimer } from "./canvas-quick-timer";
 import type { useCanvasFacilitation } from "./use-canvas-facilitation";
 import { facilitationFixture as initial } from "./canvas-facilitation-test-fixtures";
 import { canvasBoard, canvasObject } from "./canvas-test-fixtures";
@@ -16,11 +17,18 @@ const mocked = vi.hoisted(() => ({
   state: null as unknown as ReturnType<typeof useCanvasFacilitation>,
   execute: vi.fn(),
   discard: vi.fn(),
+  read: vi.fn(),
 }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
+    useRef: <T,>(initial: T) => {
+      if (!mocked.hooks) return react.useRef(initial);
+      const index = mocked.hooks.cursor++;
+      mocked.hooks.slots[index] ??= { current: initial };
+      return mocked.hooks.slots[index];
+    },
     useState: <T,>(initial: T | (() => T)) => {
       if (!mocked.hooks) return react.useState(initial);
       const hooks = mocked.hooks,
@@ -41,7 +49,20 @@ vi.mock("react", async (original) => {
     },
   };
 });
-vi.mock("./use-canvas-facilitation", () => ({ useCanvasFacilitation: () => mocked.state }));
+vi.mock("./use-canvas-facilitation", () => ({
+  useCanvasFacilitation: (...args: unknown[]) => {
+    mocked.read(...args);
+    return mocked.state;
+  },
+}));
+vi.mock("./canvas-quick-timer", () => ({
+  CanvasQuickTimer: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? (
+      <section aria-label="Quick timer" data-testid="timer-portal">
+        {children}
+      </section>
+    ) : null,
+}));
 vi.mock("../navigation-guard", () => ({ useNavigationBlocker: vi.fn() }));
 vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 function find(
@@ -58,11 +79,13 @@ function find(
   if (!isValidElement<Record<string, unknown>>(node)) return;
   return predicate(node) ? node : find(node.props.children as ReactNode, predicate);
 }
-function harness() {
+function harness(initialProps: Partial<Parameters<typeof CanvasFacilitationPanel>[0]> = {}) {
+  const props = { ...initialProps };
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   let tree: ReactNode;
   return {
-    render(board = canvasBoard) {
+    render(board = canvasBoard, next: Partial<Parameters<typeof CanvasFacilitationPanel>[0]> = {}) {
+      Object.assign(props, next);
       hooks.cursor = 0;
       hooks.effects = [];
       mocked.hooks = hooks;
@@ -71,6 +94,7 @@ function harness() {
           board,
           selectedIds: [canvasObject.id],
           onPlan: async () => true,
+          ...props,
         });
         tree = (root.type as (props: unknown) => ReactNode)(root.props);
       } finally {
@@ -79,9 +103,17 @@ function harness() {
       return renderToStaticMarkup(tree);
     },
     button(label: string) {
-      const result = find(tree, (node) => node.type === "button" && node.props.children === label);
+      const result = find(
+        tree,
+        (node) =>
+          node.type === "button" &&
+          (node.props.children === label || node.props["aria-label"] === label),
+      );
       if (!result) throw new Error(`Missing button ${label}`);
       return result.props;
+    },
+    popup() {
+      return find(tree, (node) => node.type === CanvasQuickTimer)!.props;
     },
     textarea() {
       return find(tree, (node) => node.type === "textarea")!.props;
@@ -138,12 +170,58 @@ describe("facilitation role controls and retained drafts", () => {
     expect(html).not.toContain(">Resolve</button>");
     expect(html).not.toContain(">Comment on selected object</button>");
     (view.button("Timer").onClick as () => void)();
-    expect(view.render()).not.toContain(">Start timer</button>");
+    expect(view.render()).not.toContain('aria-label="Start timer"');
     (view.button("Saved versions").onClick as () => void)();
     const versions = view.render();
     expect(versions).toContain(">Preview</button>");
     expect(versions).not.toContain(">Save version</button>");
     expect(versions).not.toContain(">Delete saved version</button>");
+  });
+  it("moves the single timer widget into the popup without resetting tab or comment drafts", () => {
+    const view = harness();
+    view.render();
+    (view.button("Comment on selected object").onClick as () => void)();
+    view.render();
+    (view.textarea().onChange as (event: unknown) => void)({
+      target: { value: "Retained while timing" },
+    });
+    view.render();
+    const previousReads = mocked.read.mock.calls.length;
+    const popup = view.render(canvasBoard, { quickTimerOpen: true });
+    expect(mocked.read).toHaveBeenCalledTimes(previousReads + 1);
+    expect(popup.match(/role="timer"/g)).toHaveLength(1);
+    expect(view.popup().open).toBe(true);
+    expect(view.textarea().value).toBe("Retained while timing");
+    (view.button("Timer").onClick as () => void)();
+    const timerTab = view.render();
+    expect(timerTab.match(/role="timer"/g)).toHaveLength(1);
+    const embedded = view.render(canvasBoard, { quickTimerOpen: false });
+    expect(embedded.match(/role="timer"/g)).toHaveLength(1);
+    expect(view.button("Timer")["aria-pressed"]).toBe(true);
+    expect(view.textarea().value).toBe("Retained while timing");
+  });
+  it("keeps the exact failed-operation retry actionable in the popup outside a hidden inspector", async () => {
+    const operation = {
+      schemaVersion: 1 as const,
+      operationId: initial.versions[0]!.id,
+      command: {
+        type: "timer_start" as const,
+        expectedRevision: initial.timer.revision,
+        durationSeconds: 300,
+      },
+    };
+    mocked.state.failure = { id: canvasBoard.id, operation, conflict: false };
+    mocked.execute.mockResolvedValue(true);
+    const view = harness({ quickTimerOpen: true });
+    const html = view.render();
+    expect(html).toContain('data-testid="timer-portal"');
+    expect(html.match(/Retry saving/g)).toHaveLength(1);
+    expect(view.button("Retry saving").disabled).toBe(false);
+    (view.button("Retry saving").onClick as () => void)();
+    await settle();
+    expect(mocked.execute).toHaveBeenCalledOnce();
+    expect(mocked.execute).toHaveBeenCalledWith(undefined);
+    expect(mocked.state.failure?.operation).toBe(operation);
   });
   it("retains failed local text through conflict, role loss and anchor deletion until explicit discard", async () => {
     const view = harness();

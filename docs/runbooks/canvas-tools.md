@@ -6,6 +6,8 @@ Navigation, save status, history, insertion, presentation, sharing, and panel co
 
 The sliding **Inspector** separates Objects, Properties, Arrange, and Board controls. Facilitation and workshop controls appear where available. Closing the inspector or switching sections preserves local property and discussion drafts. Desktop canvases resize beside the open inspector; on small screens the panel covers and temporarily disables the canvas beneath it. Opening it from a covered canvas control moves keyboard focus into the selected inspector section; closing it restores the originating control. Adding an item on a small screen keeps the canvas and floating formatting controls available. Use **Close inspector** or Escape from its navigation controls to return to the canvas.
 
+**Quick timer** opens a floating workshop timer from the top bar (or **More board actions** on small screens). The Timer section also offers **Float timer**. Use minute adjustments or duration presets, then start, pause, resume, or reset according to your board permissions. The floating timer shares its server state and recovery controls with Facilitation; closing it retains discussion drafts and any unsent operation. Escape from the timer's navigation controls closes it and restores its opener.
+
 The canvas rail keeps selection, pan, area selection, notes, text, basic shapes, frames, and connectors within reach. Its grouped controls open sticky colors, the searchable shape catalog, and drawing settings. Escape dismisses a flyout and returns focus to its trigger.
 
 Selecting objects opens the formatting toolbar. Eligible selections support type conversion, font family and size, bold, italic, underline, alignment, color, opacity, stroke width, locking, duplication, and deletion. **More actions** opens the detailed inspector and layout tools. Locked objects can be unlocked by an eligible collaborator; protected workshop ideas keep their existing moderation boundary.
@@ -15,6 +17,8 @@ Double-click an editable text-bearing object, use **Edit text**, or press F2 to 
 ## Shapes, connectors, and drawing
 
 The catalog includes basic and flowchart shapes, 17 rectangle variants, and line, arrow, and elbow connector presets. Drag an object's side handle to another object or to a free point. Attached endpoints follow their objects. Existing two-object connector selection remains available.
+
+Canvas display ink adapts to light and dark themes so freehand lines, connectors, arrows, and frame boundaries remain visible against the working surface. Note fills retain their chosen colors. This display adjustment does not rewrite saved colors or change exported artwork.
 
 Drawing settings provide 16 colors and bounded stroke widths. Highlighters use a translucent stroke. The eraser removes whole eligible strokes; it does not perform pixel editing or cascade a hit into deleting other grouped or connected objects. Undo and redo use the normal canvas operation history.
 

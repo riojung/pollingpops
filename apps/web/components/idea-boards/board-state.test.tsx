@@ -350,6 +350,7 @@ describe("idea board async state", () => {
     expect(fixtures.submitIdea).toHaveBeenCalledTimes(2);
     expect(fixtures.submitIdea.mock.calls[1]![2]).toEqual(expectedInput);
     expect(fixtures.submitIdea.mock.calls[1]![2].idempotencyKey).toBe(originalInput.idempotencyKey);
+    expect(fixtures.submitIdea.mock.calls[1]![3]).not.toBe(fixtures.submitIdea.mock.calls[0]![3]);
     expect(fixtures.uploadImage).not.toHaveBeenCalled();
     expect(view.render()).toContain(english["boards.submitted"]);
     expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual({
@@ -358,6 +359,214 @@ describe("idea board async state", () => {
       links: [],
       sketch: null,
     });
+    view.unmount();
+  });
+
+  it.each([
+    { kind: "idea", late: "success" },
+    { kind: "idea", late: "failure" },
+    { kind: "votes", late: "success" },
+    { kind: "votes", late: "failure" },
+  ] as const)(
+    "retires a hung $kind on round change and ignores its late $late while a new request is pending",
+    async ({ kind, late }) => {
+      const first: IdeaBoardGuestView = {
+        ...boardGuestFixture,
+        board: {
+          ...boardGuestFixture.board,
+          status: kind === "idea" ? "collecting" : "voting",
+          roundNumber: 1,
+          revision: 3,
+        },
+      };
+      const second: IdeaBoardGuestView = {
+        ...first,
+        revision: 1,
+        board: { ...first.board, title: "Reopened current round", roundNumber: 2, revision: 5 },
+      };
+      const ideaId = boardFixture.ideas[0]!.id;
+      const receipt: IdeaBoardGuestView = {
+        ...second,
+        revision: kind === "votes" ? 2 : second.revision,
+        hasVoted: kind === "votes",
+        votedIdeaIds: kind === "votes" ? [ideaId] : [],
+      };
+      let resolveOld!: (value: IdeaBoardGuestView) => void;
+      let rejectOld!: (error: unknown) => void;
+      let resolveNew!: (value: IdeaBoardGuestView) => void;
+      const submit = kind === "idea" ? fixtures.submitIdea : fixtures.submitVotes;
+      // Deliberately ignore abort, modelling an already accepted request or an unresponsive
+      // transport. Retirement must not depend on its promise settling.
+      submit
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              resolveOld = resolve;
+              rejectOld = reject;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveNew = resolve;
+            }),
+        );
+      fixtures.publicRead.mockResolvedValue(first.board);
+      fixtures.guestRead.mockResolvedValue(first);
+      const view = harness(() => BoardGuest({ id: boardId }));
+      const draft = {
+        ...emptyIdeaDraft(),
+        body: "Private draft retained while the old request hangs",
+      };
+      function selectIdea() {
+        (
+          view.find((element) => element.type === IdeaBoardIdeas).props.onSelect as (
+            id: string,
+            checked: boolean,
+          ) => void
+        )(ideaId, true);
+      }
+      function submitCurrent() {
+        if (kind === "idea")
+          (view.find((element) => element.type === IdeaComposer).props.onSubmit as () => void)();
+        else
+          (
+            view.find((element) => element.type === "form").props.onSubmit as (
+              event: unknown,
+            ) => void
+          )({ preventDefault: vi.fn() });
+      }
+      function isDisabled() {
+        return view.find(
+          (element) => element.type === (kind === "idea" ? IdeaComposer : IdeaBoardIdeas),
+        ).props.disabled;
+      }
+      view.render();
+      view.mount();
+      await settle();
+      view.render();
+      const pollSignal = fixtures.guestRead.mock.calls[0]![2] as AbortSignal;
+      if (kind === "idea")
+        (
+          view.find((element) => element.type === IdeaComposer).props.onChange as (
+            draft: IdeaDraft,
+          ) => void
+        )(draft);
+      else selectIdea();
+      view.render();
+      submitCurrent();
+      view.render();
+      expect(submit).toHaveBeenCalledOnce();
+      expect(isDisabled()).toBe(true);
+      const oldSignal = submit.mock.calls[0]![3] as AbortSignal;
+      expect(oldSignal).not.toBe(pollSignal);
+
+      fixtures.publicRead.mockResolvedValue(second.board);
+      fixtures.guestRead.mockResolvedValue(second);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(view.render()).toContain("Reopened current round");
+      expect(oldSignal.aborted).toBe(true);
+      expect(pollSignal.aborted).toBe(false);
+      expect(fixtures.guestRead.mock.calls.at(-1)![2]).toBe(pollSignal);
+      expect(isDisabled()).toBe(false);
+      if (kind === "idea")
+        expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+      else {
+        expect(view.find((element) => element.type === IdeaBoardIdeas).props.selected).toEqual([]);
+        selectIdea();
+        view.render();
+      }
+      // Start the new-round request before resolving or rejecting the hung old one.
+      submitCurrent();
+      view.render();
+      expect(submit).toHaveBeenCalledTimes(2);
+      const nextInput = structuredClone(submit.mock.calls[1]![2]);
+      expect(nextInput.roundNumber).toBe(2);
+      expect(nextInput.idempotencyKey).not.toBe(submit.mock.calls[0]![2].idempotencyKey);
+      const nextSignal = submit.mock.calls[1]![3] as AbortSignal;
+      expect(nextSignal).not.toBe(oldSignal);
+      expect(isDisabled()).toBe(true);
+
+      if (late === "success")
+        resolveOld({
+          ...first,
+          hasVoted: kind === "votes",
+          votedIdeaIds: kind === "votes" ? [ideaId] : [],
+        });
+      else rejectOld(new ApiClientError("Late old request failure", "INTERNAL_ERROR", 503));
+      await settle();
+      const markup = view.render();
+      expect(markup).not.toContain(english["boards.error"]);
+      expect(markup).not.toContain(english["boards.submitted"]);
+      expect(markup).not.toContain(english["boards.voteReceipt"]);
+      expect(markup).toContain("Reopened current round");
+      expect(isDisabled()).toBe(true);
+      expect(nextSignal.aborted).toBe(false);
+      expect(submit.mock.calls[1]![2]).toEqual(nextInput);
+      // A late old finally must not release the current request's UI lock or ownership.
+      submitCurrent();
+      view.render();
+      expect(submit).toHaveBeenCalledTimes(2);
+      expect(isDisabled()).toBe(true);
+      resolveNew(receipt);
+      await settle();
+      const saved = view.render();
+      expect(saved).toContain(english[kind === "idea" ? "boards.submitted" : "boards.voteReceipt"]);
+      expect(
+        view.find(
+          (element) => element.type === "button" && element.props["aria-label"] === "Refresh",
+        ).props.disabled,
+      ).toBe(false);
+      if (kind === "idea")
+        expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(
+          emptyIdeaDraft(),
+        );
+      expect(submit).toHaveBeenCalledTimes(2);
+      view.unmount();
+    },
+  );
+
+  it("retries an unknown same-round ballot outcome with the exact envelope and a new mutation signal", async () => {
+    const current: IdeaBoardGuestView = {
+      ...boardGuestFixture,
+      revision: 3,
+      board: { ...boardGuestFixture.board, status: "voting", roundNumber: 2, revision: 7 },
+    };
+    const ideaId = boardFixture.ideas[0]!.id;
+    fixtures.publicRead.mockResolvedValue(current.board);
+    fixtures.guestRead.mockResolvedValue(current);
+    fixtures.submitVotes
+      .mockRejectedValueOnce(new TypeError("Connection lost"))
+      .mockResolvedValueOnce({ ...current, revision: 4, hasVoted: true, votedIdeaIds: [ideaId] });
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    (
+      view.find((element) => element.type === IdeaBoardIdeas).props.onSelect as (
+        id: string,
+        checked: boolean,
+      ) => void
+    )(ideaId, true);
+    view.render();
+    (view.find((element) => element.type === "form").props.onSubmit as (event: unknown) => void)({
+      preventDefault: vi.fn(),
+    });
+    await settle();
+    expect(view.render()).toContain(english["boards.error"]);
+    expect(view.find((element) => element.type === IdeaBoardIdeas).props.disabled).toBe(true);
+    const original = structuredClone(fixtures.submitVotes.mock.calls[0]![2]);
+    expect(original).toMatchObject({ expectedRevision: 3, roundNumber: 2, ideaIds: [ideaId] });
+    (
+      view.find((element) => element.type === "button" && element.props.children === "Retry").props
+        .onClick as () => void
+    )();
+    await settle();
+    expect(fixtures.submitVotes).toHaveBeenCalledTimes(2);
+    expect(fixtures.submitVotes.mock.calls[1]![2]).toEqual(original);
+    expect(fixtures.submitVotes.mock.calls[1]![3]).not.toBe(fixtures.submitVotes.mock.calls[0]![3]);
+    expect(view.render()).toContain(english["boards.voteReceipt"]);
     view.unmount();
   });
 
@@ -455,6 +664,95 @@ describe("idea board async state", () => {
     );
     expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(false);
     expect(fixtures.submitIdea).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  it("retires a hung acknowledgement refresh without leaving loading or releasing the next mutation", async () => {
+    const first = { ...boardGuestFixture, board: { ...boardGuestFixture.board, revision: 3 } };
+    const newer = { ...first, board: { ...first.board, revision: 4 } };
+    const reopened = {
+      ...first,
+      revision: 1,
+      board: { ...first.board, roundNumber: 2, revision: 5, title: "Current reopened workspace" },
+    };
+    let resolveOldReceipt!: (value: IdeaBoardGuestView) => void;
+    let resolveOldRefresh!: (value: IdeaBoardGuestView["board"]) => void;
+    let resolveCurrentReceipt!: (value: IdeaBoardGuestView) => void;
+    fixtures.submitIdea
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOldReceipt = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveCurrentReceipt = resolve;
+          }),
+      );
+    fixtures.publicRead.mockResolvedValue(first.board);
+    fixtures.guestRead.mockResolvedValue(first);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    function submitDraft(body: string) {
+      (
+        view.find((element) => element.type === IdeaComposer).props.onChange as (
+          draft: IdeaDraft,
+        ) => void
+      )({ ...emptyIdeaDraft(), body });
+      view.render();
+      (view.find((element) => element.type === IdeaComposer).props.onSubmit as () => void)();
+    }
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    submitDraft("Accepted before its board snapshot became stale");
+    fixtures.publicRead.mockResolvedValue(newer.board);
+    fixtures.guestRead.mockResolvedValue(newer);
+    await vi.advanceTimersByTimeAsync(5_000);
+    view.render();
+    // The exact successful acknowledgement starts reconciliation under the same mutation.
+    fixtures.publicRead.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOldRefresh = resolve;
+        }),
+    );
+    resolveOldReceipt(first);
+    await settle();
+    expect(view.render()).toContain(english["boards.loading"]);
+    const refreshSignal = fixtures.publicRead.mock.calls.at(-1)![1] as AbortSignal;
+    expect(refreshSignal).toBe(fixtures.submitIdea.mock.calls[0]![3]);
+    fixtures.publicRead.mockResolvedValue(reopened.board);
+    fixtures.guestRead.mockResolvedValue(reopened);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const reopenedMarkup = view.render();
+    expect(refreshSignal.aborted).toBe(true);
+    expect(reopenedMarkup).not.toContain(english["boards.loading"]);
+    expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(false);
+    submitDraft("New request owns the lock");
+    view.render();
+    expect(fixtures.submitIdea).toHaveBeenCalledTimes(2);
+    expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(true);
+    // This obsolete read ignores cancellation and settles after the next write begins.
+    resolveOldRefresh(first.board);
+    await settle();
+    const currentMarkup = view.render();
+    expect(currentMarkup).toContain("Current reopened workspace");
+    expect(currentMarkup).not.toContain(english["boards.loading"]);
+    expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(true);
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual({
+      ...emptyIdeaDraft(),
+      body: "New request owns the lock",
+    });
+    resolveCurrentReceipt(reopened);
+    await settle();
+    view.render();
+    expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(false);
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(
+      emptyIdeaDraft(),
+    );
     view.unmount();
   });
 

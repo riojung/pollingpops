@@ -33,6 +33,10 @@ type VoteIntent = {
   kind: "votes";
   input: Parameters<typeof submitBoardVotes>[2];
 };
+type GuestMutation = {
+  controller: AbortController;
+  lifetime: AbortController | null;
+};
 
 export function BoardGuest({ id }: { id: string }) {
   const { t, locale } = useLocale();
@@ -52,7 +56,7 @@ export function BoardGuest({ id }: { id: string }) {
   const controller = useRef<AbortController | null>(null);
   const token = useRef<string | null>(null);
   const pending = useRef<IdeaIntent | VoteIntent | null>(null);
-  const inFlight = useRef(false);
+  const mutation = useRef<GuestMutation | null>(null);
   const latestGuest = useRef<IdeaBoardGuestView | null>(null);
   const [hasCanvas, setHasCanvas] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -64,6 +68,36 @@ export function BoardGuest({ id }: { id: string }) {
   const focusPanelOnOpen = useRef(false);
   const panelId = `workshop-participation-${id}`;
   const canvasVisible = Boolean(guest && hasCanvas);
+
+  function beginMutation() {
+    if (mutation.current || controller.current?.signal.aborted) return null;
+    const request = { controller: new AbortController(), lifetime: controller.current };
+    mutation.current = request;
+    setBusy(true);
+    return request;
+  }
+  function isCurrentMutation(request: GuestMutation) {
+    return (
+      mutation.current === request &&
+      !request.controller.signal.aborted &&
+      !request.lifetime?.signal.aborted
+    );
+  }
+  function finishMutation(request: GuestMutation) {
+    if (mutation.current !== request) return;
+    mutation.current = null;
+    setBusy(false);
+  }
+  function retireMutation() {
+    const previous = mutation.current;
+    if (!previous) return;
+    // Release ownership before aborting: an abort handler may settle the old promise
+    // immediately, and transports that ignore cancellation must also remain harmless.
+    mutation.current = null;
+    previous.controller.abort();
+    setBusy(false);
+    setLoading(false);
+  }
 
   function closePanel() {
     panelPreference.current = false;
@@ -108,6 +142,7 @@ export function BoardGuest({ id }: { id: string }) {
       // Old receipts are fenced by round, while the private composer draft stays available
       // for a deliberate submission in the reopened collection.
       pending.current = null;
+      retireMutation();
       setSelected([]);
       setError(null);
       setNotice(null);
@@ -140,6 +175,7 @@ export function BoardGuest({ id }: { id: string }) {
             if (!(caught instanceof ApiClientError && [401, 404].includes(caught.status)))
               throw caught;
             if (!active.signal.aborted) {
+              retireMutation();
               latestGuest.current = null;
               setGuest(null);
             }
@@ -151,6 +187,7 @@ export function BoardGuest({ id }: { id: string }) {
         const unavailable = caught instanceof ApiClientError && [404, 410].includes(caught.status);
         setError(unavailable ? "boards.unavailable" : "boards.error");
         if (unavailable) {
+          retireMutation();
           setInfo(null);
           latestGuest.current = null;
           setGuest(null);
@@ -165,15 +202,20 @@ export function BoardGuest({ id }: { id: string }) {
     void poll();
     return () => {
       active.abort();
+      if (mutation.current?.lifetime === active) {
+        const previous = mutation.current;
+        mutation.current = null;
+        previous.controller.abort();
+      }
       if (timer) clearTimeout(timer);
     };
   }, [id]);
 
   async function join(event: FormEvent) {
     event.preventDefault();
-    if (!info || inFlight.current) return;
-    inFlight.current = true;
-    setBusy(true);
+    if (!info) return;
+    const request = beginMutation();
+    if (!request) return;
     setError(null);
     try {
       try {
@@ -186,13 +228,14 @@ export function BoardGuest({ id }: { id: string }) {
         id,
         token.current!,
         info.identityMode === "alias" ? alias.trim() : undefined,
-        controller.current?.signal,
+        request.controller.signal,
       );
-      if (!controller.current?.signal.aborted) accept(value);
+      if (isCurrentMutation(request)) accept(value);
     } catch (caught) {
-      if (!controller.current?.signal.aborted) {
+      if (isCurrentMutation(request)) {
         const unavailable = caught instanceof ApiClientError && [404, 410].includes(caught.status);
         if (unavailable) {
+          retireMutation();
           setInfo(null);
           latestGuest.current = null;
           setGuest(null);
@@ -203,24 +246,23 @@ export function BoardGuest({ id }: { id: string }) {
         setError(unavailable ? "boards.unavailable" : "boards.error");
       }
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      finishMutation(request);
     }
   }
 
   async function execute() {
-    if (!pending.current || !token.current || inFlight.current) return;
+    if (!pending.current || !token.current) return;
     const operation = pending.current;
-    inFlight.current = true;
-    setBusy(true);
+    const request = beginMutation();
+    if (!request) return;
     setError(null);
     setNotice(null);
     try {
       const value =
         operation.kind === "idea"
-          ? await submitBoardIdea(id, token.current, operation.input, controller.current?.signal)
-          : await submitBoardVotes(id, token.current, operation.input, controller.current?.signal);
-      if (controller.current?.signal.aborted) return;
+          ? await submitBoardIdea(id, token.current, operation.input, request.controller.signal)
+          : await submitBoardVotes(id, token.current, operation.input, request.controller.signal);
+      if (!isCurrentMutation(request)) return;
       const accepted = accept(value);
       const roundNumber = latestGuest.current?.board.roundNumber;
       if (
@@ -236,15 +278,14 @@ export function BoardGuest({ id }: { id: string }) {
       }
       // A newer poll can overtake a successful same-round receipt. Acknowledge that
       // exact intent without reapplying its stale snapshot, then reconcile the view.
-      if (!accepted) await refresh();
+      if (!accepted) await refresh(request);
     } catch (caught) {
-      if (controller.current?.signal.aborted || pending.current !== operation) return;
+      if (!isCurrentMutation(request) || pending.current !== operation) return;
       if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
         pending.current = null;
       setError("boards.error");
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      finishMutation(request);
     }
   }
   function submitIdea() {
@@ -292,22 +333,26 @@ export function BoardGuest({ id }: { id: string }) {
     }
     void execute();
   }
-  async function refresh() {
-    if (pending.current) return execute();
+  async function refresh(request?: GuestMutation) {
+    if (!request && pending.current) return execute();
+    const signal = request?.controller.signal ?? controller.current?.signal;
+    const current = () => (request ? isCurrentMutation(request) : !signal?.aborted);
+    if (!current()) return;
     setError(null);
     setLoading(true);
     try {
-      const value = await fetchPublicIdeaBoard(id, controller.current?.signal);
-      if (controller.current?.signal.aborted) return;
+      const value = await fetchPublicIdeaBoard(id, signal);
+      if (!current()) return;
       setInfo(value);
       if (token.current) {
-        const current = await fetchGuestIdeaBoard(id, token.current, controller.current?.signal);
-        if (!controller.current?.signal.aborted) accept(current);
+        const value = await fetchGuestIdeaBoard(id, token.current, signal);
+        if (current()) accept(value);
       }
     } catch (caught) {
-      if (!controller.current?.signal.aborted) {
+      if (current()) {
         const unavailable = caught instanceof ApiClientError && [404, 410].includes(caught.status);
         if (unavailable) {
+          retireMutation();
           setInfo(null);
           latestGuest.current = null;
           setGuest(null);
@@ -318,7 +363,7 @@ export function BoardGuest({ id }: { id: string }) {
         setError(unavailable ? "boards.unavailable" : "boards.error");
       }
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }
   const board = guest?.board ?? info;

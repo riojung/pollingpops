@@ -1,6 +1,6 @@
 .editor {
   height: 100dvh;
-  min-height: 600px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   color: var(--ui-text);
@@ -167,6 +167,9 @@
   overflow: hidden;
   position: relative;
   background: var(--ui-surface-soft);
+}
+.workspace[data-inspector-open="true"] {
+  padding-inline-end: 360px;
 }
 .stage {
   flex: 1;
@@ -432,6 +435,73 @@
 .actions button {
   min-height: 42px;
   font-size: 12px;
+}
+.objectsPanel,
+.propertiesPanel,
+.boardPanel {
+  min-inline-size: 0;
+}
+.objectsPanel > details > summary {
+  margin-block-end: 12px;
+  color: var(--ui-text-subtle);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.objectsPanel .outline {
+  max-block-size: none;
+  overflow: visible;
+  gap: 4px;
+}
+.objectsPanel .outlineRow {
+  padding: 3px;
+  border-radius: 10px;
+}
+.objectsPanel .outlineRow:hover {
+  background: var(--ui-surface-hover);
+}
+.objectsPanel .outline button {
+  min-block-size: 40px;
+  padding: 8px;
+}
+.propertiesPanel .inspector {
+  gap: 12px;
+  padding-block: 0 4px;
+}
+.propertiesPanel .inspector h2,
+.boardPanel h2 {
+  margin-block: 0 12px;
+  font-size: 15px;
+  letter-spacing: -0.025em;
+}
+.propertiesPanel .inspector input,
+.propertiesPanel .inspector select,
+.propertiesPanel .inspector textarea {
+  min-block-size: 40px;
+  padding: 8px 10px;
+  font-size: 16px;
+}
+.propertiesPanel .inspector textarea {
+  min-block-size: 84px;
+}
+.propertiesPanel .inspector > button[type="submit"] {
+  position: sticky;
+  inset-block-end: 0;
+  min-block-size: 42px;
+  box-shadow: var(--ui-shadow-sm);
+}
+.boardOrigin {
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.boardPanel > button {
+  display: block;
+  inline-size: 100%;
+  margin-block-start: 10px;
+  min-block-size: 40px;
+  font-size: 13px;
 }
 .protected {
   padding: 10px;
@@ -794,6 +864,9 @@
 @media (max-width: 760px) {
   .workArea {
     --canvas-tool-gutter: 0px;
+  }
+  .workspace[data-inspector-open="true"] {
+    padding-inline-end: 0;
   }
   .header {
     padding: 10px 12px;

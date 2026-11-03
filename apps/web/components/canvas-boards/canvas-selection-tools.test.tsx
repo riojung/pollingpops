@@ -2,13 +2,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CanvasObjectSchema, type CanvasObject } from "@openround/contracts";
 import english from "../../lib/i18n/domains/idea-boards/en-CA";
+import { englishMessages } from "../../lib/i18n/messages/en-CA";
 import { CanvasSelectionTools } from "./canvas-selection-tools";
 import { canvasBoard, canvasObject } from "./canvas-test-fixtures";
+const messages = { ...englishMessages, ...english };
 vi.mock("../locale-provider", () => ({
   useLocale: () => ({
     locale: "en-CA",
-    t: (key: keyof typeof english, values: Record<string, string> = {}) =>
-      (english[key] ?? key).replace(/\{(\w+)\}/g, (_, name: string) => values[name] ?? name),
+    t: (key: keyof typeof messages, values: Record<string, string> = {}) =>
+      (messages[key] ?? key).replace(/\{(\w+)\}/g, (_, name: string) => values[name] ?? name),
   }),
 }));
 function render(objects: CanvasObject[], ids: string[]) {
@@ -24,9 +26,11 @@ function render(objects: CanvasObject[], ids: string[]) {
   );
 }
 function button(html: string, label: string) {
-  const found = html.match(new RegExp("<button[^>]*>" + label + "</button>"));
+  const found = html
+    .match(/<button\b[^>]*>[\s\S]*?<\/button>/g)
+    ?.find((control) => control.includes(`aria-label="${label}"`));
   if (!found) throw new Error("Control missing: " + label);
-  return found[0];
+  return found;
 }
 describe("bulk canvas controls", () => {
   it.each([
@@ -74,5 +78,38 @@ describe("bulk canvas controls", () => {
     expect(button(html, "Unlock selection")).not.toContain("disabled");
     expect(button(html, "Duplicate selected")).toContain("disabled");
     expect(html).toContain("Separately locked children stay locked");
+  });
+  it("uses compact labelled action groups and collapses secondary fields and help", () => {
+    const html = render([canvasObject], [canvasObject.id]);
+    expect(html).toContain('role="group" aria-label="Quick actions"');
+    expect(html).toContain('role="group" aria-label="Arrange"');
+    expect(html).toContain("<summary>Move selection</summary>");
+    expect(html).toContain("<summary>Parent frame</summary>");
+    expect(html).toContain("<summary>Help</summary>");
+    expect(html).not.toMatch(/<details[^>]* open/);
+    for (const mode of [
+      "left",
+      "center",
+      "right",
+      "top",
+      "middle",
+      "bottom",
+      "horizontal",
+      "vertical",
+    ] as const)
+      expect(button(html, english[`canvas.productivity.${mode}`])).toContain('aria-hidden="true"');
+    expect(html).not.toContain('aria-label="Unlock selection"');
+    expect(html).not.toContain('aria-label="Ungroup selection"');
+  });
+  it("keeps applicable ungroup and unlock controls without a duplicate lock control", () => {
+    const grouped = CanvasObjectSchema.parse({
+      ...canvasObject,
+      geometricGroupId: "00000000-0000-4000-8000-000000000199",
+    });
+    expect(button(render([grouped], [grouped.id]), "Ungroup selection")).not.toContain("disabled");
+    const locked = CanvasObjectSchema.parse({ ...canvasObject, locked: true });
+    const html = render([locked], [locked.id]);
+    expect(button(html, "Unlock selection")).not.toContain("disabled");
+    expect(html).not.toContain('aria-label="Lock selection"');
   });
 });

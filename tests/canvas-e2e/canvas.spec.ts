@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   account,
+  canvasAction,
+  closeInspector,
+  openInspector,
+  openPresentation,
   api,
   web,
   fits,
@@ -13,6 +17,12 @@ import {
   saveText,
   newTeamCanvas,
 } from "./support";
+
+async function selectObject(page: Page, name: string) {
+  const inspector = await openInspector(page, "Objects");
+  await inspector.getByRole("button", { name, exact: true }).click();
+  await openInspector(page, "Properties");
+}
 
 test("separate licensed workspaces coauthor a shared board and lose live access after revocation", async ({
   page: owner,
@@ -120,7 +130,7 @@ test("separate licensed workspaces coauthor a shared board and lose live access 
       )
       .toBe("A clear shared outcome");
 
-    await owner.getByRole("button", { name: "A clear shared outcome", exact: true }).click();
+    await selectObject(owner, "A clear shared outcome");
     await owner.getByRole("textbox", { name: "Text", exact: true }).fill("Owner updates one note");
     await editor.page
       .getByRole("textbox", { name: "Text", exact: true })
@@ -137,7 +147,7 @@ test("separate licensed workspaces coauthor a shared board and lose live access 
           ).length,
       )
       .toBe(2);
-    await editor.page.getByRole("button", { name: "Owner updates one note", exact: true }).click();
+    await selectObject(editor.page, "Owner updates one note");
     await editor.page
       .getByRole("textbox", { name: "Text", exact: true })
       .fill("Reviewed teammate text");
@@ -161,6 +171,7 @@ test("separate licensed workspaces coauthor a shared board and lose live access 
     );
     const retainedDraft = "Keep this unsaved text after a teammate deletes the note";
     await editor.page.getByRole("textbox", { name: "Text", exact: true }).fill(retainedDraft);
+    await openInspector(owner, "Arrange");
     await owner.getByRole("button", { name: "Delete selected", exact: true }).click();
     await expect
       .poll(async () =>
@@ -191,9 +202,7 @@ test("separate licensed workspaces coauthor a shared board and lose live access 
     );
     await recovery.getByRole("button", { name: "Discard my draft", exact: true }).click();
     await expect(recovery).toHaveCount(0);
-    await editor.page
-      .getByRole("button", { name: "Editor updates another note", exact: true })
-      .click();
+    await selectObject(editor.page, "Editor updates another note");
     await expect(editor.page.getByRole("textbox", { name: "Text", exact: true })).toHaveValue(
       "Editor updates another note",
     );
@@ -249,6 +258,7 @@ test("guided guests retain private intake and final ballots around the published
   await owner.getByRole("button", { name: "Add canvas view", exact: true }).click();
   await expect(owner).toHaveURL(/\/canvas\/[0-9a-f-]+$/);
   const id = new URL(owner.url()).pathname.split("/").at(-1)!;
+  await openInspector(owner, "Workshop controls");
   await expect(
     owner.getByRole("button", { name: "Switch workspace and open workshop", exact: true }),
   ).toBeVisible();
@@ -287,6 +297,7 @@ test("guided guests retain private intake and final ballots around the published
     await expect(
       otherGuest.getByRole("region", { name: "Published canvas", exact: true }).first(),
     ).toContainText("A facilitator canvas instruction");
+    await openInspector(owner, "Workshop controls");
     const pending = owner.getByRole("listitem").filter({ hasText: "A protected guest proposal" });
     await pending.getByRole("button", { name: "Approve", exact: true }).click();
     const published = otherGuest
@@ -369,6 +380,7 @@ test("keyboard editing, composition, connectors and confirmed deletion stay acce
   await page.getByTestId("canvas-surface").focus();
   await page.keyboard.press("Shift+ArrowRight");
   await expect.poll(async () => (await snapshot(page, id)).objects[0]?.x).toBe(first.x + 10);
+  await openInspector(page, "Arrange");
   await expect(page.getByRole("button", { name: "Duplicate selected", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Duplicate selected", exact: true }).focus();
   await page.keyboard.press("Enter");
@@ -377,7 +389,11 @@ test("keyboard editing, composition, connectors and confirmed deletion stay acce
   await saveText(page, "A connected idea");
   await page.getByRole("button", { name: "Connector", exact: true }).focus();
   await page.keyboard.press("Space");
-  await page.getByRole("button", { name: first.text, exact: true }).focus();
+  await openInspector(page, "Objects");
+  await page
+    .getByRole("complementary", { name: "Inspector", exact: true })
+    .getByRole("button", { name: first.text, exact: true })
+    .focus();
   await page.keyboard.press("Enter");
   await expect
     .poll(
@@ -392,12 +408,14 @@ test("keyboard editing, composition, connectors and confirmed deletion stay acce
   expect(new Set([connector.from.objectId, connector.to.objectId])).toEqual(
     new Set([first.id, second.id]),
   );
+  await openInspector(page, "Arrange");
   await page.getByRole("button", { name: "Delete selected", exact: true }).click();
   await expect.poll(async () => (await snapshot(page, id)).objects.length).toBe(2);
   await page.setViewportSize({ width: 640, height: 900 });
   await fits(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   page.once("dialog", (dialog) => dialog.accept());
+  await openInspector(page, "Board");
   await page.getByRole("button", { name: "Delete canvas", exact: true }).click();
   await expect(page).toHaveURL(`${web}/boards`);
   expect((await page.request.get(`${api}/v1/canvas-boards/${id}`)).status()).toBe(404);
@@ -473,7 +491,7 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
   await expect
     .poll(async () => (await snapshot(page, id)).objects.find((object) => object.id === note.id)?.x)
     .toBe(400);
-  await page.getByRole("button", { name: "Object outline", exact: true }).click();
+  await closeInspector(page);
   await page.getByRole("button", { name: "Fit board", exact: true }).click();
   const surface = page.getByTestId("canvas-surface");
   const zoom = page.getByRole("group", { name: "Canvas zoom", exact: true }).locator("output");
@@ -512,6 +530,11 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
   expect((await snapshot(page, id)).objects).toHaveLength(1);
   await page.getByRole("button", { name: "Fit board", exact: true }).tap();
   for (const mode of ["light", "dark"] as const) {
+    await openInspector(page, "Board");
+    const workspace = page
+      .getByRole("tabpanel", { name: "Board", exact: true })
+      .locator("p > span[lang]")
+      .first();
     await page.emulateMedia({ colorScheme: mode });
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
     const theme = await page.evaluate(() => {
@@ -529,7 +552,9 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
           document.querySelector('section[aria-label="Presentation"] [role="status"]')!,
         ).color,
         footer: getComputedStyle(document.querySelector("footer label")!).color,
-        workspace: getComputedStyle(document.querySelector("header p span[lang]")!).color,
+        workspace: getComputedStyle(
+          document.querySelector('aside [role="tabpanel"]:not([hidden]) p > span[lang]')!,
+        ).color,
       };
     });
     await writeFile(
@@ -537,19 +562,27 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
       JSON.stringify(theme, null, 2),
     );
     // Require inherited foregrounds to agree with the requested theme before checking contrast.
+    await expect(workspace).toHaveCSS("color", theme.expectedMuted);
+    await closeInspector(page);
+    await openPresentation(page);
     await expect(
       page.getByRole("region", { name: "Presentation", exact: true }).getByRole("status"),
     ).toHaveCSS("color", theme.expectedText);
     await expect(page.locator("footer label")).toHaveCSS("color", theme.expectedMuted);
-    await expect(page.locator("header p span[lang]")).toHaveCSS("color", theme.expectedMuted);
+    await (await canvasAction(page, "Presentation")).click();
+    const more = page.getByRole("button", { name: "More board actions", exact: true });
+    if ((await more.getAttribute("aria-expanded")) === "true") await more.click();
     await fits(page);
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });
       await fits(page);
-      for (const name of ["Text, images, drawings and links", "Canvas zoom"]) {
+      for (const name of ["Canvas tools", "Canvas zoom"]) {
         const buttons = page.getByRole("group", { name, exact: true }).getByRole("button");
         await expect(buttons.first()).toBeVisible();
-        for (const button of await buttons.all()) await expect(button).toBeInViewport({ ratio: 1 });
+        for (const button of await buttons.all()) {
+          await button.scrollIntoViewIfNeeded();
+          await expect(button).toBeInViewport({ ratio: 1 });
+        }
       }
     }
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -560,14 +593,16 @@ test("@mobile canvas retains keyboard alternatives, touch navigation and readabl
   }
   await page.setViewportSize({ width: 320, height: 844 });
   await fits(page);
-  const outline = page.getByRole("button", { name: "Object outline", exact: true });
+  const outline = await canvasAction(page, "Object outline");
   await outline.tap();
   await expect(outline).toHaveAttribute("aria-expanded", "true");
+  await closeInspector(page);
   const beforeInspectorZoom = await zoom.textContent();
   await page.getByRole("button", { name: "Canvas zoom +", exact: true }).tap();
   await expect(zoom).not.toHaveText(beforeInspectorZoom!);
-  await outline.tap();
-  await expect(outline).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("button", { name: "Object outline", exact: true, includeHidden: true }),
+  ).toHaveAttribute("aria-expanded", "false");
   await page.reload();
   await expect(page.getByTestId(`canvas-object-${note.id}`)).toContainText(
     "A mobile planning note",

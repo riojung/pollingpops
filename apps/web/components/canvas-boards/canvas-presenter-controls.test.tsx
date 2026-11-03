@@ -35,6 +35,7 @@ vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
+    useId: () => (mocked.hooks ? "presenter-" + mocked.hooks.cursor++ : react.useId()),
     useState: <T,>(initial: T | (() => T)) => {
       if (!mocked.hooks) return react.useState(initial);
       const hooks = mocked.hooks,
@@ -146,6 +147,8 @@ const mounted: Array<{ unmount: () => void }> = [];
 function harness(initial: Partial<Parameters<typeof CanvasPresenterControls>[0]> = {}) {
   const hooks: Hooks = { cursor: 0, slots: [], pending: [], dirty: false };
   const onFollow = vi.fn();
+  const disclosureFocus = vi.fn();
+  const menuFocus = vi.fn();
   let props: Parameters<typeof CanvasPresenterControls>[0] = {
     boardId: canvasId,
     objects: [],
@@ -164,6 +167,8 @@ function harness(initial: Partial<Parameters<typeof CanvasPresenterControls>[0]>
   }
   const view = {
     onFollow,
+    disclosureFocus,
+    menuFocus,
     render(next: Partial<typeof props> = {}) {
       props = { ...props, ...next };
       let passes = 0;
@@ -182,6 +187,27 @@ function harness(initial: Partial<Parameters<typeof CanvasPresenterControls>[0]>
         } finally {
           mocked.hooks = null;
         }
+        const section = find(tree, (element) => element.type === "section");
+        if (section)
+          (section.props.ref as { current: unknown }).current = { contains: () => false };
+        const trigger = find(
+          tree,
+          (element) => element.type === "button" && element.props["aria-label"] === "Presentation",
+        );
+        if (trigger)
+          (trigger.props.ref as { current: unknown }).current = { focus: disclosureFocus };
+        const menu = find(
+          tree,
+          (element) =>
+            element.type === "div" &&
+            typeof element.props.id === "string" &&
+            element.props.id.endsWith("-menu"),
+        );
+        if (menu)
+          (menu.props.ref as { current: unknown }).current = {
+            querySelector: () => ({ focus: menuFocus }),
+            focus: menuFocus,
+          };
         for (const effect of hooks.pending) effect();
         if (++passes > 20) throw new Error("Presenter effect did not settle");
       } while (hooks.dirty);
@@ -190,7 +216,9 @@ function harness(initial: Partial<Parameters<typeof CanvasPresenterControls>[0]>
     button(label: string) {
       const button = find(
         tree,
-        (element) => element.type === "button" && element.props.children === label,
+        (element) =>
+          element.type === "button" &&
+          (element.props.children === label || element.props["aria-label"] === label),
       );
       if (!button) throw new Error(`Missing button ${label}`);
       return button.props;
@@ -199,6 +227,26 @@ function harness(initial: Partial<Parameters<typeof CanvasPresenterControls>[0]>
       const button = view.button(label);
       if (button.disabled) throw new Error(`Disabled button ${label}`);
       (button.onClick as () => void)();
+      return view.render();
+    },
+    menu() {
+      return find(
+        tree,
+        (element) =>
+          element.type === "div" &&
+          typeof element.props.id === "string" &&
+          element.props.id.endsWith("-menu"),
+      )!.props;
+    },
+    closeWithEscape() {
+      const section = find(tree, (element) => element.type === "section")!;
+      const event = { key: "Escape", preventDefault: vi.fn(), stopPropagation: vi.fn() };
+      (section.props.onKeyDown as (event: unknown) => void)(event);
+      view.render();
+      return event;
+    },
+    outside() {
+      document.dispatchEvent(new Event("pointerdown"));
       return view.render();
     },
     event(name: string, key?: string) {
@@ -217,6 +265,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.useFakeTimers();
   vi.stubGlobal("window", new EventTarget());
+  vi.stubGlobal("document", new EventTarget());
+  vi.stubGlobal("Node", EventTarget);
   let sequence = 600;
   mocked.uuid.mockImplementation(
     () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
@@ -239,6 +289,131 @@ afterEach(() => {
 });
 
 describe("explicit local-tab presentation ownership and optional following", () => {
+  it("keeps the compact disclosure and all broadcast controls mounted without adopting a session", () => {
+    mocked.state.view = inactive();
+    const frame = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "frame",
+      visibility: "published",
+    });
+    const view = harness({
+      compact: true,
+      sourceBoardId: sourceId,
+      publishedFrameId: frame.id,
+      objects: [frame],
+    });
+    view.render();
+    expect(view.button("Presentation")["aria-expanded"]).toBe(false);
+    expect(view.menu().hidden).toBe(true);
+    view.click("Presentation");
+    expect(view.menu().hidden).toBe(false);
+    expect(view.menuFocus).toHaveBeenCalled();
+    expect(view.button("Present my view").disabled).toBe(false);
+    expect(view.button("Present selected frame to guests").disabled).toBe(false);
+    const event = view.closeWithEscape();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+    expect(view.disclosureFocus).toHaveBeenCalledOnce();
+    expect(view.menu().hidden).toBe(true);
+    expect(mocked.command).not.toHaveBeenCalled();
+  });
+  it("recovers compact action focus after Start is replaced without changing its owned session", () => {
+    const body = {};
+    Object.assign(document, {
+      body,
+      activeElement: body,
+      hasFocus: () => true,
+      querySelector: () => null,
+    });
+    mocked.state.view = inactive();
+    const view = harness({ compact: true });
+    view.render();
+    view.click("Presentation");
+    view.click("Present my view");
+    const start = mocked.command.mock.calls[0]![0] as CanvasPresenterMutation;
+    view.menuFocus.mockClear();
+    mocked.state.view = presenter({ sessionId: start.sessionId });
+    view.render();
+    expect(view.menuFocus).toHaveBeenCalledOnce();
+    expect(view.button("Stop presenting").disabled).toBe(false);
+    expect(view.menu().hidden).toBe(false);
+    expect(mocked.command).toHaveBeenCalledOnce();
+    view.closeWithEscape();
+    expect(view.menu().hidden).toBe(true);
+    expect(view.disclosureFocus).toHaveBeenCalledOnce();
+  });
+  it.each(["outside control", "native modal", "inactive window"] as const)(
+    "does not reclaim compact action focus from an %s during a presentation change",
+    (location) => {
+      const body = {};
+      Object.assign(document, {
+        body,
+        activeElement: location === "outside control" ? { isConnected: true } : body,
+        hasFocus: () => location !== "inactive window",
+        querySelector: () => (location === "native modal" ? { open: true } : null),
+      });
+      mocked.state.view = inactive();
+      const view = harness({ compact: true });
+      view.render();
+      view.click("Presentation");
+      view.menuFocus.mockClear();
+      mocked.state.view = presenter();
+      view.render();
+      expect(view.menuFocus).not.toHaveBeenCalled();
+      expect(mocked.command).not.toHaveBeenCalled();
+    },
+  );
+  it("retains an owned compact heartbeat while the disclosure is closed", async () => {
+    mocked.state.view = inactive();
+    const view = harness({ compact: true });
+    view.render();
+    view.click("Presentation");
+    view.click("Present my view");
+    const start = mocked.command.mock.calls[0]![0] as CanvasPresenterMutation;
+    mocked.state.view = presenter({ sessionId: start.sessionId });
+    view.render();
+    view.closeWithEscape();
+    expect(view.menu().hidden).toBe(true);
+    expect(view.disclosureFocus).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mocked.command.mock.calls[1]![0]).toMatchObject({
+      sessionId: start.sessionId,
+      command: { type: "update" },
+    });
+    view.click("Presentation");
+    expect(view.button("Stop presenting").disabled).toBe(false);
+  });
+  it("closes the compact menu on outside interaction without stopping optional following", () => {
+    const view = harness({ compact: true });
+    view.render();
+    view.click("Presentation");
+    view.click("Follow presenter");
+    expect(view.onFollow).toHaveBeenLastCalledWith(teamRegion);
+    view.outside();
+    expect(view.menu().hidden).toBe(true);
+    expect(view.onFollow).toHaveBeenLastCalledWith(teamRegion);
+    expect(view.disclosureFocus).not.toHaveBeenCalled();
+    view.click("Presentation");
+    expect(view.button("Stop following")["aria-pressed"]).toBe(true);
+  });
+  it("stops following and dismisses an expanded compact menu on one Escape without stopping the presenter", () => {
+    const view = harness({ compact: true });
+    view.render();
+    view.click("Presentation");
+    view.click("Follow presenter");
+    expect(view.button("Stop following")["aria-pressed"]).toBe(true);
+    expect(view.menu().hidden).toBe(false);
+    expect(view.onFollow).toHaveBeenLastCalledWith(teamRegion);
+    const event = view.closeWithEscape();
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+    expect(view.onFollow).toHaveBeenLastCalledWith(null);
+    expect(view.menu().hidden).toBe(true);
+    expect(view.disclosureFocus).toHaveBeenCalledOnce();
+    expect(mocked.state.view).toMatchObject({ active: true, sessionId: remoteSession });
+    expect(mocked.command).not.toHaveBeenCalled();
+    view.click("Presentation");
+    expect(view.button("Follow presenter")["aria-pressed"]).toBe(false);
+  });
   it.each([canvasBoard.ownerUserId, "00000000-0000-4000-8000-000000000299"])(
     "does not adopt or heartbeat an existing presenter session for creator %s",
     async (presenterId) => {

@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { fits, organization, snapshot } from "./support";
+import { fits, openInspector, openInsert, organization, snapshot } from "./support";
 
 async function fitsHorizontally(page: Page, container: Locator) {
   await fits(page);
@@ -58,9 +58,7 @@ test("@mobile starters, outline grouping and link controls fit narrow screens", 
   expect(notes).toHaveLength(2);
 
   await page.setViewportSize({ width: 320, height: 844 });
-  const outline = page.getByRole("button", { name: "Object outline", exact: true });
-  await expect(outline).toHaveAttribute("aria-expanded", "false");
-  await outline.tap();
+  await openInspector(page, "Objects");
   for (const note of notes) {
     const checkbox = page.getByRole("checkbox", {
       name: `Select ${note.text.trim().slice(0, 80)}`,
@@ -69,6 +67,7 @@ test("@mobile starters, outline grouping and link controls fit narrow screens", 
     await checkbox.tap();
     await expect(checkbox).toBeChecked();
   }
+  await openInspector(page, "Arrange");
   const selection = page.getByRole("region", { name: "2 selected", exact: true });
   await expect(selection).toBeVisible();
   await fitsHorizontally(page, selection);
@@ -92,7 +91,11 @@ test("@mobile starters, outline grouping and link controls fit narrow screens", 
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-color-mode", colorScheme);
     await fitsHorizontally(page, selection);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // WebKit updates inherited descendant colors after the media change;
+    // wait for the full rendered theme while keeping every Axe rule enabled.
+    await expect
+      .poll(async () => (await new AxeBuilder({ page }).analyze()).violations)
+      .toEqual([]);
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await selection.getByRole("button", { name: "Frame selection", exact: true }).tap();
@@ -113,7 +116,7 @@ test("@mobile starters, outline grouping and link controls fit narrow screens", 
     })
     .toBe(true);
 
-  await page.getByRole("button", { name: "Link", exact: true }).tap();
+  await openInsert(page, "Link");
   const link = page.getByRole("dialog", { name: "Add link", exact: true });
   const url = link.getByRole("textbox", { name: "Link URL", exact: true });
   const label = link.getByRole("textbox", { name: "Link label", exact: true });
@@ -132,7 +135,11 @@ test("@mobile starters, outline grouping and link controls fit narrow screens", 
     await fitsHorizontally(page, link);
     await expect(url).toBeVisible();
     await expect(label).toBeVisible();
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // WebKit updates inherited descendant colors after the media change;
+    // wait for the full rendered theme while keeping every Axe rule enabled.
+    await expect
+      .poll(async () => (await new AxeBuilder({ page }).analyze()).violations)
+      .toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath(`mobile-link-${width}-${colorScheme}.png`),
     });

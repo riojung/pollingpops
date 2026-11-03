@@ -23,3 +23,140 @@
   max-width: 100%;
   white-space: normal;
 }
+.content {
+  display: contents;
+}
+.compact {
+  position: relative;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  color: var(--ui-text);
+}
+.disclosure {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  inline-size: 44px;
+  block-size: 44px;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ui-text-subtle);
+  cursor: pointer;
+}
+.disclosure svg {
+  inline-size: 22px;
+  block-size: 22px;
+}
+.disclosure:hover {
+  background: var(--ui-surface-hover);
+  color: var(--ui-text);
+}
+.disclosure[aria-expanded="true"] {
+  color: var(--ui-accent-ink);
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+.compact button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.statusDot {
+  position: absolute;
+  inset-block-start: 5px;
+  inset-inline-end: 5px;
+  inline-size: 6px;
+  block-size: 6px;
+  border: 2px solid var(--ui-surface);
+  border-radius: 50%;
+  background: var(--ui-text-subtle);
+}
+.statusDot[data-state="own"],
+.statusDot[data-state="following"],
+.statusDot[data-state="live"] {
+  background: var(--ui-accent-ink);
+}
+.menu {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: calc(100% + 10px);
+  inset-inline-end: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  box-sizing: border-box;
+  inline-size: 284px;
+  max-inline-size: calc(100vw - 16px);
+  max-block-size: calc(100dvh - 88px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-lg);
+}
+.menu[hidden] {
+  display: none;
+}
+.menu > span {
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.menu button {
+  inline-size: 100%;
+  min-block-size: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: start;
+  white-space: normal;
+  cursor: pointer;
+}
+.menu button:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.menu small,
+.menu p {
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .compact {
+    inline-size: 100%;
+  }
+  .menu {
+    position: static;
+    inline-size: 100%;
+    max-inline-size: 100%;
+    max-block-size: none;
+    margin-block-start: 8px;
+    padding: 10px;
+    box-shadow: none;
+  }
+}

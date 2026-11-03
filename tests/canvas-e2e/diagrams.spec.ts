@@ -2,19 +2,21 @@ import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-board
 import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { fits, newTeamCanvas, organization, saveText, snapshot } from "./support";
+import {
+  canvasAction,
+  closeInspector,
+  fits,
+  newTeamCanvas,
+  openInspector,
+  organization,
+  saveText,
+  snapshot,
+} from "./support";
 
 async function selectObject(page: Page, name: string) {
-  const outline = page.getByRole("button", { name: "Object outline", exact: true });
-  if ((await outline.getAttribute("aria-expanded")) === "false") await outline.click();
-  await page.getByRole("complementary").getByRole("button", { name, exact: true }).click();
-  if ((await outline.getAttribute("aria-expanded")) === "false") {
-    await page
-      .getByRole("toolbar", { name: "Selection formatting", exact: true })
-      .getByRole("button", { name: "More actions", exact: true })
-      .click();
-  }
-  await expect(outline).toHaveAttribute("aria-expanded", "true");
+  const inspector = await openInspector(page, "Objects");
+  await inspector.getByRole("button", { name, exact: true }).click();
+  await openInspector(page, "Properties");
 }
 async function save(page: Page) {
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
@@ -114,7 +116,7 @@ test("manual flow diagrams keep styled routes, ports, layer order and exported g
         (await snapshot(page, id)).objects.find((object) => object.type === "diamond")?.rotation,
     )
     .toBe(45);
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await (await canvasAction(page, "Export")).click();
   const dialog = page.getByRole("dialog", { name: "Export board", exact: true });
   await dialog.getByRole("combobox", { name: "File format", exact: true }).selectOption("svg");
   const download = page.waitForEvent("download");
@@ -153,12 +155,28 @@ test("@mobile manual diagram controls remain usable through the outline at320px"
   await organization(page, testInfo);
   await page.setViewportSize({ width: 320, height: 844 });
   const id = await newTeamCanvas(page);
-  await page.getByRole("button", { name: "Diamond", exact: true }).tap();
+  await page.getByRole("button", { name: "Shapes and connectors", exact: true }).tap();
+  await page
+    .getByRole("dialog", { name: "Shapes and connectors", exact: true })
+    .getByRole("button", { name: "Diamond", exact: true })
+    .tap();
   await saveText(page, "Decision");
-  await page.getByRole("button", { name: "Parallelogram", exact: true }).tap();
+  await closeInspector(page);
+  await page.getByRole("button", { name: "Shapes and connectors", exact: true }).tap();
+  await page
+    .getByRole("dialog", { name: "Shapes and connectors", exact: true })
+    .getByRole("button", { name: "Parallelogram", exact: true })
+    .tap();
   await saveText(page, "Input");
+  await closeInspector(page);
+  await page.getByRole("button", { name: "Connector", exact: true }).scrollIntoViewIfNeeded();
   await page.getByRole("button", { name: "Connector", exact: true }).tap();
-  await page.getByRole("button", { name: "Decision", exact: true }).tap();
+  await openInspector(page, "Objects");
+  await page
+    .getByRole("complementary", { name: "Inspector", exact: true })
+    .getByRole("button", { name: "Decision", exact: true })
+    .tap();
+  await openInspector(page, "Properties");
   await expect(page.getByRole("textbox", { name: "Connector label", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Connector label", exact: true }).fill("Review input");
   await page.getByRole("combobox", { name: "Route", exact: true }).selectOption("elbow");

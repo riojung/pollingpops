@@ -350,7 +350,7 @@ describe("presentation builder model", () => {
     expect(normalizePresentationRecoveryDraft({ ...current, schemaVersion: 3 }).schemaVersion).toBe(
       3,
     );
-    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 4 })).toThrow();
+    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 5 })).toThrow();
     expect(() =>
       normalizePresentationRecoveryDraft({ schemaVersion: 1, blocks: "invalid" }),
     ).toThrow();

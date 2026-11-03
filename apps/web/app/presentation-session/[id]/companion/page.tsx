@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   PresentationCompanionSnapshotSchema,
+  presentationSceneTitle,
   type PresentationCompanionCommand,
   type PresentationCompanionSnapshot,
   type PresentationQuickCheckInput,
@@ -463,8 +464,10 @@ export default function PresentationCompanionPage() {
                 {block?.kind === "question"
                   ? block.question.prompt
                   : block?.kind === "content"
-                    ? (block.textElements.find((element) => element.role === "title")?.text ??
-                      snapshot.title)
+                    ? block.scene
+                      ? presentationSceneTitle(block.scene)
+                      : (block.textElements.find((element) => element.role === "title")?.text ??
+                        snapshot.title)
                     : snapshot.title}
               </h2>
               <p className="muted">

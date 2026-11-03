@@ -121,9 +121,10 @@ the subscription floor without completing the customer workflow.
 
 E00 now has an isolated local implementation; see [ADR 003](decisions/003-presentation-scene.md)
 and the [prototype record](evidence/presentation-scene-prototype.md). The later production work
-packages remain planned. E01 is the next production increment.
-Its content-only publication/delivery prerequisite is now implemented using existing slide layouts;
-native scene persistence and editing remain the next E01 work.
+packages remain planned. E01 is in progress.
+Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
+implemented locally. Rich text, pointer dragging, multiselection and the remaining editor tools
+remain subsequent E01 work.
 Use separate branches and PRs for contract/persistence, renderer and UI slices when a package is
 too large for coherent review. Dependencies describe technical order; product selection and the
 existing rollout gates still apply.
@@ -167,8 +168,16 @@ publish validation freezes the new scene and its asset references.
 The first E01 slice now supports content-only publication, session progression/finish and meaningful
 participation/timeline reports using existing slides. Empty decks and malformed question/recheck
 topology still fail validation. See the [reader and rollback requirements](runbooks/upgrade.md#content-only-presentation-compatibility)
-before enabling writers. Native scene assets still require coordinated JS/SQL media visitors,
-publish authorization and retention changes; accepting nodes only in the renderer is insufficient.
+before enabling writers.
+
+The next slice adds opt-in Presentation v4 native slides with bounded plain text, multiple images,
+labeled shapes and connectors; numeric/keyboard geometry; semantic reading order; and existing
+autosave/undo/recovery/conflict controls. JS/SQL media visitors, publication authorization,
+history/version retention and audience projections are integrated. Legacy documents retain their
+existing formats. See [native verification](evidence/presentation-native-scenes.md) and the
+[version-4 rollout boundary](runbooks/upgrade.md#native-presentation-scene-compatibility).
+Rich text, pointer dragging, multiselection and complete filmstrip hide behavior remain open;
+this slice does not mark all E01 acceptance criteria complete.
 
 Touch points: current builder/helpers, contracts, `packages/db/src/presentations.ts`,
 `apps/server/src/presentation-routes.ts` and media retention. New scene modules are proposed;

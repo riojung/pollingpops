@@ -18,6 +18,7 @@ import {
   InsertRecoveryPackIntoPresentationSchema,
   ApplyPresentationRecoveryPackUpdateSchema,
   PresentationRecoveryPackUpdatePreviewSchema,
+  PRESENTATION_SCENE_MAX_NODES,
   resolveContentSlideFrames,
   regionForContentSlideFrame,
   type ContentSlideFrame,
@@ -25,6 +26,7 @@ import {
   type ContentSlideRegion,
   type PresentationBlockDraft,
   type PresentationDraft,
+  type PresentationScene,
   type QuestionDraft,
   type QuestionType,
   type ApplyPresentationRecoveryPackUpdate,
@@ -86,6 +88,11 @@ import {
   type PresentationRecoveryPackUpdateApplied,
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
+import { NativeSceneEditor } from "./native-scene-editor";
+import {
+  adaptContentSlideToScene,
+  createNativeContentBlock,
+} from "../../lib/presentation-native-scene";
 
 interface PresentationRecord {
   id: string;
@@ -258,6 +265,9 @@ function PresentationPreview({
                   <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
                 ) : undefined
               }
+              renderSceneImage={(mediaId, altText) => (
+                <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+              )}
               variant="preview"
             />
           ) : (
@@ -807,7 +817,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
       const blocks = [...current.blocks];
       blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, block);
-      return { ...current, blocks };
+      return {
+        ...current,
+        blocks,
+        ...(block.kind === "content" && block.scene ? { schemaVersion: 4 as const } : {}),
+      };
     });
     setSelectedBlockId(block.id);
     setInspectorTab(block.kind === "content" ? "content" : "build");
@@ -922,12 +936,13 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     }
   }
 
-  async function uploadSelectedImage(file: File | null) {
+  async function uploadSelectedImage(file: File | null, nativeAltText?: string) {
     if (!file || !selectedBlock || mediaState !== "idle") return;
     const altText =
-      selectedBlock.kind === "content"
+      nativeAltText ??
+      (selectedBlock.kind === "content"
         ? selectedBlock.mediaAlt?.trim()
-        : selectedBlock.question.mediaAlt?.trim();
+        : selectedBlock.question.mediaAlt?.trim());
     if (!altText) {
       setError("Describe the instructional image before uploading it.");
       return;
@@ -966,7 +981,30 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       commit((current) =>
         updateBlock(current, blockId, (block) =>
           block.kind === "content"
-            ? setContentSlideMedia(block, ticket.mediaId, altText)
+            ? nativeAltText !== undefined
+              ? block.scene && block.scene.nodes.length < PRESENTATION_SCENE_MAX_NODES
+                ? (() => {
+                    const id = clientUuid();
+                    return {
+                      ...block,
+                      scene: {
+                        ...block.scene,
+                        nodes: [
+                          ...block.scene.nodes,
+                          {
+                            id,
+                            type: "image" as const,
+                            mediaId: ticket.mediaId,
+                            altText,
+                            frame: { x: 55, y: 35, width: 35, height: 45 },
+                          },
+                        ],
+                        readingOrder: [...block.scene.readingOrder, id],
+                      },
+                    };
+                  })()
+                : block
+              : setContentSlideMedia(block, ticket.mediaId, altText)
             : {
                 ...block,
                 question: { ...block.question, mediaId: ticket.mediaId, mediaAlt: altText },
@@ -1794,6 +1832,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
             ))}
           </ol>
           <div className={styles.addActions}>
+            <button onClick={() => addBlock(createNativeContentBlock())} type="button">
+              Add native slide
+            </button>
             <button onClick={() => addBlock(createContentBlock())} type="button">
               + {t("delivery.presentation.contentSlide")}
             </button>
@@ -1864,6 +1905,28 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                   {t("delivery.presentationBuilder.insertTrustedSource")}
                 </button>
               </div>
+            </section>
+          ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
+            <section className={styles.slideCanvas} lang="en-CA">
+              <NativeSceneEditor
+                key={selectedBlock.id}
+                scene={selectedBlock.scene}
+                onChange={(scene: PresentationScene, historyField) =>
+                  updateSelected(
+                    (block) =>
+                      block.kind === "content" && block.scene ? { ...block, scene } : block,
+                    historyField,
+                  )
+                }
+                renderImage={(mediaId, altText) => (
+                  <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+                )}
+                uploadsEnabled={mediaUploadsEnabled}
+                mediaState={mediaState}
+                onUploadImage={(file, altText) => {
+                  void uploadSelectedImage(file, altText);
+                }}
+              />
             </section>
           ) : selectedBlock.kind === "content" ? (
             <section className={styles.slideCanvas} lang="en-CA">
@@ -1940,7 +2003,23 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           )}
           {selectedBlock ? (
             <div className={styles.canvasToolbar} aria-label="Selected block actions" lang="en-CA">
-              {selectedBlock.kind === "content" ? (
+              <button
+                className={styles.compactHistory}
+                disabled={!undoStack.length}
+                onClick={undo}
+                type="button"
+              >
+                {t("delivery.builder.undo")}
+              </button>
+              <button
+                className={styles.compactHistory}
+                disabled={!redoStack.length}
+                onClick={redo}
+                type="button"
+              >
+                {t("delivery.builder.redo")}
+              </button>
+              {selectedBlock.kind === "content" && !selectedBlock.scene ? (
                 <>
                   <button
                     disabled={selectedBlock.textElements.length >= 8}
@@ -1986,6 +2065,24 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     Delete text box
                   </button>
                 </>
+              ) : null}
+              {selectedBlock.kind === "content" && !selectedBlock.scene ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const converted = adaptContentSlideToScene(selectedBlock);
+                      commit((current) => ({
+                        ...updateBlock(current, selectedBlock.id, () => converted),
+                        schemaVersion: 4,
+                      }));
+                    } catch (caught) {
+                      setError(humanError(caught));
+                    }
+                  }}
+                >
+                  Convert to native slide
+                </button>
               ) : null}
               <button
                 disabled={draft.blocks[0]?.id === selectedBlock.id}
@@ -2115,6 +2212,32 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               </section>
             ) : !selectedBlock ? (
               <p>{t("delivery.presentationBuilder.selectBlock")}</p>
+            ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
+              <section lang="en-CA">
+                <h2>Native slide</h2>
+                <p className={styles.helpText}>
+                  Select and edit slide objects below the canvas. Readiness checks include every
+                  image description and shape label.
+                </p>
+                <label className={styles.field}>
+                  <span>Speaker notes</span>
+                  <textarea
+                    aria-label="Speaker notes"
+                    maxLength={2000}
+                    value={selectedBlock.speakerNotes}
+                    onChange={(event) =>
+                      updateSelected(
+                        (block) =>
+                          block.kind === "content"
+                            ? { ...block, speakerNotes: event.target.value }
+                            : block,
+                        "speakerNotes",
+                      )
+                    }
+                    placeholder="Private facilitation cues"
+                  />
+                </label>
+              </section>
             ) : selectedBlock.kind === "content" ? (
               <section>
                 <p className={styles.eyebrow}>{t("delivery.presentation.contentSlide")}</p>

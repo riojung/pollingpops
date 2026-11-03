@@ -18,6 +18,9 @@ export * from "./canvas-artifact-links";
 export * from "./canvas-template-catalog";
 export * from "./canvas-template-factory";
 export * from "./presentation-scene-prototype";
+export * from "./presentation-scene";
+export * from "./presentation-scene-adapter";
+import { PresentationSceneDraftSchema, PresentationSceneSchema } from "./presentation-scene";
 import {
   hasTextOpinionQuestions,
   isTextOpinionQuestion,
@@ -4462,11 +4465,7 @@ export const ApplyPresentationAuthoringJobSchema = z
   .superRefine(requireAuthoringProposalSelection);
 export type ApplyPresentationAuthoringJob = z.infer<typeof ApplyPresentationAuthoringJobSchema>;
 
-/**
- * Presentations deliberately use structured, responsive blocks instead of
- * arbitrary coordinates. This keeps authoring, accessibility, and live
- * rendering on the same contract.
- */
+/** Presentation blocks retain their publication and live-session contract across scene versions. */
 export const ArtifactTypeSchema = z.enum(["round", "presentation"]);
 export type ArtifactType = z.infer<typeof ArtifactTypeSchema>;
 
@@ -4487,18 +4486,29 @@ const ContentSlideDraftFields = {
   id: z.string().uuid(),
   kind: z.literal("content"),
   layout: ContentSlideLayoutSchema,
-  textElements: z.array(ContentSlideTextElementSchema).min(1).max(8),
+  textElements: z.array(ContentSlideTextElementSchema).max(8),
   mediaId: z.string().uuid().nullable(),
   mediaAlt: z.string().trim().max(300).nullable(),
   speakerNotes: z.string().trim().max(2_000),
   citations: z.array(PresentationCitationSchema).max(20).optional(),
   sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
+  scene: PresentationSceneDraftSchema.optional(),
 };
 
 /** Draft slides retain bounded storage shape while allowing incomplete accessibility metadata. */
 export const ContentSlideDraftSchema = z
   .object(ContentSlideDraftFields)
   .superRefine((slide, ctx) => {
+    if (slide.scene) {
+      if (slide.textElements.length || slide.mediaId !== null || slide.mediaAlt !== null) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Native slides keep text and images in the scene only",
+          path: ["scene"],
+        });
+      }
+      return;
+    }
     const titles = slide.textElements.filter((element) => element.role === "title");
     if (titles.length !== 1) {
       ctx.addIssue({
@@ -4532,6 +4542,19 @@ export const ContentSlideDraftSchema = z
 export type ContentSlideDraft = z.infer<typeof ContentSlideDraftSchema>;
 
 export const ContentSlideSchema = z.object(ContentSlideDraftFields).superRefine((slide, ctx) => {
+  if (slide.scene) {
+    const draft = ContentSlideDraftSchema.safeParse(slide);
+    if (!draft.success) {
+      for (const issue of draft.error.issues) ctx.addIssue({ ...issue });
+    }
+    const scene = PresentationSceneSchema.safeParse(slide.scene);
+    if (!scene.success) {
+      for (const issue of scene.error.issues) {
+        ctx.addIssue({ ...issue, path: ["scene", ...issue.path] });
+      }
+    }
+    return;
+  }
   if (!slide.textElements.some((element) => element.text.trim()) && !slide.mediaId) {
     ctx.addIssue({
       code: "custom",
@@ -4758,7 +4781,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3;
+    schemaVersion: 2 | 3 | 4;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4792,12 +4815,43 @@ function applyPresentationRecoveryPackRules(
   }
 }
 
+/** Leave room for the mutation envelope under the existing 4 MB request limit. */
+export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
+
+function applyPresentationSceneRules(
+  presentation: {
+    schemaVersion: 2 | 3 | 4;
+    blocks: Array<{ kind: string; scene?: unknown }>;
+  },
+  ctx: z.RefinementCtx,
+) {
+  for (const [index, block] of presentation.blocks.entries()) {
+    if (block.kind === "content" && block.scene && presentation.schemaVersion !== 4) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Native scenes require Presentation schema version 4",
+      });
+    }
+  }
+  if (
+    presentation.schemaVersion === 4 &&
+    new TextEncoder().encode(JSON.stringify(presentation)).byteLength >
+      PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "This native Presentation exceeds its 3 MiB UTF-8 JSON budget",
+    });
+  }
+}
+
 export const PresentationDraftSchema = z
   .object({
     title: z.string().trim().max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3)]).default(2),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockDraftSchema).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -4805,6 +4859,7 @@ export const PresentationDraftSchema = z
   .superRefine((presentation, ctx) => {
     applyPresentationTopology(presentation, ctx, false);
     applyPresentationRecoveryPackRules(presentation, ctx);
+    applyPresentationSceneRules(presentation, ctx);
   });
 export type PresentationDraft = z.infer<typeof PresentationDraftSchema>;
 
@@ -4813,7 +4868,7 @@ export const PresentationContentSchema = z
     title: z.string().trim().min(1, "Enter a presentation title").max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3)]),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -4827,6 +4882,7 @@ export const PresentationContentSchema = z
   .superRefine((presentation, ctx) => {
     applyPresentationTopology(presentation, ctx, true);
     applyPresentationRecoveryPackRules(presentation, ctx);
+    applyPresentationSceneRules(presentation, ctx);
     const liveCommandIds = new Set<string>();
     const liveBlockIds = new Set<string>();
     for (const [index, insertion] of (presentation.livePublishedQuestions ?? []).entries()) {
@@ -4918,11 +4974,11 @@ const legacyRegionByLayout = {
   callout: "top_center",
 } as const;
 
-/** Shared by persisted artifacts and browser recovery; already-current v3 metadata is retained. */
+/** Shared by persisted artifacts and browser recovery; current version metadata is retained. */
 export function migratePresentationV1(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const presentation = value as { blocks?: unknown; [key: string]: unknown };
-  if (presentation.schemaVersion === 3) return presentation;
+  if (presentation.schemaVersion === 3 || presentation.schemaVersion === 4) return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };
   return {
     ...presentation,
@@ -5063,9 +5119,10 @@ export const PresentationLiveContentBlockSchema = z
     id: z.string().uuid(),
     kind: z.literal("content"),
     layout: ContentSlideLayoutSchema,
-    textElements: z.array(ContentSlideTextElementSchema).min(1).max(8),
+    textElements: z.array(ContentSlideTextElementSchema).max(8),
     mediaId: z.string().uuid().nullable(),
     mediaAlt: z.string().max(300).nullable(),
+    scene: PresentationSceneSchema.optional(),
   })
   .superRefine((block, ctx) => {
     const parsed = ContentSlideDraftSchema.safeParse({ ...block, speakerNotes: "" });

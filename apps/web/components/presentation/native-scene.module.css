@@ -1,0 +1,248 @@
+.stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  container-type: inline-size;
+  text-align: left;
+  color: #102a43;
+  background: #fff;
+  border: 1px solid var(--ui-border, #cbd5e1);
+}
+.connections {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.node {
+  position: absolute;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+}
+.node h1,
+.node p {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.node h1 {
+  font-size: clamp(20px, 5cqw, 48px);
+  line-height: 1.08;
+}
+.node p {
+  font-size: clamp(14px, 2.5cqw, 26px);
+  line-height: 1.35;
+}
+.selected {
+  outline: 2px solid #1769aa;
+  outline-offset: 2px;
+}
+.shape,
+.image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.shape svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.shape span {
+  position: relative;
+  max-width: 85%;
+  font-size: clamp(12px, 2cqw, 22px);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.handles {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 3px;
+}
+.handles button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 2px;
+  border: 1px solid #1769aa;
+  border-radius: 4px;
+  color: #102a43;
+  background: #fff;
+}
+.connectorSummary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.editor {
+  display: grid;
+  gap: 16px;
+}
+.controls {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr);
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 12px;
+  background: var(--ui-surface, #fff);
+}
+.controls fieldset {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.controls legend {
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+.controls label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+.controls input,
+.controls textarea,
+.controls select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+}
+.controls textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.actions button,
+.nodeList button {
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+}
+.actions button:disabled {
+  opacity: 0.5;
+}
+.nodeList {
+  padding: 0;
+  margin: 0 0 12px;
+  display: grid;
+  gap: 6px;
+  list-style: none;
+}
+.nodeList button {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.nodeList button[aria-pressed="true"] {
+  border-color: #1769aa;
+  box-shadow: 0 0 0 1px #1769aa;
+}
+.frameFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.help {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ui-text-muted, #52616f);
+}
+@media (max-width: 700px) {
+  .stage {
+    aspect-ratio: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    container-type: normal;
+  }
+  .connections {
+    display: none;
+  }
+  .node {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+  .node h1,
+  .node p {
+    height: auto;
+    overflow: visible;
+  }
+  .node h1 {
+    font-size: 30px;
+  }
+  .node p {
+    font-size: 18px;
+  }
+  .shape {
+    min-height: 100px;
+  }
+  .shape span {
+    font-size: 18px;
+  }
+  .image {
+    min-height: 80px;
+  }
+  .image img {
+    max-height: 40vh;
+  }
+  .handles {
+    position: relative;
+    justify-content: flex-end;
+  }
+  .connectorSummary {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    font-size: 14px;
+  }
+  .controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

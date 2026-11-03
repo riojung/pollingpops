@@ -238,8 +238,8 @@ describe("persisted artifact schema upcasters", () => {
   it.each([
     ["Round draft", () => upcastRoundDraft({}, 5)],
     ["Round content", () => upcastRoundContent({}, 5)],
-    ["Presentation draft", () => upcastPresentationDraft({}, 4)],
-    ["Presentation content", () => upcastPresentationContent({}, 4)],
+    ["Presentation draft", () => upcastPresentationDraft({}, 5)],
+    ["Presentation content", () => upcastPresentationContent({}, 5)],
   ])("rejects an unknown schema version for %s", (label, parse) => {
     expect(parse).toThrow(UnsupportedArtifactSchemaVersionError);
     try {
@@ -247,8 +247,8 @@ describe("persisted artifact schema upcasters", () => {
     } catch (error) {
       expect(error).toMatchObject({
         code: "UNSUPPORTED_ARTIFACT_SCHEMA_VERSION",
-        schemaVersion: label.startsWith("Round") ? 5 : 4,
-        supportedVersions: label.startsWith("Round") ? [1, 2, 3, 4] : [1, 2, 3],
+        schemaVersion: 5,
+        supportedVersions: [1, 2, 3, 4],
       });
     }
   });
@@ -335,7 +335,7 @@ describe("persisted artifact schema upcasters", () => {
             },
             1,
           ),
-          contentSchemaVersion: 4,
+          contentSchemaVersion: 5,
           contentHash: "unknown-version",
           sourceDraftRevision: 0,
           publishedAt: now,

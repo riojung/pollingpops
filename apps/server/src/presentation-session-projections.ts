@@ -107,6 +107,7 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
+      ...(block.scene ? { scene: structuredClone(block.scene) } : {}),
     };
   }
   const question = block.question;
@@ -225,6 +226,7 @@ function presentationRealtimeBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
+      ...(block.scene ? { scene: structuredClone(block.scene) } : {}),
     };
   }
   return {

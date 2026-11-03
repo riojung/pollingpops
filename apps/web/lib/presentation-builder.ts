@@ -8,6 +8,7 @@ import {
   regionContentSlideFrames,
   resolveContentSlideFrames,
   starterContentSlideFrames,
+  presentationSceneTitle,
   type ContentSlideDraft,
   type ContentSlideFrame,
   type ContentSlideLayout,
@@ -20,6 +21,7 @@ import {
   type QuestionType,
 } from "@openround/contracts";
 import { clientUuid } from "./uuid";
+import { duplicateNativeScene } from "./presentation-native-scene";
 
 export interface PresentationIssue {
   blockId: string | null;
@@ -403,7 +405,9 @@ export function applyContentSlideLayout(
 }
 
 export function contentSlideTitle(block: ContentSlideDraft): string {
-  return block.textElements.find((element) => element.role === "title")?.text ?? "";
+  return block.scene
+    ? presentationSceneTitle(block.scene)
+    : (block.textElements.find((element) => element.role === "title")?.text ?? "");
 }
 
 export function createQuestionBlock(
@@ -524,6 +528,7 @@ export function duplicatePresentationBlock(block: PresentationBlockDraft): Prese
       ...block,
       id: clientUuid(),
       textElements: block.textElements.map((element) => ({ ...element, id: clientUuid() })),
+      ...(block.scene ? { scene: duplicateNativeScene(block.scene) } : {}),
     };
   }
   const choiceIds = new Map<string, string>();
@@ -555,6 +560,7 @@ export function presentationReadiness(draft: PresentationDraft): PresentationIss
   );
   for (const block of draft.blocks) {
     if (block.kind === "content") {
+      if (block.scene) continue;
       if (!block.textElements.some((element) => element.text.trim()) && !block.mediaId) {
         issues.push({
           blockId: block.id,

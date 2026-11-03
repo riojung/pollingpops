@@ -1,3 +1,4 @@
+import { nativeSceneBlock } from "./support/presentation-native-scene.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -124,6 +125,7 @@ function originalContent(
 async function fixture(
   options: {
     intervening?: boolean;
+    native?: boolean;
     cardsEnabled?: boolean;
     linkedPurpose?: "diagnostic" | "practice";
   } = {},
@@ -154,7 +156,14 @@ async function fixture(
   const service = built.presentationService;
   const sessions = built.presentationSessions;
   const now = new Date();
-  const publishedContent = originalContent(options.intervening, options.linkedPurpose);
+  const legacyContent = originalContent(options.intervening, options.linkedPurpose);
+  const publishedContent = options.native
+    ? PresentationContentSchema.parse({
+        ...legacyContent,
+        schemaVersion: 4,
+        blocks: [nativeSceneBlock(), ...legacyContent.blocks.slice(1)],
+      })
+    : legacyContent;
   const draft = PresentationDraftSchema.parse(publishedContent);
   const presentation = await presentations.createPresentation({
     id: randomUUID(),
@@ -164,7 +173,7 @@ async function fixture(
     status: "draft",
     draft,
     draftRevision: 0,
-    draftSchemaVersion: 2,
+    draftSchemaVersion: draft.schemaVersion,
     currentVersionId: null,
     folderId: null,
     publishedDraftRevision: null,
@@ -179,7 +188,7 @@ async function fixture(
       presentationId: presentation.id,
       version: 1,
       content: publishedContent,
-      contentSchemaVersion: 2,
+      contentSchemaVersion: publishedContent.schemaVersion,
       contentHash: createHash("sha256").update(JSON.stringify(publishedContent)).digest("hex"),
       sourceDraftRevision: 0,
       publishedAt: now,
@@ -319,6 +328,25 @@ async function expectCommandNoMutation(
 }
 
 describe("Companion live Recovery Packs", () => {
+  it("preserves native v4 scenes and publication when a frozen Pack is inserted live", async () => {
+    const f = await fixture({ native: true });
+    const command = f.insertion();
+    const opened = await f.service.companionCommand(command);
+    expect(opened).toMatchObject({ phase: "question_open", blockCount: 4, revision: 1 });
+    const live = await f.current();
+    expect(live.content.schemaVersion).toBe(4);
+    expect(live.content.blocks.slice(2)).toEqual(f.publishedContent.blocks);
+    expect(live.content.recoveryPackInsertions).toMatchObject([
+      { originalContent: f.publishedPack.version.content },
+    ]);
+    expect(
+      (await f.presentations.getPresentationVersion(f.workspaceId, f.version.id))?.content,
+    ).toEqual(f.publishedContent);
+    await f.service.companionCommand(command);
+    expect((await f.current()).content).toEqual(live.content);
+    expectPrivate(opened);
+  });
+
   it.each(["diagnostic", "practice"] as const)(
     "fences a %s source, intervening content and standalone reveal until its linked recheck completes",
     async (linkedPurpose) => {

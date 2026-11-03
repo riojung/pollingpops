@@ -8,6 +8,27 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Native Presentation E01 slice November 3, 2026
+
+The first native production-code slice adds independently positioned plain text, multiple private
+images, labeled shapes and connectors to ordinary Presentation decks. Native slides use embedded
+version 4 with a bounded public scene; existing v1/v2/v3 documents keep their representations.
+Creation, explicit legacy-slide conversion, node/edge duplication, reading order and numeric/keyboard
+geometry use the existing autosave, undo/redo, recovery and conflict path.
+
+Publication freezes the scene and media references. Matching JS/SQL collectors retain scene images
+across drafts, history and immutable versions; current-slide media routes enforce existing tenant,
+credential, scan and lifecycle rules. Editor/preview/live rendering share native geometry and a
+readable narrow-screen column. Notes and source metadata remain outside audience projections;
+native titles appear in participation reports.
+
+See [ADR 003](decisions/003-presentation-scene.md), the
+[verification record](evidence/presentation-native-scenes.md) and the
+[version-4 upgrade requirements](runbooks/upgrade.md#native-presentation-scene-compatibility).
+This is a local implementation checkpoint. Rich text, pointer dragging, multiselection, grouping,
+themes, charts, creator timings, assistive-technology acceptance and deployment qualification
+remain open; it does not complete E01 or establish broad competitor parity.
+
 ### Content-only Presentation E01 slice November 3, 2026
 
 Complete, nonempty slide-only decks can now publish without adding an assessment. The existing
@@ -41,10 +62,9 @@ records local checks, four-browser verification and the production-route denial.
 timings and assistive-technology results remain unmeasured. This is the E00 implementation
 checkpoint, not production readiness or feature parity.
 
-The E01 content-only slice above removes the assessment requirement using the existing content
-model. Native scene persistence/publication/delivery and coordinated JS/SQL scene-asset retention
-remain subsequent E01 work. Existing v1/v2/v3 readers, Pack baselines and mutation hashes remain
-authoritative through that integration.
+The E01 slices above remove the assessment requirement and add the first native scene workflow
+with coordinated JS/SQL asset retention. Existing v1/v2/v3 readers, Pack baselines and mutation
+hashes remain authoritative through that integration.
 
 ### Target cleanup review follow-up November 2, 2026
 

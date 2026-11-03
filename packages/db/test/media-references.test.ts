@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { PresentationDraft, QuizDraft } from "@openround/contracts";
 import { createPresentationRepository, MemoryRepository } from "../src/index.js";
+import { expectPresentationSceneConformance } from "./support/presentation-scene-conformance.js";
 import {
   expectPresentationPackHistoryMediaConformance,
   expectPresentationPackInvalidMediaConformance,
@@ -95,6 +96,18 @@ function presentationDraft(mediaId: string | null): PresentationDraft {
 }
 
 describe("media references", () => {
+  it("retains native scene media across Pack baselines, publication, retries, history and account lifecycle", async () => {
+    const repository = new MemoryRepository();
+    const creator = await owner(repository);
+    const other = await owner(repository);
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: creator.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: creator.userId,
+    });
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const repository = new MemoryRepository();
     const creator = await owner(repository);

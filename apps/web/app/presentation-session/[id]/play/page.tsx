@@ -256,6 +256,15 @@ export default function PresentationParticipantPage() {
                 <span className={styles.statusPill}>{t("live.presentationPlay.content")}</span>
                 <ContentSlideView
                   block={block}
+                  renderSceneImage={(mediaId, altText) => (
+                    <PresentationMedia
+                      key={mediaId}
+                      sessionId={id}
+                      mediaId={mediaId}
+                      altText={altText}
+                      participant
+                    />
+                  )}
                   media={
                     <PresentationMedia
                       altText={block.mediaAlt}

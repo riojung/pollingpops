@@ -17,6 +17,7 @@ import {
   type QuestionDraft,
 } from "@openround/contracts";
 import {
+  presentationMediaReferences,
   PresentationArchivedError,
   PresentationDraftConflictError,
   PresentationMutationConflictError,
@@ -536,39 +537,7 @@ export async function registerPresentationRoutes(
       : parsedContent.error.issues.map((issue) =>
           presentationPublishIssue(id, presentation.draft, issue.path, issue.message),
         );
-    const mediaReferences: Array<{ mediaId: string; fieldPath: readonly PropertyKey[] }> =
-      presentation.draft.blocks.flatMap((block, blockIndex) => {
-        const mediaId = block.kind === "content" ? block.mediaId : block.question.mediaId;
-        if (!mediaId) return [];
-        const fieldPath =
-          block.kind === "content"
-            ? (["blocks", blockIndex, "mediaId"] as const)
-            : (["blocks", blockIndex, "question", "mediaId"] as const);
-        return [{ mediaId, fieldPath }];
-      });
-    // Frozen authoring references are retained/exported too, even after their local copies change.
-    for (const [index, insertion] of (presentation.draft.recoveryPackInsertions ?? []).entries()) {
-      const baselines = [
-        {
-          content: insertion.originalContent,
-          path: ["recoveryPackInsertions", index, "originalContent"],
-        },
-        ...(insertion.updateBaseline
-          ? [
-              {
-                content: insertion.updateBaseline.content,
-                path: ["recoveryPackInsertions", index, "updateBaseline", "content"],
-              },
-            ]
-          : []),
-      ];
-      for (const { content, path } of baselines) {
-        for (const role of ["diagnostic", "recheck", "delayedProbe"] as const) {
-          const mediaId = content[role]?.mediaId;
-          if (mediaId) mediaReferences.push({ mediaId, fieldPath: [...path, role, "mediaId"] });
-        }
-      }
-    }
+    const mediaReferences = presentationMediaReferences(presentation.draft);
     const mediaById = new Map(
       await Promise.all(
         [...new Set(mediaReferences.map((reference) => reference.mediaId))].map(

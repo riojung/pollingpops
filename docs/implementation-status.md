@@ -8,6 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation scene E00 local implementation November 3, 2026
+
+The broad presentation-creation direction now has an isolated development lab at
+`/dev/presentation-scene`, backed by strict independently versioned scene contracts. It edits
+text, images, shapes and connectors from original 10/5/5-slide pitch/demo/training fixtures,
+with pointer/keyboard movement, a numeric inspector, semantic reading order and explicit
+browser-local save/reload. Production/test runtimes reject the route. It adds no production
+scene writer or schema bump, billing change, live-session behavior or public feature entry point.
+
+[ADR 003](decisions/003-presentation-scene.md) selects a Presentation-owned bounded scene with
+pure Canvas primitive reuse. The [prototype record](evidence/presentation-scene-prototype.md)
+records local checks, four-browser verification and the production-route denial. Human creator
+timings and assistive-technology results remain unmeasured. This is the E00 implementation
+checkpoint, not production readiness or feature parity.
+
+E01 is the next production increment: native scene persistence/publication/delivery, coordinated
+JS/SQL asset retention and explicit content-only deck progression/reports. Current publishing
+still requires an assessment. Existing v1/v2/v3 readers, Pack baselines and mutation hashes remain
+authoritative until that compatible integration is implemented.
+
 ### Target cleanup review follow-up November 2, 2026
 
 The prepared-target driver now requires an acknowledged versioned cleanup write, including when

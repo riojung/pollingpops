@@ -13,6 +13,7 @@
 | Sound cues                         | Original Web Audio oscillator sequences                                                                            | Apache-2.0             | Generated at runtime; no audio files bundled                                                                            |
 | Demo quiz content                  | Test-only original factual prompts                                                                                 | Apache-2.0             | Included in tests                                                                                                       |
 | Feature-guide cover illustrations  | Original SVG task icons, CSS panels, and existing Polling Pops lollipop mark                                       | Apache-2.0             | Code-native covers in `apps/web/app/help/guide-cover.tsx`; no third-party or customer images                            |
+| Presentation prototype diagram     | Original SVG workflow illustration authored for E00 on November 3, 2026; no external source or modifications       | Apache-2.0             | `apps/web/public/presentation-prototype/workflow-diagram.svg`; bundled synthetic task material; no attribution required |
 
 Written feature guides are original project copy in `apps/web/lib/help-feature-guides.ts`.
 Their cover cards and individual Help pages do not embed production screenshots, private

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readOnlyKeyViewport } from "./canvas-read-only-navigation";
-import { worldPoint } from "./canvas-geometry";
+import { MIN_PREVIEW_ZOOM, worldPoint } from "./canvas-geometry";
 
 describe("read-only canvas navigation", () => {
   const viewport = { x: 40, y: -20, zoom: 1 };
@@ -31,4 +31,24 @@ describe("read-only canvas navigation", () => {
       expect(readOnlyKeyViewport(viewport, key, 800, 600)).toBeNull();
     },
   );
+  it("zooms a fitted preview out and back in without jumping to the editor minimum", () => {
+    const fitted = { x: 200, y: 100, zoom: 0.04 };
+    const out = readOnlyKeyViewport(fitted, "-", 800, 600, false, MIN_PREVIEW_ZOOM)!;
+    expect(out.zoom).toBeCloseTo(fitted.zoom / 1.2);
+    const restored = readOnlyKeyViewport(out, "+", 800, 600, false, MIN_PREVIEW_ZOOM)!;
+    expect(restored.zoom).toBeCloseTo(fitted.zoom);
+    expect(worldPoint({ x: 400, y: 300 }, restored)).toEqual(
+      worldPoint({ x: 400, y: 300 }, fitted),
+    );
+    expect(
+      readOnlyKeyViewport(
+        { ...fitted, zoom: MIN_PREVIEW_ZOOM },
+        "-",
+        800,
+        600,
+        false,
+        MIN_PREVIEW_ZOOM,
+      )?.zoom,
+    ).toBe(MIN_PREVIEW_ZOOM);
+  });
 });

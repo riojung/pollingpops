@@ -7,6 +7,7 @@ import type { CanvasArtifactImageContext } from "../canvas-boards/canvas-assets-
 import { readCanvasImage } from "../canvas-boards/canvas-image-resource";
 import { readBoardIdeaImage } from "./idea-image-resource";
 import { SketchPreview } from "./sketch-preview";
+import { IdeaCanvasPreview } from "./idea-canvas-preview";
 import styles from "./boards.module.css";
 
 export function BoardIdeaImage({
@@ -18,6 +19,7 @@ export function BoardIdeaImage({
   versionId,
   artifactLink,
   showCaption = true,
+  fit = false,
 }: {
   boardId: string;
   mediaId: string;
@@ -27,6 +29,7 @@ export function BoardIdeaImage({
   versionId?: string;
   artifactLink?: CanvasArtifactImageContext;
   showCaption?: boolean;
+  fit?: boolean;
 }) {
   const { t } = useLocale();
   const figure = useRef<HTMLElement>(null);
@@ -108,9 +111,20 @@ export function BoardIdeaImage({
     visibleKey,
   ]);
   return (
-    <figure ref={figure} className={styles.ideaImage}>
+    <figure
+      ref={figure}
+      className={styles.ideaImage}
+      style={fit ? { width: "100%", height: "100%", border: 0, borderRadius: 0 } : undefined}
+    >
       {image?.key === key && failed !== key ? (
-        <img src={image.url} alt={alt} lang="" loading="lazy" onError={() => setFailed(key)} />
+        <img
+          src={image.url}
+          alt={alt}
+          lang=""
+          loading="lazy"
+          style={fit ? { height: "100%", maxHeight: "none", aspectRatio: "auto" } : undefined}
+          onError={() => setFailed(key)}
+        />
       ) : (
         <p role="status">
           {t(failed === key ? "boards.imageUnavailable" : "boards.loadingImage")}
@@ -183,7 +197,8 @@ export function IdeaContent({
   showBody = true,
 }: {
   boardId: string;
-  idea: Pick<IdeaBoardIdea, "body" | "status" | "attachments" | "links" | "sketch">;
+  idea: Pick<IdeaBoardIdea, "body" | "status" | "attachments" | "links" | "sketch" | "canvas"> &
+    Partial<Pick<IdeaBoardIdea, "id">>;
   guestToken?: string;
   canvasId?: string;
   versionId?: string;
@@ -203,9 +218,18 @@ export function IdeaContent({
       return [];
     }
   });
-  const linkedImages = new Set(links.map(({ link }) => link.imageMediaId));
+  const placedImages = new Set(
+    idea.canvas?.objects.flatMap((object) => (object.type === "image" ? [object.mediaId] : [])) ??
+      [],
+  );
+  const placedLinks = new Set(
+    idea.canvas?.objects.flatMap((object) => (object.type === "link" ? [object.url] : [])) ?? [],
+  );
+  const linkedImages = new Set(
+    links.filter(({ link }) => !placedLinks.has(link.url)).map(({ link }) => link.imageMediaId),
+  );
   const attachments = (idea.attachments ?? []).filter(
-    (attachment) => !linkedImages.has(attachment.mediaId),
+    (attachment) => !linkedImages.has(attachment.mediaId) && !placedImages.has(attachment.mediaId),
   );
   return (
     <div className={styles.ideaContent}>
@@ -213,6 +237,18 @@ export function IdeaContent({
         <p className={styles.body} lang="" dir="auto">
           {idea.body}
         </p>
+      ) : null}
+      {idea.canvas ? (
+        <IdeaCanvasPreview
+          canvas={idea.canvas}
+          ideaId={idea.id}
+          title={idea.body}
+          boardId={boardId}
+          guestToken={guestToken}
+          canvasId={canvasId}
+          versionId={versionId}
+          artifactLink={artifactLink}
+        />
       ) : null}
       {attachments.length ? (
         <div className={styles.imageGrid}>
@@ -241,51 +277,53 @@ export function IdeaContent({
           ) : null}
         </div>
       ) : null}
-      {links.length ? (
+      {links.some(({ link }) => !placedLinks.has(link.url)) ? (
         <ul className={styles.linkCards}>
-          {links.map(({ link, url }) => {
-            const domain = url.hostname.replace(/^www\./, "");
-            const image = idea.attachments?.find(
-              (attachment) => attachment.mediaId === link.imageMediaId,
-            );
-            return (
-              <li key={link.url}>
-                <a
-                  href={url.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  referrerPolicy="no-referrer"
-                  className={styles.linkCard}
-                >
-                  {image ? (
-                    <div className={styles.linkThumbnail}>
-                      <BoardIdeaImage
-                        boardId={boardId}
-                        mediaId={image.mediaId}
-                        alt={image.alt}
-                        guestToken={guestToken}
-                        canvasId={canvasId}
-                        versionId={versionId}
-                        artifactLink={artifactLink}
-                        showCaption={false}
-                      />
-                    </div>
-                  ) : (
-                    <span className={styles.linkIcon} aria-hidden="true">
-                      ↗
+          {links
+            .filter(({ link }) => !placedLinks.has(link.url))
+            .map(({ link, url }) => {
+              const domain = url.hostname.replace(/^www\./, "");
+              const image = idea.attachments?.find(
+                (attachment) => attachment.mediaId === link.imageMediaId,
+              );
+              return (
+                <li key={link.url}>
+                  <a
+                    href={url.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
+                    className={styles.linkCard}
+                  >
+                    {image ? (
+                      <div className={styles.linkThumbnail}>
+                        <BoardIdeaImage
+                          boardId={boardId}
+                          mediaId={image.mediaId}
+                          alt={image.alt}
+                          guestToken={guestToken}
+                          canvasId={canvasId}
+                          versionId={versionId}
+                          artifactLink={artifactLink}
+                          showCaption={false}
+                        />
+                      </div>
+                    ) : (
+                      <span className={styles.linkIcon} aria-hidden="true">
+                        ↗
+                      </span>
+                    )}
+                    <span>
+                      <strong lang={link.label ? "" : undefined} dir="auto">
+                        {link.label || domain}
+                      </strong>
+                      <span className={styles.linkDomain}>{domain}</span>
+                      <span className="sr-only">{t("boards.openLink", { domain })}</span>
                     </span>
-                  )}
-                  <span>
-                    <strong lang={link.label ? "" : undefined} dir="auto">
-                      {link.label || domain}
-                    </strong>
-                    <span className={styles.linkDomain}>{domain}</span>
-                    <span className="sr-only">{t("boards.openLink", { domain })}</span>
-                  </span>
-                </a>
-              </li>
-            );
-          })}
+                  </a>
+                </li>
+              );
+            })}
         </ul>
       ) : null}
     </div>

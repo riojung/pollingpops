@@ -22,12 +22,16 @@ import {
 } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import { canvasToolCopy } from "../../lib/i18n/canvas-tool-messages";
-import { IdeaContent } from "../idea-boards/idea-content";
+import { BoardIdeaImage, IdeaContent } from "../idea-boards/idea-content";
+import { IdeaCanvasScene } from "../idea-boards/idea-canvas-preview";
 import { CanvasImage } from "./canvas-image";
 import type { CanvasArtifactImageContext } from "./canvas-assets-client";
 import {
   fitViewport,
   INITIAL_VIEWPORT,
+  MIN_ZOOM,
+  MIN_PREVIEW_ZOOM,
+  MAX_ZOOM,
   worldPoint,
   zoomAt,
   type CanvasPoint,
@@ -53,6 +57,32 @@ import { followCanvasRegion } from "./canvas-presentation";
 
 export type CanvasPatch = ReturnType<typeof CanvasObjectPatchSchema.parse>;
 export type CanvasTool = "select" | "hand" | "connector" | "marquee" | "pen" | "eraser";
+function fitReadOnlyViewport(
+  bounds: CanvasBounds[],
+  width: number,
+  height: number,
+  insideDialog: boolean,
+) {
+  const viewport = fitViewport(bounds, width, height);
+  if (!insideDialog || !bounds.length) return viewport;
+  const left = Math.min(...bounds.map((bound) => bound.x));
+  const top = Math.min(...bounds.map((bound) => bound.y));
+  const right = Math.max(...bounds.map((bound) => bound.x + bound.width));
+  const bottom = Math.max(...bounds.map((bound) => bound.y + bound.height));
+  const zoom = Math.max(
+    MIN_PREVIEW_ZOOM,
+    Math.min(
+      viewport.zoom,
+      Math.max(1, width - 96) / Math.max(1, right - left),
+      Math.max(1, height - 96) / Math.max(1, bottom - top),
+    ),
+  );
+  return {
+    zoom,
+    x: width / 2 - ((left + right) * zoom) / 2,
+    y: height / 2 - ((top + bottom) * zoom) / 2,
+  };
+}
 export function editableCanvasObject(object: CanvasObject, edit: boolean, facilitate: boolean) {
   return edit && !object.locked && (object.type !== "idea_ref" || facilitate);
 }
@@ -106,6 +136,7 @@ export function CanvasSurface({
   objects,
   viewport,
   onViewport,
+  minZoom = MIN_ZOOM,
   onInteract,
   selectedId,
   selectedIds,
@@ -119,6 +150,7 @@ export function CanvasSurface({
   penWidth = 3,
   penOpacity = 1,
   onCommitText,
+  onRetainText,
   onTextEditingChange,
   editTextRequest,
   onGestureActive,
@@ -127,6 +159,7 @@ export function CanvasSurface({
   canCreate = canEdit,
   canFacilitate = false,
   isObjectEditable,
+  isBackgroundObject,
   onPatch,
   onConnect,
   onCursor,
@@ -137,10 +170,12 @@ export function CanvasSurface({
   canvasId,
   versionId,
   artifactLink,
+  isIdeaImage,
 }: {
   objects: CanvasObject[];
   viewport: CanvasViewport;
   onViewport: (viewport: CanvasViewport) => void;
+  minZoom?: number;
   onInteract?: () => void;
   selectedId?: string | null;
   selectedIds?: string[];
@@ -158,6 +193,7 @@ export function CanvasSurface({
   penWidth?: number;
   penOpacity?: number;
   onCommitText?: (originalObject: CanvasObject, text: string) => Promise<boolean>;
+  onRetainText?: (originalObject: CanvasObject, text: string) => void;
   onTextEditingChange?: (active: boolean) => void;
   editTextRequest?: { id: string; nonce: number };
   onGestureActive?: (active: boolean) => void;
@@ -166,6 +202,7 @@ export function CanvasSurface({
   canCreate?: boolean;
   canFacilitate?: boolean;
   isObjectEditable?: (object: CanvasObject) => boolean;
+  isBackgroundObject?: (object: CanvasObject) => boolean;
   onPatch?: (object: CanvasObject, patch: CanvasPatch) => Promise<boolean>;
   onConnect?: (id: string) => void;
   sourceBoardId?: string;
@@ -174,6 +211,7 @@ export function CanvasSurface({
   canvasId?: string;
   versionId?: string;
   artifactLink?: CanvasArtifactImageContext;
+  isIdeaImage?: (object: CanvasObject) => boolean;
   onCursor?: (point: CanvasPoint) => void;
   members?: Array<{ userId: string; name: string; cursor: CanvasPoint | null }>;
 }) {
@@ -186,6 +224,9 @@ export function CanvasSurface({
   gestureObserver.current = onGestureActive;
   const textObserver = useRef(onTextEditingChange);
   textObserver.current = onTextEditingChange;
+  const retainTextObserver = useRef(onRetainText);
+  retainTextObserver.current = onRetainText;
+  const previousEditable = useRef(canEdit);
   useEffect(
     () => () => {
       gestureObserver.current?.(false);
@@ -261,6 +302,17 @@ export function CanvasSurface({
     onTextEditingChange?.(false);
     surface.current?.focus();
   }
+  useEffect(() => {
+    const frozen = previousEditable.current && !canEdit;
+    previousEditable.current = canEdit;
+    const active = editingRef.current;
+    const retain = retainTextObserver.current;
+    if (!frozen || !active || !retain) return;
+    // Private composers can retain an in-progress local buffer before their controls
+    // freeze. Shared creator surfaces keep the existing explicit-save behavior.
+    retain(active.original, active.text);
+    closeTextEdit();
+  }, [canEdit]);
   async function saveTextEdit() {
     const active = editingRef.current;
     if (!active || active.busy || !onCommitText) return;
@@ -311,6 +363,7 @@ export function CanvasSurface({
     sourceBoard,
   ).sort(
     (a, b) =>
+      (isBackgroundObject?.(a) ? 0 : 1) - (isBackgroundObject?.(b) ? 0 : 1) ||
       a.zIndex - b.zIndex ||
       (a.type === "frame" ? -1 : 0) - (b.type === "frame" ? -1 : 0) ||
       a.id.localeCompare(b.id),
@@ -505,6 +558,7 @@ export function CanvasSurface({
         original.viewport,
         original.midpoint,
         (original.viewport.zoom * two.distance) / original.distance,
+        minZoom,
       );
       onViewport({
         ...next,
@@ -652,6 +706,7 @@ export function CanvasSurface({
           viewport,
           point(event),
           viewport.zoom * Math.exp(-Math.max(-100, Math.min(100, event.deltaY)) * 0.005),
+          minZoom,
         ),
       );
   }
@@ -860,6 +915,9 @@ export function CanvasSurface({
               opacity={object.opacity}
               transform={`translate(${object.x} ${object.y}) rotate(${object.rotation} ${object.width / 2} ${object.height / 2})`}
             >
+              {idea?.canvas ? (
+                <title>{`${t("canvas.protected")} — ${idea.body ?? ""}`}</title>
+              ) : null}
               {object.type === "diamond" ||
               object.type === "parallelogram" ||
               (object.type === "rect" && object.shapeVariant !== "rectangle") ? (
@@ -972,6 +1030,40 @@ export function CanvasSurface({
                     </div>
                   </div>
                 </foreignObject>
+              ) : idea?.canvas && (sourceBoardId || artifactLink) ? (
+                <foreignObject
+                  x={2}
+                  y={2}
+                  width={Math.max(1, object.width - 4)}
+                  height={Math.max(1, object.height - 4)}
+                  pointerEvents="none"
+                >
+                  <IdeaCanvasScene
+                    canvas={idea.canvas}
+                    ideaId={idea.id}
+                    width={Math.max(1, object.width - 4)}
+                    height={Math.max(1, object.height - 4)}
+                    boardId={sourceBoardId ?? canvasId ?? ""}
+                    guestToken={guestToken}
+                    canvasId={canvasId}
+                    versionId={versionId}
+                    artifactLink={artifactLink}
+                  />
+                </foreignObject>
+              ) : object.type === "image" && sourceBoardId && isIdeaImage?.(object) ? (
+                <foreignObject x={0} y={0} width={object.width} height={object.height}>
+                  <BoardIdeaImage
+                    boardId={sourceBoardId}
+                    mediaId={object.mediaId}
+                    alt={object.altText}
+                    guestToken={guestToken}
+                    canvasId={canvasId}
+                    versionId={versionId}
+                    artifactLink={artifactLink}
+                    showCaption={false}
+                    fit
+                  />
+                </foreignObject>
               ) : object.type === "image" && canvasId ? (
                 <CanvasImage
                   canvasId={canvasId}
@@ -1064,6 +1156,11 @@ export function CanvasSurface({
                   </div>
                 </foreignObject>
               )}
+              {idea?.canvas ? (
+                <text x={6} y={-8} fontSize={12} fill="var(--ui-text)" pointerEvents="none">
+                  {`${t("canvas.protected")} — ${(idea.body ?? "").slice(0, 80)}`}
+                </text>
+              ) : null}
               {selected &&
               !editing &&
               selection.length === 1 &&
@@ -1205,6 +1302,8 @@ export function CanvasReadOnlySurface({
   followRegion,
   onInteract,
   fill = false,
+  isIdeaImage,
+  insideDialog = false,
 }: {
   objects: CanvasObject[];
   sourceBoardId?: string;
@@ -1217,10 +1316,13 @@ export function CanvasReadOnlySurface({
   followRegion?: CanvasBounds | null;
   onInteract?: () => void;
   fill?: boolean;
+  isIdeaImage?: (object: CanvasObject) => boolean;
+  insideDialog?: boolean;
 }) {
   const { t, locale = "en-CA" } = useLocale();
   const copy = guidedWorkshopCopy(locale);
   const toolCopy = canvasToolCopy(locale);
+  const minZoom = insideDialog ? MIN_PREVIEW_ZOOM : MIN_ZOOM;
   const root = useRef<HTMLElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const outlineTrigger = useRef<HTMLButtonElement>(null);
@@ -1257,17 +1359,18 @@ export function CanvasReadOnlySurface({
   const fit = (object?: CanvasObject) => {
     const { width, height } = dimensions();
     setViewport(
-      fitViewport(
+      fitReadOnlyViewport(
         (object ? [object] : visible).map((item) => canvasObjectBounds(item, visible)),
         width,
         height,
+        insideDialog,
       ),
     );
   };
   function zoom(next: number) {
     onInteract?.();
     const { width, height } = dimensions();
-    setViewport((previous) => zoomAt(previous, { x: width / 2, y: height / 2 }, next));
+    setViewport((previous) => zoomAt(previous, { x: width / 2, y: height / 2 }, next, minZoom));
   }
   function closeOutline() {
     setList(false);
@@ -1294,10 +1397,11 @@ export function CanvasReadOnlySurface({
     if (!element?.clientWidth || !element.clientHeight) return;
     initialized.current = true;
     setViewport(
-      fitViewport(
+      fitReadOnlyViewport(
         visible.map((object) => canvasObjectBounds(object, visible)),
         element.clientWidth,
         element.clientHeight,
+        insideDialog,
       ),
     );
   }, [objects, sourceBoard, followRegion]);
@@ -1313,10 +1417,11 @@ export function CanvasReadOnlySurface({
       if (!initialized.current && visibleRef.current.length) {
         initialized.current = true;
         setViewport(
-          fitViewport(
+          fitReadOnlyViewport(
             visibleRef.current.map((object) => canvasObjectBounds(object, visibleRef.current)),
             width,
             height,
+            insideDialog,
           ),
         );
       } else if (previous.width && previous.height) {
@@ -1373,8 +1478,15 @@ export function CanvasReadOnlySurface({
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("dialog,[contenteditable='true']")) return;
-        if (typeof document !== "undefined" && document.querySelector("dialog[open]")) return;
+        if (target?.closest("[contenteditable='true']")) return;
+        const ownDialog = insideDialog ? root.current?.closest("dialog") : null;
+        if (target?.closest("dialog") && target.closest("dialog") !== ownDialog) return;
+        if (
+          typeof document !== "undefined" &&
+          !insideDialog &&
+          document.querySelector("dialog[open]")
+        )
+          return;
         if (event.key === "Escape") {
           onInteract?.();
           if (list) {
@@ -1419,7 +1531,14 @@ export function CanvasReadOnlySurface({
           fit();
           return;
         }
-        const next = readOnlyKeyViewport(viewport, event.key, width, height, event.shiftKey);
+        const next = readOnlyKeyViewport(
+          viewport,
+          event.key,
+          width,
+          height,
+          event.shiftKey,
+          minZoom,
+        );
         if (next) {
           event.preventDefault();
           onInteract?.();
@@ -1435,6 +1554,7 @@ export function CanvasReadOnlySurface({
           objects={visible}
           viewport={viewport}
           onViewport={setViewport}
+          minZoom={minZoom}
           onInteract={onInteract}
           tool={tool}
           selectedId={selectedObject?.id ?? null}
@@ -1446,6 +1566,7 @@ export function CanvasReadOnlySurface({
           canvasId={canvasId}
           versionId={versionId}
           artifactLink={artifactLink}
+          isIdeaImage={isIdeaImage}
         />
       </div>
       <div className={readOnlyStyles.tools} role="toolbar" aria-label={copy.navigation}>
@@ -1479,7 +1600,7 @@ export function CanvasReadOnlySurface({
           <button
             aria-label={copy.zoomOut}
             title={copy.zoomOut}
-            disabled={viewport.zoom <= 0.15}
+            disabled={viewport.zoom <= minZoom}
             onClick={() => zoom(viewport.zoom / 1.2)}
             type="button"
           >
@@ -1497,7 +1618,7 @@ export function CanvasReadOnlySurface({
           <button
             aria-label={copy.zoomIn}
             title={copy.zoomIn}
-            disabled={viewport.zoom >= 3}
+            disabled={viewport.zoom >= MAX_ZOOM}
             onClick={() => zoom(viewport.zoom * 1.2)}
             type="button"
           >
@@ -1546,6 +1667,7 @@ export function CanvasReadOnlySurface({
           </button>
           <button
             ref={focusTrigger}
+            hidden={insideDialog}
             aria-label={focusMode ? copy.exitFocusMode : copy.focusMode}
             title={focusMode ? copy.exitFocusMode : copy.focusMode}
             aria-pressed={focusMode}

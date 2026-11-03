@@ -26,6 +26,19 @@ afterEach(() => {
 });
 
 describe("canvas export download boundary", () => {
+  it("accepts only bounded positive scales for native participant compositions", () => {
+    const document = (value: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><g transform="${value}"><rect width="10" height="10" fill="#ffffff"/></g></svg>`;
+    expect(validateClosedCanvasSvg(document("scale(2 1.5)"))).toEqual({ width: 800, height: 600 });
+    for (const value of [
+      "scale(0 1)",
+      "scale(10001 1)",
+      "scale(-1 1)",
+      "scale(Infinity 1)",
+      "scale(1 1) skewX(1)",
+    ])
+      expect(() => validateClosedCanvasSvg(document(value))).toThrow();
+  });
   it("requests only the current authorized SVG projection using cookie auth and a cancellable POST", async () => {
     const fetcher = vi.fn().mockResolvedValue(svgResponse());
     vi.stubGlobal("fetch", fetcher);

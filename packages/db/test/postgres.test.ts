@@ -14,6 +14,10 @@ import { expectLivePollPersistenceConformance } from "./support/live-poll-confor
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
 import {
+  expectIdeaBoardCanvasConformance,
+  expectIdeaBoardCanvasBudgetConformance,
+} from "./support/idea-board-canvas-conformance.js";
+import {
   expectIdeaBoardConformance,
   expectIdeaBoardAdmissionConformance,
   expectIdeaBoardRoundConformance,
@@ -3306,6 +3310,14 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   it("persists rich idea boards with exclusive image ownership, private projections and lifecycle cleanup", async () => {
     const owner = await creator("rich-idea-board-owner");
     await expectIdeaBoardRichConformance(repository, owner.workspaceId, owner.userId);
+  });
+  it("persists private native canvas ideas with moderation, round fences and retained media ownership", async () => {
+    const owner = await creator("canvas-idea-board-owner");
+    await expectIdeaBoardCanvasConformance(repository, owner.workspaceId, owner.userId);
+  });
+  it("serializes pending nested canvas admission at the exact shared render budget", async () => {
+    const owner = await creator("canvas-idea-board-budget");
+    await expectIdeaBoardCanvasBudgetConformance(repository, owner.workspaceId);
   });
 
   it("persists idea boards with fenced moderation, concurrent final ballots, tenant isolation and private exports", async () => {

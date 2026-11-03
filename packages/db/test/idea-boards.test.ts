@@ -8,6 +8,10 @@ import {
 import { MemoryRepository, IdeaBoardRepository, createIdeaBoardRepository } from "../src/index.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
 import {
+  expectIdeaBoardCanvasConformance,
+  expectIdeaBoardCanvasBudgetConformance,
+} from "./support/idea-board-canvas-conformance.js";
+import {
   expectIdeaBoardConformance,
   expectIdeaBoardAdmissionConformance,
   expectIdeaBoardRoundConformance,
@@ -31,6 +35,14 @@ async function fixture() {
   return { repository, owner, boards: createIdeaBoardRepository(repository) };
 }
 describe("standalone idea board durable state", () => {
+  it("keeps submitted canvas content private, moderated, round-fenced and tied to guest-owned media", async () => {
+    const { repository, owner } = await fixture();
+    await expectIdeaBoardCanvasConformance(repository, owner.workspaceId, owner.userId);
+  });
+  it("atomically bounds pending and approved nested canvas content within the shared render budget", async () => {
+    const { repository, owner } = await fixture();
+    await expectIdeaBoardCanvasBudgetConformance(repository, owner.workspaceId);
+  });
   it("replays an actual pre-round-format receipt hash without rewriting its closed stored row", async () => {
     const now = new Date(),
       key = randomUUID(),

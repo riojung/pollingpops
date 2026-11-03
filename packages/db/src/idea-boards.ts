@@ -5,6 +5,7 @@ import {
   IDEA_BOARD_MAX_IDEAS,
   IDEA_BOARD_MAX_RECEIPTS,
   IDEA_BOARD_MAX_ROUNDS,
+  IDEA_BOARD_MAX_RENDERED_OBJECTS,
   IdeaBoardAliasSchema,
   IdeaBoardBodySchema,
   IdeaBoardCreateSchema,
@@ -461,6 +462,7 @@ export class IdeaBoardRepository {
             delete idea.attachments;
             delete idea.links;
             delete idea.sketch;
+            delete idea.canvas;
           }
         } else if (parsed.type === "group.create") {
           if (row.groups.length >= IDEA_BOARD_MAX_GROUPS)
@@ -532,6 +534,16 @@ export class IdeaBoardRepository {
         throw new IdeaBoardError(
           "ENTITLEMENT_LIMIT",
           "Use up to 10 ideas per guest and 200 ideas per board",
+        );
+      const rendered = row.ideas.reduce(
+        (count, idea) =>
+          count + (idea.status === "removed" ? 0 : 1 + (idea.canvas?.objects.length ?? 0)),
+        0,
+      );
+      if (rendered + 1 + (content.canvas?.objects.length ?? 0) > IDEA_BOARD_MAX_RENDERED_OBJECTS)
+        throw new IdeaBoardError(
+          "ENTITLEMENT_LIMIT",
+          "This board has reached its 200 submitted canvas object limit",
         );
       const ideaId = randomUUID();
       row.ideas.push({

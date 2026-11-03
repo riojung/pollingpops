@@ -24,6 +24,8 @@ import { CanvasToolIcon } from "../canvas-boards/canvas-tool-icon";
 import { guidedWorkshopCopy } from "../../lib/i18n/guided-workshop-messages";
 import guestStyles from "./board-guest.module.css";
 import { WorkshopRoundHistory } from "./workshop-lifecycle";
+import { IdeaCanvasComposer } from "./idea-canvas-composer";
+import { participantCanvasCopy } from "../../lib/i18n/participant-canvas-messages";
 
 type IdeaIntent = {
   kind: "idea";
@@ -40,6 +42,7 @@ type GuestMutation = {
 
 export function BoardGuest({ id }: { id: string }) {
   const { t, locale } = useLocale();
+  const canvasCopy = participantCanvasCopy(locale);
   const copy = guidedWorkshopCopy(locale);
   const [info, setInfo] = useState<IdeaBoardPublicInfo | null>(null);
   const [guest, setGuest] = useState<IdeaBoardGuestView | null>(null);
@@ -50,7 +53,12 @@ export function BoardGuest({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<
-    "boards.error" | "boards.unavailable" | "boards.storageError" | null
+    | "boards.error"
+    | "boards.unavailable"
+    | "boards.storageError"
+    | "canvasLimit"
+    | "invalidCanvas"
+    | null
   >(null);
   const [notice, setNotice] = useState<"boards.submitted" | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -59,6 +67,10 @@ export function BoardGuest({ id }: { id: string }) {
   const mutation = useRef<GuestMutation | null>(null);
   const latestGuest = useRef<IdeaBoardGuestView | null>(null);
   const [hasCanvas, setHasCanvas] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [legacyIntake, setLegacyIntake] = useState(false);
+  const draftTrigger = useRef<HTMLButtonElement>(null);
+  const wasDrafting = useRef(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelTrigger = useRef<HTMLButtonElement>(null);
   const panelHeading = useRef<HTMLHeadingElement>(null);
@@ -68,6 +80,33 @@ export function BoardGuest({ id }: { id: string }) {
   const focusPanelOnOpen = useRef(false);
   const panelId = `workshop-participation-${id}`;
   const canvasVisible = Boolean(guest && hasCanvas);
+  const hasDraft = Boolean(
+    draft.body.trim() ||
+    draft.canvas?.objects.length ||
+    draft.canvasDraft?.length ||
+    draft.sketch ||
+    draft.attachments.length ||
+    draft.links.length,
+  );
+
+  useEffect(() => {
+    if (drafting) {
+      wasDrafting.current = true;
+      return;
+    }
+    if (!wasDrafting.current) return;
+    wasDrafting.current = false;
+    const frame = requestAnimationFrame(() => draftTrigger.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [drafting]);
+
+  function openDraft() {
+    if (busy || pending.current || uploading || guest?.board.status !== "collecting") return;
+    panelPreference.current = false;
+    setPanelOpen(false);
+    setLegacyIntake(false);
+    setDrafting(true);
+  }
 
   function beginMutation() {
     if (mutation.current || controller.current?.signal.aborted) return null;
@@ -106,11 +145,15 @@ export function BoardGuest({ id }: { id: string }) {
     panelTrigger.current?.focus();
   }
   function acceptCanvasAvailability(available: boolean) {
+    if (!available) setDrafting(false);
     const appeared = available && !canvasAvailability.current;
     canvasAvailability.current = available;
     if (appeared) {
       const focusedParticipation =
         typeof document !== "undefined" && participation.current?.contains(document.activeElement);
+      // The canvas can arrive after an already-focused fallback composer. Keep that
+      // in-progress intake available until its author deliberately opens the canvas.
+      if (focusedParticipation || (hasDraft && !draft.canvas)) setLegacyIntake(true);
       const desktop =
         typeof window !== "undefined" &&
         (typeof window.matchMedia === "function"
@@ -274,6 +317,8 @@ export function BoardGuest({ id }: { id: string }) {
       pending.current = null;
       if (operation.kind === "idea") {
         setDraft(emptyIdeaDraft());
+        setDrafting(false);
+        setLegacyIntake(false);
         setNotice("boards.submitted");
       }
       // A newer poll can overtake a successful same-round receipt. Acknowledge that
@@ -283,13 +328,25 @@ export function BoardGuest({ id }: { id: string }) {
       if (!isCurrentMutation(request) || pending.current !== operation) return;
       if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
         pending.current = null;
-      setError("boards.error");
+      setError(
+        caught instanceof ApiClientError &&
+          caught.code === "ENTITLEMENT_LIMIT" &&
+          operation.kind === "idea" &&
+          operation.input.canvas
+          ? "canvasLimit"
+          : "boards.error",
+      );
     } finally {
       finishMutation(request);
     }
   }
-  function submitIdea() {
-    if (!guest || guest.board.status !== "collecting" || uploading || !draft.body.trim()) return;
+  function submitIdea(submission = draft) {
+    if (submission.canvasDraft) {
+      setError("invalidCanvas");
+      return;
+    }
+    if (!guest || guest.board.status !== "collecting" || uploading || !submission.body.trim())
+      return;
     try {
       if (!pending.current)
         pending.current = {
@@ -298,12 +355,15 @@ export function BoardGuest({ id }: { id: string }) {
             schemaVersion: 1,
             idempotencyKey: clientUuid(),
             roundNumber: guest.board.roundNumber,
-            body: draft.body.trim(),
-            ...(draft.attachments.length
-              ? { attachments: draft.attachments.map((item) => ({ ...item })) }
+            body: submission.body.trim(),
+            ...(submission.attachments.length
+              ? { attachments: submission.attachments.map((item) => ({ ...item })) }
               : {}),
-            ...(draft.links.length ? { links: draft.links.map((item) => ({ ...item })) } : {}),
-            ...(draft.sketch ? { sketch: structuredClone(draft.sketch) } : {}),
+            ...(submission.links.length
+              ? { links: submission.links.map((item) => ({ ...item })) }
+              : {}),
+            ...(submission.sketch ? { sketch: structuredClone(submission.sketch) } : {}),
+            ...(submission.canvas ? { canvas: structuredClone(submission.canvas) } : {}),
           },
         };
     } catch {
@@ -375,6 +435,13 @@ export function BoardGuest({ id }: { id: string }) {
         : "boards.approved",
   );
   const locked = busy || uploading || pending.current !== null;
+  const errorMessage = error
+    ? error === "canvasLimit"
+      ? canvasCopy.sharedLimit
+      : error === "invalidCanvas"
+        ? canvasCopy.invalidCanvas
+        : t(error)
+    : undefined;
   return (
     <main
       className={guestStyles.page}
@@ -399,6 +466,20 @@ export function BoardGuest({ id }: { id: string }) {
             </p>
           ) : null}
         </div>
+        {canvasVisible && guest?.board.status === "collecting" && !drafting ? (
+          <button
+            ref={draftTrigger}
+            className={guestStyles.createIdea}
+            type="button"
+            aria-label={hasDraft ? canvasCopy.continueIdea : canvasCopy.startIdea}
+            title={hasDraft ? canvasCopy.continueIdea : canvasCopy.startIdea}
+            disabled={locked || guest.ownIdeas.length >= 10 || guest.board.totalIdeas >= 200}
+            onClick={openDraft}
+          >
+            <CanvasToolIcon name="sticky" />
+            <span>{hasDraft ? canvasCopy.continueIdea : canvasCopy.startIdea}</span>
+          </button>
+        ) : null}
         <button
           className={guestStyles.iconButton}
           type="button"
@@ -449,7 +530,7 @@ export function BoardGuest({ id }: { id: string }) {
       ) : null}
       {error ? (
         <div className={guestStyles.error} role="alert">
-          {t(error)}{" "}
+          {errorMessage}{" "}
           <button
             type="button"
             className="button-quiet"
@@ -474,6 +555,44 @@ export function BoardGuest({ id }: { id: string }) {
               sourceBoardId={id}
               token={token.current}
               onAvailabilityChange={acceptCanvasAvailability}
+              renderCanvas={
+                drafting
+                  ? ({ board: published, onInteract }) => (
+                      <IdeaCanvasComposer
+                        boardId={id}
+                        guestToken={token.current!}
+                        canvasId={published.id}
+                        publishedContext={published.objects}
+                        publishedSourceBoard={published.sourceBoard}
+                        value={draft}
+                        disabled={
+                          busy ||
+                          pending.current !== null ||
+                          guest.board.status !== "collecting" ||
+                          guest.ownIdeas.length >= 10 ||
+                          guest.board.totalIdeas >= 200
+                        }
+                        collectionClosed={guest.board.status !== "collecting"}
+                        submitting={busy && pending.current?.kind === "idea"}
+                        submissionError={errorMessage}
+                        onRetry={
+                          !busy && pending.current?.kind === "idea"
+                            ? () => void execute()
+                            : undefined
+                        }
+                        imagesAvailable={guest.imageUploadsAvailable}
+                        onChange={(value) => {
+                          setDraft(value);
+                          if (!pending.current) setError(null);
+                        }}
+                        onSubmit={submitIdea}
+                        onUploading={setUploading}
+                        onClose={() => setDrafting(false)}
+                        onInteract={onInteract}
+                      />
+                    )
+                  : undefined
+              }
             />
           ) : null}
         </div>
@@ -574,18 +693,35 @@ export function BoardGuest({ id }: { id: string }) {
                 <section className={guestStyles.card}>
                   <h3>{t("boards.submitIdea")}</h3>
                   <p className={guestStyles.hint}>{t("boards.ideaLimit")}</p>
-                  <IdeaComposer
-                    boardId={id}
-                    guestToken={token.current!}
-                    value={draft}
-                    disabled={
-                      locked || guest.ownIdeas.length >= 10 || guest.board.totalIdeas >= 200
-                    }
-                    imagesAvailable={guest.imageUploadsAvailable}
-                    onChange={setDraft}
-                    onSubmit={submitIdea}
-                    onUploading={setUploading}
-                  />
+                  {canvasVisible && !legacyIntake ? (
+                    <div className={guestStyles.canvasInvitation}>
+                      <p>{canvasCopy.privateHint}</p>
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={
+                          locked || guest.ownIdeas.length >= 10 || guest.board.totalIdeas >= 200
+                        }
+                        onClick={openDraft}
+                      >
+                        <CanvasToolIcon name="sticky" />
+                        {hasDraft ? canvasCopy.continueIdea : canvasCopy.startIdea}
+                      </button>
+                    </div>
+                  ) : (
+                    <IdeaComposer
+                      boardId={id}
+                      guestToken={token.current!}
+                      value={draft}
+                      disabled={
+                        locked || guest.ownIdeas.length >= 10 || guest.board.totalIdeas >= 200
+                      }
+                      imagesAvailable={guest.imageUploadsAvailable}
+                      onChange={setDraft}
+                      onSubmit={() => submitIdea()}
+                      onUploading={setUploading}
+                    />
+                  )}
                 </section>
               ) : null}
               {guest.ownIdeas.length ? (

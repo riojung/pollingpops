@@ -88,6 +88,55 @@
 .phaseLabel {
   display: none;
 }
+.createIdea {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-block-size: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--ui-accent-ink);
+  border-radius: 10px;
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.createIdea:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.createIdea svg,
+.canvasInvitation svg {
+  inline-size: 20px;
+  block-size: 20px;
+  flex-shrink: 0;
+}
+.canvasInvitation {
+  display: grid;
+  gap: 12px;
+}
+.canvasInvitation p {
+  color: var(--ui-text-subtle);
+  font-size: 13px;
+}
+.canvasInvitation button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .createIdea {
+    inline-size: 44px;
+    padding: 10px;
+  }
+  .createIdea span {
+    display: none;
+  }
+}
 .iconButton svg,
 .panelTrigger svg {
   inline-size: 20px;

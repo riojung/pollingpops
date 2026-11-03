@@ -392,7 +392,12 @@ export async function registerIdeaBoardRoutes(
             plainText(input.body, 1_000),
             input.idempotencyKey,
             () => new Date(),
-            { attachments: input.attachments, links: input.links, sketch: input.sketch },
+            {
+              attachments: input.attachments,
+              links: input.links,
+              sketch: input.sketch,
+              canvas: input.canvas,
+            },
             input.roundNumber,
           ),
         );

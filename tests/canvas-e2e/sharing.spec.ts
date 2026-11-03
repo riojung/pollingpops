@@ -3,6 +3,8 @@ import { expect, test, type Locator, type Page, type TestInfo } from "@playwrigh
 import { testEmail } from "../e2e/test-email";
 import {
   account,
+  canvasAction,
+  openInspector,
   api,
   fits,
   newTeamCanvas,
@@ -43,7 +45,7 @@ async function sharing(page: Page, id: string) {
   return response.json() as Promise<{ groups: Array<{ groupId: string; role: string }> }>;
 }
 async function openShare(page: Page) {
-  await page.getByRole("button", { name: "Share board", exact: true }).click();
+  await (await canvasAction(page, "Share board")).click();
   const dialog = page.getByRole("dialog", { name: "Share board", exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -203,6 +205,7 @@ test("guided workshop email invites remain accountless public participation and 
     expect(delivery.url).toBe(`${web}/board/${sourceId}`);
   }
   await dialog.getByRole("button", { name: "Close sharing", exact: true }).click();
+  await openInspector(page, "Workshop controls");
   await page.getByRole("button", { name: "Open collection", exact: true }).click();
   const guestContext = await browser.newContext({ baseURL: web, reducedMotion: "reduce" });
   try {

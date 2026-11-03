@@ -1,7 +1,15 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
-import { api, organization, snapshot, fits } from "./support";
+import {
+  api,
+  closeInspector,
+  organization,
+  openInspector,
+  openInsert,
+  snapshot,
+  fits,
+} from "./support";
 
 test("templates support atomic grouping, frame layout, locks, links and drawing", async ({
   page,
@@ -25,12 +33,13 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
   expect(initial.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
   expect(initial.objects.length).toBeGreaterThan(10);
   await expect(page.getByTestId(`canvas-object-${initial.objects[0]!.id}`)).toBeVisible();
-  for (const name of ["Text, images, drawings and links", "Canvas zoom"]) {
+  for (const name of ["Canvas tools", "Canvas zoom"]) {
     const buttons = page.getByRole("group", { name, exact: true }).getByRole("button");
     await expect(buttons.first()).toBeVisible();
     for (const button of await buttons.all()) {
       await expect(button).toHaveAccessibleName(/\S/);
       await expect(button).toHaveAttribute("title", /\S/);
+      await button.scrollIntoViewIfNeeded();
       await expect(button).toBeInViewport({ ratio: 1 });
     }
   }
@@ -47,8 +56,10 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
     .filter((object) => object.type === "sticky" && object.parentId === frames[0]!.id)
     .slice(0, 2);
   expect(notes).toHaveLength(2);
+  await openInspector(page, "Objects");
   for (const note of notes)
     await page.getByRole("checkbox", { name: `Select ${note.text}`, exact: true }).check();
+  await openInspector(page, "Arrange");
   await page.getByRole("button", { name: "Group selection", exact: true }).click();
   await expect
     .poll(async () => {
@@ -93,7 +104,9 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
       .filter((object) => notes.some((note) => note.id === object.id))
       .every((object) => object.parentId === frame.id),
   ).toBe(true);
+  await openInspector(page, "Objects");
   await page.getByRole("checkbox", { name: `Select ${frame.text}`, exact: true }).check();
+  await openInspector(page, "Arrange");
   await page
     .locator("summary")
     .filter({ hasText: /^Move selection$/ })
@@ -127,7 +140,7 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
       async () => (await snapshot(page, id)).objects.find((object) => object.id === frame.id)?.x,
     )
     .toBe(frame.x + 80);
-  await page.getByRole("button", { name: "Link", exact: true }).click();
+  await openInsert(page, "Link");
   const link = page.getByRole("dialog", { name: "Add link", exact: true });
   await link
     .getByRole("textbox", { name: "Link URL", exact: true })
@@ -142,7 +155,8 @@ test("templates support atomic grouping, frame layout, locks, links and drawing"
       ),
     )
     .toBe(true);
-  await page.getByRole("button", { name: "Freehand", exact: true }).click();
+  await closeInspector(page);
+  await page.getByRole("button", { name: "Pen", exact: true }).click();
   const box = (await page.getByTestId("canvas-surface").boundingBox())!;
   await page.mouse.move(box.x + 40, box.y + 45);
   await page.mouse.down();
@@ -184,6 +198,7 @@ test("guided starters publish authored scaffolding while keeping guest intake pr
   expect(board.boardType).toBe("workshop");
   expect(board.sourceBoard?.ideasVisible).toBe(false);
   expect(board.objects.length).toBeGreaterThan(10);
+  await openInspector(owner, "Workshop controls");
   await owner.getByRole("button", { name: "Open collection", exact: true }).click();
   const imageData = await owner.evaluate(() => {
     const canvas = document.createElement("canvas");
@@ -199,7 +214,7 @@ test("guided starters publish authored scaffolding while keeping guest intake pr
     if (new URL(request.url()).pathname.startsWith("/__test/canvas/storage/"))
       uploads.push(request.allHeaders());
   });
-  await owner.getByRole("button", { name: "Image", exact: true }).click();
+  await openInsert(owner, "Image");
   const upload = owner.getByRole("dialog", { name: "Add image", exact: true });
   await upload.getByLabel("Choose an image", { exact: true }).setInputFiles({
     name: "workshop.png",
@@ -227,6 +242,7 @@ test("guided starters publish authored scaffolding while keeping guest intake pr
       if (new URL(request.url()).pathname.includes("/guest/media/"))
         imageReads.push(request.allHeaders());
     });
+    await openInspector(owner, "Properties");
     await owner
       .getByRole("combobox", { name: "Guest visibility", exact: true })
       .selectOption("published");
@@ -267,6 +283,7 @@ test("guided starters publish authored scaffolding while keeping guest intake pr
         (idea: { body: string }) => idea.body === "A private learning reflection",
       ),
     ).toBe(true);
+    await openInspector(owner, "Arrange");
     await owner.getByRole("button", { name: "Delete selected", exact: true }).click();
     await expect(rendered).toHaveCount(0);
     const guestHeaders = await Promise.all(imageReads);

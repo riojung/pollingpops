@@ -163,7 +163,12 @@
   position: relative;
 }
 .workArea[data-sidebar-open="true"] {
-  --canvas-palette-sidebar-space: 320px;
+  --canvas-palette-sidebar-space: 360px;
+}
+@media (max-width: 760px) {
+  .workArea[data-sidebar-open="true"] {
+    --canvas-palette-sidebar-space: 0px;
+  }
 }
 .templateDialog {
   box-sizing: border-box;

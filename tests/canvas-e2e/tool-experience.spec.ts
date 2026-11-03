@@ -7,22 +7,34 @@ import {
   CanvasColorSchema,
   CanvasShapeVariantSchema,
 } from "../../packages/contracts/src/canvas-boards";
-import { api, fits, newTeamCanvas, organization, snapshot } from "./support";
+import {
+  api,
+  canvasAction,
+  closeInspector,
+  fits,
+  newTeamCanvas,
+  openInspector,
+  openInsert,
+  organization,
+  snapshot,
+} from "./support";
 
 const palette = (page: Page) => page.getByRole("group", { name: "Canvas tools", exact: true });
 const formatting = (page: Page) =>
   page.getByRole("toolbar", { name: "Selection formatting", exact: true });
 
 async function paletteButton(page: Page, name: string) {
+  await closeInspector(page);
   const button = palette(page).getByRole("button", { name, exact: true });
   await button.scrollIntoViewIfNeeded();
   await expect(button).toBeEnabled();
   return button;
 }
 async function hideOutline(page: Page) {
-  const button = page.getByRole("button", { name: "Object outline", exact: true });
-  if ((await button.getAttribute("aria-expanded")) === "true") await button.click();
-  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await closeInspector(page);
+  await expect(
+    page.getByRole("button", { name: "Object outline", exact: true, includeHidden: true }),
+  ).toHaveAttribute("aria-expanded", "false");
 }
 async function objectSnapshot(page: Page, boardId: string, objectId: string) {
   return (await snapshot(page, boardId)).objects.find((object) => object.id === objectId);
@@ -151,12 +163,8 @@ for (const mobile of [false, true]) {
     });
     expect(seeded.status(), await seeded.text()).toBe(200);
     await page.reload();
-    const outline = page.getByRole("button", { name: "Object outline", exact: true });
-    if ((await outline.getAttribute("aria-expanded")) === "false") await outline.click();
-    await page
-      .getByRole("complementary")
-      .getByRole("button", { name: "Frame", exact: true })
-      .click();
+    const inspector = await openInspector(page, "Objects");
+    await inspector.getByRole("button", { name: "Frame", exact: true }).click();
     await hideOutline(page);
     await formatting(page)
       .getByRole("combobox", { name: "Font size", exact: true })
@@ -229,10 +237,10 @@ test("canvas tools persist selection formatting, shape presets, port drags and w
   await expect.poll(async () => (await snapshot(page, id)).objects.length).toBe(1);
   const note = (await snapshot(page, id)).objects[0]!;
   expect(note).toMatchObject({ type: "sticky", color: "yellow" });
-  const outlineToggle = page.getByRole("button", { name: "Object outline", exact: true });
-  if ((await outlineToggle.getAttribute("aria-expanded")) === "false") await outlineToggle.click();
-  await expect(outlineToggle).toHaveAttribute("aria-expanded", "true");
-  const outline = page.getByRole("complementary");
+  const outline = await openInspector(page, "Objects");
+  await expect(
+    page.getByRole("button", { name: "Object outline", exact: true, includeHidden: true }),
+  ).toHaveAttribute("aria-expanded", "true");
   const outlineCheckbox = outline.getByRole("checkbox", {
     name: "Select Sticky note 1",
     exact: true,
@@ -393,7 +401,7 @@ test("canvas tools persist selection formatting, shape presets, port drags and w
   const stroke = (await snapshot(page, id)).objects.find((object) => object.type === "pen")!;
   expect(stroke).toMatchObject({ color: "blue", strokeWidth: 12, opacity: 0.35 });
   await page.screenshot({ path: testInfo.outputPath("canvas-tools-desktop-highlighter.png") });
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await (await canvasAction(page, "Export")).click();
   const exportDialog = page.getByRole("dialog", { name: "Export board", exact: true });
   await exportDialog.getByRole("combobox", { name: "Area", exact: true }).selectOption("whole");
   await exportDialog
@@ -532,8 +540,10 @@ test("image mutation handoff leaves exact retry accessible after a lost acknowle
     if (writes.length === 1) await route.abort("connectionreset");
     else await route.fulfill({ response });
   });
-  const addImage = page.getByRole("button", { name: "Image", exact: true });
-  await addImage.click();
+  await openInsert(page, "Image");
+  const addImage = page
+    .getByRole("group", { name: "Insert", exact: true })
+    .getByRole("button", { name: "Image", exact: true });
   const dialog = page.getByRole("dialog", { name: "Add image", exact: true });
   await dialog.getByLabel("Choose an image", { exact: true }).setInputFiles({
     name: "retry-sketch.png",
@@ -547,7 +557,9 @@ test("image mutation handoff leaves exact retry accessible after a lost acknowle
   await expect(dialog).toHaveCount(0);
   const retry = page.getByRole("button", { name: "Retry", exact: true });
   await expect(retry).toBeEnabled();
+  await page.getByRole("button", { name: "Insert", exact: true }).click();
   await expect(addImage).toBeDisabled();
+  await page.getByRole("button", { name: "Insert", exact: true }).click();
   expect(writes).toHaveLength(1);
   expect(uploads).toHaveLength(1);
   const saved = (await snapshot(page, id)).objects;
@@ -560,7 +572,7 @@ test("image mutation handoff leaves exact retry accessible after a lost acknowle
   expect(writes[1]).toBe(writes[0]);
   expect(uploads).toHaveLength(1);
   expect((await snapshot(page, id)).objects).toEqual(saved);
-  await addImage.click();
+  await openInsert(page, "Image");
   await expect(dialog.getByLabel("Choose an image", { exact: true })).toHaveValue("");
   await expect(dialog.getByRole("textbox", { name: "Image description", exact: true })).toHaveValue(
     "",
@@ -645,7 +657,7 @@ test("all shape ports and exported connectors meet their rendered outlines", asy
     { connectors },
   );
   expect(live).toEqual(expected);
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await (await canvasAction(page, "Export")).click();
   const dialog = page.getByRole("dialog", { name: "Export board", exact: true });
   await dialog.getByRole("combobox", { name: "File format", exact: true }).selectOption("svg");
   const download = page.waitForEvent("download");
@@ -687,7 +699,7 @@ test("all shape ports and exported connectors meet their rendered outlines", asy
   expect(exported).toEqual(expected);
 });
 
-test("SVG palette imports a real image and rejects external references without changing the board", async ({
+test("SVG insertion imports a real image and rejects external references without changing the board", async ({
   page,
 }, testInfo) => {
   test.setTimeout(180_000);
@@ -702,7 +714,7 @@ test("SVG palette imports a real image and rejects external references without c
     if (request.method() === "PUT" && url.pathname.startsWith("/__test/canvas/storage/"))
       imageUploads.push(request.url());
   });
-  await (await paletteButton(page, "Add SVG image")).click();
+  await openInsert(page, "Add SVG image");
   const dialog = page.getByRole("dialog", { name: "Add SVG image", exact: true });
   await expect(dialog).toContainText("SVG is imported as an image");
   await dialog.getByLabel("Choose an image", { exact: true }).setInputFiles({
@@ -751,7 +763,7 @@ test("SVG palette imports a real image and rejects external references without c
     .poll(() => objectSnapshot(page, id, image.id))
     .toMatchObject({ type: "image", altText: "Original planning checkmark drawing" });
   const beforeRejection = await snapshot(page, id);
-  await (await paletteButton(page, "Add SVG image")).click();
+  await openInsert(page, "Add SVG image");
   await dialog.getByLabel("Choose an image", { exact: true }).setInputFiles({
     name: "external-reference.svg",
     mimeType: "image/svg+xml",

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   CanvasObject,
   CanvasExportRegion,
@@ -11,12 +11,14 @@ import { canvasPresenterCopy } from "../../lib/i18n/canvas-presenter-messages";
 import { useLocale } from "../locale-provider";
 import { canvasObjectBounds } from "./canvas-hierarchy";
 import { useCanvasPresenter } from "./use-canvas-presenter";
+import { CanvasToolIcon } from "./canvas-tool-icon";
 import styles from "./canvas-presenter.module.css";
 
 interface Props {
   boardId: string;
   objects: CanvasObject[];
   canPresent?: boolean;
+  compact?: boolean;
   viewportRegion?: CanvasExportRegion | null;
   publishedFrameId?: string | null;
   sourceBoardId?: string;
@@ -31,6 +33,7 @@ function Controls({
   boardId,
   objects,
   canPresent = false,
+  compact = false,
   viewportRegion = null,
   publishedFrameId = null,
   sourceBoardId,
@@ -47,15 +50,46 @@ function Controls({
       : undefined,
   );
   const view = state.view;
+  const disclosureId = useId();
+  const container = useRef<HTMLElement>(null);
+  const disclosure = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!compact || !expanded) return;
+    function outside(event: Event) {
+      if (event.target instanceof Node && !container.current?.contains(event.target))
+        setExpanded(false);
+    }
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("focusin", outside);
+    const first = menu.current?.querySelector<HTMLElement>("button:not(:disabled)");
+    (first ?? menu.current)?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("focusin", outside);
+    };
+  }, [compact, expanded]);
   const [ownedSession, setOwnedSession] = useState<string | null>(null);
   const mine = Boolean(view?.active && guestToken === undefined && view.sessionId === ownedSession);
   const [following, setFollowing] = useState<string | null>(null);
+  useEffect(() => {
+    if (!compact || !expanded || document.hasFocus?.() === false) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== document.documentElement) return;
+    if (document.querySelector?.('dialog[open], [aria-modal="true"]')) return;
+    // Starting or stopping replaces the focused action. Keep keyboard access inside
+    // the open disclosure when the browser drops focus onto the page body.
+    const first = menu.current?.querySelector<HTMLElement>("button:not(:disabled)");
+    (first ?? menu.current)?.focus();
+  }, [compact, expanded, view?.active, mine, following, state.working, state.error, canPresent]);
   const latest = useRef({ view, viewportRegion, publishedFrameId });
   latest.current = { view, viewportRegion, publishedFrameId };
   useEffect(() => {
     const changed = () => {
       setOwnedSession(null);
       setFollowing(null);
+      setExpanded(false);
     };
     window.addEventListener(AUTH_CHANGE_EVENT, changed);
     return () => window.removeEventListener(AUTH_CHANGE_EVENT, changed);
@@ -138,9 +172,10 @@ function Controls({
     };
     void state.command(input);
   }
-  return (
-    <section className={styles.controls} aria-label={copy.title}>
-      <span role="status">{mine ? copy.own : view?.active ? copy.live : copy.idle}</span>
+  const status = mine ? copy.own : view?.active ? copy.live : copy.idle;
+  const content = (
+    <>
+      <span role="status">{status}</span>
       {canPresent && guestToken === undefined ? (
         <>
           {!view?.active ? (
@@ -210,6 +245,56 @@ function Controls({
           </button>
         </>
       ) : null}
+    </>
+  );
+  return (
+    <section
+      ref={container}
+      className={compact ? styles.compact : styles.controls}
+      aria-label={copy.title}
+      onKeyDown={(event) => {
+        if (compact && expanded && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          setExpanded(false);
+          disclosure.current?.focus();
+        }
+      }}
+    >
+      {compact ? (
+        <>
+          <button
+            ref={disclosure}
+            type="button"
+            className={styles.disclosure}
+            aria-label={copy.title}
+            title={`${copy.title} · ${status}`}
+            aria-describedby={`${disclosureId}-status`}
+            aria-expanded={expanded}
+            aria-controls={`${disclosureId}-menu`}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <CanvasToolIcon name="present" />
+            <span
+              className={styles.statusDot}
+              data-state={mine ? "own" : following ? "following" : view?.active ? "live" : "idle"}
+              aria-hidden="true"
+            />
+          </button>
+          <span id={`${disclosureId}-status`} className={styles.srOnly}>
+            {status}
+          </span>
+        </>
+      ) : null}
+      <div
+        ref={menu}
+        id={`${disclosureId}-menu`}
+        className={compact ? styles.menu : styles.content}
+        hidden={compact && !expanded}
+        tabIndex={compact ? -1 : undefined}
+      >
+        {content}
+      </div>
     </section>
   );
 }

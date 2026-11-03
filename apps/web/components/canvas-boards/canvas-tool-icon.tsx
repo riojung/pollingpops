@@ -39,7 +39,13 @@ export type CanvasToolIconName =
   | "unlock"
   | "copy"
   | "trash"
-  | "more";
+  | "more"
+  | "back"
+  | "image"
+  | "link"
+  | "share"
+  | "present"
+  | "info";
 
 const paths: Record<CanvasToolIconName, string> = {
   select: "m5 3 14 9-7 1.5L9 20 5 3Z",
@@ -85,6 +91,12 @@ const paths: Record<CanvasToolIconName, string> = {
   copy: "M8 8h13v13H8V8ZM4 16H3V3h13v1",
   trash: "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7",
   more: "M5 12h.1M12 12h.1M19 12h.1",
+  back: "m10 5-7 7 7 7M3 12h18",
+  image: "M3 4h18v16H3V4Zm0 12 5-5 5 5 4-4 4 4M17 8h.1",
+  link: "m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 12a4 4 0 0 0 6 0l5-5a4 4 0 0 0-6-6l-1 1",
+  share: "M3 21v-2a6 6 0 0 1 12 0v2M12 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0M19 5v8m-4-4h8",
+  present: "M3 4h18v13H3V4Zm9 13v4m-5 0 5-4 5 4M9 8l6 3-6 3V8Z",
+  info: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 11v6m0-10h.1",
 };
 
 /** Decorative, locally authored line icons; the parent button supplies its localized name. */

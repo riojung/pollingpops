@@ -1,0 +1,172 @@
+.tools {
+  display: grid;
+  gap: 12px;
+  min-inline-size: 0;
+  color: var(--ui-text);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.selectionActions {
+  display: flex;
+  gap: 4px;
+}
+.group h3 {
+  margin: 0 0 6px;
+  color: var(--ui-text-subtle);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.actionGrid,
+.arrangeGrid {
+  display: grid;
+  gap: 4px;
+}
+.actionGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.arrangeGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.action,
+.iconAction,
+.apply {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-inline-size: 0;
+  min-block-size: 36px;
+  padding: 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+}
+.action {
+  flex-direction: column;
+  min-block-size: 58px;
+  overflow-wrap: anywhere;
+}
+.action svg,
+.iconAction svg {
+  flex: 0 0 auto;
+  inline-size: 19px;
+  block-size: 19px;
+}
+.iconAction {
+  inline-size: 36px;
+  padding: 7px;
+}
+.arrangeGrid .iconAction {
+  inline-size: 100%;
+}
+.action:hover:not(:disabled),
+.iconAction:hover:not(:disabled),
+.apply:hover:not(:disabled),
+.tools summary:hover {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-hover);
+  color: var(--ui-text-strong);
+}
+.action:disabled,
+.iconAction:disabled,
+.apply:disabled {
+  color: var(--ui-text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tools :is(button, input, select, summary):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.tools details {
+  min-inline-size: 0;
+  border-block-start: 1px solid var(--ui-border-subtle);
+}
+.tools summary {
+  color: var(--ui-text);
+  box-sizing: border-box;
+  min-block-size: 38px;
+  padding: 10px 4px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.tools label {
+  display: grid;
+  gap: 5px;
+  min-inline-size: 0;
+  font-size: 12px;
+}
+.tools input,
+.tools select {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 40px;
+  box-sizing: border-box;
+  padding: 7px 8px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 16px;
+}
+.form {
+  display: grid;
+  gap: 8px;
+  padding-block-end: 10px;
+}
+.numeric {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.parentAction {
+  margin-block: 8px 10px;
+}
+.parentAction .action {
+  flex-direction: row;
+  min-block-size: 36px;
+  inline-size: 100%;
+}
+.tools p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.help p {
+  padding: 0 4px 10px;
+  color: var(--ui-text-subtle);
+}
+@media (max-width: 760px) {
+  .iconAction,
+  .arrangeGrid .iconAction,
+  .apply,
+  .parentAction .action,
+  .tools summary {
+    min-block-size: 44px;
+  }
+  .selectionActions .iconAction {
+    inline-size: 44px;
+  }
+}

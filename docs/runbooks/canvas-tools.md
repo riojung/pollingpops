@@ -2,6 +2,10 @@
 
 ## Editing and selection
 
+Navigation, save status, history, insertion, presentation, sharing, and panel controls share one compact top bar. **Insert** opens image, link, and SVG-image actions; secondary controls move into **More board actions** on narrow screens.
+
+The sliding **Inspector** separates Objects, Properties, Arrange, and Board controls. Facilitation and workshop controls appear where available. Closing the inspector or switching sections preserves local property and discussion drafts. Desktop canvases resize beside the open inspector; on small screens the panel covers and temporarily disables the canvas beneath it. Opening it from a covered canvas control moves keyboard focus into the selected inspector section; closing it restores the originating control. Adding an item on a small screen keeps the canvas and floating formatting controls available. Use **Close inspector** or Escape from its navigation controls to return to the canvas.
+
 The canvas rail keeps selection, pan, area selection, notes, text, basic shapes, frames, and connectors within reach. Its grouped controls open sticky colors, the searchable shape catalog, and drawing settings. Escape dismisses a flyout and returns focus to its trigger.
 
 Selecting objects opens the formatting toolbar. Eligible selections support type conversion, font family and size, bold, italic, underline, alignment, color, opacity, stroke width, locking, duplication, and deletion. **More actions** opens the detailed inspector and layout tools. Locked objects can be unlocked by an eligible collaborator; protected workshop ideas keep their existing moderation boundary.

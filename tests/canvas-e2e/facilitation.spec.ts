@@ -4,7 +4,18 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { CanvasBoardView } from "@openround/contracts";
 import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
-import { api, fits, newTeamCanvas, organization, saveText, snapshot, teammate } from "./support";
+import {
+  api,
+  canvasAction,
+  fits,
+  newTeamCanvas,
+  openInspector,
+  openPresentation,
+  organization,
+  saveText,
+  snapshot,
+  teammate,
+} from "./support";
 
 async function command(page: Page, boardId: string, value: unknown): Promise<CanvasBoardView> {
   const response = await page.request.post(`${api}/v1/canvas-boards/${boardId}/commands`, {
@@ -31,20 +42,12 @@ async function seedObjects(page: Page, boardId: string, objects: Record<string, 
   });
 }
 async function selectObject(page: Page, label: string) {
-  const outline = page.getByRole("button", { name: "Object outline", exact: true });
-  if ((await outline.getAttribute("aria-expanded")) === "false") await outline.click();
-  await page.getByRole("complementary").getByRole("button", { name: label, exact: true }).click();
-  if ((await outline.getAttribute("aria-expanded")) === "false") {
-    await page
-      .getByRole("toolbar", { name: "Selection formatting", exact: true })
-      .getByRole("button", { name: "More actions", exact: true })
-      .click();
-  }
-  await expect(outline).toHaveAttribute("aria-expanded", "true");
+  const inspector = await openInspector(page, "Objects");
+  await inspector.getByRole("button", { name: label, exact: true }).click();
+  await openInspector(page, "Properties");
 }
 async function openFacilitation(page: Page) {
-  const toggle = page.getByRole("button", { name: "Facilitation", exact: true });
-  if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  await openInspector(page, "Facilitation");
   const panel = page.getByRole("region", { name: "Facilitation", exact: true });
   await expect(panel.getByRole("button", { name: "Comments", exact: true })).toBeVisible();
   return panel;
@@ -171,7 +174,7 @@ test("hidden facilitation retains drafts, navigation protection and the original
   await expect.poll(() => presenterReads).toBeGreaterThan(0);
   expect(facilitationReads).toBe(0);
   const panel = await openFacilitation(page);
-  const toggle = page.getByRole("button", { name: "Facilitation", exact: true });
+  const toggle = await canvasAction(page, "Facilitation");
   const surface = page.getByTestId("canvas-surface");
   await panel.getByRole("button", { name: "Comment on selected object", exact: true }).click();
   const draft = "Retain this unsent synthetic comment across the drawer toggle";
@@ -179,10 +182,17 @@ test("hidden facilitation retains drafts, navigation protection and the original
   await panel.getByRole("textbox", { name: "Your draft", exact: true }).fill(draft);
   await panel.getByRole("button", { name: "Saved versions", exact: true }).click();
   await panel.getByRole("textbox", { name: "Version name", exact: true }).fill(versionName);
-  await page.getByRole("button", { name: "Object outline", exact: true }).click();
+  await openInspector(page, "Objects");
+  await expect(panel).toHaveCount(0);
+  await openInspector(page, "Facilitation");
   await expect(page.getByRole("button", { name: "Object outline", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",
+  );
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("tab", { name: "Facilitation", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
   );
 
   async function hidePanel() {
@@ -354,7 +364,7 @@ test("saved layouts preserve current text and deletions and export selected-fram
     });
   await preview.getByRole("button", { name: "Close", exact: true }).click();
   await selectObject(page, "Export frame");
-  const openExport = page.getByRole("button", { name: "Export", exact: true });
+  const openExport = await canvasAction(page, "Export");
   await openExport.click();
   const modal = page.getByRole("dialog", { name: "Export board", exact: true });
   await expect(modal.getByRole("combobox", { name: "Area", exact: true })).toBeFocused();
@@ -432,6 +442,7 @@ test("guided guests see the timer and optionally follow published frames with im
   await owner.getByRole("button", { name: "Add canvas view", exact: true }).click();
   await expect(owner).toHaveURL(/\/canvas\/[0-9a-f-]+$/);
   const id = new URL(owner.url()).pathname.split("/").at(-1)!;
+  await openInspector(owner, "Workshop controls");
   await owner.getByRole("button", { name: "Open collection", exact: true }).click();
   const firstId = randomUUID(),
     secondId = randomUUID(),
@@ -494,6 +505,7 @@ test("guided guests see the timer and optionally follow published frames with im
     await expect(guest.getByRole("status").filter({ hasText: /^Paused$/ })).toBeVisible();
     await expect(guest.getByRole("button", { name: "Start timer", exact: true })).toHaveCount(0);
     await selectObject(owner, "Private team frame");
+    await openPresentation(owner);
     await expect(
       owner.getByRole("button", { name: "Present selected frame to guests", exact: true }),
     ).toBeDisabled();
@@ -504,8 +516,10 @@ test("guided guests see the timer and optionally follow published frames with im
     await expect(guest.getByRole("button", { name: "Follow presenter", exact: true })).toHaveCount(
       0,
     );
+    await openPresentation(owner);
     await owner.getByRole("button", { name: "Stop presenting", exact: true }).click();
     await selectObject(owner, "Published first frame");
+    await openPresentation(owner);
     await owner
       .getByRole("button", { name: "Present selected frame to guests", exact: true })
       .click();
@@ -623,7 +637,7 @@ test("@mobile facilitation and export controls fit 320px screens in light and da
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`facilitation-320-${colorScheme}.png`) });
   }
-  await page.getByRole("button", { name: "Export", exact: true }).tap();
+  await (await canvasAction(page, "Export")).tap();
   const modal = page.getByRole("dialog", { name: "Export board", exact: true });
   await expect(modal.getByRole("combobox", { name: "Area", exact: true })).toBeVisible();
   await expect(modal.getByRole("combobox", { name: "File format", exact: true })).toBeVisible();

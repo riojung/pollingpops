@@ -65,6 +65,7 @@ export async function snapshot(page: Page, id: string): Promise<CanvasBoardView>
   return (await response.json()).board;
 }
 export async function saveText(page: Page, text: string) {
+  await openInspector(page);
   await page.getByRole("textbox", { name: "Text", exact: true }).fill(text);
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
@@ -87,4 +88,83 @@ export async function fits(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+}
+
+export async function canvasAction(page: Page, label: string) {
+  const actions = page.getByRole("button", { name: label, exact: true, includeHidden: true });
+  const action = actions.filter({ visible: true });
+  if (!(await action.isVisible())) {
+    const more = page.getByRole("button", { name: "More board actions", exact: true });
+    if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+  }
+  await expect(action).toBeVisible();
+  for (const button of await actions.all()) if (await button.isVisible()) return button;
+  throw new Error(`Canvas action is not visible: ${label}`);
+}
+
+export async function openInspector(
+  page: Page,
+  tab:
+    | "Objects"
+    | "Properties"
+    | "Arrange"
+    | "Board"
+    | "Facilitation"
+    | "Workshop controls" = "Properties",
+) {
+  const presentation = page.getByRole("button", {
+    name: "Presentation",
+    exact: true,
+    includeHidden: true,
+  });
+  if (
+    (await presentation.count()) > 0 &&
+    (await presentation.getAttribute("aria-expanded")) === "true"
+  )
+    await (await canvasAction(page, "Presentation")).click();
+  const more = page.getByRole("button", {
+    name: "More board actions",
+    exact: true,
+    includeHidden: true,
+  });
+  if ((await more.getAttribute("aria-expanded")) === "true" && (await more.isVisible()))
+    await more.click();
+  const insert = page.getByRole("button", { name: "Insert", exact: true });
+  if ((await insert.getAttribute("aria-expanded")) === "true") await insert.click();
+  const drawer = page.getByTestId("canvas-inspector");
+  const inspector = page.getByRole("complementary", { name: "Inspector", exact: true });
+  if ((await drawer.getAttribute("data-open")) !== "true")
+    await (await canvasAction(page, "Object outline")).click();
+  await expect(inspector).toBeVisible();
+  await inspector.getByRole("tab", { name: tab, exact: true }).click();
+  return inspector;
+}
+
+export async function closeInspector(page: Page) {
+  const drawer = page.getByTestId("canvas-inspector");
+  if ((await drawer.getAttribute("data-open")) !== "true") return;
+  const close = drawer.getByRole("button", { name: "Close inspector", exact: true });
+  await expect(close).toBeVisible();
+  await close.click();
+  await expect(drawer).toHaveAttribute("data-open", "false");
+}
+
+export async function openInsert(page: Page, label: string) {
+  const insert = page.getByRole("button", { name: "Insert", exact: true });
+  if ((await insert.getAttribute("aria-expanded")) !== "true") await insert.click();
+  await page
+    .getByRole("group", { name: "Insert", exact: true })
+    .getByRole("button", { name: label, exact: true })
+    .click();
+}
+
+export async function openPresentation(page: Page) {
+  if (
+    (await page
+      .getByRole("button", { name: "Presentation", exact: true, includeHidden: true })
+      .count()) === 0
+  )
+    return;
+  const presentation = await canvasAction(page, "Presentation");
+  if ((await presentation.getAttribute("aria-expanded")) !== "true") await presentation.click();
 }

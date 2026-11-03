@@ -256,6 +256,7 @@ function Controls({
         if (compact && expanded && event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
+          setFollowing(null);
           setExpanded(false);
           disclosure.current?.focus();
         }

@@ -371,8 +371,9 @@ describe("explicit local-tab presentation ownership and optional following", () 
     const start = mocked.command.mock.calls[0]![0] as CanvasPresenterMutation;
     mocked.state.view = presenter({ sessionId: start.sessionId });
     view.render();
-    view.click("Presentation");
+    view.closeWithEscape();
     expect(view.menu().hidden).toBe(true);
+    expect(view.disclosureFocus).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(2000);
     expect(mocked.command.mock.calls[1]![0]).toMatchObject({
       sessionId: start.sessionId,
@@ -393,10 +394,25 @@ describe("explicit local-tab presentation ownership and optional following", () 
     expect(view.disclosureFocus).not.toHaveBeenCalled();
     view.click("Presentation");
     expect(view.button("Stop following")["aria-pressed"]).toBe(true);
-    view.closeWithEscape();
+  });
+  it("stops following and dismisses an expanded compact menu on one Escape without stopping the presenter", () => {
+    const view = harness({ compact: true });
+    view.render();
+    view.click("Presentation");
+    view.click("Follow presenter");
+    expect(view.button("Stop following")["aria-pressed"]).toBe(true);
+    expect(view.menu().hidden).toBe(false);
     expect(view.onFollow).toHaveBeenLastCalledWith(teamRegion);
-    view.event("keydown", "Escape");
+    const event = view.closeWithEscape();
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
     expect(view.onFollow).toHaveBeenLastCalledWith(null);
+    expect(view.menu().hidden).toBe(true);
+    expect(view.disclosureFocus).toHaveBeenCalledOnce();
+    expect(mocked.state.view).toMatchObject({ active: true, sessionId: remoteSession });
+    expect(mocked.command).not.toHaveBeenCalled();
+    view.click("Presentation");
+    expect(view.button("Follow presenter")["aria-pressed"]).toBe(false);
   });
   it.each([canvasBoard.ownerUserId, "00000000-0000-4000-8000-000000000299"])(
     "does not adopt or heartbeat an existing presenter session for creator %s",

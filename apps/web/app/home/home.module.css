@@ -222,6 +222,7 @@
   color: var(--ui-text-strong);
   font-size: 1.08rem;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .artifactCard h3 a {
@@ -279,18 +280,33 @@
   color: var(--ui-violet-text);
 }
 
+.typePill[data-type="survey"] {
+  background: var(--ui-warning-bg);
+  color: var(--ui-warning-text);
+}
+
+.typePill[data-type="canvas"] {
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-strong);
+}
+
 .statusPill {
   background: var(--ui-surface-soft);
   color: var(--ui-text-subtle);
 }
 
 .statusPill[data-status="published"],
-.statusPill[data-status="open"] {
+.statusPill[data-status="open"],
+.statusPill[data-status="collecting"],
+.statusPill[data-status="active"] {
   background: var(--ui-success-bg);
   color: var(--ui-success-text);
 }
 
-.statusPill[data-status="scheduled"] {
+.statusPill[data-status="scheduled"],
+.statusPill[data-status="organizing"],
+.statusPill[data-status="voting"],
+.statusPill[data-status="frozen"] {
   background: var(--ui-warning-bg);
   color: var(--ui-warning-text);
 }
@@ -344,6 +360,19 @@
 
 .sideHeading {
   margin-bottom: 0.85rem;
+}
+
+.sectionCount {
+  display: inline-flex;
+  min-inline-size: 1.6rem;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-subtle);
+  padding: 0.2rem 0.45rem;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  vertical-align: middle;
 }
 
 .activityItem,

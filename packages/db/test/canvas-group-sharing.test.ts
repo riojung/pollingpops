@@ -20,6 +20,7 @@ import {
 } from "../src/index.js";
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 import { MemoryCollaborationGroupRepository } from "../src/groups.js";
+import { MemoryCanvasBoards } from "../src/canvas-board-store.js";
 
 async function principal(repository: Repository) {
   const tokenHash = randomUUID();
@@ -222,6 +223,107 @@ for (const backend of ["memory", "postgres"] as const)
         );
       }
 
+      it("counts and orders more than 1000 group-only Home shares before applying the recent limit", async () => {
+        const original = await create(),
+          selected = await group();
+        await join(selected.id);
+        await share(original.id, [selected.id], "viewer");
+        // These rows model a large retained shared corpus directly, without exercising the
+        // independent per-workspace creation quota 1005 times in a discovery regression.
+        const now = new Date();
+        const fixtures = Array.from({ length: 1005 }, (_, index) => ({
+          id: index === 0 ? original.id : randomUUID(),
+          title: `Shared Home metadata ${index}`,
+          updatedAt: new Date(now.getTime() + Math.floor(index / 2) * 1000).toISOString(),
+          status: index === 0 ? "archived" : "active",
+          expiresAt: index === 1 ? now.toISOString() : original.expiresAt,
+        }));
+        await create(); // Unshared metadata is not part of the count.
+        await canvases.create(
+          editor,
+          CanvasBoardCreateSchema.parse({
+            workspaceId: editor.workspaceId,
+            title: "Other owned workspace",
+            boardType: "team",
+            operationId: randomUUID(),
+          }),
+        );
+        if (repository instanceof MemoryRepository) {
+          const store = repository.getOrCreateLifecycleExtension(
+            "canvasBoards",
+            () => new MemoryCanvasBoards(repository as MemoryRepository),
+          );
+          const template = structuredClone(store.rows.get(original.id)!);
+          for (const row of fixtures) {
+            const state = structuredClone(template);
+            state.board = {
+              ...state.board,
+              ...row,
+              status: row.status as "active" | "archived",
+              creationKey: row.id,
+            };
+            Object.defineProperty(state, "objects", {
+              get() {
+                throw new Error("Home loaded a scene");
+              },
+            });
+            store.rows.set(row.id, state);
+          }
+        } else {
+          const target = new URL(adminUrl!);
+          target.pathname = `/${database}`;
+          const seed = new PostgresRepository(target.toString());
+          try {
+            await seed.pool.query(
+              `
+              INSERT INTO canvas_boards(id,workspace_id,organization_id,owner_user_id,source_board_id,board_type,title,status,canvas_seq,creation_key,creation_hash,created_at,updated_at,expires_at)
+              SELECT fixture.id,$2,$3,$4,NULL,'team',fixture.title,fixture.status,0,fixture.id,'metadata-fixture',$5,fixture.updated_at,fixture.expires_at
+              FROM jsonb_to_recordset($1::jsonb) AS fixture(id uuid,title text,status text,updated_at timestamptz,expires_at timestamptz)
+              ON CONFLICT(id) DO UPDATE SET status=excluded.status,updated_at=excluded.updated_at`,
+              [
+                JSON.stringify(
+                  fixtures.map(({ updatedAt, expiresAt, ...row }) => ({
+                    ...row,
+                    updated_at: updatedAt,
+                    expires_at: expiresAt,
+                  })),
+                ),
+                workspaceId,
+                organizationId,
+                owner.userId,
+                now,
+              ],
+            );
+            await seed.pool.query(
+              `INSERT INTO canvas_board_group_grants(workspace_id,board_id,group_id,role,created_at)
+              SELECT $1,id,$2,'viewer',$3 FROM canvas_boards WHERE id=ANY($4::uuid[]) ON CONFLICT DO NOTHING`,
+              [workspaceId, selected.id, now, fixtures.map((row) => row.id)],
+            );
+          } finally {
+            await seed.close();
+          }
+        }
+        const result = await canvases.recentMetadata(editor, { workspaceId, limit: 6 });
+        const expected = fixtures
+          .filter((row, index) => index > 1)
+          .sort(
+            (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id.localeCompare(b.id),
+          );
+        expect(result.total).toBe(1003);
+        expect(result.boards.map((row) => row.id)).toEqual(
+          expected.slice(0, 6).map((row) => row.id),
+        );
+        expect(result.boards.every((row) => row.role === "viewer" && !row.capabilities.edit)).toBe(
+          true,
+        );
+        expect(result.linkedSourceBoardIds).toEqual([]);
+        expect(await canvases.recentMetadata(other, { workspaceId, limit: 6 })).toEqual({
+          boards: [],
+          total: 0,
+          linkedSourceBoardIds: [],
+        });
+      });
+
       it("cleans legacy Idea Board group artifacts on deletion and retention purge and rejects stale re-adds", async () => {
         const ideas = createIdeaBoardRepository(repository);
         for (const removal of ["delete", "purge"] as const) {
@@ -361,6 +463,7 @@ for (const backend of ["memory", "postgres"] as const)
           code: "NOT_FOUND",
         });
         expect((await canvases.list(editor)).map((row) => row.id)).not.toContain(board.id);
+        expect((await canvases.recentMetadata(editor, { workspaceId, limit: 6 })).total).toBe(0);
         await expect(canvases.groupBoards(editor, workspaceId, selected.id)).rejects.toMatchObject({
           code: "NOT_FOUND",
         });
@@ -399,6 +502,7 @@ for (const backend of ["memory", "postgres"] as const)
         await expect(canvases.authorize(editor, board.id)).rejects.toMatchObject({
           code: "NOT_FOUND",
         });
+        expect((await canvases.recentMetadata(editor, { workspaceId, limit: 6 })).total).toBe(0);
         expect((await canvases.list(editor)).map((row) => row.id)).not.toContain(board.id);
       });
 
@@ -499,6 +603,7 @@ for (const backend of ["memory", "postgres"] as const)
         await workspaceMember(editor);
         await expect(canvases.get(editor, board.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
         expect(await canvases.groupBoards(editor, workspaceId, selected.id)).toEqual([]);
+        expect((await canvases.recentMetadata(editor, { workspaceId, limit: 6 })).total).toBe(0);
         await share(board.id, [selected.id], "viewer");
         expect(await canvases.get(editor, board.id)).toMatchObject({
           role: "viewer",
@@ -512,8 +617,16 @@ for (const backend of ["memory", "postgres"] as const)
         });
         await workspaceMember(editor);
         expect((await canvases.get(editor, board.id)).role).toBe("viewer");
+        expect((await canvases.recentMetadata(editor, { workspaceId, limit: 6 })).boards).toEqual([
+          expect.objectContaining({
+            id: board.id,
+            role: "viewer",
+            capabilities: expect.objectContaining({ edit: false }),
+          }),
+        ]);
         await share(board.id, [selected.id], "facilitator");
         await expect(canvases.get(editor, board.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+        expect((await canvases.recentMetadata(editor, { workspaceId, limit: 6 })).total).toBe(0);
       });
 
       it("omits archived, expired and revoked boards from group curation", async () => {

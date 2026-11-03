@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 describe("Home first-run actions", () => {
   it("links an editor to creation and the permanent quick-start guide", () => {
     const markup = renderToStaticMarkup(
-      withEnglishLocale(<HomeFirstRunActions canEdit createHref="/create" guideAvailable />),
+      withEnglishLocale(<HomeFirstRunActions canCreate guideAvailable />),
     );
 
     expect(markup).toContain('href="/create"');
@@ -20,9 +20,7 @@ describe("Home first-run actions", () => {
 
   it("keeps guidance available without showing a creation action to a viewer", () => {
     const markup = renderToStaticMarkup(
-      withEnglishLocale(
-        <HomeFirstRunActions canEdit={false} createHref="/create" guideAvailable />,
-      ),
+      withEnglishLocale(<HomeFirstRunActions canCreate={false} guideAvailable />),
     );
 
     expect(markup).not.toContain("Create your first artifact");
@@ -31,17 +29,13 @@ describe("Home first-run actions", () => {
 
   it("does not link to a video guide when its covered features are unavailable", () => {
     const editorMarkup = renderToStaticMarkup(
-      withEnglishLocale(
-        <HomeFirstRunActions canEdit createHref="/dashboard" guideAvailable={false} />,
-      ),
+      withEnglishLocale(<HomeFirstRunActions canCreate guideAvailable={false} />),
     );
     const viewerMarkup = renderToStaticMarkup(
-      withEnglishLocale(
-        <HomeFirstRunActions canEdit={false} createHref="/dashboard" guideAvailable={false} />,
-      ),
+      withEnglishLocale(<HomeFirstRunActions canCreate={false} guideAvailable={false} />),
     );
 
-    expect(editorMarkup).toContain('href="/dashboard"');
+    expect(editorMarkup).toContain('href="/create"');
     expect(editorMarkup).not.toContain("/help#quick-start");
     expect(viewerMarkup).toBe("");
   });

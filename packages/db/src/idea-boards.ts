@@ -993,6 +993,32 @@ export function createIdeaBoardRepository(repository: Repository) {
 }
 
 /** Trusted canvas transaction bridge. Call only under the shared memory platform transaction. */
+export function memoryIdeaBoardCanvasMetadata(
+  repository: MemoryRepository,
+  id: string,
+  guestHash?: string,
+) {
+  createIdeaBoardRepository(repository);
+  const store = repository.getOrCreateLifecycleExtension(
+    "ideaBoards",
+    () => new MemoryIdeaBoards(repository),
+  );
+  const row = store.rows.get(id);
+  return row
+    ? {
+        id: row.id,
+        workspaceId: row.workspaceId,
+        revision: row.revision,
+        status: row.status,
+        closesAt: row.closesAt,
+        expiresAt: row.expiresAt,
+        guestPresent: Boolean(
+          guestHash && row.guests.some((guest) => guest.tokenHash === guestHash),
+        ),
+      }
+    : null;
+}
+/** Trusted canvas transaction bridge. Call only under the shared memory platform transaction. */
 export function memoryIdeaBoardCanvasSource(repository: MemoryRepository, id: string) {
   createIdeaBoardRepository(repository);
   const store = repository.getOrCreateLifecycleExtension(

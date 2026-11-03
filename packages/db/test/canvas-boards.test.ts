@@ -456,6 +456,116 @@ for (const backend of ["memory", "postgres"] as const)
           store,
         );
       }
+      it("returns bounded Home metadata with canonical role/seat facts and full linked-source deduplication", async () => {
+        const now = new Date();
+        const source = await createIdeaBoardRepository(repository).create(
+          workspaceId,
+          randomUUID(),
+          IdeaBoardCreateSchema.parse({ title: "Private workshop source" }),
+          randomUUID(),
+          {
+            participantLimit: 10,
+            closesAt: new Date(now.getTime() + 3_600_000).toISOString(),
+            expiresAt: new Date(now.getTime() + 7_200_000).toISOString(),
+          },
+          now,
+        );
+        const workshop = await canvases.create(
+          owner,
+          CanvasBoardCreateSchema.parse({
+            schemaVersion: CANVAS_SCHEMA_VERSION,
+            workspaceId,
+            title: "Older workshop canvas",
+            boardType: "workshop",
+            sourceBoardId: source.id,
+            operationId: randomUUID(),
+          }),
+          now,
+        );
+        const latest = await canvases.create(
+          owner,
+          CanvasBoardCreateSchema.parse({
+            schemaVersion: CANVAS_SCHEMA_VERSION,
+            workspaceId,
+            title: "Latest team canvas",
+            boardType: "team",
+            operationId: randomUUID(),
+          }),
+          new Date(now.getTime() + 1000),
+        );
+        const calls: string[] = [];
+        const metadata = withReadTransaction(
+          (tx) =>
+            new Proxy(tx, {
+              get(target, property) {
+                const value = target[property as keyof CanvasTransaction];
+                if (typeof value !== "function") return value;
+                return (...args: unknown[]) => {
+                  const name = String(property);
+                  calls.push(name);
+                  if (["get", "snapshot", "source", "list"].includes(name))
+                    throw new Error(`Home fetched ${name}`);
+                  return Reflect.apply(value, target, args);
+                };
+              },
+            }),
+        );
+        const page = await metadata.recentMetadata(
+          owner,
+          { workspaceId, limit: 1 },
+          new Date(now.getTime() + 1000),
+        );
+        expect(page.total).toBe(2);
+        expect(page.linkedSourceBoardIds).toEqual([source.id]);
+        expect(page.boards).toEqual([
+          expect.objectContaining({
+            id: latest.id,
+            role: "owner",
+            title: latest.title,
+            capabilities: {
+              edit: true,
+              facilitate: true,
+              share: true,
+              delete: true,
+              archive: true,
+            },
+          }),
+        ]);
+        expect(Object.keys(page.boards[0]!).sort()).toEqual(
+          [
+            "id",
+            "workspaceId",
+            "title",
+            "boardType",
+            "sourceBoardId",
+            "status",
+            "updatedAt",
+            "role",
+            "capabilities",
+          ].sort(),
+        );
+        expect(calls.filter((call) => call === "metadata")).toHaveLength(1);
+        const query = { workspaceId: editor.workspaceId, limit: 6 };
+        await share(workshop.id, "viewer");
+        const viewerPage = await canvases.recentMetadata(editor, query);
+        expect(viewerPage).toMatchObject({
+          total: 1,
+          linkedSourceBoardIds: [],
+          boards: [{ id: workshop.id, role: "viewer", capabilities: { edit: false } }],
+        });
+        await platform.assignOrganizationUserLicense(org, owner.userId, editor.userId, false);
+        expect((await canvases.recentMetadata(editor, query)).total).toBe(1);
+        await platform.updateOrganizationStatus(org, "suspended");
+        expect(await canvases.recentMetadata(editor, query)).toEqual({
+          boards: [],
+          total: 0,
+          linkedSourceBoardIds: [],
+        });
+        await platform.updateOrganizationStatus(org, "active");
+        expect(
+          (await canvases.recentMetadata(editor, query, new Date(workshop.expiresAt))).total,
+        ).toBe(0);
+      });
       it("matches the full-state response with exact actor-owned uppercase history heads", async () => {
         const board = await create();
         const a = { ...note("Owner note"), id: "00000000-0000-4000-8000-000000000001" },

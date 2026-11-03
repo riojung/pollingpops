@@ -5,9 +5,13 @@ import { withEnglishLocale } from "../../test-utils/english-locale";
 vi.mock("next/navigation", () => ({ usePathname: () => "/library" }));
 describe("product feedback", () => {
   it("provides a global labelled dialog trigger", () => {
-    expect(renderToStaticMarkup(withEnglishLocale(<FeedbackButton />))).toContain(
-      'aria-haspopup="dialog"',
-    );
+    const markup = renderToStaticMarkup(withEnglishLocale(<FeedbackButton />));
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain('aria-label="Feedback"');
+    expect(markup).toMatch(/title="[^"]+"/);
+    expect(markup).toContain("<svg");
+    // The trigger contains SVG geometry only, with no visible label beside or inside it.
+    expect(markup).toMatch(/^<button[^>]*><svg[^>]*>(?:<path[^>]*><\/path>)+<\/svg><\/button>$/);
   });
   it("explains collection, protects sensitive data, and asks for optional follow-up consent", () => {
     const markup = renderToStaticMarkup(

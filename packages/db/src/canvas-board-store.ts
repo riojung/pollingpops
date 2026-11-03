@@ -13,7 +13,12 @@ import type { PostgresRepository } from "./postgres.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PostgresPlatformStore } from "./platform-postgres.js";
 import { selectWorkspaceLicenseAssignment, workspaceLicenseTerms } from "./platform-service.js";
-import { memoryIdeaBoardCanvasSource, saveMemoryIdeaBoardCanvasSource } from "./idea-boards.js";
+import {
+  memoryIdeaBoardCanvasMetadata,
+  memoryIdeaBoardCanvasSource,
+  saveMemoryIdeaBoardCanvasSource,
+} from "./idea-boards.js";
+import { canvasMetadataRole, canvasRecentMetadataSql } from "./canvas-metadata.js";
 import type {
   CanvasAccessContext,
   CanvasBoardStored,
@@ -182,7 +187,8 @@ export class MemoryCanvasBoards {
             : null;
         },
         sourceMetadata: async (id, guestHash) => {
-          const source = sources.get(id) ?? memoryIdeaBoardCanvasSource(this.repository, id);
+          const source = sources.get(id);
+          if (!source) return memoryIdeaBoardCanvasMetadata(this.repository, id, guestHash);
           return source
             ? {
                 id: source.id,
@@ -220,6 +226,51 @@ export class MemoryCanvasBoards {
           };
         },
         list: async () => [...this.rows.values()].map((state) => structuredClone(state.board)),
+        recentMetadata: async (workspaceId, userId, limit, now) => {
+          const accessByWorkspace = new Map<string, CanvasAccessContext | null>();
+          const groupsByWorkspace = new Map<string, Set<string>>();
+          const boards: CanvasBoardStored[] = [];
+          const linkedSourceBoardIds: string[] = [];
+          for (const state of this.rows.values()) {
+            const board = state.board;
+            if (board.status === "archived" || Date.parse(board.expiresAt) <= now.getTime())
+              continue;
+            if (!accessByWorkspace.has(board.workspaceId))
+              accessByWorkspace.set(board.workspaceId, await tx.access(board.workspaceId, userId));
+            const access = accessByWorkspace.get(board.workspaceId)!;
+            if (!groupsByWorkspace.has(board.workspaceId)) {
+              const groups = access?.workspace.membership
+                ? await createCollaborationGroupRepository(this.repository).listGroups(
+                    board.workspaceId,
+                    userId,
+                  )
+                : [];
+              groupsByWorkspace.set(board.workspaceId, new Set(groups.map((group) => group.id)));
+            }
+            const joined = groupsByWorkspace.get(board.workspaceId)!;
+            const role = canvasMetadataRole(
+              { board, grants: state.grants },
+              { userId },
+              access,
+              (state.groupGrants ?? []).filter((grant) => joined.has(grant.groupId)),
+            );
+            if (!role || (board.workspaceId !== workspaceId && role === "owner")) continue;
+            if (board.sourceBoardId) {
+              const source = await tx.sourceMetadata(board.sourceBoardId);
+              if (!source || Date.parse(source.expiresAt) <= now.getTime()) continue;
+              if (board.workspaceId === workspaceId) linkedSourceBoardIds.push(board.sourceBoardId);
+            }
+            boards.push(board);
+          }
+          boards.sort(
+            (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id.localeCompare(b.id),
+          );
+          return {
+            boards: structuredClone(boards.slice(0, limit)),
+            total: boards.length,
+            linkedSourceBoardIds: linkedSourceBoardIds.sort(),
+          };
+        },
         put: async (state) => {
           if (state.board.uploadCount || canvasMediaIds(state).length) await tx.syncMedia(state);
           changed.set(state.board.id, structuredClone(state));
@@ -752,6 +803,30 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
           (
             await client.query("SELECT * FROM canvas_boards ORDER BY updated_at DESC,id LIMIT 1000")
           ).rows.map(boardRow),
+        recentMetadata: async (workspaceId, userId, limit, now) => {
+          // This narrowly scoped read joins metadata across authorized owning workspaces.
+          // Restore the prior context before any per-board canonical authorization work.
+          const prior =
+            (await client.query("SELECT current_setting('app.system_access',true) AS value"))
+              .rows[0]?.value ?? "";
+          await context(client, "app.system_access", "on");
+          try {
+            const result = await client.query(canvasRecentMetadataSql, [
+              userId,
+              workspaceId,
+              now,
+              limit,
+            ]);
+            const row = result.rows[0];
+            return {
+              boards: row.boards.map(boardRow),
+              total: Number(row.total),
+              linkedSourceBoardIds: row.linked_sources,
+            };
+          } finally {
+            await context(client, "app.system_access", prior);
+          }
+        },
         snapshot: async (id, actorId) => {
           const board = await readLockedBoard(id);
           if (!board) return null;

@@ -450,7 +450,9 @@ test("library search finds later-page canvases and workshops and resets paginati
   await expect(page.getByRole("link", { name: initialTitle, exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: laterCanvas.title, exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: laterWorkshop.title, exact: true })).toHaveCount(0);
-  const search = page.getByRole("searchbox", { name: "Search boards", exact: true });
+  const search = page
+    .getByRole("toolbar", { name: "Idea boards", exact: true })
+    .getByRole("searchbox", { name: "Search boards", exact: true });
   async function find(title: string, endpoint: string) {
     const request = page.waitForRequest((candidate) => {
       const url = new URL(candidate.url());

@@ -1,87 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, humanError } from "../../lib/api";
+import { useCallback, useMemo } from "react";
 import { useLocale } from "../../components/locale-provider";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { HomeFirstRunActions } from "./home-first-run-actions";
 import { professionalRoundBuilderAvailable } from "../../lib/help-guide-availability";
 import { pluralCategory } from "../../lib/i18n/format";
+import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
+import { canvasMessages } from "../../lib/i18n/canvas-messages";
+import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
+import { hasHomeWork, homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
+import { useHomeSummary } from "./home-summary";
 import styles from "./home.module.css";
-
-type ArtifactType = "round" | "presentation";
-
-interface HomeSummary {
-  generatedAt: string;
-  recentArtifacts: Array<{
-    id: string;
-    artifactType: ArtifactType;
-    title: string;
-    description: string;
-    status: "draft" | "published" | "archived";
-    itemCount: number;
-    updatedAt: string;
-    editHref: string;
-    actionHref: string;
-    actionLabel: string;
-  }>;
-  sessions: Array<{
-    id: string;
-    artifactType: ArtifactType;
-    artifactId: string;
-    title: string;
-    status: "active" | "finished" | "expired";
-    phase: string;
-    code: string;
-    participantCount: number;
-    progressLabel: string;
-    createdAt: string;
-    href: string;
-  }>;
-  assignments: Array<{
-    id: string;
-    quizId: string;
-    title: string;
-    status: "scheduled" | "open";
-    checkpointCount: number;
-    attemptCount: number;
-    completedAttemptCount: number;
-    opensAt: string;
-    closesAt: string;
-    href: string;
-  }>;
-  resultHighlights: Array<{
-    id: string;
-    artifactType: ArtifactType;
-    title: string;
-    status: "pending" | "ready" | "failed";
-    participantCount: number;
-    accuracyPercent: number | null;
-    recoveryPercent: number | null;
-    createdAt: string;
-    href: string;
-  }>;
-  groupSchedule: Array<{
-    id: string;
-    groupId: string;
-    groupName: string;
-    artifactType: ArtifactType;
-    artifactId: string;
-    artifactTitle: string;
-    kind: "live_session" | "round_assignment";
-    scheduledFor: string;
-    note: string;
-    href: string;
-  }>;
-  totals: {
-    artifacts: number;
-    activeSessions: number;
-    activeAssignments: number;
-    upcomingGroupItems: number;
-  };
-}
 
 type Translator = ReturnType<typeof useLocale>["t"];
 
@@ -107,10 +39,27 @@ function localizedProgress(label: string, t: Translator) {
 
 function HomeWorkspace() {
   const { locale, t } = useLocale();
-  const { canEdit, creator, productFeatures } = useWorkspace();
-  const [summary, setSummary] = useState<HomeSummary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { canEdit, creator, workspace, productFeatures, loading: accountLoading } = useWorkspace();
+  const copy = workspaceDiscoveryCopy(locale);
+  const canvasCopy = canvasMessages(locale);
+  const contextKey =
+    !accountLoading && creator && productFeatures?.workspaceShell === true
+      ? JSON.stringify([
+          creator.userId,
+          creator.workspaceId,
+          workspace?.id,
+          workspace?.organization?.id,
+          creator.role,
+          productFeatures.presentations,
+          productFeatures.surveys,
+          productFeatures.ideaBoards,
+          productFeatures.canvasBoards,
+          productFeatures.groups,
+        ])
+      : null;
+  const { summary, loading, error, refresh: loadSummary } = useHomeSummary(contextKey);
+  const canCreate = workspaceCreationOptions({ canEdit, productFeatures }).length > 0;
+  const recentWork = summary ? recentHomeWork(summary) : [];
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -126,40 +75,104 @@ function HomeWorkspace() {
     [dateFormatter],
   );
 
-  const loadSummary = useCallback(async () => {
-    if (!creator || productFeatures?.workspaceShell !== true) return;
-    setLoading(true);
-    setError("");
-    try {
-      setSummary(await apiFetch<HomeSummary>("/v1/home/summary"));
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, [creator, productFeatures?.workspaceShell]);
-
-  useEffect(() => {
-    void loadSummary();
-  }, [loadSummary]);
-
   const activeSessions = summary?.sessions.filter((session) => session.status === "active") ?? [];
   const firstName = creator?.email.split("@", 1)[0]?.replace(/[._-]+/g, " ") || "there";
-  const createHref = productFeatures?.builderV2 ? "/create" : "/dashboard";
-  const artifactLabel = productFeatures?.presentations
-    ? t("home.createRoundOrPresentation")
-    : t("home.createRound");
+  const createHref = "/create";
+  function workType(artifact: HomeWork) {
+    if (artifact.artifactType === "round") return t("common.round");
+    if (artifact.artifactType === "presentation") return t("common.presentation");
+    if (artifact.artifactType === "survey") return copy.survey;
+    if (artifact.artifactType === "idea_board") return copy.ideaBoard;
+    return artifact.artifactType === "canvas" && artifact.boardType === "workshop"
+      ? canvasCopy["canvas.workshop"]
+      : copy.canvas;
+  }
+  function workStatus(artifact: HomeWork) {
+    if (artifact.status === "organizing") return copy.statusOrganizing;
+    if (artifact.status === "collecting") return copy.statusCollecting;
+    if (artifact.status === "voting") return copy.statusVoting;
+    if (artifact.status === "closed") return copy.statusClosed;
+    if (artifact.status === "frozen") return copy.statusFrozen;
+    if (artifact.status === "active") return copy.statusActive;
+    return t(`pages.common.status.${artifact.status}`);
+  }
+  function workCount(artifact: HomeWork) {
+    if (artifact.itemCount === null) return null;
+    const singular = pluralCategory(locale, artifact.itemCount) === "one";
+    if (artifact.artifactType === "round" || artifact.artifactType === "survey")
+      return t(
+        singular
+          ? "pages.home.authoring.questionCount.one"
+          : "pages.home.authoring.questionCount.other",
+        { count: artifact.itemCount },
+      );
+    if (artifact.artifactType === "presentation")
+      return t("pages.home.authoring.blockCount", { count: artifact.itemCount });
+    return (
+      artifact.artifactType === "canvas"
+        ? singular
+          ? copy.objectCountOne
+          : copy.objectCount
+        : singular
+          ? copy.ideaCountOne
+          : copy.ideaCount
+    ).replace("{count}", new Intl.NumberFormat(locale).format(artifact.itemCount));
+  }
+  function workAction(artifact: HomeWork) {
+    const action = homeWorkAction(artifact, canEdit);
+    const label =
+      action.label === "hostRound"
+        ? t("pages.home.authoring.hostRound")
+        : action.label === "hostPresentation"
+          ? t("pages.home.authoring.hostPresentation")
+          : action.label === "continueEditing"
+            ? t("pages.home.authoring.continueEditing")
+            : copy[action.label];
+    return { ...action, label };
+  }
+  function compactWork(items: HomeWork[]) {
+    return (
+      <div className={styles.activityList}>
+        {items.slice(0, 3).map((artifact) => (
+          <Link
+            className={styles.activityItem}
+            href={homeWorkAction(artifact, canEdit).href}
+            key={`${artifact.artifactType}:${artifact.id}`}
+          >
+            <div className={styles.activityTopline}>
+              <span>{workType(artifact)}</span>
+              <span className={styles.statusPill} data-status={artifact.status}>
+                {workStatus(artifact)}
+              </span>
+            </div>
+            <strong lang="">{artifact.title}</strong>
+            {workCount(artifact) || artifact.updatedAt ? (
+              <small>
+                {workCount(artifact)}
+                {workCount(artifact) && artifact.updatedAt ? " · " : null}
+                {artifact.updatedAt ? (
+                  <time dateTime={artifact.updatedAt} lang={locale}>
+                    {t("pages.common.updated", { date: formatDate(artifact.updatedAt) })}
+                  </time>
+                ) : null}
+              </small>
+            ) : null}
+          </Link>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <WorkspaceShell
       actions={
-        canEdit ? (
+        canCreate ? (
           <Link className="button" href={createHref} lang={locale}>
             {t("common.create")}
           </Link>
         ) : null
       }
-      description={t("home.description")}
+      description={copy.homeDescription}
       eyebrow={t("home.eyebrow")}
       title={t("home.title")}
       translationLevel="full"
@@ -167,12 +180,12 @@ function HomeWorkspace() {
       <section className={styles.hero} lang={locale}>
         <div>
           <p className={styles.eyebrow}>{t("home.welcome", { name: firstName })}</p>
-          <h2>{t("home.headline")}</h2>
-          <p>{t("home.introduction")}</p>
+          <h2>{copy.homeHeadline}</h2>
+          <p>{copy.homeIntroduction}</p>
           <div className={styles.heroActions}>
-            {canEdit ? (
+            {canCreate ? (
               <Link className={styles.primaryAction} href={createHref}>
-                {artifactLabel}
+                {copy.create}
               </Link>
             ) : null}
             <Link className={styles.secondaryAction} href="/library">
@@ -216,13 +229,13 @@ function HomeWorkspace() {
         </section>
       ) : null}
 
-      {summary && summary.totals.artifacts === 0 ? (
+      {summary && !hasHomeWork(summary) ? (
         <section className={styles.onboarding}>
           <div className={styles.sectionHeading}>
             <div>
               <p className={styles.eyebrow}>{t("pages.home.onboarding.eyebrow")}</p>
               <h2>{t("pages.home.onboarding.title")}</h2>
-              <p>{t("pages.home.onboarding.description")}</p>
+              <p>{copy.onboardingDescription}</p>
             </div>
           </div>
           <ol className={styles.onboardingSteps}>
@@ -230,31 +243,26 @@ function HomeWorkspace() {
               <span>1</span>
               <div>
                 <strong>{t("pages.home.onboarding.createTitle")}</strong>
-                <p>
-                  {productFeatures?.presentations
-                    ? t("pages.home.onboarding.createWithPresentations")
-                    : t("pages.home.onboarding.createRound")}
-                </p>
+                <p>{copy.createDescription}</p>
               </div>
             </li>
             <li>
               <span>2</span>
               <div>
                 <strong>{t("pages.home.onboarding.publishTitle")}</strong>
-                <p>{t("pages.home.onboarding.publishDescription")}</p>
+                <p>{copy.publishDescription}</p>
               </div>
             </li>
             <li>
               <span>3</span>
               <div>
                 <strong>{t("pages.home.onboarding.reviewTitle")}</strong>
-                <p>{t("pages.home.onboarding.reviewDescription")}</p>
+                <p>{copy.reviewDescription}</p>
               </div>
             </li>
           </ol>
           <HomeFirstRunActions
-            canEdit={canEdit}
-            createHref={createHref}
+            canCreate={canCreate}
             guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
           />
         </section>
@@ -268,13 +276,13 @@ function HomeWorkspace() {
                 <div>
                   <p className={styles.eyebrow}>{t("pages.home.authoring.eyebrow")}</p>
                   <h2>{t("pages.home.authoring.title")}</h2>
-                  <p>{t("pages.home.authoring.description")}</p>
+                  <p>{copy.recentDescription}</p>
                 </div>
                 <Link href="/library">{t("pages.common.viewLibrary")}</Link>
               </div>
-              {summary.recentArtifacts.length ? (
+              {recentWork.length ? (
                 <div className={styles.artifactGrid}>
-                  {summary.recentArtifacts.map((artifact) => (
+                  {recentWork.map((artifact) => (
                     <article
                       className={styles.artifactCard}
                       key={`${artifact.artifactType}:${artifact.id}`}
@@ -285,14 +293,10 @@ function HomeWorkspace() {
                           data-type={artifact.artifactType}
                           lang={locale}
                         >
-                          {t(
-                            artifact.artifactType === "round"
-                              ? "common.round"
-                              : "common.presentation",
-                          )}
+                          {workType(artifact)}
                         </span>
                         <span className={styles.statusPill} data-status={artifact.status}>
-                          {t(`pages.common.status.${artifact.status}`)}
+                          {workStatus(artifact)}
                         </span>
                       </div>
                       <h3 lang="">
@@ -305,41 +309,27 @@ function HomeWorkspace() {
                           t("pages.common.noDescription")
                         )}
                       </p>
-                      <p className={styles.metadata}>
-                        {t(
-                          artifact.artifactType === "round"
-                            ? pluralCategory(locale, artifact.itemCount) === "one"
-                              ? "pages.home.authoring.questionCount.one"
-                              : "pages.home.authoring.questionCount.other"
-                            : "pages.home.authoring.blockCount",
-                          { count: artifact.itemCount },
-                        )}{" "}
-                        ·{" "}
-                        <time dateTime={artifact.updatedAt} lang={locale}>
-                          {t("pages.common.updated", { date: formatDate(artifact.updatedAt) })}
-                        </time>
-                      </p>
-                      <Link className={styles.cardAction} href={artifact.actionHref}>
-                        {t(
-                          artifact.status === "published"
-                            ? artifact.artifactType === "round"
-                              ? "pages.home.authoring.hostRound"
-                              : "pages.home.authoring.hostPresentation"
-                            : "pages.home.authoring.continueEditing",
-                        )}{" "}
-                        →
+                      {workCount(artifact) || artifact.updatedAt ? (
+                        <p className={styles.metadata}>
+                          {workCount(artifact)}
+                          {workCount(artifact) && artifact.updatedAt ? " · " : null}
+                          {artifact.updatedAt ? (
+                            <time dateTime={artifact.updatedAt} lang={locale}>
+                              {t("pages.common.updated", { date: formatDate(artifact.updatedAt) })}
+                            </time>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      <Link className={styles.cardAction} href={workAction(artifact).href}>
+                        {workAction(artifact).label} →
                       </Link>
                     </article>
                   ))}
                 </div>
               ) : (
                 <div className={styles.compactEmpty}>
-                  <p>
-                    {productFeatures?.presentations
-                      ? t("pages.home.authoring.emptyArtifacts")
-                      : t("pages.home.authoring.emptyRounds")}
-                  </p>
-                  {canEdit ? (
+                  <p>{copy.emptyWork}</p>
+                  {canCreate ? (
                     <Link href={createHref}>{t("pages.home.authoring.chooseMethod")}</Link>
                   ) : null}
                 </div>
@@ -417,6 +407,40 @@ function HomeWorkspace() {
           </div>
 
           <aside className={styles.sideColumn} aria-label={t("pages.home.currentActivity")}>
+            {productFeatures?.ideaBoards ||
+            productFeatures?.canvasBoards ||
+            summary.recentBoards?.length ? (
+              <section className={styles.sidePanel} aria-labelledby="home-boards-title">
+                <div className={styles.sideHeading}>
+                  <h2 id="home-boards-title">
+                    {t("workspace.nav.boards")}{" "}
+                    <span className={styles.sectionCount}>
+                      {new Intl.NumberFormat(locale).format(
+                        summary.totals.boards ?? summary.recentBoards?.length ?? 0,
+                      )}
+                    </span>
+                  </h2>
+                  <Link href="/boards">{t("pages.common.all")}</Link>
+                </div>
+                {compactWork(summary.recentBoards ?? [])}
+              </section>
+            ) : null}
+            {productFeatures?.surveys || summary.recentSurveys?.length ? (
+              <section className={styles.sidePanel} aria-labelledby="home-surveys-title">
+                <div className={styles.sideHeading}>
+                  <h2 id="home-surveys-title">
+                    {t("pages.common.surveys")}{" "}
+                    <span className={styles.sectionCount}>
+                      {new Intl.NumberFormat(locale).format(
+                        summary.totals.surveys ?? summary.recentSurveys?.length ?? 0,
+                      )}
+                    </span>
+                  </h2>
+                  <Link href="/library?type=surveys">{t("pages.common.all")}</Link>
+                </div>
+                {compactWork(summary.recentSurveys ?? [])}
+              </section>
+            ) : null}
             <section className={styles.sidePanel}>
               <div className={styles.sideHeading}>
                 <div>

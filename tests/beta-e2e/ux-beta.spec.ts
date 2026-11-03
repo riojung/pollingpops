@@ -22,8 +22,9 @@ async function openRoundCreate(page: Page) {
   await page.getByRole("button", { name: "Create", exact: true }).click();
   const round = page.getByRole("link", { name: /^Round\b/ });
   await expect(round).toBeVisible();
+  await expect(round).toHaveAttribute("href", "/create?product=round");
   await round.click();
-  await expect(page).toHaveURL(/\/create$/);
+  await expect(page).toHaveURL(/\/create\?product=round$/);
 }
 
 async function joinParticipant(browser: Browser, code: string) {

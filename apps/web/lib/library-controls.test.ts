@@ -36,6 +36,18 @@ const items = [
 ];
 
 describe("Library controls", () => {
+  it("keeps board searches on their own library without forwarding creation or access context", () => {
+    expect(librarySearchHref("  project & retro  ", "/boards", "?create=1&token=private")).toBe(
+      "/boards?q=project+%26+retro",
+    );
+    expect(librarySearchHref("", "/canvas/board-id", "?token=private")).toBe("/boards");
+    expect(
+      new URL(
+        librarySearchHref("a".repeat(200), "/boards", ""),
+        "https://example.test",
+      ).searchParams.get("q"),
+    ).toHaveLength(160);
+  });
   it("keeps header searches on Surveys or the selected Library type without copying private queries", () => {
     expect(librarySearchHref("  feedback  ", "/library", "?type=surveys&token=secret")).toBe(
       "/library?type=surveys&q=feedback",

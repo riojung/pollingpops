@@ -9,7 +9,7 @@ import styles from "./language-menu.module.css";
 
 function LanguageIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="9" />
       <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
     </svg>
@@ -125,7 +125,6 @@ export function LanguageMenu() {
           title={t("locale.trigger", { language: selected.nativeLabel })}
         >
           <LanguageIcon />
-          <span aria-hidden="true">{selected.shortLabel}</span>
         </summary>
         <div className={styles.panel}>
           <p className={styles.label}>{t("locale.label")}</p>

@@ -1,0 +1,420 @@
+.lab {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 32px;
+  color: var(--ui-text);
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.header h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+}
+.header p {
+  margin: 0;
+  color: var(--ui-text-subtle);
+}
+.eyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.badge {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  padding: 10px 16px;
+  border-radius: 24px;
+  font-weight: 700;
+}
+.toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+}
+.lab label {
+  display: grid;
+  gap: 7px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.lab :is(input, textarea, select) {
+  min-width: 0;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-weight: 400;
+}
+.lab textarea {
+  resize: vertical;
+}
+.lab :is(button, input, textarea, select):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+.status {
+  flex: 1 1 150px;
+  margin: 0 0 8px;
+  color: var(--ui-accent-ink);
+  font-size: 0.875rem;
+}
+.localNote,
+.hint {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ui-text-subtle);
+}
+.localNote {
+  margin: 10px 0 20px;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 260px;
+  gap: 20px;
+  align-items: start;
+}
+.filmstrip {
+  display: grid;
+  gap: 10px;
+}
+.filmstrip button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 66px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: 0.875rem;
+}
+.filmstrip button > span:first-child {
+  color: var(--ui-text-subtle);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.filmstrip button[aria-current] {
+  border: 2px solid var(--ui-focus);
+  background: var(--ui-accent-soft);
+}
+.canvasColumn {
+  min-width: 0;
+}
+.canvasHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.canvasHeading h2 {
+  font-size: 0.9rem;
+  margin: 0;
+}
+.canvasHeading span {
+  color: var(--ui-text-subtle);
+  font-size: 0.8rem;
+}
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  isolation: isolate;
+  container-type: inline-size;
+  background: #fff;
+  color: #242931;
+  border: 1px solid #dce1e7;
+  border-radius: 12px;
+  box-shadow: var(--ui-shadow-md);
+  overflow: hidden;
+}
+.node {
+  position: absolute;
+  min-width: 0;
+}
+.node h2 {
+  font-size: clamp(1rem, 4cqw, 2.6rem);
+  line-height: 1.18;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.node p {
+  font-size: clamp(1rem, 2.4cqw, 1.5rem);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.node img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.node > svg {
+  width: 100%;
+  height: 100%;
+}
+.selectedNode {
+  outline: 2px solid #146552;
+  outline-offset: -2px;
+}
+.moveHandle {
+  position: absolute;
+  z-index: 100;
+  border: 1px solid #146552;
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: #fff;
+  color: #146552;
+  font-size: 0.7rem;
+  cursor: move;
+  touch-action: none;
+  opacity: 0;
+}
+.moveHandle[data-selected="true"] {
+  z-index: 101;
+}
+.moveHandle:focus-visible,
+.moveHandle:hover,
+.node:hover + .moveHandle,
+.moveHandle[data-selected="true"] {
+  opacity: 1;
+}
+.connections {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.connectorSummary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.notes {
+  margin-top: 20px;
+}
+.inspector {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  min-width: 0;
+}
+.inspector :is(h2, h3, p) {
+  margin: 0;
+}
+.inspector h2 {
+  font-size: 1rem;
+}
+.inspector h3 {
+  font-size: 0.875rem;
+}
+.nodeList {
+  display: grid;
+  gap: 5px;
+  padding-left: 22px;
+  margin: 0;
+}
+.nodeList button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--ui-text);
+  font-size: 0.875rem;
+}
+.nodeList button[aria-pressed="true"] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-focus);
+  color: var(--ui-accent-ink);
+}
+.orderButtons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.geometry {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 10px;
+  margin: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.geometry legend {
+  font-size: 0.8rem;
+}
+.endpoint {
+  display: grid;
+  gap: 10px;
+}
+.taskDetails {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+.taskDetails summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.taskDetails li + li {
+  margin-top: 8px;
+}
+.readingView {
+  display: grid;
+  aspect-ratio: auto;
+  gap: 20px;
+  padding: 28px;
+  container-type: normal;
+}
+.readingView .node {
+  position: static;
+  width: auto !important;
+  height: auto !important;
+}
+.readingView .node h2 {
+  font-size: 1.75rem;
+}
+.readingView .node p {
+  font-size: 1rem;
+}
+.readingView .node img {
+  max-height: 200px;
+}
+.readingView .node > svg {
+  height: 100px;
+  max-width: 220px;
+}
+.readingView .connections {
+  display: none;
+}
+.readingView .connectorSummary {
+  position: static;
+  clip-path: none;
+  width: auto;
+  height: auto;
+  margin: 0;
+  font-size: 0.875rem;
+}
+.mediaUnavailable {
+  border: 1px dashed #7c8592;
+  padding: 10px;
+}
+@media (max-width: 1150px) {
+  .workspace {
+    grid-template-columns: 140px minmax(0, 1fr);
+  }
+  .inspector {
+    grid-column: 2;
+  }
+}
+@media (max-width: 700px) {
+  .lab {
+    padding: 16px;
+  }
+  .header {
+    align-items: start;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .filmstrip {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    padding: 4px;
+  }
+  .filmstrip button {
+    flex: 0 0 150px;
+    min-height: 62px;
+  }
+  .canvasColumn,
+  .inspector {
+    width: 100%;
+  }
+  .toolbar > label {
+    width: 100%;
+  }
+  .stage {
+    display: grid;
+    aspect-ratio: auto;
+    gap: 22px;
+    padding: 26px;
+    container-type: normal;
+  }
+  .stage .node {
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    height: auto !important;
+  }
+  .stage .node h2 {
+    font-size: 1.5rem;
+  }
+  .stage .node p {
+    font-size: 1rem;
+  }
+  .stage .node img {
+    max-height: 180px;
+  }
+  .stage .node > svg {
+    height: 85px;
+    max-width: 200px;
+  }
+  .stage .connections {
+    display: none;
+  }
+  .stage .connectorSummary {
+    position: static;
+    clip-path: none;
+    width: auto;
+    height: auto;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+  .moveHandle {
+    opacity: 1;
+    position: static;
+    justify-self: start;
+    margin-top: -12px;
+  }
+  .canvasHeading {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab * {
+    scroll-behavior: auto;
+  }
+}

@@ -69,6 +69,7 @@
     "test:smoke-support": "vitest run tests/support",
     "test:e2e": "playwright test",
     "test:e2e:beta": "playwright test --config=playwright.beta.config.ts",
+    "test:e2e:presentation-scene": "node scripts/test-presentation-scene.mjs",
     "test:e2e:business": "playwright test --config=playwright.business.config.ts",
     "test:e2e:canvas": "playwright test --config=playwright.canvas.config.ts",
     "test:e2e:control": "playwright test --config=playwright.control.config.ts",

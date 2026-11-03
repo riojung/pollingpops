@@ -8,27 +8,29 @@ education and workplace learning. Use this index to choose the shortest path for
 The public name is now Polling Pops. The [brand and interface guide](brand.md) includes
 the new logo assets, palette, Candy Pop preset, and the technical names kept for compatibility.
 
-| I want to…                                                   | Read                                                                                         |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Get guidance that matches my enabled workspace               | Sign in and open the in-product `/help` page                                                 |
-| Run Polling Pops locally and complete a first round          | [Quick start](quick-start.md)                                                                |
-| Create, host, join, recover, and review understanding        | [User guide](user-guide.md)                                                                  |
-| Position and resize Presentation text, or use layout guides  | [Slide arrangement guide](user-guide.md#arrange-text-on-a-presentation-slide)                |
-| Permanently remove archived work or retained session history | [Deletion guide](user-guide.md#delete-archived-content-and-session-history)                  |
-| Understand product behavior and interaction choices          | [Product and experience design](design.md)                                                   |
-| Review the latest competitor and customer-needs research     | [October 27 competitor research](competitor-research-2026-10-27.md)                          |
-| Evaluate prioritized customer and differentiation increments | [October 27 detailed backlog](competitor-backlog-2026-10-27.md)                              |
-| Review the existing gated roadmap and selection rules        | [2026 market research and development plan](market-research-and-development-plan-2026-09.md) |
-| Review the 2026 Kahoot-alternatives UX benchmark and plan    | [Kahoot-alternatives UX gap plan](kahoot-alternatives-2026-ux-gap-plan.md)                   |
-| Review the competitive position and post-P0 roadmap          | [Competitive strategy and roadmap](competitive-strategy-and-roadmap.md)                      |
-| Capture or revisit future customer feature ideas             | [Future product ideas backlog](future-product-ideas.md)                                      |
-| Review live competition, the podium and final standings      | [Competition dashboard](idea-016-competition-dashboard-plan.md)                              |
-| Follow IDEA 004 richer response format delivery              | [Response formats implementation plan](idea-004-response-formats-plan.md)                    |
-| Follow IDEA 005 summaries and sharing                        | [Session summaries implementation plan](idea-005-session-summaries-plan.md)                  |
-| Follow IDEA 006 brainstorming and prioritization             | [Brainstorming boards implementation plan](idea-006-brainstorming-boards-plan.md)            |
-| Understand services, state, storage, and trust boundaries    | [Architecture and protocol](architecture.md)                                                 |
-| Integrate with REST or realtime interfaces                   | [API and realtime reference](api.md)                                                         |
-| Configure a gated institution pilot                          | [Institution integration guide](institution-integrations.md)                                 |
+| I want to…                                                           | Read                                                                                         |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Get guidance that matches my enabled workspace                       | Sign in and open the in-product `/help` page                                                 |
+| Run Polling Pops locally and complete a first round                  | [Quick start](quick-start.md)                                                                |
+| Create, host, join, recover, and review understanding                | [User guide](user-guide.md)                                                                  |
+| Position and resize Presentation text, or use layout guides          | [Slide arrangement guide](user-guide.md#arrange-text-on-a-presentation-slide)                |
+| Permanently remove archived work or retained session history         | [Deletion guide](user-guide.md#delete-archived-content-and-session-history)                  |
+| Understand product behavior and interaction choices                  | [Product and experience design](design.md)                                                   |
+| Review the latest competitor and customer-needs research             | [October 27 competitor research](competitor-research-2026-10-27.md)                          |
+| Benchmark broad presentation creation, especially Genially and Prezi | [November presentation benchmark](presentation-benchmark-2026-11.md)                         |
+| Plan a low-priced presentation creator with Codex                    | [Presentation implementation plan](presentation-implementation-plan-2026-11.md)              |
+| Evaluate prioritized customer and differentiation increments         | [October 27 detailed backlog](competitor-backlog-2026-10-27.md)                              |
+| Review the existing gated roadmap and selection rules                | [2026 market research and development plan](market-research-and-development-plan-2026-09.md) |
+| Review the 2026 Kahoot-alternatives UX benchmark and plan            | [Kahoot-alternatives UX gap plan](kahoot-alternatives-2026-ux-gap-plan.md)                   |
+| Review the competitive position and post-P0 roadmap                  | [Competitive strategy and roadmap](competitive-strategy-and-roadmap.md)                      |
+| Capture or revisit future customer feature ideas                     | [Future product ideas backlog](future-product-ideas.md)                                      |
+| Review live competition, the podium and final standings              | [Competition dashboard](idea-016-competition-dashboard-plan.md)                              |
+| Follow IDEA 004 richer response format delivery                      | [Response formats implementation plan](idea-004-response-formats-plan.md)                    |
+| Follow IDEA 005 summaries and sharing                                | [Session summaries implementation plan](idea-005-session-summaries-plan.md)                  |
+| Follow IDEA 006 brainstorming and prioritization                     | [Brainstorming boards implementation plan](idea-006-brainstorming-boards-plan.md)            |
+| Understand services, state, storage, and trust boundaries            | [Architecture and protocol](architecture.md)                                                 |
+| Integrate with REST or realtime interfaces                           | [API and realtime reference](api.md)                                                         |
+| Configure a gated institution pilot                                  | [Institution integration guide](institution-integrations.md)                                 |
 
 ## Build and operate
 
@@ -37,6 +39,9 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 - [Local operations quick guide](quick-start.md#day-to-day-commands) covers routine profile-aware
   restarts, logs, data-preserving stops, and the boundary between cleanup and an intentional reset.
 - [Implementation status](implementation-status.md) describes what is implemented and what remains a release gate.
+- [Presentation scene prototype](evidence/presentation-scene-prototype.md) covers the E00 development
+  lab, local verification and remaining creator observations; [ADR 003](decisions/003-presentation-scene.md)
+  records the native scene architecture and E01 integration boundary.
 - [Recent contract and deletion upgrades](runbooks/upgrade.md#recent-content-report-and-deletion-upgrades)
   cover Presentation v2, Report V4, migration 048, and compatible rollback targets.
 - [Release readiness ledger](release-readiness.json) is the machine-validated source of truth for

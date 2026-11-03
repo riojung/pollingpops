@@ -17,6 +17,7 @@ export * from "./canvas-diagram-geometry";
 export * from "./canvas-artifact-links";
 export * from "./canvas-template-catalog";
 export * from "./canvas-template-factory";
+export * from "./presentation-scene-prototype";
 import {
   hasTextOpinionQuestions,
   isTextOpinionQuestion,

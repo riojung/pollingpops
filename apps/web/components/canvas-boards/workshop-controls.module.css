@@ -32,6 +32,24 @@
   font-weight: 750;
   color: var(--ui-accent-ink);
 }
+.hint {
+  color: var(--ui-text-muted);
+  font-size: 0.85rem;
+}
+.reviewLink {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ui-accent-ink);
+  text-decoration: underline;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.controls :focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;

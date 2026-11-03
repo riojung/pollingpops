@@ -35,6 +35,11 @@ import {
   type CanvasBounds,
 } from "./canvas-geometry";
 import styles from "./canvas.module.css";
+import readOnlyStyles from "./canvas-read-only.module.css";
+import { guidedWorkshopCopy } from "../../lib/i18n/guided-workshop-messages";
+import { CanvasToolIcon } from "./canvas-tool-icon";
+import { readOnlyKeyViewport } from "./canvas-read-only-navigation";
+import { formatNumber } from "../../lib/i18n/format";
 import {
   canvasDragRect,
   canvasPenHits,
@@ -1199,6 +1204,7 @@ export function CanvasReadOnlySurface({
   label,
   followRegion,
   onInteract,
+  fill = false,
 }: {
   objects: CanvasObject[];
   sourceBoardId?: string;
@@ -1210,11 +1216,120 @@ export function CanvasReadOnlySurface({
   label?: string;
   followRegion?: CanvasBounds | null;
   onInteract?: () => void;
+  fill?: boolean;
 }) {
-  const { t } = useLocale();
+  const { t, locale = "en-CA" } = useLocale();
+  const copy = guidedWorkshopCopy(locale);
+  const toolCopy = canvasToolCopy(locale);
+  const root = useRef<HTMLElement>(null);
   const container = useRef<HTMLDivElement>(null);
+  const outlineTrigger = useRef<HTMLButtonElement>(null);
+  const focusTrigger = useRef<HTMLButtonElement>(null);
+  const outlineHeading = useRef<HTMLHeadingElement>(null);
+  const outlineId = useId();
+  const helpId = useId();
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT);
   const [list, setList] = useState(false);
+  const percentage = formatNumber(locale, viewport.zoom, {
+    style: "percent",
+    maximumFractionDigits: 0,
+  });
+  const [focusMode, setFocusMode] = useState(false);
+  const [tool, setTool] = useState<"hand" | "select">("hand");
+  const [selected, setSelected] = useState<string | null>(null);
+  // Guests receive a published projection. Keep the outline and local selection inside
+  // that boundary as well, including when a referenced idea or connector disappears.
+  const visible = visibleCanvasObjects(
+    guestToken ? objects.filter((object) => object.visibility === "published") : objects,
+    sourceBoard,
+  );
+  const selectedObject = visible.find((object) => object.id === selected);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const following = useRef(followRegion);
+  following.current = followRegion;
+  const initialized = useRef(false);
+  const size = useRef({ width: 0, height: 0 });
+  const dimensions = () => ({
+    width: container.current?.clientWidth || 800,
+    height: container.current?.clientHeight || 500,
+  });
+  const fit = (object?: CanvasObject) => {
+    const { width, height } = dimensions();
+    setViewport(
+      fitViewport(
+        (object ? [object] : visible).map((item) => canvasObjectBounds(item, visible)),
+        width,
+        height,
+      ),
+    );
+  };
+  function zoom(next: number) {
+    onInteract?.();
+    const { width, height } = dimensions();
+    setViewport((previous) => zoomAt(previous, { x: width / 2, y: height / 2 }, next));
+  }
+  function closeOutline() {
+    setList(false);
+    outlineTrigger.current?.focus();
+  }
+  function closeFocusMode() {
+    setFocusMode(false);
+    focusTrigger.current?.focus();
+  }
+  useEffect(() => {
+    if (list) outlineHeading.current?.focus();
+  }, [list]);
+  useEffect(() => {
+    if (!focusMode) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      if (document.body.style.overflow === "hidden") document.body.style.overflow = previous;
+    };
+  }, [focusMode]);
+  useEffect(() => {
+    if (initialized.current || !visible.length || followRegion) return;
+    const element = container.current;
+    if (!element?.clientWidth || !element.clientHeight) return;
+    initialized.current = true;
+    setViewport(
+      fitViewport(
+        visible.map((object) => canvasObjectBounds(object, visible)),
+        element.clientWidth,
+        element.clientHeight,
+      ),
+    );
+  }, [objects, sourceBoard, followRegion]);
+  useEffect(() => {
+    const element = container.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const width = element.clientWidth,
+        height = element.clientHeight;
+      const previous = size.current;
+      size.current = { width, height };
+      if (!width || !height || following.current) return;
+      if (!initialized.current && visibleRef.current.length) {
+        initialized.current = true;
+        setViewport(
+          fitViewport(
+            visibleRef.current.map((object) => canvasObjectBounds(object, visibleRef.current)),
+            width,
+            height,
+          ),
+        );
+      } else if (previous.width && previous.height) {
+        setViewport((value) => ({
+          ...value,
+          x: value.x + (width - previous.width) / 2,
+          y: value.y + (height - previous.height) / 2,
+        }));
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const element = container.current;
     if (!element || !followRegion) return;
@@ -1232,55 +1347,259 @@ export function CanvasReadOnlySurface({
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [followRegion, list]);
-  const visible = visibleCanvasObjects(objects, sourceBoard);
-  const fit = () =>
-    setViewport(
-      fitViewport(
-        visible.map((object) => canvasObjectBounds(object, visible)),
-        container.current?.clientWidth ?? 800,
-        container.current?.clientHeight ?? 500,
-      ),
+  }, [followRegion]);
+  function objectLabel(object: CanvasObject, index: number) {
+    return (
+      (object.type === "image"
+        ? object.altText
+        : object.type === "idea_ref"
+          ? object.idea?.body
+          : object.text
+      )
+        ?.trim()
+        .slice(0, 120) ||
+      `${object.type === "frame" ? copy.frame : copy.object} ${formatNumber(locale, index + 1)}`
     );
-  const initialObjects = useRef(visible);
-  useEffect(() => {
-    setViewport(
-      fitViewport(
-        initialObjects.current.map((object) => canvasObjectBounds(object, initialObjects.current)),
-        container.current?.clientWidth ?? 800,
-        container.current?.clientHeight ?? 500,
-      ),
-    );
-  }, []);
+  }
   return (
-    <section className={styles.readOnly} aria-label={label ?? t("canvas.team")}>
-      <div className={styles.readOnlyTools}>
-        <button
-          className="button-quiet"
-          onClick={() => {
-            onInteract?.();
-            fit();
-          }}
-          type="button"
-        >
-          {t("canvas.fit")}
-        </button>
-        <button
-          className="button-quiet"
-          onClick={() => {
-            onInteract?.();
-            setList(!list);
-          }}
-          aria-expanded={list}
-          type="button"
-        >
-          {t("canvas.objects")}
-        </button>
+    <section
+      ref={root}
+      className={`${readOnlyStyles.readOnly} ${fill ? readOnlyStyles.fill : ""} ${focusMode ? readOnlyStyles.focusMode : ""}`}
+      aria-label={label ?? t("canvas.team")}
+      aria-describedby={helpId}
+      role={focusMode ? "dialog" : undefined}
+      aria-modal={focusMode || undefined}
+      data-focus-mode={focusMode}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("dialog,[contenteditable='true']")) return;
+        if (typeof document !== "undefined" && document.querySelector("dialog[open]")) return;
+        if (event.key === "Escape") {
+          onInteract?.();
+          if (list) {
+            event.preventDefault();
+            closeOutline();
+          } else if (focusMode) {
+            event.preventDefault();
+            closeFocusMode();
+          }
+          return;
+        }
+        if (event.key === "Tab" && focusMode) {
+          const controls = Array.from(
+            root.current?.querySelectorAll<HTMLElement>(
+              "button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex='0']",
+            ) ?? [],
+          ).filter(
+            (element) => element.getClientRects().length && !element.closest("[hidden],[inert]"),
+          );
+          const first = controls[0],
+            last = controls.at(-1);
+          if (!root.current?.contains(document.activeElement)) {
+            const target = event.shiftKey ? last : first;
+            if (target) {
+              event.preventDefault();
+              target.focus();
+            }
+          } else if (event.shiftKey && document.activeElement === first && last) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last && first) {
+            event.preventDefault();
+            first.focus();
+          }
+          return;
+        }
+        if (target?.closest("button,a,input,textarea,select")) return;
+        const { width, height } = dimensions();
+        if (event.key.toLowerCase() === "f" || event.key === "0") {
+          event.preventDefault();
+          onInteract?.();
+          fit();
+          return;
+        }
+        const next = readOnlyKeyViewport(viewport, event.key, width, height, event.shiftKey);
+        if (next) {
+          event.preventDefault();
+          onInteract?.();
+          setViewport(next);
+        }
+      }}
+    >
+      <p id={helpId} className={readOnlyStyles.srOnly}>
+        {copy.panHelp}
+      </p>
+      <div ref={container} className={readOnlyStyles.stage}>
+        <CanvasSurface
+          objects={visible}
+          viewport={viewport}
+          onViewport={setViewport}
+          onInteract={onInteract}
+          tool={tool}
+          selectedId={selectedObject?.id ?? null}
+          onSelect={(id) => setSelected(id)}
+          onSelectMany={(ids) => setSelected(ids[0] ?? null)}
+          sourceBoardId={sourceBoardId}
+          sourceBoard={sourceBoard}
+          guestToken={guestToken}
+          canvasId={canvasId}
+          versionId={versionId}
+          artifactLink={artifactLink}
+        />
       </div>
-      {list ? (
-        <ol className={styles.readOnlyList}>
-          {visible.map((object) => (
+      <div className={readOnlyStyles.tools} role="toolbar" aria-label={copy.navigation}>
+        <div className={readOnlyStyles.toolGroup}>
+          <button
+            aria-label={toolCopy.pan}
+            title={toolCopy.pan}
+            aria-pressed={tool === "hand"}
+            onClick={() => {
+              onInteract?.();
+              setTool("hand");
+            }}
+            type="button"
+          >
+            <CanvasToolIcon name="hand" />
+          </button>
+          <button
+            aria-label={toolCopy.select}
+            title={toolCopy.select}
+            aria-pressed={tool === "select"}
+            onClick={() => {
+              onInteract?.();
+              setTool("select");
+            }}
+            type="button"
+          >
+            <CanvasToolIcon name="select" />
+          </button>
+        </div>
+        <div className={readOnlyStyles.toolGroup}>
+          <button
+            aria-label={copy.zoomOut}
+            title={copy.zoomOut}
+            disabled={viewport.zoom <= 0.15}
+            onClick={() => zoom(viewport.zoom / 1.2)}
+            type="button"
+          >
+            <CanvasToolIcon name="minus" />
+          </button>
+          <button
+            aria-label={`${percentage} — ${copy.resetZoom}`}
+            title={copy.resetZoom}
+            className={readOnlyStyles.percentage}
+            onClick={() => zoom(1)}
+            type="button"
+          >
+            {percentage}
+          </button>
+          <button
+            aria-label={copy.zoomIn}
+            title={copy.zoomIn}
+            disabled={viewport.zoom >= 3}
+            onClick={() => zoom(viewport.zoom * 1.2)}
+            type="button"
+          >
+            <CanvasToolIcon name="plus" />
+          </button>
+        </div>
+        <div className={readOnlyStyles.toolGroup}>
+          <button
+            aria-label={t("canvas.fit")}
+            title={t("canvas.fit")}
+            onClick={() => {
+              onInteract?.();
+              fit();
+            }}
+            type="button"
+          >
+            <CanvasToolIcon name="fit" />
+          </button>
+          <button
+            aria-label={copy.fitSelection}
+            title={copy.fitSelection}
+            disabled={!selectedObject}
+            onClick={() => {
+              if (!selectedObject) return;
+              onInteract?.();
+              fit(selectedObject);
+              if (list) closeOutline();
+            }}
+            type="button"
+          >
+            <CanvasToolIcon name="fit-selection" />
+          </button>
+          <button
+            ref={outlineTrigger}
+            aria-label={t("canvas.objects")}
+            title={t("canvas.objects")}
+            aria-controls={outlineId}
+            aria-expanded={list}
+            onClick={() => {
+              onInteract?.();
+              setList(!list);
+            }}
+            type="button"
+          >
+            <CanvasToolIcon name="objects" />
+          </button>
+          <button
+            ref={focusTrigger}
+            aria-label={focusMode ? copy.exitFocusMode : copy.focusMode}
+            title={focusMode ? copy.exitFocusMode : copy.focusMode}
+            aria-pressed={focusMode}
+            onClick={() => {
+              onInteract?.();
+              if (focusMode) closeFocusMode();
+              else {
+                focusTrigger.current?.focus();
+                setFocusMode(true);
+              }
+            }}
+            type="button"
+          >
+            <CanvasToolIcon name={focusMode ? "close" : "frame"} />
+          </button>
+        </div>
+      </div>
+      <aside
+        id={outlineId}
+        className={readOnlyStyles.outline}
+        hidden={!list}
+        aria-label={t("canvas.objects")}
+      >
+        <div className={readOnlyStyles.outlineHeader}>
+          <h3 ref={outlineHeading} tabIndex={-1}>
+            {t("canvas.objects")}
+          </h3>
+          <button
+            aria-label={toolCopy.close}
+            title={toolCopy.close}
+            onClick={closeOutline}
+            type="button"
+          >
+            <CanvasToolIcon name="close" />
+          </button>
+        </div>
+        <ol className={readOnlyStyles.outlineList}>
+          {visible.map((object, index) => (
             <li key={object.id}>
+              <button
+                className={readOnlyStyles.selectObject}
+                aria-label={copy.selectObject.replace("{object}", objectLabel(object, index))}
+                aria-pressed={selectedObject?.id === object.id}
+                onClick={() => {
+                  onInteract?.();
+                  setSelected(object.id);
+                }}
+                type="button"
+              >
+                <CanvasToolIcon name={object.type === "frame" ? "frame" : "select"} />
+                <span dir="auto" lang="">
+                  {objectLabel(object, index)}
+                </span>
+              </button>
               {object.type === "idea_ref" && (sourceBoardId || artifactLink) ? (
                 <IdeaContent
                   boardId={sourceBoardId ?? canvasId ?? ""}
@@ -1292,46 +1611,23 @@ export function CanvasReadOnlySurface({
                     object.idea ?? sourceBoard!.ideas.find((idea) => idea.id === object.ideaId)!
                   }
                 />
-              ) : (
+              ) : object.type === "link" ? (
                 <p dir="auto" lang="">
-                  {object.type === "link" ? (
-                    <>
-                      <a
-                        href={object.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        referrerPolicy="no-referrer"
-                      >
-                        {object.text || new URL(object.url).hostname}
-                      </a>
-                      {object.text ? <small> ({new URL(object.url).hostname})</small> : null}
-                    </>
-                  ) : object.type === "image" ? (
-                    object.altText
-                  ) : (
-                    object.text
-                  )}
+                  <a
+                    href={object.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
+                  >
+                    {object.text || new URL(object.url).hostname}
+                  </a>
+                  {object.text ? <small> ({new URL(object.url).hostname})</small> : null}
                 </p>
-              )}
+              ) : null}
             </li>
           ))}
         </ol>
-      ) : (
-        <div ref={container} className={styles.readOnlyStage}>
-          <CanvasSurface
-            objects={visible}
-            viewport={viewport}
-            onViewport={setViewport}
-            onInteract={onInteract}
-            sourceBoardId={sourceBoardId}
-            sourceBoard={sourceBoard}
-            guestToken={guestToken}
-            canvasId={canvasId}
-            versionId={versionId}
-            artifactLink={artifactLink}
-          />
-        </div>
-      )}
+      </aside>
     </section>
   );
 }

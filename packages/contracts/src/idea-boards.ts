@@ -4,6 +4,8 @@ export const IDEA_BOARD_MAX_IDEAS = 200;
 export const IDEA_BOARD_MAX_GUEST_IDEAS = 10;
 export const IDEA_BOARD_MAX_GROUPS = 20;
 export const IDEA_BOARD_MAX_RECEIPTS = 5_000;
+export const IDEA_BOARD_MAX_ROUNDS = 20;
+const roundNumber = z.number().int().min(1).max(IDEA_BOARD_MAX_ROUNDS);
 const id = z.string().uuid();
 const plain = (limit: number) =>
   z
@@ -197,6 +199,17 @@ export const IdeaBoardCreateSchema = z
   .strict();
 export type IdeaBoardCreate = z.infer<typeof IdeaBoardCreateSchema>;
 export const IdeaBoardStatusSchema = z.enum(["draft", "collecting", "voting", "closed"]);
+export const IdeaBoardRoundStoredSchema = z
+  .object({
+    roundNumber,
+    closedAt: z.string().datetime().nullable(),
+    ballotCount: z.number().int().min(0).max(250),
+    results: z
+      .array(z.object({ ideaId: id, voteCount: z.number().int().min(0).max(250) }).strict())
+      .max(IDEA_BOARD_MAX_IDEAS),
+  })
+  .strict();
+export const IdeaBoardRoundSchema = IdeaBoardRoundStoredSchema;
 export const IdeaBoardGroupSchema = z.object({ id, name: plain(80) }).strict();
 export const IdeaBoardIdeaSchema = z
   .object({
@@ -224,6 +237,7 @@ export const IdeaBoardPublicInfoSchema = z
     status: IdeaBoardStatusSchema,
     closesAt: z.string().datetime(),
     expiresAt: z.string().datetime(),
+    roundNumber: roundNumber.default(1),
   })
   .strict();
 export type IdeaBoardPublicInfo = z.infer<typeof IdeaBoardPublicInfoSchema>;
@@ -236,6 +250,14 @@ export const IdeaBoardViewSchema = IdeaBoardPublicInfoSchema.extend({
   participantCount: z.number().int().nonnegative().nullable(),
   totalIdeas: z.number().int().nonnegative(),
   countsVisible: z.boolean(),
+  roundHistory: z
+    .array(IdeaBoardRoundSchema)
+    .max(IDEA_BOARD_MAX_ROUNDS - 1)
+    .default([]),
+  roundHistoryIdeas: z
+    .array(z.object({ ideaId: id, body: z.string().max(1_000).nullable() }).strict())
+    .max(IDEA_BOARD_MAX_IDEAS)
+    .default([]),
 }).strict();
 export type IdeaBoardView = z.infer<typeof IdeaBoardViewSchema>;
 export const IdeaBoardReceiptSchema = z
@@ -255,21 +277,43 @@ export const IdeaBoardGuestViewSchema = z
     revision: z.number().int().nonnegative(),
     receipt: IdeaBoardReceiptSchema.optional(),
     imageUploadsAvailable: z.boolean().optional(),
+    hasVoted: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .transform((value) => ({
+    ...value,
+    hasVoted: value.hasVoted ?? (value.board.roundNumber === 1 && value.revision > 0),
+  }));
 export type IdeaBoardGuestView = z.infer<typeof IdeaBoardGuestViewSchema>;
+const hostRound = { roundNumber: roundNumber.optional() };
 export const IdeaBoardHostCommandSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("collect") }).strict(),
-  z.object({ type: z.literal("start_voting") }).strict(),
-  z.object({ type: z.literal("close") }).strict(),
-  z.object({ type: z.literal("visibility"), visible: z.boolean() }).strict(),
+  z.object({ type: z.literal("collect"), ...hostRound }).strict(),
+  z.object({ type: z.literal("start_voting"), ...hostRound }).strict(),
+  z.object({ type: z.literal("close"), ...hostRound }).strict(),
   z
-    .object({ type: z.literal("moderate"), ideaId: id, status: z.enum(["approved", "removed"]) })
+    .object({
+      type: z.literal("reopen"),
+      windowDays: z.number().int().min(1).max(30).optional(),
+      ...hostRound,
+    })
     .strict(),
-  z.object({ type: z.literal("group.create"), id, name: plain(80) }).strict(),
-  z.object({ type: z.literal("group.rename"), groupId: id, name: plain(80) }).strict(),
-  z.object({ type: z.literal("group.delete"), groupId: id }).strict(),
-  z.object({ type: z.literal("idea.group"), ideaId: id, groupId: id.nullable() }).strict(),
+  z.object({ type: z.literal("visibility"), visible: z.boolean(), ...hostRound }).strict(),
+  z
+    .object({
+      type: z.literal("moderate"),
+      ideaId: id,
+      status: z.enum(["approved", "removed"]),
+      ...hostRound,
+    })
+    .strict(),
+  z.object({ type: z.literal("group.create"), id, name: plain(80), ...hostRound }).strict(),
+  z
+    .object({ type: z.literal("group.rename"), groupId: id, name: plain(80), ...hostRound })
+    .strict(),
+  z.object({ type: z.literal("group.delete"), groupId: id, ...hostRound }).strict(),
+  z
+    .object({ type: z.literal("idea.group"), ideaId: id, groupId: id.nullable(), ...hostRound })
+    .strict(),
 ]);
 export type IdeaBoardHostCommand = z.infer<typeof IdeaBoardHostCommandSchema>;
 export const IdeaBoardJoinSchema = z
@@ -283,6 +327,7 @@ export const IdeaBoardSubmitSchema = z
     schemaVersion: z.literal(1).default(1),
     body: IdeaBoardBodySchema,
     idempotencyKey: id,
+    roundNumber: roundNumber.optional(),
     ...IdeaBoardRichContentSchema.shape,
   })
   .strict()
@@ -293,6 +338,7 @@ export const IdeaBoardVoteSchema = z
     ideaIds: z.array(id).max(10),
     expectedRevision: z.number().int().nonnegative(),
     idempotencyKey: id,
+    roundNumber: roundNumber.optional(),
   })
   .strict()
   .refine(
@@ -302,6 +348,11 @@ export const IdeaBoardVoteSchema = z
 
 /** Server-private durable state. Never serialize this record into an API or account export. */
 export const IdeaBoardStoredSchema = IdeaBoardPublicInfoSchema.extend({
+  roundHistory: z
+    .array(IdeaBoardRoundStoredSchema)
+    .max(IDEA_BOARD_MAX_ROUNDS - 1)
+    .default([]),
+  closedAt: z.string().datetime().nullable().optional(),
   workspaceId: id,
   revision: z.number().int().nonnegative(),
   participantLimit: z.number().int().positive().max(250),
@@ -329,6 +380,7 @@ export const IdeaBoardStoredSchema = IdeaBoardPublicInfoSchema.extend({
           revision: z.number().int().nonnegative(),
           ideaIds: z.array(id).max(IDEA_BOARD_MAX_GUEST_IDEAS),
           votedIdeaIds: z.array(id).max(10),
+          votedRound: z.number().int().min(0).max(IDEA_BOARD_MAX_ROUNDS).optional(),
           uploadCount: z.number().int().nonnegative().max(40).optional(),
         })
         .strict(),
@@ -373,6 +425,19 @@ export function ideaBoardProjection(
     status,
     closesAt: record.closesAt,
     expiresAt: record.expiresAt,
+    roundNumber: record.roundNumber,
+    roundHistory: record.roundHistory.map((round) => ({
+      ...round,
+      results: round.results.map((result) => ({ ...result })),
+    })),
+    roundHistoryIdeas: [
+      ...new Set(
+        record.roundHistory.flatMap((round) => round.results.map((result) => result.ideaId)),
+      ),
+    ].map((ideaId) => {
+      const idea = record.ideas.find((idea) => idea.id === ideaId);
+      return { ideaId, body: idea?.status === "approved" ? idea.body : null };
+    }),
     revision: record.revision,
     participantLimit: record.participantLimit,
     createdAt: record.createdAt,

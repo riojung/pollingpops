@@ -16,6 +16,7 @@ import {
   readWorkshopCanvas,
   watchGuestWorkshopCanvas,
 } from "./workshop-canvas-client";
+import guestStyles from "./workshop-canvas-guest.module.css";
 
 export function WorkshopCanvasLauncher({
   board,
@@ -119,9 +120,11 @@ export function WorkshopCanvasLauncher({
 export function PublishedWorkshopCanvas({
   sourceBoardId,
   token,
+  onAvailabilityChange,
 }: {
   sourceBoardId: string;
   token: string;
+  onAvailabilityChange?: (available: boolean) => void;
 }) {
   const { t } = useLocale();
   const [followRegion, setFollowRegion] = useState<CanvasExportRegion | null>(null);
@@ -132,6 +135,8 @@ export function PublishedWorkshopCanvas({
   } | null>(null);
   const [failed, setFailed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const availabilityObserver = useRef(onAvailabilityChange);
+  availabilityObserver.current = onAvailabilityChange;
   useEffect(() => {
     const active = new AbortController();
     let inFlight = false;
@@ -209,6 +214,10 @@ export function PublishedWorkshopCanvas({
     };
   }, [sourceBoardId, token, refreshKey]);
   const board = snapshot?.sourceId === sourceBoardId ? snapshot.board : null;
+  const available = Boolean(board);
+  useEffect(() => {
+    availabilityObserver.current?.(available);
+  }, [available]);
   if (!board)
     return failed ? (
       <p className="error" role="alert">
@@ -223,18 +232,21 @@ export function PublishedWorkshopCanvas({
       </p>
     ) : null;
   return (
-    <div>
-      <h2>{t("canvas.workshop.published")}</h2>
-      <CanvasGuestFacilitation
-        boardId={board.id}
-        sourceBoardId={sourceBoardId}
-        token={token}
-        canvasSeq={board.canvasSeq}
-        objects={board.objects}
-        cancelKey={navigation}
-        onFollow={setFollowRegion}
-      />
+    <div className={guestStyles.published}>
+      <div className={guestStyles.liveTools}>
+        <h2>{t("canvas.workshop.published")}</h2>
+        <CanvasGuestFacilitation
+          boardId={board.id}
+          sourceBoardId={sourceBoardId}
+          token={token}
+          canvasSeq={board.canvasSeq}
+          objects={board.objects}
+          cancelKey={navigation}
+          onFollow={setFollowRegion}
+        />
+      </div>
       <CanvasReadOnlySurface
+        fill
         objects={board.objects}
         canvasId={board.id}
         sourceBoardId={sourceBoardId}

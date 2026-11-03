@@ -299,7 +299,12 @@ export async function registerIdeaBoardRoutes(
         const input = HostMutation.parse(request.body);
         const current = await deps.boards.getModerator(actor.workspaceId, id, () => new Date());
         // A completed collect retry reaches the receipt check even when new opens pause.
-        if (input.command.type === "collect" && current.status === "draft")
+        if (
+          (input.command.type === "collect" && current.status === "draft") ||
+          (input.command.type === "reopen" &&
+            current.status === "closed" &&
+            (input.command.roundNumber ?? 1) === current.roundNumber)
+        )
           await requireCreation(actor.workspaceId);
         let command = input.command;
         if (command.type === "group.create" || command.type === "group.rename")
@@ -388,6 +393,7 @@ export async function registerIdeaBoardRoutes(
             input.idempotencyKey,
             () => new Date(),
             { attachments: input.attachments, links: input.links, sketch: input.sketch },
+            input.roundNumber,
           ),
         );
       },
@@ -406,6 +412,7 @@ export async function registerIdeaBoardRoutes(
             input.expectedRevision,
             input.idempotencyKey,
             () => new Date(),
+            input.roundNumber,
           ),
         );
       },

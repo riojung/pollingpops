@@ -1,0 +1,288 @@
+.page {
+  min-block-size: 100dvh;
+  inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  color: var(--ui-text);
+  background: var(--ui-canvas);
+  overflow-wrap: anywhere;
+}
+.page[data-canvas="true"] {
+  display: flex;
+  flex-direction: column;
+  block-size: 100dvh;
+  min-block-size: 0;
+  overflow: hidden;
+}
+.header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 14px;
+  min-inline-size: 0;
+  min-block-size: 72px;
+  padding: 10px 20px;
+  box-sizing: border-box;
+  border-block-end: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+.brand {
+  flex-shrink: 0;
+}
+.brand :global(.brand-name) {
+  display: none;
+}
+.identity {
+  flex: 1;
+  min-inline-size: 0;
+}
+.identity h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.identity p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--ui-text-subtle);
+}
+.identity p > span:first-child {
+  color: var(--ui-accent-ink);
+  font-weight: 650;
+}
+.iconButton,
+.panelTrigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ui-text-subtle);
+  cursor: pointer;
+}
+.panelTrigger {
+  gap: 8px;
+  padding-inline: 12px;
+  border-color: var(--ui-border);
+  font-size: 12px;
+  font-weight: 650;
+}
+.panelTrigger[aria-expanded="true"] {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+.phaseLabel {
+  display: none;
+}
+.iconButton svg,
+.panelTrigger svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+.iconButton:hover:not(:disabled),
+.panelTrigger:hover {
+  background: var(--ui-surface-hover);
+}
+.page button:focus-visible,
+.page summary:focus-visible,
+.page input:focus-visible,
+.page textarea:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.page button {
+  min-block-size: 44px;
+}
+.workspace {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.canvas {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.page[data-canvas="false"] .workspace {
+  display: block;
+}
+.page[data-canvas="false"] .canvas {
+  min-block-size: 0;
+}
+.participation {
+  flex: 0 0 360px;
+  inline-size: 360px;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  padding: 16px;
+  border-inline-start: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.participation[hidden] {
+  display: none;
+}
+.page[data-canvas="false"] .participation {
+  flex-basis: auto;
+  inline-size: min(56rem, 100%);
+  margin: 24px auto;
+  overflow: visible;
+  border: 0;
+  border-radius: 16px;
+}
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 16px;
+}
+.panelHeader h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.prompt h3,
+.card h3 {
+  margin-block: 0 8px;
+  font-size: 14px;
+}
+.prompt {
+  padding: 0 4px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.prompt p {
+  margin-block: 8px;
+}
+.deadline,
+.hint,
+.disclosure {
+  color: var(--ui-text-subtle);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.disclosure summary,
+.card > summary {
+  min-block-size: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-weight: 650;
+}
+.card {
+  min-inline-size: 0;
+  margin-block: 0 14px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface-raised);
+  font-size: 14px;
+}
+.card > summary {
+  font-size: 14px;
+}
+.card > summary span {
+  float: inline-end;
+  min-inline-size: 24px;
+  text-align: center;
+  border-radius: 8px;
+  background: var(--ui-canvas);
+  font-variant-numeric: tabular-nums;
+}
+.card label,
+.card input,
+.card textarea,
+.card select {
+  font-size: 16px;
+}
+.card :global(.button),
+.card :global(.button-quiet) {
+  max-inline-size: 100%;
+  white-space: normal;
+}
+.ownIdea {
+  min-inline-size: 0;
+  padding-block: 12px;
+  border-block-end: 1px solid var(--ui-border-subtle);
+}
+.message,
+.error {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px 20px;
+  font-size: 13px;
+  background: var(--ui-surface);
+}
+.error {
+  background: var(--ui-danger-bg);
+  color: var(--ui-danger-text);
+}
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .participation {
+    position: absolute;
+    z-index: 10;
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: min(380px, 100%);
+    box-shadow: var(--ui-shadow-lg);
+  }
+  .page[data-canvas="false"] .participation {
+    position: static;
+    margin-block: 0;
+  }
+  .header {
+    gap: 8px;
+    padding-inline: 10px;
+  }
+  .identity h1 {
+    font-size: 15px;
+  }
+  .panelTrigger {
+    max-inline-size: 40vw;
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.3;
+    text-align: start;
+  }
+  .panelTrigger > svg {
+    display: none;
+  }
+  .panelTrigger > span {
+    display: block;
+  }
+  .phaseLabel {
+    display: block;
+    margin-block-start: 2px;
+    color: var(--ui-accent-ink);
+    font-size: 10px;
+    font-weight: 650;
+  }
+}

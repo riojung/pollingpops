@@ -86,12 +86,14 @@ describe("idea board browser boundaries", () => {
     await submitBoardIdea(boardId, token, {
       schemaVersion: 1,
       idempotencyKey: boardIdeaId,
+      roundNumber: 2,
       body: "Synthetic idea",
     });
     await submitBoardVotes(boardId, token, {
       schemaVersion: 1,
       idempotencyKey: boardIdeaId,
       expectedRevision: 0,
+      roundNumber: 2,
       ideaIds: [boardIdeaId],
     });
     for (const [url, init] of mock.mock.calls as Array<[string, RequestInit]>) {
@@ -106,6 +108,14 @@ describe("idea board browser boundaries", () => {
     expect(mock.mock.calls[1]![1].body).toBe("{}");
     expect(mock.mock.calls[1]![1].headers.authorization).toBe(`Bearer ${token}`);
     expect(mock.mock.calls.at(-1)![1].method).toBe("PUT");
+    expect(JSON.parse(mock.mock.calls[3]![1].body)).toMatchObject({
+      roundNumber: 2,
+      body: "Synthetic idea",
+    });
+    expect(JSON.parse(mock.mock.calls.at(-1)![1].body)).toMatchObject({
+      roundNumber: 2,
+      ideaIds: [boardIdeaId],
+    });
   });
 
   it("binds returned boards to the requested source and rejects private unexpected fields", async () => {

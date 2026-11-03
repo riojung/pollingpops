@@ -7,6 +7,7 @@ import { liveDeliveryEnglishMessages } from "../lib/i18n/domains/live-delivery";
 import { reportRoundEnglishMessages } from "../lib/i18n/domains/report-round";
 import { workspacePageEnglishMessages } from "../lib/i18n/domains/workspace-pages";
 import { sessionSummaryEnglishMessages } from "../lib/i18n/domains/session-summary";
+import { ideaBoardEnglishMessages } from "../lib/i18n/domains/idea-boards";
 
 const allEnglishMessages: Messages = {
   ...englishMessages,
@@ -16,6 +17,7 @@ const allEnglishMessages: Messages = {
   ...reportRoundEnglishMessages,
   ...liveDeliveryEnglishMessages,
   ...sessionSummaryEnglishMessages,
+  ...ideaBoardEnglishMessages,
 };
 
 export function EnglishLocaleTestProvider({ children }: Readonly<{ children: ReactNode }>) {

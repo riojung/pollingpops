@@ -16,6 +16,7 @@ import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-confor
 import {
   expectIdeaBoardConformance,
   expectIdeaBoardAdmissionConformance,
+  expectIdeaBoardRoundConformance,
 } from "./support/idea-board-conformance.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -1399,6 +1400,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 85, name: "group_idea_boards" },
       { version: 86, name: "board_invitation_delivery" },
       { version: 87, name: "canvas_object_styles" },
+      { version: 88, name: "idea_board_rounds" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -3385,6 +3387,10 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(
       ((await repository.exportAccount(owner.userId)) as { ideaBoards: unknown[] }).ideaBoards,
     ).toEqual([]);
+  });
+  it("reopens bounded fresh voting rounds with preserved intake, redacted history and fenced retries", async () => {
+    const owner = await creator("reusable-idea-board-owner");
+    await expectIdeaBoardRoundConformance(repository, owner.workspaceId);
   });
 
   it("serializes idea board admission restrictions and deletes all private state with its owner", async () => {

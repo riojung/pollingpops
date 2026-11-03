@@ -15,6 +15,7 @@ import {
   CanvasFacilitationMutationSchema,
   type CanvasFacilitationCommand,
   type CanvasBoardCommand,
+  type IdeaBoardHostCommand,
 } from "@openround/contracts";
 import {
   MemoryRepository,
@@ -138,6 +139,344 @@ for (const backend of ["memory", "postgres"] as const)
             operationId: randomUUID(),
           }),
         );
+      it("atomically reopens the same linked canvas with retained layout and a fresh fenced voting round", async () => {
+        const ideas = createIdeaBoardRepository(repository),
+          now = new Date();
+        const source = await ideas.create(
+          workspaceId,
+          randomUUID(),
+          IdeaBoardCreateSchema.parse({ title: "Reusable linked workshop" }),
+          randomUUID(),
+          {
+            participantLimit: 10,
+            closesAt: new Date(+now + 86_400_000).toISOString(),
+            expiresAt: new Date(+now + 60 * 86_400_000).toISOString(),
+          },
+          now,
+        );
+        // Current workshop creation inherits source expiry. Model a retained canvas with an
+        // earlier immutable deadline at INSERT, so the wrapped-reopen bound is exercised
+        // independently of that creation default on both stores.
+        const retainedCanvases = withReadTransaction((tx) => ({
+          ...tx,
+          put: async (state, insert) => {
+            if (insert && state.board.sourceBoardId === source.id)
+              state.board.expiresAt = new Date(+now + 30 * 86_400_000).toISOString();
+            await tx.put(state, insert);
+          },
+        }));
+        const board = await retainedCanvases.create(
+          owner,
+          CanvasBoardCreateSchema.parse({
+            schemaVersion: CANVAS_SCHEMA_VERSION,
+            workspaceId,
+            title: "Retained canvas",
+            boardType: "workshop",
+            sourceBoardId: source.id,
+            operationId: randomUUID(),
+          }),
+          now,
+        );
+        expect(Date.parse(board.expiresAt)).toBeLessThan(Date.parse(source.expiresAt));
+        const workshop = async (command: IdeaBoardHostCommand, clock = now) => {
+          const current = await ideas.getModerator(workspaceId, source.id);
+          return canvases.command(
+            owner,
+            board.id,
+            {
+              schemaVersion: CANVAS_SCHEMA_VERSION,
+              operationId: randomUUID(),
+              command: { type: "workshop", expectedRevision: current.revision, command },
+            },
+            clock,
+          );
+        };
+        await workshop({ type: "collect" });
+        const token = createHash("sha256").update(randomUUID()).digest("hex");
+        await ideas.join(source.id, token, null, now);
+        const submitted = await ideas.submitIdea(
+            source.id,
+            token,
+            "Approve this retained idea",
+            randomUUID(),
+            now,
+          ),
+          ideaId = submitted.ownIdeas[0]!.id;
+        const before = await canvases.get(owner, board.id);
+        await expect(workshop({ type: "start_voting" })).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: "Approve at least one idea before voting",
+        });
+        expect((await canvases.get(owner, board.id)).canvasSeq).toBe(before.canvasSeq);
+        await workshop({ type: "moderate", ideaId, status: "approved" });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [{ type: "create", object: note("Retain this canvas layout") }],
+        });
+        const geometry = (await canvases.get(owner, board.id)).objects.map(
+          ({ id, x, y, width, height }) => ({ id, x, y, width, height }),
+        );
+        await workshop({ type: "start_voting" });
+        expect((await canvases.get(owner, board.id)).status).toBe("frozen");
+        await ideas.vote(source.id, token, [ideaId], 0, randomUUID(), now);
+        await workshop({ type: "close" });
+        await share(board.id, "viewer");
+        const closedSource = await ideas.getModerator(workspaceId, source.id);
+        await expect(
+          canvases.command(
+            editor,
+            board.id,
+            {
+              schemaVersion: CANVAS_SCHEMA_VERSION,
+              operationId: randomUUID(),
+              command: {
+                type: "workshop",
+                expectedRevision: closedSource.revision,
+                command: { type: "reopen", roundNumber: 1 },
+              },
+            },
+            now,
+          ),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        const cursor = await lastOutboxCursor();
+        const reopenedAt = new Date(Date.parse(board.expiresAt) - 86_400_000);
+        const reopened = await workshop({ type: "reopen", roundNumber: 1 }, reopenedAt);
+        expect(reopened.board.sourceBoard?.closesAt).toBe(board.expiresAt);
+        expect(reopened.board).toMatchObject({
+          id: board.id,
+          status: "active",
+          capabilities: { edit: true },
+          sourceBoard: {
+            id: source.id,
+            roundNumber: 2,
+            status: "collecting",
+            roundHistory: [{ ballotCount: 1, results: [{ ideaId, voteCount: 1 }] }],
+          },
+        });
+        expect(
+          reopened.board.objects.map(({ id, x, y, width, height }) => ({
+            id,
+            x,
+            y,
+            width,
+            height,
+          })),
+        ).toEqual(geometry);
+        expect(await ideas.getGuest(source.id, token, now)).toMatchObject({
+          hasVoted: false,
+          revision: 2,
+        });
+        expect((await canvases.listOutbox(cursor, 500)).events).toHaveLength(1);
+        await expect(workshop({ type: "close", roundNumber: 1 })).rejects.toMatchObject({
+          code: "STALE_DRAFT",
+        });
+        const current = await ideas.getModerator(workspaceId, source.id);
+        await ideas.hostCommand(
+          workspaceId,
+          source.id,
+          { type: "close", roundNumber: 2 },
+          current.revision,
+          randomUUID(),
+          reopenedAt,
+        );
+        const closed = await ideas.getModerator(workspaceId, source.id);
+        await ideas.hostCommand(
+          workspaceId,
+          source.id,
+          { type: "reopen", roundNumber: 2 },
+          closed.revision,
+          randomUUID(),
+          reopenedAt,
+        );
+        expect(await canvases.authorize(owner, board.id, reopenedAt)).toMatchObject({
+          canvasSeq: reopened.board.canvasSeq,
+          sourceRevision: closed.revision + 1,
+          capabilities: { edit: true },
+        });
+      });
+      it.skipIf(backend !== "postgres")(
+        "reads and reopens persisted pre-round workshop sources without rewriting reads or replaying old ballots",
+        async () => {
+          if (!(repository instanceof PostgresRepository))
+            throw new Error("This fixture requires raw PostgreSQL storage");
+          const pool = repository.pool,
+            ideas = createIdeaBoardRepository(repository),
+            now = new Date();
+          const source = await ideas.create(
+            workspaceId,
+            randomUUID(),
+            IdeaBoardCreateSchema.parse({
+              title: "Pre-round retained workshop",
+              moderationEnabled: false,
+              ideasVisible: true,
+            }),
+            randomUUID(),
+            {
+              participantLimit: 10,
+              closesAt: new Date(+now + 86_400_000).toISOString(),
+              expiresAt: new Date(+now + 30 * 86_400_000).toISOString(),
+            },
+            now,
+          );
+          await ideas.hostCommand(
+            workspaceId,
+            source.id,
+            { type: "collect" },
+            0,
+            randomUUID(),
+            now,
+          );
+          const token = createHash("sha256").update(randomUUID()).digest("hex");
+          await ideas.join(source.id, token, null, now);
+          const submitted = await ideas.submitIdea(
+              source.id,
+              token,
+              "Retain this approved legacy idea",
+              randomUUID(),
+              now,
+            ),
+            ideaId = submitted.ownIdeas[0]!.id;
+          const board = await canvases.create(
+            owner,
+            CanvasBoardCreateSchema.parse({
+              workspaceId,
+              title: "Pre-round workshop canvas",
+              boardType: "workshop",
+              sourceBoardId: source.id,
+              operationId: randomUUID(),
+            }),
+            now,
+          );
+          async function storedSource(legacyStatus?: "collecting" | "closed") {
+            const client = await pool.connect();
+            try {
+              await client.query("BEGIN");
+              await client.query("SELECT set_config('app.workspace_id',$1,true)", [workspaceId]);
+              if (legacyStatus)
+                await client.query(
+                  `UPDATE idea_boards SET data=jsonb_set(
+                    (data-ARRAY['roundNumber','roundHistory','closedAt'])
+                      ||jsonb_build_object('status',$2::text),
+                    '{guests}',
+                    COALESCE((SELECT jsonb_agg(guest-'votedRound' ORDER BY ordinal)
+                      FROM jsonb_array_elements(data->'guests') WITH ORDINALITY AS guests(guest,ordinal)),
+                      '[]'::jsonb))
+                   WHERE id=$1`,
+                  [source.id, legacyStatus],
+                );
+              const result = await client.query<{ data: Record<string, unknown> }>(
+                "SELECT data FROM idea_boards WHERE id=$1",
+                [source.id],
+              );
+              await client.query("COMMIT");
+              return result.rows[0]!.data;
+            } catch (error) {
+              await client.query("ROLLBACK");
+              throw error;
+            } finally {
+              client.release();
+            }
+          }
+          function expectLegacyFieldsAbsent(row: Record<string, unknown>) {
+            for (const field of ["roundNumber", "roundHistory", "closedAt", "guests.0.votedRound"])
+              expect(row).not.toHaveProperty(field);
+          }
+          const legacyActive = await storedSource("collecting");
+          expectLegacyFieldsAbsent(legacyActive);
+          const activeHost = await canvases.get(owner, board.id, now);
+          expect(activeHost.sourceBoard).toMatchObject({
+            roundNumber: 1,
+            roundHistory: [],
+            roundHistoryIdeas: [],
+          });
+          expect(await canvases.getGuest(source.id, token, now)).toMatchObject({
+            sourceBoard: { roundNumber: 1, status: "collecting", roundHistory: [] },
+          });
+          expect(await storedSource()).toEqual(legacyActive);
+
+          // This legacy command omits the round fence and must execute in round one.
+          const voting = await change(owner, board.id, {
+            type: "workshop",
+            expectedRevision: activeHost.sourceBoard!.revision,
+            command: { type: "start_voting" },
+          });
+          expect(voting.board).toMatchObject({
+            status: "frozen",
+            sourceBoard: { roundNumber: 1, status: "voting" },
+          });
+          const ballotKey = randomUUID(),
+            accepted = await ideas.vote(source.id, token, [ideaId], 0, ballotKey, now);
+          const beforeClosure = await storedSource();
+          // Close and strip the additive fields in one update while OLD is still voting.
+          // The immutable-closed-row trigger remains enabled throughout this fixture.
+          const legacyClosed = await storedSource("closed");
+          expectLegacyFieldsAbsent(legacyClosed);
+          expect(legacyClosed.receipts).toEqual(beforeClosure.receipts);
+          expect(legacyClosed.receipts).toContainEqual(
+            expect.objectContaining({
+              key: ballotKey,
+              hash: createHash("sha256")
+                .update(JSON.stringify({ ideaIds: [ideaId], expectedRevision: 0 }))
+                .digest("hex"),
+              receipt: accepted.receipt,
+            }),
+          );
+          const closedHost = await canvases.get(owner, board.id, now);
+          expect(closedHost).toMatchObject({
+            status: "closed",
+            sourceBoard: { roundNumber: 1, ideas: [{ id: ideaId, voteCount: 1 }] },
+          });
+          expect(await canvases.getGuest(source.id, token, now)).toMatchObject({
+            status: "closed",
+            sourceBoard: { roundNumber: 1, ideas: [{ id: ideaId, voteCount: 1 }] },
+          });
+          expect(await ideas.getGuest(source.id, token, now)).toMatchObject({
+            hasVoted: true,
+            revision: 1,
+            votedIdeaIds: [ideaId],
+          });
+          expect(await storedSource()).toEqual(legacyClosed);
+
+          const reopened = await change(owner, board.id, {
+            type: "workshop",
+            expectedRevision: closedHost.sourceBoard!.revision,
+            command: { type: "reopen", roundNumber: 1 },
+          });
+          expect(reopened.board).toMatchObject({
+            id: board.id,
+            status: "active",
+            sourceBoard: {
+              id: source.id,
+              roundNumber: 2,
+              status: "collecting",
+              roundHistory: [
+                {
+                  roundNumber: 1,
+                  closedAt: null,
+                  ballotCount: 1,
+                  results: [{ ideaId, voteCount: 1 }],
+                },
+              ],
+              roundHistoryIdeas: [{ ideaId, body: "Retain this approved legacy idea" }],
+            },
+          });
+          expect(await ideas.getGuest(source.id, token, now)).toMatchObject({
+            hasVoted: false,
+            revision: accepted.revision + 1,
+            votedIdeaIds: [],
+          });
+          const freshRound = await storedSource(),
+            replay = await ideas.vote(source.id, token, [ideaId], 0, ballotKey, now);
+          expect(replay).toMatchObject({
+            receipt: accepted.receipt,
+            hasVoted: false,
+            revision: accepted.revision + 1,
+            votedIdeaIds: [],
+            board: { roundNumber: 2, roundHistory: reopened.board.sourceBoard!.roundHistory },
+          });
+          expect(await storedSource()).toEqual(freshRound);
+        },
+      );
       const change = (
         actor: CreatorContext,
         id: string,

@@ -1243,9 +1243,26 @@ Creator-cookie routes:
 - `GET /v1/idea-boards/{id}` returns the moderator projection to owners/editors and only the
   approved projection to viewers. Neither projection includes guest identities or ballots.
 - `POST /v1/idea-boards/{id}/commands` requires `idempotencyKey`, `expectedRevision`, and `command`.
-  Commands include `collect`, `start_voting`, `close`, `visibility`, `moderate`, `group.create`,
+  Commands include `collect`, `start_voting`, `close`, `reopen`, `visibility`, `moderate`, `group.create`,
   `group.rename`, `group.delete`, and `idea.group`. Owner/editor access is rechecked for retries.
 - `DELETE /v1/idea-boards/{id}` is owner-only and deletes all board operational data.
+
+`start_voting` requires an approved idea; pending moderation returns `422 VALIDATION_ERROR`.
+`reopen` starts a fresh collecting/voting round on the same retained board and guest link,
+preserving ideas, groups, intake privacy, resource quotas and prior aggregate results. Its
+optional `windowDays` is 1–30 (default 7), clipped to hard retention; a canvas-wrapped reopen
+also clips to that canvas's expiry. Expiry is never extended, and workshops support 20 rounds.
+View fields `roundNumber` (legacy default 1), `roundHistory` and `roundHistoryIdeas` (default
+empty arrays) expose scalar prior counts plus one deduplicated, currently redacted idea-text
+map. Public admission metadata contains the round number, without history or participant data.
+
+Deploy web and API readers together and reload already-open browsers: older strict readers do
+not recognize the additive round fields. Host commands and guest idea/ballot writes send the
+current `roundNumber`; omission remains valid only for legacy round 1. Preserve an accepted
+intent's original envelope on retries, including omitted fields, to retain its historical hash.
+Reopening advances board and guest revisions; clients use `hasVoted`, rather than a positive
+guest revision, to identify a submitted ballot in the current round. Accepted old receipts
+replay without applying their mutation to a new round.
 
 Audience routes omit creator cookies. `GET /v1/idea-boards/{id}/public` returns only admission
 metadata. For other guest calls, send a browser-generated 32-byte hex credential as

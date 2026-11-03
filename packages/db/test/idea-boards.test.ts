@@ -1,11 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { IdeaBoardCreateSchema, type IdeaBoardRichContent } from "@openround/contracts";
-import { MemoryRepository, createIdeaBoardRepository } from "../src/index.js";
+import {
+  IdeaBoardCreateSchema,
+  IdeaBoardStoredSchema,
+  type IdeaBoardRichContent,
+} from "@openround/contracts";
+import { MemoryRepository, IdeaBoardRepository, createIdeaBoardRepository } from "../src/index.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
 import {
   expectIdeaBoardConformance,
   expectIdeaBoardAdmissionConformance,
+  expectIdeaBoardRoundConformance,
   ideaGuestHash,
 } from "./support/idea-board-conformance.js";
 
@@ -26,6 +31,64 @@ async function fixture() {
   return { repository, owner, boards: createIdeaBoardRepository(repository) };
 }
 describe("standalone idea board durable state", () => {
+  it("replays an actual pre-round-format receipt hash without rewriting its closed stored row", async () => {
+    const now = new Date(),
+      key = randomUUID(),
+      id = randomUUID(),
+      workspaceId = randomUUID();
+    const input = { command: { type: "close" }, expectedRevision: 6 };
+    const receipt = { id: randomUUID(), kind: "close", revision: 7, ideaId: null };
+    const legacy = {
+      schemaVersion: 1,
+      id,
+      workspaceId,
+      title: "Legacy closed board",
+      description: "",
+      identityMode: "anonymous",
+      moderationEnabled: true,
+      voteBudget: 3,
+      ideasVisible: false,
+      status: "closed",
+      closesAt: new Date(+now + 86_400_000).toISOString(),
+      expiresAt: new Date(+now + 2 * 86_400_000).toISOString(),
+      revision: 7,
+      participantLimit: 10,
+      createdAt: now.toISOString(),
+      creationKey: randomUUID(),
+      creationHash: "a".repeat(64),
+      groups: [],
+      ideas: [],
+      guests: [],
+      receipts: [
+        {
+          owner: "host",
+          key,
+          hash: createHash("sha256").update(JSON.stringify(input)).digest("hex"),
+          receipt,
+        },
+      ],
+    };
+    const frozen = JSON.stringify(legacy);
+    const boards = new IdeaBoardRepository(async (_workspace, _id, work) =>
+      work({
+        get: async () => IdeaBoardStoredSchema.parse(structuredClone(legacy)),
+        list: async () => [],
+        put: async () => {
+          throw new Error("A retry rewrote legacy state");
+        },
+        remove: async () => {},
+        admission: async () => {},
+      }),
+    );
+    const replay = await boards.hostCommand(workspaceId, id, { type: "close" }, 6, key, now);
+    expect(replay.receipt).toEqual(receipt);
+    expect(replay.board).toMatchObject({ roundNumber: 1, roundHistory: [], roundHistoryIdeas: [] });
+    expect(JSON.stringify(legacy)).toBe(frozen);
+  });
+  it("reopens bounded fresh voting rounds with preserved intake, redacted aggregate history and fenced legacy retries", async () => {
+    const { repository, owner } = await fixture();
+    await expectIdeaBoardRoundConformance(repository, owner.workspaceId);
+  });
   it("keeps rich ideas and exclusively owned images private through moderation, retries and deletion", async () => {
     const { repository, owner } = await fixture();
     await expectIdeaBoardRichConformance(repository, owner.workspaceId, owner.userId);

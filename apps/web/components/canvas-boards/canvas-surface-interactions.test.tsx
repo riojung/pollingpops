@@ -157,6 +157,147 @@ beforeEach(() => {
   vi.stubGlobal("Element", Target);
 });
 describe("read-only canvas outline", () => {
+  function readOnlyHarness(props: Parameters<typeof CanvasReadOnlySurface>[0]) {
+    const hooks: Hooks = { cursor: 0, slots: [] };
+    let tree: ReactNode;
+    const view = {
+      render() {
+        hooks.cursor = 0;
+        mocked.hooks = hooks;
+        try {
+          tree = CanvasReadOnlySurface(props);
+          return tree;
+        } finally {
+          mocked.hooks = null;
+        }
+      },
+      find(predicate: (element: ReactElement<Record<string, unknown>>) => boolean) {
+        const found = findElement(tree, predicate);
+        if (!found) throw new Error("Read-only control missing");
+        return found;
+      },
+      button(label: string) {
+        return view.find(
+          (element) => element.type === "button" && element.props["aria-label"] === label,
+        );
+      },
+      surface() {
+        return view.find((element) => element.type === CanvasSurface);
+      },
+    };
+    return view;
+  }
+  it("selects and fits a frame locally without exposing editing callbacks", () => {
+    const frame = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "frame",
+      text: "Shared agenda",
+      visibility: "published",
+    });
+    const onInteract = vi.fn();
+    const view = readOnlyHarness({ objects: [frame], onInteract, guestToken: "ab".repeat(32) });
+    view.render();
+    expect(view.button("Fit selection").props.disabled).toBe(true);
+    (view.button("Object outline").props.onClick as () => void)();
+    view.render();
+    (view.button("Select Shared agenda").props.onClick as () => void)();
+    view.render();
+    expect(view.button("Fit selection").props.disabled).toBe(false);
+    (view.button("Fit selection").props.onClick as () => void)();
+    view.render();
+    expect(view.surface().props.selectedId).toBe(frame.id);
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBeGreaterThan(0);
+    for (const callback of [
+      "onPatch",
+      "onTransform",
+      "onCreatePen",
+      "onCreateConnector",
+      "onCommitText",
+      "canEdit",
+      "canFacilitate",
+    ])
+      expect(view.surface().props[callback]).toBeUndefined();
+    expect(onInteract).toHaveBeenCalledTimes(3);
+  });
+  it("keeps unpublished objects and connectors out of guest local navigation", () => {
+    const privateNote = CanvasObjectSchema.parse({
+      ...canvasObject,
+      text: "Private host note",
+      visibility: "team",
+    });
+    const connector = CanvasObjectSchema.parse({
+      ...canvasObject,
+      id: "00000000-0000-4000-8000-000000000098",
+      type: "connector",
+      visibility: "published",
+      from: { objectId: privateNote.id, x: 0, y: 0 },
+      to: { objectId: null, x: 300, y: 40 },
+    });
+    const view = readOnlyHarness({
+      objects: [privateNote, connector],
+      guestToken: "ab".repeat(32),
+    });
+    view.render();
+    expect(view.surface().props.objects).toEqual([]);
+    expect(renderToStaticMarkup(view.render())).not.toContain("Private host note");
+  });
+  it("returns focus when leaving focus mode and lets Escape reach presenter opt-out", () => {
+    vi.stubGlobal("document", { querySelector: () => null });
+    const onInteract = vi.fn();
+    const view = readOnlyHarness({ objects: [canvasObject], onInteract });
+    view.render();
+    const focus = vi.fn();
+    (view.button("Focus canvas").props.ref as { current: unknown }).current = { focus };
+    (view.button("Focus canvas").props.onClick as () => void)();
+    const expanded = view.render() as ReactElement<Record<string, unknown>>;
+    expect(expanded.props.role).toBe("dialog");
+    focus.mockClear();
+    const stopPropagation = vi.fn();
+    (expanded.props.onKeyDown as (event: unknown) => void)({
+      key: "Escape",
+      nativeEvent: { isComposing: false },
+      target: new Target(),
+      preventDefault: vi.fn(),
+      stopPropagation,
+    });
+    expect(focus).toHaveBeenCalledOnce();
+    expect(stopPropagation).not.toHaveBeenCalled();
+    expect(onInteract).toHaveBeenCalledTimes(2);
+    expect((view.render() as ReactElement<Record<string, unknown>>).props["data-focus-mode"]).toBe(
+      false,
+    );
+  });
+  it("ignores composing and native field shortcuts while supporting keyboard zoom", () => {
+    vi.stubGlobal("document", { querySelector: () => null });
+    const onInteract = vi.fn();
+    const view = readOnlyHarness({ objects: [canvasObject], onInteract });
+    const tree = view.render() as ReactElement<Record<string, unknown>>;
+    expect(view.button("100% — Reset zoom").props.children).toBe("100%");
+    const key = (target: Target, composing = false) =>
+      (tree.props.onKeyDown as (event: unknown) => void)({
+        key: "+",
+        nativeEvent: { isComposing: composing },
+        target,
+        preventDefault: vi.fn(),
+      });
+    class FieldTarget extends Target {
+      closest(selector: string) {
+        return selector.includes("input") ? this : null;
+      }
+    }
+    key(new FieldTarget());
+    key(new Target(), true);
+    expect(onInteract).not.toHaveBeenCalled();
+    key(new Target());
+    view.render();
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBe(1.2);
+    expect(onInteract).toHaveBeenCalledOnce();
+    expect(view.button("120% — Reset zoom").props.children).toBe("120%");
+    (view.button("120% — Reset zoom").props.onClick as () => void)();
+    view.render();
+    expect(view.button("100% — Reset zoom").props.children).toBe("100%");
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBe(1);
+  });
   it("exposes image descriptions and explicit safe links when the outline is opened", () => {
     const image = CanvasObjectSchema.parse({
       ...canvasObject,
@@ -186,7 +327,7 @@ describe("read-only canvas outline", () => {
     const tree = render();
     const toggle = findElement(
       tree,
-      (element) => element.type === "button" && element.props.children === "Object outline",
+      (element) => element.type === "button" && element.props["aria-label"] === "Object outline",
     );
     expect(toggle?.props["aria-expanded"]).toBe(false);
     (toggle!.props.onClick as () => void)();

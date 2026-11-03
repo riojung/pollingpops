@@ -1439,6 +1439,7 @@ export class CanvasBoardRepository {
           command.expectedRevision,
           mutation.operationId,
           () => instant(clock),
+          state.board.expiresAt,
         );
         checked.source = sourceCurrent(await tx.source(source.id), instant(clock));
         if (["draft", "collecting"].includes(checked.source.status))

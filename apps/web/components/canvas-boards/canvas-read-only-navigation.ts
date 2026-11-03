@@ -1,4 +1,4 @@
-import { zoomAt, type CanvasViewport } from "./canvas-geometry";
+import { MIN_ZOOM, zoomAt, type CanvasViewport } from "./canvas-geometry";
 
 /** View navigation only: keyboard gestures never produce object operations. */
 export function readOnlyKeyViewport(
@@ -7,6 +7,7 @@ export function readOnlyKeyViewport(
   width: number,
   height: number,
   shift = false,
+  minZoom = MIN_ZOOM,
 ): CanvasViewport | null {
   const step = shift ? 160 : 64;
   if (key === "ArrowLeft") return { ...viewport, x: viewport.x + step };
@@ -19,5 +20,5 @@ export function readOnlyKeyViewport(
       : key === "-" || key === "_"
         ? viewport.zoom / 1.2
         : null;
-  return zoom === null ? null : zoomAt(viewport, { x: width / 2, y: height / 2 }, zoom);
+  return zoom === null ? null : zoomAt(viewport, { x: width / 2, y: height / 2 }, zoom, minZoom);
 }

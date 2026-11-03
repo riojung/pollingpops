@@ -12,6 +12,7 @@ export interface CanvasViewport extends CanvasPoint {
 }
 export const INITIAL_VIEWPORT: CanvasViewport = { x: 80, y: 80, zoom: 1 };
 export const MIN_ZOOM = 0.15;
+export const MIN_PREVIEW_ZOOM = 0.005;
 export const MAX_ZOOM = 3;
 
 export function worldPoint(point: CanvasPoint, viewport: CanvasViewport): CanvasPoint {
@@ -23,8 +24,9 @@ export function zoomAt(
   viewport: CanvasViewport,
   point: CanvasPoint,
   nextZoom: number,
+  minZoom = MIN_ZOOM,
 ): CanvasViewport {
-  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZoom));
+  const zoom = Math.max(minZoom, Math.min(MAX_ZOOM, nextZoom));
   const world = worldPoint(point, viewport);
   return { zoom, x: point.x - world.x * zoom, y: point.y - world.y * zoom };
 }

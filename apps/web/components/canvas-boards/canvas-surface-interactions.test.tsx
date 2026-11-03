@@ -6,9 +6,15 @@ import { CanvasObjectSchema } from "@openround/contracts";
 import english from "../../lib/i18n/domains/idea-boards/en-CA";
 import { CanvasReadOnlySurface, CanvasSurface } from "./canvas-surface";
 import { canvasObject } from "./canvas-test-fixtures";
+import { boardFixture } from "../../test-utils/idea-board";
+import { BoardIdeaImage } from "../idea-boards/idea-content";
+import { IdeaCanvasScene } from "../idea-boards/idea-canvas-preview";
+import { CanvasImage } from "./canvas-image";
+import { MIN_PREVIEW_ZOOM } from "./canvas-geometry";
 interface Hooks {
   cursor: number;
   slots: unknown[];
+  effects?: Array<{ effect: ReactModule.EffectCallback; dependencies?: readonly unknown[] }>;
 }
 const mocked = vi.hoisted(() => ({ hooks: null as Hooks | null }));
 vi.mock("react", async (original) => {
@@ -39,6 +45,7 @@ vi.mock("react", async (original) => {
     useId: () => (mocked.hooks ? "canvas-id-" + mocked.hooks.cursor++ : react.useId()),
     useEffect: (effect: ReactModule.EffectCallback, dependencies?: readonly unknown[]) => {
       if (!mocked.hooks) react.useEffect(effect, dependencies);
+      else mocked.hooks.effects?.push({ effect, dependencies });
     },
   };
 });
@@ -76,7 +83,7 @@ function findElement(
   return predicate(node) ? node : findElement(node.props.children as ReactNode, predicate);
 }
 function harness(props: Partial<Parameters<typeof CanvasSurface>[0]> = {}) {
-  const hooks: Hooks = { cursor: 0, slots: [] };
+  const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   let tree: ReactNode;
   const viewport = vi.fn(),
     onSelect = vi.fn(),
@@ -104,6 +111,7 @@ function harness(props: Partial<Parameters<typeof CanvasSurface>[0]> = {}) {
     ...handlers,
     render() {
       hooks.cursor = 0;
+      hooks.effects = [];
       mocked.hooks = hooks;
       try {
         tree = CanvasSurface({
@@ -147,6 +155,13 @@ function harness(props: Partial<Parameters<typeof CanvasSurface>[0]> = {}) {
     find(predicate: (element: ReactElement<Record<string, unknown>>) => boolean) {
       return findElement(tree, predicate);
     },
+    permissionEffect(canEdit: boolean) {
+      const effect = hooks.effects?.find(
+        ({ dependencies }) => dependencies?.length === 1 && dependencies[0] === canEdit,
+      );
+      if (!effect) throw new Error("Canvas permission effect missing");
+      return effect.effect();
+    },
   };
   return view;
 }
@@ -187,6 +202,40 @@ describe("read-only canvas outline", () => {
     };
     return view;
   }
+  it("forwards idea-media ownership to a read-only scene", () => {
+    const isIdeaImage = vi.fn(() => true);
+    const view = readOnlyHarness({ objects: [], isIdeaImage });
+    view.render();
+    expect(view.surface().props.isIdeaImage).toBe(isIdeaImage);
+  });
+  it("fits a large native idea inside its preview dialog", () => {
+    const object = CanvasObjectSchema.parse({ ...canvasObject, width: 10_000, height: 10_000 });
+    const view = readOnlyHarness({ objects: [object], insideDialog: true });
+    view.render();
+    (view.button(english["canvas.fit"]).props.onClick as () => void)();
+    view.render();
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBeCloseTo(0.0404);
+    expect(view.button("Focus canvas").props.hidden).toBe(true);
+    expect(view.surface().props.minZoom).toBe(MIN_PREVIEW_ZOOM);
+    expect(view.button("Zoom out").props.disabled).toBe(false);
+    (view.button("Zoom out").props.onClick as () => void)();
+    const tree = view.render() as ReactElement<Record<string, unknown>>;
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBeCloseTo(0.0404 / 1.2);
+    (tree.props.onKeyDown as (event: unknown) => void)({
+      key: "-",
+      nativeEvent: { isComposing: false },
+      target: new Target(),
+      preventDefault: vi.fn(),
+    });
+    view.render();
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBeCloseTo(0.0404 / 1.2 ** 2);
+    for (let step = 0; step < 20; step++) {
+      (view.button("Zoom out").props.onClick as () => void)();
+      view.render();
+    }
+    expect((view.surface().props.viewport as { zoom: number }).zoom).toBe(MIN_PREVIEW_ZOOM);
+    expect(view.button("Zoom out").props.disabled).toBe(true);
+  });
   it("selects and fits a frame locally without exposing editing callbacks", () => {
     const frame = CanvasObjectSchema.parse({
       ...canvasObject,
@@ -346,9 +395,177 @@ describe("read-only canvas outline", () => {
     });
   });
 });
+describe("preview zoom gestures", () => {
+  it("uses the preview range for wheel and pinch without changing objects", () => {
+    const view = harness({
+      canEdit: false,
+      minZoom: MIN_PREVIEW_ZOOM,
+      viewport: { x: 0, y: 0, zoom: 0.04 },
+    });
+    view.render();
+    const surface = view.find((node) => node.type === "svg")!;
+    (surface.props.onWheel as (event: unknown) => void)({
+      clientX: 100,
+      clientY: 100,
+      deltaY: 20,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      preventDefault: vi.fn(),
+    });
+    expect(view.viewport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ zoom: 0.04 * Math.exp(-0.1) }),
+    );
+    view.event("onPointerDown", 0, 0, new Target(), 1);
+    view.event("onPointerDown", 100, 0, new Target(), 2);
+    view.event("onPointerMove", 80, 0, new Target(), 2);
+    expect(view.viewport).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 0.032 }));
+    expect(view.onTransform).not.toHaveBeenCalled();
+    expect(view.onCommitText).not.toHaveBeenCalled();
+  });
+});
 afterEach(() => {
   mocked.hooks = null;
   vi.unstubAllGlobals();
+});
+describe("protected native idea scenes", () => {
+  it("retains a private inline text buffer once when editing permission freezes", () => {
+    const onRetainText = vi.fn();
+    const props = { canEdit: true, onRetainText };
+    const view = harness(props);
+    view.render();
+    view.event("onDoubleClick", 20, 20);
+    view.render();
+    const textarea = view.find((element) => element.type === "textarea");
+    expect(textarea).toBeDefined();
+    (textarea!.props.onChange as (event: unknown) => void)({
+      target: { value: "Private text kept when collection closes" },
+    });
+    view.render();
+    props.canEdit = false;
+    view.render();
+    view.permissionEffect(false);
+    view.render();
+    expect(onRetainText).toHaveBeenCalledExactlyOnceWith(
+      canvasObject,
+      "Private text kept when collection closes",
+    );
+    expect(view.find((element) => element.type === "textarea")).toBeUndefined();
+    expect(view.onTextEditingChange).toHaveBeenLastCalledWith(false);
+    expect(view.onCommitText).not.toHaveBeenCalled();
+    view.permissionEffect(false);
+    expect(onRetainText).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the existing explicit-save editor when no private retention callback is supplied", () => {
+    const props = { canEdit: true };
+    const view = harness(props);
+    view.render();
+    view.event("onDoubleClick", 20, 20);
+    view.render();
+    props.canEdit = false;
+    view.render();
+    view.permissionEffect(false);
+    view.render();
+    expect(view.find((element) => element.type === "textarea")).toBeDefined();
+    expect(view.onCommitText).not.toHaveBeenCalled();
+  });
+
+  it("routes only participant-owned images through idea media with their access context", () => {
+    const image = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "image",
+      mediaId: boardFixture.id,
+      altText: "Private composition image",
+    });
+    if (image.type !== "image") throw new Error("Expected an image fixture");
+    const props = {
+      objects: [image],
+      sourceBoardId: boardFixture.id,
+      canvasId: canvasObject.id,
+      guestToken: "ab".repeat(32),
+      versionId: boardFixture.id,
+    };
+    const participant = harness({ ...props, isIdeaImage: (object) => object.id === image.id });
+    participant.render();
+    expect(participant.find((element) => element.type === BoardIdeaImage)?.props).toMatchObject({
+      boardId: boardFixture.id,
+      mediaId: image.mediaId,
+      guestToken: props.guestToken,
+      canvasId: canvasObject.id,
+      versionId: boardFixture.id,
+      showCaption: false,
+      fit: true,
+    });
+    expect(participant.find((element) => element.type === CanvasImage)).toBeUndefined();
+    const published = harness(props);
+    published.render();
+    expect(published.find((element) => element.type === CanvasImage)).toBeDefined();
+    expect(published.find((element) => element.type === BoardIdeaImage)).toBeUndefined();
+  });
+
+  it("keeps a native composition inert inside one movable protected reference", async () => {
+    const idea = {
+      ...boardFixture.ideas[0]!,
+      canvas: {
+        schemaVersion: 1,
+        x: 100,
+        y: 200,
+        width: 400,
+        height: 200,
+        objects: [
+          {
+            id: canvasObject.id,
+            type: "sticky",
+            text: "Native participant note",
+            x: 20,
+            y: 20,
+            width: 180,
+            height: 100,
+          },
+        ],
+      },
+    };
+    const reference = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "idea_ref",
+      text: "",
+      ideaId: idea.id,
+      idea,
+      x: 100,
+      y: 200,
+      width: 400,
+      height: 200,
+    });
+    const view = harness({
+      objects: [reference],
+      sourceBoardId: boardFixture.id,
+      selectedIds: [reference.id],
+      canFacilitate: true,
+    });
+    const markup = view.render();
+    expect(markup).toContain("Native participant note");
+    const scene = view.find((element) => element.type === IdeaCanvasScene);
+    expect(scene?.props).toMatchObject({
+      canvas: idea.canvas,
+      ideaId: idea.id,
+      width: 396,
+      height: 196,
+    });
+    const container = view.find(
+      (element) => element.type === "foreignObject" && element.props.pointerEvents === "none",
+    );
+    expect(container).toBeDefined();
+    expect(view.find((element) => element.type === BoardIdeaImage)).toBeUndefined();
+    view.event("onPointerDown", 120, 220, new Target(reference.id));
+    view.event("onPointerUp", 160, 250, new Target(reference.id));
+    await settle();
+    expect(view.onTransform).toHaveBeenCalledExactlyOnceWith(
+      [reference.id],
+      { type: "move", dx: 40, dy: 30 },
+      [reference],
+    );
+  });
 });
 describe("canvas productivity pointer paths", () => {
   it.each([30, 45, 90, -45])(

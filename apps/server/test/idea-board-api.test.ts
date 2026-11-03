@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   IdeaBoardGuestViewSchema,
   IdeaBoardViewSchema,
+  IdeaBoardCanvasSchema,
   type IdeaBoardHostCommand,
 } from "@openround/contracts";
 import { IdeaBoardRepository, MemoryRepository, createPlatformRepository } from "@openround/db";
@@ -130,6 +131,72 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
 }
 
 describe("independent idea board APIs", () => {
+  it("accepts bounded private native canvas content through the guest submission API", async () => {
+    const { app, headers } = await fixture();
+    const { board } = await createBoard(app, headers, { ideasVisible: true });
+    await host(app, board.id, headers, { type: "collect" });
+    const author = guestHeaders(),
+      other = guestHeaders();
+    await join(app, board.id, author);
+    await join(app, board.id, other);
+    const canvas = IdeaBoardCanvasSchema.parse({
+      schemaVersion: 1,
+      x: -600,
+      y: 300,
+      width: 300,
+      height: 200,
+      objects: [
+        {
+          id: randomUUID(),
+          type: "sticky",
+          x: 10,
+          y: 10,
+          width: 200,
+          height: 150,
+          text: "PRIVATE spatial content",
+        },
+      ],
+    });
+    const payload = {
+      schemaVersion: 1,
+      body: "Spatial proposal",
+      canvas,
+      roundNumber: 1,
+      idempotencyKey: randomUUID(),
+    };
+    const submit = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/idea-boards/${board.id}/ideas`,
+        headers: author,
+        payload,
+      });
+    const created = await submit();
+    expect(created.statusCode, created.body).toBe(200);
+    const ideaId = created.json().ownIdeas[0].id;
+    expect(created.json().ownIdeas[0]).toMatchObject({ id: ideaId, canvas, status: "pending" });
+    expect((await submit()).json().receipt).toEqual(created.json().receipt);
+    const read = () => app.inject({ url: `/v1/idea-boards/${board.id}/guest`, headers: other });
+    expect((await read()).body).not.toContain("PRIVATE spatial content");
+    const publicRead = await app.inject({ url: `/v1/idea-boards/${board.id}/public` });
+    expect(publicRead.body).not.toContain("PRIVATE spatial content");
+    await host(app, board.id, headers, { type: "moderate", ideaId, status: "approved" });
+    expect((await read()).json().board.ideas[0].canvas).toEqual(canvas);
+    const malformed = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: author,
+      payload: {
+        ...payload,
+        idempotencyKey: randomUUID(),
+        canvas: { ...canvas, objects: [{ ...canvas.objects[0], visibility: "published" }] },
+      },
+    });
+    expect(malformed.statusCode).toBe(400);
+    await host(app, board.id, headers, { type: "moderate", ideaId, status: "removed" });
+    expect((await submit()).body).not.toContain("PRIVATE spatial content");
+    expect((await read()).body).not.toContain("PRIVATE spatial content");
+  });
   it("explains approval preconditions and reopens retained rounds with scoped authority and retry-safe guest fences", async () => {
     const { app, headers, repository } = await fixture();
     const { board } = await createBoard(app, headers);

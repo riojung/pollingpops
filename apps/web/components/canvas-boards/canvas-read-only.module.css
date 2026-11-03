@@ -97,6 +97,9 @@
   opacity: 0.45;
   cursor: default;
 }
+.tools button[hidden] {
+  display: none;
+}
 .tools button:focus-visible,
 .outline button:focus-visible,
 .outline a:focus-visible {

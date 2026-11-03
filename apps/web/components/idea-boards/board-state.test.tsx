@@ -2,6 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as IdeaBoardClientModule from "../../lib/idea-board-client";
 import type { IdeaBoardGuestView } from "@openround/contracts";
+import { CanvasBoardGuestViewSchema, IdeaBoardCanvasSchema } from "@openround/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "../../lib/api";
@@ -12,6 +13,7 @@ import { BoardGuest } from "./board-guest";
 import { emptyIdeaDraft, IdeaComposer, type IdeaDraft } from "./idea-composer";
 import { IdeaBoardIdeas } from "./idea-list";
 import { PublishedWorkshopCanvas } from "../canvas-boards/workshop-canvas-bridge";
+import { IdeaCanvasComposer } from "./idea-canvas-composer";
 
 interface Hooks {
   cursor: number;
@@ -158,6 +160,13 @@ describe("idea board async state", () => {
     view.mount();
     await settle();
     view.render();
+    const draft = { ...emptyIdeaDraft(), body: "Private draft that survives closing the panel" };
+    (
+      view.find((element) => element.type === IdeaComposer).props.onChange as (
+        draft: IdeaDraft,
+      ) => void
+    )(draft);
+    view.render();
     const availability = view.find((element) => element.type === PublishedWorkshopCanvas).props
       .onAvailabilityChange as (available: boolean) => void;
     availability(true);
@@ -172,13 +181,7 @@ describe("idea board async state", () => {
     );
     const focus = vi.fn();
     (trigger.props.ref as { current: unknown }).current = { focus };
-    const draft = { ...emptyIdeaDraft(), body: "Private draft that survives closing the panel" };
-    (
-      view.find((element) => element.type === IdeaComposer).props.onChange as (
-        draft: IdeaDraft,
-      ) => void
-    )(draft);
-    view.render();
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
     (
       view.find(
         (element) =>
@@ -189,7 +192,7 @@ describe("idea board async state", () => {
     )();
     view.render();
     expect(view.find((element) => element.type === "aside").props.hidden).toBe(true);
-    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+    expect(view.render()).toContain("Continue your idea");
     expect(focus).toHaveBeenCalledOnce();
     expect(fixtures.submitIdea).not.toHaveBeenCalled();
     availability(false);
@@ -197,7 +200,129 @@ describe("idea board async state", () => {
     availability(true);
     view.render();
     expect(view.find((element) => element.type === "aside").props.hidden).toBe(true);
-    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+    const open = view.find(
+      (element) =>
+        element.type === "button" && element.props["aria-label"] === "Continue your idea",
+    );
+    (open.props.onClick as () => void)();
+    view.render();
+    expect(() => view.find((element) => element.type === IdeaComposer)).toThrow("Control missing");
+    const renderCanvas = view.find((element) => element.type === PublishedWorkshopCanvas).props
+      .renderCanvas as (context: unknown) => ReactElement<Record<string, unknown>>;
+    const composer = renderCanvas({
+      board: CanvasBoardGuestViewSchema.parse({
+        schemaVersion: 4,
+        id: boardId,
+        sourceBoardId: boardId,
+        canvasSeq: 1,
+        status: "active",
+        objects: [],
+        sourceBoard: boardGuestFixture.board,
+      }),
+      onInteract: vi.fn(),
+    });
+    expect(composer.type).toBe(IdeaCanvasComposer);
+    expect(composer.props.value).toEqual(draft);
+    (composer.props.onClose as () => void)();
+    expect(view.render()).toContain("Continue your idea");
+    view.unmount();
+  });
+  it("submits the final private canvas atomically and retries its exact intent inside the editor", async () => {
+    fixtures.publicRead.mockResolvedValue(boardFixture);
+    fixtures.guestRead.mockResolvedValue(boardGuestFixture);
+    let rejectSubmission!: (error: unknown) => void;
+    fixtures.submitIdea
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectSubmission = reject;
+          }),
+      )
+      .mockResolvedValueOnce(boardGuestFixture);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    (
+      view.find((element) => element.type === PublishedWorkshopCanvas).props
+        .onAvailabilityChange as (value: boolean) => void
+    )(true);
+    view.render();
+    (
+      view.find(
+        (element) => element.type === "button" && element.props["aria-label"] === "Create an idea",
+      ).props.onClick as () => void
+    )();
+    view.render();
+    const currentComposer = () => {
+      const renderCanvas = view.find((element) => element.type === PublishedWorkshopCanvas).props
+        .renderCanvas as (context: unknown) => ReactElement<Record<string, unknown>>;
+      return renderCanvas({
+        board: CanvasBoardGuestViewSchema.parse({
+          schemaVersion: 4,
+          id: boardId,
+          sourceBoardId: boardId,
+          canvasSeq: 1,
+          status: "active",
+          objects: [],
+          sourceBoard: boardGuestFixture.board,
+        }),
+        onInteract: vi.fn(),
+      });
+    };
+    const composer = currentComposer();
+    const canvas = IdeaBoardCanvasSchema.parse({
+      schemaVersion: 1,
+      x: 400,
+      y: 300,
+      width: 200,
+      height: 160,
+      objects: [
+        {
+          id: "00000000-0000-4000-8000-000000000033",
+          type: "sticky",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 160,
+          text: "Fresh visual idea",
+        },
+      ],
+    });
+    const finalDraft = { ...emptyIdeaDraft(), body: "Fresh composition title", canvas };
+    (composer.props.onChange as (value: IdeaDraft) => void)(finalDraft);
+    (composer.props.onSubmit as (value: IdeaDraft) => void)(finalDraft);
+    expect(fixtures.submitIdea).toHaveBeenCalledOnce();
+    expect(fixtures.submitIdea.mock.calls[0]![2]).toMatchObject({
+      body: finalDraft.body,
+      canvas,
+      roundNumber: 1,
+    });
+    expect(fixtures.submitIdea.mock.calls[0]![2].canvas).not.toBe(canvas);
+    expect(fixtures.submitIdea.mock.calls[0]![2].canvas.objects).not.toBe(canvas.objects);
+    const expectedInput = structuredClone(fixtures.submitIdea.mock.calls[0]![2]);
+    view.render();
+    expect(currentComposer().props).toMatchObject({
+      disabled: true,
+      collectionClosed: false,
+      submitting: true,
+    });
+    rejectSubmission(new ApiClientError("Try again", "INTERNAL_ERROR", 503));
+    await settle();
+    view.render();
+    const retryComposer = currentComposer();
+    expect(retryComposer.props).toMatchObject({
+      disabled: true,
+      collectionClosed: false,
+      submitting: false,
+      submissionError: english["boards.error"],
+    });
+    expect(retryComposer.props.value).toEqual(finalDraft);
+    (retryComposer.props.onRetry as () => void)();
+    await settle();
+    expect(fixtures.submitIdea.mock.calls[1]![2]).toEqual(expectedInput);
+    expect(view.render()).toContain(english["boards.submitted"]);
     view.unmount();
   });
   it("keeps focused mobile intake visible when the first published canvas arrives", async () => {

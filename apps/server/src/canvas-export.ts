@@ -223,6 +223,14 @@ export async function renderCanvasSvg(input: {
     );
   if (new Set(scene.map((object) => object.id)).size !== scene.length)
     throw new CanvasExportError("INVALID_EXPORT");
+  if (
+    scene.reduce(
+      (count, object) =>
+        count + 1 + (object.type === "idea_ref" ? (object.idea?.canvas?.objects.length ?? 0) : 0),
+      0,
+    ) > CANVAS_MAX_OBJECTS
+  )
+    throw new CanvasExportError("EXPORT_LIMIT");
   const byId = new Map(scene.map((object) => [object.id, object]));
   // An omitted connector must not remain a usable endpoint for another connector.
   for (let pass = 0; pass < scene.length; pass++) {
@@ -261,11 +269,25 @@ export async function renderCanvasSvg(input: {
         (a.type === "frame" ? -1 : 0) - (b.type === "frame" ? -1 : 0) ||
         a.id.localeCompare(b.id),
     );
+  for (const object of visible) {
+    if (object.type !== "idea_ref" || !object.idea?.canvas) continue;
+    const authorizedImages = new Set((object.idea.attachments ?? []).map((item) => item.mediaId));
+    if (
+      object.idea.canvas.objects.some(
+        (item) => item.type === "image" && !authorizedImages.has(item.mediaId),
+      )
+    )
+      throw new CanvasExportError("INVALID_EXPORT");
+  }
   const mediaIds = visible.flatMap((object) =>
     object.type === "image"
       ? [object.mediaId]
       : object.type === "idea_ref"
-        ? (object.idea!.attachments ?? []).map((attachment) => attachment.mediaId)
+        ? object.idea!.canvas
+          ? object.idea!.canvas.objects.flatMap((item) =>
+              item.type === "image" ? [item.mediaId] : [],
+            )
+          : (object.idea!.attachments ?? []).map((attachment) => attachment.mediaId)
         : [],
   );
   if (mediaIds.length > CANVAS_EXPORT_MAX_IMAGES) throw new CanvasExportError("EXPORT_LIMIT");
@@ -377,9 +399,11 @@ export async function renderCanvasSvg(input: {
         `<rect x="${n(region.x)}" y="${n(region.y)}" width="${n(region.width)}" height="${n(region.height)}" fill="#ffffff"/>`,
       );
     append('<g clip-path="url(#export-region)">');
-    visible.forEach((object, index) => {
+    let objectIndex = 0;
+    function renderObject(object: CanvasObject, objectsById: Map<string, CanvasObject>) {
+      const index = objectIndex++;
       if (object.type === "connector") {
-        const geometry = canvasConnectorGeometry(object, [...byId.values()]);
+        const geometry = canvasConnectorGeometry(object, [...objectsById.values()]);
         const path = geometry.points
           .map((point, index) => `${index ? "L" : "M"}${n(point.x)} ${n(point.y)}`)
           .join(" ");
@@ -416,6 +440,32 @@ export async function renderCanvasSvg(input: {
       append(
         `<g opacity="${n(object.opacity)}" transform="translate(${n(object.x)} ${n(object.y)}) rotate(${n(object.rotation)} ${n(object.width / 2)} ${n(object.height / 2)})">`,
       );
+      if (object.type === "idea_ref" && object.idea?.canvas) {
+        const canvas = object.idea.canvas;
+        const contents = canvas.objects.map((item) =>
+          CanvasObjectSchema.parse({ ...item, version: 1, visibility: "published" }),
+        );
+        const local = new Map(contents.map((item) => [item.id, item]));
+        // Match the fitted native preview, including its protected-reference inset.
+        const availableWidth = Math.max(1, object.width - 4);
+        const availableHeight = Math.max(1, object.height - 4);
+        const zoom = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+        const x = 2 + (availableWidth - canvas.width * zoom) / 2;
+        const y = 2 + (availableHeight - canvas.height * zoom) / 2;
+        append(
+          `<title>${xml(object.idea.body ?? "")}</title><defs><clipPath id="export-object-${index}"><rect x="2" y="2" width="${n(availableWidth)}" height="${n(availableHeight)}"/></clipPath></defs><g clip-path="url(#export-object-${index})"><g transform="translate(${n(x)} ${n(y)}) rotate(0 0 0)"><g transform="scale(${n(zoom)} ${n(zoom)})">`,
+        );
+        contents
+          .sort(
+            (a, b) =>
+              a.zIndex - b.zIndex ||
+              (a.type === "frame" ? -1 : 0) - (b.type === "frame" ? -1 : 0) ||
+              a.id.localeCompare(b.id),
+          )
+          .forEach((item) => renderObject(item, local));
+        append("</g></g></g></g>");
+        return;
+      }
       const fill = object.type === "frame" || object.type === "text" ? "none" : fills[object.color];
       const stroke = ["rect", "ellipse", "diamond", "parallelogram"].includes(object.type)
         ? inks[object.color]
@@ -486,7 +536,8 @@ export async function renderCanvasSvg(input: {
         );
       }
       append("</g></g>");
-    });
+    }
+    visible.forEach((object) => renderObject(object, byId));
     append("</g></svg>");
     return {
       svg: Buffer.from(parts.join("")),

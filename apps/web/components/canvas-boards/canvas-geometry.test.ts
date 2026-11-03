@@ -3,6 +3,7 @@ import {
   connectorPoint,
   fitViewport,
   revealCanvasBounds,
+  MIN_PREVIEW_ZOOM,
   worldPoint,
   zoomAt,
 } from "./canvas-geometry";
@@ -33,6 +34,16 @@ describe("canvas navigation geometry", () => {
     const pointer = { x: 350, y: 220 };
     const before = worldPoint(pointer, viewport);
     expect(worldPoint(pointer, zoomAt(viewport, pointer, 2))).toEqual(before);
+  });
+  it("supports preview zoom below 15% while keeping the focal point and default editor limits", () => {
+    const viewport = { x: 200, y: -30, zoom: 0.04 };
+    const pointer = { x: 350, y: 220 };
+    const next = zoomAt(viewport, pointer, 0.03, MIN_PREVIEW_ZOOM);
+    expect(next.zoom).toBe(0.03);
+    expect(worldPoint(pointer, next)).toEqual(worldPoint(pointer, viewport));
+    expect(zoomAt(viewport, pointer, 0, MIN_PREVIEW_ZOOM).zoom).toBe(MIN_PREVIEW_ZOOM);
+    expect(zoomAt(viewport, pointer, 0.03).zoom).toBe(0.15);
+    expect(zoomAt(viewport, pointer, 4, MIN_PREVIEW_ZOOM).zoom).toBe(3);
   });
   it("fits negative and positive coordinates into a bounded viewport", () => {
     const items = [

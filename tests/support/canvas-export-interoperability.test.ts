@@ -3,6 +3,7 @@ import {
   CanvasObjectSchema,
   CanvasColorSchema,
   CanvasShapeVariantSchema,
+  IdeaBoardCanvasSchema,
   type CanvasObject,
 } from "../../packages/contracts/src/index.ts";
 import { renderCanvasSvg } from "../../apps/server/src/canvas-export.ts";
@@ -38,6 +39,49 @@ async function acceptsRendererOutput(objects: CanvasObject[]) {
 
 // Cross-application compatibility belongs in repository tests, outside the isolated web image.
 describe("server SVG and browser closed-document interoperability", () => {
+  it("accepts the scaled native content of an approved participant composition", async () => {
+    const canvas = IdeaBoardCanvasSchema.parse({
+      schemaVersion: 1,
+      x: 40,
+      y: 50,
+      width: 400,
+      height: 300,
+      objects: [
+        {
+          id: id(100),
+          type: "sticky",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 160,
+          text: "Participant composition",
+        },
+      ],
+    });
+    const objects = [
+      CanvasObjectSchema.parse({
+        ...base,
+        type: "idea_ref",
+        text: "",
+        ideaId: id(2),
+        width: 800,
+        height: 450,
+        idea: {
+          id: id(2),
+          status: "approved",
+          body: "An original composition",
+          alias: null,
+          groupId: null,
+          createdAt: "2026-11-03T12:00:00.000Z",
+          voteCount: null,
+          canvas,
+        },
+      }),
+    ];
+    const svg = await acceptsRendererOutput(objects);
+    expect(svg).toContain('transform="scale(1.48667 1.48667)"');
+    expect(svg).toContain('transform="translate(102.66667 2) rotate(0 0 0)"');
+  });
   it("accepts the actual renderer output for the original closed scene primitives", async () => {
     const objects = ["sticky", "text", "rect", "ellipse", "frame", "link"].map((type, index) =>
       CanvasObjectSchema.parse({

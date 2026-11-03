@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CanvasBoardGuestView, IdeaBoardView, CanvasExportRegion } from "@openround/contracts";
 import { ApiClientError } from "../../lib/api";
 import { clientUuid } from "../../lib/uuid";
@@ -121,10 +121,12 @@ export function PublishedWorkshopCanvas({
   sourceBoardId,
   token,
   onAvailabilityChange,
+  renderCanvas,
 }: {
   sourceBoardId: string;
   token: string;
   onAvailabilityChange?: (available: boolean) => void;
+  renderCanvas?: (context: { board: CanvasBoardGuestView; onInteract: () => void }) => ReactNode;
 }) {
   const { t } = useLocale();
   const [followRegion, setFollowRegion] = useState<CanvasExportRegion | null>(null);
@@ -137,6 +139,13 @@ export function PublishedWorkshopCanvas({
   const [refreshKey, setRefreshKey] = useState(0);
   const availabilityObserver = useRef(onAvailabilityChange);
   availabilityObserver.current = onAvailabilityChange;
+  const authoring = Boolean(renderCanvas);
+  useEffect(() => {
+    if (authoring) {
+      setFollowRegion(null);
+      setNavigation((value) => value + 1);
+    }
+  }, [authoring]);
   useEffect(() => {
     const active = new AbortController();
     let inFlight = false;
@@ -231,6 +240,12 @@ export function PublishedWorkshopCanvas({
         </button>
       </p>
     ) : null;
+  const onInteract = () => {
+    setFollowRegion(null);
+    setNavigation((value) => value + 1);
+  };
+  if (renderCanvas)
+    return <div className={guestStyles.published}>{renderCanvas({ board, onInteract })}</div>;
   return (
     <div className={guestStyles.published}>
       <div className={guestStyles.liveTools}>
@@ -254,10 +269,7 @@ export function PublishedWorkshopCanvas({
         guestToken={token}
         label={t("canvas.workshop.published")}
         followRegion={followRegion}
-        onInteract={() => {
-          setFollowRegion(null);
-          setNavigation((value) => value + 1);
-        }}
+        onInteract={onInteract}
       />
     </div>
   );

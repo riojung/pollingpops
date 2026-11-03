@@ -4,6 +4,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
 import { guidedWorkshopCopy } from "../../apps/web/lib/i18n/guided-workshop-messages";
+import { participantCanvasCopy } from "../../apps/web/lib/i18n/participant-canvas-messages";
+import { canvasToolCopy } from "../../apps/web/lib/i18n/canvas-tool-messages";
 import {
   account,
   canvasAction,
@@ -24,6 +26,31 @@ async function selectObject(page: Page, name: string) {
   const inspector = await openInspector(page, "Objects");
   await inspector.getByRole("button", { name, exact: true }).click();
   await openInspector(page, "Properties");
+}
+
+async function submitCanvasIdea(page: Page, body: string) {
+  const copy = participantCanvasCopy("en-CA"),
+    tools = canvasToolCopy("en-CA");
+  await expect(
+    page.getByRole("region", { name: "Published canvas", exact: true }).first(),
+  ).toBeVisible();
+  await page
+    .locator("main > header")
+    .getByRole("button", { name: copy.startIdea, exact: true })
+    .click();
+  const editor = page.getByRole("dialog", { name: copy.title, exact: true });
+  await editor.getByRole("textbox", { name: copy.ideaTitle, exact: true }).fill(body);
+  await editor.getByRole("button", { name: tools.sticky, exact: true }).click();
+  const text = editor.getByRole("textbox", { name: tools.editText, exact: true });
+  await text.fill(body);
+  await editor.getByRole("button", { name: tools.saveText, exact: true }).click();
+  await expect(text).toHaveCount(0);
+  await editor.getByRole("button", { name: copy.submitIdea, exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await page
+    .locator("main > header")
+    .getByRole("button", { name: /Your participation.*Open participation panel/ })
+    .click();
 }
 
 test("separate licensed workspaces coauthor a shared board and lose live access after revocation", async ({
@@ -285,10 +312,7 @@ test("guided guests retain private intake and final ballots around the published
   try {
     await guest.goto(`/board/${sourceId}`);
     await guest.getByRole("button", { name: "Join board", exact: true }).click();
-    await guest
-      .getByRole("textbox", { name: "Your idea", exact: true })
-      .fill("A protected guest proposal");
-    await guest.getByRole("button", { name: "Submit idea", exact: true }).click();
+    await submitCanvasIdea(guest, "A protected guest proposal");
     await expect(guest.getByText("Awaiting review", { exact: true })).toBeVisible();
     await otherGuest.goto(`/board/${sourceId}`);
     await otherGuest.getByRole("button", { name: "Join board", exact: true }).click();
@@ -427,7 +451,11 @@ test("guided guests retain private intake and final ballots around the published
       ],
     });
     await expect(guest.getByText("Round 2", { exact: true })).toBeVisible();
-    await expect(guest.getByRole("textbox", { name: "Your idea", exact: true })).toBeVisible();
+    await expect(
+      guest
+        .locator("main > header")
+        .getByRole("button", { name: participantCanvasCopy("en-CA").startIdea, exact: true }),
+    ).toBeVisible();
     await expect(
       guest.getByText("Your votes are saved. Your ballot cannot be changed.", { exact: true }),
     ).toHaveCount(0);
@@ -665,11 +693,22 @@ test("@mobile guided guest canvas fills the screen and preserves read-only navig
     await expect(
       panel.getByRole("heading", { name: copy.participantPanel, exact: true }),
     ).toBeFocused();
-    const draft = panel.getByRole("textbox", { name: "Your idea", exact: true });
+    const canvasCopy = participantCanvasCopy("en-CA");
+    await expect(panel.getByRole("textbox", { name: "Your idea", exact: true })).toHaveCount(0);
+    await panel.getByRole("button", { name: canvasCopy.startIdea, exact: true }).tap();
+    const editor = guest.getByRole("dialog", { name: canvasCopy.title, exact: true });
+    const draft = editor.getByRole("textbox", { name: canvasCopy.ideaTitle, exact: true });
     await draft.fill("A private draft survives canvas navigation");
-    await draft.press("Escape");
+    await editor.getByRole("button", { name: canvasCopy.backToWorkshop, exact: true }).tap();
+    await expect(editor).toHaveCount(0);
     await expect(panel).toBeHidden();
-    await expect(panelTrigger).toBeFocused();
+    const continueDraft = guest
+      .locator("main > header")
+      .getByRole("button", { name: canvasCopy.continueIdea, exact: true });
+    await expect(continueDraft).toBeFocused();
+    await continueDraft.tap();
+    await expect(draft).toHaveValue("A private draft survives canvas navigation");
+    await editor.getByRole("button", { name: canvasCopy.backToWorkshop, exact: true }).tap();
     for (const mode of ["light", "dark"] as const) {
       await guest.emulateMedia({ colorScheme: mode });
       await expect(guest.locator("html")).toHaveAttribute("data-color-mode", mode);
@@ -679,7 +718,9 @@ test("@mobile guided guest canvas fills the screen and preserves read-only navig
         .toEqual([]);
       await guest.screenshot({ path: testInfo.outputPath(`guided-guest-${mode}-canvas.png`) });
       await panelTrigger.tap();
-      await expect(draft).toHaveValue("A private draft survives canvas navigation");
+      await expect(
+        panel.getByRole("button", { name: canvasCopy.continueIdea, exact: true }),
+      ).toBeVisible();
       await fits(guest);
       await expect
         .poll(async () => (await new AxeBuilder({ page: guest }).analyze()).violations)

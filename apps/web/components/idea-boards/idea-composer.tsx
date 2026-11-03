@@ -5,6 +5,8 @@ import {
   IdeaBoardLinkSchema,
   type IdeaBoardIdea,
   type IdeaBoardSketch,
+  type IdeaBoardCanvas,
+  type CanvasObject,
 } from "@openround/contracts";
 import { uploadIdeaBoardImage } from "../../lib/idea-board-client";
 import { useLocale } from "../locale-provider";
@@ -18,6 +20,9 @@ export type IdeaDraft = {
   attachments: NonNullable<IdeaBoardIdea["attachments"]>;
   links: NonNullable<IdeaBoardIdea["links"]>;
   sketch: IdeaBoardSketch | null;
+  canvas?: IdeaBoardCanvas | null;
+  /** In-memory recovery for an unfinished composition; never part of a submission payload. */
+  canvasDraft?: CanvasObject[];
 };
 export function emptyIdeaDraft(): IdeaDraft {
   return { body: "", attachments: [], links: [], sketch: null };

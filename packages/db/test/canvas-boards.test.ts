@@ -12,6 +12,7 @@ import {
   CanvasObjectCreateV2Schema,
   CanvasBoardCreateV1Schema,
   IdeaBoardCreateSchema,
+  IdeaBoardCanvasSchema,
   CanvasFacilitationMutationSchema,
   type CanvasFacilitationCommand,
   type CanvasBoardCommand,
@@ -200,15 +201,64 @@ for (const backend of ["memory", "postgres"] as const)
             "Approve this retained idea",
             randomUUID(),
             now,
+            {
+              canvas: IdeaBoardCanvasSchema.parse({
+                schemaVersion: 1,
+                x: -450,
+                y: 320,
+                width: 400,
+                height: 240,
+                objects: [
+                  {
+                    id: randomUUID(),
+                    type: "sticky",
+                    x: 10,
+                    y: 10,
+                    width: 200,
+                    height: 160,
+                    text: "Retained spatial content",
+                  },
+                ],
+              }),
+            },
           ),
           ideaId = submitted.ownIdeas[0]!.id;
         const before = await canvases.get(owner, board.id);
+        expect(before.objects.some((object) => object.id === ideaId)).toBe(false);
+        expect(JSON.stringify(await canvases.getGuest(source.id, token, now))).not.toContain(
+          "Retained spatial content",
+        );
         await expect(workshop({ type: "start_voting" })).rejects.toMatchObject({
           code: "VALIDATION_ERROR",
           message: "Approve at least one idea before voting",
         });
         expect((await canvases.get(owner, board.id)).canvasSeq).toBe(before.canvasSeq);
         await workshop({ type: "moderate", ideaId, status: "approved" });
+        const initialReference = (await canvases.get(owner, board.id)).objects.find(
+          (object) => object.id === ideaId,
+        )!;
+        expect(initialReference).toMatchObject({
+          type: "idea_ref",
+          x: -450,
+          y: 320,
+          width: 400,
+          height: 240,
+          idea: { canvas: { x: -450, y: 320 } },
+        });
+        await change(owner, board.id, {
+          type: "batch",
+          operations: [
+            {
+              type: "update",
+              id: ideaId,
+              expectedVersion: initialReference.version,
+              patch: { x: 750, y: 600 },
+            },
+          ],
+        });
+        expect(
+          (await canvases.get(owner, board.id)).objects.find((object) => object.id === ideaId),
+        ).toMatchObject({ x: 750, y: 600, width: 400, height: 240 });
         await change(owner, board.id, {
           type: "batch",
           operations: [{ type: "create", object: note("Retain this canvas layout") }],
@@ -218,6 +268,16 @@ for (const backend of ["memory", "postgres"] as const)
         );
         await workshop({ type: "start_voting" });
         expect((await canvases.get(owner, board.id)).status).toBe("frozen");
+        expect(
+          (await canvases.getGuest(source.id, token, now))?.objects.find(
+            (object) => object.id === ideaId,
+          ),
+        ).toMatchObject({
+          type: "idea_ref",
+          x: 750,
+          y: 600,
+          idea: { canvas: { objects: [{ type: "sticky", text: "Retained spatial content" }] } },
+        });
         await ideas.vote(source.id, token, [ideaId], 0, randomUUID(), now);
         await workshop({ type: "close" });
         await share(board.id, "viewer");

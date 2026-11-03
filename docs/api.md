@@ -1273,12 +1273,31 @@ the participant link:
   chosen board nickname, while anonymous boards reject aliases.
 - `GET /v1/idea-boards/{id}/guest` returns visible approved ideas, own submissions and own ballot.
 - `POST /v1/idea-boards/{id}/ideas` accepts `body` and `idempotencyKey` during collection, plus
-  optional `attachments`, `links` and `sketch`. The request limit is 64 KiB. Text remains required.
+  optional `attachments`, `links`, `sketch` and `canvas`. The request limit is 64 KiB. Text remains required.
   Attachments are `{mediaId, alt}` (up to three); images must be clean uploads owned by this
   board and guest. Links are `{url, label?, imageMediaId?}` (up to three), using HTTP(S) without
   URL credentials. A link's optional image must be in the same idea's attachments. Sketches are
   versioned typed geometry, at most 32 elements / 1,024 points / 16 KiB; arbitrary SVG is rejected.
   Empty rich fields are omitted, preserving text-only idea objects and legacy retry fingerprints.
+  `canvas` is an independently versioned V1 composition `{schemaVersion:1,x,y,width,height,objects}`.
+  Its world placement `x`/`y` is finite and within ±100,000; dimensions are 1–10,000. Objects use
+  frozen native V4 content primitives (including shapes, frames, connectors, pen, images and links),
+  without `visibility`, `version`, embedded `idea` or `idea_ref` authority. Their coordinates,
+  rotated bounds, endpoints and drawing points stay inside the composition. Frame/connector
+  references are local, frames are acyclic, and geometric groups share a parent. A composition
+  contains 1–32 objects, at most 1,024 pen points and 32 KiB of normalized UTF-8 JSON. Canvas images
+  must also occur in the same idea's attachment manifest and pass the existing clean/guest-owner
+  checks. A nonempty legacy sketch and a canvas cannot be submitted together.
+  One composition remains one moderated idea and one voting choice. Unsubmitted drafts are local
+  and private; submitted pending content is visible only to its author and moderators. Approval
+  publishes through the existing idea projection and `ideasVisible` policy. The linked canvas's
+  protected reference starts at the submitted placement and size; subsequent facilitator moves
+  remain authoritative. Nested content never becomes ordinary guest-writable scene objects.
+  Across nonremoved ideas, the sum of one reference plus each composition's child objects is
+  limited to 200. Admission checks this budget atomically and returns `ENTITLEMENT_LIMIT` without
+  consuming a submission or retry key when full. Existing lifetime idea/upload limits and the
+  1 MiB retained board bound remain unchanged. Removal strips the canvas and revokes its media
+  through the existing attachment retention rules; reopening does not reset quotas or retention.
 - `POST /v1/idea-boards/{id}/media` reserves a board-private image upload using the existing
   media upload request (`fileName`, `mimeType`, `sizeBytes`, `altText`). The admitted guest
   must be in collection and the upload pipeline available. It returns

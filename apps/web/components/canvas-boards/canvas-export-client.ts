@@ -186,7 +186,18 @@ export function validateClosedCanvasSvg(svg: string): { width: number; height: n
       } else if (key === "viewBox" || key === "points" || key === "stroke-dasharray") {
         if (!numberList.test(value)) invalid();
       } else if (key === "transform") {
-        if (!/^translate\(-?[\d.]+ -?[\d.]+\) rotate\(-?[\d.]+ [\d.]+ [\d.]+\)$/.test(value))
+        const scale = /^scale\(([\d.]+) ([\d.]+)\)$/.exec(value);
+        if (scale) {
+          if (
+            !scale
+              .slice(1)
+              .every(
+                (number) =>
+                  Number.isFinite(Number(number)) && Number(number) > 0 && Number(number) <= 10_000,
+              )
+          )
+            invalid();
+        } else if (!/^translate\(-?[\d.]+ -?[\d.]+\) rotate\(-?[\d.]+ [\d.]+ [\d.]+\)$/.test(value))
           invalid();
       } else if (key === "d") {
         validateExportPath(value);

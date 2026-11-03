@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { IdeaBoardCanvasSchema, type IdeaBoardCanvas } from "./idea-board-canvas";
+export * from "./idea-board-canvas";
 
 export const IDEA_BOARD_MAX_IDEAS = 200;
 export const IDEA_BOARD_MAX_GUEST_IDEAS = 10;
@@ -146,7 +148,12 @@ export const IdeaBoardSketchSchema = z
   });
 export type IdeaBoardSketch = z.infer<typeof IdeaBoardSketchSchema>;
 function validateLinkImages(
-  value: { attachments?: Array<{ mediaId: string }>; links?: Array<{ imageMediaId?: string }> },
+  value: {
+    attachments?: Array<{ mediaId: string }>;
+    links?: Array<{ imageMediaId?: string }>;
+    sketch?: IdeaBoardSketch | null;
+    canvas?: IdeaBoardCanvas;
+  },
   context: z.RefinementCtx,
 ) {
   const images = new Set(value.attachments?.map((item) => item.mediaId));
@@ -158,6 +165,20 @@ function validateLinkImages(
         message: "Choose a link image from this idea's attachments",
       });
   });
+  value.canvas?.objects.forEach((object, index) => {
+    if (object.type === "image" && !images.has(object.mediaId))
+      context.addIssue({
+        code: "custom",
+        path: ["canvas", "objects", index, "mediaId"],
+        message: "Choose a canvas image from this idea's attachments",
+      });
+  });
+  if (value.canvas && value.sketch?.elements.length)
+    context.addIssue({
+      code: "custom",
+      path: ["canvas"],
+      message: "Submit a canvas or a legacy drawing, not both",
+    });
 }
 export const IdeaBoardRichContentSchema = z
   .object({
@@ -171,6 +192,7 @@ export const IdeaBoardRichContentSchema = z
       .optional(),
     links: z.array(IdeaBoardLinkSchema).max(IDEA_BOARD_MAX_LINKS).optional(),
     sketch: IdeaBoardSketchSchema.nullable().optional(),
+    canvas: IdeaBoardCanvasSchema.optional(),
   })
   .strict()
   .superRefine(validateLinkImages);
@@ -183,6 +205,7 @@ export function ideaBoardRichContent(value: IdeaBoardRichContent): IdeaBoardRich
       : {}),
     ...(value.links?.length ? { links: value.links.map((item) => ({ ...item })) } : {}),
     ...(value.sketch?.elements.length ? { sketch: structuredClone(value.sketch) } : {}),
+    ...(value.canvas ? { canvas: structuredClone(value.canvas) } : {}),
   };
 }
 export const IdeaBoardCreateSchema = z

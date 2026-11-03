@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CanvasObjectSchema,
+  IdeaBoardCanvasSchema,
   CanvasShapeVariantSchema,
   CANVAS_FILL_COLORS,
   canvasShapeVariantPath,
@@ -43,6 +44,120 @@ function largePng(length: number) {
 afterEach(() => vi.useRealTimers());
 
 describe("closed current-scene canvas SVG export", () => {
+  it("exports approved native idea compositions in place with scoped connectors and scanned images", async () => {
+    const scene = IdeaBoardCanvasSchema.parse({
+      schemaVersion: 1,
+      x: 70,
+      y: 90,
+      width: 400,
+      height: 250,
+      objects: [
+        {
+          id: id(10),
+          type: "sticky",
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 100,
+          text: "A proposal",
+          color: "mint",
+        },
+        {
+          id: id(11),
+          type: "connector",
+          x: 120,
+          y: 30,
+          width: 40,
+          height: 1,
+          from: { objectId: id(10), anchor: "right", x: 120, y: 50 },
+          to: { objectId: null, x: 180, y: 50 },
+          text: "Next",
+          routing: "elbow",
+        },
+        {
+          id: id(12),
+          type: "image",
+          x: 200,
+          y: 0,
+          width: 100,
+          height: 100,
+          mediaId: id(50),
+          altText: "A scanned diagram",
+        },
+        {
+          id: id(13),
+          type: "link",
+          x: 0,
+          y: 150,
+          width: 300,
+          height: 80,
+          url: "https://example.test/plan",
+          text: "Reference",
+        },
+      ],
+    });
+    const approved = object({
+      type: "idea_ref",
+      text: "",
+      ideaId: id(30),
+      x: scene.x,
+      y: scene.y,
+      width: 800,
+      height: 500,
+      idea: {
+        id: id(30),
+        body: "Composition <title>",
+        alias: null,
+        groupId: null,
+        status: "approved",
+        createdAt: "2026-11-03T12:00:00.000Z",
+        voteCount: null,
+        canvas: scene,
+        attachments: [{ mediaId: id(50), alt: "A scanned diagram" }],
+      },
+    });
+    const loadImage = vi.fn().mockResolvedValue({ bytes: png, mime: "image/png" });
+    // Child identifiers are local to an idea, including when multiple ideas use the same IDs.
+    const duplicateIds = object({
+      ...approved,
+      id: id(2),
+      ideaId: id(31),
+      x: 1000,
+      idea: { ...approved.idea, id: id(31) },
+    });
+    const result = await renderCanvasSvg({
+      objects: [approved, duplicateIds],
+      region: null,
+      loadImage,
+    });
+    const svg = result.svg.toString();
+    expect(svg).toContain('transform="scale(1.984 1.984)"');
+    expect(svg).toContain('transform="translate(3.2 2) rotate(0 0 0)"');
+    expect(svg).toContain("Composition &lt;title&gt;");
+    expect(svg.match(/A proposal/g)).toHaveLength(2);
+    expect(svg).toContain("https://example.test/plan");
+    expect(svg).toContain('marker-end="url(#export-arrow)"');
+    expect(svg).toContain("data:image/png;base64,");
+    expect(loadImage).toHaveBeenCalledOnce();
+    expect(result.mediaIds).toEqual([id(50)]);
+    const clipIds = [...svg.matchAll(/id="(export-object-\d+)"/g)].map((match) => match[1]);
+    expect(new Set(clipIds).size).toBe(clipIds.length);
+    expect(svg).not.toMatch(/<foreignObject|<script|<a\b|href="https?:/);
+    const pending = object({ ...approved, idea: { ...approved.idea, status: "pending" } });
+    loadImage.mockClear();
+    expect(
+      (await renderCanvasSvg({ objects: [pending], region: null, loadImage })).svg.toString(),
+    ).not.toContain("A proposal");
+    expect(loadImage).not.toHaveBeenCalled();
+    const missingManifest = object({ ...approved, idea: { ...approved.idea, attachments: [] } });
+    await expect(
+      renderCanvasSvg({ objects: [missingManifest], region: null, loadImage }),
+    ).rejects.toMatchObject({
+      code: "INVALID_EXPORT",
+    });
+    expect(loadImage).not.toHaveBeenCalled();
+  });
+
   it("escapes plain text and titles while links remain inert URL labels", async () => {
     const result = await renderCanvasSvg({
       objects: [

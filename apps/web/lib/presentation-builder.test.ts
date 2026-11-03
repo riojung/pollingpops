@@ -56,6 +56,43 @@ function draft(): PresentationDraft {
 }
 
 describe("presentation builder model", () => {
+  it("accepts a complete content-only deck while retaining empty-slide validation", () => {
+    const source = draft();
+    source.blocks = source.blocks.filter((block) => block.kind === "content");
+    expect(presentationReadiness(source)).toEqual([]);
+
+    source.blocks = [];
+    expect(presentationReadiness(source)).toContainEqual({
+      blockId: null,
+      field: "blocks",
+      message: "Add at least one slide.",
+    });
+
+    const emptySlide = createContentBlock();
+    source.blocks = [emptySlide];
+    expect(presentationReadiness(source)).toContainEqual({
+      blockId: emptySlide.id,
+      field: "textElements",
+      message: "Add content to this slide.",
+    });
+  });
+
+  it("still rejects an orphan recheck in a deck with content slides", () => {
+    const source = draft();
+    const question = source.blocks.find((block) => block.kind === "question")!;
+    question.question.delivery = "recheck";
+    expect(
+      presentationReadiness(source).some((issue) =>
+        issue.message.includes("main interactive question"),
+      ),
+    ).toBe(true);
+    expect(
+      presentationReadiness(source).some((issue) =>
+        issue.message.includes("Every recheck must be linked"),
+      ),
+    ).toBe(true);
+  });
+
   it("rejects text and cloud formats rather than silently creating ratings", () => {
     for (const type of ["open_text", "word_cloud"] as const)
       expect(() => createPresentationQuestion(type)).toThrow("live Rounds only");

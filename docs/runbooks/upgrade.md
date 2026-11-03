@@ -18,6 +18,31 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Content-only Presentation compatibility
+
+Content-only publication expands validation for existing Presentation content versions 2 and 3;
+the JSON representation, immutable version hashes for already-valid content, and database schema
+are unchanged. Older application readers require a question and reject newly published content-only
+versions and their live-session snapshots. This is a reader compatibility boundary even though it
+requires no SQL migration or new content-version number.
+
+Before accepting content-only publications, fence Presentation publication and session creation
+at ingress, drain accepted writes, and deploy compatible server, jobs and web images together.
+Verify the serving image set before reopening those writes. Existing Presentation, realtime and
+workspace rollout policies still apply; verify effective Admin Features policy rather than assuming
+an environment flag overrides an explicit policy. This increment introduces no additional paywall.
+
+After a content-only version or session exists, retain content-only-capable readers and report
+workers on rollback. Disabling new creation does not make older readers compatible with retained
+history. Keep existing immutable publications and accepted command fingerprints; use a compatible
+rollback image or forward repair rather than rewriting stored data to insert artificial questions.
+
+Verify a content-only and a mixed deck through save, publication, hosting, reconnect, finish and
+report reconciliation. Content-only reports retain participation and slide timeline evidence;
+their empty leaderboard and null participant standings are deliberate. Legacy REST host/list roster
+aliases remain intact for strict clients and represent the participant roster rather than assessed
+results. Existing question/recheck timing and scoring must still pass their regression checks.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.

@@ -8,6 +8,24 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Content-only Presentation E01 slice November 3, 2026
+
+Complete, nonempty slide-only decks can now publish without adding an assessment. The existing
+session lifecycle runs their slides, preserves credentials and revision-fenced command retries,
+finishes normally and reconciles a durable report. Participant standings and the host competition
+dashboard are omitted; reports show participation counts, slide titles and the facilitation
+timeline. Empty/invalid slides, image publication checks and mixed-deck question/recheck rules
+remain enforced.
+
+This slice uses existing content layouts and existing feature/workspace rollouts. It does not
+enable native scene publication, multi-image/shapes editing or the E00 prototype in production.
+The [upgrade boundary](runbooks/upgrade.md#content-only-presentation-compatibility) requires
+compatible readers before new publication and a compatible rollback image afterward. The
+[implementation plan](presentation-implementation-plan-2026-11.md) keeps the remaining E01 work
+explicit; this checkpoint does not close deployment or customer-validation gates.
+The [local verification record](evidence/presentation-content-only.md) covers the real API/browser
+journey and isolated PostgreSQL publication, media-reference and session-conformance checks.
+
 ### Presentation scene E00 local implementation November 3, 2026
 
 The broad presentation-creation direction now has an isolated development lab at
@@ -23,10 +41,10 @@ records local checks, four-browser verification and the production-route denial.
 timings and assistive-technology results remain unmeasured. This is the E00 implementation
 checkpoint, not production readiness or feature parity.
 
-E01 is the next production increment: native scene persistence/publication/delivery, coordinated
-JS/SQL asset retention and explicit content-only deck progression/reports. Current publishing
-still requires an assessment. Existing v1/v2/v3 readers, Pack baselines and mutation hashes remain
-authoritative until that compatible integration is implemented.
+The E01 content-only slice above removes the assessment requirement using the existing content
+model. Native scene persistence/publication/delivery and coordinated JS/SQL scene-asset retention
+remain subsequent E01 work. Existing v1/v2/v3 readers, Pack baselines and mutation hashes remain
+authoritative through that integration.
 
 ### Target cleanup review follow-up November 2, 2026
 

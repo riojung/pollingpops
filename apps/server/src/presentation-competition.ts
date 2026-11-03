@@ -12,6 +12,13 @@ import {
   type PresentationSessionTimelineRecord,
 } from "@openround/db";
 
+/** Unanswered deck questions still count; session-only Quick Checks never enable rankings. */
+export function presentationHasQuestions(session: Pick<PresentationSessionRecord, "content">) {
+  return session.content.blocks.some(
+    (block) => block.kind === "question" && block.id !== session.content.liveQuickCheck?.blockId,
+  );
+}
+
 /** Staff-only competition view; this does not expand Presentation audience identity access. */
 export function presentationCompetitionStandings(
   session: PresentationSessionRecord,

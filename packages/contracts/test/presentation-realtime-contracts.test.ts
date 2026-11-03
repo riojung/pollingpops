@@ -62,6 +62,85 @@ function snapshotBase() {
 }
 
 describe("Presentation realtime contracts", () => {
+  it.each(["content", "finished"] as const)(
+    "already supports content-only %s snapshots without question results or audience standings",
+    (phase) => {
+      const source = snapshotBase();
+      const base = {
+        ...source,
+        title: "Project update",
+        status: phase === "finished" ? "finished" : "active",
+        phase,
+        questionOpenedAt: null,
+        questionClosesAt: null,
+        acceptingResponses: false,
+        currentBlock: {
+          id: randomUUID(),
+          kind: "content",
+          layout: "title",
+          textElements: [
+            { id: "heading", role: "title", text: "Next steps", region: "middle_center", order: 0 },
+          ],
+          mediaId: null,
+          mediaAlt: null,
+        },
+        finishedAt: phase === "finished" ? NOW : null,
+      };
+      const room = { ...roomStatus(source.sessionId), responseCount: 0 };
+      const host = PresentationHostSnapshotSchema.parse({
+        ...base,
+        projection: "host",
+        participantCount: 2,
+        responseCount: 0,
+        // Retain the existing staff roster wire shape; it does not imply an assessed session.
+        participants: [
+          { id: randomUUID(), nickname: "Robin", joinedAt: NOW, score: 0, rank: 1 },
+          { id: randomUUID(), nickname: "Sage", joinedAt: NOW, score: 0, rank: 2 },
+        ],
+        roomStatus: room,
+      });
+      expect(host.currentBlock?.kind).toBe("content");
+      expect(
+        PresentationRestV1HostSnapshotSchema.parse({
+          ...host,
+          id: host.sessionId,
+          eventSeq: host.seq,
+          trustMode: host.settings.trustMode,
+          leaderboard: host.participants,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }).currentBlock?.kind,
+      ).toBe("content");
+      const participant = PresentationParticipantSnapshotSchema.parse({
+        ...base,
+        projection: "participant",
+        participantId: randomUUID(),
+        participantCount: 2,
+        responseSubmitted: false,
+        standing: null,
+        responseResult: null,
+      });
+      expect(participant).toMatchObject({ standing: null, responseResult: null });
+      expect(
+        PresentationRestV1ParticipantSnapshotSchema.parse({
+          ...participant,
+          id: participant.sessionId,
+          eventSeq: participant.seq,
+          trustMode: participant.settings.trustMode,
+        }).currentBlock?.kind,
+      ).toBe("content");
+      expect(
+        PresentationCompanionSnapshotSchema.parse({
+          ...base,
+          projection: "companion",
+          roomStatus: room,
+          primaryAction: phase === "finished" ? "none" : "advance",
+          resultSummary: null,
+        }),
+      ).toMatchObject({ resultSummary: null, acceptingResponses: false });
+    },
+  );
+
   it("keeps companion live commands strict and separately credentialed", () => {
     const command = {
       sessionId: randomUUID(),

@@ -4892,14 +4892,10 @@ export const PresentationContentSchema = z
         });
       }
     }
-    if (!presentation.blocks.some((block) => block.kind === "question")) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Add at least one interactive question before publishing",
-        path: ["blocks"],
-      });
-    }
+    // Content-only decks are publishable. A deck that includes questions still needs a main
+    // checkpoint, in addition to the unchanged linked-recheck topology validated above.
     if (
+      presentation.blocks.some((block) => block.kind === "question") &&
       !presentation.blocks.some(
         (block) => block.kind === "question" && (block.question.delivery ?? "main") === "main",
       )

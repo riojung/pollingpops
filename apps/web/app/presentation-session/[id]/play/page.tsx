@@ -420,7 +420,7 @@ export default function PresentationParticipantPage() {
               <>
                 <span className={styles.statusPill}>{t("live.common.complete")}</span>
                 <h1>{t("live.presentationPlay.thanks")}</h1>
-                <p>{t("live.presentationPlay.savedForReport")}</p>
+                <p>{t("live.presentationSession.finished")}</p>
                 {snapshot.standing ? (
                   <p className="notice">
                     {t("live.presentationPlay.rankPoints", {

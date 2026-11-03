@@ -11,6 +11,7 @@ import type {
 import {
   buildPresentationCompanionSnapshot,
   buildPresentationHostSnapshot,
+  buildPresentationListSnapshot,
   buildPresentationParticipantSnapshot,
   buildPresentationProjectionData,
   buildTargetedPresentationParticipantSnapshot,
@@ -268,6 +269,115 @@ function fixture() {
 }
 
 describe("Presentation session projections", () => {
+  it("keeps content-only rosters without inventing standings or an assessment dashboard", () => {
+    const { session, participants, currentResponse, ids } = fixture();
+    const slideId = randomUUID();
+    const content = PresentationContentSchema.parse({
+      ...session.content,
+      blocks: [
+        {
+          id: slideId,
+          kind: "content",
+          layout: "title",
+          textElements: [
+            {
+              id: "title",
+              role: "title",
+              text: "A project update",
+              region: "top_center",
+              order: 0,
+            },
+          ],
+          mediaId: null,
+          mediaAlt: null,
+          speakerNotes: "Private cue",
+        },
+      ],
+    });
+    for (const phase of ["lobby", "content", "finished"] as const) {
+      const contentSession: PresentationSessionRecord = {
+        ...session,
+        content,
+        phase,
+        status: phase === "finished" ? "finished" : "active",
+        currentBlockIndex: phase === "lobby" ? -1 : 0,
+        questionOpenedAt: null,
+        questionClosesAt: null,
+        finishedAt: phase === "finished" ? NOW : null,
+      };
+      const data = buildPresentationProjectionData(contentSession, participants, []);
+      const host = buildPresentationHostSnapshot(contentSession, data);
+      expect(host.participants).toHaveLength(participants.length);
+      expect(host.participantCount).toBe(participants.length);
+      expect(host).not.toHaveProperty("competitionStandings");
+      const listed = buildPresentationListSnapshot(contentSession, participants, []);
+      expect(listed).toMatchObject({
+        participants: participants.map(({ id }) => ({ id })),
+      });
+      expect(listed.leaderboard).toEqual(listed.participants);
+      expect(
+        buildPresentationParticipantSnapshot(contentSession, ids.participantId, data),
+      ).toMatchObject({ standing: null, responseResult: null, responseSubmitted: false });
+      expect(buildPresentationCompanionSnapshot(contentSession, data)).toMatchObject({
+        resultSummary: null,
+        questionOpenedAt: null,
+        questionClosesAt: null,
+      });
+      expect(
+        buildTargetedPresentationParticipantSnapshot(
+          contentSession,
+          ids.participantId,
+          {
+            participantCount: participants.length,
+            currentResponse: null,
+            standing: { rank: 1, score: 200 },
+          },
+          currentResponse,
+        ).standing,
+      ).toBeNull();
+    }
+  });
+
+  it("retains an unscored poll dashboard when nobody has responded", () => {
+    const { session, participants } = fixture();
+    const block = session.content.blocks[0]!;
+    if (block.kind !== "question" || !("choices" in block.question))
+      throw new Error("Choice fixture required");
+    const content = PresentationContentSchema.parse({
+      ...session.content,
+      blocks: [
+        {
+          ...block,
+          question: {
+            ...block.question,
+            type: "poll",
+            purpose: "opinion",
+            confidence: "off",
+            basePoints: 0,
+            choices: block.question.choices.map(({ id, label }) => ({
+              id,
+              label,
+              isCorrect: false,
+            })),
+          },
+        },
+      ],
+    });
+    const pollSession = { ...session, content };
+    expect(
+      buildPresentationHostSnapshot(
+        pollSession,
+        buildPresentationProjectionData(pollSession, participants, []),
+      ),
+    ).toMatchObject({
+      competitionStandings: {
+        status: "unscored",
+        entries: [],
+        totalParticipants: participants.length,
+      },
+    });
+  });
+
   it("shows only current-question choice aggregates after reveal with zero defaults", () => {
     const { session, participants, currentResponse, previousResponse } = fixture();
     const data = buildPresentationProjectionData(session, participants, [

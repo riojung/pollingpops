@@ -138,6 +138,79 @@ async function settle() {
 }
 
 describe("Presentation Quick Check report compatibility", () => {
+  it("shows slide and participant context without quiz claims for a content-only report", async () => {
+    const report = PresentationReportSchema.parse({
+      ...reportFixture(1),
+      responseCount: 0,
+      evidence: [
+        {
+          blockId: "44444444-4444-4444-8444-444444444444",
+          blockIndex: 0,
+          kind: "content",
+          title: "Project overview",
+          assessmentStatus: "not_assessed",
+        },
+        {
+          blockId: "66666666-6666-4666-8666-666666666666",
+          blockIndex: 1,
+          kind: "content",
+          title: "Next steps",
+          assessmentStatus: "not_assessed",
+        },
+      ],
+      // A prior API may have kept join-order rows even though no question was asked.
+      leaderboard: [
+        {
+          id: "77777777-7777-4777-8777-777777777777",
+          nickname: "Attendee",
+          score: 0,
+          rank: 1,
+        },
+      ],
+      evidenceNote: "The report records participation and the facilitation timeline.",
+    });
+    fixtures.apiFetch.mockResolvedValue({ reportStatus: "ready", report });
+    const harness = reportHarness();
+    await settle();
+    const markup = renderToStaticMarkup(harness.render());
+    expect(markup).toContain("Project overview");
+    expect(markup).toContain("Next steps");
+    expect(markup).toContain("Participants");
+    expect(markup).toContain("Total blocks");
+    expect(markup).toContain("Facilitation timeline");
+    expect(markup).not.toContain("Responses");
+    expect(markup).not.toContain("Accuracy");
+    expect(markup).not.toContain("Leaderboard");
+    expect(markup).not.toContain("0 points");
+    expect(markup).not.toContain("learning evidence");
+    expect(markup).not.toContain("Not assessed.");
+  });
+
+  it("preserves response and content-assessment distinctions in a mixed deck", async () => {
+    const report = PresentationReportSchema.parse({
+      ...reportFixture(1),
+      evidence: [
+        {
+          blockId: "66666666-6666-4666-8666-666666666666",
+          blockIndex: 0,
+          kind: "content",
+          title: "Context for discussion",
+          assessmentStatus: "not_assessed",
+        },
+        ...reportFixture(1).evidence,
+      ],
+    });
+    fixtures.apiFetch.mockResolvedValue({ reportStatus: "ready", report });
+    const harness = reportHarness();
+    await settle();
+    const markup = renderToStaticMarkup(harness.render());
+    expect(markup).toContain("Responses");
+    expect(markup).toContain("Accuracy");
+    expect(markup).toContain("Not assessed.");
+    expect(markup).toContain("Presentation exposure is not treated as learning evidence.");
+    expect(markup).not.toContain("Total blocks");
+  });
+
   it("offers sharing only when report generation is ready, even if a pending envelope contains evidence", async () => {
     vi.useFakeTimers();
     try {

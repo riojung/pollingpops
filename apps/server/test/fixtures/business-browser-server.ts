@@ -87,8 +87,12 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
     features: {
       uxBeta: { enabled: true, plans: ["free", "pro", "team"] },
       workspaceShell: { enabled: true, plans: ["free", "pro", "team"] },
+      builderV2: { enabled: true, plans: ["free", "pro", "team"] },
       groups: { enabled: true, plans: ["free", "pro", "team"] },
       presentations: { enabled: true, plans: ["free", "pro", "team"] },
+      audienceScopes: { enabled: true, plans: ["free", "pro", "team"] },
+      feedbackRooms: { enabled: true, plans: ["free", "pro", "team"] },
+      surveys: { enabled: true, plans: ["free", "pro", "team"] },
       ideaBoards: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoards: { enabled: true, plans: ["free", "pro", "team"] },
       canvasBoardSharing: { enabled: true, plans: ["free", "pro", "team"] },

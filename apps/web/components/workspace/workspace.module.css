@@ -446,7 +446,7 @@
   position: absolute;
   z-index: 50;
   top: calc(100% + 0.65rem);
-  right: 0;
+  inset-inline-end: 0;
   display: grid;
   width: min(360px, calc(100vw - 2rem));
   gap: 0.35rem;
@@ -514,19 +514,33 @@
 }
 
 .utilityAction {
-  display: inline-flex;
+  display: grid;
+  box-sizing: border-box;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   min-height: 44px;
   min-width: 44px;
-  align-items: center;
-  gap: 0.4rem;
+  place-items: center;
   border-radius: 0.72rem;
   border: 1px solid var(--ui-border);
   background: var(--ui-surface-soft);
   color: var(--ui-text-subtle);
   font-size: 0.8rem;
   font-weight: 740;
-  padding: 0.55rem 0.6rem;
+  padding: 10px;
   text-decoration: none;
+}
+
+.topActions > details > summary {
+  box-sizing: border-box;
+}
+
+.utilityAction:focus-visible,
+.accountButton:focus-visible,
+.createButton:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
 }
 
 .utilityAction:hover {
@@ -553,6 +567,7 @@
 
 .accountButton {
   display: grid;
+  box-sizing: border-box;
   width: 44px;
   height: 44px;
   flex: 0 0 auto;
@@ -665,7 +680,7 @@
 
 @media (max-width: 1160px) {
   .topHeader {
-    grid-template-columns: minmax(220px, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .workspaceSwitch {
@@ -702,8 +717,10 @@
   }
 
   .topHeader {
-    grid-template-columns: auto minmax(200px, 1fr) auto;
-    padding-inline: 1rem;
+    grid-template-areas: "brand actions" "search search";
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 0.6rem 0.5rem;
+    padding-inline: 12px;
     background:
       radial-gradient(ellipse 180px 100px at 32px 22px, var(--ui-brand-glow), transparent),
       var(--ui-surface-translucent);
@@ -711,6 +728,23 @@
 
   .mobileBrand {
     display: block;
+    grid-area: brand;
+  }
+
+  .mobileBrand :global(.brand) > span:last-child {
+    display: none;
+  }
+
+  .globalSearch {
+    width: 100%;
+    grid-area: search;
+  }
+
+  .topActions {
+    grid-area: actions;
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: 4px;
   }
 
   .mobileNav {
@@ -762,23 +796,23 @@
     grid-template-areas:
       "brand actions"
       "search search";
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.6rem 0.8rem;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 0.6rem 0.5rem;
   }
 
   .mobileBrand {
     grid-area: brand;
   }
 
-  .mobileBrand :global(.brand) > span:last-child,
-  .createButton > span:not(.chevron) {
+  .mobileBrand :global(.brand) > span:last-child {
     display: none;
   }
 
   .createButton {
-    width: 44px;
     justify-content: center;
-    padding-inline: 0;
+    min-width: 104px;
+    padding-inline: 12px;
+    white-space: nowrap;
   }
 
   .globalSearch {
@@ -794,21 +828,6 @@
 
   .createMenu {
     position: static;
-  }
-
-  .utilityAction {
-    display: none;
-  }
-
-  .utilityAction.feedbackAction {
-    display: inline-flex;
-    width: 44px;
-    justify-content: center;
-    padding-inline: 0;
-  }
-
-  .feedbackAction > span {
-    display: none;
   }
 
   .createButton .chevron {

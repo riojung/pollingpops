@@ -1,0 +1,156 @@
+.toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-inline-size: 0;
+  margin-block-end: 16px;
+  padding: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+}
+.scopes {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.scopes button {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ui-text-subtle);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.scopes button[aria-pressed="true"] {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+.scopes button:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.search {
+  min-inline-size: 0;
+  margin: 0;
+}
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  min-block-size: 44px;
+  padding-inline: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-subtle);
+}
+.searchField svg {
+  flex: 0 0 18px;
+  inline-size: 18px;
+  block-size: 18px;
+}
+.searchField input {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 42px;
+  padding-block: 8px;
+  border: 0;
+  outline: 0;
+  color: var(--ui-text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+.searchField input::placeholder {
+  color: var(--ui-text-muted);
+}
+.searchField:focus-within {
+  border-color: var(--ui-accent-ink);
+  outline: 3px solid var(--ui-focus);
+  background: var(--ui-surface);
+}
+.create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-inline-size: 0;
+  min-block-size: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 9px;
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.create svg {
+  flex: 0 0 18px;
+  inline-size: 18px;
+  block-size: 18px;
+}
+.create:hover:not(:disabled) {
+  background: var(--ui-accent-hover);
+}
+.toolbar button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.toolbar button:disabled,
+.toolbar input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .scopes {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 480px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .scopes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .scopes button {
+    min-inline-size: 0;
+    padding-inline: 5px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .searchField input {
+    font-size: 16px;
+  }
+  .create {
+    justify-self: stretch;
+  }
+}

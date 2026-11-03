@@ -42,7 +42,7 @@ test("a new verified account signs in to Home in its default workspace without p
     "/library",
   );
   await expect(
-    page.getByRole("heading", { name: "From a trusted source to useful evidence", exact: true }),
+    page.getByRole("heading", { name: "Everything you are working on, together.", exact: true }),
   ).toBeVisible();
   const layout = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,

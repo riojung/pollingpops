@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import type {
+  CanvasBoardRepository,
   CollaborationGroupRepository,
+  IdeaBoardRepository,
   PresentationRepository,
   PresentationSessionRepository,
   Repository,
+  SurveyRepository,
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import { professionalFeatureUnavailable } from "./workspace-rollout.js";
@@ -39,6 +42,9 @@ export async function registerHomeRoutes(
     presentations: PresentationRepository;
     presentationSessions: PresentationSessionRepository;
     groups: CollaborationGroupRepository;
+    surveys: SurveyRepository;
+    ideaBoards: IdeaBoardRepository;
+    canvasBoards: CanvasBoardRepository;
     auth: AuthService;
     workspaceEnabled: (workspaceId: string) => boolean | Promise<boolean>;
     presentationsEnabled: (workspaceId: string) => boolean | Promise<boolean>;
@@ -50,6 +56,9 @@ export async function registerHomeRoutes(
     presentations,
     presentationSessions,
     groups,
+    surveys,
+    ideaBoards,
+    canvasBoards,
     auth,
     workspaceEnabled,
     presentationsEnabled,
@@ -76,6 +85,9 @@ export async function registerHomeRoutes(
       scheduledAssignmentPage,
       reportPage,
       groupList,
+      surveyList,
+      ideaBoardList,
+      canvasList,
     ] = await Promise.all([
       repository.listQuizzes(creator.workspaceId),
       workspacePresentationsEnabled ? presentations.listPresentations(creator.workspaceId) : [],
@@ -98,7 +110,78 @@ export async function registerHomeRoutes(
       }),
       repository.listReportHistory(creator.workspaceId, { limit: 20, now }),
       workspaceGroupsEnabled ? groups.listGroups(creator.workspaceId, creator.userId) : [],
+      // Creation rollout flags do not revoke the canonical repositories' read access.
+      surveys.list(creator.workspaceId),
+      ideaBoards.list(creator.workspaceId, () => now, creator.role !== "viewer"),
+      canvasBoards.list(creator, { scope: "all" }, () => now),
     ]);
+
+    // A user's other owned workspaces are not part of this workspace's Home. Explicit direct
+    // or group grants remain discoverable through the same actor authorization as Boards.
+    const visibleCanvases = canvasList.filter(
+      (board) => board.workspaceId === creator.workspaceId || board.role !== "owner",
+    );
+    const attachedSources = new Set(visibleCanvases.map((board) => board.sourceBoardId));
+    const standaloneIdeaBoards = ideaBoardList.filter((board) => !attachedSources.has(board.id));
+
+    const recentSurveys = surveyList
+      .map((survey) => ({
+        id: survey.id,
+        artifactType: "survey" as const,
+        title: survey.draft.title,
+        description: survey.draft.description,
+        status: survey.status,
+        itemCount: survey.draft.items.length,
+        updatedAt: survey.updatedAt ?? null,
+        occurredAt: new Date(survey.updatedAt ?? 0),
+        editHref: `/surveys/${survey.id}`,
+        actionHref: `/surveys/${survey.id}`,
+        actionLabel: creator.role === "viewer" ? "View Survey" : "Open Survey",
+      }))
+      .sort(newestFirst)
+      .slice(0, RECENT_ARTIFACT_LIMIT)
+      .map(({ occurredAt: _occurredAt, ...artifact }) => artifact);
+
+    const recentBoards = [
+      ...standaloneIdeaBoards.map((board) => ({
+        id: board.id,
+        artifactType: "idea_board" as const,
+        boardType: "workshop" as const,
+        title: board.title,
+        description: board.description,
+        status: board.status,
+        itemCount: board.totalIdeas,
+        // The list projection exposes creation time, not a last-modified timestamp. Keep
+        // that real instant rather than manufacturing recency from a summary read.
+        updatedAt: board.createdAt,
+        occurredAt: new Date(board.createdAt),
+        canEdit: creator.role !== "viewer",
+        editHref: `/boards/${board.id}`,
+        actionHref: `/boards/${board.id}`,
+        actionLabel: "Open Board",
+      })),
+      ...visibleCanvases.map((board) => ({
+        id: board.id,
+        artifactType: "canvas" as const,
+        boardType: board.boardType,
+        title: board.title,
+        description: "",
+        status: board.status,
+        // Canonical list metadata intentionally omits objects. Do not fetch scene or
+        // workshop content just to populate a Home card's count.
+        itemCount: null,
+        updatedAt: board.updatedAt,
+        occurredAt: new Date(board.updatedAt),
+        role: board.role,
+        canEdit: board.capabilities.edit,
+        editHref: `/canvas/${board.id}`,
+        actionHref: `/canvas/${board.id}`,
+        actionLabel: "Open Board",
+      })),
+    ]
+      .sort(newestFirst)
+      .slice(0, RECENT_ARTIFACT_LIMIT)
+      .map(({ occurredAt: _occurredAt, ...artifact }) => artifact);
 
     const recentArtifacts = [
       ...rounds.map((round) => ({
@@ -311,12 +394,21 @@ export async function registerHomeRoutes(
       .send({
         generatedAt: now,
         recentArtifacts,
+        recentSurveys,
+        recentBoards,
         sessions: recentSessions,
         assignments,
         resultHighlights,
         groupSchedule,
         totals: {
-          artifacts: rounds.length + presentationList.length,
+          artifacts:
+            rounds.length +
+            presentationList.length +
+            surveyList.length +
+            standaloneIdeaBoards.length +
+            visibleCanvases.length,
+          surveys: surveyList.length,
+          boards: standaloneIdeaBoards.length + visibleCanvases.length,
           activeSessions:
             roundActiveSessionPage.items.length +
             presentationSessionList.filter((session) => session.status === "active").length,

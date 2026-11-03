@@ -17,6 +17,7 @@ import { workshopTemplateIntent } from "./canvas-template-creation";
 import { CanvasTemplateChooser } from "./canvas-template-chooser";
 import { CanvasTemplateBrowserDialog, CanvasTemplateStrip } from "./canvas-template-library";
 import { BoardLibrary } from "./board-library";
+import { BoardLibraryToolbar } from "./board-library-toolbar";
 
 interface EffectSlot {
   dependencies?: readonly unknown[];
@@ -31,6 +32,10 @@ const mocked = vi.hoisted(() => ({
   hooks: null as Hooks | null,
   fetch: vi.fn(),
   push: vi.fn(),
+  replace: vi.fn(),
+  query: "",
+  canEdit: true,
+  loading: false,
   creator: {
     userId: "00000000-0000-4000-8000-000000000001",
     workspaceId: "00000000-0000-4000-8000-000000000002",
@@ -41,7 +46,10 @@ vi.mock("../../lib/api", async (original) => ({
   ...(await original<typeof ApiModule>()),
   apiFetch: mocked.fetch,
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocked.push }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mocked.push, replace: mocked.replace }),
+  useSearchParams: () => new URLSearchParams(mocked.query),
+}));
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: ReactNode; href: string }) => (
     <a href={href}>{children}</a>
@@ -53,7 +61,8 @@ vi.mock("../locale-provider", () => ({
 vi.mock("../workspace/workspace-provider", () => ({
   useWorkspace: () => ({
     creator: mocked.creator,
-    canEdit: true,
+    canEdit: mocked.canEdit,
+    loading: mocked.loading,
     productFeatures: mocked.features,
   }),
 }));
@@ -162,6 +171,10 @@ function harness() {
     render,
     find,
     click(label: string) {
+      if (label === "New board") {
+        (find((element) => element.type === BoardLibraryToolbar).props.onCreate as () => void)();
+        return;
+      }
       (
         find(
           (element) =>
@@ -198,6 +211,9 @@ beforeEach(() => {
     workspaceId: "00000000-0000-4000-8000-000000000002",
   };
   mocked.features = { canvasBoards: true, ideaBoards: true };
+  mocked.query = "";
+  mocked.canEdit = true;
+  mocked.loading = false;
   vi.stubGlobal("window", { sessionStorage: storage });
   vi.stubGlobal("document", { activeElement: null });
   vi.stubGlobal("HTMLElement", class {});
@@ -208,6 +224,41 @@ afterEach(() => {
 });
 
 describe("board library starter creation", () => {
+  it("opens an authorized creation link once without submitting or replaying it on close", () => {
+    mocked.query = "create=1&q=retro&token=synthetic-private-value";
+    const view = harness();
+    view.render();
+    expect(view.render()).toContain('id="new-board-heading"');
+    expect(mocked.replace).toHaveBeenCalledWith("/boards?q=retro", { scroll: false });
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.click("Cancel");
+    expect(view.render()).not.toContain('id="new-board-heading"');
+    expect(mocked.replace).toHaveBeenCalledTimes(1);
+    mocked.query = "";
+    view.render();
+    mocked.query = "create=1";
+    view.render();
+    expect(view.render()).toContain('id="new-board-heading"');
+    expect(mocked.replace).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
+  it("does not open creation links for viewers, disabled features, or an unresolved account", () => {
+    for (const blocked of ["viewer", "disabled", "loading"]) {
+      mocked.query = "create=1";
+      mocked.canEdit = blocked !== "viewer";
+      mocked.features = {
+        canvasBoards: blocked !== "disabled",
+        ideaBoards: blocked !== "disabled",
+      };
+      mocked.loading = blocked === "loading";
+      const view = harness();
+      view.render();
+      expect(view.render()).not.toContain('id="new-board-heading"');
+      expect(mocked.replace).not.toHaveBeenCalled();
+      expect(mocked.fetch).not.toHaveBeenCalled();
+      view.unmount();
+    }
+  });
   it("opens setup from quick starters and template browsing without creating a board", () => {
     const view = harness();
     view.render();

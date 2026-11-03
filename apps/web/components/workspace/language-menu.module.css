@@ -3,12 +3,12 @@
 }
 
 .trigger {
-  display: inline-grid;
-  min-width: 46px;
+  display: grid;
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
   height: 44px;
-  align-items: center;
-  grid-template-columns: 1rem auto;
-  gap: 0.25rem;
+  place-items: center;
   border: 1px solid var(--ui-border);
   border-radius: 0.72rem;
   background: var(--ui-surface-soft);
@@ -17,7 +17,12 @@
   font-size: 0.62rem;
   font-weight: 850;
   list-style: none;
-  padding: 0 0.5rem;
+  padding: 10px;
+}
+
+.trigger:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
 }
 
 .trigger::-webkit-details-marker {
@@ -32,8 +37,8 @@
 }
 
 .trigger svg {
-  width: 1rem;
-  height: 1rem;
+  width: 1.15rem;
+  height: 1.15rem;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -45,7 +50,7 @@
   position: absolute;
   z-index: 65;
   top: calc(100% + 0.65rem);
-  right: 0;
+  inset-inline-end: 0;
   width: min(290px, calc(100vw - 2rem));
   max-height: min(560px, calc(100vh - 6rem));
   overflow-y: auto;
@@ -86,7 +91,7 @@
   background: transparent;
   color: var(--ui-text-subtle);
   padding: 0.5rem 0.65rem;
-  text-align: left;
+  text-align: start;
 }
 
 .option:hover:not(:disabled) {
@@ -151,8 +156,7 @@
   }
 
   .panel {
-    right: 0.75rem;
-    left: 0.75rem;
+    inset-inline: 0.75rem;
     width: auto;
   }
 }

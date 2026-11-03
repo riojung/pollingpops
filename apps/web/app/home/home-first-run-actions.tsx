@@ -3,21 +3,19 @@ import { useLocale } from "../../components/locale-provider";
 import styles from "./home.module.css";
 
 export function HomeFirstRunActions({
-  canEdit,
-  createHref,
+  canCreate,
   guideAvailable,
 }: {
-  canEdit: boolean;
-  createHref: string;
+  canCreate: boolean;
   guideAvailable: boolean;
 }) {
   const { t } = useLocale();
-  if (!canEdit && !guideAvailable) return null;
+  if (!canCreate && !guideAvailable) return null;
 
   return (
     <div className={styles.onboardingActions}>
-      {canEdit ? (
-        <Link className="button" href={createHref}>
+      {canCreate ? (
+        <Link className="button" href="/create">
           {t("pages.home.firstRun.create")}
         </Link>
       ) : null}

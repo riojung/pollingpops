@@ -4,6 +4,15 @@ export type LibraryOwnershipFilter = "all" | "workspace";
 
 /** Keep header searches on the current content surface without forwarding private URL context. */
 export function librarySearchHref(query: string, pathname: string, search: string) {
+  if (
+    pathname === "/boards" ||
+    pathname.startsWith("/boards/") ||
+    pathname.startsWith("/canvas/")
+  ) {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim().normalize("NFC").slice(0, 160));
+    return `/boards${params.size ? `?${params}` : ""}`;
+  }
   const requested = new URLSearchParams(search).get("type");
   const sessions = pathname === "/sessions";
   const type =

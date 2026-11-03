@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   CANVAS_SCHEMA_VERSION,
@@ -32,6 +32,7 @@ import {
 import { CanvasTemplateChooser } from "./canvas-template-chooser";
 import { CanvasTemplateBrowserDialog, CanvasTemplateStrip } from "./canvas-template-library";
 import { useBoardLibrary, type BoardLibraryScope } from "./use-board-library";
+import { BoardLibraryToolbar } from "./board-library-toolbar";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
 import { WorkspaceShell } from "../workspace/workspace-shell";
@@ -79,12 +80,14 @@ export function BoardLibrary() {
   const copy = canvasTemplateMessages(locale);
   const creationCopy = canvasCreationMessages(locale);
   const router = useRouter();
-  const { creator, canEdit, productFeatures } = useWorkspace();
+  const searchParams = useSearchParams();
+  const { creator, canEdit, productFeatures, loading: accountLoading } = useWorkspace();
   const workspaceId = creator?.workspaceId;
   const userId = creator?.userId;
   const contextKey = `${userId ?? ""}:${workspaceId ?? ""}`;
   const [scope, setScope] = useState<BoardLibraryScope>("all");
-  const [search, setSearch] = useState("");
+  const urlSearch = (searchParams.get("q") ?? "").normalize("NFC").slice(0, 160);
+  const [search, setSearch] = useState(urlSearch);
   const [input, setInput] = useState<IdeaBoardCreate>(defaults);
   const [kind, setKind] = useState<"team" | "workshop">("team");
   const [templateId, setTemplateId] = useState<CanvasTemplateId | null>(null);
@@ -103,6 +106,9 @@ export function BoardLibrary() {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLInputElement>(null);
   const templateOpener = useRef<HTMLElement | null>(null);
+  const createButton = useRef<HTMLButtonElement>(null);
+  const handledCreateRequest = useRef(false);
+  const createRequested = searchParams.get("create") === "1";
   const canCreate = canEdit && (productFeatures?.canvasBoards || productFeatures?.ideaBoards);
   const library = useBoardLibrary({
     workspaceId,
@@ -155,6 +161,40 @@ export function BoardLibrary() {
       }
     }
   }, [contextKey, userId, workspaceId]);
+  useEffect(() => setSearch(urlSearch), [urlSearch, contextKey]);
+  useEffect(() => {
+    if (!createRequested) {
+      handledCreateRequest.current = false;
+      return;
+    }
+    if (
+      accountLoading ||
+      !canCreate ||
+      !creator ||
+      busy ||
+      formContext !== contextKey ||
+      handledCreateRequest.current
+    )
+      return;
+    handledCreateRequest.current = true;
+    if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
+    createButton.current?.focus();
+    setCreating(true);
+    const next = new URLSearchParams();
+    if (urlSearch) next.set("q", urlSearch);
+    router.replace(`/boards${next.size ? `?${next}` : ""}`, { scroll: false });
+  }, [
+    createRequested,
+    accountLoading,
+    canCreate,
+    creator,
+    busy,
+    formContext,
+    contextKey,
+    productFeatures?.canvasBoards,
+    urlSearch,
+    router,
+  ]);
   useEffect(() => {
     if (!canCreate || !productFeatures?.canvasBoards) setBrowsing(false);
   }, [canCreate, productFeatures?.canvasBoards]);
@@ -373,29 +413,19 @@ export function BoardLibrary() {
           }}
         />
       ) : null}
-      <div className={canvasStyles.libraryToolbar}>
-        <label>
-          {t("canvas.search")}
-          <input
-            type="search"
-            maxLength={160}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-        {canCreate ? (
-          <button
-            type="button"
-            className="button"
-            onClick={() => {
-              if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
-              setCreating(true);
-            }}
-          >
-            {t("canvas.create")}
-          </button>
-        ) : null}
-      </div>
+      <BoardLibraryToolbar
+        scope={scope}
+        search={search}
+        onSearchChange={setSearch}
+        onScopeChange={setScope}
+        disabled={busy}
+        canCreate={Boolean(canCreate)}
+        createButtonRef={createButton}
+        onCreate={() => {
+          if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
+          setCreating(true);
+        }}
+      />
       {templatePending && !creating ? (
         <aside className={templateStyles.recovery} role="status">
           <p>{templatePending.sourceBoardId ? copy.sourceCreated : copy.pending}</p>
@@ -407,20 +437,6 @@ export function BoardLibrary() {
           ) : null}
         </aside>
       ) : null}
-      <div className={canvasStyles.filters} role="group" aria-label={t("boards.title")}>
-        {(["all", "owned", "shared", "archived"] as const).map((value) => (
-          <button
-            type="button"
-            className="button-quiet"
-            key={value}
-            aria-pressed={scope === value}
-            disabled={busy}
-            onClick={() => setScope(value)}
-          >
-            {t(("canvas." + value) as "canvas.all")}
-          </button>
-        ))}
-      </div>
       {error || library.error ? (
         <p className="error" role="alert">
           {t("boards.error")}{" "}

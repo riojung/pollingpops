@@ -15,6 +15,8 @@ import styles from "../../components/workspace/workspace-content.module.css";
 import { apiFetch, humanError } from "../../lib/api";
 import type { MessageKey } from "../../lib/i18n/catalog";
 import { recordCreationEvent } from "../../components/workspace/product-events";
+import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
+import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 
 type StartMethod = "starters" | "source" | "import" | "blank";
 
@@ -93,8 +95,11 @@ function startMethod(value: string | null): StartMethod | null {
 function CreateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = workspaceDiscoveryCopy(locale);
   const { canEdit, entitlements, productFeatures } = useWorkspace();
+  const creationOptions = workspaceCreationOptions({ canEdit, productFeatures });
+  const builderEnabled = productFeatures?.builderV2 === true;
   const [legacyHashMethod, setLegacyHashMethod] = useState<StartMethod | null>(null);
   const [title, setTitle] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>("single_select");
@@ -102,14 +107,16 @@ function CreateContent() {
   const [error, setError] = useState("");
   const requestedMethod = startMethod(searchParams.get("start")) ?? legacyHashMethod;
   const requestedKind = searchParams.get("type");
-  const kind =
-    requestedKind === "quiz" || requestedKind === "poll" || requestedKind === "custom"
+  const kind = !builderEnabled
+    ? null
+    : requestedKind === "quiz" || requestedKind === "poll" || requestedKind === "custom"
       ? requestedKind
       : requestedMethod
         ? "custom"
         : null;
-  const selectedMethod =
-    kind === "poll" && (requestedMethod === "source" || requestedMethod === "import")
+  const selectedMethod = !kind
+    ? null
+    : kind === "poll" && (requestedMethod === "source" || requestedMethod === "import")
       ? null
       : requestedMethod;
   const availableTypes = questionTypeOptions
@@ -132,6 +139,42 @@ function CreateContent() {
       ? "poll"
       : "single_select";
 
+  const roundCards = builderEnabled
+    ? (["quiz", "poll", "custom"] as const).map((type) => ({
+        id: type,
+        href: `/create?type=${type}`,
+        label: t(`create.kind.${type}`),
+        description: t(`create.kind.${type}.description`),
+      }))
+    : creationOptions
+        .filter((option) => option.kind === "round")
+        .map((option) => ({
+          id: "round",
+          href: option.href,
+          label: t("common.round"),
+          description: t("workspace.create.roundDescription"),
+        }));
+  const productCards = creationOptions
+    .filter((option) => option.kind !== "round")
+    .map((option) => ({
+      id: option.kind,
+      href: option.href,
+      label:
+        option.kind === "presentation"
+          ? t("common.presentation")
+          : option.kind === "survey"
+            ? copy.survey
+            : copy.ideaBoard,
+      description:
+        option.kind === "presentation"
+          ? t("workspace.create.presentationDescription")
+          : option.kind === "survey"
+            ? t("create.kind.survey.description")
+            : copy.ideaBoardDescription,
+    }));
+  const launcherCards =
+    searchParams.get("product") === "round" ? roundCards : [...roundCards, ...productCards];
+
   useEffect(() => {
     if (startMethod(searchParams.get("start"))) return;
     setLegacyHashMethod(startMethod(window.location.hash.slice(1)));
@@ -139,6 +182,7 @@ function CreateContent() {
 
   async function createBlank(event: FormEvent) {
     event.preventDefault();
+    if (!canEdit || !builderEnabled || busy) return;
     setBusy(true);
     setError("");
     recordCreationEvent("creation_started", "blank", "round");
@@ -174,17 +218,13 @@ function CreateContent() {
     <>
       {!kind ? (
         <nav className={styles.startGrid} aria-label={t("create.kind.title")}>
-          {(["quiz", "poll", "survey", "custom"] as const).map((type, index) => (
-            <Link
-              className={styles.startCard}
-              href={type === "survey" ? "/surveys/new" : `/create?type=${type}`}
-              key={type}
-            >
+          {launcherCards.map((option, index) => (
+            <Link className={styles.startCard} href={option.href} key={option.id}>
               <span className={styles.startNumber} aria-hidden="true">
                 {index + 1}
               </span>
-              <h2>{t(`create.kind.${type}`)}</h2>
-              <p>{t(`create.kind.${type}.description`)}</p>
+              <h2>{option.label}</h2>
+              <p>{option.description}</p>
               <span className={styles.startLink}>{t("create.kind.start")}</span>
             </Link>
           ))}
@@ -340,18 +380,18 @@ function CreateContent() {
 }
 
 export default function CreatePage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = workspaceDiscoveryCopy(locale);
   return (
     <WorkspaceProvider>
       <WorkspaceShell
         actions={
-          <Link className="button-quiet" href="/library">
-            {t("create.round.backToRounds")}
+          <Link className="button-quiet" href="/home">
+            {copy.backToHome}
           </Link>
         }
-        description={t("create.round.description")}
+        description={copy.launcherDescription}
         eyebrow={t("create.round.eyebrow")}
-        requiredFeature="builderV2"
         title={t("create.kind.title")}
         translationLevel="full"
       >

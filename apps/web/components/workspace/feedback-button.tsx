@@ -30,7 +30,6 @@ export function FeedbackButton() {
           <path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z" />
           <path d="M7 10h10M7 14h6" />
         </svg>
-        <span>{t("feedback.button")}</span>
       </button>
       {open ? (
         <FeedbackDialog page={feedbackPage(pathname)} onClose={() => setOpen(false)} />

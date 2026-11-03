@@ -9,6 +9,7 @@ import { englishMessages } from "../../lib/i18n/catalog";
 import { workspacePageEnglishMessages } from "../../lib/i18n/domains/workspace-pages";
 import germanWorkspacePageMessages from "../../lib/i18n/domains/workspace-pages/de-DE";
 import germanMessages from "../../lib/i18n/messages/de-DE";
+import ideaBoardEnglish from "../../lib/i18n/domains/idea-boards/en-CA";
 
 const fixtures = vi.hoisted(() => ({
   captureEffects: false,
@@ -49,6 +50,7 @@ const fixtures = vi.hoisted(() => ({
       groups: true,
       discover: true,
       ideaBoards: false,
+      canvasBoards: false,
     },
     loading: false,
     error: "",
@@ -151,6 +153,7 @@ describe("professional workspace shell", () => {
     fixtures.workspace.productFeatures.groups = true;
     fixtures.workspace.productFeatures.discover = true;
     fixtures.workspace.productFeatures.ideaBoards = false;
+    fixtures.workspace.productFeatures.canvasBoards = false;
     fixtures.push.mockClear();
     fixtures.replace.mockClear();
   });
@@ -343,6 +346,28 @@ describe("professional workspace shell", () => {
     expect(paused).toContain("Existing boards remain readable");
   });
 
+  it.each([true, false])(
+    "keeps canvas-only Boards navigation available with edit permission %s",
+    (canEdit) => {
+      fixtures.workspace.canEdit = canEdit;
+      fixtures.workspace.productFeatures.ideaBoards = false;
+      fixtures.workspace.productFeatures.canvasBoards = true;
+      fixtures.pathname = "/canvas/example";
+      const markup = renderToStaticMarkup(
+        <WorkspaceShell title="Canvas">
+          <p>Canvas workspace</p>
+        </WorkspaceShell>,
+      );
+      const desktop = markup.match(/<aside[^]*?<\/aside>/)?.[0] ?? "";
+      const mobile =
+        markup.match(/<nav[^>]*aria-label="Workspace sections"[^]*?<\/nav>/)?.[0] ?? "";
+      for (const navigation of [desktop, mobile]) {
+        expect(navigation).toContain('href="/boards"');
+        expect(navigation).toMatch(/aria-current="page"[^>]*href="\/boards"/);
+      }
+      if (!canEdit) expect(markup).not.toContain('href="/boards?create=1"');
+    },
+  );
   it("keeps search, activity, help, account, and both Create destinations global", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceShell title="Home">
@@ -370,11 +395,75 @@ describe("professional workspace shell", () => {
       /aria-label="Interface appearance"[^]*?aria-checked="true"[^>]*role="radio" tabindex="0"/,
     );
     expect(markup).toContain("Create new");
-    expect(markup).toContain('href="/create"');
+    expect(markup).toContain('href="/create?product=round"');
     expect(markup).toContain('href="/create/presentation"');
     expect(markup).toContain("Questions, diagnosis, rechecks, and practice");
   });
 
+  it("renders icon-only utilities with localized names and keeps Create labelled", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Home</p>
+      </WorkspaceShell>,
+    );
+    const topbar = markup.match(/<header[^]*?<\/header>/)?.[0] ?? "";
+    for (const [href, label] of [
+      ["/activity", "Activity"],
+      ["/help", "Help"],
+    ]) {
+      const control = topbar.match(new RegExp(`<a[^>]*href="${href}"[^>]*>[^]*?</a>`))?.[0] ?? "";
+      expect(control).toContain(`aria-label="${label}"`);
+      expect(control).toMatch(/title="[^"]+"/);
+      expect(control).toContain("<svg");
+      expect(control.replace(/<[^>]+>/g, "").trim()).toBe("");
+    }
+    const language =
+      topbar.match(
+        /<summary[^>]*aria-label="EN: Language: English \(Canada\)"[^>]*>[^]*?<\/summary>/,
+      )?.[0] ?? "";
+    expect(language).toContain("<svg");
+    expect(language.replace(/<[^>]+>/g, "").trim()).toBe("");
+    expect(topbar).toContain('title="Language: English (Canada)"');
+    expect(topbar).toMatch(/<summary[^>]*aria-label="Create"[^>]*>[^]*?<span>Create<\/span>/);
+  });
+  it("adds the enabled Idea board creation link and removes it when its effective feature is paused", () => {
+    fixtures.workspace.productFeatures.ideaBoards = true;
+    const enabled = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Home</p>
+      </WorkspaceShell>,
+    );
+    expect(enabled).toContain('href="/boards?create=1"');
+    expect(enabled).toContain("Collaborate on a team canvas or run a guided workshop.");
+    fixtures.workspace.productFeatures.ideaBoards = false;
+    const paused = renderToStaticMarkup(
+      <WorkspaceShell title="Home">
+        <p>Home</p>
+      </WorkspaceShell>,
+    );
+    expect(paused).not.toContain('href="/boards?create=1"');
+  });
+  it.each(["/boards", "/boards/example", "/canvas/example"])(
+    "labels global search for boards on %s",
+    (pathname) => {
+      fixtures.pathname = pathname;
+      const markup = renderToStaticMarkup(
+        <LocaleProvider
+          initialDomains={["idea-boards"]}
+          initialLocale="en-CA"
+          initialMessages={{ ...englishMessages, ...ideaBoardEnglish }}
+        >
+          <WorkspaceShell title="Idea boards">
+            <p>Board library</p>
+          </WorkspaceShell>
+        </LocaleProvider>,
+      );
+      const topbar = markup.match(/<header[^]*?<\/header>/)?.[0] ?? "";
+      expect(topbar).toContain('placeholder="Search boards"');
+      expect(topbar).toContain(">Search boards</label>");
+      expect(topbar).not.toContain('placeholder="Search your library"');
+    },
+  );
   it("renders workspace navigation and global controls from a non-English catalog", () => {
     const markup = renderToStaticMarkup(
       <LocaleProvider

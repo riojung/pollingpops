@@ -19,6 +19,8 @@ import {
   WorkspaceProvider,
   type WorkspaceProductFeatures,
 } from "./workspace-provider";
+import { workspaceCreationOptions } from "./workspace-creation-model";
+import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 import styles from "./workspace.module.css";
 
 type IconName =
@@ -40,7 +42,8 @@ type IconName =
   | "signOut"
   | "upgrade"
   | "billing"
-  | "settings";
+  | "settings"
+  | "board";
 
 export const SIDEBAR_PREFERENCE_KEY = "pollingpops:sidebar-collapsed:v1";
 
@@ -201,6 +204,13 @@ function ShellIcon({ name }: { name: IconName }) {
           <path d="M8 20v-5h8v5M8 9h1M12 9h1M16 9h1" />
         </svg>
       );
+    case "board":
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="15" rx="2" />
+          <path d="M7 8h5v5H7ZM15 8h3M15 12h3M8 22h8M12 19v3" />
+        </svg>
+      );
     case "search":
       return (
         <svg {...common}>
@@ -305,8 +315,10 @@ export function WorkspaceNav({
       lang={locale}
     >
       {destinations
-        .filter(
-          (destination) => !destination.feature || productFeatures?.[destination.feature] === true,
+        .filter((destination) =>
+          destination.feature === "ideaBoards"
+            ? productFeatures?.ideaBoards === true || productFeatures?.canvasBoards === true
+            : !destination.feature || productFeatures?.[destination.feature] === true,
         )
         .map((destination) => {
           const active = destination.match(pathname);
@@ -380,13 +392,18 @@ export function WorkspaceManagementRail({ navigation }: { navigation: Management
 }
 
 function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeatures }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const { canEdit } = useWorkspace();
+  const copy = workspaceDiscoveryCopy(locale);
+  const options = workspaceCreationOptions({ canEdit, productFeatures });
+  if (!options.length) return null;
   return (
     <details className={styles.createMenu}>
       <summary
         aria-label={t("workspace.create.label")}
         className={styles.createButton}
         role="button"
+        title={t("workspace.create.label")}
       >
         <ShellIcon name="plus" />
         <span>{t("workspace.create.label")}</span>
@@ -396,40 +413,44 @@ function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeat
       </summary>
       <div className={styles.createMenuPanel}>
         <p className={styles.createMenuLabel}>{t("workspace.create.new")}</p>
-        <Link
-          className={styles.createMenuItem}
-          href={productFeatures.builderV2 ? "/create" : "/dashboard"}
-        >
-          <span className={styles.createMenuIcon}>
-            <ShellIcon name="assignments" />
-          </span>
-          <span>
-            <strong>{t("common.round")}</strong>
-            <small>{t("workspace.create.roundDescription")}</small>
-          </span>
-        </Link>
-        {productFeatures.presentations ? (
-          <Link className={styles.createMenuItem} href="/create/presentation">
-            <span className={styles.createMenuIcon} data-tone="violet">
-              <ShellIcon name="presentation" />
+        {options.map((option) => (
+          <Link key={option.kind} className={styles.createMenuItem} href={option.href}>
+            <span
+              className={styles.createMenuIcon}
+              data-tone={option.kind === "presentation" ? "violet" : undefined}
+            >
+              <ShellIcon
+                name={
+                  option.kind === "presentation"
+                    ? "presentation"
+                    : option.kind === "ideaBoard"
+                      ? "board"
+                      : "assignments"
+                }
+              />
             </span>
             <span>
-              <strong>{t("common.presentation")}</strong>
-              <small>{t("workspace.create.presentationDescription")}</small>
+              <strong>
+                {option.kind === "round"
+                  ? t("common.round")
+                  : option.kind === "presentation"
+                    ? t("common.presentation")
+                    : option.kind === "survey"
+                      ? t("create.kind.survey")
+                      : copy.ideaBoard}
+              </strong>
+              <small>
+                {option.kind === "round"
+                  ? t("workspace.create.roundDescription")
+                  : option.kind === "presentation"
+                    ? t("workspace.create.presentationDescription")
+                    : option.kind === "survey"
+                      ? t("create.kind.survey.description")
+                      : copy.ideaBoardDescription}
+              </small>
             </span>
           </Link>
-        ) : null}
-        {productFeatures.surveys ? (
-          <Link className={styles.createMenuItem} href="/surveys/new">
-            <span className={styles.createMenuIcon}>
-              <ShellIcon name="assignments" />
-            </span>
-            <span>
-              <strong>{t("create.kind.survey")}</strong>
-              <small>{t("create.kind.survey.description")}</small>
-            </span>
-          </Link>
-        ) : null}
+        ))}
       </div>
     </details>
   );
@@ -529,6 +550,8 @@ export function WorkspaceShell({
     router.push(librarySearchHref(globalSearch, window.location.pathname, window.location.search));
   }
 
+  const boardSearch =
+    pathname === "/boards" || pathname.startsWith("/boards/") || pathname.startsWith("/canvas/");
   const workspaceLabel =
     workspace?.organization?.name ?? workspace?.name ?? t("workspace.switcher.current");
   const effectivePlan = entitlements?.plan ?? creator?.plan;
@@ -709,9 +732,11 @@ export function WorkspaceShell({
           <form className={styles.globalSearch} onSubmit={submitSearch} role="search">
             <label className={styles.srOnly} htmlFor="workspace-search">
               {t(
-                pathname === "/sessions"
-                  ? "pages.sessions.workspaceSearch"
-                  : "workspace.search.label",
+                boardSearch
+                  ? "canvas.search"
+                  : pathname === "/sessions"
+                    ? "pages.sessions.workspaceSearch"
+                    : "workspace.search.label",
               )}
             </label>
             <ShellIcon name="search" />
@@ -720,9 +745,11 @@ export function WorkspaceShell({
               id="workspace-search"
               onChange={(event) => setGlobalSearch(event.target.value)}
               placeholder={t(
-                pathname === "/sessions"
-                  ? "pages.sessions.workspaceSearch"
-                  : "workspace.search.placeholder",
+                boardSearch
+                  ? "canvas.search"
+                  : pathname === "/sessions"
+                    ? "pages.sessions.workspaceSearch"
+                    : "workspace.search.placeholder",
               )}
               type="search"
               value={globalSearch}
@@ -734,23 +761,23 @@ export function WorkspaceShell({
             <ColorModeMenu />
             <Link
               aria-current={pathname === "/activity" ? "page" : undefined}
+              aria-label={t("workspace.activity")}
               className={styles.utilityAction}
               href="/activity"
               title={t("workspace.activityTitle")}
             >
               <ShellIcon name="activity" />
-              <span className={styles.utilityLabel}>{t("workspace.activity")}</span>
             </Link>
             <Link
               aria-current={
                 pathname === "/help" || pathname.startsWith("/help/") ? "page" : undefined
               }
+              aria-label={t("workspace.help")}
               className={styles.utilityAction}
               href="/help"
               title={t("workspace.help")}
             >
               <ShellIcon name="help" />
-              <span className={styles.utilityLabel}>{t("workspace.help")}</span>
             </Link>
             <FeedbackButton />
             <Link

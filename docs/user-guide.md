@@ -554,6 +554,11 @@ questions are independent; later source edits do not synchronize. Wait for **Sav
 **Preview**, and **Publish** an immutable version before hosting. Speaker notes and source
 citations remain private authoring/facilitator information.
 
+Questions are optional. A content-only Presentation needs at least one complete slide and can be
+published and hosted without adding a poll or quiz. Empty slides, missing image descriptions and
+unavailable or unscanned images still block publication. A deck containing questions retains the
+main-question and linked-recheck requirements.
+
 Live Presentation creation requires its separate realtime rollout gate. Select **Host**, create a
 session from the published version, and share its code or direct link. Advance through content
 slides and open, close, reveal, or recheck interactive questions using the controls offered for
@@ -561,6 +566,12 @@ the current phase. Participants receive complete slide content and question cont
 own devices. When live flex mode is also enabled, choose **Flex** during setup to remove question
 countdowns and deadlines for the whole room; the host closes responses. The live code expires
 after 24 hours independently of how long session history is retained.
+
+For a content-only deck, use **Start Presentation**, **Next block** and **Finish Presentation**.
+The finished room thanks participants, and its report shows join counts, slide titles and the
+facilitation timeline. It does not assign quiz standings or learning outcomes to slide viewing.
+An ordinary content slide uses the existing text/image layout tools; richer native scene editing
+remains a separate implementation increment.
 
 ### Collect Presentation Q&A
 

@@ -12,6 +12,11 @@ import {
   type PresentationSessionTimelineRecord,
 } from "@openround/db";
 
+/** Use frozen content, not response counts: an unanswered assessment is still an assessment. */
+export function presentationHasQuestions(session: Pick<PresentationSessionRecord, "content">) {
+  return session.content.blocks.some((block) => block.kind === "question");
+}
+
 /** Staff-only competition view; this does not expand Presentation audience identity access. */
 export function presentationCompetitionStandings(
   session: PresentationSessionRecord,

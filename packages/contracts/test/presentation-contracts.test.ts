@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   ContentSlideDraftSchema,
@@ -62,6 +62,35 @@ function contentBlock(title = "", body = ""): ContentSlideDraft {
     mediaAlt: null,
     speakerNotes: "",
   };
+}
+
+function compatibilityDeck(schemaVersion: 2 | 3) {
+  const id = (value: number) =>
+    `00000000-0000-4000-8000-${String(value).padStart(12, "0")}` as const;
+  const checkpoint = (offset: number) => {
+    const block = questionBlock();
+    block.id = id(offset);
+    block.question.id = id(offset + 1);
+    block.question.choices.forEach((choice, index) => {
+      choice.id = id(offset + 2 + index);
+    });
+    return block;
+  };
+  const diagnostic = checkpoint(10);
+  const recheck = checkpoint(20);
+  recheck.question.delivery = "recheck";
+  diagnostic.question.linkedRecheckQuestionId = recheck.question.id;
+  const slide = contentBlock("Context", "Use the evidence before choosing.");
+  slide.id = id(1);
+  slide.textElements[0]!.id = "compatibility:title";
+  slide.textElements[1]!.id = "compatibility:body";
+  slide.speakerNotes = "Keep the notes private.";
+  return PresentationDraftSchema.parse({
+    title: "Compatibility deck",
+    description: "Frozen mixed recovery fixture",
+    schemaVersion,
+    blocks: [slide, diagnostic, recheck],
+  });
 }
 
 describe("presentation contracts", () => {
@@ -177,24 +206,113 @@ describe("presentation contracts", () => {
     ).toBe(true);
   });
 
-  it("requires complete content and an interactive block to publish", () => {
-    const contentOnly = PresentationContentSchema.safeParse({
-      title: "Content only",
-      description: "",
-      experiencePreset: { id: "focus", version: 1 },
-      schemaVersion: 2,
-      blocks: [contentBlock("Context", "Read this before the activity.")],
-    });
-    expect(contentOnly.success).toBe(false);
+  it.each([2, 3] as const)(
+    "publishes a nonempty content-only v%s deck without manufacturing an assessment",
+    (schemaVersion) => {
+      const draft = PresentationDraftSchema.parse({
+        title: "Project update",
+        schemaVersion,
+        blocks: [
+          contentBlock("Context", "Our next project milestone."),
+          contentBlock("Next steps"),
+        ],
+      });
+      const published = PresentationContentSchema.parse(draft);
+      expect(published).toEqual(draft);
+      expect(published.schemaVersion).toBe(schemaVersion);
+      expect(published.blocks.every((block) => block.kind === "content")).toBe(true);
+    },
+  );
 
-    const mixed = PresentationContentSchema.safeParse({
-      title: "Mixed deck",
-      description: "",
-      experiencePreset: { id: "focus", version: 1 },
+  it("still rejects empty decks, incomplete content and missing media descriptions", () => {
+    const base = { title: "Project update", schemaVersion: 2 };
+    expect(PresentationDraftSchema.safeParse({ ...base, blocks: [] }).success).toBe(true);
+    for (const blocks of [
+      [],
+      [contentBlock()],
+      [{ ...contentBlock(), mediaId: randomUUID(), mediaAlt: null }],
+    ]) {
+      expect(PresentationContentSchema.safeParse({ ...base, blocks }).success).toBe(false);
+    }
+    expect(
+      PresentationContentSchema.safeParse({ ...base, title: "", blocks: [contentBlock("Context")] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("keeps content-only block IDs unique", () => {
+    const first = contentBlock("Context");
+    const second = { ...contentBlock("Next steps"), id: first.id };
+    const parsed = PresentationContentSchema.safeParse({
+      title: "Duplicate slides",
       schemaVersion: 2,
-      blocks: [questionBlock()],
+      blocks: [first, second],
     });
-    expect(mixed.success).toBe(true);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map(({ message }) => message)).toContain(
+      "Every presentation block needs a unique ID",
+    );
+  });
+
+  it("requires a main question whenever any question is present, including mixed recheck-only decks", () => {
+    const recheck = questionBlock();
+    recheck.question.delivery = "recheck";
+    for (const blocks of [[recheck], [contentBlock("Context"), recheck]]) {
+      const parsed = PresentationContentSchema.safeParse({
+        title: "Recheck without a main checkpoint",
+        schemaVersion: 2,
+        blocks,
+      });
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues.map(({ message }) => message)).toEqual(
+        expect.arrayContaining([
+          "Add at least one main interactive question before publishing",
+          "Every recheck must be linked from one earlier diagnostic question",
+        ]),
+      );
+    }
+  });
+
+  it.each([
+    [2, "d0742a94fcdcea8de5f76f55aa8ff60fe048c22f539272ae1ff4ff5f656bbbba"],
+    [3, "67292e9b3620b1867f8f7517974741eb41eb60ae121720e8b25d81350cbd8290"],
+  ] as const)(
+    "preserves pre-change mixed/recovery v%s content and serialized hash",
+    (version, hash) => {
+      const draft = compatibilityDeck(version);
+      const published = PresentationContentSchema.parse(draft);
+      expect(published).toEqual(draft);
+      expect(migratePresentationV1(published)).toEqual(published);
+      expect(createHash("sha256").update(JSON.stringify(published)).digest("hex")).toBe(hash);
+    },
+  );
+
+  it("keeps the existing v1 upcast readable without changing current mixed content", () => {
+    const draft = compatibilityDeck(2);
+    const slide = draft.blocks[0];
+    if (slide?.kind !== "content") throw new Error("Expected the compatibility content slide");
+    const legacy = {
+      ...draft,
+      schemaVersion: 1,
+      blocks: [
+        {
+          id: slide.id,
+          kind: "content",
+          layout: slide.layout,
+          title: "Context",
+          body: "Use the evidence before choosing.",
+          mediaId: slide.mediaId,
+          mediaAlt: slide.mediaAlt,
+          speakerNotes: slide.speakerNotes,
+        },
+        ...draft.blocks.slice(1),
+      ],
+    };
+    const before = structuredClone(legacy);
+    const published = PresentationContentSchema.parse(migratePresentationV1(legacy));
+    expect(published.schemaVersion).toBe(2);
+    expect(published.blocks.slice(1)).toEqual(draft.blocks.slice(1));
+    expect(legacy).toEqual(before);
   });
 
   it("rejects duplicate question and choice IDs", () => {

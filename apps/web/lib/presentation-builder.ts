@@ -548,14 +548,6 @@ export function presentationReadiness(draft: PresentationDraft): PresentationIss
   if (draft.blocks.length === 0) {
     issues.push({ blockId: null, field: "blocks", message: "Add at least one slide." });
   }
-  if (!draft.blocks.some((block) => block.kind === "question")) {
-    issues.push({
-      blockId: null,
-      field: "blocks",
-      message: "Add at least one interactive question before publishing.",
-    });
-  }
-
   const questions = new Map(
     draft.blocks.flatMap((block) =>
       block.kind === "question" ? [[block.question.id, block.question] as const] : [],

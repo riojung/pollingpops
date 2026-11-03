@@ -24,7 +24,10 @@ import {
   presentationSnapshotSettings,
 } from "./presentation-recovery-pack-cards.js";
 
-import { presentationCompetitionStandings } from "./presentation-competition.js";
+import {
+  presentationCompetitionStandings,
+  presentationHasQuestions,
+} from "./presentation-competition.js";
 
 const PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS = 15_000;
 
@@ -317,12 +320,16 @@ export function buildPresentationHostSnapshot(
         session.phase === "finished",
     ),
     participantCount: participants.length,
-    competitionStandings: presentationCompetitionStandings(
-      session,
-      participants,
-      data.responses,
-      data.timeline,
-    ),
+    ...(presentationHasQuestions(session)
+      ? {
+          competitionStandings: presentationCompetitionStandings(
+            session,
+            participants,
+            data.responses,
+            data.timeline,
+          ),
+        }
+      : {}),
     responseCount,
     participants: data.facilitatorLeaderboard.map(({ id, nickname, joinedAt, score, rank }) => ({
       id,
@@ -392,7 +399,7 @@ export function buildPresentationParticipantSnapshot(
         }
       : null,
     standing:
-      session.phase !== "question_open" && standing
+      presentationHasQuestions(session) && session.phase !== "question_open" && standing
         ? { rank: standing.rank, score: standing.score }
         : null,
     responseResult:
@@ -441,7 +448,10 @@ export function buildTargetedPresentationParticipantSnapshot(
     currentBlock: presentationRealtimeBlock(block, false),
     participantCount: projection.participantCount,
     responseSubmitted: Boolean(currentResponse),
-    standing: session.phase === "question_open" ? null : projection.standing,
+    standing:
+      presentationHasQuestions(session) && session.phase !== "question_open"
+        ? projection.standing
+        : null,
     responseResult:
       resultVisible && currentResponse
         ? { correct: currentResponse.correct, score: currentResponse.score }
@@ -563,6 +573,7 @@ export function buildPresentationListSnapshot(
         ? responses.filter((response) => response.blockId === block.id).length
         : 0,
     participants: leaderboard,
+    // REST v1 requires this roster alias to match participants, including unassessed decks.
     leaderboard,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),

@@ -118,18 +118,23 @@ content slide does not validate those other surfaces.
 
 ## Production integration is a coordinated E01 change
 
-Two constraints prevent turning the prototype on merely by adding its renderer:
+Two integration boundaries prevent turning the prototype on merely by adding its renderer:
 
-1. **Content-only presentations are currently not publishable.** `PresentationContentSchema` requires
-   an interactive question and a main question; Builder readiness repeats that policy. Broad
-   creation needs a coordinated product/contract change, terminal live-session behavior and
-   meaningful reports for a deck with zero questions. Removing only the validation check risks
-   inventing completion, empty-score failures or a session with no valid finish path.
+1. **Content-only publication requires a compatible lifecycle and readers.** The E00 baseline
+   required an interactive/main question. The first E01 slice now supports question-free decks
+   using existing slides, with verified terminal navigation, durable reports and neutral
+   completion/projection behavior. Keep that lifecycle support and its reader floor when adding
+   native scenes; a permissive renderer alone is insufficient.
 2. **Node assets are absent from production retention visitors.** The publish route validates
    current block/question media and frozen Pack baselines. JS `presentationMediaIds` and SQL
    `openround_presentation_media_ids` retain the same families across drafts, immutable versions
    and history. New scene image references require matching publish validation, authorization,
    retention/export and cleanup changes before any production writer accepts them.
+
+The subsequent E01 content-only slice resolves the first policy/lifecycle constraint using existing
+content slides. It preserves the scene integration boundary: production still does not accept the
+experimental scene artifact. The [upgrade runbook](../runbooks/upgrade.md#content-only-presentation-compatibility)
+defines the new reader floor and writer cutover; old readers cannot consume the newly allowed decks.
 
 Do not rewrite applied migrations or immutable published rows. Select the next production schema
 version after auditing all draft, content, live-session, report and Recovery Pack readers/writers.

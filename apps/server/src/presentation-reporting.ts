@@ -12,9 +12,12 @@ import {
   type PresentationSessionResponseRecord,
   type PresentationSessionTimelineRecord,
 } from "@openround/db";
+import { presentationHasQuestions } from "./presentation-competition.js";
 
 const PRESENTATION_EVIDENCE_NOTE =
   "Content slides are recorded in the facilitation timeline but are not evidence of learning.";
+const PRESENTATION_CONTENT_EVIDENCE_NOTE =
+  "This report records participant join counts and the sequence of slides presented.";
 
 function reportLeaderboard(
   participants: PresentationSessionParticipantRecord[],
@@ -140,7 +143,9 @@ export function generatePresentationReport(input: {
     trustMode: session.trustMode,
     participantCount: participants.length,
     responseCount: responses.length,
-    leaderboard: reportLeaderboard(participants, responses),
+    leaderboard: presentationHasQuestions(session)
+      ? reportLeaderboard(participants, responses)
+      : [],
     evidence,
     recovery,
     timeline: timeline.map((event) => ({
@@ -153,7 +158,9 @@ export function generatePresentationReport(input: {
         ? { recoveryPackIntervention: event.recoveryPackIntervention }
         : {}),
     })),
-    evidenceNote: PRESENTATION_EVIDENCE_NOTE,
+    evidenceNote: presentationHasQuestions(session)
+      ? PRESENTATION_EVIDENCE_NOTE
+      : PRESENTATION_CONTENT_EVIDENCE_NOTE,
     createdAt: session.createdAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
   });

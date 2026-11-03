@@ -309,6 +309,8 @@ export async function expectPresentationSessionRepositoryConformance(
     expect.objectContaining({ revealedParticipantIds: [skippedParticipant.id] }),
   ]);
 
+  await expectContentOnlySessionConformance(input, now);
+
   await input.beginWorkspaceDeletion();
 
   // Existing receipts remain recoverable after the deletion fence closes new mutations.
@@ -386,6 +388,132 @@ export async function expectPresentationSessionRepositoryConformance(
   await expect(input.repository.listParticipants(sessionId)).resolves.toHaveLength(1);
   await expect(input.repository.listResponses(sessionId)).resolves.toHaveLength(1);
   await expect(input.repository.listTimeline(sessionId)).resolves.toHaveLength(2);
+}
+
+async function expectContentOnlySessionConformance(
+  input: PresentationSessionRepositoryConformanceInput,
+  now: Date,
+) {
+  const content: PresentationContent = {
+    ...input.content,
+    title: "Content-only durable session",
+    blocks: ["Project context", "Next steps"].map((title) => {
+      const id = randomUUID();
+      return {
+        id,
+        kind: "content" as const,
+        layout: "title" as const,
+        textElements: [
+          {
+            id: `${id}:title`,
+            role: "title" as const,
+            text: title,
+            region: "top_center" as const,
+            order: 0,
+          },
+        ],
+        mediaId: null,
+        mediaAlt: null,
+        speakerNotes: "Private presenter note",
+      };
+    }),
+  };
+  // A live snapshot is its own frozen content, as with existing session-only insertions.
+  const session = await input.repository.createSession({
+    id: randomUUID(),
+    workspaceId: input.workspaceId,
+    presentationId: input.presentationId,
+    presentationVersionId: input.presentationVersionId,
+    title: content.title,
+    content,
+    code: String(randomInt(1_000_000, 10_000_000)),
+    status: "active",
+    phase: "lobby",
+    currentBlockIndex: -1,
+    revision: 0,
+    settings: { timeMode: "timed" },
+    trustMode: "learning",
+    eventSeq: 0,
+    questionOpenedAt: null,
+    questionClosesAt: null,
+    createdBy: input.createdBy,
+    createdAt: now,
+    updatedAt: now,
+    finishedAt: null,
+    liveExpiresAt: new Date(now.getTime() + 60 * 60_000),
+    retentionExpiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60_000),
+  });
+  const commands: PresentationSessionCommandInput[] = [0, 1, 2].map((index) => ({
+    workspaceId: input.workspaceId,
+    sessionId: session.id,
+    commandId: randomUUID(),
+    requestHash: createHash("sha256").update(`content-only:${session.id}:${index}`).digest("hex"),
+    expectedRevision: index,
+    phase: index === 2 ? "finished" : "content",
+    currentBlockIndex: Math.min(index, 1),
+    status: index === 2 ? "finished" : "active",
+    occurredAt: new Date(now.getTime() + (index + 1) * 1_000),
+    event: {
+      type: index === 2 ? "presentation.finished" : "content.presented",
+      blockIndex: index === 2 ? null : index,
+      blockId: index === 2 ? null : content.blocks[index]!.id,
+    },
+  }));
+  for (const [index, command] of commands.entries()) {
+    await expect(input.repository.transitionSessionCommand(command)).resolves.toMatchObject({
+      status: "accepted",
+      session: {
+        content,
+        phase: command.phase,
+        status: command.status,
+        currentBlockIndex: command.currentBlockIndex,
+        revision: index + 1,
+        eventSeq: index + 1,
+        questionOpenedAt: null,
+        questionClosesAt: null,
+      },
+    });
+    await expect(input.repository.transitionSessionCommand(command)).resolves.toMatchObject({
+      status: "duplicate",
+      session: { revision: index + 1, eventSeq: index + 1 },
+    });
+  }
+  await expect(input.repository.getSessionById(session.id)).resolves.toMatchObject({
+    content,
+    phase: "finished",
+    revision: 3,
+    finishedAt: commands[2]!.occurredAt,
+    questionOpenedAt: null,
+    questionClosesAt: null,
+  });
+  await expect(input.repository.transitionSessionCommand(commands[0]!)).resolves.toMatchObject({
+    status: "duplicate",
+    session: { phase: "finished", revision: 3, eventSeq: 3 },
+  });
+  await expect(
+    input.repository.transitionSessionCommand({
+      ...commands[0]!,
+      commandId: randomUUID(),
+    }),
+  ).rejects.toMatchObject({ expectedRevision: 0, currentRevision: 3 });
+  await expect(input.repository.listResponses(session.id)).resolves.toEqual([]);
+  await expect(input.repository.listTimeline(session.id)).resolves.toEqual([
+    expect.objectContaining({
+      sequence: 1,
+      type: "content.presented",
+      blockId: content.blocks[0]!.id,
+    }),
+    expect.objectContaining({
+      sequence: 2,
+      type: "content.presented",
+      blockId: content.blocks[1]!.id,
+    }),
+    expect.objectContaining({ sequence: 3, type: "presentation.finished", blockId: null }),
+  ]);
+  await expect(input.repository.getReport(input.workspaceId, session.id)).resolves.toMatchObject({
+    status: "pending",
+    payload: null,
+  });
 }
 
 export function presentationRecoveryPackIntervention(): PresentationRecoveryPackIntervention {

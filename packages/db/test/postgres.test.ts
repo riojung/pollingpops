@@ -31,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Pool, type PoolClient } from "pg";
 import {
   ProductEventNameSchema,
+  PresentationContentSchema,
   IdeaBoardCreateSchema,
   type AuthoringDraft,
   type PresentationDraft,
@@ -4079,6 +4080,118 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       error: expect.objectContaining({ message: "Workspace deletion is in progress" }),
     });
   }, 15_000);
+
+  it("persists content-only publications with frozen media references and tenant isolation", async () => {
+    const owner = await creator("content-only-publication-owner");
+    const outsider = await creator("content-only-publication-outsider");
+    const now = new Date();
+    const mediaId = randomUUID();
+    await repository.createMediaAsset({
+      id: mediaId,
+      workspaceId: owner.workspaceId,
+      objectKey: `clean/${owner.workspaceId}/${mediaId}.png`,
+      mimeType: "image/png",
+      sizeBytes: 128,
+      scanStatus: "clean",
+      altText: "A project handoff diagram",
+      createdAt: now,
+    });
+    const slideId = randomUUID();
+    const content = PresentationContentSchema.parse({
+      title: "A content-only project update",
+      schemaVersion: 2,
+      blocks: [
+        {
+          id: slideId,
+          kind: "content",
+          layout: "title_body",
+          textElements: [
+            {
+              id: `${slideId}:title`,
+              role: "title",
+              text: "Agree on the next step",
+              region: "top_center",
+              order: 0,
+            },
+            {
+              id: `${slideId}:body`,
+              role: "body",
+              text: "Name an owner and a handoff.",
+              region: "middle_center",
+              order: 0,
+            },
+          ],
+          mediaId,
+          mediaAlt: "A project handoff diagram",
+          speakerNotes: "Private preparation",
+        },
+      ],
+    });
+    const presentations = new PostgresPresentationRepository(repository);
+    const presentation = await presentations.createPresentation({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      title: content.title,
+      description: content.description,
+      status: "draft",
+      draft: content,
+      draftRevision: 0,
+      draftSchemaVersion: 2,
+      currentVersionId: null,
+      folderId: null,
+      publishedDraftRevision: null,
+      lastEditedBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const contentHash = createHash("sha256").update(JSON.stringify(content)).digest("hex");
+    const publication = {
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      presentationId: presentation.id,
+      version: 1,
+      content,
+      contentHash,
+      contentSchemaVersion: 2,
+      sourceDraftRevision: 0,
+      publishedAt: now,
+    };
+    const published = await presentations.publishPresentation(publication, 0);
+    expect(await presentations.publishPresentation(publication, 0)).toMatchObject({
+      id: published.id,
+      contentHash,
+    });
+    expect(
+      await presentations.getPresentationVersion(owner.workspaceId, published.id),
+    ).toMatchObject({ content, contentHash, contentSchemaVersion: 2 });
+    expect(
+      await presentations.getPresentationVersion(outsider.workspaceId, published.id),
+    ).toBeNull();
+    const edited = structuredClone(content);
+    const slide = edited.blocks[0]!;
+    if (slide.kind !== "content") throw new Error("Expected a content slide");
+    slide.textElements[0]!.text = "A later unpublished revision";
+    slide.mediaId = null;
+    slide.mediaAlt = null;
+    await presentations.updatePresentationDraft({
+      workspaceId: owner.workspaceId,
+      presentationId: presentation.id,
+      draft: edited,
+      expectedRevision: 0,
+      mutationId: randomUUID(),
+      editorId: owner.userId,
+      draftHash: createHash("sha256").update(JSON.stringify(edited)).digest("hex"),
+    });
+    expect(
+      await presentations.getPresentationVersion(owner.workspaceId, published.id),
+    ).toMatchObject({ content, contentHash });
+    expect(await repository.listMediaReferences(owner.workspaceId, mediaId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ownerType: "presentation_version", ownerId: published.id }),
+      ]),
+    );
+    expect(await repository.getMediaAsset(owner.workspaceId, mediaId)).not.toBeNull();
+  });
 
   it("keeps PostgreSQL on the shared Presentation repository conformance contract", async () => {
     const owner = await creator("presentation-repository-conformance");

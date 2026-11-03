@@ -75,6 +75,30 @@ function reportFixture() {
 }
 
 describe("Presentation report contracts", () => {
+  it.each([1, 2, 3] as const)(
+    "already supports content-only, unassessed evidence in report v%s",
+    (schemaVersion) => {
+      const source = reportFixture();
+      const value = {
+        ...source,
+        schemaVersion,
+        title: "Project update",
+        responseCount: 0,
+        leaderboard: [],
+        evidence: [source.evidence[0]!],
+        recovery: [],
+      };
+      const parsed = PresentationReportSchema.parse(value);
+      expect(parsed).toEqual(value);
+      expect(parsed.evidence).toEqual([
+        expect.objectContaining({ kind: "content", assessmentStatus: "not_assessed" }),
+      ]);
+      expect(
+        PresentationReportEnvelopeSchema.parse({ reportStatus: "ready", report: value }).report,
+      ).toEqual(value);
+    },
+  );
+
   it("versions session-only Quick Checks without widening strict legacy report readers", () => {
     const report = reportFixture();
     const existing = report.evidence[1]!;

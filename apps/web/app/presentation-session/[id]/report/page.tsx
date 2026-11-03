@@ -29,6 +29,7 @@ function PresentationReportContent() {
   const [reportFailed, setReportFailed] = useState(false);
   const [error, setError] = useState("");
   const [summaryReady, setSummaryReady] = useState(false);
+  const hasQuestionEvidence = report?.evidence.some((block) => block.kind === "question") ?? false;
 
   useEffect(() => {
     let cancelled = false;
@@ -134,8 +135,19 @@ function PresentationReportContent() {
                   <span>{t("live.common.participants")}</span>
                 </div>
                 <div className={styles.metric}>
-                  <strong>{report.responseCount.toLocaleString(locale)}</strong>
-                  <span>{t("live.common.responses")}</span>
+                  <strong>
+                    {(hasQuestionEvidence
+                      ? report.responseCount
+                      : report.evidence.length
+                    ).toLocaleString(locale)}
+                  </strong>
+                  <span>
+                    {t(
+                      hasQuestionEvidence
+                        ? "live.common.responses"
+                        : "live.presentationHost.totalBlocks",
+                    )}
+                  </span>
                 </div>
               </div>
             </section>
@@ -164,12 +176,12 @@ function PresentationReportContent() {
                       sessionOnly={"sessionOnly" in block ? block.sessionOnly : undefined}
                     />
                   ) : null}
-                  {block.kind === "content" ? (
+                  {block.kind === "content" && hasQuestionEvidence ? (
                     <p>
                       <strong>{t("live.presentationReport.notAssessed")}</strong>{" "}
                       {t("live.presentationReport.notAssessedDescription")}
                     </p>
-                  ) : (
+                  ) : block.kind === "question" ? (
                     <div className={styles.metricRow}>
                       <div className={styles.metric}>
                         <strong>{block.respondents.toLocaleString(locale)}</strong>
@@ -199,11 +211,11 @@ function PresentationReportContent() {
                         <span>{t("live.presentationReport.averageResponse")}</span>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </article>
               ))}
             </section>
-            {report.leaderboard.length ? (
+            {hasQuestionEvidence && report.leaderboard.length ? (
               <section className={styles.reportCard}>
                 <h2>{t("live.common.leaderboard")}</h2>
                 <ol className={styles.leaderboard}>
@@ -223,7 +235,7 @@ function PresentationReportContent() {
                 </ol>
               </section>
             ) : null}
-            {report.recovery.length ? (
+            {hasQuestionEvidence && report.recovery.length ? (
               <section className={styles.reportCard}>
                 <h2>{t("live.presentationReport.recoveryEvidence")}</h2>
                 {report.recovery.map((item) => (

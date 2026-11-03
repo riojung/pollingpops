@@ -507,7 +507,11 @@ function PresentationHostContent() {
                   <>
                     <span className={styles.statusPill}>{t("live.common.complete")}</span>
                     <h1>{t("live.presentationSession.finished")}</h1>
-                    <p>{t("live.presentationSession.completeDescription")}</p>
+                    <p>
+                      {t("live.common.joinedCount", {
+                        count: formatNumber(locale, snapshot.participantCount),
+                      })}
+                    </p>
                     <Link className="button" href={`/presentation-session/${id}/report`}>
                       {t("live.presentationSession.openReport")}
                     </Link>

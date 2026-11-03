@@ -410,9 +410,17 @@ export async function registerCanvasBoardRoutes(
         const observation = observations.get(request);
         if (observation) observation.action = input.command.type;
         if (input.command.type === "grant") await sharing(request, actor.userId, id);
-        if (input.command.type === "workshop" && input.command.command.type === "collect") {
+        if (
+          input.command.type === "workshop" &&
+          ["collect", "reopen"].includes(input.command.command.type)
+        ) {
           const board = await freshBoard(request, actor.userId, id);
-          if (board.sourceBoard?.status === "draft") {
+          if (
+            board.sourceBoard?.status === "draft" ||
+            (input.command.command.type === "reopen" &&
+              board.sourceBoard?.status === "closed" &&
+              (input.command.command.roundNumber ?? 1) === board.sourceBoard.roundNumber)
+          ) {
             await requireFeature(board.workspaceId, "ideaBoards");
             if (!(await deps.repository.getOperationalFeatures()).sessionCreation)
               throw new CanvasBoardError(

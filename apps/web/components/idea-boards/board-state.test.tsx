@@ -1,6 +1,7 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as IdeaBoardClientModule from "../../lib/idea-board-client";
+import type { IdeaBoardGuestView } from "@openround/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "../../lib/api";
@@ -8,7 +9,9 @@ import { boardFixture, boardGuestFixture, boardId } from "../../test-utils/idea-
 import english from "../../lib/i18n/domains/idea-boards/en-CA";
 import { BoardHost } from "./board-host";
 import { BoardGuest } from "./board-guest";
-import { IdeaComposer, type IdeaDraft } from "./idea-composer";
+import { emptyIdeaDraft, IdeaComposer, type IdeaDraft } from "./idea-composer";
+import { IdeaBoardIdeas } from "./idea-list";
+import { PublishedWorkshopCanvas } from "../canvas-boards/workshop-canvas-bridge";
 
 interface Hooks {
   cursor: number;
@@ -22,6 +25,7 @@ const fixtures = vi.hoisted(() => ({
   guestRead: vi.fn(),
   command: vi.fn(),
   submitIdea: vi.fn(),
+  submitVotes: vi.fn(),
   uploadImage: vi.fn(),
 }));
 vi.mock("react", async (importOriginal) => {
@@ -79,6 +83,7 @@ vi.mock("../../lib/idea-board-client", async (importOriginal) => ({
   fetchGuestIdeaBoard: fixtures.guestRead,
   commandIdeaBoard: fixtures.command,
   submitBoardIdea: fixtures.submitIdea,
+  submitBoardVotes: fixtures.submitVotes,
   uploadIdeaBoardImage: fixtures.uploadImage,
 }));
 
@@ -144,6 +149,110 @@ afterEach(() => {
 });
 
 describe("idea board async state", () => {
+  it("defaults desktop participation open, keeps its draft mounted, and respects explicit collapse", async () => {
+    Object.assign(window, { innerWidth: 1280, matchMedia: () => ({ matches: true }) });
+    fixtures.publicRead.mockResolvedValue(boardFixture);
+    fixtures.guestRead.mockResolvedValue(boardGuestFixture);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    const availability = view.find((element) => element.type === PublishedWorkshopCanvas).props
+      .onAvailabilityChange as (available: boolean) => void;
+    availability(true);
+    view.render();
+    expect(view.find((element) => element.type === "main").props["data-canvas"]).toBe(true);
+    expect(view.find((element) => element.type === "aside").props.hidden).toBe(false);
+    const trigger = view.find(
+      (element) =>
+        element.type === "button" &&
+        element.props["aria-label"] ===
+          "Your participation Submit idea — Close participation panel",
+    );
+    const focus = vi.fn();
+    (trigger.props.ref as { current: unknown }).current = { focus };
+    const draft = { ...emptyIdeaDraft(), body: "Private draft that survives closing the panel" };
+    (
+      view.find((element) => element.type === IdeaComposer).props.onChange as (
+        draft: IdeaDraft,
+      ) => void
+    )(draft);
+    view.render();
+    (
+      view.find(
+        (element) =>
+          element.type === "button" &&
+          element.props["aria-label"] ===
+            "Your participation Submit idea — Close participation panel",
+      ).props.onClick as () => void
+    )();
+    view.render();
+    expect(view.find((element) => element.type === "aside").props.hidden).toBe(true);
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(fixtures.submitIdea).not.toHaveBeenCalled();
+    availability(false);
+    view.render();
+    availability(true);
+    view.render();
+    expect(view.find((element) => element.type === "aside").props.hidden).toBe(true);
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+    view.unmount();
+  });
+  it("keeps focused mobile intake visible when the first published canvas arrives", async () => {
+    Object.assign(window, { innerWidth: 390, matchMedia: () => ({ matches: false }) });
+    const input = { value: "An idea being composed" };
+    vi.stubGlobal("document", { activeElement: input });
+    fixtures.publicRead.mockResolvedValue(boardFixture);
+    fixtures.guestRead.mockResolvedValue(boardGuestFixture);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    (view.find((element) => element.type === "aside").props.ref as { current: unknown }).current = {
+      contains: (node: unknown) => node === input,
+    };
+    (
+      view.find((element) => element.type === PublishedWorkshopCanvas).props
+        .onAvailabilityChange as (available: boolean) => void
+    )(true);
+    view.render();
+    expect(view.find((element) => element.type === "aside").props.hidden).toBe(false);
+    expect(view.find((element) => element.type === "aside").props.inert).toBe(false);
+    expect(document.activeElement).toBe(input);
+    view.unmount();
+  });
+  it("offers a visible named participation action and phase cue when mobile intake starts collapsed", async () => {
+    Object.assign(window, { innerWidth: 320, matchMedia: () => ({ matches: false }) });
+    fixtures.publicRead.mockResolvedValue(boardFixture);
+    fixtures.guestRead.mockResolvedValue(boardGuestFixture);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    (
+      view.find((element) => element.type === PublishedWorkshopCanvas).props
+        .onAvailabilityChange as (available: boolean) => void
+    )(true);
+    view.render();
+    expect(view.find((element) => element.type === "aside").props.hidden).toBe(true);
+    const trigger = view.find(
+      (element) =>
+        element.type === "button" &&
+        element.props["aria-label"] === "Your participation Submit idea — Open participation panel",
+    );
+    const markup = renderToStaticMarkup(trigger);
+    expect(markup).toContain("Your participation");
+    expect(markup).toContain("Submit idea");
+    expect(trigger.props["aria-expanded"]).toBe(false);
+    (trigger.props.onClick as () => void)();
+    view.render();
+    expect(view.find((element) => element.type === "aside").props.hidden).toBe(false);
+    view.unmount();
+  });
   it.each([
     { name: "a server failure", failure: new ApiClientError("Try again", "INTERNAL_ERROR", 503) },
     { name: "an unknown network outcome", failure: new TypeError("Connection lost") },
@@ -210,6 +319,7 @@ describe("idea board async state", () => {
     const expectedInput = {
       schemaVersion: 1,
       idempotencyKey: originalInput.idempotencyKey,
+      roundNumber: boardGuestFixture.board.roundNumber,
       ...expectedDraft,
       body: expectedDraft.body.trim(),
     };
@@ -248,6 +358,173 @@ describe("idea board async state", () => {
       links: [],
       sketch: null,
     });
+    view.unmount();
+  });
+
+  it("keeps the private draft across a reopened round and ignores a late old idea receipt", async () => {
+    const first = {
+      ...boardGuestFixture,
+      board: { ...boardGuestFixture.board, roundNumber: 1, revision: 3 },
+      hasVoted: false,
+    };
+    const second = {
+      ...boardGuestFixture,
+      revision: 1,
+      hasVoted: false,
+      board: { ...boardGuestFixture.board, roundNumber: 2, revision: 5 },
+    };
+    fixtures.publicRead.mockResolvedValue(first.board);
+    fixtures.guestRead.mockResolvedValue(first);
+    let resolveOld!: (value: IdeaBoardGuestView) => void;
+    fixtures.submitIdea
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(second);
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    const draft = { ...emptyIdeaDraft(), body: "A private idea kept through reopening" };
+    (
+      view.find((element) => element.type === IdeaComposer).props.onChange as (
+        draft: IdeaDraft,
+      ) => void
+    )(draft);
+    view.render();
+    (view.find((element) => element.type === IdeaComposer).props.onSubmit as () => void)();
+    expect(fixtures.submitIdea.mock.calls[0]![2].roundNumber).toBe(1);
+    fixtures.publicRead.mockResolvedValue(second.board);
+    fixtures.guestRead.mockResolvedValue(second);
+    await vi.advanceTimersByTimeAsync(5_000);
+    view.render();
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+    resolveOld(first);
+    await settle();
+    expect(view.render()).not.toContain(english["boards.submitted"]);
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(draft);
+    (view.find((element) => element.type === IdeaComposer).props.onSubmit as () => void)();
+    await settle();
+    expect(fixtures.submitIdea.mock.calls[1]![2]).toMatchObject({
+      body: draft.body,
+      roundNumber: 2,
+    });
+    expect(fixtures.submitIdea.mock.calls[1]![2].idempotencyKey).not.toBe(
+      fixtures.submitIdea.mock.calls[0]![2].idempotencyKey,
+    );
+    view.unmount();
+  });
+
+  it("acknowledges an exact same-round idea receipt overtaken by a newer board poll", async () => {
+    const first = { ...boardGuestFixture, board: { ...boardGuestFixture.board, revision: 3 } };
+    const newer = { ...first, board: { ...first.board, revision: 4, title: "Newest board title" } };
+    fixtures.publicRead.mockResolvedValue(first.board);
+    fixtures.guestRead.mockResolvedValue(first);
+    let resolveReceipt!: (value: IdeaBoardGuestView) => void;
+    fixtures.submitIdea.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveReceipt = resolve;
+        }),
+    );
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    view.render();
+    (
+      view.find((element) => element.type === IdeaComposer).props.onChange as (
+        value: IdeaDraft,
+      ) => void
+    )({ ...emptyIdeaDraft(), body: "Known successful idea" });
+    view.render();
+    (view.find((element) => element.type === IdeaComposer).props.onSubmit as () => void)();
+    fixtures.publicRead.mockResolvedValue(newer.board);
+    fixtures.guestRead.mockResolvedValue(newer);
+    await vi.advanceTimersByTimeAsync(5_000);
+    view.render();
+    resolveReceipt(first);
+    await settle();
+    expect(view.render()).toContain("Newest board title");
+    expect(view.find((element) => element.type === IdeaComposer).props.value).toEqual(
+      emptyIdeaDraft(),
+    );
+    expect(view.find((element) => element.type === IdeaComposer).props.disabled).toBe(false);
+    expect(fixtures.submitIdea).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  it("allows a fresh ballot after reopening, retains current choices on poll, and rejects late old-round responses", async () => {
+    const first = {
+      ...boardGuestFixture,
+      revision: 1,
+      hasVoted: true,
+      votedIdeaIds: [boardFixture.ideas[0]!.id],
+      board: { ...boardGuestFixture.board, status: "closed" as const, roundNumber: 1, revision: 4 },
+    };
+    const second = {
+      ...boardGuestFixture,
+      revision: 2,
+      hasVoted: false,
+      board: { ...boardGuestFixture.board, status: "voting" as const, roundNumber: 2, revision: 7 },
+    };
+    fixtures.publicRead.mockResolvedValue(first.board);
+    fixtures.guestRead.mockResolvedValue(first);
+    let resolveOld!: (value: IdeaBoardGuestView) => void;
+    fixtures.submitVotes.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    const view = harness(() => BoardGuest({ id: boardId }));
+    view.render();
+    view.mount();
+    await settle();
+    expect(view.render()).toContain(english["boards.voteReceipt"]);
+    fixtures.publicRead.mockResolvedValue(second.board);
+    fixtures.guestRead.mockResolvedValue(second);
+    await vi.advanceTimersByTimeAsync(5_000);
+    view.render();
+    const ideaId = boardFixture.ideas[0]!.id;
+    (
+      view.find((element) => element.type === IdeaBoardIdeas).props.onSelect as (
+        id: string,
+        checked: boolean,
+      ) => void
+    )(ideaId, true);
+    fixtures.guestRead.mockResolvedValue({ ...second, revision: 3 });
+    await vi.advanceTimersByTimeAsync(5_000);
+    view.render();
+    expect(view.find((element) => element.type === IdeaBoardIdeas).props.selected).toEqual([
+      ideaId,
+    ]);
+    (view.find((element) => element.type === "form").props.onSubmit as (event: unknown) => void)({
+      preventDefault: vi.fn(),
+    });
+    expect(fixtures.submitVotes.mock.calls[0]![2]).toMatchObject({
+      expectedRevision: 3,
+      roundNumber: 2,
+      ideaIds: [ideaId],
+    });
+    const third = {
+      ...second,
+      revision: 4,
+      board: { ...second.board, roundNumber: 3, revision: 9 },
+    };
+    fixtures.publicRead.mockResolvedValue(third.board);
+    fixtures.guestRead.mockResolvedValue(third);
+    await vi.advanceTimersByTimeAsync(5_000);
+    view.render();
+    expect(view.find((element) => element.type === IdeaBoardIdeas).props.selected).toEqual([]);
+    resolveOld({ ...first, revision: 4, board: second.board });
+    await settle();
+    expect(view.render()).not.toContain(english["boards.voteReceipt"]);
+    expect(view.find((element) => element.type === IdeaBoardIdeas).props.selected).toEqual([]);
     view.unmount();
   });
 
@@ -328,7 +605,11 @@ describe("idea board async state", () => {
       await settle();
       expect(view.render()).toContain("Synthetic accessible idea");
       const refresh = view.find(
-        (element) => element.type === "button" && element.props.children === "Refresh",
+        (element) =>
+          element.type === "button" &&
+          (kind === "guest"
+            ? element.props["aria-label"] === "Refresh"
+            : element.props.children === "Refresh"),
       );
       (refresh.props.onClick as () => void)();
       await settle();

@@ -42,6 +42,46 @@ function fixture(facilitate = true) {
 }
 
 describe("canvas workshop controls", () => {
+  it("requires an approved idea before voting and directs the facilitator to moderation", () => {
+    const board = fixture();
+    board.sourceBoard!.ideas = board.sourceBoard!.ideas.map((idea) => ({
+      ...idea,
+      status: "pending",
+    }));
+    const html = renderToStaticMarkup(
+      <CanvasWorkshopControls board={board} onRefresh={() => {}} />,
+    );
+    const vote = html.match(/<button[^>]*>Start voting<\/button>/)?.[0] ?? "";
+    expect(vote).toContain('disabled=""');
+    expect(vote).toContain("aria-describedby=");
+    expect(html).toContain("Collect and approve at least one idea before starting voting.");
+    expect(html).toContain("Review pending ideas");
+    expect(html).toContain("Approve");
+  });
+  it("keeps opening collection available before any ideas exist", () => {
+    const board = fixture();
+    board.sourceBoard!.status = "draft";
+    board.sourceBoard!.ideas = [];
+    const html = renderToStaticMarkup(
+      <CanvasWorkshopControls board={board} onRefresh={() => {}} />,
+    );
+    const collect =
+      html.match(new RegExp(`<button[^>]*>${english["boards.collect"]}</button>`))?.[0] ?? "";
+    expect(collect).toContain(english["boards.collect"]);
+    expect(collect).not.toContain("disabled=");
+    expect(html).not.toContain("Start voting");
+  });
+  it("makes reopening discoverable after closing without losing historical results", () => {
+    const board = fixture();
+    board.sourceBoard!.status = "closed";
+    board.status = "frozen";
+    const html = renderToStaticMarkup(
+      <CanvasWorkshopControls board={board} onRefresh={() => {}} />,
+    );
+    expect(html).toContain("Reopen collection");
+    expect(html).toContain("Round 1");
+    expect(html).not.toContain("Start voting");
+  });
   it("reserves moderation and guest-card organization for facilitators", () => {
     const editor = renderToStaticMarkup(
       <CanvasWorkshopControls board={fixture(false)} onRefresh={() => {}} />,

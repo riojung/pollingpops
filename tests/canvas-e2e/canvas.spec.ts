@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Request } from "@playwright/test";
+import { CANVAS_SCHEMA_VERSION } from "../../packages/contracts/src/canvas-boards";
+import { guidedWorkshopCopy } from "../../apps/web/lib/i18n/guided-workshop-messages";
 import {
   account,
   canvasAction,
@@ -238,6 +240,7 @@ test("guided guests retain private intake and final ballots around the published
   browser,
 }, testInfo) => {
   test.setTimeout(180_000);
+  const copy = guidedWorkshopCopy("en-CA");
   await organization(owner, testInfo);
   const created = await owner.request.post(`${api}/v1/idea-boards`, {
     data: {
@@ -267,11 +270,18 @@ test("guided guests retain private intake and final ballots around the published
   const guest = await owner.context().newPage();
   const publicContext = await browser.newContext({ baseURL: web });
   const otherGuest = await publicContext.newPage();
-  const reads: Array<Promise<Record<string, string>>> = [];
-  guest.on("request", (request) => {
+  const reads: Array<Promise<{ headers: Record<string, string> | null; error: unknown }>> = [];
+  function captureGuestRequest(request: Request) {
     const path = new URL(request.url()).pathname;
-    if (/\/v1\/(idea-boards|canvas-boards)\//.test(path)) reads.push(request.allHeaders());
-  });
+    if (/\/v1\/(idea-boards|canvas-boards)\//.test(path))
+      reads.push(
+        request.allHeaders().then(
+          (headers) => ({ headers, error: null }),
+          (error: unknown) => ({ headers: null, error }),
+        ),
+      );
+  }
+  guest.on("request", captureGuestRequest);
   try {
     await guest.goto(`/board/${sourceId}`);
     await guest.getByRole("button", { name: "Join board", exact: true }).click();
@@ -298,6 +308,13 @@ test("guided guests retain private intake and final ballots around the published
       otherGuest.getByRole("region", { name: "Published canvas", exact: true }).first(),
     ).toContainText("A facilitator canvas instruction");
     await openInspector(owner, "Workshop controls");
+    const startVoting = owner.getByRole("button", { name: "Start voting", exact: true });
+    await expect(startVoting).toBeDisabled();
+    await expect(startVoting).toHaveAccessibleDescription(copy.votingNeedsApproved);
+    await owner.getByRole("button", { name: copy.reviewBeforeVoting, exact: true }).click();
+    await expect(
+      owner.getByRole("heading", { name: "Awaiting review", exact: true }),
+    ).toBeFocused();
     const pending = owner.getByRole("listitem").filter({ hasText: "A protected guest proposal" });
     await pending.getByRole("button", { name: "Approve", exact: true }).click();
     const published = otherGuest
@@ -339,14 +356,345 @@ test("guided guests retain private intake and final ballots around the published
     ).toBeVisible();
     await owner.getByRole("button", { name: "Close board", exact: true }).click();
     await expect(guest.getByText("1 votes", { exact: true })).toBeVisible();
-    for (const headers of await Promise.all(reads)) expect(headers.cookie).toBeUndefined();
+
+    const reopen = owner.getByRole("button", { name: copy.reopenCollection, exact: true });
+    const dialog = owner.getByRole("dialog", { name: copy.reopenTitle, exact: true });
+    await reopen.click();
+    await expect(
+      dialog.getByRole("combobox", { name: copy.reopenWindow, exact: true }),
+    ).toHaveValue("7");
+    await dialog.getByRole("combobox", { name: copy.reopenWindow, exact: true }).selectOption("1");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(reopen).toBeFocused();
+    expect((await snapshot(owner, id)).sourceBoard).toMatchObject({
+      status: "closed",
+      roundNumber: 1,
+    });
+
+    const reopenRequests: string[] = [];
+    await owner.route(`${api}/v1/canvas-boards/${id}/commands`, async (route) => {
+      const request = route.request();
+      const body = request.postDataJSON();
+      if (
+        request.method() === "POST" &&
+        body.command.type === "workshop" &&
+        body.command.command.type === "reopen"
+      ) {
+        reopenRequests.push(request.postData()!);
+        if (reopenRequests.length === 1) {
+          await route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            headers: {
+              "access-control-allow-origin": web,
+              "access-control-allow-credentials": "true",
+            },
+            body: JSON.stringify({
+              error: { code: "UNAVAILABLE", message: "Synthetic workshop outage" },
+            }),
+          });
+          return;
+        }
+      }
+      await route.continue();
+    });
+    await reopen.click();
+    const window = dialog.getByRole("combobox", { name: copy.reopenWindow, exact: true });
+    await expect(window).toHaveValue("7");
+    await dialog.getByRole("button", { name: copy.confirmReopen, exact: true }).click();
+    await expect(dialog.getByRole("alert")).toHaveText(copy.reopenError);
+    await expect(window).toBeDisabled();
+    expect((await snapshot(owner, id)).sourceBoard).toMatchObject({
+      status: "closed",
+      roundNumber: 1,
+    });
+    await dialog.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(reopenRequests).toHaveLength(2);
+    expect(reopenRequests[1]).toBe(reopenRequests[0]);
+    expect(JSON.parse(reopenRequests[0]!)).toMatchObject({
+      operationId: expect.any(String),
+      command: { type: "workshop", command: { type: "reopen", roundNumber: 1, windowDays: 7 } },
+    });
+    const reopened = (await snapshot(owner, id)).sourceBoard!;
+    expect(reopened).toMatchObject({
+      status: "collecting",
+      roundNumber: 2,
+      totalIdeas: 1,
+      roundHistory: [
+        { roundNumber: 1, ballotCount: 1, results: [{ ideaId: card.ideaId, voteCount: 1 }] },
+      ],
+    });
+    await expect(guest.getByText("Round 2", { exact: true })).toBeVisible();
+    await expect(guest.getByRole("textbox", { name: "Your idea", exact: true })).toBeVisible();
+    await expect(
+      guest.getByText("Your votes are saved. Your ballot cannot be changed.", { exact: true }),
+    ).toHaveCount(0);
+    const history = guest.locator("details").filter({
+      has: guest.locator("summary").filter({ hasText: copy.votingHistory }),
+    });
+    await history.locator("summary").click();
+    const firstRound = history.getByRole("article").filter({
+      has: guest.getByRole("heading", { name: "Round 1", exact: true }),
+    });
+    await expect(firstRound).toContainText("1 ballot");
+    await expect(
+      firstRound.getByRole("list", { name: copy.votingResults, exact: true }),
+    ).toContainText("A protected guest proposal");
+    await expect(firstRound.getByText("1 vote", { exact: true })).toBeVisible();
+
+    await startVoting.click();
+    const secondBallot = guest.getByRole("checkbox", {
+      name: "A protected guest proposal",
+      exact: true,
+    });
+    await expect(secondBallot).not.toBeChecked();
+    await secondBallot.check();
+    await guest.getByRole("button", { name: "Submit votes", exact: true }).click();
+    await expect(
+      guest.getByText("Your votes are saved. Your ballot cannot be changed.", { exact: true }),
+    ).toBeVisible();
+    await owner.getByRole("button", { name: "Close board", exact: true }).click();
+    await expect(guest.getByText("1 votes", { exact: true })).toBeVisible();
+    await expect(guest.getByText("2 votes", { exact: true })).toHaveCount(0);
+    await expect(firstRound).toContainText("1 ballot");
+    await expect(firstRound.getByText("1 vote", { exact: true })).toBeVisible();
+    expect((await snapshot(owner, id)).sourceBoard).toMatchObject({
+      roundNumber: 2,
+      ideas: [{ id: card.ideaId, voteCount: 1 }],
+      roundHistory: reopened.roundHistory,
+    });
     await owner
       .getByRole("button", { name: "Switch workspace and open workshop", exact: true })
       .click();
     await expect(owner).toHaveURL(`${web}/boards/${sourceId}`);
     await expect(owner.getByRole("button", { name: "Delete board", exact: true })).toBeVisible();
+    await expect(owner.getByText("Round 2", { exact: true })).toBeVisible();
+    await expect(owner.locator("summary").filter({ hasText: copy.votingHistory })).toBeVisible();
   } finally {
-    await publicContext.close();
+    guest.off("request", captureGuestRequest);
+    try {
+      for (const result of await Promise.all(reads)) {
+        expect(result.error, "Guest request headers remain readable before cleanup").toBeNull();
+        expect(result.headers!.cookie).toBeUndefined();
+      }
+    } finally {
+      await Promise.all([publicContext.close(), guest.close()]);
+    }
+  }
+});
+
+test("@mobile guided guest canvas fills the screen and preserves read-only navigation and private intake", async ({
+  page: owner,
+  browserName,
+}, testInfo) => {
+  const copy = guidedWorkshopCopy("en-CA");
+  await owner.emulateMedia({ reducedMotion: "reduce" });
+  await organization(owner, testInfo);
+  const created = await owner.request.post(`${api}/v1/idea-boards`, {
+    data: {
+      schemaVersion: 1,
+      idempotencyKey: randomUUID(),
+      title: "Mobile guided workshop",
+      moderationEnabled: true,
+      ideasVisible: true,
+      windowDays: 7,
+    },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const sourceId = (await created.json()).board.id as string;
+  await owner.goto(`/boards/${sourceId}`);
+  await owner.getByRole("button", { name: "Add canvas view", exact: true }).click();
+  await expect(owner).toHaveURL(/\/canvas\/[0-9a-f-]+$/);
+  const id = new URL(owner.url()).pathname.split("/").at(-1)!;
+  await openInspector(owner, "Workshop controls");
+  await owner.getByRole("button", { name: "Open collection", exact: true }).click();
+  const publicId = randomUUID();
+  const privateId = randomUUID();
+  const seeded = await owner.request.post(`${api}/v1/canvas-boards/${id}/commands`, {
+    data: {
+      schemaVersion: CANVAS_SCHEMA_VERSION,
+      operationId: randomUUID(),
+      command: {
+        type: "batch",
+        operations: [
+          {
+            type: "create",
+            object: {
+              id: publicId,
+              type: "sticky",
+              text: "Shared workshop map",
+              visibility: "published",
+              x: 100,
+              y: 100,
+              width: 240,
+              height: 180,
+            },
+          },
+          {
+            type: "create",
+            object: {
+              id: privateId,
+              type: "sticky",
+              text: "Private facilitator notes",
+              visibility: "team",
+              x: 600,
+              y: 100,
+              width: 240,
+              height: 180,
+            },
+          },
+        ],
+      },
+    },
+  });
+  expect(seeded.status(), await seeded.text()).toBe(200);
+  const objects = (await snapshot(owner, id)).objects;
+  const guest = await owner.context().newPage();
+  const canvasWrites: string[] = [];
+  guest.on("request", (request) => {
+    if (request.method() === "POST" && request.url() === `${api}/v1/canvas-boards/${id}/commands`)
+      canvasWrites.push(request.postData()!);
+  });
+  try {
+    await guest.setViewportSize({ width: 320, height: 844 });
+    await guest.goto(`/board/${sourceId}`);
+    await guest.getByRole("button", { name: "Join board", exact: true }).tap();
+    const canvas = guest.locator('section[aria-label="Published canvas"]');
+    const surface = canvas.getByTestId("canvas-surface");
+    const navigation = canvas.getByRole("toolbar", { name: copy.navigation, exact: true });
+    const panel = guest.getByRole("complementary", { name: copy.participantPanel, exact: true });
+    const panelTrigger = guest.getByRole("button", {
+      name: `${copy.participantPanel} Submit idea — ${copy.openParticipantPanel}`,
+      exact: true,
+    });
+    await expect(surface).toBeVisible();
+    await expect(panelTrigger).toHaveAttribute("aria-expanded", "false");
+    await expect(panelTrigger).toContainText(copy.participantPanel);
+    await expect(panel).toBeHidden();
+    await expect(guest.getByTestId(`canvas-object-${publicId}`)).toBeVisible();
+    await expect(guest.getByTestId(`canvas-object-${privateId}`)).toHaveCount(0);
+    await expect(guest.getByText("Private facilitator notes", { exact: true })).toHaveCount(0);
+    const fullCanvas = (await surface.boundingBox())!;
+    expect(fullCanvas.x).toBeCloseTo(0, 0);
+    expect(fullCanvas.width).toBe(320);
+    expect(fullCanvas.height).toBeGreaterThan(400);
+    await fits(guest);
+
+    const zoom = navigation.getByRole("button", { name: /^\d+% — Reset zoom$/ });
+    const initialZoom = await zoom.textContent();
+    await expect(zoom).toHaveAccessibleName(`${initialZoom} — ${copy.resetZoom}`);
+    await navigation.getByRole("button", { name: copy.zoomIn, exact: true }).tap();
+    await expect(zoom).not.toHaveText(initialZoom!);
+    await zoom.tap();
+    await expect(zoom).toHaveText("100%");
+    await expect(zoom).toHaveAccessibleName(`100% — ${copy.resetZoom}`);
+    const transform = surface.locator(":scope > g").first();
+    const beforePan = await transform.getAttribute("transform");
+    const x = fullCanvas.x + 90;
+    const y = fullCanvas.y + 100;
+    if (browserName === "chromium") {
+      const touch = await guest.context().newCDPSession(guest);
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x, y, id: 1 }],
+      });
+      try {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: x + 60, y: y + 30, id: 1 }],
+        });
+        await expect(transform).not.toHaveAttribute("transform", beforePan!);
+      } finally {
+        await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await touch.detach();
+      }
+    } else {
+      await guest.mouse.move(x, y);
+      await guest.mouse.down();
+      await guest.mouse.move(x + 60, y + 30, { steps: 4 });
+      await guest.mouse.up();
+      await expect(transform).not.toHaveAttribute("transform", beforePan!);
+    }
+    const afterPan = await transform.getAttribute("transform");
+    await surface.focus();
+    await surface.press("ArrowRight");
+    await expect(transform).not.toHaveAttribute("transform", afterPan!);
+
+    const outlineTrigger = navigation.getByRole("button", { name: "Object outline", exact: true });
+    await outlineTrigger.tap();
+    const outline = canvas.getByRole("complementary", { name: "Object outline", exact: true });
+    await expect(
+      outline.getByRole("heading", { name: "Object outline", exact: true }),
+    ).toBeFocused();
+    await expect(outline.getByRole("listitem")).toHaveCount(1);
+    const selected = outline.getByRole("button", {
+      name: "Select Shared workshop map",
+      exact: true,
+    });
+    await selected.tap();
+    await expect(selected).toHaveAttribute("aria-pressed", "true");
+    await navigation.getByRole("button", { name: copy.fitSelection, exact: true }).tap();
+    await expect(outline).toBeHidden();
+    await expect(outlineTrigger).toBeFocused();
+    await navigation.getByRole("button", { name: copy.focusMode, exact: true }).tap();
+    const focused = guest.getByRole("dialog", { name: "Published canvas", exact: true });
+    await expect(focused).toHaveAttribute("aria-modal", "true");
+    const focusBounds = (await focused.boundingBox())!;
+    expect(focusBounds).toEqual({ x: 0, y: 0, width: 320, height: 844 });
+    await navigation.getByRole("button", { name: copy.exitFocusMode, exact: true }).press("Tab");
+    await expect(surface).toBeFocused();
+    await surface.press("Shift+Tab");
+    await expect(
+      navigation.getByRole("button", { name: copy.exitFocusMode, exact: true }),
+    ).toBeFocused();
+    await guest.keyboard.press("Escape");
+    await expect(focused).toHaveCount(0);
+    await expect(
+      navigation.getByRole("button", { name: copy.focusMode, exact: true }),
+    ).toBeFocused();
+
+    await panelTrigger.tap();
+    await expect(
+      guest.getByRole("button", {
+        name: `${copy.participantPanel} Submit idea — ${copy.closeParticipantPanel}`,
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      panel.getByRole("heading", { name: copy.participantPanel, exact: true }),
+    ).toBeFocused();
+    const draft = panel.getByRole("textbox", { name: "Your idea", exact: true });
+    await draft.fill("A private draft survives canvas navigation");
+    await draft.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(panelTrigger).toBeFocused();
+    for (const mode of ["light", "dark"] as const) {
+      await guest.emulateMedia({ colorScheme: mode });
+      await expect(guest.locator("html")).toHaveAttribute("data-color-mode", mode);
+      await fits(guest);
+      await expect
+        .poll(async () => (await new AxeBuilder({ page: guest }).analyze()).violations)
+        .toEqual([]);
+      await guest.screenshot({ path: testInfo.outputPath(`guided-guest-${mode}-canvas.png`) });
+      await panelTrigger.tap();
+      await expect(draft).toHaveValue("A private draft survives canvas navigation");
+      await fits(guest);
+      await expect
+        .poll(async () => (await new AxeBuilder({ page: guest }).analyze()).violations)
+        .toEqual([]);
+      await guest.screenshot({
+        path: testInfo.outputPath(`guided-guest-${mode}-participation.png`),
+      });
+      await panel.getByRole("button", { name: copy.closeParticipantPanel, exact: true }).tap();
+      await expect(panelTrigger).toBeFocused();
+    }
+    await expect(guest.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
+    await expect(guest.getByRole("button", { name: "Start voting", exact: true })).toHaveCount(0);
+    expect(canvasWrites).toEqual([]);
+    expect((await snapshot(owner, id)).objects).toEqual(objects);
+  } finally {
     await guest.close();
   }
 });

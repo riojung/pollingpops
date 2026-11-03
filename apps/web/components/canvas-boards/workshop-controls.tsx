@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type {
   CanvasBoardMutation,
   CanvasBoardView,
@@ -11,6 +11,8 @@ import { clientUuid } from "../../lib/uuid";
 import { useLocale } from "../locale-provider";
 import { IdeaContent } from "../idea-boards/idea-content";
 import { canvasIntent, writeCanvas } from "./canvas-client";
+import { guidedWorkshopCopy } from "../../lib/i18n/guided-workshop-messages";
+import { WorkshopLifecycleControls, WorkshopRoundHistory } from "../idea-boards/workshop-lifecycle";
 import styles from "./workshop-controls.module.css";
 
 export function CanvasWorkshopControls({
@@ -22,17 +24,38 @@ export function CanvasWorkshopControls({
   onRefresh: () => void;
   disabled?: boolean;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = guidedWorkshopCopy(locale);
   const source = board.sourceBoard;
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState(false);
+  const [problem, setProblem] = useState<false | "approval" | "generic">(false);
   const [conflict, setConflict] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [renames, setRenames] = useState<Record<string, string>>({});
   const pending = useRef<{ boardId: string; operation: CanvasBoardMutation } | null>(null);
   const inFlight = useRef(false);
+  const pendingHeading = useRef<HTMLHeadingElement>(null);
+  const votingHintId = useId();
+  const roundNumber = source?.roundNumber ?? 1;
+  const activeScope = useRef("");
+  activeScope.current = `${board.id}:${roundNumber}`;
+  useEffect(() => {
+    const attempt = pending.current;
+    if (
+      attempt &&
+      (attempt.boardId !== board.id ||
+        (attempt.operation.command.type === "workshop" &&
+          (attempt.operation.command.command.roundNumber ?? 1) !== roundNumber))
+    ) {
+      pending.current = null;
+      setProblem(false);
+      setConflict(false);
+    }
+  }, [board.id, roundNumber]);
   if (!source || !board.capabilities.facilitate) return null;
   const collecting = source.status === "collecting";
+  const approved = source.ideas.filter((idea) => idea.status === "approved");
+  const awaitingReview = source.ideas.some((idea) => idea.status === "pending");
   const locked = busy || disabled || pending.current !== null;
 
   async function openOriginal() {
@@ -44,37 +67,58 @@ export function CanvasWorkshopControls({
       await apiFetch(`/v1/workspaces/${board.workspaceId}/select`, { method: "POST", body: "{}" });
       window.location.assign(`/boards/${source.id}`);
     } catch {
-      setProblem(true);
+      setProblem("generic");
       setBusy(false);
     }
   }
 
-  async function perform(command?: IdeaBoardHostCommand) {
-    if (!source || disabled || inFlight.current) return;
+  async function perform(command?: IdeaBoardHostCommand): Promise<boolean> {
+    if (!source || disabled || inFlight.current) return false;
+    if (command?.type === "start_voting" && !approved.length) {
+      setProblem("approval");
+      return false;
+    }
     if (pending.current?.boardId !== board.id) pending.current = null;
     if (!pending.current && command)
       pending.current = {
         boardId: board.id,
-        operation: canvasIntent({ type: "workshop", expectedRevision: source.revision, command }),
+        operation: canvasIntent({
+          type: "workshop",
+          expectedRevision: source.revision,
+          command: { ...command, roundNumber },
+        }),
       };
     const attempt = pending.current;
-    if (!attempt) return;
+    if (!attempt) return false;
+    const operationScope = activeScope.current;
     inFlight.current = true;
     setBusy(true);
     setProblem(false);
     setConflict(false);
     try {
       await writeCanvas(board.id, attempt.operation);
+      if (operationScope !== activeScope.current) return false;
       pending.current = null;
       setGroupName("");
       await onRefresh();
+      return true;
     } catch (error) {
-      setProblem(true);
+      if (operationScope !== activeScope.current) return false;
+      const intent = attempt.operation.command;
+      setProblem(
+        error instanceof ApiClientError &&
+          error.status === 422 &&
+          intent.type === "workshop" &&
+          intent.command.type === "start_voting"
+          ? "approval"
+          : "generic",
+      );
       const stale = error instanceof ApiClientError && error.status === 409;
       setConflict(stale);
       if (error instanceof ApiClientError && error.status < 500 && error.status !== 429)
         pending.current = null;
       await onRefresh();
+      return false;
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -101,9 +145,28 @@ export function CanvasWorkshopControls({
         </p>
       ) : null}
       <p className={styles.status}>{t(`boards.${source.status}`)}</p>
+      <WorkshopLifecycleControls
+        board={source}
+        canReopen
+        disabled={locked}
+        retentionDeadline={board.expiresAt}
+        onReopen={(windowDays) => perform({ type: "reopen", windowDays })}
+        onRetryReopen={
+          !busy &&
+          !disabled &&
+          pending.current?.operation.command.type === "workshop" &&
+          pending.current.operation.command.command.type === "reopen"
+            ? () => perform()
+            : undefined
+        }
+      />
       {problem ? (
         <div className="error" role="alert">
-          <p>{t(conflict ? "canvas.conflictHelp" : "boards.error")}</p>
+          <p>
+            {problem === "approval"
+              ? copy.approvalChanged
+              : t(conflict ? "canvas.conflictHelp" : "boards.error")}
+          </p>
           {pending.current ? (
             <button
               className="button-quiet"
@@ -144,7 +207,8 @@ export function CanvasWorkshopControls({
           <button
             className="button"
             type="button"
-            disabled={locked}
+            disabled={locked || !approved.length}
+            aria-describedby={!approved.length ? votingHintId : undefined}
             onClick={() => void perform({ type: "start_voting" })}
           >
             {t("boards.startVoting")}
@@ -161,6 +225,21 @@ export function CanvasWorkshopControls({
           </button>
         ) : null}
       </div>
+      {collecting && !approved.length ? (
+        <div className={styles.hint}>
+          <p id={votingHintId}>{copy.votingNeedsApproved}</p>
+          {awaitingReview ? (
+            <button
+              type="button"
+              className={styles.reviewLink}
+              onClick={() => pendingHeading.current?.focus()}
+            >
+              {copy.reviewBeforeVoting}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      <WorkshopRoundHistory board={source} />
       {collecting ? (
         <>
           <p>{t("boards.freezeNote")}</p>
@@ -176,7 +255,9 @@ export function CanvasWorkshopControls({
             {t("boards.visible")}
           </label>
           <section>
-            <h3>{t("boards.pending")}</h3>
+            <h3 ref={pendingHeading} tabIndex={-1}>
+              {t("boards.pending")}
+            </h3>
             {source.ideas.filter((idea) => idea.status === "pending").length === 0 ? (
               <p>{t("boards.noIdeas")}</p>
             ) : null}
@@ -292,6 +373,7 @@ export function CanvasWorkshopControls({
       ) : null}
       <section>
         <h3>{t("boards.approved")}</h3>
+        {!approved.length ? <p className={styles.hint}>{t("boards.noIdeas")}</p> : null}
         <ul className={styles.list}>
           {source.ideas
             .filter((idea) => idea.status === "approved")

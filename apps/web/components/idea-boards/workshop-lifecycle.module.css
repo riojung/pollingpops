@@ -1,0 +1,147 @@
+.lifecycle {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.round {
+  width: fit-content;
+  margin: 0;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+.lifecycle :focus-visible,
+.dialog :focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+.dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  border-radius: 20px;
+  padding: clamp(20px, 4vw, 30px);
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-lg);
+}
+.dialog::backdrop {
+  background: var(--ui-overlay);
+  backdrop-filter: blur(3px);
+}
+.dialog form {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.dialog h2,
+.dialog p {
+  margin: 0;
+  line-height: 1.5;
+}
+.dialog h2 {
+  line-height: 1.2;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+}
+.field {
+  display: grid;
+  gap: 0.5rem;
+  font-weight: 700;
+}
+.field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  padding: 0.6rem;
+  font: inherit;
+}
+.actions {
+  display: flex;
+  justify-content: end;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.actions button {
+  min-height: 44px;
+}
+.hint {
+  color: var(--ui-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.history {
+  min-width: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+.history summary {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0.85rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 750;
+  color: var(--ui-text-strong);
+}
+.history summary span {
+  margin-inline-start: 0.5rem;
+  color: var(--ui-text-muted);
+}
+.rounds {
+  display: grid;
+  gap: 1rem;
+  padding: 0 0.85rem 0.85rem;
+}
+.previousRound {
+  min-width: 0;
+}
+.previousRound h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.previousRound p {
+  margin: 0.35rem 0 0.65rem;
+}
+.results {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.results li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  border-top: 1px solid var(--ui-border);
+  padding-block: 0.6rem;
+  overflow-wrap: anywhere;
+}
+.results li > span {
+  flex: 1 1 140px;
+}
+.results strong {
+  font-size: 0.8rem;
+  color: var(--ui-accent-ink);
+}
+@media (max-width: 480px) {
+  .field select {
+    font-size: 16px;
+  }
+  .actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

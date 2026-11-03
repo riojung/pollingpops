@@ -250,7 +250,13 @@ export async function fetchIdeaBoardImage(
 export async function submitBoardVotes(
   id: string,
   token: string,
-  input: { schemaVersion: 1; idempotencyKey: string; expectedRevision: number; ideaIds: string[] },
+  input: {
+    schemaVersion: 1;
+    idempotencyKey: string;
+    expectedRevision: number;
+    ideaIds: string[];
+    roundNumber?: number;
+  },
   signal?: AbortSignal,
 ) {
   return IdeaBoardGuestViewSchema.parse(

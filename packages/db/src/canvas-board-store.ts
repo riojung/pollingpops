@@ -4,6 +4,7 @@ import {
   CanvasCommentThreadSchema,
   CanvasTimerSchema,
   CanvasVersionMetadataSchema,
+  IdeaBoardStoredSchema,
   type CanvasObject,
   type CanvasBoardEvent,
   type IdeaBoardStored,
@@ -330,8 +331,10 @@ export class MemoryCanvasBoards {
             ? { userId: user.userId, email: user.email }
             : null;
         },
-        source: async (id) =>
-          structuredClone(sources.get(id) ?? memoryIdeaBoardCanvasSource(this.repository, id)),
+        source: async (id) => {
+          const row = sources.get(id) ?? memoryIdeaBoardCanvasSource(this.repository, id);
+          return row ? IdeaBoardStoredSchema.parse(row) : null;
+        },
         putSource: async (row) => {
           sources.set(row.id, structuredClone(row));
         },
@@ -1281,7 +1284,7 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             `SELECT data FROM idea_boards WHERE id=$1${lock ? " FOR UPDATE" : " FOR SHARE"}`,
             [id],
           );
-          return result.rows[0]?.data ?? null;
+          return result.rows[0] ? IdeaBoardStoredSchema.parse(result.rows[0].data) : null;
         },
         putSource: async (row) => {
           await client.query("UPDATE idea_boards SET data=$2 WHERE id=$1", [row.id, row]);

@@ -468,3 +468,23 @@
     justify-content: center;
   }
 }
+.workshopHint {
+  color: var(--ui-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.reviewLink {
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ui-accent-ink);
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.reviewLink:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}

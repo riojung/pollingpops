@@ -9,6 +9,9 @@ export const boardFixture: IdeaBoardView = {
   description: "What should we improve?",
   status: "collecting",
   revision: 1,
+  roundNumber: 1,
+  roundHistory: [],
+  roundHistoryIdeas: [],
   identityMode: "anonymous",
   moderationEnabled: true,
   voteBudget: 3,
@@ -38,4 +41,5 @@ export const boardGuestFixture: IdeaBoardGuestView = {
   ownIdeas: [],
   votedIdeaIds: [],
   revision: 0,
+  hasVoted: false,
 };

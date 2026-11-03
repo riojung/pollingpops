@@ -4,6 +4,7 @@ import {
   IDEA_BOARD_MAX_GROUPS,
   IDEA_BOARD_MAX_IDEAS,
   IDEA_BOARD_MAX_RECEIPTS,
+  IDEA_BOARD_MAX_ROUNDS,
   IdeaBoardAliasSchema,
   IdeaBoardBodySchema,
   IdeaBoardCreateSchema,
@@ -90,6 +91,17 @@ function collecting(row: IdeaBoardStored, now: Date) {
   if (row.status !== "collecting")
     throw new IdeaBoardError("VALIDATION_ERROR", "This action is available while collecting ideas");
 }
+function currentRound(row: IdeaBoardStored, supplied?: number) {
+  IdeaBoardVoteSchema.shape.roundNumber.parse(supplied);
+  if ((supplied ?? 1) !== row.roundNumber)
+    throw new IdeaBoardError(
+      "STALE_DRAFT",
+      "This workshop has started a new round. Refresh before continuing",
+    );
+}
+function votedInRound(row: IdeaBoardStored, guest: Guest) {
+  return (guest.votedRound ?? (guest.revision > 0 ? 1 : 0)) === row.roundNumber;
+}
 function guestFor(row: IdeaBoardStored, tokenHash: string): Guest {
   const guest = row.guests.find(
     (candidate) =>
@@ -105,7 +117,13 @@ function guestView(row: IdeaBoardStored, guest: Guest, now: Date): IdeaBoardGues
   const own = ideaBoardProjection(row, now, true).ideas.filter((idea) =>
     guest.ideaIds.includes(idea.id),
   );
-  return { board, ownIdeas: own, votedIdeaIds: [...guest.votedIdeaIds], revision: guest.revision };
+  return {
+    board,
+    ownIdeas: own,
+    votedIdeaIds: [...guest.votedIdeaIds],
+    revision: guest.revision,
+    hasVoted: votedInRound(row, guest),
+  };
 }
 function retry(row: IdeaBoardStored, owner: string, key: string, input: unknown) {
   const previous = row.receipts.find((receipt) => receipt.owner === owner && receipt.key === key);
@@ -226,6 +244,8 @@ export class IdeaBoardRepository {
         voteBudget: parsed.voteBudget,
         ideasVisible: parsed.ideasVisible,
         status: "draft",
+        roundNumber: 1,
+        roundHistory: [],
         revision: 0,
         participantLimit: settings.participantLimit,
         createdAt: now.toISOString(),
@@ -258,7 +278,11 @@ export class IdeaBoardRepository {
       const now = instant(clock);
       return rows
         .filter((row) => Date.parse(row.expiresAt) > now.getTime())
-        .map((row) => ({ ...ideaBoardProjection(row, now, moderator), ideas: [], groups: [] }));
+        .map((row) => ({
+          ...ideaBoardProjection({ ...row, roundHistory: [] }, now, moderator),
+          ideas: [],
+          groups: [],
+        }));
     });
   }
   getModerator(workspaceId: string, id: string, clock: Clock = () => new Date()) {
@@ -293,6 +317,7 @@ export class IdeaBoardRepository {
         status: view.status,
         closesAt: row.closesAt,
         expiresAt: row.expiresAt,
+        roundNumber: row.roundNumber,
       });
     });
   }
@@ -327,6 +352,7 @@ export class IdeaBoardRepository {
         revision: 0,
         ideaIds: [],
         votedIdeaIds: [],
+        votedRound: 0,
       };
       row.guests.push(guest);
       await tx.put(row);
@@ -348,6 +374,7 @@ export class IdeaBoardRepository {
     expectedRevision: number,
     key: string,
     clock: Clock,
+    reopenDeadline?: string,
   ) {
     const parsed = IdeaBoardHostCommandSchema.parse(command);
     validKey(key);
@@ -358,10 +385,49 @@ export class IdeaBoardRepository {
         input = { command: parsed, expectedRevision };
       const previous = retry(row, "host", key, input);
       if (previous) return { board: ideaBoardProjection(row, now, true), receipt: previous };
-      writable(row, now);
+      currentRound(row, parsed.roundNumber);
+      if (parsed.type !== "reopen") writable(row, now);
       if (row.revision !== expectedRevision)
         throw new IdeaBoardError("STALE_DRAFT", "This board changed. Refresh before continuing");
-      if (parsed.type === "collect") {
+      if (parsed.type === "reopen") {
+        if (row.status !== "closed" && Date.parse(row.closesAt) > now.getTime())
+          throw new IdeaBoardError("VALIDATION_ERROR", "Close this workshop before reopening it");
+        if (row.roundNumber >= IDEA_BOARD_MAX_ROUNDS)
+          throw new IdeaBoardError(
+            "ENTITLEMENT_LIMIT",
+            "This workshop has reached its 20-round limit",
+          );
+        const hardDeadline = Math.min(
+          Date.parse(row.expiresAt),
+          reopenDeadline === undefined ? Infinity : Date.parse(reopenDeadline),
+        );
+        if (!Number.isFinite(hardDeadline) || hardDeadline <= now.getTime())
+          throw new IdeaBoardError("ROOM_CLOSED", "This workshop's retention window has ended");
+        const ballots = row.guests.filter((guest) => votedInRound(row, guest));
+        row.roundHistory.push({
+          roundNumber: row.roundNumber,
+          closedAt:
+            row.closedAt ?? (Date.parse(row.closesAt) <= now.getTime() ? row.closesAt : null),
+          ballotCount: ballots.length,
+          results: row.ideas
+            .filter((idea) => idea.status === "approved")
+            .map((idea) => ({
+              ideaId: idea.id,
+              voteCount: ballots.filter((guest) => guest.votedIdeaIds.includes(idea.id)).length,
+            })),
+        });
+        row.roundNumber++;
+        row.status = "collecting";
+        row.closedAt = null;
+        row.closesAt = new Date(
+          Math.min(hardDeadline, now.getTime() + (parsed.windowDays ?? 7) * 86_400_000),
+        ).toISOString();
+        for (const guest of row.guests) {
+          guest.votedIdeaIds = [];
+          guest.votedRound = 0;
+          guest.revision++;
+        }
+      } else if (parsed.type === "collect") {
         if (row.status !== "draft")
           throw new IdeaBoardError("VALIDATION_ERROR", "Only draft boards can open collection");
         row.status = "collecting";
@@ -372,6 +438,7 @@ export class IdeaBoardRepository {
         row.status = "voting";
       } else if (parsed.type === "close") {
         row.status = "closed";
+        row.closedAt = now.toISOString();
       } else {
         collecting(row, now);
         if (parsed.type === "visibility") row.ideasVisible = parsed.visible;
@@ -436,6 +503,7 @@ export class IdeaBoardRepository {
     key: string,
     clock: Clock,
     rich: IdeaBoardRichContent = {},
+    roundNumber?: number,
   ) {
     const parsed = IdeaBoardBodySchema.parse(body);
     const content = ideaBoardRichContent(IdeaBoardRichContentSchema.parse(rich));
@@ -445,9 +513,10 @@ export class IdeaBoardRepository {
       let now = instant(clock);
       const row = found(locked, now),
         guest = guestFor(row, tokenHash),
-        input = { body: parsed, ...content };
+        input = { body: parsed, ...content, ...(roundNumber === undefined ? {} : { roundNumber }) };
       const previous = retry(row, guest.id, key, input);
       if (previous) return { ...guestView(row, guest, now), receipt: previous };
+      currentRound(row, roundNumber);
       collecting(row, now);
       for (const attachment of content.attachments ?? []) {
         const media = await boardMedia(tx, row, attachment.mediaId);
@@ -614,17 +683,28 @@ export class IdeaBoardRepository {
     expectedRevision: number,
     key: string,
     clock: Clock,
+    roundNumber?: number,
   ) {
-    const parsed = IdeaBoardVoteSchema.parse({ ideaIds, expectedRevision, idempotencyKey: key });
+    const parsed = IdeaBoardVoteSchema.parse({
+      ideaIds,
+      expectedRevision,
+      idempotencyKey: key,
+      ...(roundNumber === undefined ? {} : { roundNumber }),
+    });
     const ordered = [...parsed.ideaIds].sort();
     return this.run(null, id, async (tx) => {
       const locked = await tx.get(id);
       const now = instant(clock),
         row = found(locked, now),
         guest = guestFor(row, tokenHash),
-        input = { ideaIds: ordered, expectedRevision };
+        input = {
+          ideaIds: ordered,
+          expectedRevision,
+          ...(roundNumber === undefined ? {} : { roundNumber }),
+        };
       const previous = retry(row, guest.id, key, input);
       if (previous) return { ...guestView(row, guest, now), receipt: previous };
+      currentRound(row, roundNumber);
       writable(row, now);
       if (row.status !== "voting")
         throw new IdeaBoardError("VALIDATION_ERROR", "Voting is not open");
@@ -633,7 +713,7 @@ export class IdeaBoardRepository {
           "STALE_DRAFT",
           "Your saved ballot changed. Refresh before continuing",
         );
-      if (guest.revision > 0)
+      if (votedInRound(row, guest))
         throw new IdeaBoardError(
           "VALIDATION_ERROR",
           "Your final ballot has already been submitted",
@@ -650,6 +730,7 @@ export class IdeaBoardRepository {
           "Choose approved ideas within this board's vote budget",
         );
       guest.votedIdeaIds = ordered;
+      guest.votedRound = row.roundNumber;
       guest.revision++;
       const receipt = remember(row, guest.id, key, input, "vote.submit", guest.revision);
       await tx.put(row);

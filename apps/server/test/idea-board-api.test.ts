@@ -130,6 +130,130 @@ async function member(app: FastifyInstance, owner: Headers, role: "editor" | "vi
 }
 
 describe("independent idea board APIs", () => {
+  it("explains approval preconditions and reopens retained rounds with scoped authority and retry-safe guest fences", async () => {
+    const { app, headers, repository } = await fixture();
+    const { board } = await createBoard(app, headers);
+    await host(app, board.id, headers, { type: "collect" });
+    const guest = guestHeaders();
+    await join(app, board.id, guest);
+    const submit = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: guest,
+      payload: { body: "Private pending priority", idempotencyKey: randomUUID() },
+    });
+    const ideaId = submit.json().ownIdeas[0].id;
+    const current = await app.inject({ url: `/v1/idea-boards/${board.id}`, headers });
+    const blocked = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/commands`,
+      headers,
+      payload: {
+        command: { type: "start_voting" },
+        expectedRevision: current.json().board.revision,
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(blocked.statusCode).toBe(422);
+    expect(blocked.json().error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Approve at least one idea before voting",
+    });
+    await host(app, board.id, headers, { type: "moderate", ideaId, status: "approved" });
+    await host(app, board.id, headers, { type: "start_voting" });
+    const ballot = { ideaIds: [ideaId], expectedRevision: 0, idempotencyKey: randomUUID() };
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: `/v1/idea-boards/${board.id}/votes`,
+          headers: guest,
+          payload: ballot,
+        })
+      ).statusCode,
+    ).toBe(200);
+    const closed = await host(app, board.id, headers, { type: "close" });
+    const reopen = {
+      command: { type: "reopen", roundNumber: 1 },
+      expectedRevision: closed.board.revision,
+      idempotencyKey: randomUUID(),
+    };
+    const viewer = await member(app, headers, "viewer"),
+      outsider = await signIn(app, "reopen-outsider@example.com");
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/v1/idea-boards/${board.id}/commands`,
+          headers: viewer,
+          payload: reopen,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/v1/idea-boards/${board.id}/commands`,
+          headers: outsider,
+          payload: reopen,
+        })
+      ).statusCode,
+    ).toBe(404);
+    const opened = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/commands`,
+      headers,
+      payload: reopen,
+    });
+    expect(opened.statusCode, opened.body).toBe(200);
+    expect(opened.json().board).toMatchObject({
+      id: board.id,
+      roundNumber: 2,
+      status: "collecting",
+      roundHistory: [{ ballotCount: 1, results: [{ ideaId, voteCount: 1 }] }],
+    });
+    const publicInfo = await app.inject({ url: `/v1/idea-boards/${board.id}/public` });
+    expect(publicInfo.json().board.roundNumber).toBe(2);
+    expect(publicInfo.body).not.toContain("roundHistory");
+    const replay = await app.inject({
+      method: "PUT",
+      url: `/v1/idea-boards/${board.id}/votes`,
+      headers: guest,
+      payload: ballot,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ hasVoted: false, revision: 2, votedIdeaIds: [] });
+    const stale = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: guest,
+      payload: { body: "Delayed prior round", idempotencyKey: randomUUID() },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("STALE_DRAFT");
+    const fresh = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/ideas`,
+      headers: guest,
+      payload: { body: "Fresh private intake", idempotencyKey: randomUUID(), roundNumber: 2 },
+    });
+    expect(fresh.statusCode, fresh.body).toBe(200);
+    await createPlatformRepository(repository).saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { ideaBoards: { enabled: false, plans: ["free", "pro", "team"] } },
+    });
+    const retry = await app.inject({
+      method: "POST",
+      url: `/v1/idea-boards/${board.id}/commands`,
+      headers,
+      payload: reopen,
+    });
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json().receipt).toEqual(opened.json().receipt);
+    const count = await app.inject({ url: `/v1/idea-boards/${board.id}`, headers });
+    expect(count.json().board.roundHistory).toHaveLength(1);
+  });
   it.each(["userId", "workspaceId"] as const)(
     "rejects stale guided setup %s before looking up receipts or creating workshops",
     async (field) => {

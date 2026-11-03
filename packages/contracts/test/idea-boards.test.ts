@@ -8,6 +8,9 @@ import {
   IdeaBoardViewSchema,
   IdeaBoardStoredSchema,
   IdeaBoardSubmitSchema,
+  IdeaBoardGuestViewSchema,
+  IdeaBoardRoundStoredSchema,
+  ideaBoardProjection,
   IdeaBoardLinkSchema,
   IdeaBoardSketchSchema,
   ideaBoardRichContent,
@@ -48,7 +51,18 @@ describe("standalone idea board contracts", () => {
       false,
     );
     expect(IdeaBoardVoteSchema.safeParse({ ...ballot, expectedRevision: -1 }).success).toBe(false);
-    expect(IdeaBoardHostCommandSchema.safeParse({ type: "reopen" }).success).toBe(false);
+    expect(IdeaBoardHostCommandSchema.parse({ type: "reopen" })).toEqual({ type: "reopen" });
+    for (const extra of [
+      { windowDays: 0 },
+      { windowDays: 31 },
+      { roundNumber: 0 },
+      { roundNumber: 21 },
+      { resetIdeas: true },
+    ])
+      expect(IdeaBoardHostCommandSchema.safeParse({ type: "reopen", ...extra }).success).toBe(
+        false,
+      );
+    expect(IdeaBoardHostCommandSchema.parse({ type: "close" })).toEqual({ type: "close" });
     expect(
       IdeaBoardHostCommandSchema.safeParse({ type: "moderate", ideaId, status: "pending" }).success,
     ).toBe(false);
@@ -63,6 +77,88 @@ describe("standalone idea board contracts", () => {
   it("keeps public schemas strict and rejects unknown stored schema versions", () => {
     expect(IdeaBoardViewSchema.safeParse({ schemaVersion: 2 }).success).toBe(false);
     expect(IdeaBoardStoredSchema.safeParse({ schemaVersion: 2 }).success).toBe(false);
+  });
+  it("upcasts legacy rounds and ballots and exposes only redacted aggregate history", () => {
+    const ideaId = randomUUID(),
+      guestId = randomUUID(),
+      now = new Date().toISOString();
+    const stored = IdeaBoardStoredSchema.parse({
+      schemaVersion: 1,
+      id: randomUUID(),
+      workspaceId: randomUUID(),
+      title: "Legacy",
+      description: "",
+      identityMode: "anonymous",
+      moderationEnabled: true,
+      voteBudget: 3,
+      ideasVisible: false,
+      status: "closed",
+      closesAt: now,
+      expiresAt: now,
+      revision: 2,
+      participantLimit: 10,
+      createdAt: now,
+      creationKey: randomUUID(),
+      creationHash: "a".repeat(64),
+      groups: [],
+      ideas: [
+        {
+          id: ideaId,
+          body: null,
+          alias: null,
+          groupId: null,
+          status: "removed",
+          createdAt: now,
+          guestId,
+        },
+      ],
+      guests: [],
+      receipts: [],
+    });
+    expect(stored.roundNumber).toBe(1);
+    expect(stored.roundHistory).toEqual([]);
+    const legacy = IdeaBoardGuestViewSchema.parse({
+      board: ideaBoardProjection(stored, new Date()),
+      ownIdeas: [],
+      votedIdeaIds: [ideaId],
+      revision: 1,
+    });
+    expect(legacy.hasVoted).toBe(true);
+    const next = IdeaBoardGuestViewSchema.parse({
+      ...legacy,
+      hasVoted: undefined,
+      board: { ...legacy.board, roundNumber: 2 },
+      revision: 2,
+    });
+    expect(next.hasVoted).toBe(false);
+    stored.roundNumber = 2;
+    stored.roundHistory = [
+      { roundNumber: 1, closedAt: now, ballotCount: 1, results: [{ ideaId, voteCount: 1 }] },
+    ];
+    expect(ideaBoardProjection(stored, new Date()).roundHistory[0]?.results).toEqual([
+      { ideaId, voteCount: 1 },
+    ]);
+    expect(ideaBoardProjection(stored, new Date()).roundHistoryIdeas).toEqual([
+      { ideaId, body: null },
+    ]);
+    stored.roundNumber = 20;
+    stored.roundHistory = Array.from({ length: 19 }, (_, index) => ({
+      roundNumber: index + 1,
+      closedAt: now,
+      ballotCount: 1,
+      results: [{ ideaId, voteCount: 1 }],
+    }));
+    expect(ideaBoardProjection(stored, new Date()).roundHistoryIdeas).toHaveLength(1);
+    expect(
+      IdeaBoardRoundStoredSchema.safeParse({ ...stored.roundHistory[0], tokenHash: "private" })
+        .success,
+    ).toBe(false);
+    expect(
+      IdeaBoardRoundStoredSchema.safeParse({
+        ...stored.roundHistory[0],
+        results: [{ ideaId, voteCount: 1, body: "Must not freeze removed content" }],
+      }).success,
+    ).toBe(false);
   });
   it("keeps legacy text payloads unchanged and permits bounded structured rich content", () => {
     const key = randomUUID();

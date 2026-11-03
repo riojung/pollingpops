@@ -22,6 +22,8 @@ import styles from "./boards.module.css";
 import { WorkshopCanvasLauncher } from "../canvas-boards/workshop-canvas-bridge";
 import { GuestInvitationDialog } from "./guest-invitation-dialog";
 import { canvasSharingMessages } from "../../lib/i18n/canvas-sharing-messages";
+import { guidedWorkshopCopy } from "../../lib/i18n/guided-workshop-messages";
+import { WorkshopLifecycleControls, WorkshopRoundHistory } from "./workshop-lifecycle";
 
 function BoardDeletionDialog({
   busy,
@@ -79,11 +81,14 @@ function BoardDeletionDialog({
 export function BoardHost({ id }: { id: string }) {
   const { t, locale } = useLocale();
   const sharingCopy = canvasSharingMessages(locale);
+  const workshopCopy = guidedWorkshopCopy(locale);
   const { creator, canEdit } = useWorkspace();
   const router = useRouter();
   const workspaceId = creator?.workspaceId;
   const [loaded, setLoaded] = useState<{ workspaceId: string; board: IdeaBoardView } | null>(null);
-  const [error, setError] = useState<false | "boards.error" | "boards.unavailable">(false);
+  const [error, setError] = useState<false | "boards.error" | "boards.unavailable" | "approval">(
+    false,
+  );
   const [notice, setNotice] = useState<
     "boards.saved" | "boards.copied" | "boards.copyFailed" | null
   >(null);
@@ -99,6 +104,19 @@ export function BoardHost({ id }: { id: string }) {
   const scope = useRef(workspaceId);
   scope.current = workspaceId;
   const board = loaded && loaded.workspaceId === workspaceId ? loaded.board : null;
+  const roundNumber = board?.roundNumber ?? 1;
+  const activeRound = useRef(roundNumber);
+  activeRound.current = roundNumber;
+  const pendingHeading = useRef<HTMLHeadingElement>(null);
+  const votingHintId = `board-voting-hint-${id}`;
+
+  useEffect(() => {
+    if (board && pending.current && (pending.current.command.roundNumber ?? 1) !== roundNumber) {
+      pending.current = null;
+      needsRebase.current = false;
+      setError(false);
+    }
+  }, [roundNumber, board]);
 
   useEffect(() => {
     const active = new AbortController();
@@ -156,28 +174,38 @@ export function BoardHost({ id }: { id: string }) {
       }
     }
   }
-  async function command(value?: IdeaBoardHostCommand) {
-    if (!board || !canEdit || !workspaceId || inFlight.current) return;
+  async function command(value?: IdeaBoardHostCommand): Promise<boolean> {
+    if (!board || !canEdit || !workspaceId || inFlight.current) return false;
+    if (value?.type === "start_voting" && !board.ideas.some((idea) => idea.status === "approved")) {
+      setError("approval");
+      return false;
+    }
+    if (pending.current && (pending.current.command.roundNumber ?? 1) !== roundNumber) {
+      pending.current = null;
+      needsRebase.current = false;
+      if (!value) return false;
+    }
     try {
       if (pending.current && needsRebase.current) {
         pending.current = ideaBoardCommandIntent(board.revision, pending.current.command);
         needsRebase.current = false;
       }
       if (!pending.current && value)
-        pending.current = ideaBoardCommandIntent(board.revision, value);
+        pending.current = ideaBoardCommandIntent(board.revision, { ...value, roundNumber });
     } catch {
       setError("boards.error");
-      return;
+      return false;
     }
-    if (!pending.current) return;
+    if (!pending.current) return false;
     const operation = pending.current;
+    const operationRound = operation.command.roundNumber ?? 1;
     inFlight.current = true;
     setBusy(true);
     setError(false);
     setNotice(null);
     try {
       const result = await commandIdeaBoard(id, operation, controller.current?.signal);
-      if (scope.current !== workspaceId || controller.current?.signal.aborted) return;
+      if (scope.current !== workspaceId || controller.current?.signal.aborted) return false;
       pending.current = null;
       needsRebase.current = false;
       setLoaded((previous) =>
@@ -187,14 +215,27 @@ export function BoardHost({ id }: { id: string }) {
       );
       setGroupName("");
       setNotice("boards.saved");
+      return true;
     } catch (caught) {
-      if (scope.current !== workspaceId || controller.current?.signal.aborted) return;
+      if (scope.current !== workspaceId || controller.current?.signal.aborted) return false;
+      if (operationRound !== activeRound.current) {
+        pending.current = null;
+        needsRebase.current = false;
+        return false;
+      }
       if (caught instanceof ApiClientError && caught.code === "STALE_DRAFT")
         needsRebase.current = true;
       else if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
         pending.current = null;
       await refresh();
-      setError("boards.error");
+      setError(
+        caught instanceof ApiClientError &&
+          caught.status === 422 &&
+          operation.command.type === "start_voting"
+          ? "approval"
+          : "boards.error",
+      );
+      return false;
     } finally {
       inFlight.current = false;
       if (scope.current === workspaceId) setBusy(false);
@@ -252,7 +293,7 @@ export function BoardHost({ id }: { id: string }) {
     >
       {error ? (
         <p className="error" role="alert">
-          {t(error)}{" "}
+          {error === "approval" ? workshopCopy.approvalChanged : t(error)}{" "}
           <button
             type="button"
             className="button-quiet"
@@ -314,6 +355,11 @@ export function BoardHost({ id }: { id: string }) {
                   type="button"
                   className="button"
                   disabled={locked || !board.ideas.some((idea) => idea.status === "approved")}
+                  aria-describedby={
+                    !board.ideas.some((idea) => idea.status === "approved")
+                      ? votingHintId
+                      : undefined
+                  }
                   onClick={() => void command({ type: "start_voting" })}
                 >
                   {t("boards.startVoting")}
@@ -330,6 +376,29 @@ export function BoardHost({ id }: { id: string }) {
                 </button>
               ) : null}
             </div>
+            <WorkshopLifecycleControls
+              board={board}
+              canReopen={canEdit}
+              disabled={locked}
+              onReopen={(windowDays) => command({ type: "reopen", windowDays })}
+              onRetryReopen={
+                !busy && pending.current?.command.type === "reopen" ? () => command() : undefined
+              }
+            />
+            {canEdit && collecting && !board.ideas.some((idea) => idea.status === "approved") ? (
+              <div className={styles.workshopHint}>
+                <p id={votingHintId}>{workshopCopy.votingNeedsApproved}</p>
+                {board.ideas.some((idea) => idea.status === "pending") ? (
+                  <button
+                    type="button"
+                    className={styles.reviewLink}
+                    onClick={() => pendingHeading.current?.focus()}
+                  >
+                    {workshopCopy.reviewBeforeVoting}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {collecting ? <p>{t("boards.freezeNote")}</p> : null}
             {canEdit && collecting ? (
               <label className={styles.check}>
@@ -348,6 +417,7 @@ export function BoardHost({ id }: { id: string }) {
               <p className={styles.muted}>{t("boards.countsHidden")}</p>
             ) : null}
           </section>
+          <WorkshopRoundHistory board={board} />
           {inviting && canEdit && board.status !== "closed" ? (
             <GuestInvitationDialog
               sourceBoardId={board.id}
@@ -358,7 +428,9 @@ export function BoardHost({ id }: { id: string }) {
           {canEdit && collecting ? (
             <div className={styles.layout}>
               <section className={styles.panel}>
-                <h2>{t("boards.pending")}</h2>
+                <h2 ref={pendingHeading} tabIndex={-1}>
+                  {t("boards.pending")}
+                </h2>
                 <p className={styles.muted}>{t("boards.removeNote")}</p>
                 <ul className={styles.list}>
                   {board.ideas

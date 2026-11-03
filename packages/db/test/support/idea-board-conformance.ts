@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { expect } from "vitest";
-import { IdeaBoardCreateSchema } from "@openround/contracts";
+import {
+  IdeaBoardCreateSchema,
+  IDEA_BOARD_MAX_ROUNDS,
+  type IdeaBoardHostCommand,
+} from "@openround/contracts";
 import {
   createIdeaBoardRepository,
   createPlatformRepository,
@@ -8,6 +12,164 @@ import {
 } from "../../src/index.js";
 
 export const ideaGuestHash = () => createHash("sha256").update(randomUUID()).digest("hex");
+export async function expectIdeaBoardRoundConformance(repository: Repository, workspaceId: string) {
+  const boards = createIdeaBoardRepository(repository),
+    now = new Date(),
+    token = ideaGuestHash(),
+    second = ideaGuestHash();
+  const board = await boards.create(
+    workspaceId,
+    randomUUID(),
+    IdeaBoardCreateSchema.parse({ title: "Reusable workshop" }),
+    randomUUID(),
+    {
+      participantLimit: 10,
+      closesAt: new Date(+now + 86_400_000).toISOString(),
+      expiresAt: new Date(+now + 2 * 86_400_000).toISOString(),
+    },
+    now,
+  );
+  const host = async (command: IdeaBoardHostCommand, key = randomUUID()) => {
+    const current = await boards.getModerator(workspaceId, board.id, now);
+    return boards.hostCommand(workspaceId, board.id, command, current.revision, key, now);
+  };
+  await host({ type: "collect" });
+  await boards.join(board.id, token, null, now);
+  await boards.join(board.id, second, null, now);
+  const submitKey = randomUUID();
+  const submitted = await boards.submitIdea(board.id, token, "Approved priority", submitKey, now);
+  const ideaId = submitted.ownIdeas[0]!.id;
+  await boards.submitIdea(board.id, second, "PRIVATE pending intake", randomUUID(), now);
+  await expect(host({ type: "start_voting" })).rejects.toMatchObject({
+    code: "VALIDATION_ERROR",
+    message: "Approve at least one idea before voting",
+  });
+  await host({ type: "moderate", ideaId, status: "approved" });
+  const groupId = randomUUID();
+  await host({ type: "group.create", id: groupId, name: "Retained group" });
+  await host({ type: "idea.group", ideaId, groupId });
+  await host({ type: "start_voting" });
+  const voteKey = randomUUID();
+  const voted = await boards.vote(board.id, token, [ideaId], 0, voteKey, now);
+  expect(voted.hasVoted).toBe(true);
+  const closed = (await host({ type: "close" })).board;
+  const reopenKey = randomUUID(),
+    reopen = { type: "reopen" as const };
+  const opened = await Promise.all([
+    boards.hostCommand(workspaceId, board.id, reopen, closed.revision, reopenKey, now),
+    boards.hostCommand(workspaceId, board.id, reopen, closed.revision, reopenKey, now),
+  ]);
+  expect(opened[0]?.receipt).toEqual(opened[1]?.receipt);
+  expect(opened[0]?.board).toMatchObject({
+    id: board.id,
+    status: "collecting",
+    roundNumber: 2,
+    expiresAt: board.expiresAt,
+    closesAt: board.expiresAt,
+    roundHistory: [
+      {
+        roundNumber: 1,
+        closedAt: now.toISOString(),
+        ballotCount: 1,
+        results: [{ ideaId, voteCount: 1 }],
+      },
+    ],
+    roundHistoryIdeas: [{ ideaId, body: "Approved priority" }],
+  });
+  expect(opened[0]?.board.groups).toEqual([{ id: groupId, name: "Retained group" }]);
+  const fresh = await boards.getGuest(board.id, token, now),
+    untouched = await boards.getGuest(board.id, second, now);
+  expect(fresh).toMatchObject({ revision: 2, hasVoted: false, votedIdeaIds: [] });
+  expect(untouched.revision).toBe(1);
+  expect(JSON.stringify(fresh.board.roundHistory)).not.toContain("PRIVATE pending intake");
+  expect(fresh.board.ideas).toEqual([]);
+  expect(fresh.ownIdeas[0]?.id).toBe(ideaId);
+  expect(
+    (await boards.submitIdea(board.id, token, "Approved priority", submitKey, now)).receipt,
+  ).toEqual(submitted.receipt);
+  expect(await boards.vote(board.id, token, [ideaId], 0, voteKey, now)).toMatchObject({
+    receipt: voted.receipt,
+    hasVoted: false,
+    votedIdeaIds: [],
+  });
+  await expect(
+    boards.submitIdea(board.id, token, "Late idea", randomUUID(), now),
+  ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+  await expect(host({ type: "close", roundNumber: 1 })).rejects.toMatchObject({
+    code: "STALE_DRAFT",
+  });
+  await expect(
+    boards.vote(board.id, token, [ideaId], fresh.revision, randomUUID(), now, 1),
+  ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+  await host({ type: "start_voting", roundNumber: 2 });
+  await expect(
+    boards.vote(board.id, token, [ideaId], voted.revision, randomUUID(), now, 2),
+  ).rejects.toMatchObject({ code: "STALE_DRAFT" });
+  const secondVote = await boards.vote(
+    board.id,
+    token,
+    [ideaId],
+    fresh.revision,
+    randomUUID(),
+    now,
+    2,
+  );
+  expect(secondVote).toMatchObject({ revision: 3, hasVoted: true });
+  await host({ type: "close", roundNumber: 2 });
+  await host({ type: "reopen", roundNumber: 2, windowDays: 1 });
+  await host({ type: "moderate", roundNumber: 3, ideaId, status: "removed" });
+  const removed = await boards.getGuest(board.id, token, now);
+  expect(removed.board.roundHistory.map((round) => round.results)).toEqual([
+    [{ ideaId, voteCount: 1 }],
+    [{ ideaId, voteCount: 1 }],
+  ]);
+  expect(removed.board.roundHistoryIdeas).toEqual([{ ideaId, body: null }]);
+  for (let round = 3; round <= IDEA_BOARD_MAX_ROUNDS; round++) {
+    await host({ type: "close", roundNumber: round });
+    if (round < IDEA_BOARD_MAX_ROUNDS) await host({ type: "reopen", roundNumber: round });
+  }
+  const capped = await boards.getModerator(workspaceId, board.id, now);
+  expect(capped.roundHistory).toHaveLength(19);
+  expect(capped.roundHistory.at(-1)?.ballotCount).toBe(0);
+  await expect(host({ type: "reopen", roundNumber: 20 })).rejects.toMatchObject({
+    code: "ENTITLEMENT_LIMIT",
+  });
+  expect(await boards.getModerator(workspaceId, board.id, now)).toEqual(capped);
+  await expect(
+    boards.hostCommand(
+      workspaceId,
+      board.id,
+      { type: "reopen", roundNumber: 20 },
+      capped.revision,
+      randomUUID(),
+      new Date(board.expiresAt),
+    ),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  const earlier = new Date(+now - 7_200_000),
+    deadline = new Date(+now - 3_600_000).toISOString();
+  const timed = await boards.create(
+    workspaceId,
+    randomUUID(),
+    IdeaBoardCreateSchema.parse({ title: "Deadline-closed round" }),
+    randomUUID(),
+    { participantLimit: 10, closesAt: deadline, expiresAt: board.expiresAt },
+    earlier,
+  );
+  await boards.hostCommand(workspaceId, timed.id, { type: "collect" }, 0, randomUUID(), earlier);
+  const renewed = await boards.hostCommand(
+    workspaceId,
+    timed.id,
+    { type: "reopen" },
+    1,
+    randomUUID(),
+    now,
+  );
+  expect(renewed.board).toMatchObject({
+    status: "collecting",
+    roundNumber: 2,
+    roundHistory: [{ closedAt: deadline, ballotCount: 0, results: [] }],
+  });
+}
 export async function expectIdeaBoardConformance(
   repository: Repository,
   workspaceId: string,

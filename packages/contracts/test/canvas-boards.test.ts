@@ -23,6 +23,30 @@ const object = () => ({
   text: "A manually written idea",
 });
 describe("typed canvas contracts", () => {
+  it("embeds round-fenced workshop reopen commands without normalizing legacy intents", () => {
+    const base = {
+      schemaVersion: 4,
+      operationId: randomUUID(),
+      command: {
+        type: "workshop",
+        expectedRevision: 8,
+        command: { type: "reopen", roundNumber: 2, windowDays: 7 },
+      },
+    };
+    expect(CanvasBoardMutationSchema.parse(base)).toEqual(base);
+    expect(
+      CanvasBoardMutationSchema.safeParse({
+        ...base,
+        command: { ...base.command, command: { type: "reopen", roundNumber: 21 } },
+      }).success,
+    ).toBe(false);
+    const legacy = {
+      schemaVersion: 1,
+      operationId: randomUUID(),
+      command: { type: "workshop", expectedRevision: 1, command: { type: "close" } },
+    };
+    expect(CanvasBoardMutationSchema.parse(legacy)).toEqual(legacy);
+  });
   it("keeps V1 request normalization unchanged and requires V2 for new object fields", () => {
     const v1 = {
       schemaVersion: 1,

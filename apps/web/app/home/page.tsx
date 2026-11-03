@@ -54,6 +54,7 @@ function HomeWorkspace() {
           productFeatures.surveys,
           productFeatures.ideaBoards,
           productFeatures.canvasBoards,
+          productFeatures.groups,
         ])
       : null;
   const { summary, loading, error, refresh: loadSummary } = useHomeSummary(contextKey);

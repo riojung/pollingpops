@@ -87,7 +87,7 @@ export async function registerHomeRoutes(
       groupList,
       surveyList,
       ideaBoardList,
-      canvasList,
+      canvasMetadata,
     ] = await Promise.all([
       repository.listQuizzes(creator.workspaceId),
       workspacePresentationsEnabled ? presentations.listPresentations(creator.workspaceId) : [],
@@ -113,15 +113,14 @@ export async function registerHomeRoutes(
       // Creation rollout flags do not revoke the canonical repositories' read access.
       surveys.list(creator.workspaceId),
       ideaBoards.list(creator.workspaceId, () => now, creator.role !== "viewer"),
-      canvasBoards.list(creator, { scope: "all" }, () => now),
+      canvasBoards.recentMetadata(
+        creator,
+        { workspaceId: creator.workspaceId, limit: RECENT_ARTIFACT_LIMIT },
+        () => now,
+      ),
     ]);
 
-    // A user's other owned workspaces are not part of this workspace's Home. Explicit direct
-    // or group grants remain discoverable through the same actor authorization as Boards.
-    const visibleCanvases = canvasList.filter(
-      (board) => board.workspaceId === creator.workspaceId || board.role !== "owner",
-    );
-    const attachedSources = new Set(visibleCanvases.map((board) => board.sourceBoardId));
+    const attachedSources = new Set(canvasMetadata.linkedSourceBoardIds);
     const standaloneIdeaBoards = ideaBoardList.filter((board) => !attachedSources.has(board.id));
 
     const recentSurveys = surveyList
@@ -160,7 +159,7 @@ export async function registerHomeRoutes(
         actionHref: `/boards/${board.id}`,
         actionLabel: "Open Board",
       })),
-      ...visibleCanvases.map((board) => ({
+      ...canvasMetadata.boards.map((board) => ({
         id: board.id,
         artifactType: "canvas" as const,
         boardType: board.boardType,
@@ -406,9 +405,9 @@ export async function registerHomeRoutes(
             presentationList.length +
             surveyList.length +
             standaloneIdeaBoards.length +
-            visibleCanvases.length,
+            canvasMetadata.total,
           surveys: surveyList.length,
-          boards: standaloneIdeaBoards.length + visibleCanvases.length,
+          boards: standaloneIdeaBoards.length + canvasMetadata.total,
           activeSessions:
             roundActiveSessionPage.items.length +
             presentationSessionList.filter((session) => session.status === "active").length,

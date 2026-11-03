@@ -10,7 +10,8 @@ describe("product feedback", () => {
     expect(markup).toContain('aria-label="Feedback"');
     expect(markup).toMatch(/title="[^"]+"/);
     expect(markup).toContain("<svg");
-    expect(markup.replace(/<[^>]+>/g, "").trim()).toBe("");
+    // The trigger contains SVG geometry only, with no visible label beside or inside it.
+    expect(markup).toMatch(/^<button[^>]*><svg[^>]*>(?:<path[^>]*><\/path>)+<\/svg><\/button>$/);
   });
   it("explains collection, protects sensitive data, and asks for optional follow-up consent", () => {
     const markup = renderToStaticMarkup(

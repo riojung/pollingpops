@@ -35,7 +35,6 @@ import {
   type CanvasFacilitationResponse,
   type CanvasBoardShareGroups,
   type CanvasBoardSharing,
-  type CanvasBoardGroupGrant,
 } from "@openround/contracts";
 import { MemoryRepository } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
@@ -59,7 +58,9 @@ import type {
   CanvasTransaction,
   CanvasSceneRead,
   CanvasHistoryHeads,
+  CanvasRecentMetadata,
 } from "./canvas-board-types.js";
+import { canvasBoardRole as roleFor, canvasMetadataRole } from "./canvas-metadata.js";
 
 import { CanvasBoardError } from "./canvas-board-error.js";
 import { canvasHistoryHeads } from "./canvas-snapshot.js";
@@ -108,27 +109,6 @@ function status(
     return "closed";
   if (source?.status === "voting") return "frozen";
   return board.status;
-}
-function roleFor(
-  state: Pick<CanvasSceneRead, "board" | "grants">,
-  actor: CanvasActor,
-  access: CanvasAccessContext,
-  groupGrants: CanvasBoardGroupGrant[] = [],
-): CanvasBoardRole | null {
-  if (
-    (state.board.ownerUserId === actor.userId && access.workspace.membership) ||
-    (access.workspace.ownerId === actor.userId && access.workspace.membership === "owner")
-  )
-    return "owner";
-  const ranks = { viewer: 1, editor: 2, facilitator: 3 };
-  const roles = [
-    ...state.grants.filter((grant) => grant.userId === actor.userId).map((grant) => grant.role),
-    ...groupGrants.map((grant) => grant.role),
-  ];
-  return roles.reduce<CanvasBoardRole | null>(
-    (best, role) => (!best || (best !== "owner" && ranks[role] > ranks[best]) ? role : best),
-    null,
-  );
 }
 function currentSeat(access: CanvasAccessContext, userId: string, now: Date) {
   if (access.organization?.licenseUnit !== "user") return true;
@@ -631,6 +611,52 @@ export class CanvasBoardRepository {
       return result;
     });
   }
+  recentMetadata(
+    actor: CanvasActor,
+    query: { workspaceId: string; limit: number },
+    clock: CanvasClock = () => new Date(),
+  ): Promise<CanvasRecentMetadata> {
+    assert(
+      Number.isInteger(query.limit) && query.limit >= 1 && query.limit <= 50,
+      "Choose up to 50 recent boards",
+    );
+    return this.run(actor, {}, async (tx) => {
+      const page = await tx.recentMetadata(
+        query.workspaceId,
+        actor.userId,
+        query.limit,
+        instant(clock),
+      );
+      const boards: CanvasRecentMetadata["boards"] = [];
+      for (const candidate of page.boards) {
+        try {
+          // Recheck only the bounded recent page against the same canonical metadata/seat
+          // policy used by list(). No current scene, source body or receipt is loaded.
+          const checked = await this.authorizedMetadata(tx, actor, candidate.id, clock, false);
+          const board = checked.board;
+          if (
+            board.status === "archived" ||
+            (board.workspaceId !== query.workspaceId && checked.authorization.role === "owner")
+          )
+            continue;
+          boards.push({
+            id: board.id,
+            workspaceId: board.workspaceId,
+            title: board.title,
+            boardType: board.boardType,
+            sourceBoardId: board.sourceBoardId,
+            updatedAt: board.updatedAt,
+            status: status(board, checked.source, instant(clock)),
+            role: checked.authorization.role,
+            capabilities: checked.authorization.capabilities,
+          });
+        } catch (error) {
+          if (!(error instanceof CanvasBoardError && error.code === "NOT_FOUND")) throw error;
+        }
+      }
+      return { ...page, boards };
+    });
+  }
   private async authorizedMetadata(
     tx: CanvasTransaction,
     actor: CanvasActor,
@@ -642,29 +668,14 @@ export class CanvasBoardRepository {
     if (!board) fail();
     const access = await tx.access(board.workspaceId, actor.userId);
     notExpired(board, instant(clock));
-    if (
-      !access?.user?.verified ||
-      access.workspaceDeleting ||
-      access.organization?.status !== "active" ||
-      access.workspace.status !== "active" ||
-      (!access.member &&
-        !(access.organization?.accountType === "personal" && access.workspace.membership))
-    )
-      fail();
     const grant = await tx.grant(id, actor.userId);
-    const role = roleFor(
+    const role = canvasMetadataRole(
       { board, grants: grant ? [grant] : [] },
       actor,
       access,
       await tx.groupRoles(id, actor.userId, lockGroups),
     );
-    if (!role || (access.member?.role === "billing" && role !== "viewer")) fail();
-    if (
-      access.organization?.licenseUnit === "user" &&
-      role !== "viewer" &&
-      !access.assignments.some((assignment) => assignment.userId === actor.userId)
-    )
-      fail();
+    if (!role || !access) fail();
     const source = board.sourceBoardId ? await tx.sourceMetadata(board.sourceBoardId) : null;
     if (
       board.sourceBoardId &&

@@ -62,6 +62,28 @@ export interface CanvasBoardStored {
   uploadCount: number;
   uploadBytes: number;
 }
+export type CanvasRecentBoardMetadata = Pick<
+  CanvasBoardView,
+  | "id"
+  | "workspaceId"
+  | "title"
+  | "boardType"
+  | "sourceBoardId"
+  | "status"
+  | "updatedAt"
+  | "role"
+  | "capabilities"
+>;
+export interface CanvasRecentMetadata {
+  boards: CanvasRecentBoardMetadata[];
+  total: number;
+  linkedSourceBoardIds: string[];
+}
+export interface CanvasRecentMetadataCandidates {
+  boards: CanvasBoardStored[];
+  total: number;
+  linkedSourceBoardIds: string[];
+}
 export interface CanvasReceipt {
   operationId: string;
   actorId: string;
@@ -163,6 +185,13 @@ export interface CanvasTransaction {
     | null
   >;
   list(): Promise<CanvasBoardStored[]>;
+  /** Actor-scoped count and bounded recent metadata; never reads scene or receipt rows. */
+  recentMetadata(
+    workspaceId: string,
+    userId: string,
+    limit: number,
+    now: Date,
+  ): Promise<CanvasRecentMetadataCandidates>;
   get(id: string, lock?: boolean): Promise<CanvasState | null>;
   snapshot(id: string, actorId: string): Promise<CanvasSnapshotRead | null>;
   put(state: CanvasState, insert?: boolean): Promise<void>;

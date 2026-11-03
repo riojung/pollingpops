@@ -31,23 +31,21 @@ async function cancelExit(page: Page, action: () => Promise<unknown>, editorUrl:
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Synthetic local work");
 }
 
-function exitLinks(page: Page, mobile: boolean): Locator[] {
+async function exitLinks(page: Page, mobile: boolean): Promise<Locator[]> {
   const nav = page.getByRole("navigation", {
     name: mobile ? "Workspace sections" : "Workspace",
     exact: true,
   });
+  await expect(nav).toBeVisible();
+  const visibleNavLinks = nav.getByRole("link").filter({ visible: true });
+  await expect(visibleNavLinks.first()).toBeVisible();
+  const navLinks = await visibleNavLinks.all();
+  expect(navLinks.length, "Workspace navigation must contain visible destinations").toBeGreaterThan(
+    0,
+  );
   return [
     page.getByRole("link", { name: "All Surveys", exact: true }),
-    ...[
-      "Home",
-      "Library",
-      "Sessions",
-      "Assignments",
-      "Results",
-      "Discover",
-      "Groups",
-      "Workspace",
-    ].map((name) => nav.getByRole("link", { name, exact: true })),
+    ...navLinks,
     page.locator(mobile ? "header .brand" : "aside .brand"),
     page.locator('header a[aria-label="Open account and workspace settings"]'),
     ...(!mobile
@@ -66,6 +64,11 @@ for (const surface of ["", "@mobile "]) {
   }) => {
     const id = await openSurvey(page);
     const editorUrl = page.url();
+    const account = await page.request.get(`${api}/v1/auth/me`);
+    expect(account.ok()).toBe(true);
+    const { productFeatures } = (await account.json()) as {
+      productFeatures: { ideaBoards?: boolean; canvasBoards?: boolean };
+    };
     // Freeze the browser timer so slow CI cannot accidentally complete the 700 ms
     // debounce before exercising each navigation surface.
     // Pin wall time first so transport latency cannot put the pause target in the past.
@@ -73,14 +76,30 @@ for (const surface of ["", "@mobile "]) {
     await page.clock.setFixedTime(pauseTime);
     await page.clock.pauseAt(pauseTime);
     await page.getByLabel("Title", { exact: true }).fill("Synthetic local work");
-    for (const link of exitLinks(page, Boolean(surface))) {
+    for (const link of await exitLinks(page, Boolean(surface))) {
       await expect(link).toBeVisible();
       await cancelExit(page, () => link.click(), editorUrl);
     }
-    await page.locator('summary[aria-label="Create"]').click();
-    for (const href of ["/create", "/create/presentation", "/surveys/new"])
-      await cancelExit(page, () => page.locator(`a[href="${href}"]`).click(), editorUrl);
-    await page.locator('summary[aria-label="Create"]').click();
+    const create = page.locator('summary[aria-label="Create"]');
+    const createMenu = page.locator("header details").filter({ has: create });
+    await create.click();
+    const creationLinks = [
+      { name: /^Round\b/, href: "/create?product=round" },
+      { name: /^Presentation\b/, href: "/create/presentation" },
+      { name: /^Survey\b/, href: "/surveys/new" },
+      ...(productFeatures.ideaBoards || productFeatures.canvasBoards
+        ? [{ name: /^Idea board\b/, href: "/boards?create=1" }]
+        : []),
+    ];
+    await expect(createMenu.getByRole("link")).toHaveCount(creationLinks.length);
+    for (const { name, href } of creationLinks) {
+      const link = createMenu.getByRole("link", { name });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("href", href);
+      await cancelExit(page, () => link.click(), editorUrl);
+      await expect(createMenu).toHaveJSProperty("open", true);
+    }
+    await create.click();
     expect((await storedSurvey(page, id)).draft.title).not.toBe("Synthetic local work");
 
     // Confirming discard navigates exactly once, rather than prompting on both
@@ -122,7 +141,7 @@ for (const surface of ["", "@mobile "]) {
       await expect(page.getByRole("main").getByRole("alert")).toContainText(
         "Synthetic save failure",
       );
-      for (const link of exitLinks(page, Boolean(surface)))
+      for (const link of await exitLinks(page, Boolean(surface)))
         await cancelExit(page, () => link.click(), editorUrl);
 
       const search = page.getByRole("searchbox", { name: "Search your workspace library" });

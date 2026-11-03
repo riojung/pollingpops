@@ -148,6 +148,59 @@ function createSummaryCanvas(
 }
 
 describe("Home workspace summary", () => {
+  it("uses bounded canvas metadata and deduplicates a linked workshop outside the recent page", async () => {
+    const f = await artifactFixture();
+    const { creator, cookie } = f.owner;
+    const now = Date.now();
+    const standalone = await createSummaryIdeaBoard(
+      f,
+      creator.workspaceId,
+      "Older standalone workshop",
+      new Date(now - 100_000),
+    );
+    const source = await createSummaryIdeaBoard(
+      f,
+      creator.workspaceId,
+      "Older linked source",
+      new Date(now - 90_000),
+    );
+    await createSummaryCanvas(f, creator, "Older linked canvas", source.id, new Date(now - 80_000));
+    const teams = [];
+    for (let index = 0; index < 7; index++)
+      teams.push(
+        await createSummaryCanvas(
+          f,
+          creator,
+          `Recent canvas ${index}`,
+          undefined,
+          new Date(now - (7 - index) * 10_000),
+        ),
+      );
+    const list = vi
+      .spyOn(f.canvasBoards, "list")
+      .mockRejectedValue(new Error("Home must not scan the Board library"));
+    const recent = vi.spyOn(f.canvasBoards, "recentMetadata");
+    const response = await f.app.inject({ url: "/v1/home/summary", headers: { cookie } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(list).not.toHaveBeenCalled();
+    expect(recent).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: creator.userId }),
+      { workspaceId: creator.workspaceId, limit: 6 },
+      expect.any(Function),
+    );
+    expect(response.json().recentBoards.map((board: { id: string }) => board.id)).toEqual(
+      teams
+        .slice(1)
+        .reverse()
+        .map((board) => board.id),
+    );
+    expect(response.json().totals).toMatchObject({ boards: 9, artifacts: 9 });
+    expect(response.body).not.toContain(source.title);
+    expect(response.json().recentBoards).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: standalone.id })]),
+    );
+  });
+
   it("includes retained Surveys and both Board modes when creation is paused, with distinct keys, real dates and deduplicated totals", async () => {
     const f = await artifactFixture();
     const { cookie, creator } = f.owner;

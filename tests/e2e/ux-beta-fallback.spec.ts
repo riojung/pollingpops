@@ -128,7 +128,17 @@ test("legacy authoring remains available while professional features are off", a
   await expect(legacyCard.getByRole("link", { name: "Rehearse" })).toHaveCount(0);
 
   await page.goto("/create");
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/create$/);
+  const creationFormats = page.getByRole("navigation", {
+    name: "What would you like to create?",
+    exact: true,
+  });
+  const legacyRound = creationFormats.getByRole("link", { name: /^Round\b/ });
+  await expect(legacyRound).toHaveAttribute("href", "/dashboard");
+  for (const name of ["Live quiz", "Live poll", "Custom Round"])
+    await expect(creationFormats.getByRole("heading", { name, exact: true })).toHaveCount(0);
+  await legacyRound.click();
+  await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByLabel("Checkpoint set title")).toBeVisible();
   await expect(page.getByRole("heading", { name: "How do you want to start?" })).toHaveCount(0);
 

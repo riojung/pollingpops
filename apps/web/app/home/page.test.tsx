@@ -394,6 +394,19 @@ describe("workspace Home", () => {
     expect(markup).not.toContain("0 objects");
   });
 
+  it("invalidates the summary after a Groups grant change with the same account and workspace", () => {
+    renderHome();
+    const disabledScope = mocked.contextKeys.at(-1);
+    mocked.productFeatures.groups = true;
+    renderHome();
+    const enabledScope = mocked.contextKeys.at(-1);
+    expect(enabledScope).not.toBeNull();
+    expect(enabledScope).not.toBe(disabledScope);
+    mocked.productFeatures.groups = false;
+    renderHome();
+    expect(mocked.contextKeys.at(-1)).toBe(disabledScope);
+  });
+
   it("changes the summary scope for user, workspace and account changes and blocks loading contexts", () => {
     renderHome();
     const initial = mocked.contextKeys.at(-1);

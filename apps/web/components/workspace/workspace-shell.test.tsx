@@ -415,14 +415,19 @@ describe("professional workspace shell", () => {
       expect(control).toContain(`aria-label="${label}"`);
       expect(control).toMatch(/title="[^"]+"/);
       expect(control).toContain("<svg");
-      expect(control.replace(/<[^>]+>/g, "").trim()).toBe("");
+      // Only decorative geometry may appear inside these icon-only links.
+      expect(control).toMatch(
+        /^<a[^>]*><svg[^>]*>(?:<path[^>]*><\/path>|<circle[^>]*><\/circle>)+<\/svg><\/a>$/,
+      );
     }
     const language =
       topbar.match(
         /<summary[^>]*aria-label="EN: Language: English \(Canada\)"[^>]*>[^]*?<\/summary>/,
       )?.[0] ?? "";
     expect(language).toContain("<svg");
-    expect(language.replace(/<[^>]+>/g, "").trim()).toBe("");
+    expect(language).toMatch(
+      /^<summary[^>]*><svg[^>]*><circle[^>]*><\/circle><path[^>]*><\/path><\/svg><\/summary>$/,
+    );
     expect(topbar).toContain('title="Language: English (Canada)"');
     expect(topbar).toMatch(/<summary[^>]*aria-label="Create"[^>]*>[^]*?<span>Create<\/span>/);
   });

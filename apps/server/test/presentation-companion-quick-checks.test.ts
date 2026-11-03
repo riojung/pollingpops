@@ -108,7 +108,11 @@ function publishedContent(linkedPurpose?: "diagnostic" | "practice"): Presentati
 }
 
 async function fixture(
-  options: { timeMode?: "timed" | "flex"; linkedPurpose?: "diagnostic" | "practice" } = {},
+  options: {
+    timeMode?: "timed" | "flex";
+    linkedPurpose?: "diagnostic" | "practice";
+    contentOnly?: boolean;
+  } = {},
 ) {
   const workspaceId = randomUUID();
   const userId = randomUUID();
@@ -133,7 +137,13 @@ async function fixture(
   const built = await buildApp(config, { repository, cache: new MemorySessionCache() });
   apps.push(built.app);
   const presentations = createPresentationRepository(repository);
-  const content = publishedContent(options.linkedPurpose);
+  const prepared = publishedContent(options.linkedPurpose);
+  const content = PresentationContentSchema.parse({
+    ...prepared,
+    blocks: options.contentOnly
+      ? prepared.blocks.filter((block) => block.kind === "content")
+      : prepared.blocks,
+  });
   const draft = PresentationDraftSchema.parse(content);
   const now = new Date();
   const presentation = await presentations.createPresentation({
@@ -253,6 +263,86 @@ async function expectNoMutation(
 }
 
 describe("Companion session-only Quick Checks", () => {
+  it.each(["timed", "flex"] as const)(
+    "keeps a content-only %s session unranked after a live Quick Check",
+    async (timeMode) => {
+      const f = await fixture({ timeMode, contentOnly: true });
+      await f.service.companionCommand(f.command());
+      const record = await f.current();
+      const block = record.content.blocks[0]!;
+      if (block.kind !== "question" || block.question.type !== "poll")
+        throw new Error("Expected poll");
+      const response = {
+        sessionId: f.sessionId,
+        participantToken: f.joined.participantToken,
+        blockId: block.id,
+        expectedRevision: record.revision,
+        idempotencyKey: randomUUID(),
+        response: { choiceIds: [block.question.choices[0]!.id] },
+      };
+      const answer = await f.service.submitResponse(response);
+      expect(answer.snapshot.standing).toBeNull();
+      for (const phase of ["question_open", "question_reveal", "content", "finished"] as const) {
+        const host = await f.service.sync({
+          sessionId: f.sessionId,
+          projection: "host",
+          controlToken: f.hosted.controlToken,
+        });
+        expect(host.snapshot.phase).toBe(phase);
+        expect(host.snapshot).not.toHaveProperty("competitionStandings");
+        const participant = await f.service.getParticipantSnapshot(
+          f.sessionId,
+          f.joined.participantToken,
+        );
+        expect(participant.snapshot.standing).toBeNull();
+        // Lost-ack retries use the targeted projection, including after the poll closes.
+        const retry = await f.service.submitResponse(response);
+        expect(retry).toMatchObject({ duplicate: true, snapshot: { standing: null } });
+        if (phase === "question_reveal") {
+          expect((await f.snapshot()).resultSummary).toMatchObject({
+            blockId: block.id,
+            responseCount: 1,
+            choiceCounts: block.question.choices.map((choice, index) => ({
+              choiceId: choice.id,
+              count: index === 0 ? 1 : 0,
+            })),
+          });
+        }
+        if (phase !== "finished") await f.advance();
+      }
+      for (const reportStatus of ["pending", "ready"] as const) {
+        if (reportStatus === "ready")
+          expect(await new PresentationReportWorker(f.sessions, 60_000).runOnce()).toBe(
+            "completed",
+          );
+        for (const includeQuickChecks of [false, true]) {
+          const result = await f.service.getReport(
+            f.workspaceId,
+            f.sessionId,
+            false,
+            includeQuickChecks,
+          );
+          expect(result).toMatchObject({
+            reportStatus,
+            report: { responseCount: 1, leaderboard: [], recovery: [] },
+          });
+          expect(result.report!.evidence[0]).toMatchObject({
+            kind: "question",
+            ...(includeQuickChecks ? { sessionOnly: "quick_check" } : {}),
+            respondents: 1,
+            correct: null,
+            accuracyPercent: null,
+            totalScore: 0,
+          });
+        }
+      }
+      expect((await f.current()).content.liveQuickCheck?.blockId).toBe(block.id);
+      expect(
+        (await f.presentations.getPresentationVersion(f.workspaceId, f.version.id))?.content,
+      ).toEqual(f.content);
+    },
+  );
+
   it.each(["timed", "flex"] as const)(
     "inserts a plain unscored poll with %s timing without Pack eligibility",
     async (timeMode) => {
@@ -637,6 +727,9 @@ describe("Companion session-only Quick Checks", () => {
       timeline: await f.sessions.listTimeline(f.sessionId),
     });
     expect(report.responseCount).toBe(3);
+    expect(report.leaderboard).toEqual([
+      expect.objectContaining({ id: f.joined.snapshot.participantId, rank: 1, score: 100 }),
+    ]);
     expect(report.schemaVersion).toBe(3);
     expect(() => PresentationReportV3Schema.parse(report)).not.toThrow();
     expect(report.evidence[0]).toMatchObject({

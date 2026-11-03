@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import type {
   CanvasBoardView,
   CanvasCommentThread,
@@ -11,10 +11,12 @@ import { useLocale } from "../locale-provider";
 import { useNavigationBlocker } from "../navigation-guard";
 import { formatDateTime } from "../../lib/i18n/format";
 import { canvasFacilitationCopy } from "../../lib/i18n/canvas-facilitation-messages";
+import { canvasFacilitationUiCopy } from "../../lib/i18n/canvas-facilitation-ui-messages";
 import { canvasObjectLabel } from "./canvas-model";
 import { useCanvasFacilitation } from "./use-canvas-facilitation";
 import { facilitationCommandAllowed, reviewFacilitationCommand } from "./canvas-facilitation-model";
-import { CanvasTimerDisplay } from "./canvas-timer";
+import { CanvasTimerControls, FacilitationIcon } from "./canvas-timer-controls";
+import { CanvasQuickTimer } from "./canvas-quick-timer";
 import { CanvasHistoryPreview } from "./canvas-history-preview";
 import type { CanvasPlan } from "./canvas-productivity";
 import styles from "./canvas-facilitation.module.css";
@@ -26,6 +28,10 @@ interface Props {
   onPlan: (plan: CanvasPlan) => Promise<boolean>;
   onRefresh?: () => void;
   onSelectObject?: (id: string) => void;
+  quickTimerOpen?: boolean;
+  onCloseQuickTimer?: () => void;
+  onOpenQuickTimer?: () => void;
+  quickTimerReturnFocusRef?: RefObject<HTMLElement | null>;
 }
 interface Draft {
   kind: "create" | "reply" | "edit";
@@ -46,11 +52,30 @@ function PanelContent({
   onPlan,
   onRefresh,
   onSelectObject,
+  quickTimerOpen = false,
+  onCloseQuickTimer,
+  onOpenQuickTimer,
+  quickTimerReturnFocusRef,
 }: Props) {
   const { locale } = useLocale();
   const copy = canvasFacilitationCopy(locale);
+  const ui = canvasFacilitationUiCopy(locale);
   const state = useCanvasFacilitation(board.id, board.canvasSeq);
   const view = state.view;
+  const observed = useRef({
+    serverNow: view?.serverNow,
+    revision: view?.timer.revision,
+    time: performance.now(),
+  });
+  if (
+    observed.current.serverNow !== view?.serverNow ||
+    observed.current.revision !== view?.timer.revision
+  )
+    observed.current = {
+      serverNow: view?.serverNow,
+      revision: view?.timer.revision,
+      time: performance.now(),
+    };
   const [tab, setTab] = useState<"comments" | "timer" | "versions">("comments");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [minutes, setMinutes] = useState(5);
@@ -161,22 +186,8 @@ function PanelContent({
       board.objects.some((object) => object.id === pendingCommand.objectId)),
   );
   const currentAnchor = draft && board.objects.find((object) => object.id === draft.objectId);
-  return (
-    <section className={styles.panel} aria-label={copy.title}>
-      <h2>{copy.title}</h2>
-      <div className={styles.tabs} role="group" aria-label={copy.title}>
-        {(["comments", "timer", "versions"] as const).map((value) => (
-          <button
-            type="button"
-            className="button-quiet"
-            key={value}
-            aria-pressed={tab === value}
-            onClick={() => setTab(value)}
-          >
-            {copy[value]}
-          </button>
-        ))}
-      </div>
+  const notices = (
+    <>
       {state.loading && !view ? <p role="status">{copy.loading}</p> : null}
       {state.error ? (
         <div className={styles.notice} role="alert">
@@ -230,328 +241,307 @@ function PanelContent({
           </div>
         </div>
       ) : null}
-      {tab === "comments" && view ? (
-        <>
-          {!view.capabilities.comment ? (
-            <p>{copy.readonly}</p>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="button-quiet"
-                disabled={
-                  blocked || Boolean(draft) || !selectedIds.length || view.threads.length >= 100
-                }
-                onClick={() => compose()}
-              >
-                {copy.newThread}
-              </button>
-              {!selectedIds.length ? <p className={styles.muted}>{copy.choose}</p> : null}
-            </>
-          )}
-          {!view.threads.length ? (
-            <p>{copy.empty}</p>
-          ) : (
-            <ol className={styles.list}>
-              {view.threads.map((thread) => {
-                const anchor = board.objects.find((object) => object.id === thread.objectId);
-                return (
-                  <li key={thread.id}>
-                    <article className={styles.thread} aria-labelledby={`thread-${thread.id}`}>
-                      <h3 id={`thread-${thread.id}`}>
-                        {anchor ? canvasObjectLabel(anchor, copy.comments) : copy.anchorGone}
-                      </h3>
-                      {anchor && onSelectObject ? (
-                        <button
-                          type="button"
-                          className="button-quiet"
-                          onClick={() => onSelectObject(anchor.id)}
-                        >
-                          {copy.preview}
-                        </button>
-                      ) : null}
-                      {thread.resolved ? <p>{copy.resolved}</p> : null}
-                      {thread.messages.map((message) => (
-                        <div key={message.id} className={styles.message}>
-                          <p className={styles.muted}>
-                            {message.authorId === view.actorId ? copy.you : copy.member} ·{" "}
-                            {formatDateTime(locale, message.updatedAt)}
-                          </p>
-                          <p dir="auto" lang="">
-                            {message.deleted ? copy.deleted : message.text}
-                          </p>
-                          {!message.deleted ? (
-                            <div className={styles.actions}>
-                              {view.capabilities.comment && message.authorId === view.actorId ? (
-                                <button
-                                  type="button"
-                                  className="button-quiet"
-                                  disabled={blocked || Boolean(draft)}
-                                  onClick={() => compose(thread, message.id)}
-                                >
-                                  {copy.edit}
-                                </button>
-                              ) : null}
-                              {(view.capabilities.comment && message.authorId === view.actorId) ||
-                              view.capabilities.moderateComments ? (
-                                <button
-                                  type="button"
-                                  className="button-quiet"
-                                  disabled={blocked || Boolean(draft)}
-                                  onClick={() =>
-                                    void commit({
-                                      type: "comment_delete",
-                                      threadId: thread.id,
-                                      expectedVersion: thread.version,
-                                      messageId: message.id,
-                                    })
-                                  }
-                                >
-                                  {copy.delete}
-                                </button>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                      <div className={styles.actions}>
-                        {view.capabilities.comment && !thread.resolved ? (
-                          <button
-                            type="button"
-                            className="button-quiet"
-                            disabled={blocked || Boolean(draft) || thread.messages.length >= 20}
-                            onClick={() => compose(thread)}
-                          >
-                            {copy.reply}
-                          </button>
-                        ) : null}
-                        {view.capabilities.moderateComments ? (
-                          <button
-                            type="button"
-                            className="button-quiet"
-                            disabled={blocked || Boolean(draft)}
-                            onClick={() =>
-                              void commit({
-                                type: "comment_resolve",
-                                threadId: thread.id,
-                                expectedVersion: thread.version,
-                                resolved: !thread.resolved,
-                              })
-                            }
-                          >
-                            {thread.resolved ? copy.reopen : copy.resolve}
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </>
-      ) : null}
-      {draft ? (
-        <form className={styles.form} onSubmit={(event) => void submit(event)}>
-          <h3>
-            {draft.kind === "edit"
-              ? copy.edit
-              : draft.kind === "reply"
-                ? copy.reply
-                : copy.newThread}
-          </h3>
-          {!currentAnchor ? (
-            <p role="status">{copy.anchorGone}</p>
-          ) : (
-            <p className={styles.muted}>{canvasObjectLabel(currentAnchor, copy.comments)}</p>
-          )}
-          <label>
-            {copy.draft}
-            <textarea
-              autoFocus
-              value={draft.text}
-              maxLength={2000}
-              readOnly={blocked || !view?.capabilities.comment || !currentAnchor}
-              onChange={(event) => setDraft({ ...draft, text: event.target.value })}
-            />
-          </label>
-          <div className={styles.actions}>
-            <button
-              type="submit"
-              className="button-quiet"
-              disabled={blocked || !draftCommand() || draft.text === draft.original}
-            >
-              {draft.kind === "edit" ? copy.save : copy.post}
-            </button>
+    </>
+  );
+  const timerControls = view ? (
+    <CanvasTimerControls
+      timer={view.timer}
+      serverNow={view.serverNow}
+      observedAt={observed.current.time}
+      minutes={minutes}
+      onMinutes={setMinutes}
+      canControl={view.capabilities.controlTimer}
+      disabled={blocked}
+      onCommand={(command) => void commit(command)}
+      onFloat={!quickTimerOpen ? onOpenQuickTimer : undefined}
+    />
+  ) : null;
+  return (
+    <>
+      <section className={styles.panel} aria-label={copy.title}>
+        <h2 className={styles.panelTitle}>{copy.title}</h2>
+        <div className={styles.tabs} role="group" aria-label={copy.title}>
+          {(["comments", "timer", "versions"] as const).map((value) => (
             <button
               type="button"
-              className="button-quiet"
-              disabled={state.saving}
-              onClick={() => {
-                state.discard();
-                setDraft(null);
-              }}
+              className={styles.tab}
+              key={value}
+              aria-label={copy[value]}
+              aria-pressed={tab === value}
+              onClick={() => setTab(value)}
             >
-              {copy.discard}
+              <FacilitationIcon name={value} />
+              <span>{copy[value]}</span>
             </button>
-          </div>
-        </form>
-      ) : null}
-      {tab === "timer" && view ? (
-        <>
-          <CanvasTimerDisplay timer={view.timer} serverNow={view.serverNow} />
-          <p className={styles.muted}>{copy.timerHelp}</p>
-          {view.capabilities.controlTimer ? (
-            <form
-              className={styles.form}
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!blocked)
-                  void commit({
-                    type: "timer_start",
-                    expectedRevision: view.timer.revision,
-                    durationSeconds: Math.round(minutes * 60),
-                  });
-              }}
-            >
-              <label>
-                {copy.duration}
-                <input
-                  type="number"
-                  min={1}
-                  max={120}
-                  step={1}
-                  value={minutes}
-                  disabled={blocked}
-                  onChange={(event) => setMinutes(event.currentTarget.valueAsNumber)}
-                />
-              </label>
-              <div className={styles.actions}>
-                <button
-                  type="submit"
-                  className="button-quiet"
-                  disabled={blocked || !Number.isFinite(minutes) || minutes < 1 || minutes > 120}
-                >
-                  {copy.start}
-                </button>
-                {view.timer.status === "running" ? (
-                  <button
-                    type="button"
-                    className="button-quiet"
-                    disabled={blocked}
-                    onClick={() =>
-                      void commit({ type: "timer_pause", expectedRevision: view.timer.revision })
-                    }
-                  >
-                    {copy.pause}
-                  </button>
-                ) : null}
-                {view.timer.status === "paused" ? (
-                  <button
-                    type="button"
-                    className="button-quiet"
-                    disabled={blocked}
-                    onClick={() =>
-                      void commit({ type: "timer_resume", expectedRevision: view.timer.revision })
-                    }
-                  >
-                    {copy.resume}
-                  </button>
-                ) : null}
+          ))}
+        </div>
+        {!quickTimerOpen ? notices : null}
+        {tab === "comments" && view ? (
+          <>
+            {!view.capabilities.comment ? (
+              <p>{copy.readonly}</p>
+            ) : (
+              <>
                 <button
                   type="button"
                   className="button-quiet"
-                  disabled={blocked || view.timer.status === "idle"}
-                  onClick={() =>
-                    void commit({ type: "timer_reset", expectedRevision: view.timer.revision })
+                  disabled={
+                    blocked || Boolean(draft) || !selectedIds.length || view.threads.length >= 100
                   }
+                  onClick={() => compose()}
                 >
-                  {copy.reset}
+                  {copy.newThread}
                 </button>
+                {!selectedIds.length ? <p className={styles.muted}>{copy.choose}</p> : null}
+              </>
+            )}
+            {!view.threads.length ? (
+              <div className={styles.emptyState}>
+                <FacilitationIcon name="comments" />
+                <h3>{ui.commentsEmpty}</h3>
+                <p>{copy.empty}</p>
               </div>
-            </form>
-          ) : null}
-        </>
-      ) : null}
-      {tab === "versions" && view ? (
-        <>
-          {view.capabilities.saveVersion ? (
-            <form
-              className={styles.form}
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!blocked && name.trim())
-                  void commit({ type: "version_create", versionId: clientUuid(), name });
-              }}
-            >
-              <label>
-                {copy.versionName}
-                <input
-                  value={name}
-                  maxLength={120}
-                  required
-                  disabled={blocked}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </label>
+            ) : (
+              <ol className={styles.list}>
+                {view.threads.map((thread) => {
+                  const anchor = board.objects.find((object) => object.id === thread.objectId);
+                  return (
+                    <li key={thread.id}>
+                      <article className={styles.thread} aria-labelledby={`thread-${thread.id}`}>
+                        <h3 id={`thread-${thread.id}`}>
+                          {anchor ? canvasObjectLabel(anchor, copy.comments) : copy.anchorGone}
+                        </h3>
+                        {anchor && onSelectObject ? (
+                          <button
+                            type="button"
+                            className="button-quiet"
+                            onClick={() => onSelectObject(anchor.id)}
+                          >
+                            {copy.preview}
+                          </button>
+                        ) : null}
+                        {thread.resolved ? (
+                          <p className={styles.resolved}>{copy.resolved}</p>
+                        ) : null}
+                        {thread.messages.map((message) => (
+                          <div key={message.id} className={styles.message}>
+                            <p className={styles.muted}>
+                              {message.authorId === view.actorId ? copy.you : copy.member} ·{" "}
+                              {formatDateTime(locale, message.updatedAt)}
+                            </p>
+                            <p dir="auto" lang="">
+                              {message.deleted ? copy.deleted : message.text}
+                            </p>
+                            {!message.deleted ? (
+                              <div className={styles.actions}>
+                                {view.capabilities.comment && message.authorId === view.actorId ? (
+                                  <button
+                                    type="button"
+                                    className="button-quiet"
+                                    disabled={blocked || Boolean(draft)}
+                                    onClick={() => compose(thread, message.id)}
+                                  >
+                                    {copy.edit}
+                                  </button>
+                                ) : null}
+                                {(view.capabilities.comment && message.authorId === view.actorId) ||
+                                view.capabilities.moderateComments ? (
+                                  <button
+                                    type="button"
+                                    className="button-quiet"
+                                    disabled={blocked || Boolean(draft)}
+                                    onClick={() =>
+                                      void commit({
+                                        type: "comment_delete",
+                                        threadId: thread.id,
+                                        expectedVersion: thread.version,
+                                        messageId: message.id,
+                                      })
+                                    }
+                                  >
+                                    {copy.delete}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                        <div className={styles.actions}>
+                          {view.capabilities.comment && !thread.resolved ? (
+                            <button
+                              type="button"
+                              className="button-quiet"
+                              disabled={blocked || Boolean(draft) || thread.messages.length >= 20}
+                              onClick={() => compose(thread)}
+                            >
+                              {copy.reply}
+                            </button>
+                          ) : null}
+                          {view.capabilities.moderateComments ? (
+                            <button
+                              type="button"
+                              className="button-quiet"
+                              disabled={blocked || Boolean(draft)}
+                              onClick={() =>
+                                void commit({
+                                  type: "comment_resolve",
+                                  threadId: thread.id,
+                                  expectedVersion: thread.version,
+                                  resolved: !thread.resolved,
+                                })
+                              }
+                            >
+                              {thread.resolved ? copy.reopen : copy.resolve}
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </>
+        ) : null}
+        {draft ? (
+          <form className={styles.form} onSubmit={(event) => void submit(event)}>
+            <h3>
+              {draft.kind === "edit"
+                ? copy.edit
+                : draft.kind === "reply"
+                  ? copy.reply
+                  : copy.newThread}
+            </h3>
+            {!currentAnchor ? (
+              <p role="status">{copy.anchorGone}</p>
+            ) : (
+              <p className={styles.muted}>{canvasObjectLabel(currentAnchor, copy.comments)}</p>
+            )}
+            <label>
+              {copy.draft}
+              <textarea
+                autoFocus
+                value={draft.text}
+                maxLength={2000}
+                readOnly={blocked || !view?.capabilities.comment || !currentAnchor}
+                onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+              />
+            </label>
+            <div className={styles.actions}>
               <button
                 type="submit"
                 className="button-quiet"
-                disabled={blocked || !name.trim() || view.versions.length >= 10}
+                disabled={blocked || !draftCommand() || draft.text === draft.original}
               >
-                {copy.saveVersion}
+                {draft.kind === "edit" ? copy.save : copy.post}
               </button>
-            </form>
-          ) : null}
-          {!view.versions.length ? (
-            <p>{copy.emptyVersions}</p>
-          ) : (
-            <ol className={styles.list}>
-              {view.versions.map((version) => (
-                <li className={styles.version} key={version.id}>
-                  <h3>{version.name}</h3>
-                  <p className={styles.muted}>{formatDateTime(locale, version.createdAt)}</p>
-                  <div className={styles.actions}>
-                    <button
-                      type="button"
-                      className="button-quiet"
-                      onClick={() => setPreview(version.id)}
-                    >
-                      {copy.preview}
-                    </button>
-                    {view.capabilities.deleteVersion ? (
+              <button
+                type="button"
+                className="button-quiet"
+                disabled={state.saving}
+                onClick={() => {
+                  state.discard();
+                  setDraft(null);
+                }}
+              >
+                {copy.discard}
+              </button>
+            </div>
+          </form>
+        ) : null}
+        {tab === "timer" && !quickTimerOpen ? timerControls : null}
+        {tab === "versions" && view ? (
+          <>
+            {view.capabilities.saveVersion ? (
+              <form
+                className={styles.form}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!blocked && name.trim())
+                    void commit({ type: "version_create", versionId: clientUuid(), name });
+                }}
+              >
+                <label>
+                  {copy.versionName}
+                  <input
+                    value={name}
+                    maxLength={120}
+                    required
+                    disabled={blocked}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="button-quiet"
+                  disabled={blocked || !name.trim() || view.versions.length >= 10}
+                >
+                  {copy.saveVersion}
+                </button>
+              </form>
+            ) : null}
+            {!view.versions.length ? (
+              <div className={styles.emptyState}>
+                <FacilitationIcon name="versions" />
+                <h3>{ui.versionsEmpty}</h3>
+                <p>{copy.emptyVersions}</p>
+              </div>
+            ) : (
+              <ol className={styles.list}>
+                {view.versions.map((version) => (
+                  <li className={styles.version} key={version.id}>
+                    <h3>{version.name}</h3>
+                    <p className={styles.muted}>{formatDateTime(locale, version.createdAt)}</p>
+                    <div className={styles.actions}>
                       <button
                         type="button"
                         className="button-quiet"
-                        disabled={blocked}
-                        onClick={() => {
-                          if (window.confirm(copy.confirmDelete))
-                            void commit({
-                              type: "version_delete",
-                              versionId: version.id,
-                              expectedVersion: version.version,
-                            });
-                        }}
+                        onClick={() => setPreview(version.id)}
                       >
-                        {copy.deleteVersion}
+                        {copy.preview}
                       </button>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-          {preview ? (
-            <CanvasHistoryPreview
-              board={board}
-              versionId={preview}
-              disabled={blocked || Boolean(draft) || Boolean(name.trim())}
-              onPlan={onPlan}
-              onClose={() => setPreview(null)}
-            />
-          ) : null}
-        </>
-      ) : null}
-    </section>
+                      {view.capabilities.deleteVersion ? (
+                        <button
+                          type="button"
+                          className="button-quiet"
+                          disabled={blocked}
+                          onClick={() => {
+                            if (window.confirm(copy.confirmDelete))
+                              void commit({
+                                type: "version_delete",
+                                versionId: version.id,
+                                expectedVersion: version.version,
+                              });
+                          }}
+                        >
+                          {copy.deleteVersion}
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {preview ? (
+              <CanvasHistoryPreview
+                board={board}
+                versionId={preview}
+                disabled={blocked || Boolean(draft) || Boolean(name.trim())}
+                onPlan={onPlan}
+                onClose={() => setPreview(null)}
+              />
+            ) : null}
+          </>
+        ) : null}
+      </section>
+      <CanvasQuickTimer
+        open={quickTimerOpen}
+        onClose={() => onCloseQuickTimer?.()}
+        returnFocusRef={quickTimerReturnFocusRef}
+      >
+        {notices}
+        {timerControls}
+      </CanvasQuickTimer>
+    </>
   );
 }

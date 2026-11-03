@@ -52,9 +52,19 @@ export function editableCanvasObject(object: CanvasObject, edit: boolean, facili
   return edit && !object.locked && (object.type !== "idea_ref" || facilitate);
 }
 const colorValues = CANVAS_FILL_COLORS;
+// Display ink belongs to the surface theme. Saved colors and export ink stay canonical.
+function displayLineColor(color: CanvasObject["color"]) {
+  return `var(--canvas-line-${color})`;
+}
+const displayLineColors = Object.fromEntries(
+  Object.keys(CANVAS_STROKE_COLORS).map((color) => [
+    color,
+    displayLineColor(color as CanvasObject["color"]),
+  ]),
+) as Record<CanvasObject["color"], string>;
 const lineColors = {
-  ...CANVAS_STROKE_COLORS,
-  neutral: "#697384",
+  ...displayLineColors,
+  neutral: "var(--canvas-line-neutral)",
   selected: "var(--ui-accent-ink)",
 };
 const fontFamilies = { sans: "Arial, sans-serif", serif: "Georgia, serif", mono: "monospace" };
@@ -705,6 +715,15 @@ export function CanvasSurface({
       <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
         {renderObjects.map((object) => {
           const selected = selection.includes(object.id);
+          const outline = selected
+            ? lineColors.selected
+            : object.type === "frame"
+              ? displayLineColor(object.color)
+              : object.type === "text" || object.type === "idea_ref"
+                ? "var(--canvas-panel-border)"
+                : object.color === "black"
+                  ? "var(--canvas-black-border)"
+                  : CANVAS_STROKE_COLORS[object.color];
           if (object.type === "connector") {
             const geometry = canvasConnectorGeometry(object, renderObjects);
             const label = canvasConnectorLabel(object.text, geometry.label, object.fontSize);
@@ -737,8 +756,8 @@ export function CanvasSurface({
                       width={label.width}
                       height={label.height}
                       rx={4}
-                      fill="#fff"
-                      stroke="#cdd4df"
+                      fill="var(--ui-surface-raised)"
+                      stroke="var(--canvas-panel-border)"
                     />
                     <text
                       fontSize={object.fontSize}
@@ -746,7 +765,7 @@ export function CanvasSurface({
                       fontWeight={object.fontWeight}
                       fontStyle={object.fontStyle}
                       textDecoration={object.textDecoration}
-                      fill="#252a33"
+                      fill="var(--ui-text-strong)"
                       pointerEvents="none"
                       aria-label={object.text}
                     >
@@ -789,7 +808,7 @@ export function CanvasSurface({
                 <polyline
                   points={object.points.map((pair) => pair.join(",")).join(" ")}
                   fill="none"
-                  stroke={CANVAS_STROKE_COLORS[object.color]}
+                  stroke={displayLineColor(object.color)}
                   strokeWidth={object.strokeWidth}
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -817,6 +836,8 @@ export function CanvasSurface({
                     width={16}
                     height={16}
                     fill="var(--ui-accent-ink)"
+                    stroke="var(--ui-surface)"
+                    strokeWidth={2}
                     className={styles.resizeHandle}
                   />
                 ) : null}
@@ -844,7 +865,7 @@ export function CanvasSurface({
                       : canvasDiagramShapePath(object.type, object.width, object.height)
                   }
                   fill={colorValues[object.color]}
-                  stroke={selected ? "var(--ui-accent-ink)" : CANVAS_STROKE_COLORS[object.color]}
+                  stroke={outline}
                   strokeWidth={object.strokeWidth}
                 />
               ) : object.type === "ellipse" ? (
@@ -854,7 +875,7 @@ export function CanvasSurface({
                   rx={object.width / 2}
                   ry={object.height / 2}
                   fill={colorValues[object.color]}
-                  stroke={selected ? "var(--ui-accent-ink)" : CANVAS_STROKE_COLORS[object.color]}
+                  stroke={outline}
                   strokeWidth={object.strokeWidth}
                 />
               ) : (
@@ -869,13 +890,7 @@ export function CanvasSurface({
                         ? "transparent"
                         : colorValues[object.color]
                   }
-                  stroke={
-                    selected
-                      ? "var(--ui-accent-ink)"
-                      : object.type === "text"
-                        ? "transparent"
-                        : CANVAS_STROKE_COLORS[object.color]
-                  }
+                  stroke={outline}
                   strokeWidth={object.strokeWidth}
                   strokeDasharray={object.type === "frame" ? "7 5" : undefined}
                 />
@@ -1057,6 +1072,7 @@ export function CanvasSurface({
                   height={16}
                   fill="var(--ui-accent-ink)"
                   stroke="var(--ui-surface)"
+                  strokeWidth={2}
                   className={styles.resizeHandle}
                 />
               ) : null}
@@ -1133,7 +1149,7 @@ export function CanvasSurface({
           <polyline
             points={stroke.map((point) => point.join(",")).join(" ")}
             fill="none"
-            stroke={CANVAS_STROKE_COLORS[penColor]}
+            stroke={displayLineColor(penColor)}
             strokeWidth={penWidth}
             opacity={penOpacity}
             strokeLinecap="round"

@@ -190,7 +190,7 @@ describe("V4 canvas rendering", () => {
         />,
       );
       expect(html).toContain(`fill="${CANVAS_FILL_COLORS[color]}"`);
-      expect(html).toContain(`stroke="${CANVAS_STROKE_COLORS[color]}"`);
+      expect(html).toContain(`stroke="var(--canvas-line-${color})"`);
       expect(html).toContain('stroke-width="12"');
       expect(html).toContain('opacity="0.35"');
       if (color === "black") expect(html).toContain("color:#ffffff");
@@ -240,6 +240,210 @@ function contrast(a: string, b: string) {
     second = luminance(b);
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
+function canvasTheme(mode: "light" | "dark") {
+  const theme = declarations(themeCss, mode === "dark" ? 'html[data-color-mode="dark"]' : ":root");
+  const tokens = {
+    ...theme,
+    ...declarations(surfaceCss, ".surface"),
+    ...(mode === "dark"
+      ? declarations(surfaceCss, ':global([data-color-mode="dark"]) .surface')
+      : {}),
+  };
+  function resolve(value: string): string {
+    const variable = value.match(/^var\((--[\w-]+)\)$/)?.[1];
+    return variable ? resolve(tokens[variable]!) : value;
+  }
+  return { theme, tokens, resolve };
+}
+
+describe("canvas display ink", () => {
+  const colors = Object.keys(CANVAS_FILL_COLORS) as (keyof typeof CANVAS_FILL_COLORS)[];
+
+  it.each(["light", "dark"] as const)(
+    "keeps all standalone color families and neutral lines visible on the %s canvas and panels",
+    (mode) => {
+      const { theme, tokens, resolve } = canvasTheme(mode);
+      expect(declarations(surfaceCss, ".surface").background).toBe("var(--ui-canvas)");
+      for (const color of [...colors, "neutral"]) {
+        const ink = resolve(tokens[`--canvas-line-${color}`]!);
+        for (const background of [
+          "--ui-canvas",
+          "--ui-surface",
+          "--ui-surface-soft",
+          "--ui-surface-raised",
+        ]) {
+          expect(
+            contrast(ink, theme[background]!),
+            `${color} on ${background}`,
+          ).toBeGreaterThanOrEqual(3);
+        }
+        if (mode === "light" && color !== "neutral")
+          expect(ink).toBe(CANVAS_STROKE_COLORS[color as keyof typeof CANVAS_STROKE_COLORS]);
+      }
+    },
+  );
+
+  it.each(colors)(
+    "uses the same themed %s ink for saved pen strokes, connector routes/arrowheads and frame boundaries",
+    (color) => {
+      const pen = CanvasObjectSchema.parse({
+        ...canvasObject,
+        type: "pen",
+        color,
+        points: [
+          [20, 30],
+          [100, 80],
+        ],
+      });
+      const connector = CanvasObjectSchema.parse({
+        ...canvasObject,
+        id: "00000000-0000-4000-8000-000000000098",
+        type: "connector",
+        lineColor: color,
+        startMarker: "arrow",
+        endMarker: "arrow",
+        from: { objectId: null, x: 240, y: 80 },
+        to: { objectId: null, x: 400, y: 80 },
+      });
+      const frame = CanvasObjectSchema.parse({
+        ...canvasObject,
+        id: "00000000-0000-4000-8000-000000000099",
+        type: "frame",
+        color,
+      });
+      const objects = [pen, connector, frame];
+      const original = structuredClone(objects);
+      const html = renderToStaticMarkup(
+        <CanvasSurface
+          objects={objects}
+          viewport={{ x: 0, y: 0, zoom: 1 }}
+          onViewport={() => undefined}
+        />,
+      );
+      const ink = `var(--canvas-line-${color})`;
+      expect(html).toContain(`<polyline points="20,30 100,80" fill="none" stroke="${ink}"`);
+      expect(html).toContain(`d="M240 80 L400 80" fill="none" stroke="${ink}"`);
+      expect(html).toContain(`fill="transparent" stroke="${ink}"`);
+      const marker = [...html.matchAll(/<marker[^>]*id="([^"]+)"[^>]*>(.*?)<\/marker>/g)].find(
+        (match) => match[1]!.endsWith(`-${color}`),
+      );
+      expect(marker?.[2]).toContain(`fill="${ink}"`);
+      expect(html).toContain(`marker-start="url(#${marker![1]})"`);
+      expect(html).toContain(`marker-end="url(#${marker![1]})"`);
+      expect(objects).toEqual(original);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "preserves chosen fills and a visible object boundary in %s mode",
+    (mode) => {
+      const { theme, tokens, resolve } = canvasTheme(mode);
+      for (const color of colors) {
+        const object = CanvasObjectSchema.parse({ ...canvasObject, color });
+        const html = renderToStaticMarkup(
+          <CanvasSurface
+            objects={[object]}
+            viewport={{ x: 0, y: 0, zoom: 1 }}
+            onViewport={() => undefined}
+          />,
+        );
+        const fill = CANVAS_FILL_COLORS[color];
+        const border =
+          color === "black" ? "var(--canvas-black-border)" : CANVAS_STROKE_COLORS[color];
+        expect(html).toContain(`fill="${fill}" stroke="${border}"`);
+        expect(
+          Math.max(
+            contrast(fill, theme["--ui-canvas"]!),
+            contrast(resolve(border), theme["--ui-canvas"]!),
+          ),
+          `${color} boundary`,
+        ).toBeGreaterThanOrEqual(3);
+        if (color !== "black" || mode === "dark")
+          expect(
+            contrast(resolve(border), fill),
+            `${color} border on its fill`,
+          ).toBeGreaterThanOrEqual(3);
+      }
+      expect(
+        contrast(resolve(tokens["--canvas-panel-border"]!), theme["--ui-surface-raised"]!),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it("themes default connector ink, labels and text-panel boundaries", () => {
+    const connector = CanvasObjectSchema.parse({
+      ...canvasObject,
+      type: "connector",
+      text: "Readable label",
+      from: { objectId: null, x: 0, y: 0 },
+      to: { objectId: null, x: 200, y: 0 },
+    });
+    const text = CanvasObjectSchema.parse({
+      ...canvasObject,
+      id: "00000000-0000-4000-8000-000000000099",
+      type: "text",
+    });
+    const html = renderToStaticMarkup(
+      <CanvasSurface
+        objects={[connector, text]}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        onViewport={() => undefined}
+      />,
+    );
+    expect(html).toContain('d="M0 0 L200 0" fill="none" stroke="var(--canvas-line-neutral)"');
+    expect(
+      html.match(/fill="var\(--ui-surface-raised\)" stroke="var\(--canvas-panel-border\)"/g),
+    ).toHaveLength(2);
+    expect(html).toContain('fill="var(--ui-text-strong)"');
+    for (const mode of ["light", "dark"] as const) {
+      const { theme } = canvasTheme(mode);
+      expect(
+        contrast(theme["--ui-text-strong"]!, theme["--ui-surface-raised"]!),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(connector).toMatchObject({ type: "connector", lineColor: "neutral" });
+  });
+
+  it("keeps selection handles and connector ports outlined against both themes", () => {
+    for (const type of ["sticky", "pen"] as const) {
+      const object = CanvasObjectSchema.parse({
+        ...canvasObject,
+        type,
+        ...(type === "pen"
+          ? {
+              points: [
+                [0, 0],
+                [100, 80],
+              ],
+            }
+          : {}),
+      });
+      const html = renderToStaticMarkup(
+        <CanvasSurface
+          objects={[object]}
+          selectedIds={[object.id]}
+          tool="select"
+          canEdit
+          onCreateConnector={async () => true}
+          viewport={{ x: 0, y: 0, zoom: 1 }}
+          onViewport={() => undefined}
+        />,
+      );
+      const handle = html.match(/<rect data-canvas-resize="true"[^>]*>/)?.[0];
+      expect(handle).toContain('fill="var(--ui-accent-ink)"');
+      expect(handle).toContain('stroke="var(--ui-surface)" stroke-width="2"');
+      if (type === "sticky") {
+        expect(html.match(/data-canvas-port=/g)).toHaveLength(4);
+        expect(html).toContain('fill="var(--ui-surface)" stroke="var(--ui-accent-ink)"');
+      }
+    }
+    for (const mode of ["light", "dark"] as const) {
+      const { theme } = canvasTheme(mode);
+      for (const background of ["--ui-canvas", "--ui-surface"])
+        expect(contrast(theme["--ui-accent-ink"]!, theme[background]!)).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
 
 describe("canvas text contrast and frame typography", () => {
   it.each(["light", "dark"] as const)(

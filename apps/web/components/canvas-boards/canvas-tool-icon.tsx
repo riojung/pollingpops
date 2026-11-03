@@ -15,6 +15,7 @@ export type CanvasToolIconName =
   | "redo"
   | "objects"
   | "facilitation"
+  | "timer"
   | "export"
   | "workshop"
   | "fit"
@@ -64,6 +65,7 @@ const paths: Record<CanvasToolIconName, string> = {
   redo: "m16 5 5 5-5 5M21 10H11a6 6 0 0 0 0 12",
   objects: "m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5",
   facilitation: "M4 4h16v12H9l-5 4V4Zm4 4h8m-8 4h5",
+  timer: "M9 2h6m-3 0v3m6 1 2-2M12 9v5l3 2M21 14a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   export: "M12 15V3m-4 4 4-4 4 4M5 13v7h14v-7",
   workshop: "M4 4h16v12H4V4Zm8 12v5m-5 0 5-3 5 3M8 8h8m-8 4h5",
   fit: "M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5M9 9h6v6H9V9Z",

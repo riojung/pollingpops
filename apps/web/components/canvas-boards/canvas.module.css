@@ -188,12 +188,27 @@
   min-height: 300px;
   touch-action: none;
   user-select: none;
-  --canvas-pen-yellow: #8b6900;
-  --canvas-pen-blue: #236b9e;
-  --canvas-pen-green: #287654;
-  --canvas-pen-pink: #a73562;
-  --canvas-pen-purple: #7544a0;
-  --canvas-pen-white: var(--ui-text);
+  background: var(--ui-canvas);
+  /* Standalone strokes need ink against the canvas, not a pastel note fill. */
+  --canvas-line-yellow: #886800;
+  --canvas-line-blue: #175ca5;
+  --canvas-line-green: #24744a;
+  --canvas-line-pink: #b03765;
+  --canvas-line-purple: #7040aa;
+  --canvas-line-white: #202938;
+  --canvas-line-orange: #a75113;
+  --canvas-line-red: #b6342a;
+  --canvas-line-teal: #147d76;
+  --canvas-line-lime: #657d18;
+  --canvas-line-gray: #606a79;
+  --canvas-line-black: #202938;
+  --canvas-line-amber: #956300;
+  --canvas-line-lavender: #7951af;
+  --canvas-line-mint: #247a58;
+  --canvas-line-sky: #246f9b;
+  --canvas-line-neutral: var(--ui-text-subtle);
+  --canvas-panel-border: var(--ui-border-strong);
+  --canvas-black-border: #202938;
   /* Text sits on a themed surface; its display ink follows the same theme. */
   --canvas-text-yellow: #886800;
   --canvas-text-blue: #175ca5;
@@ -213,11 +228,23 @@
   --canvas-text-sky: #246f9b;
 }
 :global([data-color-mode="dark"]) .surface {
-  --canvas-pen-yellow: #f5d76e;
-  --canvas-pen-blue: #8dcafa;
-  --canvas-pen-green: #8ed8b2;
-  --canvas-pen-pink: #f0a1bf;
-  --canvas-pen-purple: #c5abed;
+  --canvas-line-yellow: #e8cc76;
+  --canvas-line-blue: #91bce8;
+  --canvas-line-green: #8fc6a8;
+  --canvas-line-pink: #e5a0b9;
+  --canvas-line-purple: #b7a1df;
+  --canvas-line-white: #e8ebf0;
+  --canvas-line-orange: #e6b086;
+  --canvas-line-red: #e8a19b;
+  --canvas-line-teal: #82c3bb;
+  --canvas-line-lime: #c3d18b;
+  --canvas-line-gray: #b0bac8;
+  --canvas-line-black: #d5dce5;
+  --canvas-line-amber: #dfbd77;
+  --canvas-line-lavender: #c5b0e6;
+  --canvas-line-mint: #a0d1bc;
+  --canvas-line-sky: #99c8df;
+  --canvas-black-border: var(--ui-text-subtle);
   --canvas-text-yellow: #fff1a8;
   --canvas-text-blue: #cde7ff;
   --canvas-text-green: #ccebdc;
@@ -278,6 +305,9 @@
   margin-bottom: 8px;
   color: var(--ui-text-muted);
   font-size: 10px;
+}
+.objectContent[data-type="link"] small {
+  color: inherit;
 }
 .objectContent[data-type="diamond"],
 .objectContent[data-type="parallelogram"] {

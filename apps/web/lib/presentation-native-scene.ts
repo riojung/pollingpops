@@ -1,5 +1,7 @@
 import {
   adaptContentSlideToScene,
+  PRESENTATION_SCENE_MAX_NODES,
+  type PresentationDraft,
   type ContentSlideDraft,
   type PresentationScene,
   type PresentationSceneFrame,
@@ -113,5 +115,60 @@ export function duplicateNativeScene(scene: PresentationScene): PresentationScen
         : { ...structuredClone(node), id: ids.get(node.id)! },
     ),
     readingOrder: scene.readingOrder.map((id) => ids.get(id)!),
+  };
+}
+
+/** A clean upload waiting to join its original slide; never a storage URL or pending draft node. */
+export interface NativeImageAttachment {
+  blockId: string;
+  nodeId: string;
+  mediaId: string;
+  altText: string;
+}
+
+export function nativeImageAttachmentStatus(
+  draft: PresentationDraft,
+  attachment: NativeImageAttachment,
+): "ready" | "attached" | "full" | "missing" | "conflict" {
+  const block = draft.blocks.find((candidate) => candidate.id === attachment.blockId);
+  if (block?.kind !== "content" || !block.scene) return "missing";
+  const existing = block.scene.nodes.find((node) => node.id === attachment.nodeId);
+  if (existing) {
+    return existing.type === "image" && existing.mediaId === attachment.mediaId
+      ? "attached"
+      : "conflict";
+  }
+  return block.scene.nodes.length >= PRESENTATION_SCENE_MAX_NODES ? "full" : "ready";
+}
+
+/** Pure and idempotent, including when React replays an updater or history replaces the target. */
+export function attachNativeImage(
+  draft: PresentationDraft,
+  attachment: NativeImageAttachment,
+): PresentationDraft {
+  if (nativeImageAttachmentStatus(draft, attachment) !== "ready") return draft;
+  return {
+    ...draft,
+    blocks: draft.blocks.map((block) =>
+      block.id === attachment.blockId && block.kind === "content" && block.scene
+        ? {
+            ...block,
+            scene: {
+              ...block.scene,
+              nodes: [
+                ...block.scene.nodes,
+                {
+                  id: attachment.nodeId,
+                  type: "image" as const,
+                  mediaId: attachment.mediaId,
+                  altText: attachment.altText,
+                  frame: { x: 55, y: 35, width: 35, height: 45 },
+                },
+              ],
+              readingOrder: [...block.scene.readingOrder, attachment.nodeId],
+            },
+          }
+        : block,
+    ),
   };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PresentationDraftSchema,
   PresentationSceneDraftSchema,
+  PRESENTATION_SCENE_MAX_NODES,
   type PresentationDraft,
   type PresentationScene,
 } from "@openround/contracts";
@@ -12,7 +13,10 @@ import {
   presentationReadiness,
 } from "./presentation-builder";
 import {
+  attachNativeImage,
   boundNativeSceneFrame,
+  nativeImageAttachmentStatus,
+  type NativeImageAttachment,
   createNativeContentBlock,
   removeNativeNode,
   reorderNativeNode,
@@ -145,5 +149,113 @@ describe("native Presentation authoring operations", () => {
     const issues = presentationReadiness(input);
     expect(issues.some((issue) => issue.field === "altText")).toBe(true);
     expect(issues.some((issue) => issue.message === "Add content to this slide.")).toBe(false);
+  });
+});
+
+describe("finalized native image attachment", () => {
+  function fullDraft() {
+    const input = draft();
+    const block = input.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("fixture");
+    while (block.scene.nodes.length < PRESENTATION_SCENE_MAX_NODES) {
+      const id = `extra-${block.scene.nodes.length}`;
+      block.scene.nodes.push({
+        id,
+        type: "text",
+        role: "body",
+        text: "Existing work",
+        frame: { x: 8, y: 40, width: 20, height: 20 },
+      });
+      block.scene.readingOrder.push(id);
+    }
+    const attachment: NativeImageAttachment = {
+      blockId: block.id,
+      nodeId: "uploaded-image",
+      mediaId: "11111111-1111-4111-8111-111111111111",
+      altText: "Clean uploaded evidence",
+    };
+    return { input, attachment };
+  }
+
+  it("retains a finalized image when history fills the last slot, then attaches the same media when space returns", () => {
+    const { input: full, attachment } = fullDraft();
+    const target = full.blocks[0]!;
+    if (target.kind !== "content" || !target.scene) throw new Error("fixture");
+    const withSpace = {
+      ...full,
+      blocks: [{ ...target, scene: removeNativeNode(target.scene, "extra-49") }],
+    };
+    expect(nativeImageAttachmentStatus(withSpace, attachment)).toBe("ready");
+    // An Undo/Redo can restore the 50-node draft while quarantine/scanning is still pending.
+    const before = structuredClone(full);
+    expect(nativeImageAttachmentStatus(full, attachment)).toBe("full");
+    expect(attachNativeImage(full, attachment)).toBe(full);
+    expect(full).toEqual(before);
+    const attached = attachNativeImage(withSpace, attachment);
+    expect(nativeImageAttachmentStatus(attached, attachment)).toBe("attached");
+    const block = attached.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("fixture");
+    expect(block.scene.nodes).toHaveLength(PRESENTATION_SCENE_MAX_NODES);
+    expect(block.scene.nodes.at(-1)).toMatchObject({
+      id: attachment.nodeId,
+      type: "image",
+      mediaId: attachment.mediaId,
+      altText: attachment.altText,
+    });
+    expect(block.scene.readingOrder.at(-1)).toBe(attachment.nodeId);
+    expect(block.speakerNotes).toBe("Private notes");
+    expect(PresentationDraftSchema.safeParse(attached).success).toBe(true);
+  });
+
+  it("waits for a removed or converted target and never redirects to another selected slide", () => {
+    const { input: full, attachment } = fullDraft();
+    const target = full.blocks[0]!;
+    if (target.kind !== "content" || !target.scene) throw new Error("fixture");
+    const other = createNativeContentBlock();
+    const removed = { ...full, blocks: [other] };
+    expect(nativeImageAttachmentStatus(removed, attachment)).toBe("missing");
+    expect(attachNativeImage(removed, attachment)).toBe(removed);
+    const converted = { ...full, blocks: [{ ...target, scene: undefined }, other] };
+    expect(nativeImageAttachmentStatus(converted, attachment)).toBe("missing");
+    expect(attachNativeImage(converted, attachment)).toBe(converted);
+    const restored = {
+      ...full,
+      blocks: [other, { ...target, scene: removeNativeNode(target.scene, "extra-49") }],
+    };
+    const attached = attachNativeImage(restored, attachment);
+    expect(attached.blocks[0]).toBe(other);
+    expect(nativeImageAttachmentStatus(attached, attachment)).toBe("attached");
+  });
+
+  it("is pure under updater replay and idempotent after attachment", () => {
+    const input = draft();
+    const attachment: NativeImageAttachment = {
+      blockId: input.blocks[0]!.id,
+      nodeId: "stable-image",
+      mediaId: "11111111-1111-4111-8111-111111111111",
+      altText: "Scanned diagram",
+    };
+    const before = structuredClone(input);
+    const first = attachNativeImage(input, attachment);
+    const replay = attachNativeImage(input, attachment);
+    expect(first).toEqual(replay);
+    expect(input).toEqual(before);
+    expect(attachNativeImage(first, attachment)).toBe(first);
+    const target = first.blocks[0]!;
+    if (target.kind !== "content" || !target.scene) throw new Error("fixture");
+    expect(target.scene.nodes.filter((node) => node.id === attachment.nodeId)).toHaveLength(1);
+    expect(target.scene.readingOrder.filter((id) => id === attachment.nodeId)).toHaveLength(1);
+  });
+
+  it("does not overwrite an existing object with the upload's ID", () => {
+    const input = draft();
+    const attachment: NativeImageAttachment = {
+      blockId: input.blocks[0]!.id,
+      nodeId: "title",
+      mediaId: "11111111-1111-4111-8111-111111111111",
+      altText: "Scanned diagram",
+    };
+    expect(nativeImageAttachmentStatus(input, attachment)).toBe("conflict");
+    expect(attachNativeImage(input, attachment)).toBe(input);
   });
 });

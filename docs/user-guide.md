@@ -654,6 +654,11 @@ Add images through the existing private upload and scan flow. Each image keeps i
 and description. Uploads remain unavailable until the operator configures image storage and
 malware scanning; an unavailable or unscanned image cannot be published.
 
+Adding objects pauses while an image uploads and scans. If Undo fills the last slot or removes
+the original slide, the finished image waits for space or for that slide to be restored. Finish
+the attachment or choose **Discard uploaded image** before starting another upload. Keep the
+builder open until the image is attached; leaving or reloading can discard a waiting upload.
+
 Reading order is independent of visual placement. Arrange it to make the slide understandable as
 a reading column on a phone or with assistive technology. Deleting a node also removes connectors
 that refer to it. Duplicating a slide creates independent nodes and reconnects its copied edges.

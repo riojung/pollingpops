@@ -33,6 +33,7 @@ export function NativeSceneEditor({
   renderImage,
   uploadsEnabled,
   mediaState,
+  attachmentPending = false,
   onUploadImage,
 }: {
   scene: PresentationScene;
@@ -40,12 +41,16 @@ export function NativeSceneEditor({
   renderImage: SceneImageRenderer;
   uploadsEnabled: boolean;
   mediaState: "idle" | "uploading" | "scanning";
+  attachmentPending?: boolean;
   onUploadImage: (file: File, altText: string) => void;
 }) {
   const [selection, setSelection] = useState(scene.nodes[0]?.id);
   const [imageAlt, setImageAlt] = useState("");
   const selected = scene.nodes.find((node) => node.id === selection) ?? scene.nodes[0]!;
-  const canAdd = scene.nodes.length < PRESENTATION_SCENE_MAX_NODES;
+  const canAdd =
+    mediaState === "idle" &&
+    !attachmentPending &&
+    scene.nodes.length < PRESENTATION_SCENE_MAX_NODES;
   const framed = scene.nodes.filter((node) => node.type !== "connector");
   const readingIndex = scene.readingOrder.indexOf(selected.id);
   function update(updater: (node: PresentationSceneNode) => PresentationSceneNode, field?: string) {
@@ -174,13 +179,15 @@ export function NativeSceneEditor({
             />
           </label>
           <p className={styles.help}>
-            {mediaState === "uploading"
-              ? "Uploading to quarantine…"
-              : mediaState === "scanning"
-                ? "Checking image safety…"
-                : uploadsEnabled
-                  ? "JPEG, PNG or WebP up to 10 MB. Describe each image before uploading; clean scanned images are added to this slide."
-                  : "Uploads are unavailable until malware scanning is configured."}
+            {attachmentPending
+              ? "Finish or discard the uploaded image attachment before choosing another image."
+              : mediaState === "uploading"
+                ? "Uploading to quarantine…"
+                : mediaState === "scanning"
+                  ? "Checking image safety…"
+                  : uploadsEnabled
+                    ? "JPEG, PNG or WebP up to 10 MB. Describe each image before uploading; clean scanned images are added to this slide."
+                    : "Uploads are unavailable until malware scanning is configured."}
           </p>
         </fieldset>
         <fieldset>

@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { PresentationDraft } from "../../packages/contracts/src/index.ts";
+import {
+  PresentationDraftSchema,
+  type ContentSlideDraft,
+  type PresentationDraft,
+} from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
@@ -11,6 +15,176 @@ async function savedDraft(page: Page, id: string): Promise<PresentationDraft> {
   expect(response.status()).toBe(200);
   return (await response.json()).presentation.draft;
 }
+
+test("retains a scanned native image when history fills its original slide during upload", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await signInBeta(page);
+  const title = `Native upload race ${randomUUID().slice(0, 8)}`;
+  function slide(count: number, slideTitle: string): ContentSlideDraft {
+    const nodes = Array.from({ length: count }, (_, index) => ({
+      id: randomUUID(),
+      type: "text" as const,
+      role: index === 0 ? ("title" as const) : ("body" as const),
+      text: index === 0 ? slideTitle : `Object ${index}`,
+      frame: { x: 8, y: 8, width: 84, height: 20 },
+    }));
+    return {
+      id: randomUUID(),
+      kind: "content",
+      layout: "title_body",
+      textElements: [],
+      mediaId: null,
+      mediaAlt: null,
+      speakerNotes: "",
+      scene: {
+        schemaVersion: 1,
+        aspectRatio: "16:9",
+        nodes,
+        readingOrder: nodes.map((node) => node.id),
+      },
+    };
+  }
+  const target = slide(49, "Original upload slide");
+  const other = slide(1, "Other slide");
+  const created = await page.request.post(`${apiUrl}/v1/presentations`, { data: { title } });
+  expect(created.status()).toBe(201);
+  let record = (await created.json()).presentation;
+  record = {
+    ...record,
+    draft: PresentationDraftSchema.parse({
+      ...record.draft,
+      schemaVersion: 4,
+      blocks: [target, other],
+    }),
+  };
+  const mediaId = randomUUID();
+  const uploadUrl = new URL("/native-race-upload", page.url()).href;
+  const imageUrl = new URL("/native-race-image.png", page.url()).href;
+  let uploadTickets = 0;
+  let uploadRequests = 0;
+  let scanRequests = 0;
+  let releaseUpload!: () => void;
+  let releaseScan!: () => void;
+  const uploading = new Promise<void>((resolve) => {
+    releaseUpload = resolve;
+  });
+  const scanning = new Promise<void>((resolve) => {
+    releaseScan = resolve;
+  });
+  const imageBytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+    "base64",
+  );
+  // Control storage/scanner timing and draft persistence for this client race only.
+  // The normal native authoring/delivery journeys below use the real draft APIs.
+  await page.route(`${apiUrl}/v1/features`, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), mediaUploads: true } });
+  });
+  await page.route(`${apiUrl}/v1/presentations/${record.id}`, (route) =>
+    route.fulfill({ json: { presentation: record } }),
+  );
+  await page.route(`${apiUrl}/v1/presentations/${record.id}/draft`, async (route) => {
+    const draft = PresentationDraftSchema.parse(route.request().postDataJSON().draft);
+    record = { ...record, draft, draftRevision: record.draftRevision + 1 };
+    await route.fulfill({ json: { presentation: record } });
+  });
+  await page.route(`${apiUrl}/v1/media`, (route) => {
+    uploadTickets += 1;
+    return route.fulfill({ json: { mediaId, uploadUrl, scanStatus: "pending" } });
+  });
+  await page.route(uploadUrl, async (route) => {
+    uploadRequests += 1;
+    await uploading;
+    await route.fulfill({ status: 204 });
+  });
+  await page.route(`${apiUrl}/v1/media/${mediaId}/complete`, async (route) => {
+    scanRequests += 1;
+    await scanning;
+    await route.fulfill({
+      json: { media: { id: mediaId, scanStatus: "clean" }, downloadUrl: imageUrl },
+    });
+  });
+  await page.route(`${apiUrl}/v1/media/${mediaId}`, (route) =>
+    route.fulfill({ json: { downloadUrl: imageUrl } }),
+  );
+  await page.route(imageUrl, (route) =>
+    route.fulfill({ contentType: "image/png", body: imageBytes }),
+  );
+  const targetNodes = () => {
+    const block = (record.draft as PresentationDraft).blocks.find(
+      (block) => block.id === target.id,
+    );
+    return block?.kind === "content" ? block.scene!.nodes : [];
+  };
+  try {
+    await page.goto(`/presentation/${record.id}`);
+    await page.getByRole("button", { name: "Add native shape", exact: true }).click();
+    await page.getByLabel("Shape label", { exact: true }).fill("Capacity marker");
+    await page.getByRole("button", { name: "Delete object", exact: true }).click();
+    await expect.poll(() => targetNodes().length).toBe(49);
+    await page
+      .getByLabel("New image description", { exact: true })
+      .fill("Uploaded reference image");
+    await page.getByLabel("Add native image", { exact: true }).setInputFiles({
+      name: "reference.png",
+      mimeType: "image/png",
+      buffer: imageBytes,
+    });
+    await expect.poll(() => uploadRequests).toBe(1);
+    for (const name of ["Add native text", "Add native shape", "Add native connector"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
+    }
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(() => targetNodes().length).toBe(50);
+    releaseUpload();
+    await expect.poll(() => scanRequests).toBe(1);
+    await page
+      .getByRole("complementary", { name: "Presentation map", exact: true })
+      .getByRole("button", { name: /Other slide/ })
+      .click();
+    for (const name of ["Add native text", "Add native shape", "Add native connector"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
+    }
+    releaseScan();
+    const pending = page.getByRole("status", { name: "Uploaded image attachment", exact: true });
+    await expect(pending).toContainText("waiting for space on its original slide");
+    expect(targetNodes().filter((node) => node.type === "image")).toEqual([]);
+    await expect(page.getByLabel("Native slide title", { exact: true })).toBeEnabled();
+    await expect(page.getByLabel("Add native image", { exact: true })).toBeDisabled();
+    // Redo the removal while viewing a different slide. Reuse the completed scan.
+    await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect.poll(() => targetNodes().filter((node) => node.type === "image").length).toBe(1);
+    await expect(pending).toHaveCount(0);
+    expect(targetNodes()).toHaveLength(50);
+    expect(targetNodes().find((node) => node.type === "image")).toMatchObject({
+      mediaId,
+      altText: "Uploaded reference image",
+    });
+    const otherBlock = (record.draft as PresentationDraft).blocks.find(
+      (block) => block.id === other.id,
+    );
+    expect(otherBlock?.kind === "content" ? otherBlock.scene?.nodes : []).toHaveLength(1);
+    expect({ uploadTickets, uploadRequests, scanRequests }).toEqual({
+      uploadTickets: 1,
+      uploadRequests: 1,
+      scanRequests: 1,
+    });
+    await page
+      .getByRole("complementary", { name: "Presentation map", exact: true })
+      .getByRole("button", { name: /Original upload slide/ })
+      .click();
+    await expect(
+      page.getByRole("img", { name: "Uploaded reference image", exact: true }),
+    ).toBeVisible();
+  } finally {
+    releaseUpload();
+    releaseScan();
+  }
+});
 
 async function overlayHitTest(control: Locator, sceneNode: Locator) {
   const nodeBounds = await sceneNode.boundingBox();

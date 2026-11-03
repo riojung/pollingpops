@@ -10,6 +10,7 @@ export function MediaEditor({
   uxBeta,
   mediaUploadsEnabled,
   mediaState,
+  uploadBlocked = false,
   mediaPreviewUrl,
   onRemoveImage,
   onUpdateQuestion,
@@ -19,6 +20,7 @@ export function MediaEditor({
   uxBeta: boolean;
   mediaUploadsEnabled: boolean;
   mediaState: MediaEditorState;
+  uploadBlocked?: boolean;
   mediaPreviewUrl: string;
   onRemoveImage: () => void;
   onUpdateQuestion: QuestionUpdater;
@@ -51,7 +53,7 @@ export function MediaEditor({
             accept="image/jpeg,image/png,image/webp"
             aria-describedby="media-help"
             className={styles.upload}
-            disabled={!mediaUploadsEnabled || mediaState !== "idle"}
+            disabled={!mediaUploadsEnabled || mediaState !== "idle" || uploadBlocked}
             id="media-upload"
             onChange={(event) => {
               onUploadImage(event.target.files?.[0] ?? null);
@@ -60,9 +62,11 @@ export function MediaEditor({
             type="file"
           />
           <small className="muted" id="media-help" lang="en-CA">
-            {mediaUploadsEnabled
-              ? "JPEG, PNG, or WebP up to 10 MB. Images are quarantined and scanned before use."
-              : "New image uploads are disabled until this operator configures malware scanning."}
+            {uploadBlocked
+              ? "Finish or discard the uploaded image attachment before choosing another image."
+              : mediaUploadsEnabled
+                ? "JPEG, PNG, or WebP up to 10 MB. Images are quarantined and scanned before use."
+                : "New image uploads are disabled until this operator configures malware scanning."}
           </small>
           {mediaState !== "idle" ? (
             <span className="notice" lang="en-CA" role="status">

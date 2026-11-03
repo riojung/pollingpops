@@ -35,7 +35,7 @@ and document recovery pipeline. It does not complete all E01 editor or release a
 
 ## Local verification
 
-Before the mobile-stacking follow-up below, `pnpm check` passed formatting, Docker-context validation, lint, type checks, tests,
+Before the review follow-ups below, `pnpm check` passed formatting, Docker-context validation, lint, type checks, tests,
 support tests and production builds. It includes 514 contract, 1,968 web, 1,034 server and 459
 database tests. Its default environment skipped 339 database, 15 server and one support case;
 the two focused real-PostgreSQL cases below executed separately against the isolated cluster.
@@ -65,7 +65,7 @@ that removing an image from the current draft leaves history/version protection 
 isolated local database evidence, not a production migration rehearsal or capacity result.
 The task-owned container and loopback SSH forward were removed after verification.
 
-The new browser journey uses real editor/API/autosave/publication/session calls without response
+The original authoring/delivery browser journeys use real editor/API/autosave/publication/session calls without response
 stubs. It creates text, a labeled shape and a connector, changes geometry by number and keyboard,
 changes reading order, reloads, duplicates with remapped IDs, uses undo/redo, publishes, joins a
 guest, reloads both live surfaces, advances/finishes, and checks report titles and private-note
@@ -120,6 +120,35 @@ stacking run passed both mobile Chromium and mobile WebKit cases with zero retri
 model/renderer unit tests, targeted ESLint, formatting and diff checks passed. A read-only follow-up
 confirmed the stacking fix and overlapping-geometry regression. The broader `pnpm check` result
 above predates this CSS-only production correction; it was not rerun for this follow-up.
+
+## PR 183 follow-up: retained image attachments
+
+Native additions now pause during image upload/scanning and while a completed image waits to be
+attached. Ordinary text/geometry editing, selection and history remain available. A completed
+scan keeps its original block ID, one stable node ID, media ID and description in a pending
+attachment until the rendered draft confirms the node exists. A pure, idempotent helper applies
+it through the existing commit/autosave/recovery flow.
+
+If history fills the original slide or removes its scene, a persistent status explains what is
+waiting. Freeing space or restoring the target retries attachment without another ticket, upload
+or scan. An explicit **Discard uploaded image** action releases the pending result. The builder
+warns before exit/reload while an upload or attachment is pending; the unattached result is local
+to the open editor and is not a new persisted artifact. Legacy/question upload controls also stay
+blocked until the pending result is attached or discarded.
+
+The client race regression holds both upload and scan completion, starts at 49 nodes, verifies
+addition controls are disabled, uses Undo to restore 50 nodes, switches to another slide, then
+finishes scanning. It checks the waiting state, frees space through history and verifies exactly
+one image attaches to the original slide with one ticket/upload/scan. This focused test stubs
+storage/scanner and draft-persistence responses to control the race; it does not claim real image
+byte or scanner qualification. The separate authoring/delivery journeys retain real service calls.
+
+Validation for this follow-up: web type checking, changed-file ESLint and 26 targeted unit tests
+passed. All six existing native browser cases passed; the deferred-upload race passed in desktop
+Chromium and Firefox with zero retries in the final focused run. The fixture uses Redo to replay
+the removal that frees space; an initial extra Undo still pointed at a full history entry and
+was corrected without changing product behavior. Independent read-only review found no further
+issues. The full repository check above predates this follow-up.
 
 ## Compatibility and remaining work
 

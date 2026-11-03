@@ -91,7 +91,10 @@ import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import {
   adaptContentSlideToScene,
+  attachNativeImage,
   createNativeContentBlock,
+  nativeImageAttachmentStatus,
+  type NativeImageAttachment,
 } from "../../lib/presentation-native-scene";
 
 interface PresentationRecord {
@@ -384,6 +387,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const [mediaUploadsEnabled, setMediaUploadsEnabled] = useState(false);
   const [mediaState, setMediaState] = useState<"idle" | "uploading" | "scanning">("idle");
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
+  const [pendingNativeImage, setPendingNativeImage] = useState<NativeImageAttachment | null>(null);
+  const pendingNativeImageRef = useRef<NativeImageAttachment | null>(null);
+  const mediaUploadInFlight = useRef(false);
   const [packImportOpen, setPackImportOpen] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
   const [packError, setPackError] = useState("");
@@ -628,6 +634,17 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     [recoveryKey],
   );
 
+  useEffect(() => {
+    if (!draft || !pendingNativeImage) return;
+    const status = nativeImageAttachmentStatus(draft, pendingNativeImage);
+    if (status === "attached") {
+      pendingNativeImageRef.current = null;
+      setPendingNativeImage(null);
+    } else if (status === "ready" && !builderMutationBlocked) {
+      commit((current) => attachNativeImage(current, pendingNativeImage));
+    }
+  }, [draft, pendingNativeImage, builderMutationBlocked, commit]);
+
   const enqueueSave = useCallback(
     (candidate: PresentationDraft): Promise<void> => {
       const serialized = JSON.stringify(candidate);
@@ -689,14 +706,16 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         saveState === "error" ||
         saveState === "conflict" ||
         packPending.current !== null ||
-        packUpdatePending.current !== null
+        packUpdatePending.current !== null ||
+        mediaState !== "idle" ||
+        pendingNativeImage !== null
       ) {
         event.preventDefault();
       }
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [saveState, packRetryVersionId, packUpdateReceiptPending]);
+  }, [saveState, packRetryVersionId, packUpdateReceiptPending, mediaState, pendingNativeImage]);
 
   function guardBuilderExit(event: MouseEvent<HTMLAnchorElement>) {
     if (!draft) return;
@@ -706,11 +725,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       saveState === "saving" ||
       saveState === "error" ||
       saveState === "conflict";
-    if (!needsRecovery) return;
+    const hasPendingImage = mediaState !== "idle" || pendingNativeImage !== null;
+    if (!needsRecovery && !hasPendingImage) return;
     void saveBuilderRecovery(recoveryKey, revisionRef.current, draft).catch(() => undefined);
     if (
       !window.confirm(
-        "This Presentation still has changes that are pending, failed, or conflicted. A recovery copy has been kept on this device. Leave the Builder?",
+        hasPendingImage
+          ? "An image upload or attachment is still pending. Leaving the Builder can discard it. Draft changes have a recovery copy on this device. Leave the Builder?"
+          : "This Presentation still has changes that are pending, failed, or conflicted. A recovery copy has been kept on this device. Leave the Builder?",
       )
     ) {
       event.preventDefault();
@@ -937,7 +959,23 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   }
 
   async function uploadSelectedImage(file: File | null, nativeAltText?: string) {
-    if (!file || !selectedBlock || mediaState !== "idle") return;
+    if (
+      !file ||
+      !selectedBlock ||
+      mediaState !== "idle" ||
+      mediaUploadInFlight.current ||
+      pendingNativeImageRef.current
+    )
+      return;
+    if (
+      nativeAltText !== undefined &&
+      (selectedBlock.kind !== "content" ||
+        !selectedBlock.scene ||
+        selectedBlock.scene.nodes.length >= PRESENTATION_SCENE_MAX_NODES)
+    ) {
+      setError("Remove an object before uploading another native image.");
+      return;
+    }
     const altText =
       nativeAltText ??
       (selectedBlock.kind === "content"
@@ -948,6 +986,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       return;
     }
     const blockId = selectedBlock.id;
+    const nativeNodeId = nativeAltText !== undefined ? clientUuid() : null;
+    mediaUploadInFlight.current = true;
     setError("");
     setMediaState("uploading");
     try {
@@ -978,43 +1018,27 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       if (finalized.media.scanStatus !== "clean" || !finalized.downloadUrl) {
         throw new Error("The image did not pass security validation.");
       }
-      commit((current) =>
-        updateBlock(current, blockId, (block) =>
-          block.kind === "content"
-            ? nativeAltText !== undefined
-              ? block.scene && block.scene.nodes.length < PRESENTATION_SCENE_MAX_NODES
-                ? (() => {
-                    const id = clientUuid();
-                    return {
-                      ...block,
-                      scene: {
-                        ...block.scene,
-                        nodes: [
-                          ...block.scene.nodes,
-                          {
-                            id,
-                            type: "image" as const,
-                            mediaId: ticket.mediaId,
-                            altText,
-                            frame: { x: 55, y: 35, width: 35, height: 45 },
-                          },
-                        ],
-                        readingOrder: [...block.scene.readingOrder, id],
-                      },
-                    };
-                  })()
-                : block
-              : setContentSlideMedia(block, ticket.mediaId, altText)
-            : {
-                ...block,
-                question: { ...block.question, mediaId: ticket.mediaId, mediaAlt: altText },
-              },
-        ),
-      );
-      setMediaPreviewUrl(finalized.downloadUrl);
+      if (nativeNodeId) {
+        const attachment = { blockId, nodeId: nativeNodeId, mediaId: ticket.mediaId, altText };
+        pendingNativeImageRef.current = attachment;
+        setPendingNativeImage(attachment);
+      } else {
+        commit((current) =>
+          updateBlock(current, blockId, (block) =>
+            block.kind === "content"
+              ? setContentSlideMedia(block, ticket.mediaId, altText)
+              : {
+                  ...block,
+                  question: { ...block.question, mediaId: ticket.mediaId, mediaAlt: altText },
+                },
+          ),
+        );
+        setMediaPreviewUrl(finalized.downloadUrl);
+      }
     } catch (caught) {
       setError(humanError(caught));
     } finally {
+      mediaUploadInFlight.current = false;
       setMediaState("idle");
     }
   }
@@ -1653,6 +1677,33 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           </button>
         </div>
       ) : null}
+      {pendingNativeImage ? (
+        <div
+          className={styles.recoveryBanner}
+          role="status"
+          aria-label="Uploaded image attachment"
+          lang="en-CA"
+        >
+          <span>
+            {nativeImageAttachmentStatus(draft, pendingNativeImage) === "full"
+              ? "Uploaded image is waiting for space on its original slide. Remove an object to finish attaching it."
+              : nativeImageAttachmentStatus(draft, pendingNativeImage) === "missing"
+                ? "Uploaded image is waiting for its original native slide. Restore that slide to finish attaching it."
+                : nativeImageAttachmentStatus(draft, pendingNativeImage) === "conflict"
+                  ? "Uploaded image could not be attached to its original slide. Discard this upload and try again."
+                  : "Finishing image attachment to its original slide…"}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              pendingNativeImageRef.current = null;
+              setPendingNativeImage(null);
+            }}
+          >
+            Discard uploaded image
+          </button>
+        </div>
+      ) : null}
       {draft.sourceDisclosure ? (
         <div className={styles.sourceBanner} lang="en-CA" role="note">
           <span>
@@ -1923,6 +1974,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 )}
                 uploadsEnabled={mediaUploadsEnabled}
                 mediaState={mediaState}
+                attachmentPending={pendingNativeImage !== null}
                 onUploadImage={(file, altText) => {
                   void uploadSelectedImage(file, altText);
                 }}
@@ -2460,7 +2512,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <span lang="en-CA">Instructional image</span>
                       <input
                         accept="image/jpeg,image/png,image/webp"
-                        disabled={!mediaUploadsEnabled || mediaState !== "idle"}
+                        disabled={
+                          !mediaUploadsEnabled ||
+                          mediaState !== "idle" ||
+                          pendingNativeImage !== null
+                        }
                         onChange={(event) => {
                           void uploadSelectedImage(event.target.files?.[0] ?? null);
                           event.currentTarget.value = "";
@@ -2469,9 +2525,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       />
                     </label>
                     <p className={styles.helpText} lang="en-CA">
-                      {mediaUploadsEnabled
-                        ? "JPEG, PNG, or WebP up to 10 MB. Uploads are quarantined and scanned."
-                        : "Uploads are unavailable until malware scanning is configured."}{" "}
+                      {pendingNativeImage
+                        ? "Finish or discard the uploaded image attachment before choosing another image."
+                        : mediaUploadsEnabled
+                          ? "JPEG, PNG, or WebP up to 10 MB. Uploads are quarantined and scanned."
+                          : "Uploads are unavailable until malware scanning is configured."}{" "}
                       Attaching an image reserves space and adjusts text boxes that intersect its
                       area.
                     </p>
@@ -2615,6 +2673,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     <MediaEditor
                       mediaPreviewUrl={mediaPreviewUrl}
                       mediaState={mediaState}
+                      uploadBlocked={pendingNativeImage !== null}
                       mediaUploadsEnabled={mediaUploadsEnabled}
                       onRemoveImage={removeSelectedImage}
                       onUpdateQuestion={(updater) => updateQuestion(updater, "media")}

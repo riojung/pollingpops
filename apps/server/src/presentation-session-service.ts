@@ -22,6 +22,7 @@ import {
   type PresentationTimeMode,
 } from "@openround/contracts";
 import {
+  presentationContentBlockMediaIds,
   SessionCodeConflictError,
   WorkspaceDeletionInProgressError,
   createPlatformRepository,
@@ -881,7 +882,7 @@ export class PresentationSessionService {
     const block = presentationCurrentBlock(session);
     const referenced =
       block?.kind === "content"
-        ? block.mediaId === mediaId
+        ? presentationContentBlockMediaIds(block).includes(mediaId)
         : block?.kind === "question"
           ? block.question.mediaId === mediaId
           : false;

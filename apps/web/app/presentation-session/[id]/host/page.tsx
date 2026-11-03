@@ -421,6 +421,14 @@ function PresentationHostContent() {
                     </span>
                     <ContentSlideView
                       block={block}
+                      renderSceneImage={(mediaId, altText) => (
+                        <PresentationMedia
+                          key={mediaId}
+                          sessionId={id}
+                          mediaId={mediaId}
+                          altText={altText}
+                        />
+                      )}
                       media={
                         <PresentationMedia
                           altText={block.mediaAlt}

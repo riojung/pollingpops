@@ -570,8 +570,8 @@ after 24 hours independently of how long session history is retained.
 For a content-only deck, use **Start Presentation**, **Next block** and **Finish Presentation**.
 The finished room thanks participants, and its report shows join counts, slide titles and the
 facilitation timeline. It does not assign quiz standings or learning outcomes to slide viewing.
-An ordinary content slide uses the existing text/image layout tools; richer native scene editing
-remains a separate implementation increment.
+Ordinary content slides retain the existing text/image layout tools. Native slides add independently
+positioned text, images, labeled shapes and connectors in the same deck.
 
 ### Collect Presentation Q&A
 
@@ -639,8 +639,35 @@ preserving customized arrangements.
 Region shortcuts use neighboring slots when the image occupies the requested region, keeping
 multiple text boxes stacked in order.
 
-Bounded positioning, resizing, and layout guides are in scope. Rotation, shapes, detailed font
-styling, and a full freeform design canvas remain deferred.
+These structured layouts retain their existing positioning and image rules. Use a native slide
+when you need several images, shapes or connectors.
+
+### Build a native slide
+
+Choose **Add native slide** in the Presentation builder. Select a node in the slide or its reading
+order list to edit its text, image description, shape or connector. The position and size fields
+use percentages of the slide. Focus a move or resize button and use arrow keys for 1% steps,
+or hold Shift for 5% steps.
+Give shapes meaningful labels and images useful descriptions for people who cannot see them.
+
+Add images through the existing private upload and scan flow. Each image keeps its own placement
+and description. Uploads remain unavailable until the operator configures image storage and
+malware scanning; an unavailable or unscanned image cannot be published.
+
+Adding objects pauses while an image uploads and scans. If Undo fills the last slot or removes
+the original slide, the finished image waits for space or for that slide to be restored. Finish
+the attachment or choose **Discard uploaded image** before starting another upload. Keep the
+builder open until the image is attached; leaving or reloading can discard a waiting upload.
+
+Reading order is independent of visual placement. Arrange it to make the slide understandable as
+a reading column on a phone or with assistive technology. Deleting a node also removes connectors
+that refer to it. Duplicating a slide creates independent nodes and reconnects its copied edges.
+
+Native edits use the same autosave, **Undo**, **Redo**, recovery and conflict review as the existing
+builder. Wait for **Saved**, reload to verify the saved slide, then preview and publish. Publication
+freezes that version; later draft edits do not change a running Presentation. Speaker notes and
+source information remain private. Text is plain text in this first native editing increment;
+rich text, grouping, themes, charts and advanced layout tools remain later work.
 
 ## Organize and manage the Library
 

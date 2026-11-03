@@ -1,4 +1,5 @@
 import {
+  presentationSceneTitle,
   PresentationReportSchema,
   PresentationReportV1Schema,
   PresentationReportV2Schema,
@@ -68,7 +69,9 @@ export function generatePresentationReport(input: {
         blockId: block.id,
         blockIndex,
         kind: "content" as const,
-        title: block.textElements.find((element) => element.role === "title")?.text ?? "",
+        title: block.scene
+          ? presentationSceneTitle(block.scene)
+          : (block.textElements.find((element) => element.role === "title")?.text ?? ""),
         assessmentStatus: "not_assessed" as const,
       };
     }

@@ -52,6 +52,8 @@ export const PRESENTATION_DRAFT_SCHEMA_VERSION = 2;
 export const PRESENTATION_CONTENT_SCHEMA_VERSION = 2;
 /** Complete frozen Pack baselines opt into v3; pre-existing question provenance stays valid in v2. */
 export const PRESENTATION_RECOVERY_PACK_SCHEMA_VERSION = 3;
+/** Bounded native scenes use v4 without changing ordinary v2 or frozen Pack v3 artifacts. */
+export const PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION = 4;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -154,6 +156,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_RECOVERY_PACK_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 3)),
   ],
+  [
+    PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 4)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -171,6 +177,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_RECOVERY_PACK_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 3)),
+  ],
+  [
+    PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 4)),
   ],
 ]);
 

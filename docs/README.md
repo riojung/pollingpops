@@ -44,6 +44,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
   records the native scene architecture and E01 integration boundary.
 - [Content-only Presentation verification](evidence/presentation-content-only.md) covers the first
   E01 slice, real PostgreSQL/browser checks and the compatible-reader rollout requirement.
+- [Native Presentation verification](evidence/presentation-native-scenes.md) covers version-4
+  scenes, durable editing, authorized media retention and the first native delivery workflow.
 - [Recent contract and deletion upgrades](runbooks/upgrade.md#recent-content-report-and-deletion-upgrades)
   cover Presentation v2, Report V4, migration 048, and compatible rollback targets.
 - [Release readiness ledger](release-readiness.json) is the machine-validated source of truth for

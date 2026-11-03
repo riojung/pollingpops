@@ -102,6 +102,18 @@ describe("MediaEditor", () => {
     expect(onRemoveImage).toHaveBeenCalledOnce();
   });
 
+  it("blocks another upload while a finalized attachment waits, while preserving alternative-text editing", () => {
+    const node = editor({ uploadBlocked: true });
+    expect(control(node, "media-upload").props.disabled).toBe(true);
+    expect(control(node, "media-alt").props.disabled).not.toBe(true);
+    const markup = renderToStaticMarkup(node);
+    expect(markup).toContain(
+      "Finish or discard the uploaded image attachment before choosing another image.",
+    );
+    expect(markup).not.toContain("configures malware scanning");
+    expect(markup).not.toContain("Checking image safety");
+  });
+
   it.each(["uploading", "scanning"] as const)(
     "keeps file selection disabled while %s",
     (mediaState) => {

@@ -43,6 +43,35 @@ their empty leaderboard and null participant standings are deliberate. Legacy RE
 aliases remain intact for strict clients and represent the participant roster rather than assessed
 results. Existing question/recheck timing and scoring must still pass their regression checks.
 
+## Native Presentation scene compatibility
+
+Native slides opt into embedded Presentation draft/content version 4. Their public visual scene
+has its own version 1; this is distinct from the draft mutation envelope's version 2, Recovery Pack
+versions and report versions. Legacy Presentation v1/v2/v3 readers and stored content remain
+supported without rewriting immutable versions, accepted mutation hashes or Pack baselines.
+
+Apply migration `089_presentation_native_scene_media.sql` with the restricted migration job before
+accepting native scene writes. It adds scene images to the existing draft/version/history media
+collector and backfills reference edges without editing document JSON. Keep the existing locking,
+forced tenant isolation and deletion rules. Old cleanup processes do not understand scene images.
+
+Fence Presentation draft mutations, publication and session creation at ingress and drain accepted
+writes while deploying compatible server, jobs and web images. Reopen writers only after all
+readers, media validators and cleanup processes support version 4. Existing feature/workspace
+policies and media scanning requirements still apply. This change introduces no paid dependency
+or new commercial entitlement.
+
+After version-4 drafts, history, publications or sessions exist, keep migration 089 and compatible
+readers/cleanup workers on rollback. Disabling new native-slide creation does not make retained
+native content safe for an old process. Use a compatible image or forward repair; do not downgrade
+documents or discard node assets to fit a legacy reader.
+
+Verify a native content-only deck and a mixed native/question deck through save/retry, reload,
+publication, scoped image access, reconnect, finish and report reconciliation. Check scene images
+against draft, history and immutable-version retention; compare JS and SQL collectors. Confirm
+that notes/source metadata stay outside audience projections and that live Quick Checks do not
+create rankings for an otherwise content-only deck.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.
@@ -72,7 +101,7 @@ Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`081_canvas_facilitation.sql`. Apply the complete ordered migration set with the restricted
+`089_presentation_native_scene_media.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
 

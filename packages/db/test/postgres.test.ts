@@ -1,3 +1,5 @@
+import { expectPresentationSceneConformance } from "./support/presentation-scene-conformance.js";
+import { presentationMediaIds } from "../src/media-references.js";
 import { expectFolderConformance } from "./support/folder-conformance.js";
 import {
   expectSessionSummaryConformance,
@@ -1406,6 +1408,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 86, name: "board_invitation_delivery" },
       { version: 87, name: "canvas_object_styles" },
       { version: 88, name: "idea_board_rounds" },
+      { version: 89, name: "presentation_native_scene_media" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -2874,6 +2877,25 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
         ),
       ),
     ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("retains native scene media across Pack baselines, publication, retries, history and account lifecycle", async () => {
+    const owner = await creator("presentation-native-scene");
+    const other = await creator("presentation-native-scene-other");
+    const { draft, expectedMediaIds } = await expectPresentationSceneConformance({
+      repository,
+      workspaceId: owner.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: owner.userId,
+    });
+    const collected = await repository.pool.query<{ media_id: string }>(
+      "SELECT media_id FROM openround_presentation_media_ids($1::jsonb) ORDER BY media_id",
+      [JSON.stringify(draft)],
+    );
+    expect(collected.rows.map(({ media_id }) => media_id)).toEqual(expectedMediaIds);
+    expect(collected.rows.map(({ media_id }) => media_id)).toEqual(
+      presentationMediaIds(draft).sort(),
+    );
   });
 
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {

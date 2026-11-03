@@ -22,8 +22,10 @@ import {
   type ContentSlideLayout,
   type ContentSlideRegion,
   type ContentSlideTextElement,
+  type PresentationScene,
 } from "@openround/contracts";
 import styles from "./content-slide-view.module.css";
+import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 
 export const contentSlideRegions: ContentSlideRegion[] = [
   "top_left",
@@ -54,11 +56,13 @@ type ContentSlideViewBlock = {
   layout: ContentSlideLayout;
   textElements: ContentSlideTextElement[];
   mediaId?: string | null;
+  scene?: PresentationScene;
 };
 
 interface ContentSlideViewProps {
   block: ContentSlideViewBlock;
   media?: ReactNode;
+  renderSceneImage?: SceneImageRenderer;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -257,7 +261,15 @@ function frameBlockSignature(block: ContentSlideViewBlock, hasMedia: boolean) {
     .join("|")}`;
 }
 
-export function ContentSlideView({
+export function ContentSlideView(props: ContentSlideViewProps) {
+  return props.block.scene ? (
+    <NativeSceneView scene={props.block.scene} renderImage={props.renderSceneImage} />
+  ) : (
+    <LegacyContentSlideView {...props} />
+  );
+}
+
+function LegacyContentSlideView({
   block,
   media,
   variant,

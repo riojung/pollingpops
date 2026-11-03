@@ -2,7 +2,8 @@
 
 Date: November 3, 2026
 
-Status: selected for the isolated E00 prototype. Production schema and rollout remain E01 work.
+Status: selected in E00; the first production native-scene E01 slice is implemented locally.
+Deployment and broader editor qualification remain separate work.
 
 ## Decision
 
@@ -176,6 +177,54 @@ Acceptance for the slice:
   private metadata and unrestricted asset URLs never enter a recipient projection.
 - Keyboard editing, focus, semantic reading order and narrow-screen rendering are verified on
   representative tasks. Relevant compatibility, repository and browser tests pass before rollout.
+
+## First production native-scene increment
+
+The first E01 native increment uses embedded Presentation version 4 and a separately versioned
+public scene. [The production contract](../../packages/contracts/src/presentation-scene.ts)
+contains only `schemaVersion: 1`, a fixed 16:9 aspect ratio, bounded nodes and an explicit reading
+order. It is separate from the experimental artifact. Plain text, private image references,
+palette-colored labeled shapes and connectors are supported. Notes, citations, source disclosures,
+question answers and arbitrary URLs/markup are absent from the scene.
+
+A native slide remains a `kind: content` block. Its scene is authoritative; legacy `textElements`
+is empty and `mediaId`/`mediaAlt` are null. Structured slides keep their existing representation and
+renderer. Version-2/3 documents cannot contain scenes. Existing v1/v2/v3 upcasters, default version
+2, parsed JSON ordering and immutable hashes remain intact; no stored content is rewritten.
+Pack insertion preserves version 4 rather than downgrading a native deck to version 3.
+
+There are at most 50 nodes and 128 KiB of UTF-8 JSON per scene, and 3 MiB per version-4 draft/content
+document including frozen baselines. IDs are unique and stable; reading order lists every node
+once. Connectors reference distinct existing non-connector nodes. Exactly one title node remains
+available while drafting. Publication requires meaningful slide content, descriptions for every
+image and labels for shapes. These are admission limits, not measured customer capacity.
+
+The [production adapter](../../packages/contracts/src/presentation-scene-adapter.ts) explicitly
+converts a current structured slide. It retains block identity, notes, citations and source
+metadata, moves text/media into scene nodes, and clears the legacy visual slots. It preserves
+reading order and resolved geometry, and rejects an incompatible source without sanitizing or
+truncating it. Conversion is an authoring operation covered by the existing undo/recovery flow;
+historical drafts and immutable versions are not automatically converted.
+
+The builder adds native slide creation, plain text, multiple scanned images, labeled shapes,
+connectors, selection, numeric geometry, keyboard movement/resizing and reading-order controls.
+Duplication remaps nodes, edges and reading order together; node deletion cascades to its edges.
+All document changes use existing revision-fenced autosave, undo/redo, retry, recovery and conflict
+review. The shared native renderer serves editor, preview and live views, while the caller supplies
+an authorized image renderer. Narrow screens use semantic reading order in a readable column.
+
+Media visitors now cover scene image nodes alongside existing block/question media and frozen
+Pack baselines. Migration 089 updates the SQL visitor and backfills draft/version/history edges;
+publish validation and current-slide session access enforce workspace, scan and lifecycle rules.
+Audience projections explicitly include public scene data and omit private block metadata.
+Reports derive native titles from the frozen scene. See the
+[upgrade requirements](../runbooks/upgrade.md#native-presentation-scene-compatibility) before enabling
+version-4 writers or selecting a rollback image.
+
+This increment does not complete E01. Rich text, pointer dragging, multiselection, grouping,
+advanced themes and creator/device/accessibility acceptance remain open. The
+[native verification record](../evidence/presentation-native-scenes.md) separates executed local
+checks from those outstanding observations.
 
 ## Verification and open evidence
 

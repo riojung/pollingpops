@@ -595,6 +595,10 @@
   margin: 20px auto 0;
 }
 
+.compactHistory {
+  display: none;
+}
+
 .positionActions {
   display: flex;
   gap: 8px;
@@ -980,6 +984,10 @@
 }
 
 @media (max-width: 1180px) {
+  .canvasToolbar .compactHistory {
+    display: inline-flex;
+  }
+
   .commandBar {
     grid-template-columns: auto minmax(220px, 1fr) auto;
   }

@@ -97,12 +97,31 @@ describe("native design across a Presentation", () => {
     [8, 2, 8],
     [8, 3, 8],
     [8, 4, 8],
+    [9, 1, 9],
+    [9, 2, 9],
+    [9, 3, 9],
+    [9, 4, 9],
   ] as const)(
     "preserves/promotes document %s for scene %s to %s",
     (current, sceneVersion, expected) => {
       expect(nativeSceneDocumentVersion(current, { schemaVersion: sceneVersion })).toBe(expected);
     },
   );
+
+  it("retains opted-in opinion v9 across bulk design and later native edits", () => {
+    const original = draft();
+    original.schemaVersion = 9;
+    const question = createQuestionBlock("ranking");
+    original.blocks.push(question);
+    const changed = applyNativeDesignToDeck(original, design);
+    expect(changed.schemaVersion).toBe(9);
+    expect(changed.blocks.at(-1)).toBe(question);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(9);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(9);
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+  });
 
   it("refuses an all-slide design that exceeds the document budget without changing the source", () => {
     const original = draft();

@@ -3,6 +3,9 @@ import {
   PresentationReportSchema,
   PresentationReportV1Schema,
   PresentationReportV2Schema,
+  PresentationReportV4Schema,
+  isPresentationOpinionResultQuestion,
+  requiresPresentationOpinionFormats,
   questionTypeDefinition,
   type PresentationReport,
 } from "@openround/contracts";
@@ -13,7 +16,14 @@ import {
   type PresentationSessionResponseRecord,
   type PresentationSessionTimelineRecord,
 } from "@openround/db";
-import { presentationHasQuestions } from "./presentation-competition.js";
+import {
+  presentationHasQuestions,
+  presentationHasScoredQuestions,
+  presentationScoredResponses,
+} from "./presentation-competition.js";
+import { presentationOpinionSummary } from "./presentation-opinion-results.js";
+import { PresentationSessionServiceError } from "./presentation-session-errors.js";
+import { presentationResponsesForContent } from "./presentation-response-identifiers.js";
 
 const PRESENTATION_EVIDENCE_NOTE =
   "Content slides are recorded in the facilitation timeline but are not evidence of learning.";
@@ -48,7 +58,8 @@ export function generatePresentationReport(input: {
   responses: PresentationSessionResponseRecord[];
   timeline: PresentationSessionTimelineRecord[];
 }): PresentationReport {
-  const { session, participants, responses, timeline } = input;
+  const { session, participants, timeline } = input;
+  const responses = presentationResponsesForContent(session.content, input.responses);
   if (session.status !== "finished") {
     throw new Error("A Presentation report can only be generated for a finished session");
   }
@@ -56,6 +67,7 @@ export function generatePresentationReport(input: {
   // finished_at. updatedAt was the legacy transition timestamp and is the lossless fallback also
   // used by the report-queue migration.
   const finishedAt = session.finishedAt ?? session.updatedAt;
+  const includesOpinionResults = requiresPresentationOpinionFormats(session.content);
 
   const responsesByBlock = new Map<string, PresentationSessionResponseRecord[]>();
   for (const response of responses) {
@@ -77,15 +89,20 @@ export function generatePresentationReport(input: {
     }
     const blockResponses = responsesByBlock.get(block.id) ?? [];
     const quickCheck = session.content.liveQuickCheck?.blockId === block.id;
-    const assessed = quickCheck
-      ? []
-      : blockResponses.filter((response) => response.correct !== null);
+    const assessed =
+      quickCheck || isPresentationOpinionResultQuestion(block.question)
+        ? []
+        : blockResponses.filter((response) => response.correct !== null);
     const correct = assessed.filter((response) => response.correct).length;
+    const opinionSummary = includesOpinionResults
+      ? presentationOpinionSummary(block, blockResponses)
+      : undefined;
     return {
       blockId: block.id,
       blockIndex,
       kind: "question" as const,
       ...(quickCheck ? { sessionOnly: "quick_check" as const } : {}),
+      ...(opinionSummary ? { opinionSummary } : {}),
       questionId: block.question.id,
       prompt: block.question.prompt,
       questionType: block.question.type,
@@ -94,9 +111,10 @@ export function generatePresentationReport(input: {
       respondents: blockResponses.length,
       correct: assessed.length ? correct : null,
       accuracyPercent: assessed.length ? Math.round((correct / assessed.length) * 100) : null,
-      totalScore: quickCheck
-        ? 0
-        : blockResponses.reduce((total, response) => total + response.score, 0),
+      totalScore:
+        quickCheck || isPresentationOpinionResultQuestion(block.question)
+          ? 0
+          : blockResponses.reduce((total, response) => total + response.score, 0),
       averageResponseMs: blockResponses.length
         ? Math.round(
             blockResponses.reduce((total, response) => total + response.responseMs, 0) /
@@ -110,7 +128,22 @@ export function generatePresentationReport(input: {
     responses.map((response) => [`${response.participantId}:${response.questionId}`, response]),
   );
   const recovery = session.content.blocks.flatMap((block) => {
-    if (block.kind !== "question" || !block.question.linkedRecheckQuestionId) return [];
+    if (
+      block.kind !== "question" ||
+      isPresentationOpinionResultQuestion(block.question) ||
+      !block.question.linkedRecheckQuestionId
+    )
+      return [];
+    const recheckBlock = session.content.blocks.find(
+      (candidate) =>
+        candidate.kind === "question" &&
+        candidate.question.id === block.question.linkedRecheckQuestionId,
+    );
+    if (
+      recheckBlock?.kind === "question" &&
+      isPresentationOpinionResultQuestion(recheckBlock.question)
+    )
+      return [];
     let eligible = 0;
     let recovered = 0;
     for (const participant of participants) {
@@ -136,7 +169,13 @@ export function generatePresentationReport(input: {
 
   const includesPackEvidence = timeline.some((event) => event.recoveryPackIntervention);
   return PresentationReportSchema.parse({
-    schemaVersion: session.content.liveQuickCheck ? 3 : includesPackEvidence ? 2 : 1,
+    schemaVersion: includesOpinionResults
+      ? 4
+      : session.content.liveQuickCheck
+        ? 3
+        : includesPackEvidence
+          ? 2
+          : 1,
     sessionId: session.id,
     artifactType: "presentation",
     presentationId: session.presentationId,
@@ -146,8 +185,15 @@ export function generatePresentationReport(input: {
     trustMode: session.trustMode,
     participantCount: participants.length,
     responseCount: responses.length,
-    leaderboard: presentationHasQuestions(session)
-      ? reportLeaderboard(participants, responses)
+    leaderboard: (
+      includesOpinionResults
+        ? presentationHasScoredQuestions(session)
+        : presentationHasQuestions(session)
+    )
+      ? reportLeaderboard(
+          participants,
+          includesOpinionResults ? presentationScoredResponses(session, responses) : responses,
+        )
       : [],
     evidence,
     recovery,
@@ -169,22 +215,33 @@ export function generatePresentationReport(input: {
   });
 }
 
-/** REST opt-in preserves strict older readers without mutating the stored V3 evidence. */
+/** REST opt-ins preserve strict older readers without mutating the stored versioned evidence. */
 export function presentationReportRestProjection(
   report: PresentationReport,
   includeQuickChecks: boolean,
+  includeOpinionResults = false,
 ) {
-  if (includeQuickChecks || report.schemaVersion !== 3) return report;
+  if (report.schemaVersion === 4 && !includeOpinionResults) {
+    throw new PresentationSessionServiceError(
+      422,
+      "VALIDATION_ERROR",
+      "This report includes opinion results. Use includeOpinionResults=true.",
+    );
+  }
+  if (includeQuickChecks || (report.schemaVersion !== 3 && report.schemaVersion !== 4))
+    return report;
+  const evidence = report.evidence.map((entry) => {
+    if (entry.kind !== "question") return entry;
+    const compatible = { ...entry };
+    delete compatible.sessionOnly;
+    return compatible;
+  });
+  if (report.schemaVersion === 4) return PresentationReportV4Schema.parse({ ...report, evidence });
   const includesPackEvidence = report.timeline.some((event) => event.recoveryPackIntervention);
   const legacy = {
     ...report,
     schemaVersion: includesPackEvidence ? 2 : 1,
-    evidence: report.evidence.map((entry) => {
-      if (entry.kind !== "question") return entry;
-      const evidence = { ...entry };
-      delete evidence.sessionOnly;
-      return evidence;
-    }),
+    evidence,
   };
   return includesPackEvidence
     ? PresentationReportV2Schema.parse(legacy)

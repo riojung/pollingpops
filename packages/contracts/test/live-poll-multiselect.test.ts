@@ -102,19 +102,46 @@ describe("multiple-selection opinion contracts", () => {
     );
   });
 
-  it("rejects unsupported Presentation content before a selection limit can be lost", () => {
+  it("requires explicit Presentation version 9 before retaining an opinion selection limit", () => {
     const presentation = {
       title: "Opinions",
       schemaVersion: 2,
       blocks: [{ id: randomUUID(), kind: "question", question: poll() }],
     };
     for (const schema of [PresentationDraftSchema, PresentationContentSchema]) {
-      const result = schema.safeParse(presentation);
-      expect(result.success).toBe(false);
-      if (!result.success)
-        expect(
-          result.error.issues.some((issue) => issue.message.includes("live Rounds only")),
-        ).toBe(true);
+      for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8]) {
+        const result = schema.safeParse({ ...presentation, schemaVersion });
+        expect(result.success).toBe(false);
+        if (!result.success)
+          expect(
+            result.error.issues.some((issue) =>
+              issue.message.includes("Presentation schema version 9"),
+            ),
+          ).toBe(true);
+      }
+      const supported = schema.parse({ ...presentation, schemaVersion: 9 });
+      expect(supported.blocks[0]).toMatchObject({ question: { type: "poll", maxSelections: 2 } });
+      expect(schema.safeParse({ ...presentation, schemaVersion: 10 }).success).toBe(false);
+      for (const type of ["open_text", "word_cloud"]) {
+        const { choices, maxSelections, ...fields } = poll();
+        expect(choices).toHaveLength(3);
+        expect(maxSelections).toBe(2);
+        const question = { ...fields, type };
+        expect(QuestionDraftSchema.safeParse(question).success).toBe(true);
+        expect(QuestionSchema.safeParse(question).success).toBe(true);
+        const unsupported = schema.safeParse({
+          ...presentation,
+          schemaVersion: 9,
+          blocks: [{ ...presentation.blocks[0]!, question }],
+        });
+        expect(unsupported.success).toBe(false);
+        if (!unsupported.success)
+          expect(
+            unsupported.error.issues.some((issue) =>
+              issue.message.includes("Text opinions are not supported"),
+            ),
+          ).toBe(true);
+      }
     }
   });
 

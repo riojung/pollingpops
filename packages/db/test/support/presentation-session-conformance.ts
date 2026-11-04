@@ -1,3 +1,4 @@
+import { expectPresentationOpinionResponseConformance } from "./presentation-opinion-conformance.js";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { expect } from "vitest";
 import type {
@@ -62,6 +63,7 @@ export function presentationSessionConformanceContent(): PresentationContent {
 export async function expectPresentationSessionRepositoryConformance(
   input: PresentationSessionRepositoryConformanceInput,
 ) {
+  await expectPresentationOpinionResponseConformance(input);
   const questionBlock = input.content.blocks.find((block) => block.kind === "question");
   if (!questionBlock || questionBlock.question.type !== "numeric") {
     throw new Error("Presentation repository conformance requires one numeric question");

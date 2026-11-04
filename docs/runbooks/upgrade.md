@@ -55,6 +55,55 @@ serving process. Never relabel a stage credential as Companion or host to force 
 Actual screen sharing, physical-device/clicker and managed-browser popup behavior still require
 manual qualification; software tests do not establish those results.
 
+## Presentation opinion formats compatibility
+
+The first E04 family adds **Presentation document v9**, explicit ordered ranking responses and
+**Presentation Report V4** for multiple-selection opinion polls and rankings. Apply
+`091_presentation_opinion_formats.sql` after migrations 089–090 using the restricted migration
+job before enabling these writes. It adds `response_schema_version` (legacy default 1, new-format
+responses 2), new-write document checks and frozen-question response validation. The document
+checks are `NOT VALID` to avoid scanning or rewriting historical snapshots; new writes still
+must pass. UUID comparisons account for case without changing stored immutable JSON or hashes.
+Keep RLS, tenant ownership, session/receipt locks and media retention controls in place.
+
+Use a coordinated cutover:
+
+1. Fence Presentation draft mutations, publication, history restore, session creation and new
+   published-question/Companion insertion at ingress. Drain accepted operations while preserving
+   their original envelopes and idempotency identities. Account for any already running rooms;
+   they continue to require compatible response and report readers/writers.
+2. Apply the complete migration sequence through 091. Deploy matching v9/response-v2/report-V4
+   API, job/report-worker, artifact/history/account-export, retention and web readers/writers to
+   every serving process. A compatible web editor alone does not make an older worker or API
+   safe. Refresh open browsers before they submit these formats.
+3. Verify the reader floor and rehearse author/save/publish, independent Round copy, session
+   freeze, participant response acknowledgement/reconnect, current-block reveal, stage/Companion
+   privacy and explicit V4 report retrieval/CSV. Include restricted PostgreSQL writes and exact
+   receipt replay. Record executed results in the [first-family evidence record](../evidence/presentation-e04-opinion-formats.md).
+4. Reopen new writes only after those checks pass. Existing Presentation feature/room policy
+   still governs eligibility. This is separate from Live Round protocol rollout; enabling a
+   Round writer is neither required for reading an existing Presentation nor a substitute for
+   the Presentation reader floor. A new published Round source may require its own authoring gate.
+
+Only a ranking or poll with `maxSelections > 1` opts a document into v9. Keep the existing API
+v2 starter, native blank v7/scene3, scenario-template v8/scene4, and mutation-envelope v2 defaults.
+Do not eagerly promote old content or change v1–v8 JSON, published hashes, frozen baselines or
+accepted response/command fingerprints. Later edits, history operations and copies retain an
+existing v9 floor. New opinion responses have no correctness, confidence or participant score;
+this does not redefine legacy assessment or opinion-purpose behavior.
+
+V4 reports require `includeOpinionResults=true`; older report requests receive a validation
+error rather than a lossy legacy projection. Existing V1–V3 report contracts, including the V3
+Quick Check compatibility projection, remain supported for reports without the new evidence.
+Pausing new authoring or a feature flag does not remove v9 drafts/history/publications, live
+response-v2 rows or V4 reports. After these exist, rollback requires a compatible full
+reader/writer set or a reviewed forward repair. Keep migration 091 and its constraints/column;
+never strip opinion results, sort ranking order, rewrite immutable content/hashes, or regenerate
+retry envelopes to fit an older binary. Do not send existing E04 rooms to a legacy response writer.
+
+Moderated open text and word clouds remain a later E04 family. This rollout does not enable them
+in Presentation authoring, published-question insertion, participant responses or reports.
+
 ## Content-only Presentation compatibility
 
 Content-only publication expands validation for existing Presentation content versions 2 and 3;

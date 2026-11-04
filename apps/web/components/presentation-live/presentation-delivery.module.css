@@ -149,6 +149,13 @@
   flex-shrink: 0;
   margin-block: auto;
 }
+.stageOpinionCanvas {
+  padding: 16px 24px;
+}
+.stageOpinionBody h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+}
 .stageFrame {
   width: min(100cqw, calc(100cqh * 16 / 9));
   max-width: 100%;

@@ -315,7 +315,7 @@ function expectSafe(value: unknown) {
     expect(text).not.toContain(`"${field}"`);
 }
 describe("Companion standalone published Round questions", () => {
-  it("excludes multiple-selection opinion polls from the catalog and rejects insertion without mutation", async () => {
+  it("catalogs supported opinion formats and inserts them at v9 with unchanged fences while excluding text", async () => {
     const f = await fixture();
     const question = sourceQuestion("Multiple opinion priorities");
     const source = await f.publishRound([
@@ -329,6 +329,40 @@ describe("Companion standalone published Round questions", () => {
         maxSelections: 2,
         choices: question.choices.map(({ id, label }) => ({ id, label, isCorrect: false })),
       },
+      {
+        ...question,
+        id: randomUUID(),
+        type: "ranking",
+        prompt: "Ordered opinion priorities",
+        purpose: "opinion",
+        basePoints: 0,
+        conceptKeys: [],
+        explanation: "",
+        rankCount: 2,
+        choices: [
+          ...question.choices.map(({ label }) => ({
+            id: randomUUID(),
+            label,
+            isCorrect: false,
+          })),
+          { id: randomUUID(), label: "Option C", isCorrect: false },
+        ],
+      },
+      ...(["open_text", "word_cloud"] as const).map((type) => ({
+        id: randomUUID(),
+        type,
+        prompt: `Unsupported ${type} opinion`,
+        purpose: "opinion" as const,
+        confidence: "off" as const,
+        delivery: "main" as const,
+        linkedRecheckQuestionId: null,
+        timeLimitSeconds: question.timeLimitSeconds,
+        basePoints: 0,
+        conceptKeys: [],
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+      })),
     ]);
     const response = await f.app.inject({
       method: "GET",
@@ -336,30 +370,67 @@ describe("Companion standalone published Round questions", () => {
       headers: { authorization: `Bearer ${f.pass.companionToken}` },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().questions).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ sourceQuizVersionId: source.version.id })]),
+    expectSafe(response.json());
+    expect(JSON.stringify(response.json())).not.toContain('"choices"');
+    const catalog = response
+      .json<{ questions: Array<PresentationPublishedQuestionSelection & { type: string }> }>()
+      .questions.filter((entry) => entry.sourceQuizVersionId === source.version.id);
+    expect(catalog).toHaveLength(2);
+    expect(catalog.map(({ type }) => type).sort()).toEqual(["poll", "ranking"]);
+    const selection = (index: number): PresentationPublishedQuestionSelection => ({
+      sourceQuizVersionId: source.version.id,
+      sourceQuestionId: source.version.content.questions[index]!.id,
+      contentHash: source.version.contentHash,
+    });
+    expect(catalog.map(({ sourceQuestionId }) => sourceQuestionId).sort()).toEqual(
+      [selection(0).sourceQuestionId, selection(1).sourceQuestionId].sort(),
     );
-    await expectNoMutation(
-      f,
-      f.command(0, {
-        sourceQuizVersionId: source.version.id,
-        sourceQuestionId: source.version.content.questions[0]!.id,
-        contentHash: source.version.contentHash,
-      }),
-      "VALIDATION_ERROR",
+    const command = f.command(0, selection(0));
+    const opened = await f.service.companionCommand(command);
+    expectSafe(opened);
+    expect(opened).toMatchObject({
+      phase: "question_open",
+      revision: 1,
+      currentBlock: {
+        kind: "question",
+        question: { type: "poll", maxSelections: 2, confidence: "off", basePoints: 0 },
+      },
+    });
+    const accepted = await f.current(),
+      timeline = await f.sessions.listTimeline(f.sessionId);
+    expect(accepted.content.schemaVersion).toBe(9);
+    await expect(f.service.companionCommand(command)).resolves.toMatchObject({
+      revision: 1,
+      currentBlock: { id: opened.currentBlock!.id },
+    });
+    await expect(
+      f.service.companionCommand({ ...command, publishedQuestion: selection(1) }),
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    expect(await f.current()).toEqual(accepted);
+    expect(await f.sessions.listTimeline(f.sessionId)).toEqual(timeline);
+    await expectNoMutation(f, f.command(1, selection(1)), "PHASE_CLOSED");
+    await f.advance();
+    for (const index of [2, 3])
+      await expectNoMutation(f, f.command(2, selection(index)), "VALIDATION_ERROR");
+    const ranked = await f.service.companionCommand(f.command(2, selection(1)));
+    expectSafe(ranked);
+    expect(ranked).toMatchObject({
+      phase: "question_open",
+      revision: 3,
+      currentBlock: {
+        kind: "question",
+        question: { type: "ranking", rankCount: 2, confidence: "off", basePoints: 0 },
+      },
+    });
+    expect((await f.current()).content).toMatchObject({ schemaVersion: 9 });
+    expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 2);
+    expect((await f.repository.getQuizVersion(f.workspaceId, source.version.id))?.content).toEqual(
+      source.version.content,
     );
-    const live = await f.current();
-    expect(() =>
-      presentationPublishedQuestionInsertionTransition(
-        live,
-        source.version,
-        f.command(0, {
-          sourceQuizVersionId: source.version.id,
-          sourceQuestionId: source.version.content.questions[0]!.id,
-          contentHash: source.version.contentHash,
-        }),
-      ),
-    ).toThrow("live Rounds only");
+    expect(
+      (await f.presentations.getPresentationVersion(f.workspaceId, f.presentationVersion.id))
+        ?.content,
+    ).toEqual(f.content);
   });
 
   it.each(["timed", "flex"] as const)(

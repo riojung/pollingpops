@@ -5,6 +5,7 @@ import {
   PresentationReportV1Schema,
   PresentationReportV2Schema,
   PresentationReportV3Schema,
+  PresentationReportV4Schema,
   PresentationReportSchema,
   PresentationReportWithSessionContextEnvelopeSchema,
 } from "../src/index";
@@ -135,6 +136,51 @@ describe("Presentation report contracts", () => {
       const schema = schemaVersion === 1 ? PresentationReportV1Schema : PresentationReportV2Schema;
       expect(schema.safeParse({ ...value, schemaVersion }).success).toBe(false);
       expect(schema.parse({ ...report, schemaVersion }).schemaVersion).toBe(schemaVersion);
+    }
+  });
+
+  it("versions immutable opinion aggregates without widening older reports", () => {
+    const report = reportFixture();
+    const original = report.evidence[1]!;
+    const opinionSummary = {
+      blockId: original.blockId,
+      kind: "poll",
+      responseCount: 2,
+      maxSelections: 2,
+      totalSelections: 3,
+      choices: [
+        { choiceId: randomUUID(), label: "One", count: 2, percentOfRespondents: 100 },
+        { choiceId: randomUUID(), label: "Two", count: 1, percentOfRespondents: 50 },
+      ],
+    };
+    const evidence = {
+      ...original,
+      questionType: "poll",
+      correct: null,
+      accuracyPercent: null,
+      totalScore: 0,
+      opinionSummary,
+    };
+    const value = { ...report, schemaVersion: 4, evidence: [evidence] };
+    expect(PresentationReportV4Schema.parse(value).evidence[0]).toMatchObject({ opinionSummary });
+    expect(PresentationReportSchema.parse(value).schemaVersion).toBe(4);
+    for (const [schemaVersion, schema] of [
+      [1, PresentationReportV1Schema],
+      [2, PresentationReportV2Schema],
+      [3, PresentationReportV3Schema],
+    ] as const) {
+      expect(schema.safeParse({ ...value, schemaVersion }).success).toBe(false);
+    }
+    for (const extra of [
+      { correct: 1 },
+      { totalScore: 1 },
+      { respondents: 1 },
+      { questionType: "ranking" },
+    ]) {
+      expect(
+        PresentationReportV4Schema.safeParse({ ...value, evidence: [{ ...evidence, ...extra }] })
+          .success,
+      ).toBe(false);
     }
   });
 

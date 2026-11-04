@@ -1,3 +1,7 @@
+import {
+  presentationResponseSchemaVersion,
+  upcastPresentationResponse,
+} from "./response-schemas.js";
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { assertAudienceAdmissionForTransaction } from "./platform-postgres.js";
@@ -10,6 +14,7 @@ import type { PostgresRepository } from "./postgres.js";
 import { WorkspaceDeletionInProgressError } from "./types.js";
 import {
   PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL,
+  PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL,
   mapCommandReceipt,
   mapCredential,
   mapParticipant,
@@ -110,8 +115,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                 WHERE current_response.session_id = session.id
                   AND current_response.participant_id = $3
                   AND session.current_block_index >= 0
-                  AND current_response.block_id::text =
-                    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+                  AND ${PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL}
                 LIMIT 1) AS current_response
          FROM presentation_live_sessions session
          CROSS JOIN LATERAL (
@@ -147,8 +151,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                   WHERE current_response.session_id = session.id
                     AND current_response.participant_id = $3
                     AND session.current_block_index >= 0
-                    AND current_response.block_id::text =
-                      session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+                    AND ${PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL}
                   LIMIT 1) AS current_response,
               standing.score AS standing_score,
               standing.rank AS standing_rank
@@ -707,12 +710,15 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
   }
 
   async saveResponse(input: PresentationSessionResponseRecord) {
+    const responseSchemaVersion =
+      input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response);
+    upcastPresentationResponse(input.response, responseSchemaVersion);
     return this.transaction(null, async (client) => {
       const result = await client.query(
         `INSERT INTO presentation_live_responses
           (id, workspace_id, session_id, participant_id, block_id, question_id,
-           response, correct, score, response_ms, submitted_at, idempotency_key, request_hash)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           response, correct, score, response_ms, submitted_at, idempotency_key, request_hash, response_schema_version)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          ON CONFLICT (session_id, participant_id, block_id)
          DO NOTHING
          RETURNING *`,
@@ -730,6 +736,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
           input.submittedAt,
           input.idempotencyKey ?? null,
           input.requestHash ?? null,
+          responseSchemaVersion,
         ],
       );
       if (result.rows[0]) return mapResponse(result.rows[0]);
@@ -746,6 +753,9 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     input: PresentationSessionResponseRecord,
     expectedSessionRevision: number,
   ): Promise<PresentationResponseAcceptance> {
+    const responseSchemaVersion =
+      input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response);
+    upcastPresentationResponse(input.response, responseSchemaVersion);
     type WriteResult =
       | { status: "accepted"; response: PresentationSessionResponseRecord }
       | { status: "duplicate"; response: PresentationSessionResponseRecord }
@@ -816,8 +826,8 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
          )
          INSERT INTO presentation_live_responses
           (id, workspace_id, session_id, participant_id, block_id, question_id,
-           response, correct, score, response_ms, submitted_at, idempotency_key, request_hash)
-         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
+           response, correct, score, response_ms, submitted_at, idempotency_key, request_hash, response_schema_version)
+         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$15
            FROM eligible_session
          ON CONFLICT DO NOTHING
          RETURNING *`,
@@ -836,6 +846,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
           input.idempotencyKey ?? null,
           input.requestHash ?? null,
           expectedSessionRevision,
+          responseSchemaVersion,
         ],
       );
       if (inserted.rows[0]) {

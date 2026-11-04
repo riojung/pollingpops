@@ -17,6 +17,8 @@ import {
   assertCommandRequestHash,
   commandReceiptMatches,
   normalizeSession,
+  normalizePresentationResponse,
+  presentationResponseBlockId,
   responseWindowOpen,
   transitionWindow,
   transitionRecoveryPackIntervention,
@@ -626,12 +628,13 @@ export class MemoryPresentationSessionRepository
   }
 
   async saveResponse(input: PresentationSessionResponseRecord) {
-    const key = `${input.sessionId}:${input.participantId}:${input.blockId}`;
+    const session = this.sessions.get(input.sessionId);
+    const blockId = presentationResponseBlockId(session, input.blockId);
+    const key = `${input.sessionId}:${input.participantId}:${blockId}`;
     const existing = this.responses.get(key);
     if (existing) return clone(existing);
-    const stored = clone(input);
+    const stored = normalizePresentationResponse(session, input);
     this.responses.set(key, stored);
-    const session = this.sessions.get(input.sessionId);
     if (session?.workspaceId === input.workspaceId) session.eventSeq += 1;
     return clone(stored);
   }
@@ -679,7 +682,8 @@ export class MemoryPresentationSessionRepository
     ) {
       return { status: "phase_closed" };
     }
-    const key = `${input.sessionId}:${input.participantId}:${input.blockId}`;
+    const blockId = presentationResponseBlockId(session, input.blockId);
+    const key = `${input.sessionId}:${input.participantId}:${blockId}`;
     const existing = this.responses.get(key);
     if (existing) {
       if (input.idempotencyKey) {
@@ -693,8 +697,8 @@ export class MemoryPresentationSessionRepository
     }
     // A response changes participant/answer aggregates while the host revision stays fixed.
     // Advance the independent sequence so delayed snapshots cannot roll those aggregates back.
+    const stored = normalizePresentationResponse(session, input);
     session.eventSeq += 1;
-    const stored = clone(input);
     this.responses.set(key, stored);
     return {
       status: "accepted",
@@ -760,8 +764,11 @@ export class MemoryPresentationSessionRepository
       const rank = ranked.findIndex((participant) => participant.id === participantId);
       standing = rank < 0 ? null : { rank: rank + 1, score: ranked[rank]!.score };
     }
-    const currentResponse = currentBlockId
-      ? this.responses.get(`${sessionId}:${participantId}:${currentBlockId}`)
+    const responseBlockId = currentBlockId
+      ? presentationResponseBlockId(this.sessions.get(sessionId), currentBlockId)
+      : null;
+    const currentResponse = responseBlockId
+      ? this.responses.get(`${sessionId}:${participantId}:${responseBlockId}`)
       : undefined;
     return {
       participantCount: participants.length,

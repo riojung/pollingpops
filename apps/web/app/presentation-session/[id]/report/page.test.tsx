@@ -236,7 +236,7 @@ describe("Presentation Quick Check report compatibility", () => {
       const harness = reportHarness();
       await settle();
       expect(fixtures.apiFetch.mock.calls[0]?.[0]).toBe(
-        "/v1/presentation-sessions/11111111-1111-4111-8111-111111111111/report?includeSessionContext=true&includeQuickChecks=true",
+        "/v1/presentation-sessions/11111111-1111-4111-8111-111111111111/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true",
       );
       const markup = renderToStaticMarkup(harness.render());
       expect(markup).toContain("Which approach should we discuss?");

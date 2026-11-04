@@ -12,6 +12,9 @@ normal path takes about ten minutes after container images are available.
 Core-parity includes Presentation Q&A, a gated self-paced Survey beta, and gated Live Round
 multiple-selection polls, ranking, moderated open text and word clouds. Standalone Q&A feedback
 rooms and advanced feedback exports remain pending.
+The first Presentation opinion-format increment adds multiple-selection polls and full/top-N
+rankings after migration 091 and the matching reader/writer release. Presentation moderated text
+and word clouds remain pending.
 
 ## Try the new creation workflows
 
@@ -44,7 +47,8 @@ In a Survey poll, **Maximum selections** controls single-choice radios or multi-
 up to the number of available options. Live Round polls offer the same bounded setting when
 `FEATURE_ROUND_CLIENT_PROTOCOL=true` and the workspace UUID is in
 `CORE_PARITY_WORKSPACE_ALLOWLIST`. Their multiple-selection player uses explicit submission;
-polls remain unscored, and Presentation/practice delivery of this setting remains unsupported.
+polls remain unscored. Practice delivery remains unsupported; Presentation delivery uses the
+separate document-v9/migration-091 boundary described below rather than the Round protocol.
 The same gate enables Ranking, Open text and Word cloud in Live Round builders. Text responses
 start in a private moderation queue; approve at least five responses and reveal results before
 they appear publicly. Review responses before ending the session. See
@@ -420,6 +424,17 @@ views share the slide renderers. Operators must deploy the
 before accepting the new composition/template writes. Existing feature policies and entitlements
 are unchanged. See
 [the Presentation walkthrough](user-guide.md#create-and-host-a-presentation).
+
+For an opinion activity, choose **Poll** and set **Maximum selections**, or choose **Ranking** and
+set **Choices to rank** to all choices or an exact top-N. These formats have no correct answer,
+confidence or participant points. Participants explicitly submit their selected options or ordered
+ranking, then wait for **Saved**. **Reveal and close question** shows anonymous current-question
+results: poll percentages count respondents; ranking weights decrease from the number of available
+choices and give zero to unranked options. The report offers **Export evidence CSV**. A published
+Round's multiple-selection poll or ranking can also be copied into an independent Presentation.
+Operators must complete the [migration-091/document-v9 rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
+before these writes; older content/default creation versions remain unchanged. See the
+[poll/ranking walkthrough](user-guide.md#collect-presentation-polls-and-rankings).
 
 In an eligible live Presentation, **Open audience stage** creates a separate read-only window for
 screen sharing; use its new-tab link when popups are blocked. Keep the presenter workspace for

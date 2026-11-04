@@ -86,6 +86,8 @@
 
 .canvas {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   min-height: min(650px, calc(100vh - 160px));
   place-items: center;
   padding: clamp(28px, 6vw, 78px);
@@ -93,6 +95,7 @@
 }
 
 .canvasContent {
+  min-width: 0;
   width: min(100%, 850px);
 }
 

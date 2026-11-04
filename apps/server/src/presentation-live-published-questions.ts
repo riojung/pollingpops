@@ -1,7 +1,8 @@
 import {
   PresentationContentSchema,
   QuestionSchema,
-  requiresExtendedRoundResponses,
+  presentationQuestionSupported,
+  isPresentationOpinionResultQuestion,
   type PresentationCompanionCommand,
 } from "@openround/contracts";
 import {
@@ -41,7 +42,7 @@ export function presentationPublishedQuestionInsertionTransition(
     (question) => question.id === selection.sourceQuestionId,
   );
   const source = matches[0];
-  if (source && requiresExtendedRoundResponses({ questions: [source] })) {
+  if (source && !presentationQuestionSupported(source)) {
     throw new PresentationSessionServiceError(
       422,
       "VALIDATION_ERROR",
@@ -79,6 +80,7 @@ export function presentationPublishedQuestionInsertionTransition(
   });
   const content = PresentationContentSchema.parse({
     ...session.content,
+    ...(isPresentationOpinionResultQuestion(question) ? { schemaVersion: 9 } : {}),
     blocks,
     livePublishedQuestions: [
       ...(session.content.livePublishedQuestions ?? []),

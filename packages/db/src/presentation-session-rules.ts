@@ -1,5 +1,6 @@
 import {
   PresentationContentSchema,
+  isPresentationOpinionResultQuestion,
   PresentationRecoveryPackInterventionSchema,
 } from "@openround/contracts";
 import type {
@@ -10,6 +11,10 @@ import type {
   PresentationSessionResponseRecord,
   PresentationSessionTransitionInput,
 } from "./presentation-session-types.js";
+import {
+  presentationResponseSchemaVersion,
+  upcastPresentationResponse,
+} from "./response-schemas.js";
 import { upcastPresentationSessionContent } from "./artifact-schemas.js";
 
 export function clone<T>(value: T): T {
@@ -154,8 +159,10 @@ export function responseWindowOpen(
   const block = session.content.blocks[session.currentBlockIndex];
   if (
     block?.kind !== "question" ||
-    block.id !== response.blockId ||
-    block.question.id !== response.questionId ||
+    (isPresentationOpinionResultQuestion(block.question)
+      ? block.id.toLowerCase() !== response.blockId.toLowerCase() ||
+        block.question.id.toLowerCase() !== response.questionId.toLowerCase()
+      : block.id !== response.blockId || block.question.id !== response.questionId) ||
     session.questionOpenedAt === null ||
     response.submittedAt < session.questionOpenedAt
   ) {
@@ -165,4 +172,78 @@ export function responseWindowOpen(
     session.questionClosesAt === null ||
     response.submittedAt.getTime() <= session.questionClosesAt.getTime()
   );
+}
+
+/** E04 UUIDs share the frozen block identity; legacy key spelling remains literal. */
+export function presentationResponseBlockId(
+  session: PresentationSessionRecord | undefined,
+  blockId: string,
+): string {
+  return (
+    session?.content.blocks.find(
+      (block) =>
+        block.kind === "question" &&
+        isPresentationOpinionResultQuestion(block.question) &&
+        block.id.toLowerCase() === blockId.toLowerCase(),
+    )?.id ?? blockId
+  );
+}
+
+export function normalizePresentationResponse(
+  session: PresentationSessionRecord | undefined,
+  input: PresentationSessionResponseRecord,
+): PresentationSessionResponseRecord {
+  const block = session?.content.blocks.find(
+    (candidate) =>
+      candidate.id === input.blockId ||
+      (candidate.kind === "question" &&
+        isPresentationOpinionResultQuestion(candidate.question) &&
+        candidate.id.toLowerCase() === input.blockId.toLowerCase()),
+  );
+  const question = block?.kind === "question" ? block.question : undefined;
+  const responseSchemaVersion =
+    input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response, question);
+  const response = upcastPresentationResponse(input.response, responseSchemaVersion);
+  const opinion = question && isPresentationOpinionResultQuestion(question);
+  if (opinion || response.orderedChoiceIds !== undefined) {
+    const choices = question && "choices" in question ? question.choices : [];
+    const selected = question?.type === "ranking" ? response.orderedChoiceIds : response.choiceIds;
+    const limit =
+      question?.type === "ranking"
+        ? (question.rankCount ?? choices.length)
+        : question?.type === "poll"
+          ? (question.maxSelections ?? 1)
+          : 0;
+    if (
+      !opinion ||
+      session?.content.schemaVersion !== 9 ||
+      responseSchemaVersion !== 2 ||
+      question?.id.toLowerCase() !== input.questionId.toLowerCase() ||
+      input.correct !== null ||
+      input.score !== 0 ||
+      response.confidence != null ||
+      response.numericValue !== undefined ||
+      response.ratingValue !== undefined ||
+      !selected ||
+      selected.length < 1 ||
+      selected.length > limit ||
+      new Set(selected.map((id) => id.toLowerCase())).size !== selected.length ||
+      selected.some(
+        (id) => !choices.some((choice) => choice.id.toLowerCase() === id.toLowerCase()),
+      ) ||
+      (question?.type === "ranking" &&
+        (response.choiceIds !== undefined || selected.length !== limit)) ||
+      (question?.type === "poll" && response.orderedChoiceIds !== undefined)
+    ) {
+      throw new Error(
+        "Presentation opinion responses must match the frozen v9 unscored response v2 question",
+      );
+    }
+  }
+  return {
+    ...clone(input),
+    ...(opinion && block && question ? { blockId: block.id, questionId: question.id } : {}),
+    responseSchemaVersion,
+    response,
+  };
 }

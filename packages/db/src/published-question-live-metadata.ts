@@ -14,8 +14,6 @@ export function publishedQuestionTextOnlyLiveEligible(
   return (
     QuestionSchema.safeParse(question).success &&
     !isTextOpinionQuestion(question) &&
-    question.type !== "ranking" &&
-    !(question.type === "poll" && (question.maxSelections ?? 1) > 1) &&
     question.mediaId == null &&
     (question.delivery ?? "main") === "main" &&
     !question.linkedRecheckQuestionId &&

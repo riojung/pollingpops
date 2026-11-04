@@ -16,14 +16,17 @@ import {
   moveContentTextElement,
   normalizePresentationRecoveryDraft,
   presentationReadiness,
+  promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
   removePresentationBlock,
   setContentTextElementFrame,
   setContentSlideMedia,
   setPresentationSlideHidden,
+  updatePresentationQuestion,
 } from "./presentation-builder";
 import { createNativeContentBlock } from "./presentation-native-scene";
+import { removeQuestionChoice, type ChoiceQuestionDraft } from "../components/editor/types";
 import {
   PresentationContentSchema,
   PresentationDraftSchema,
@@ -102,10 +105,18 @@ describe("presentation builder model", () => {
     for (const type of ["open_text", "word_cloud"] as const)
       expect(() => createPresentationQuestion(type)).toThrow("live Rounds only");
   });
-  it("explicitly rejects ranking insertion into the unsupported Presentation builder", () => {
-    expect(() => createPresentationQuestion("ranking")).toThrow(
-      "Ranking polls currently support live Rounds only.",
-    );
+  it("creates full rankings as unscored opinions and requires their explicit document opt-in", () => {
+    const ranking = createPresentationQuestion("ranking");
+    expect(ranking).toMatchObject({
+      type: "ranking",
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+    });
+    expect(ranking).not.toHaveProperty("rankCount");
+    expect("choices" in ranking && ranking.choices.every((choice) => !choice.isCorrect)).toBe(true);
     const source = draft();
     const block = source.blocks.find((candidate) => candidate.kind === "question")!;
     if (block.kind !== "question" || !("choices" in block.question)) return;
@@ -120,8 +131,9 @@ describe("presentation builder model", () => {
       choices: block.question.choices.map((choice) => ({ ...choice, isCorrect: false })),
     };
     expect(
-      presentationReadiness(source).some((issue) => issue.message.includes("live Rounds only")),
+      presentationReadiness(source).some((issue) => issue.message.includes("schema version 9")),
     ).toBe(true);
+    expect(presentationReadiness(promotePresentationOpinionFormats(source))).toEqual([]);
   });
   function expectClearOfImage(frame: ContentSlideFrame) {
     expect(
@@ -367,7 +379,10 @@ describe("presentation builder model", () => {
     expect(normalizePresentationRecoveryDraft({ ...current, schemaVersion: 8 }).schemaVersion).toBe(
       8,
     );
-    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 9 })).toThrow();
+    expect(normalizePresentationRecoveryDraft({ ...current, schemaVersion: 9 }).schemaVersion).toBe(
+      9,
+    );
+    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 10 })).toThrow();
     expect(() =>
       normalizePresentationRecoveryDraft({ schemaVersion: 1, blocks: "invalid" }),
     ).toThrow();
@@ -740,7 +755,7 @@ describe("presentation builder model", () => {
     }
   });
 
-  it("rejects multiple-selection poll publication and clears its limit when changing formats", () => {
+  it("opts multiple-selection polls into v9 and clears their limit when changing formats", () => {
     const source = draft();
     const block = source.blocks.find((candidate) => candidate.kind === "question")!;
     if (block.kind !== "question" || !("choices" in block.question)) return;
@@ -754,64 +769,205 @@ describe("presentation builder model", () => {
       choices: block.question.choices.map((choice) => ({ ...choice, isCorrect: false })),
     };
     expect(
-      presentationReadiness(source).some((issue) => issue.message.includes("live Rounds only")),
+      presentationReadiness(source).some((issue) => issue.message.includes("schema version 9")),
     ).toBe(true);
-    const changed = changePresentationQuestionType(source, block.id, "rating");
+    const optedIn = promotePresentationOpinionFormats(source);
+    expect(optedIn.schemaVersion).toBe(9);
+    expect(presentationReadiness(optedIn)).toEqual([]);
+    const changed = changePresentationQuestionType(optedIn, block.id, "rating");
+    expect(changed.schemaVersion).toBe(9);
     const updated = changed.blocks.find((candidate) => candidate.id === block.id)!;
     expect(updated.kind === "question" && "maxSelections" in updated.question).toBe(false);
   });
 
-  it("clears inbound recovery links when a recheck becomes an opinion question", () => {
-    const main = createQuestionBlock();
-    const recheck = createQuestionBlock();
-    main.question.linkedRecheckQuestionId = recheck.question.id;
-    recheck.question.delivery = "recheck";
-    const source: PresentationDraft = {
-      title: "Recovery pair",
-      description: "",
-      experiencePreset: { id: "focus", version: 1 },
-      schemaVersion: 2,
-      blocks: [main, recheck],
-    };
-
-    const updated = changePresentationQuestionType(source, recheck.id, "poll");
-    const updatedMain = updated.blocks[0];
-    const updatedRecheck = updated.blocks[1];
-    expect(updatedMain?.kind).toBe("question");
-    expect(updatedRecheck?.kind).toBe("question");
-    if (updatedMain?.kind === "question" && updatedRecheck?.kind === "question") {
-      expect(updatedMain.question.linkedRecheckQuestionId).toBeNull();
-      expect(updatedRecheck.question.id).toBe(recheck.question.id);
-      expect(updatedRecheck.question.delivery).toBe("main");
-      expect(updatedRecheck.question.linkedRecheckQuestionId).toBeNull();
-    }
-    expect(main.question.linkedRecheckQuestionId).toBe(recheck.question.id);
+  it("keeps old defaults unchanged until an actual new format is written and retains v9 history", () => {
+    const original = draft();
+    expect(promotePresentationOpinionFormats(original)).toBe(original);
+    const block = original.blocks[1]!;
+    const poll = changePresentationQuestionType(original, block.id, "poll");
+    expect(poll.schemaVersion).toBe(2);
+    const ranked = changePresentationQuestionType(original, block.id, "ranking");
+    expect(ranked.schemaVersion).toBe(9);
+    const checkpoint = promotePresentationOpinionFormats(original, ranked.schemaVersion);
+    expect(checkpoint.schemaVersion).toBe(9);
+    expect(checkpoint.blocks).toBe(original.blocks);
+    expect(normalizePresentationRecoveryDraft(checkpoint)).toEqual(checkpoint);
+    const withoutQuestion = removePresentationBlock(ranked, block.id);
+    expect(withoutQuestion.schemaVersion).toBe(9);
+    expect(promotePresentationOpinionFormats(withoutQuestion)).toBe(withoutQuestion);
+    const slide = original.blocks[0]!;
+    expect(setPresentationSlideHidden(checkpoint, slide.id, true).schemaVersion).toBe(9);
   });
 
-  it("promotes a detached recheck when its diagnostic becomes an opinion question", () => {
-    const main = createQuestionBlock();
+  it("clears hidden legacy poll answers and recovery settings when enabling multiple selections", () => {
+    const source = draft();
+    const poll = source.blocks[1]!;
+    if (poll.kind !== "question" || !("choices" in poll.question))
+      throw new Error("Expected choices");
     const recheck = createQuestionBlock();
-    main.question.linkedRecheckQuestionId = recheck.question.id;
     recheck.question.delivery = "recheck";
-    const source: PresentationDraft = {
-      title: "Recovery pair",
-      description: "",
-      experiencePreset: { id: "focus", version: 1 },
-      schemaVersion: 2,
-      blocks: [main, recheck],
+    poll.question = {
+      ...poll.question,
+      type: "poll",
+      linkedRecheckQuestionId: recheck.question.id,
     };
-
-    const updated = changePresentationQuestionType(source, main.id, "rating");
-    const updatedMain = updated.blocks[0];
-    const updatedRecheck = updated.blocks[1];
-    expect(updatedMain?.kind).toBe("question");
-    expect(updatedRecheck?.kind).toBe("question");
-    if (updatedMain?.kind === "question" && updatedRecheck?.kind === "question") {
-      expect(updatedMain.question.id).toBe(main.question.id);
-      expect(updatedMain.question.linkedRecheckQuestionId).toBeNull();
-      expect(updatedRecheck.question.delivery).toBe("main");
-    }
+    source.blocks.push(recheck);
+    const changed = updatePresentationQuestion(source, poll.id, (question) =>
+      question.type === "poll" ? { ...question, maxSelections: 2 } : question,
+    );
+    expect(changed.schemaVersion).toBe(9);
+    const updated = changed.blocks[1]!;
+    if (updated.kind !== "question" || updated.question.type !== "poll")
+      throw new Error("Expected poll");
+    expect(updated.question).toMatchObject({
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+      maxSelections: 2,
+    });
+    expect(updated.question.choices.every((choice) => !choice.isCorrect)).toBe(true);
+    const target = changed.blocks[2]!;
+    expect(target.kind === "question" && target.question.delivery).toBe("main");
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+    expect(poll.question.choices.some((choice) => choice.isCorrect)).toBe(true);
   });
+
+  it("retains choice IDs and labels through compatible type changes while clearing opinion answers", () => {
+    const original = draft();
+    const block = original.blocks[1]!;
+    if (block.kind !== "question" || !("choices" in block.question))
+      throw new Error("Expected choices");
+    block.question.confidence = "required";
+    const originalChoices = block.question.choices.map(({ id, label }) => ({ id, label }));
+    const ranked = changePresentationQuestionType(original, block.id, "ranking");
+    const ranking = ranked.blocks[1]!;
+    if (ranking.kind !== "question" || ranking.question.type !== "ranking")
+      throw new Error("Expected ranking");
+    expect(ranking.question.choices.map(({ id, label }) => ({ id, label }))).toEqual(
+      originalChoices,
+    );
+    expect(ranking.question.choices.every((choice) => !choice.isCorrect)).toBe(true);
+    expect(ranking.question).toMatchObject({
+      purpose: "opinion",
+      confidence: "off",
+      basePoints: 0,
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+    });
+    expect(presentationReadiness(ranked)).toEqual([]);
+    const polled = changePresentationQuestionType(ranked, block.id, "poll");
+    expect(polled.schemaVersion).toBe(9);
+    const poll = polled.blocks[1]!;
+    if (poll.kind !== "question" || poll.question.type !== "poll") throw new Error("Expected poll");
+    expect(poll.question.choices.map(({ id, label }) => ({ id, label }))).toEqual(originalChoices);
+    expect(poll.question.choices.every((choice) => !choice.isCorrect)).toBe(true);
+    const diagnostic = changePresentationQuestionType(polled, block.id, "single_select");
+    expect(diagnostic.schemaVersion).toBe(9);
+    expect(presentationReadiness(diagnostic)).toEqual([]);
+    const restored = diagnostic.blocks[1]!;
+    expect(restored.kind === "question" && restored.question.purpose).toBe("diagnostic");
+  });
+
+  it.each(["poll", "ranking"] as const)(
+    "keeps %s limits valid when choices are removed and retains the limit in independent copies",
+    (type) => {
+      const block = createQuestionBlock(type);
+      if (block.question.type !== "poll" && block.question.type !== "ranking")
+        throw new Error("Expected an opinion");
+      let question: ChoiceQuestionDraft = {
+        ...block.question,
+        prompt: "Choose your preferred direction",
+        choices: block.question.choices.map((choice, index) => ({
+          ...choice,
+          label: `Choice ${index + 1}`,
+        })),
+      };
+      if (question.type === "poll") question.maxSelections = 4;
+      else if (question.type === "ranking") question.rankCount = 4;
+      for (const length of [3, 2]) {
+        question = removeQuestionChoice(question, question.choices.at(-1)!.id);
+        expect(question.choices).toHaveLength(length);
+        expect(type === "poll" ? question.maxSelections : question.rankCount).toBe(length);
+        const source = { ...draft(), schemaVersion: 9 as const, blocks: [{ ...block, question }] };
+        expect(PresentationContentSchema.safeParse(source).success).toBe(true);
+        const copied = duplicatePresentationBlock(source.blocks[0]!);
+        if (copied.kind !== "question" || !("choices" in copied.question))
+          throw new Error("Expected copied choices");
+        expect(copied.question.id).not.toBe(question.id);
+        expect(copied.question.choices.map((choice) => choice.label)).toEqual(
+          question.choices.map((choice) => choice.label),
+        );
+        expect(
+          copied.question.choices.some((choice) =>
+            question.choices.some((original) => original.id === choice.id),
+          ),
+        ).toBe(false);
+        expect(type === "poll" ? copied.question.maxSelections : copied.question.rankCount).toBe(
+          length,
+        );
+      }
+    },
+  );
+
+  it.each(["poll", "ranking"] as const)(
+    "clears inbound recovery links when a recheck becomes a %s opinion",
+    (type) => {
+      const main = createQuestionBlock();
+      const recheck = createQuestionBlock();
+      main.question.linkedRecheckQuestionId = recheck.question.id;
+      recheck.question.delivery = "recheck";
+      const source: PresentationDraft = {
+        title: "Recovery pair",
+        description: "",
+        experiencePreset: { id: "focus", version: 1 },
+        schemaVersion: 2,
+        blocks: [main, recheck],
+      };
+
+      const updated = changePresentationQuestionType(source, recheck.id, type);
+      const updatedMain = updated.blocks[0];
+      const updatedRecheck = updated.blocks[1];
+      expect(updatedMain?.kind).toBe("question");
+      expect(updatedRecheck?.kind).toBe("question");
+      if (updatedMain?.kind === "question" && updatedRecheck?.kind === "question") {
+        expect(updatedMain.question.linkedRecheckQuestionId).toBeNull();
+        expect(updatedRecheck.question.id).toBe(recheck.question.id);
+        expect(updatedRecheck.question.delivery).toBe("main");
+        expect(updatedRecheck.question.linkedRecheckQuestionId).toBeNull();
+      }
+      expect(main.question.linkedRecheckQuestionId).toBe(recheck.question.id);
+    },
+  );
+
+  it.each(["rating", "ranking"] as const)(
+    "promotes a detached recheck when its diagnostic becomes a %s opinion",
+    (type) => {
+      const main = createQuestionBlock();
+      const recheck = createQuestionBlock();
+      main.question.linkedRecheckQuestionId = recheck.question.id;
+      recheck.question.delivery = "recheck";
+      const source: PresentationDraft = {
+        title: "Recovery pair",
+        description: "",
+        experiencePreset: { id: "focus", version: 1 },
+        schemaVersion: 2,
+        blocks: [main, recheck],
+      };
+
+      const updated = changePresentationQuestionType(source, main.id, type);
+      const updatedMain = updated.blocks[0];
+      const updatedRecheck = updated.blocks[1];
+      expect(updatedMain?.kind).toBe("question");
+      expect(updatedRecheck?.kind).toBe("question");
+      if (updatedMain?.kind === "question" && updatedRecheck?.kind === "question") {
+        expect(updatedMain.question.id).toBe(main.question.id);
+        expect(updatedMain.question.linkedRecheckQuestionId).toBeNull();
+        expect(updatedRecheck.question.delivery).toBe("main");
+      }
+    },
+  );
 
   it("rejects a recovery link that does not target a recheck", () => {
     const source = draft();

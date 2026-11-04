@@ -440,10 +440,12 @@ describe("composed Presentation document8", () => {
     expect(PresentationContentSchema.parse(visible).blocks).toHaveLength(1);
     expect(PresentationContentSchema.safeParse(draft).success).toBe(false);
     expect(PresentationDraftSchema.parse({ ...deck(), schemaVersion: 8 }).schemaVersion).toBe(8);
-    expect(PresentationDraftSchema.safeParse({ ...deck(), schemaVersion: 9 }).success).toBe(false);
-    expect(PresentationContentSchema.safeParse({ ...deck(), schemaVersion: 9 }).success).toBe(
-      false,
-    );
+    for (const schema of [PresentationDraftSchema, PresentationContentSchema]) {
+      const opinionDocumentVersion = schema.parse({ ...deck(), schemaVersion: 9 });
+      expect(opinionDocumentVersion.schemaVersion).toBe(9);
+      expect(opinionDocumentVersion.blocks[0]).toMatchObject({ scene: { schemaVersion: 4 } });
+      expect(schema.safeParse({ ...deck(), schemaVersion: 10 }).success).toBe(false);
+    }
     expect(PresentationSceneDraftSchema.safeParse({ ...scene(), schemaVersion: 5 }).success).toBe(
       false,
     );

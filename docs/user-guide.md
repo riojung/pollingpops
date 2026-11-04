@@ -10,6 +10,8 @@ The Core-Parity foundation includes gated Presentation Q&A and a gated self-pace
 using single- or multiple-selection opinion polls and ratings. Presentation replies/chat/Pulse,
 Q&A-only feedback rooms and advanced feedback exports remain pending. Live Rounds support gated
 multiple-selection polls, ranking, moderated open text and word clouds.
+Presentations also support multiple-selection opinion polls and full/top-N rankings after the
+matching release is deployed. Moderated open text and word clouds remain unavailable in Presentations.
 Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
@@ -582,6 +584,62 @@ The finished room thanks participants, and its report shows join counts, slide t
 facilitation timeline. It does not assign quiz standings or learning outcomes to slide viewing.
 Ordinary content slides retain the existing text/image layout tools. Native slides add independently
 positioned text, images, labeled shapes and connectors in the same deck.
+
+### Collect Presentation polls and rankings
+
+Add an interactive question and choose **Poll** or **Ranking** under **Question type**. For a poll,
+set **Maximum selections** from one to the number of choices. A limit above one lets each
+participant choose up to that many options and then explicitly **Submit response**. Unselected
+options stop accepting selections at the limit; participants can deselect an option to change
+their selection before submitting.
+
+For a ranking, add two to six choices and set **Choices to rank**. Choosing the full number asks
+for a complete order; a smaller number asks for exactly that many priorities. Participants use
+the **Add**, **Remove**, **Move up** and **Move down** controls, including the keyboard, before
+submitting. The first position is the highest priority. Reducing the number of authored choices
+also reduces a selection/ranking limit that would otherwise exceed the remaining choices.
+
+These new opinion formats have no correct answer, confidence prompt, participant points or
+paired recovery question. Their opinion/scoring/recovery controls are locked. Changing an
+assessment into a poll or ranking clears its correctness and incompatible recovery links while
+preserving compatible choice text. **From published Round** can copy multiple-selection polls
+and rankings with fresh destination IDs; later source edits do not update those independent
+copies. Moderated open text and word clouds remain disabled in this picker.
+
+Wait for **Saved**, preview and publish, then host the immutable version. Later draft edits or a
+new publication do not change a running session's question, choices or limits. Participants
+should wait for **Saved** after submission. **Saving…** or **Reconnecting—not yet saved** means
+confirmation is still pending; leave the tab open while it reconciles. Refresh recovers an
+accepted response rather than submitting another vote or ranking.
+
+Use **Reveal and close question** to show **Poll results** or **Ranking results**. The host,
+participant and audience stage show results for the current revealed activity only; Companion
+opens them through **Show results**. Before reveal, a submitted response does not expose the
+aggregate. The tables contain aggregate choices, not participant identities, private notes or
+source citations.
+
+After reveal, the audience stage puts the results before question media and explanations so
+repeated choices do not hide the data. Wide tables scroll horizontally; focus **Opinion result
+table** and use Left/Right Arrow, or swipe, to reach every column.
+
+Poll percentages use the number of respondents who submitted an accepted response as the
+denominator. With two respondents, a choice selected by both shows 100%, even if each respondent
+also selected another choice. Multiple-selection percentages can therefore total more than
+100%; they are not percentages of all selections or of everyone who joined the room.
+
+Ranking results use the total number of available choices as the first-place weight, decreasing
+by one at each ranked position. Ranking three of six choices gives weights **6, 5, 4**, with zero
+for unranked choices. **Ranked by**, **Average rank** and rank-position counts describe submitted
+orders. These result weights are not participant scores or evidence of learning accuracy.
+
+At the end, open the session report for anonymous choice evidence and select **Export evidence
+CSV** to download poll counts/percentages and ranking weights/rank-position counts. An opinion-only
+session has no scored leaderboard, accuracy result or paired recovery outcome. Existing
+assessment questions in a mixed deck retain their own scoring and recovery behavior.
+
+Operators must complete the [document-v9/report-v4 rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
+before enabling these writes. See the [first-family implementation record](evidence/presentation-e04-opinion-formats.md)
+for verification status and remaining scope.
 
 ### Collect Presentation Q&A
 

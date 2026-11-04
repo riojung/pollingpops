@@ -70,6 +70,7 @@ import type { StorageService } from "./storage.js";
 import { presentationCanInsertRecoveryPack } from "./presentation-live-recovery-packs.js";
 import { presentationCanInsertQuickCheck } from "./presentation-live-quick-checks.js";
 import { presentationCanInsertPublishedQuestion } from "./presentation-live-published-questions.js";
+import { presentationOpinionSummary } from "./presentation-opinion-results.js";
 
 import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 
@@ -194,6 +195,22 @@ export class PresentationSessionService {
       realtimeHostSnapshot: (session) => this.realtimeHostSnapshot(session),
       realtimeCompanionSnapshot: (session) => this.realtimeCompanionSnapshot(session),
       restHostSnapshot: (session) => this.restHostSnapshot(session),
+      closedOpinionSummary: async (session) => {
+        // Only the rare closed E04 receipt replay requests this aggregate. Keep normal/legacy
+        // acknowledgements on their existing row-level read path, and do not attach a result if
+        // the host moved the room while the aggregate was read.
+        const responses = await this.sessions.listResponses(session.id);
+        const confirmed = await this.sessions.getSessionById(session.id);
+        if (
+          !confirmed ||
+          confirmed.revision !== session.revision ||
+          confirmed.eventSeq !== session.eventSeq ||
+          confirmed.phase !== session.phase ||
+          presentationCurrentBlock(confirmed)?.id !== presentationCurrentBlock(session)?.id
+        )
+          return undefined;
+        return presentationOpinionSummary(presentationCurrentBlock(confirmed), responses);
+      },
       recordProductEvents: (workspaceId, events) => this.recordProductEvents(workspaceId, events),
     });
   }
@@ -1171,6 +1188,7 @@ export class PresentationSessionService {
     sessionId: string,
     includeSessionContext = false,
     includeQuickChecks = false,
+    includeOpinionResults = false,
   ) {
     const session = await this.sessions.getSessionForWorkspace(workspaceId, sessionId);
     if (!session) {
@@ -1207,7 +1225,9 @@ export class PresentationSessionService {
     }
     const envelope = PresentationReportEnvelopeSchema.parse({
       reportStatus: stored.status,
-      report: report ? presentationReportRestProjection(report, includeQuickChecks) : null,
+      report: report
+        ? presentationReportRestProjection(report, includeQuickChecks, includeOpinionResults)
+        : null,
     });
     return includeSessionContext
       ? PresentationReportWithSessionContextEnvelopeSchema.parse({

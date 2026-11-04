@@ -16,6 +16,8 @@ import {
   shouldApplyPresentationSnapshot,
 } from "../../../../lib/presentation-realtime";
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
 import styles from "../../../../components/presentation-live/presentation-delivery.module.css";
@@ -198,6 +200,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
   }
 
   const remaining = presentationRemainingSeconds(snapshot, receivedAt.current, now);
+  const opinionSummary = presentationOpinionSummaryFor(snapshot);
   return (
     <main className={styles.stagePage} lang="en-CA">
       <div className={styles.stageLayout}>
@@ -231,7 +234,11 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
             {reconnecting ? (
               <p role="status">Reconnecting — showing the last confirmed slide.</p>
             ) : null}
-            <section aria-label="Audience slide" className={styles.stageCanvas} tabIndex={0}>
+            <section
+              aria-label="Audience slide"
+              className={`${styles.stageCanvas}${opinionSummary ? ` ${styles.stageOpinionCanvas}` : ""}`}
+              tabIndex={0}
+            >
               {snapshot.phase === "lobby" ? (
                 <div className={styles.stageBody}>
                   <h1 lang="">{snapshot.title}</h1>
@@ -244,22 +251,39 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                 </div>
               ) : snapshot.currentBlock ? (
                 <div
-                  className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}`}
+                  className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}${opinionSummary ? ` ${styles.stageOpinionBody}` : ""}`}
                 >
                   {remaining !== null ? <p aria-live="off">{remaining}s remaining</p> : null}
-                  <PresentationDeliveryBlock
-                    block={snapshot.currentBlock}
-                    revealedAnswer={snapshot.revealedAnswer}
-                    renderMedia={(mediaId, altText) => (
+                  {opinionSummary && snapshot.currentBlock.kind === "question" ? (
+                    <>
+                      <h1 lang="">{snapshot.currentBlock.question.prompt}</h1>
+                      <PresentationOpinionResults summary={opinionSummary} compact />
                       <StageMedia
-                        key={`${snapshot.currentBlock?.id}:${mediaId}`}
+                        key={`${snapshot.currentBlock.id}:${snapshot.currentBlock.question.mediaId}`}
                         sessionId={id}
                         token={token}
-                        mediaId={mediaId}
-                        altText={altText}
+                        mediaId={snapshot.currentBlock.question.mediaId}
+                        altText={snapshot.currentBlock.question.mediaAlt}
                       />
-                    )}
-                  />
+                      {snapshot.revealedAnswer?.explanation ? (
+                        <p lang="">{snapshot.revealedAnswer.explanation}</p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <PresentationDeliveryBlock
+                      block={snapshot.currentBlock}
+                      revealedAnswer={snapshot.revealedAnswer}
+                      renderMedia={(mediaId, altText) => (
+                        <StageMedia
+                          key={`${snapshot.currentBlock?.id}:${mediaId}`}
+                          sessionId={id}
+                          token={token}
+                          mediaId={mediaId}
+                          altText={altText}
+                        />
+                      )}
+                    />
+                  )}
                   {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
                     <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
                   ) : null}

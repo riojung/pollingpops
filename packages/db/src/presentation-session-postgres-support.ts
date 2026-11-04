@@ -9,6 +9,7 @@ import type {
   PresentationSessionResponseRecord,
   PresentationSessionTimelineRecord,
 } from "./presentation-session-types.js";
+import { upcastPresentationResponse } from "./response-schemas.js";
 import { upcastPresentationSessionContent } from "./artifact-schemas.js";
 
 // Revision and live child rows are monotonic for the lifetime of a Presentation session. Their
@@ -26,6 +27,23 @@ export const PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL = `(
   + (SELECT count(*)
        FROM presentation_live_responses response
       WHERE response.session_id = session.id)
+)`;
+
+/** Match E04 frozen UUID spelling without changing literal legacy acknowledgement semantics. */
+export const PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL = `(
+  CASE WHEN (
+    session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
+    OR (
+      session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'poll'
+      AND COALESCE(session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'maxSelections', '1')
+        IN ('2', '3', '4', '5', '6')
+    )
+  ) THEN openround_presentation_uuid_equal(
+    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id',
+    current_response.block_id::text
+  ) ELSE current_response.block_id::text =
+    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+  END
 )`;
 
 export function mapSession(row: QueryResultRow): PresentationSessionRecord {
@@ -105,7 +123,8 @@ export function mapResponse(row: QueryResultRow): PresentationSessionResponseRec
     participantId: String(row.participant_id),
     blockId: String(row.block_id),
     questionId: String(row.question_id),
-    response: row.response,
+    response: upcastPresentationResponse(row.response, row.response_schema_version ?? 1),
+    responseSchemaVersion: row.response_schema_version ?? 1,
     correct: row.correct == null ? null : Boolean(row.correct),
     score: Number(row.score ?? 0),
     responseMs: Number(row.response_ms ?? 0),

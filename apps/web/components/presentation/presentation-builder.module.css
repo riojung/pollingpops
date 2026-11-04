@@ -55,6 +55,7 @@
 .commandBar button,
 .exitLink,
 .canvasToolbar button,
+.compactCommands button,
 .addActions button,
 .emptyCanvas button,
 .previewControls button,
@@ -599,6 +600,15 @@
   display: none;
 }
 
+.compactCommands,
+.compactPreview {
+  display: none;
+}
+
+.compactCommands button {
+  min-height: 44px;
+}
+
 .positionActions {
   display: flex;
   gap: 8px;
@@ -984,6 +994,18 @@
 }
 
 @media (max-width: 1180px) {
+  .compactCommands {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+
+  .compactCommands .saveStatus {
+    display: inline-flex;
+  }
+
   .canvasToolbar .compactHistory {
     display: inline-flex;
   }
@@ -1052,6 +1074,11 @@
 }
 
 @media (max-width: 640px) {
+  .compactPreview {
+    display: inline-flex;
+    align-items: center;
+  }
+
   .commandBar {
     gap: 8px;
     padding: 8px;
@@ -1113,4 +1140,21 @@
     transition: none;
     animation: none;
   }
+}
+
+.hiddenBadge {
+  padding: 3px 7px;
+  border: 1px dashed var(--ui-border, #aab9c7);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ui-text-muted, #52616f);
+}
+.hiddenBanner {
+  padding: 12px 16px;
+  margin: 0 0 12px;
+  border: 1px dashed var(--ui-border, #aab9c7);
+  border-radius: 8px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
 }

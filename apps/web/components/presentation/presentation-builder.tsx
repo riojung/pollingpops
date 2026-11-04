@@ -19,6 +19,8 @@ import {
   ApplyPresentationRecoveryPackUpdateSchema,
   PresentationRecoveryPackUpdatePreviewSchema,
   PRESENTATION_SCENE_MAX_NODES,
+  preparePresentationPublication,
+  type PresentationDraftMutation,
   resolveContentSlideFrames,
   regionForContentSlideFrame,
   type ContentSlideFrame,
@@ -51,6 +53,8 @@ import {
   createQuestionBlock,
   duplicatePresentationBlock,
   movePresentationBlock,
+  canMovePresentationBlock,
+  setPresentationSlideHidden,
   moveContentTextElement,
   normalizePresentationRecoveryDraft,
   presentationReadiness,
@@ -61,6 +65,7 @@ import {
   removePresentationBlock,
   updateContentTextElement,
 } from "../../lib/presentation-builder";
+import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import { RecoverableOperationQueue } from "../../lib/recoverable-operation-queue";
 import { isRetryableSaveError, retryWithBackoff } from "../../lib/retry";
 import {
@@ -234,7 +239,8 @@ function PresentationPreview({
 }) {
   const [index, setIndex] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const block = draft.blocks[index];
+  const publication = preparePresentationPublication(draft);
+  const block = publication.blocks[index];
   useEffect(() => focusModal(dialogRef.current), []);
   return (
     <div
@@ -252,14 +258,18 @@ function PresentationPreview({
           <strong lang={draft.title ? "" : "en-CA"}>
             {draft.title || "Untitled presentation"}
           </strong>
-          <span>{draft.blocks.length ? `${index + 1} / ${draft.blocks.length}` : "No slides"}</span>
+          <span>
+            {publication.blocks.length
+              ? `${index + 1} / ${publication.blocks.length}`
+              : "No slides"}
+          </span>
           <button className={styles.iconButton} onClick={onClose} type="button">
             Close preview
           </button>
         </div>
         <div className={styles.previewCanvas}>
           {!block ? (
-            <p>Add a slide to preview this presentation.</p>
+            <p>Show a slide or add an activity to preview this presentation.</p>
           ) : block.kind === "content" ? (
             <ContentSlideView
               block={block}
@@ -311,7 +321,7 @@ function PresentationPreview({
             Previous
           </button>
           <button
-            disabled={index >= draft.blocks.length - 1}
+            disabled={index >= publication.blocks.length - 1}
             onClick={() => setIndex((value) => value + 1)}
             type="button"
           >
@@ -360,6 +370,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const { locale, t } = useLocale();
   const router = useRouter();
   const recoveryKey = `presentation:${presentationId}`;
+  const pendingSaveKey = `${recoveryKey}:pending-save`;
   const [record, setRecord] = useState<PresentationRecord | null>(null);
   const [draft, setDraft] = useState<PresentationDraft | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -371,6 +382,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [recoveryPreviewOpen, setRecoveryPreviewOpen] = useState(false);
+  const [ordinarySavePending, setOrdinarySavePending] = useState(false);
+  const [saveConflictPresent, setSaveConflictPresent] = useState(false);
   const [recovery, setRecovery] = useState<BuilderRecoverySnapshot<PresentationDraft> | null>(null);
   const [undoStack, setUndoStack] = useState<PresentationDraft[]>([]);
   const [redoStack, setRedoStack] = useState<PresentationDraft[]>([]);
@@ -407,9 +421,13 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   } | null>(null);
   const alive = useRef(true);
   const revisionRef = useRef(0);
+  const draftBaseRevision = useRef(0);
   const lastSavedJson = useRef("");
+  const lastSavedServerJson = useRef("");
   const latestDraftJson = useRef("");
   const saveQueue = useRef(new RecoverableOperationQueue());
+  const retainedSave = useRef(new RetainedPresentationSave());
+  const saveConflict = useRef(false);
   const lastHistoryCommit = useRef<{ key: string; at: number } | null>(null);
   const roundImportDialogRef = useRef<HTMLDivElement>(null);
   const sourceImportDialogRef = useRef<HTMLDivElement>(null);
@@ -470,8 +488,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     void Promise.all([
       apiFetch<{ presentation: PresentationRecord }>(`/v1/presentations/${presentationId}`),
       loadBuilderRecovery<unknown>(recoveryKey),
+      loadBuilderRecovery<unknown>(pendingSaveKey),
     ])
-      .then(([response, local]) => {
+      .then(([response, local, pending]) => {
         if (!active) return;
         setRecord(response.presentation);
         previousBlockCount.current = response.presentation.draft.blocks.length;
@@ -479,11 +498,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         setDraft(response.presentation.draft);
         setSelectedBlockId(response.presentation.draft.blocks[0]?.id ?? null);
         revisionRef.current = response.presentation.draftRevision;
+        draftBaseRevision.current = response.presentation.draftRevision;
         lastSavedJson.current = JSON.stringify(response.presentation.draft);
+        lastSavedServerJson.current = lastSavedJson.current;
         latestDraftJson.current = lastSavedJson.current;
+        let localDraft: PresentationDraft | null = null;
         if (local) {
           try {
-            const localDraft = normalizePresentationRecoveryDraft(local.draft);
+            localDraft = normalizePresentationRecoveryDraft(local.draft);
             if (JSON.stringify(localDraft) !== lastSavedJson.current) {
               setRecovery({ ...local, draft: localDraft });
             }
@@ -491,6 +513,40 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
             setError(
               "The saved local copy could not be restored. Your saved presentation is available.",
             );
+          }
+        }
+        if (pending) {
+          try {
+            retainedSave.current.restore(pending.draft);
+            const attempt = retainedSave.current.pending!;
+            const working = localDraft ?? attempt.draft;
+            draftBaseRevision.current =
+              localDraft && JSON.stringify(localDraft) !== JSON.stringify(attempt.draft)
+                ? local!.revision
+                : attempt.expectedRevision;
+            setDraft(working);
+            setSelectedBlockId(working.blocks[0]?.id ?? null);
+            latestDraftJson.current = JSON.stringify(working);
+            if (latestDraftJson.current !== lastSavedJson.current) {
+              setRecovery({
+                key: recoveryKey,
+                revision: local?.revision ?? attempt.expectedRevision,
+                savedAt: local?.savedAt ?? pending.savedAt,
+                draft: working,
+              });
+            }
+            setOrdinarySavePending(true);
+            setSaveState("error");
+            setError(
+              "A previous save is awaiting acknowledgement. Your local edits were recovered. Retry save to recover its exact receipt before newer changes are saved.",
+            );
+          } catch {
+            setError(
+              "The previous save receipt could not be recovered. Preserve the local copy before continuing.",
+            );
+            saveConflict.current = true;
+            setSaveConflictPresent(true);
+            setSaveState("conflict");
           }
         }
         setLoaded(true);
@@ -502,7 +558,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     return () => {
       active = false;
     };
-  }, [presentationId, recoveryKey, router]);
+  }, [presentationId, recoveryKey, pendingSaveKey, router]);
 
   useEffect(() => {
     if (!loaded || !draft) return;
@@ -630,7 +686,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         setRedoStack([]);
         latestDraftJson.current = JSON.stringify(next);
         setSaveState("dirty");
-        void saveBuilderRecovery(recoveryKey, revisionRef.current, next).catch(() => undefined);
+        void saveBuilderRecovery(recoveryKey, draftBaseRevision.current, next).catch(
+          () => undefined,
+        );
         return next;
       });
     },
@@ -651,55 +709,143 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const enqueueSave = useCallback(
     (candidate: PresentationDraft): Promise<void> => {
       const serialized = JSON.stringify(candidate);
-      if (serialized === lastSavedJson.current) return Promise.resolve();
-      const mutationId = clientUuid();
+      if (serialized === lastSavedJson.current && !retainedSave.current.pending)
+        return Promise.resolve();
       setSaveState("saving");
-      void saveBuilderRecovery(recoveryKey, revisionRef.current, candidate).catch(() => undefined);
+      void saveBuilderRecovery(recoveryKey, draftBaseRevision.current, candidate).catch(
+        () => undefined,
+      );
       const queued = saveQueue.current.enqueue(async () => {
-        const response = await retryWithBackoff(() =>
-          apiFetch<{ presentation: PresentationRecord }>(
-            `/v1/presentations/${presentationId}/draft`,
-            {
-              method: "PUT",
-              body: JSON.stringify({
-                draft: candidate,
-                expectedRevision: revisionRef.current,
-                mutationId,
-                schemaVersion: 2,
-              }),
-            },
-          ),
-        );
-        revisionRef.current = response.presentation.draftRevision;
+        if (saveConflict.current)
+          throw new ApiClientError(
+            "Your local changes were preserved. Review the current draft or duplicate the local copy before saving.",
+            "STALE_DRAFT",
+            409,
+          );
+        await retainedSave.current.save(candidate, {
+          revision: () => revisionRef.current,
+          savedJson: () => lastSavedJson.current,
+          mutationId: clientUuid,
+          beforeNewAttempt: () => {
+            if (draftBaseRevision.current !== revisionRef.current)
+              throw new ApiClientError(
+                "This local copy is based on a different saved revision. Preview, download or duplicate it before continuing.",
+                "STALE_DRAFT",
+                409,
+              );
+          },
+          persist: async (pending: PresentationDraftMutation | null) => {
+            setOrdinarySavePending(pending !== null);
+            if (pending)
+              await saveBuilderRecovery(pendingSaveKey, pending.expectedRevision, pending);
+            else await clearBuilderRecovery(pendingSaveKey);
+          },
+          send: (pending) =>
+            retryWithBackoff(() =>
+              apiFetch<{ presentation: PresentationRecord }>(
+                `/v1/presentations/${presentationId}/draft`,
+                { method: "PUT", body: JSON.stringify(pending) },
+              ),
+            ),
+          definitiveFailure: (error) =>
+            error instanceof ApiClientError &&
+            error.status >= 400 &&
+            error.status < 500 &&
+            ![408, 425, 429].includes(error.status),
+          accepted: (response, pending) => {
+            const acceptedJson = JSON.stringify(response.presentation.draft);
+            if (
+              response.presentation.draftRevision < revisionRef.current ||
+              (response.presentation.draftRevision === revisionRef.current &&
+                lastSavedServerJson.current !== acceptedJson)
+            ) {
+              throw new ApiClientError(
+                "The save receipt was recovered, but another saved revision is newer. Your local work was preserved; review or duplicate it before continuing.",
+                "STALE_DRAFT",
+                409,
+              );
+            }
+            const attemptedJson = JSON.stringify(pending.draft);
+            if (
+              draftBaseRevision.current !== pending.expectedRevision &&
+              latestDraftJson.current !== attemptedJson
+            )
+              throw new ApiClientError(
+                "The save receipt was recovered, but this local copy has a different base revision. Preview or duplicate it before continuing.",
+                "STALE_DRAFT",
+                409,
+              );
+            revisionRef.current = response.presentation.draftRevision;
+            draftBaseRevision.current = response.presentation.draftRevision;
+            lastSavedJson.current = attemptedJson;
+            lastSavedServerJson.current = acceptedJson;
+            setRecord(response.presentation);
+            setRecovery((current) =>
+              current?.revision === pending.expectedRevision
+                ? { ...current, revision: response.presentation.draftRevision }
+                : current,
+            );
+            setSaveState(latestDraftJson.current === attemptedJson ? "saved" : "dirty");
+            setError("");
+          },
+        });
         lastSavedJson.current = serialized;
-        setRecord(response.presentation);
-        setSaveState("saved");
+        setSaveState(latestDraftJson.current === serialized ? "saved" : "dirty");
         setError("");
-        if (latestDraftJson.current === serialized) {
+        if (latestDraftJson.current === lastSavedJson.current) {
           await clearBuilderRecovery(recoveryKey).catch(() => undefined);
+        } else {
+          await saveBuilderRecovery(
+            recoveryKey,
+            revisionRef.current,
+            normalizePresentationRecoveryDraft(JSON.parse(latestDraftJson.current)),
+          ).catch(() => undefined);
         }
       });
       void queued.catch((caught) => {
         const conflict =
           caught instanceof ApiClientError &&
           (caught.code === "STALE_DRAFT" || caught.status === 409 || caught.status === 412);
+        if (conflict) {
+          saveConflict.current = true;
+          setSaveConflictPresent(true);
+          retainedSave.current.clear();
+          setOrdinarySavePending(false);
+          void clearBuilderRecovery(pendingSaveKey).catch(() => undefined);
+        }
         recordAuthoringEvent(conflict ? "draft_conflict" : "draft_save_failed", "presentation");
         setSaveState(conflict ? "conflict" : "error");
         setError(humanError(caught));
       });
       return queued;
     },
-    [presentationId, recoveryKey],
+    [presentationId, recoveryKey, pendingSaveKey],
   );
 
   useEffect(() => {
-    if (!loaded || !draft || packImportOpen || packUpdateBusy || packUpdateReceiptPending) return;
+    if (
+      !loaded ||
+      !draft ||
+      saveConflictPresent ||
+      packImportOpen ||
+      packUpdateBusy ||
+      packUpdateReceiptPending
+    )
+      return;
     const serialized = JSON.stringify(draft);
-    if (serialized === lastSavedJson.current) return;
+    if (serialized === lastSavedJson.current && !retainedSave.current.pending) return;
     setSaveState("dirty");
     const timer = window.setTimeout(() => void enqueueSave(draft), 700);
     return () => window.clearTimeout(timer);
-  }, [draft, enqueueSave, loaded, packImportOpen, packUpdateBusy, packUpdateReceiptPending]);
+  }, [
+    draft,
+    enqueueSave,
+    loaded,
+    saveConflictPresent,
+    packImportOpen,
+    packUpdateBusy,
+    packUpdateReceiptPending,
+  ]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -711,14 +857,22 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         packPending.current !== null ||
         packUpdatePending.current !== null ||
         mediaState !== "idle" ||
-        pendingNativeImage !== null
+        pendingNativeImage !== null ||
+        ordinarySavePending
       ) {
         event.preventDefault();
       }
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [saveState, packRetryVersionId, packUpdateReceiptPending, mediaState, pendingNativeImage]);
+  }, [
+    saveState,
+    packRetryVersionId,
+    packUpdateReceiptPending,
+    mediaState,
+    pendingNativeImage,
+    ordinarySavePending,
+  ]);
 
   function guardBuilderExit(event: MouseEvent<HTMLAnchorElement>) {
     if (!draft) return;
@@ -730,7 +884,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       saveState === "conflict";
     const hasPendingImage = mediaState !== "idle" || pendingNativeImage !== null;
     if (!needsRecovery && !hasPendingImage) return;
-    void saveBuilderRecovery(recoveryKey, revisionRef.current, draft).catch(() => undefined);
+    void saveBuilderRecovery(recoveryKey, draftBaseRevision.current, draft).catch(() => undefined);
     if (
       !window.confirm(
         hasPendingImage
@@ -848,9 +1002,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         ...(block.kind === "content" && block.scene
           ? {
               schemaVersion:
-                current.schemaVersion === 5 || block.scene.schemaVersion === 2
-                  ? (5 as const)
-                  : (4 as const),
+                current.schemaVersion >= 5
+                  ? current.schemaVersion
+                  : block.scene.schemaVersion === 2
+                    ? (5 as const)
+                    : (4 as const),
             }
           : {}),
       };
@@ -875,7 +1031,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     setDraft(previous);
     latestDraftJson.current = JSON.stringify(previous);
     setSaveState("dirty");
-    void saveBuilderRecovery(recoveryKey, revisionRef.current, previous).catch(() => undefined);
+    void saveBuilderRecovery(recoveryKey, draftBaseRevision.current, previous).catch(
+      () => undefined,
+    );
     if (!previous.blocks.some((block) => block.id === selectedBlockId)) {
       setSelectedBlockId(previous.blocks[0]?.id ?? null);
     }
@@ -897,10 +1055,16 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     setDraft(next);
     latestDraftJson.current = JSON.stringify(next);
     setSaveState("dirty");
-    void saveBuilderRecovery(recoveryKey, revisionRef.current, next).catch(() => undefined);
+    void saveBuilderRecovery(recoveryKey, draftBaseRevision.current, next).catch(() => undefined);
   }
 
   async function reloadLatestDraft(preferredBlockId?: string) {
+    if (retainedSave.current.pending) {
+      setError("Retry the outstanding save acknowledgement before loading another draft.");
+      return;
+    }
+    const local = draft;
+    const localRevision = draftBaseRevision.current;
     setSaveState("saving");
     setError("");
     try {
@@ -919,49 +1083,70 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       setRedoStack([]);
       lastHistoryCommit.current = null;
       revisionRef.current = response.presentation.draftRevision;
+      draftBaseRevision.current = response.presentation.draftRevision;
       lastSavedJson.current = JSON.stringify(response.presentation.draft);
+      lastSavedServerJson.current = lastSavedJson.current;
       latestDraftJson.current = lastSavedJson.current;
+      saveConflict.current = false;
+      setSaveConflictPresent(false);
       setSaveState("saved");
-      await clearBuilderRecovery(recoveryKey);
+      if (local && JSON.stringify(local) !== lastSavedJson.current) {
+        const snapshot = {
+          key: recoveryKey,
+          revision: localRevision,
+          draft: local,
+          savedAt: new Date().toISOString(),
+        };
+        setRecovery(snapshot);
+        await saveBuilderRecovery(recoveryKey, localRevision, local);
+      } else {
+        setRecovery(null);
+        await clearBuilderRecovery(recoveryKey);
+      }
     } catch (caught) {
       setError(humanError(caught));
       setSaveState("error");
     }
   }
 
-  function preserveLocalCopy() {
-    if (!draft) return;
-    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+  function downloadLocalCopy(source: PresentationDraft) {
+    const blob = new Blob([JSON.stringify(source, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${draft.title.trim() || "untitled-presentation"}-local-copy.json`;
+    link.download = `${source.title.trim() || "untitled-presentation"}-local-copy.json`;
     link.click();
     URL.revokeObjectURL(url);
   }
 
-  async function duplicateLocalDraft() {
-    if (!draft) return;
+  function preserveLocalCopy() {
+    if (draft) downloadLocalCopy(draft);
+  }
+
+  async function duplicateLocalDraft(source: PresentationDraft | null = draft) {
+    if (!source) return;
     setError("");
     try {
-      const title = `${draft.title.trim() || t("delivery.presentationBuilder.untitled")} — ${formatDateTime(locale, Date.now())}`;
+      const title = `${source.title.trim() || t("delivery.presentationBuilder.untitled")} — ${formatDateTime(locale, Date.now())}`;
       const created = await apiFetch<{ presentation: PresentationRecord }>("/v1/presentations", {
         method: "POST",
-        body: JSON.stringify({ title, description: draft.description ?? "" }),
+        body: JSON.stringify({ title, description: source.description ?? "" }),
       });
       await apiFetch<{ presentation: PresentationRecord }>(
         `/v1/presentations/${created.presentation.id}/draft`,
         {
           method: "PUT",
           body: JSON.stringify({
-            draft: { ...draft, title },
+            draft: { ...source, title },
             expectedRevision: created.presentation.draftRevision,
             mutationId: clientUuid(),
             schemaVersion: 2,
           }),
         },
       );
-      await clearBuilderRecovery(recoveryKey);
+      if (!retainedSave.current.pending && JSON.stringify(source) === latestDraftJson.current) {
+        await clearBuilderRecovery(recoveryKey);
+      }
       router.push(`/presentation/${created.presentation.id}`);
     } catch (caught) {
       setError(humanError(caught));
@@ -1164,7 +1349,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       setRecord(response.presentation);
       setDraft(response.presentation.draft);
       revisionRef.current = response.presentation.draftRevision;
+      draftBaseRevision.current = response.presentation.draftRevision;
       lastSavedJson.current = JSON.stringify(response.presentation.draft);
+      lastSavedServerJson.current = lastSavedJson.current;
       latestDraftJson.current = lastSavedJson.current;
       setSelectedBlockId(response.insertedBlockIds[0] ?? selectedBlockId);
       setInspectorTab("build");
@@ -1328,7 +1515,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       setRecord(next);
       setDraft(next.draft);
       revisionRef.current = next.draftRevision;
+      draftBaseRevision.current = next.draftRevision;
       lastSavedJson.current = JSON.stringify(next.draft);
+      lastSavedServerJson.current = lastSavedJson.current;
       latestDraftJson.current = lastSavedJson.current;
       setUndoStack([]);
       setRedoStack([]);
@@ -1473,7 +1662,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       setRecord(response.presentation);
       setDraft(response.presentation.draft);
       revisionRef.current = response.presentation.draftRevision;
+      draftBaseRevision.current = response.presentation.draftRevision;
       lastSavedJson.current = JSON.stringify(response.presentation.draft);
+      lastSavedServerJson.current = lastSavedJson.current;
       latestDraftJson.current = lastSavedJson.current;
       setSelectedBlockId(response.insertedBlockIds[0] ?? selectedBlockId);
       setRoundImportOpen(false);
@@ -1570,6 +1761,17 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           },
         ];
 
+  const saveLabel =
+    saveState === "saving"
+      ? t("delivery.common.saving")
+      : saveState === "dirty"
+        ? t("delivery.presentationBuilder.unsaved")
+        : saveState === "error"
+          ? t("delivery.builder.saveFailed")
+          : saveState === "conflict"
+            ? t("delivery.presentationBuilder.newerVersion")
+            : t("delivery.common.saved");
+
   return (
     <div className={styles.builder}>
       <a className={styles.skipLink} href="#presentation-canvas">
@@ -1616,15 +1818,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         </label>
         <div className={styles.commandActions}>
           <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
-            {saveState === "saving"
-              ? t("delivery.common.saving")
-              : saveState === "dirty"
-                ? t("delivery.presentationBuilder.unsaved")
-                : saveState === "error"
-                  ? t("delivery.builder.saveFailed")
-                  : saveState === "conflict"
-                    ? t("delivery.presentationBuilder.newerVersion")
-                    : t("delivery.common.saved")}
+            {saveLabel}
           </span>
           <button disabled={!undoStack.length} onClick={undo} type="button">
             {t("delivery.builder.undo")}
@@ -1659,29 +1853,54 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           inert={builderMutationBlocked}
           lang="en-CA"
           role="status"
+          aria-label="Local draft recovery"
         >
           <span>
-            A newer local edit from{" "}
-            <time dateTime={recovery.savedAt} lang={locale}>
-              {formatDateTime(locale, recovery.savedAt)}
-            </time>{" "}
-            is available.
+            {recovery.revision === record.draftRevision ? (
+              <>
+                A local recovery copy from{" "}
+                <time dateTime={recovery.savedAt}>{formatDateTime(locale, recovery.savedAt)}</time>{" "}
+                is available.
+              </>
+            ) : (
+              <>
+                This local recovery copy is based on revision {recovery.revision}; the saved
+                Presentation is revision {record.draftRevision}. Preview, download or duplicate the
+                local copy to preserve both versions.
+              </>
+            )}
           </span>
-          <button
-            onClick={() => {
-              commit(recovery.draft);
-              setRecovery(null);
-            }}
-            type="button"
-          >
-            Restore local copy
+          {recovery.revision === record.draftRevision && !saveConflictPresent ? (
+            <button
+              type="button"
+              onClick={() => {
+                draftBaseRevision.current = recovery.revision;
+                commit(recovery.draft);
+                setRecovery(null);
+              }}
+            >
+              Restore local copy
+            </button>
+          ) : null}
+          <button type="button" onClick={() => setRecoveryPreviewOpen(true)}>
+            Preview local copy
+          </button>
+          <button type="button" onClick={() => downloadLocalCopy(recovery.draft)}>
+            Download local copy
+          </button>
+          <button type="button" onClick={() => void duplicateLocalDraft(recovery.draft)}>
+            Duplicate local copy
           </button>
           <button
+            type="button"
             onClick={() => {
-              void clearBuilderRecovery(recoveryKey);
+              if (
+                JSON.stringify(recovery.draft) !== latestDraftJson.current ||
+                !retainedSave.current.pending
+              )
+                void clearBuilderRecovery(recoveryKey).catch(() => undefined);
               setRecovery(null);
             }}
-            type="button"
           >
             Dismiss
           </button>
@@ -1738,12 +1957,12 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       {error ? (
         <div className={styles.errorBanner} inert={builderMutationBlocked} role="alert">
           <span lang="en-CA">{error}</span>
-          {saveState === "error" ? (
+          {(saveState === "error" || ordinarySavePending) && saveState !== "saving" ? (
             <button onClick={() => void enqueueSave(draft)} type="button">
               {t("delivery.builder.retrySave")}
             </button>
           ) : null}
-          {saveState === "conflict" ? (
+          {saveState === "conflict" || saveConflictPresent ? (
             <>
               <button lang="en-CA" onClick={() => void reloadLatestDraft()} type="button">
                 Reload current
@@ -1866,7 +2085,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         )}
                     </strong>
                   </span>
-                  {issuesByBlock.has(block.id) ? (
+                  {block.kind === "content" && block.hidden ? (
+                    <span className={styles.hiddenBadge} lang="en-CA">
+                      Hidden
+                    </span>
+                  ) : issuesByBlock.has(block.id) ? (
                     <span
                       className={styles.issueBadge}
                       aria-label={t(
@@ -1930,6 +2153,18 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         </aside>
 
         <main className={styles.canvasArea} id="presentation-canvas">
+          <div className={styles.compactCommands} inert={builderMutationBlocked}>
+            <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
+              {saveLabel}
+            </span>
+            <button
+              className={styles.compactPreview}
+              onClick={() => setPreviewOpen(true)}
+              type="button"
+            >
+              {t("delivery.common.preview")}
+            </button>
+          </div>
           {productFeatures?.canvasBoards ? (
             <CanvasArtifactLinks
               target={{ kind: "presentation", targetId: presentationId }}
@@ -1946,6 +2181,17 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
             >
               {t("delivery.presentationBuilder.openMap")}
             </button>
+          ) : null}
+          {selectedBlock?.kind === "content" && selectedBlock.hidden ? (
+            <p
+              className={styles.hiddenBanner}
+              role="status"
+              aria-label="Slide visibility"
+              lang="en-CA"
+            >
+              Hidden from presentation. This slide stays editable here and is excluded from preview
+              and published delivery.
+            </p>
           ) : null}
           {!selectedBlock ? (
             <section className={styles.emptyCanvas}>
@@ -1981,7 +2227,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         block.kind === "content" && block.scene ? { ...block, scene } : block,
                       ),
                       schemaVersion:
-                        current.schemaVersion === 5 || scene.schemaVersion === 2 ? 5 : 4,
+                        current.schemaVersion >= 5
+                          ? current.schemaVersion
+                          : scene.schemaVersion === 2
+                            ? 5
+                            : 4,
                     }),
                     historyField ? `${selectedBlock.id}:${historyField}` : undefined,
                   )
@@ -2143,7 +2393,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       const converted = adaptContentSlideToScene(selectedBlock);
                       commit((current) => ({
                         ...updateBlock(current, selectedBlock.id, () => converted),
-                        schemaVersion: current.schemaVersion === 5 ? 5 : 4,
+                        schemaVersion: current.schemaVersion >= 5 ? current.schemaVersion : 4,
                       }));
                     } catch (caught) {
                       setError(humanError(caught));
@@ -2154,7 +2404,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 </button>
               ) : null}
               <button
-                disabled={draft.blocks[0]?.id === selectedBlock.id}
+                disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
+                title="Keep linked rechecks after their source question."
                 onClick={() =>
                   commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
                 }
@@ -2163,7 +2414,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 Move earlier
               </button>
               <button
-                disabled={draft.blocks.at(-1)?.id === selectedBlock.id}
+                disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
+                title="Keep linked rechecks after their source question."
                 onClick={() =>
                   commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
                 }
@@ -2171,6 +2423,23 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               >
                 Move later
               </button>
+              {selectedBlock.kind === "content" ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    commit((current) =>
+                      setPresentationSlideHidden(current, selectedBlock.id, !selectedBlock.hidden),
+                    )
+                  }
+                >
+                  {selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                </button>
+              ) : (
+                <p className={styles.helpText} lang="en-CA">
+                  Activities stay in the presentation. Remove an activity to exclude it; linked
+                  rechecks keep their order.
+                </p>
+              )}
               <button
                 onClick={() => {
                   const copy = duplicatePresentationBlock(selectedBlock);
@@ -2842,6 +3111,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       </div>
       {previewOpen ? (
         <PresentationPreview draft={draft} onClose={() => setPreviewOpen(false)} />
+      ) : null}
+      {recoveryPreviewOpen && recovery ? (
+        <PresentationPreview draft={recovery.draft} onClose={() => setRecoveryPreviewOpen(false)} />
       ) : null}
       {roundImportOpen ? (
         <div

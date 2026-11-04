@@ -238,8 +238,8 @@ describe("persisted artifact schema upcasters", () => {
   it.each([
     ["Round draft", () => upcastRoundDraft({}, 5), 5, [1, 2, 3, 4]],
     ["Round content", () => upcastRoundContent({}, 5), 5, [1, 2, 3, 4]],
-    ["Presentation draft", () => upcastPresentationDraft({}, 6), 6, [1, 2, 3, 4, 5]],
-    ["Presentation content", () => upcastPresentationContent({}, 6), 6, [1, 2, 3, 4, 5]],
+    ["Presentation draft", () => upcastPresentationDraft({}, 7), 7, [1, 2, 3, 4, 5, 6]],
+    ["Presentation content", () => upcastPresentationContent({}, 7), 7, [1, 2, 3, 4, 5, 6]],
   ])(
     "rejects an unknown schema version for %s",
     (label, parse, schemaVersion, supportedVersions) => {
@@ -338,7 +338,7 @@ describe("persisted artifact schema upcasters", () => {
             },
             1,
           ),
-          contentSchemaVersion: 6,
+          contentSchemaVersion: 7,
           contentHash: "unknown-version",
           sourceDraftRevision: 0,
           publishedAt: now,

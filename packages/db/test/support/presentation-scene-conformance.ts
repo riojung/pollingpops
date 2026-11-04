@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import {
   PresentationContentSchema,
   PresentationDraftSchema,
+  preparePresentationPublication,
   type PresentationDraft,
 } from "@openround/contracts";
 import {
@@ -124,9 +125,11 @@ export async function expectPresentationSceneConformance(input: {
   otherWorkspaceId: string;
   editorId: string;
   richText?: boolean;
+  visibility?: boolean;
 }) {
-  const { repository, workspaceId, otherWorkspaceId, editorId, richText = false } = input;
-  const schemaVersion = richText ? 5 : 4;
+  const { repository, workspaceId, otherWorkspaceId, editorId, visibility = false } = input;
+  const richText = input.richText === true || visibility;
+  const schemaVersion = visibility ? 6 : richText ? 5 : 4;
   const presentations = createPresentationRepository(repository);
   const sessions = createPresentationSessionRepository(repository);
   const now = new Date();
@@ -138,9 +141,17 @@ export async function expectPresentationSceneConformance(input: {
   ];
   const originalIds = Array.from({ length: 3 }, () => randomUUID());
   const baselineIds = Array.from({ length: 3 }, () => randomUUID());
+  const hiddenIds = visibility ? [randomUUID()] : [];
   const foreignId = randomUUID();
   const deletingId = randomUUID();
-  for (const id of [...sceneIds, ...originalIds, ...baselineIds, foreignId, deletingId])
+  for (const id of [
+    ...sceneIds,
+    ...originalIds,
+    ...baselineIds,
+    ...hiddenIds,
+    foreignId,
+    deletingId,
+  ])
     await repository.createMediaAsset({
       id,
       workspaceId: id === foreignId ? otherWorkspaceId : workspaceId,
@@ -154,10 +165,27 @@ export async function expectPresentationSceneConformance(input: {
   expect(await repository.claimMediaAssetDeletion(workspaceId, deletingId, now)).not.toBeNull();
   const packDraft = presentationPackMediaDraft(presentationPackContent(originalIds));
   const baseline = presentationPackContent(baselineIds);
+  const hiddenBlock = visibility
+    ? { ...presentationSceneBlock(hiddenIds, richText), hidden: true as const }
+    : null;
+  if (hiddenBlock) {
+    const title = hiddenBlock.scene.nodes.find(
+      (node) => node.type === "text" && node.role === "title",
+    );
+    if (!title || title.type !== "text") throw new Error("Expected hidden native title");
+    title.text = "PRIVATE hidden source";
+    title.richText = {
+      paragraphs: [{ kind: "paragraph", runs: [{ text: title.text, bold: true }] }],
+    };
+  }
   const draft = PresentationDraftSchema.parse({
     ...packDraft,
     schemaVersion,
-    blocks: [presentationSceneBlock(sceneIds, richText), ...packDraft.blocks],
+    blocks: [
+      presentationSceneBlock(sceneIds, richText),
+      ...(hiddenBlock ? [hiddenBlock] : []),
+      ...packDraft.blocks,
+    ],
     recoveryPackInsertions: [
       {
         ...packDraft.recoveryPackInsertions![0]!,
@@ -170,7 +198,8 @@ export async function expectPresentationSceneConformance(input: {
       },
     ],
   });
-  const expectedMediaIds = [...sceneIds, ...originalIds, ...baselineIds].sort();
+  const expectedPublishedMediaIds = [...sceneIds, ...originalIds, ...baselineIds].sort();
+  const expectedMediaIds = [...expectedPublishedMediaIds, ...hiddenIds].sort();
   expect(presentationMediaIds(draft).sort()).toEqual(expectedMediaIds);
   const presentation = await presentations.createPresentation({
     id: randomUUID(),
@@ -188,7 +217,17 @@ export async function expectPresentationSceneConformance(input: {
     createdAt: now,
     updatedAt: now,
   });
-  const content = PresentationContentSchema.parse(draft);
+  const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+  expect(presentationMediaIds(content).sort()).toEqual(expectedPublishedMediaIds);
+  expect(content.schemaVersion).toBe(schemaVersion);
+  expect(content.blocks).toEqual(
+    draft.blocks.filter((block) => block.kind !== "content" || !block.hidden),
+  );
+  expect(content.recoveryPackInsertions).toEqual(draft.recoveryPackInsertions);
+  if (hiddenBlock) {
+    expect(JSON.stringify(content)).not.toContain("PRIVATE hidden source");
+    expect(content.blocks.map((block) => block.id)).not.toContain(hiddenBlock.id);
+  }
   const version = await presentations.publishPresentation(
     {
       id: randomUUID(),
@@ -211,10 +250,15 @@ export async function expectPresentationSceneConformance(input: {
     expect(references).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ ownerType: "presentation_draft", ownerId: presentation.id }),
-        expect.objectContaining({ ownerType: "presentation_version", ownerId: version.id }),
         expect.objectContaining({ ownerType: "presentation_history" }),
       ]),
     );
+    expect(
+      references.some(
+        (reference) =>
+          reference.ownerType === "presentation_version" && reference.ownerId === version.id,
+      ),
+    ).toBe(expectedPublishedMediaIds.includes(mediaId));
     await expect(repository.deleteMediaAsset(workspaceId, mediaId)).resolves.toBe(false);
   }
   for (const mediaId of [foreignId, deletingId, randomUUID()]) {
@@ -292,6 +336,69 @@ export async function expectPresentationSceneConformance(input: {
     content,
     contentHash: hash(content),
   });
+  if (hiddenBlock) {
+    expect(restored).toMatchObject({ draftRevision: 2, draftSchemaVersion: 6, draft });
+    expect(
+      (await presentations.listPresentationHistory(workspaceId, presentation.id)).map(
+        (entry) => entry.draft,
+      ),
+    ).toContainEqual(draft);
+    const unhidden = structuredClone(draft);
+    for (const block of unhidden.blocks) if (block.kind === "content") delete block.hidden;
+    const visibleContent = PresentationContentSchema.parse(
+      preparePresentationPublication(unhidden),
+    );
+    expect(visibleContent.schemaVersion).toBe(6);
+    expect(visibleContent.blocks.map((block) => block.id)).toContain(hiddenBlock.id);
+    expect(presentationMediaIds(visibleContent).sort()).toEqual(expectedMediaIds);
+    const unhiddenSaved = await presentations.updatePresentationDraft({
+      workspaceId,
+      presentationId: presentation.id,
+      draft: unhidden,
+      expectedRevision: 2,
+      mutationId: randomUUID(),
+      editorId,
+      draftHash: hash(unhidden),
+    });
+    expect(unhiddenSaved).toMatchObject({
+      draftRevision: 3,
+      draftSchemaVersion: 6,
+      draft: unhidden,
+    });
+    const visibleVersion = await presentations.publishPresentation(
+      {
+        id: randomUUID(),
+        workspaceId,
+        presentationId: presentation.id,
+        version: 2,
+        content: visibleContent,
+        contentSchemaVersion: 6,
+        contentHash: hash(visibleContent),
+        sourceDraftRevision: 3,
+        publishedAt: now,
+      },
+      3,
+    );
+    expect(visibleVersion).toMatchObject({ content: visibleContent, sourceDraftRevision: 3 });
+    expect(await presentations.getPresentationVersion(workspaceId, version.id)).toMatchObject({
+      content,
+      contentHash: hash(content),
+      sourceDraftRevision: 0,
+    });
+    const references = await repository.listMediaReferences(workspaceId, hiddenIds[0]!);
+    expect(references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ownerType: "presentation_version", ownerId: visibleVersion.id }),
+        expect.objectContaining({ ownerType: "presentation_history" }),
+      ]),
+    );
+    expect(
+      references.some(
+        (reference) =>
+          reference.ownerType === "presentation_version" && reference.ownerId === version.id,
+      ),
+    ).toBe(false);
+  }
   const session = await sessions.createSession({
     id: randomUUID(),
     workspaceId,
@@ -315,6 +422,17 @@ export async function expectPresentationSceneConformance(input: {
     content,
   );
   const exported = await repository.exportAccount(editorId);
+  if (hiddenBlock) {
+    const history = exported.presentationDraftHistory as Array<Record<string, unknown>>;
+    expect(history.some((entry) => JSON.stringify(entry.draft).includes('"hidden":true'))).toBe(
+      true,
+    );
+    const versions = exported.presentationVersions as Array<Record<string, unknown>>;
+    const firstVersion = versions.find((entry) => entry.id === version.id);
+    expect(firstVersion).toBeDefined();
+    expect(JSON.stringify(firstVersion)).not.toContain("PRIVATE hidden source");
+    expect(JSON.stringify(firstVersion)).not.toContain(hiddenIds[0]!);
+  }
   for (const key of [
     "presentations",
     "presentationVersions",
@@ -354,5 +472,5 @@ export async function expectPresentationSceneConformance(input: {
       ),
     ).resolves.toBe(true);
   }
-  return { draft, expectedMediaIds };
+  return { draft, content, expectedMediaIds, expectedPublishedMediaIds };
 }

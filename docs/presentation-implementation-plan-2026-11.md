@@ -121,12 +121,14 @@ the subscription floor without completing the customer workflow.
 
 E00 now has an isolated local implementation; see [ADR 003](decisions/003-presentation-scene.md)
 and the [prototype record](evidence/presentation-scene-prototype.md). The later production work
-packages remain planned. E01 is in progress.
+packages remain planned. E01 implementation is complete locally; release qualification remains open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
-bounded emphasis, lists and links through explicit formatting. Remaining filmstrip tools and
-editor qualification remain subsequent E01 work.
+bounded emphasis, lists and links through explicit formatting. The completion increment adds visual
+slide hiding, valid linked-question filmstrip edits and retained save receipts across retries and
+refresh. See the [E01 acceptance record](evidence/presentation-e01-completion.md) for verification
+and the human, device and deployment evidence still required.
 Use separate branches and PRs for contract/persistence, renderer and UI slices when a package is
 too large for coherent review. Dependencies describe technical order; product selection and the
 existing rollout gates still apply.
@@ -183,8 +185,18 @@ move/resize, Shift-click and checkbox selection, group movement and safe multi-o
 Gestures preview locally and commit on release; narrow screens retain the readable column and
 keyboard/numeric controls. The [rich-text increment](evidence/presentation-rich-text.md) adds
 structured paragraphs, bold/italic ranges, bullet/numbered lists and safe web links under opt-in
-document v5/scene v2, retaining legacy JSON and hashes. Complete filmstrip hide behavior remains open;
-these slices do not mark all E01 acceptance criteria complete.
+document v5/scene v2, retaining legacy JSON and hashes.
+
+The completion increment opts hidden visual slides into document v6 without changing the scene
+format. Drafts, history and exports retain hidden slides; preview and immutable publication omit
+them. Activities cannot be hidden. Reordering cannot move a linked recheck before its source;
+deleting a source or copying a recheck produces valid standalone activities. Ordinary save retries
+retain and persist the exact mutation envelope before newer edits can be sent. Divergent local
+recovery offers preview, download and duplication instead of overwriting the current server copy.
+The [acceptance record](evidence/presentation-e01-completion.md) maps E01 to executed checks.
+Software completion does not close creator task observations, manual assistive-technology or
+physical-device checks, production scanner/storage qualification or deployment gates. Grouping,
+themes, charts and reusable components remain E02 scope.
 
 Touch points: current builder/helpers, contracts, `packages/db/src/presentations.ts`,
 `apps/server/src/presentation-routes.ts` and media retention. New scene modules are proposed;

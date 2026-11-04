@@ -4494,6 +4494,7 @@ const ContentSlideDraftFields = {
   citations: z.array(PresentationCitationSchema).max(20).optional(),
   sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
   scene: PresentationSceneDraftSchema.optional(),
+  hidden: z.literal(true).optional(),
 };
 
 /** Draft slides retain bounded storage shape while allowing incomplete accessibility metadata. */
@@ -4588,6 +4589,8 @@ const QuestionProvenanceSchema = z.object({
 export const InteractiveQuestionBlockDraftSchema = z.object({
   id: z.string().uuid(),
   kind: z.literal("question"),
+  // Activities stay explicit: hiding only applies to visual content slides.
+  hidden: z.never().optional(),
   question: QuestionDraftSchema,
   provenance: QuestionProvenanceSchema.optional(),
   citations: z.array(PresentationCitationSchema).max(20).optional(),
@@ -4598,6 +4601,8 @@ export type InteractiveQuestionBlockDraft = z.infer<typeof InteractiveQuestionBl
 export const InteractiveQuestionBlockSchema = z.object({
   id: z.string().uuid(),
   kind: z.literal("question"),
+  // Activities stay explicit: hiding only applies to visual content slides.
+  hidden: z.never().optional(),
   question: QuestionSchema,
   provenance: QuestionProvenanceSchema.optional(),
   citations: z.array(PresentationCitationSchema).max(20).optional(),
@@ -4782,7 +4787,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5;
+    schemaVersion: 2 | 3 | 4 | 5 | 6;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4821,12 +4826,29 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5;
-    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 } }>;
+    schemaVersion: 2 | 3 | 4 | 5 | 6;
+    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 }; hidden?: true }>;
   },
   ctx: z.RefinementCtx,
+  published = false,
 ) {
   for (const [index, block] of presentation.blocks.entries()) {
+    if (block.kind === "content" && block.hidden) {
+      if (presentation.schemaVersion < 6) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["blocks", index, "hidden"],
+          message: "Hidden slides require Presentation schema version 6",
+        });
+      }
+      if (published) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["blocks", index, "hidden"],
+          message: "Exclude hidden slides before freezing published content",
+        });
+      }
+    }
     if (block.kind === "content" && block.scene && presentation.schemaVersion < 4) {
       ctx.addIssue({
         code: "custom",
@@ -4847,6 +4869,17 @@ function applyPresentationSceneRules(
     }
   }
   if (
+    published &&
+    presentation.schemaVersion === 6 &&
+    !presentation.blocks.some((block) => block.kind !== "content" || !block.hidden)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["blocks"],
+      message: "Show a slide or add an activity before publishing",
+    });
+  }
+  if (
     presentation.schemaVersion >= 4 &&
     new TextEncoder().encode(JSON.stringify(presentation)).byteLength >
       PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES
@@ -4863,7 +4896,9 @@ export const PresentationDraftSchema = z
     title: z.string().trim().max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).default(2),
+    schemaVersion: z
+      .union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)])
+      .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockDraftSchema).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -4875,12 +4910,22 @@ export const PresentationDraftSchema = z
   });
 export type PresentationDraft = z.infer<typeof PresentationDraftSchema>;
 
+/**
+ * Compile a validated authoring draft into its visible publication candidate. Hidden source
+ * slides stay in drafts/history, while immutable live content cannot carry them or their media.
+ * Run PresentationContentSchema on the result; preparation does not replace publication checks.
+ */
+export function preparePresentationPublication(draft: PresentationDraft): PresentationDraft {
+  const blocks = draft.blocks.filter((block) => block.kind !== "content" || !block.hidden);
+  return blocks.length === draft.blocks.length ? draft : { ...draft, blocks };
+}
+
 export const PresentationContentSchema = z
   .object({
     title: z.string().trim().min(1, "Enter a presentation title").max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -4894,7 +4939,7 @@ export const PresentationContentSchema = z
   .superRefine((presentation, ctx) => {
     applyPresentationTopology(presentation, ctx, true);
     applyPresentationRecoveryPackRules(presentation, ctx);
-    applyPresentationSceneRules(presentation, ctx);
+    applyPresentationSceneRules(presentation, ctx, true);
     const liveCommandIds = new Set<string>();
     const liveBlockIds = new Set<string>();
     for (const [index, insertion] of (presentation.livePublishedQuestions ?? []).entries()) {
@@ -4993,7 +5038,8 @@ export function migratePresentationV1(value: unknown): unknown {
   if (
     presentation.schemaVersion === 3 ||
     presentation.schemaVersion === 4 ||
-    presentation.schemaVersion === 5
+    presentation.schemaVersion === 5 ||
+    presentation.schemaVersion === 6
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };

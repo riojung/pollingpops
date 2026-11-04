@@ -265,16 +265,22 @@ async function updateFixture() {
 }
 
 describe("Recovery Pack Presentation insertion", () => {
-  it.each([4, 5] as const)(
+  it.each([4, 5, 6] as const)(
     "preserves native v%s scenes when inserting and publishing a frozen Pack baseline",
     async (schemaVersion) => {
       const { app, cookie } = await setup();
       const { version, presentation } = await material(app, cookie);
-      const block = schemaVersion === 5 ? richTextSceneBlock() : nativeSceneBlock();
+      const block = schemaVersion >= 5 ? richTextSceneBlock() : nativeSceneBlock();
+      const blocks = [
+        block,
+        ...(schemaVersion === 6
+          ? [{ ...nativeSceneBlock([], "HIDDEN Pack neighbor"), hidden: true as const }]
+          : []),
+      ];
       const saved = await save(app, cookie, presentation, {
         ...presentation.draft,
         schemaVersion,
-        blocks: [block],
+        blocks,
       });
       expect(saved.statusCode, saved.body).toBe(200);
       const request = { packVersionId: version.id, expectedRevision: 2, mutationId: randomUUID() };
@@ -284,7 +290,7 @@ describe("Recovery Pack Presentation insertion", () => {
         draftSchemaVersion: schemaVersion,
         draft: {
           schemaVersion,
-          blocks: [block, { kind: "question" }, { kind: "question" }],
+          blocks: [...blocks, { kind: "question" }, { kind: "question" }],
           recoveryPackInsertions: [{ originalContent: version.content }],
         },
       });

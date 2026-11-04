@@ -604,6 +604,26 @@ answered** after addressing a question verbally. At Presentation end, retained Q
 until credential expiry/revocation or session retention/deletion. Disabling new activation does
 not remove previously activated Q&A.
 
+### Organize Presentation slides and recover edits
+
+Use the slide map to add, duplicate, move or delete slides. **Hide slide** keeps a visual slide in
+the editable deck and its history while omitting it from preview and the next published version.
+Choose **Show slide** to include it again. Hiding and showing support **Undo** and **Redo**.
+Activities cannot be hidden; remove an activity explicitly when it should leave the deck. At least
+one visible slide or activity is required to publish. Changes to the draft never alter an existing
+published version or running Presentation.
+
+A linked recheck must follow its source. The map disables moves that would reverse that order.
+Duplicating a recheck creates a standalone activity; deleting its source makes the retained
+recheck standalone while preserving its content.
+
+Wait for **Saved** before leaving. If saving fails, **Retry save** settles the pending save before
+sending newer edits. Recovery is kept in this browser, including an uncertain pending save; clearing
+site data removes it. When a local copy matches the saved revision, **Restore local copy** restores
+it for editing. If the server copy has diverged, use **Preview local copy**, **Download local copy**
+or **Duplicate local copy** to preserve your work. A revision conflict stops writes until you choose
+how to continue; reloading the current server copy does not silently apply old local edits to it.
+
 ### Arrange text on a Presentation slide
 
 Content slides support up to eight text elements total: exactly one title and up to seven text

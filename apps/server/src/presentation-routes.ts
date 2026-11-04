@@ -9,6 +9,7 @@ import {
   PresentationContentSchema,
   PresentationDraftSchema,
   PresentationDraftMutationSchema,
+  preparePresentationPublication,
   PublishPresentationSchema,
   type AuthoringDraft,
   type ContentSlideRegion,
@@ -531,13 +532,14 @@ export async function registerPresentationRoutes(
         ),
       );
     }
-    const parsedContent = PresentationContentSchema.safeParse(presentation.draft);
+    const candidate = preparePresentationPublication(presentation.draft);
+    const parsedContent = PresentationContentSchema.safeParse(candidate);
     const validationIssues = parsedContent.success
       ? []
       : parsedContent.error.issues.map((issue) =>
-          presentationPublishIssue(id, presentation.draft, issue.path, issue.message),
+          presentationPublishIssue(id, candidate, issue.path, issue.message),
         );
-    const mediaReferences = presentationMediaReferences(presentation.draft);
+    const mediaReferences = presentationMediaReferences(candidate);
     const mediaById = new Map(
       await Promise.all(
         [...new Set(mediaReferences.map((reference) => reference.mediaId))].map(
@@ -552,7 +554,7 @@ export async function registerPresentationRoutes(
       validationIssues.push(
         presentationPublishIssue(
           id,
-          presentation.draft,
+          candidate,
           reference.fieldPath,
           media
             ? "This image must finish security scanning before publishing"

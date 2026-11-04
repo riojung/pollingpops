@@ -50,6 +50,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
   pointer gestures, temporary multiselection and their history/autosave behavior.
 - [Presentation rich-text verification](evidence/presentation-rich-text.md) covers opt-in
   formatted text, safe links, compatible artifact readers and shared delivery rendering.
+- [Presentation E01 acceptance](evidence/presentation-e01-completion.md) covers slide visibility,
+  linked-question filmstrip safeguards, durable save recovery and remaining release evidence.
 - [Recent contract and deletion upgrades](runbooks/upgrade.md#recent-content-report-and-deletion-upgrades)
   cover Presentation v2, Report V4, migration 048, and compatible rollback targets.
 - [Release readiness ledger](release-readiness.json) is the machine-validated source of truth for

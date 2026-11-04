@@ -1,4 +1,4 @@
-import { type ReactElement } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type PresentationScene } from "@openround/contracts";
@@ -82,6 +82,12 @@ function fixture(): PresentationScene {
   };
 }
 
+function elements(node: ReactNode): ReactElement<Record<string, any>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement<Record<string, any>>(node)) return [];
+  return [node, ...elements(node.props.children as ReactNode)];
+}
+
 function harness(selectedNodeIds = ["body", "shape"]) {
   const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as (() => void)[] };
   const capture = new Set<number>();
@@ -135,10 +141,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     };
   }
   render();
-  const view = () =>
-    (tree.props.children as ReactElement<Record<string, any>>[]).find(
-      (child) => child.type === NativeSceneView,
-    )!;
+  const view = () => elements(tree).find((child) => child.type === NativeSceneView)!;
   return {
     original,
     onChange,

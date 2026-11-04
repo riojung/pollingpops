@@ -399,7 +399,26 @@ native slide with Design controls above the canvas; **New slide** adds another d
 Existing ordinary slides offer **Convert to native slide** in the toolbar above the canvas.
 Ordinary slides retain their six structured layouts and eight-element limit. Native slides add
 bounded text, images, shapes, connectors and design tools without requiring an activity.
-The preview and live views share the arrangement. See
+**Templates → Presentations** offers 21 entries: 12 native, eight-slide scenario decks alongside the nine
+retained facilitated templates. Search by workflow, choose **Preview structure**, then use
+**Previous slide**/**Next slide** or Left/Right, Home and End; Escape closes the preview.
+**Use presentation template** creates an independent draft. The sample stories and data are
+illustrative, with adaptation guidance in the speaker notes.
+
+On a native slide, **Group selected objects** keeps a selection together; use **Group and rotate**
+for proportional resizing and bounded rotation. Moving near an edge or centre shows local snap
+guides; hold Alt to move freely and Escape to cancel the drag. **Add table** and **Add bar chart**,
+**Add line chart** or **Add pie chart** provide editable inline data. Use **Preview pasted data**
+before **Apply table changes**/**Apply chart changes**; **Discard staged changes** leaves the
+saved object unchanged. Tables support 20 data rows × six columns; charts support 20 categories
+and four series, with a full data table and description. Pie charts use one nonnegative series.
+
+**External video** adds an explicit HTTPS destination plus a captions/transcript fallback. It opens
+on the external site only when followed; it does not embed or upload video. The preview and live
+views share the slide renderers. Operators must deploy the
+[scene4/document8-compatible reader set](runbooks/upgrade.md#native-presentation-composition-compatibility)
+before accepting the new composition/template writes. Existing feature policies and entitlements
+are unchanged. See
 [the Presentation walkthrough](user-guide.md#create-and-host-a-presentation).
 
 In an eligible live Presentation host, select **Launch companion** to open the compact sidecar.

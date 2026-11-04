@@ -9,6 +9,7 @@ import {
   type PresentationSceneNode,
 } from "@openround/contracts";
 import { clientUuid } from "./uuid";
+import { removeNativeSceneNodes } from "./presentation-native-geometry";
 
 export function createNativeContentBlock(): ContentSlideDraft {
   const titleId = clientUuid();
@@ -64,6 +65,8 @@ export function nativeNodeLabel(node: PresentationSceneNode): string {
     return node.role === "title" ? "Slide title" : node.text.trim().slice(0, 40) || "Body text";
   if (node.type === "image") return node.altText?.trim() || "Image";
   if (node.type === "shape") return node.label.trim() || `${node.shape.replaceAll("_", " ")} shape`;
+  if (node.type === "table") return node.caption.trim() || "Data table";
+  if (node.type === "chart") return node.title.trim() || `${node.chartType} chart`;
   return node.label.trim() || "Connection";
 }
 
@@ -76,22 +79,9 @@ export function updateNativeNode(
 }
 
 export function removeNativeNode(scene: PresentationScene, id: string): PresentationScene {
-  const node = scene.nodes.find((item) => item.id === id);
-  if (!node || (node.type === "text" && node.role === "title")) return scene;
-  const removed = new Set(
-    scene.nodes
-      .filter(
-        (item) =>
-          item.id === id ||
-          (item.type === "connector" && (item.from.nodeId === id || item.to.nodeId === id)),
-      )
-      .map((item) => item.id),
-  );
-  return {
-    ...scene,
-    nodes: scene.nodes.filter((item) => !removed.has(item.id)),
-    readingOrder: scene.readingOrder.filter((item) => !removed.has(item)),
-  };
+  const node = scene.nodes.find((node) => node.id === id);
+  if (node?.type === "text" && node.role === "title") return scene;
+  return removeNativeSceneNodes(scene, [id]);
 }
 
 export function reorderNativeNode(
@@ -125,6 +115,14 @@ export function duplicateNativeScene(scene: PresentationScene): PresentationScen
         : { ...structuredClone(node), id: ids.get(node.id)! },
     ),
     readingOrder: scene.readingOrder.map((id) => ids.get(id)!),
+    ...(scene.groups
+      ? {
+          groups: scene.groups.map((group) => ({
+            id: clientUuid(),
+            nodeIds: group.nodeIds.map((id) => ids.get(id)!),
+          })),
+        }
+      : {}),
   };
 }
 

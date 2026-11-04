@@ -54,6 +54,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
   linked-question filmstrip safeguards, durable save recovery and remaining release evidence.
 - [Presentation design foundation](evidence/presentation-design-foundation.md) covers the first
   E02 themes/layouts, arrangement, image fit and compatible-reader requirements.
+- [Presentation E02 acceptance](evidence/presentation-e02-completion.md) covers persistent groups,
+  rotation, snap guides, editable information components, native scenario decks and video links.
 - [Recent contract and deletion upgrades](runbooks/upgrade.md#recent-content-report-and-deletion-upgrades)
   cover Presentation v2, Report V4, migration 048, and compatible rollback targets.
 - [Release readiness ledger](release-readiness.json) is the machine-validated source of truth for

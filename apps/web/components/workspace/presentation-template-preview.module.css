@@ -1,0 +1,129 @@
+.thumbnail {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  inline-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface-soft);
+  margin-block: 0.5rem 1rem;
+  pointer-events: none;
+}
+
+.thumbnailScene {
+  position: absolute;
+  inset: 0 auto auto 0;
+  inline-size: 960px;
+  transform-origin: top left;
+}
+
+.thumbnailScene > article {
+  min-block-size: 540px;
+}
+
+.dialog {
+  inline-size: min(1080px, calc(100% - 32px));
+  max-inline-size: calc(100% - 32px);
+  max-block-size: calc(100dvh - 32px);
+  box-sizing: border-box;
+  padding: 20px;
+  overflow: auto;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  box-shadow: var(--ui-shadow-lg);
+}
+
+.dialog::backdrop {
+  background: rgb(10 20 35 / 65%);
+}
+
+.header,
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block-end: 16px;
+}
+
+.header > div {
+  flex: 1 1 240px;
+  min-inline-size: 0;
+}
+
+.header h2 {
+  margin: 0 0 6px;
+  color: var(--ui-text-strong);
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.header p,
+.keyboard {
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.dialog button {
+  min-block-size: 44px;
+  max-inline-size: 100%;
+}
+
+.controls p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage {
+  min-inline-size: 0;
+  margin-block-end: 16px;
+}
+
+.stage > article {
+  border-radius: 10px;
+}
+
+.activity {
+  padding: 28px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+}
+
+.activity h1 {
+  margin-block: 12px 20px;
+  font-size: clamp(24px, 4vw, 40px);
+}
+
+.activity li {
+  margin-block: 8px;
+}
+
+@media (max-width: 700px) {
+  .dialog {
+    inline-size: calc(100% - 16px);
+    max-inline-size: calc(100% - 16px);
+    max-block-size: calc(100dvh - 16px);
+    padding: 12px;
+  }
+
+  .controls {
+    gap: 8px;
+  }
+
+  .controls button {
+    flex: 1 1 40%;
+  }
+
+  .controls p {
+    flex-basis: 100%;
+    order: -1;
+    text-align: center;
+  }
+}

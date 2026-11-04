@@ -26,7 +26,11 @@ for (const mobile of [false, true]) {
           "aria-selected",
           "true",
         );
-        if (name === "Presentations") await expect(page.getByRole("article")).toHaveCount(9);
+        if (name === "Presentations") {
+          await expect(page.getByRole("article")).toHaveCount(21);
+          await expect(page.locator('[data-template-collection="native"]')).toHaveCount(12);
+          await expect(page.locator('[data-template-collection="facilitated"]')).toHaveCount(9);
+        }
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
           `${name} templates fit in ${mode} mode`,
@@ -97,6 +101,7 @@ for (const mobile of [false, true]) {
     expect(presentationResponse.ok()).toBe(true);
     const storedPresentation = (await presentationResponse.json()).presentation;
     expect(storedPresentation.draft.title).toBe("Project kickoff");
+    expect(storedPresentation.draft.schemaVersion).toBe(2);
     expect(storedPresentation.draft.blocks).toHaveLength(5);
     expect(
       new Set(storedPresentation.draft.blocks.map((block: { id: string }) => block.id)).size,

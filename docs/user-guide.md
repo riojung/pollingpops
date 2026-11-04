@@ -24,8 +24,18 @@ later in the Round editor. A live poll is not a self-paced Survey.
 Open **Templates** and choose **Rounds**, **Presentations**, or **Surveys**. Search original
 Round and Survey templates and filter by category/type. **Preview questions** shows prompts
 and options without creating content. **Use this starter** makes an independent draft with fresh IDs.
-Presentation templates provide ready-to-edit slides and interactions for meetings, training,
-reviews, and workshops. Survey templates contain opinion polls and ratings for self-paced feedback.
+The 21-template Presentation catalogue contains 12 native scenario decks and the nine retained facilitated
+templates. Each native scenario has eight editable slides and works without an audience activity:
+startup pitch, client proposal, project update, quarterly strategy, portfolio case study, event talk,
+product demo, customer onboarding, practical workshop, lesson/explainer, research findings and
+business decision brief. Their worked examples and data are explicitly illustrative; review the
+speaker notes and replace example assumptions with your own sourced information.
+**Preview structure** opens a read-only, shared-renderer deck preview. Use **Previous slide**,
+**Next slide**, Left/Right arrow keys, Home or End to navigate, and Escape or **Close preview** to
+return to the chooser. Only the current preview slide is mounted. **Use presentation template**
+creates an independent draft with fresh IDs; viewing the preview creates no content. The existing
+facilitated templates retain their slides, questions and linked rechecks. Survey templates contain
+opinion polls and ratings for self-paced feedback.
 Review every answer, explanation and recheck for your audience before publishing. Original template
 content is English; chooser/filter controls are localized.
 
@@ -670,7 +680,8 @@ when you need several images, shapes or connectors.
 
 ### Build a native slide
 
-Choose **Add native slide** in the Presentation builder. Select a node in the slide or its reading
+Choose **New slide** above the canvas for a designed native starter; **Add native slide** in the
+map still adds a plain native starter. Select a node in the slide or its reading
 order list to edit its text, image description, shape or connector. The position and size fields
 use percentages of the slide. Focus a move or resize button and use arrow keys for 1% steps,
 or hold Shift for 5% steps.
@@ -678,12 +689,15 @@ Give shapes meaningful labels and images useful descriptions for people who cann
 
 On a desktop, drag an object or its move button to reposition it. Drag its resize button to change
 its width and height from the bottom-right corner. Release to save the change as one **Undo** step;
-press Escape before releasing to cancel. Movement stays inside the slide.
+press Escape before releasing to cancel. Movement stays inside the slide. During movement, local
+snap guides appear within six screen pixels of nearby object or slide edges/centres. Hold Alt to
+move freely. Guides are temporary editor feedback and are not saved in the slide.
 
 Hold Shift while clicking objects or use their **Include … in selection** checkboxes to select
 several. Drag a selected object's move button, use its arrow keys, or use the **Move selection**
 buttons to move them together. They keep their spacing when reaching a slide edge. Resize and
-numeric fields apply to the object being inspected. **Delete selected objects** removes selected
+numeric fields apply to the object being inspected, except that a stored group's resize handle
+resizes its members proportionally. **Delete selected objects** removes selected
 objects and their connectors while keeping the required slide title. Selection is temporary and
 does not create a saved group. On phones, use selection, movement buttons and numeric fields;
 the reading column keeps ordinary scrolling and does not support geometric dragging.
@@ -704,7 +718,7 @@ that refer to it. Duplicating a slide creates independent nodes and reconnects i
 Native edits use the same autosave, **Undo**, **Redo**, recovery and conflict review as the existing
 builder. Wait for **Saved**, reload to verify the saved slide, then preview and publish. Publication
 freezes that version; later draft edits do not change a running Presentation. Speaker notes and
-source information remain private. Persistent grouping, charts and advanced layout tools remain later work.
+source information remain private.
 
 In **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
 **Apply design to all native slides** applies those choices to existing native slides, including
@@ -716,14 +730,63 @@ Choose an available layout button to reposition existing text and images. Preset
 shown object combination and never delete content to make it fit. Use **Undo** to restore the
 previous positions. Select multiple objects to align them or distribute at least three evenly.
 Distribution is unavailable when their sizes cannot fit without overlap. Layer controls move the
-last selected object in front of or behind other visual objects; reading order stays unchanged.
+last selected object, or its stored group, in front of or behind other visual objects; reading order stays unchanged.
 Connectors follow their objects and stay behind them.
 
 For an image, **Contain** shows the whole image; **Cover** crops it to fill the frame. Adjust its
 focal X/Y position to keep the important area in view. Narrow screens show the complete image in
 the reading column. Cropping never changes the source image or its access permissions. Preview
 and published delivery use the same design; later draft changes leave existing sessions unchanged.
-Grouping, rotation, tables/charts and complete deck templates remain later E02 work.
+
+In **Group and rotate**, choose **Group selected objects** to save a group, or
+**Ungroup selected objects** to release its members. Groups are flat: an object belongs to at most
+one group, and connectors are not members. Selecting a member selects its group for movement,
+proportional resizing, alignment and layering. **Grow selection 5%** and **Shrink selection 5%**
+provide resize controls. Grouping leaves reading order and connector references intact; duplicating
+a slide gives its copied groups and members fresh IDs.
+
+Use **Rotate selection left 15°**, **Rotate selection right 15°**, or
+**Last selected angle (degrees)**. The angle field sets the last selected object's angle while
+preserving relative angles in the selection. Rotation follows the physical 16:9 slide shape;
+both the object's frame and its rotated visible bounds must remain inside the slide. If the
+selection would leave the slide, move it away from the edge or reduce its size before retrying.
+Narrow reading views retain semantic order and show unrotated content.
+
+### Add a table or chart
+
+Choose **Add table**, **Add bar chart**, **Add line chart**, or **Add pie chart** on a native slide,
+then select the object in **Slide objects · reading order**. A table supports up to 20 data rows
+and six columns. Give it a **Table caption** and readable column headings. Charts support up to
+20 categories and four numeric series; provide a **Chart title** and **Chart description** that
+explain the important pattern. A pie chart uses one nonnegative series with a positive total.
+
+Edit the staged cells or use **Paste CSV or TSV data**, then **Preview pasted data**. The first
+row supplies headings; chart data starts with category labels followed by numeric series. Quoted
+cells and quoted newlines are supported. Table cells remain literal text; no spreadsheet formula
+or live spreadsheet connection is executed. A new paste replaces the staged grid.
+
+Choose **Apply table changes** or **Apply chart changes** to update the slide as one **Undo** step.
+Until then, edits remain local to the data editor and do not change the saved object. Choose
+**Discard staged changes** to return to the object's current data. Invalid or over-limit input
+shows an error and retains the staged work; correct it before applying. Apply before switching
+objects or leaving when you want to keep a staged edit.
+
+Charts use local SVG geometry and show their full data table and description. Tables retain all
+cells, with a readable narrow-screen presentation. Review both the plot and its data alternative
+after changing values, fonts or size; update the description when the message changes. The editor,
+preview and live delivery share these renderers.
+
+### Link to an external video
+
+In **External video**, enter **Video title**, **Video HTTPS link**, and
+**Captions or transcript HTTPS link**, then choose **Add external video link**. Both destinations
+appear on the slide with a fallback explanation. The audience chooses whether to open the
+external site; use the captions/transcript link if playback is unavailable. Destination availability
+is not checked by the editor.
+
+These are ordinary rich-text links, not an embedded player. Opening a link uses a new tab without
+opener/referrer access. Adding or previewing the slide does not load provider scripts, iframes,
+remote thumbnails or video bytes. Uploaded-video hosting/transcoding is not part of this feature.
 
 To add formatting, select a native text object and choose **Format text**. Select characters in its
 text field, then choose **Bold** or **Italic**. **Paragraph style** changes the current or selected

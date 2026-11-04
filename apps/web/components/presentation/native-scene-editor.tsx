@@ -22,6 +22,10 @@ import {
 import { type SceneImageRenderer } from "./native-scene-view";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneCompositionControls } from "./native-scene-composition-controls";
+import { NativeSceneVideoControls } from "./native-scene-video-controls";
+import { NativeSceneDataEditor } from "./native-scene-data-editor";
+import { createNativeChartNode, createNativeTableNode } from "../../lib/presentation-native-data";
 import {
   NativeSceneArrangementControls,
   NativeSceneDesignControls,
@@ -31,6 +35,7 @@ import {
 import {
   moveNativeSceneNodes,
   removeNativeSceneNodes,
+  expandNativeSceneSelection,
 } from "../../lib/presentation-native-geometry";
 import styles from "./native-scene.module.css";
 
@@ -44,7 +49,7 @@ const anchors = ["center", "top", "right", "bottom", "left"] as const;
 
 export function NativeSceneEditor({
   scene,
-  onChange,
+  onChange: onSceneChange,
   renderImage,
   uploadsEnabled,
   mediaState,
@@ -55,7 +60,7 @@ export function NativeSceneEditor({
   onApplyDesignToDeck,
 }: {
   scene: PresentationScene;
-  onChange: (scene: PresentationScene, historyField?: string) => void;
+  onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
   renderImage: SceneImageRenderer;
   uploadsEnabled: boolean;
   mediaState: "idle" | "uploading" | "scanning";
@@ -68,8 +73,15 @@ export function NativeSceneEditor({
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
   const [formatError, setFormatError] = useState("");
+  const [changeFailure, setChangeFailure] = useState<{
+    scene: PresentationScene;
+    message: string;
+  } | null>(null);
   const validSelection = selection.filter((id) => scene.nodes.some((node) => node.id === id));
-  const selectedIds = validSelection.length ? validSelection : [scene.nodes[0]!.id];
+  const selectedIds = expandNativeSceneSelection(
+    scene,
+    validSelection.length ? validSelection : [scene.nodes[0]!.id],
+  );
   const selected = scene.nodes.find((node) => node.id === selectedIds.at(-1))!;
   const multiple = selectedIds.length > 1;
   const canMoveSelection = scene.nodes.some(
@@ -77,13 +89,39 @@ export function NativeSceneEditor({
   );
   function select(id: string, additive = false) {
     setSelection((current) => {
-      if (!additive) return [id];
-      const valid = current.filter((candidate) =>
-        scene.nodes.some((node) => node.id === candidate),
+      const members = expandNativeSceneSelection(scene, [id]);
+      if (!additive) return members;
+      const valid = expandNativeSceneSelection(
+        scene,
+        current.filter((candidate) => scene.nodes.some((node) => node.id === candidate)),
       );
-      if (!valid.includes(id)) return [...valid, id];
-      return valid.length > 1 ? valid.filter((candidate) => candidate !== id) : valid;
+      if (!members.every((id) => valid.includes(id)))
+        return [...valid.filter((id) => !members.includes(id)), ...members];
+      const remaining = valid.filter((id) => !members.includes(id));
+      return remaining.length ? remaining : valid;
     });
+  }
+  function onChange(next: PresentationScene, historyField?: string) {
+    if (next === scene) return false;
+    const parsed = PresentationSceneDraftSchema.safeParse(next);
+    if (!parsed.success) {
+      setChangeFailure({
+        scene,
+        message:
+          "This change cannot fit within the slide’s limits. Keep rotated objects inside the slide; shorten content or remove an object, then try again.",
+      });
+      return false;
+    }
+    setChangeFailure(null);
+    if (onSceneChange(parsed.data, historyField) === false) {
+      setChangeFailure({
+        scene,
+        message:
+          "The Presentation could not accept this change. Reduce content and try again; the current slide is retained.",
+      });
+      return false;
+    }
+    return true;
   }
   const canAdd =
     mediaState === "idle" &&
@@ -99,12 +137,13 @@ export function NativeSceneEditor({
   }
   function add(node: PresentationSceneNode) {
     if (!canAdd) return;
-    onChange({
+    const added = onChange({
       ...scene,
+      schemaVersion: node.type === "table" || node.type === "chart" ? 4 : scene.schemaVersion,
       nodes: [...scene.nodes, node],
       readingOrder: [...scene.readingOrder, node.id],
     });
-    setSelection([node.id]);
+    if (added) setSelection([node.id]);
   }
   function restoreHistory(action: () => void) {
     const active = document.activeElement;
@@ -135,6 +174,29 @@ export function NativeSceneEditor({
           onChange={onChange}
           onApplyDesignToDeck={onApplyDesignToDeck}
         />
+        <fieldset className={styles.designControls}>
+          <legend>Tables and charts</legend>
+          <div className={styles.actions}>
+            <button type="button" disabled={!canAdd} onClick={() => add(createNativeTableNode())}>
+              Add table
+            </button>
+            {(["bar", "line", "pie"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                disabled={!canAdd}
+                onClick={() => add(createNativeChartNode(kind))}
+              >
+                Add {kind} chart
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        {changeFailure?.scene === scene ? (
+          <p className={styles.formatError} role="alert">
+            {changeFailure.message}
+          </p>
+        ) : null}
       </div>
       <NativeSceneCanvas
         scene={scene}
@@ -146,6 +208,12 @@ export function NativeSceneEditor({
       <div className={styles.controls} aria-label="Native slide editor" lang="en-CA">
         <NativeSceneLayoutControls scene={scene} onChange={onChange} />
         <NativeSceneArrangementControls
+          scene={scene}
+          selectedIds={selectedIds}
+          selectedId={selected.id}
+          onChange={onChange}
+        />
+        <NativeSceneCompositionControls
           scene={scene}
           selectedIds={selectedIds}
           selectedId={selected.id}
@@ -296,6 +364,12 @@ export function NativeSceneEditor({
                     : "Uploads are unavailable until malware scanning is configured."}
           </p>
         </fieldset>
+        <NativeSceneVideoControls
+          scene={scene}
+          canAdd={canAdd}
+          onChange={onChange}
+          onSelect={(id) => setSelection([id])}
+        />
         <fieldset
           data-native-text-fields="true"
           onKeyDown={(event) => {
@@ -325,10 +399,7 @@ export function NativeSceneEditor({
               onChange={(node, field) => {
                 const next = updateNativeNode(scene, selected.id, () => node);
                 onChange(
-                  PresentationSceneDraftSchema.parse({
-                    ...next,
-                    schemaVersion: scene.schemaVersion === 3 ? 3 : 2,
-                  }),
+                  { ...next, schemaVersion: scene.schemaVersion >= 2 ? scene.schemaVersion : 2 },
                   field ? `native:${selected.id}:${field}` : undefined,
                 );
               }}
@@ -355,24 +426,24 @@ export function NativeSceneEditor({
                 <button
                   type="button"
                   onClick={() => {
+                    let richText;
                     try {
-                      const richText = plainTextToPresentationRichText(selected.text);
-                      setFormatError("");
-                      onChange(
-                        PresentationSceneDraftSchema.parse({
-                          ...updateNativeNode(scene, selected.id, () => ({
-                            ...selected,
-                            text: presentationRichTextToPlainText(richText),
-                            richText,
-                          })),
-                          schemaVersion: scene.schemaVersion === 3 ? 3 : 2,
-                        }),
-                      );
+                      richText = plainTextToPresentationRichText(selected.text);
                     } catch {
                       setFormatError(
                         "This text cannot be formatted within the slide's limits. Use at most 100 paragraphs, remove unsupported control characters, or reduce the slide's content.",
                       );
+                      return;
                     }
+                    setFormatError("");
+                    onChange({
+                      ...updateNativeNode(scene, selected.id, () => ({
+                        ...selected,
+                        text: presentationRichTextToPlainText(richText),
+                        richText,
+                      })),
+                      schemaVersion: scene.schemaVersion >= 2 ? scene.schemaVersion : 2,
+                    });
                   }}
                 >
                   Format text
@@ -384,6 +455,14 @@ export function NativeSceneEditor({
                 </p>
               ) : null}
             </>
+          ) : null}
+          {selected.type === "table" || selected.type === "chart" ? (
+            <NativeSceneDataEditor
+              key={selected.id}
+              scene={scene}
+              node={selected}
+              onChange={onChange}
+            />
           ) : null}
           {selected.type === "image" ? (
             <label>
@@ -590,11 +669,13 @@ export function NativeSceneEditor({
           </div>
           <p className={styles.help}>
             On wide screens, drag an object or its move button; drag its resize button to change
-            size. Press Escape to cancel a drag. Shift-click objects or use the selection checkboxes
-            to move several together. Arrow keys on a move button nudge the selection by 1%, or 5%
-            with Shift. Resize keys change the focused object; numeric fields change the last
-            selected object. Narrow screens use the reading-order view with keyboard and numeric
-            controls. Deleting objects also removes their connectors. The title stays on the slide.
+            size. Dragging near an object or slide edge/center shows snap guides; hold Alt to move
+            freely. Press Escape to cancel a drag. Shift-click objects or use the selection
+            checkboxes to move several together. Arrow keys on a move button nudge the selection by
+            1%, or 5% with Shift. Resize keys proportionally resize a stored group or change the
+            focused object; numeric fields change the last selected object. Narrow screens use the
+            reading-order view with keyboard and numeric controls. Deleting objects also removes
+            their connectors. The title stays on the slide.
           </p>
         </fieldset>
       </div>

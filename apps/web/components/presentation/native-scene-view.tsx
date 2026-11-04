@@ -21,6 +21,8 @@ import { boundNativeSceneFrame, nativeNodeLabel } from "../../lib/presentation-n
 import styles from "./native-scene.module.css";
 import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
 import { NativeRichTextView } from "./native-rich-text-view";
+import { NativeSceneDataView } from "./native-scene-data-view";
+import { selectedNativeSceneBounds } from "../../lib/presentation-native-geometry";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
 type Connector = Extract<PresentationSceneNode, { type: "connector" }>;
@@ -30,9 +32,19 @@ function endpoint(scene: PresentationScene, endpoint: Connector["from"]) {
   const target = scene.nodes.find((node) => node.id === endpoint.nodeId);
   if (!target || target.type === "connector") return null;
   const { x, y, width, height } = target.frame;
+  if (!target.rotation)
+    return {
+      x: x + (endpoint.anchor === "left" ? 0 : endpoint.anchor === "right" ? width : width / 2),
+      y: y + (endpoint.anchor === "top" ? 0 : endpoint.anchor === "bottom" ? height : height / 2),
+    };
+  const angle = ((target.rotation ?? 0) * Math.PI) / 180;
+  const dx =
+    (endpoint.anchor === "left" ? -width / 2 : endpoint.anchor === "right" ? width / 2 : 0) * 16;
+  const dy =
+    (endpoint.anchor === "top" ? -height / 2 : endpoint.anchor === "bottom" ? height / 2 : 0) * 9;
   return {
-    x: x + (endpoint.anchor === "left" ? 0 : endpoint.anchor === "right" ? width : width / 2),
-    y: y + (endpoint.anchor === "top" ? 0 : endpoint.anchor === "bottom" ? height : height / 2),
+    x: x + width / 2 + (dx * Math.cos(angle) - dy * Math.sin(angle)) / 16,
+    y: y + height / 2 + (dx * Math.sin(angle) + dy * Math.cos(angle)) / 9,
   };
 }
 
@@ -194,6 +206,7 @@ export function NativeSceneView({
           width: `${node.frame.width}%`,
           height: `${node.frame.height}%`,
           zIndex: scene.nodes.indexOf(node) + 1,
+          transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined,
         };
         return (
           <div
@@ -203,6 +216,7 @@ export function NativeSceneView({
             data-node-id={id}
             data-node-type={node.type}
             data-frame={JSON.stringify(node.frame)}
+            data-rotation={node.rotation}
             onClick={
               editing && !onNodePointerDown ? (event) => onSelect?.(id, event.shiftKey) : undefined
             }
@@ -224,6 +238,9 @@ export function NativeSceneView({
               )
             ) : null}
             {node.type === "shape" ? <Shape node={node} /> : null}
+            {node.type === "table" || node.type === "chart" ? (
+              <NativeSceneDataView node={node} />
+            ) : null}
             {node.type === "image" ? (
               <div
                 className={styles.image}
@@ -267,6 +284,7 @@ export function NativeSceneView({
                 </button>
                 <button
                   type="button"
+                  hidden={scene.groups?.some((group) => group.nodeIds.includes(id))}
                   aria-label={`Resize ${nativeNodeLabel(node)}. Use arrow keys to change size.`}
                   onFocus={() => {
                     if (!selectedNodeIds?.includes(id)) onSelect?.(id);
@@ -290,6 +308,43 @@ export function NativeSceneView({
           </div>
         );
       })}
+      {editing
+        ? scene.groups?.map((group, index) => {
+            if (!group.nodeIds.every((id) => selectedNodeIds?.includes(id))) return null;
+            const bounds = selectedNativeSceneBounds(scene, group.nodeIds)!;
+            const member = nodes.get(group.nodeIds[0]!) as FramedNode;
+            return (
+              <div
+                key={group.id}
+                className={styles.groupOutline}
+                data-native-group={group.id}
+                style={{
+                  left: `${bounds.x}%`,
+                  top: `${bounds.y}%`,
+                  width: `${bounds.width}%`,
+                  height: `${bounds.height}%`,
+                  zIndex: scene.nodes.length + 1,
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label={`Resize group ${index + 1}. Use arrow keys to change size.`}
+                  onKeyDown={(event) => frameKey(event, member, true)}
+                  onPointerDown={
+                    onNodePointerDown
+                      ? (event) => {
+                          event.stopPropagation();
+                          onNodePointerDown(event, member.id, true, true);
+                        }
+                      : undefined
+                  }
+                >
+                  ↘
+                </button>
+              </div>
+            );
+          })
+        : null}
     </article>
   );
 }

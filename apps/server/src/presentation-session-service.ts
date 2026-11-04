@@ -721,15 +721,23 @@ export class PresentationSessionService {
     if (!session) {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Presentation session not found");
     }
-    const credential = await this.sessions.revokeCredential(
+    const result = await this.sessions.revokeActiveCredential(
       input.workspaceId,
       input.sessionId,
       input.credentialId,
       new Date(),
       "stage",
     );
-    if (!credential) {
+    if (result.status === "not_found") {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Stage pass not found");
+    }
+    if (result.status === "stale") {
+      throw new PresentationSessionServiceError(
+        409,
+        "CONFLICT",
+        "This stage pass is no longer current. No current stage access was revoked; a newer stage may still be open.",
+        { reason: "STALE_STAGE_PASS" },
+      );
     }
     await this.dependencies.repository.recordAudit({
       workspaceId: input.workspaceId,
@@ -738,7 +746,7 @@ export class PresentationSessionService {
       targetType: "presentation_live_session",
       targetId: input.sessionId,
       requestId: input.requestId,
-      metadata: { credentialId: credential.id },
+      metadata: { credentialId: result.credential.id },
     });
   }
 

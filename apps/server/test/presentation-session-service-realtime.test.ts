@@ -357,7 +357,7 @@ describe("PresentationSessionService realtime integration", () => {
   });
 
   it("rotates and revokes stage passes by exact role and enforces one-hour/session expiry", async () => {
-    const { service, hosted, sessions, ids } = await fixture();
+    const { repository, service, hosted, sessions, ids } = await fixture();
     const sessionId = hosted.snapshot.sessionId;
     const input = {
       workspaceId: ids.workspaceId,
@@ -375,6 +375,18 @@ describe("PresentationSessionService realtime integration", () => {
     await expect(service.getStageSnapshot(sessionId, previous.stageToken)).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
+    const audit = vi.spyOn(repository, "recordAudit");
+    await expect(
+      service.revokeStagePass({ ...input, credentialId: previous.credentialId }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "CONFLICT",
+      details: { reason: "STALE_STAGE_PASS" },
+    });
+    expect(audit).not.toHaveBeenCalled();
+    await expect(service.getStageSnapshot(sessionId, pass.stageToken)).resolves.toMatchObject({
+      projection: "stage",
+    });
     await expect(
       service.revokeStagePass({ ...input, credentialId: hosted.controlCredentialId }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -389,6 +401,13 @@ describe("PresentationSessionService realtime integration", () => {
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await service.revokeStagePass({ ...input, credentialId: pass.credentialId });
+    await expect(
+      service.revokeStagePass({ ...input, credentialId: pass.credentialId }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "CONFLICT",
+      details: { reason: "STALE_STAGE_PASS" },
+    });
     await expect(service.getStageSnapshot(sessionId, pass.stageToken)).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
@@ -402,6 +421,9 @@ describe("PresentationSessionService realtime integration", () => {
       await expect(service.getStageSnapshot(sessionId, expired.stageToken)).rejects.toMatchObject({
         code: "UNAUTHORIZED",
       });
+      await expect(
+        service.revokeStagePass({ ...input, credentialId: expired.credentialId }),
+      ).rejects.toMatchObject({ status: 409, details: { reason: "STALE_STAGE_PASS" } });
     } finally {
       vi.useRealTimers();
     }
@@ -414,6 +436,47 @@ describe("PresentationSessionService realtime integration", () => {
     sessionLookup.mockResolvedValue({ ...stored, liveExpiresAt: new Date(Date.now() - 1) });
     await expect(service.createStagePass(input)).rejects.toMatchObject({ code: "PHASE_CLOSED" });
     sessionLookup.mockRestore();
+  });
+
+  it("reports a stale revoke when another host rotates the stage after service preflight", async () => {
+    const { repository, service, sessions, hosted, ids } = await fixture();
+    const sessionId = hosted.snapshot.sessionId;
+    const input = {
+      workspaceId: ids.workspaceId,
+      userId: ids.userId,
+      sessionId,
+      requestId: randomUUID(),
+    };
+    const stageA = await service.createStagePass(input);
+    const revokeActive = sessions.revokeActiveCredential.bind(sessions);
+    let stageB: Awaited<ReturnType<typeof service.createStagePass>> | undefined;
+    const audit = vi.spyOn(repository, "recordAudit");
+    const updated = vi.fn();
+    service.setSessionUpdatedHandler(updated);
+    vi.spyOn(sessions, "revokeActiveCredential").mockImplementationOnce(async (...args) => {
+      // The session preflight has completed. Another host wins rotation before the conditional
+      // revocation reaches the repository; its new pass must survive this stale request.
+      stageB = await service.createStagePass(input);
+      audit.mockClear();
+      return revokeActive(...args);
+    });
+    await expect(
+      service.revokeStagePass({ ...input, credentialId: stageA.credentialId }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "CONFLICT",
+      details: { reason: "STALE_STAGE_PASS" },
+    });
+    expect(audit).not.toHaveBeenCalled();
+    expect(updated).not.toHaveBeenCalled();
+    expect(stageB).toBeDefined();
+    await expect(service.getStageSnapshot(sessionId, stageB!.stageToken)).resolves.toMatchObject({
+      projection: "stage",
+    });
+    await service.revokeStagePass({ ...input, credentialId: stageB!.credentialId });
+    await expect(service.getStageSnapshot(sessionId, stageB!.stageToken)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
   });
 
   // Four real scrypt derivations retain production password checks on shared CI CPUs.

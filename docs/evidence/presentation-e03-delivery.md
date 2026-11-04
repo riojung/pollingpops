@@ -57,7 +57,7 @@ facilitator authority. See the [rollout and rollback requirements](../runbooks/u
 
 Full `pnpm check` passed, including repository formatting, Docker-context dependency checks,
 lint, type checking, unit/integration tests, production builds and the admin build/help check.
-Final-source local log: `/tmp/pollingpops-e03-check-viewport.log`. The principal affected suites reported:
+Desktop-delivery local log: `/tmp/pollingpops-e03-check-viewport.log`. The principal affected suites reported:
 
 | Suite     | Passed | Default-run skips |
 | --------- | -----: | ----------------: |
@@ -156,6 +156,47 @@ different order. The invocation was corrected and the comparator now sorts conta
 mount destinations while retaining every value check. The subsequent coordinated update passed.
 Local result: `/tmp/pollingpops-e03-local-update-result.json`; private build log:
 `/tmp/pollingpops-e03-local-update.log`.
+
+## PR 194 review follow-up: stale stage revocation
+
+The [review finding](https://github.com/riojung/pollingpops/pull/194#discussion_r4469882018)
+identified a two-host-tab false-success path: tab B replaced tab A's stage pass, then tab A's
+revocation returned success for its already-revoked credential while tab B's stage stayed active.
+
+Stage revocation now uses a separate atomic active-only repository operation. PostgreSQL locks
+the exact tenant/session/id/role row and conditionally updates only an unrevoked, unexpired pass;
+memory performs the same classification/mutation without an asynchronous gap. A stale pass
+returns `409 CONFLICT` with `STALE_STAGE_PASS`, records no successful-revoke audit and leaves any
+newer stage alone. The UI retains the old credential/control state, displays the conflict and
+explains how to recover. Existing host/Companion revocation remains idempotent. No migration,
+document format, entitlement or dependency changed.
+
+Verification after this fix:
+
+- Fifty-four targeted backend tests passed, along with DB/server type checks, scoped lint/format
+  and independent read-only review. The service race test rotates a replacement after session
+  preflight and before the atomic revoke, then checks the conflict and missing success audit.
+- Full `pnpm check` passed: 615 contracts, 2,301 web, 1,060 server, 507 DB and 354 support tests,
+  with the existing 15 server/343 DB/one support default-run skips. Formatting, lint, types,
+  Docker-context checks and production/admin builds passed. Local log:
+  `/tmp/pollingpops-e03-pr194-review-check.log`.
+- Real PostgreSQL 17 verified all ninety migrations/checksums twice with restricted runtime and
+  forced credential RLS. **4 passed, 121 filtered skips**, including the shared Presentation
+  contract's stale/expired/concurrent revoke checks and legacy host/Companion idempotency, plus
+  Q&A and v7/v8 compatibility. The owned tmpfs container/SSH forward were removed; existing
+  containers, application data and settings were unchanged. Local result:
+  `/tmp/pollingpops-e03-pr194-pg/result-9fe4b302a7.json`.
+- A focused production browser regression passed **4/4** on its first attempt, with zero failures
+  or skips in 54.4 seconds across desktop Chromium/Firefox and emulated mobile Chromium/WebKit.
+  Two real host tabs shared creator authority but retained independent stage storage. Tab A's
+  stale revoke returned the conflict/error/guidance without clearing its credential, button or
+  fallback link; tab B's stage remained readable until tab B revoked its active pass successfully.
+  Neither tab rotated the host control pass. Local log:
+  `/tmp/pollingpops-e03-pr194-stale-stage-browser.log`. Task-owned Firefox data was removed and
+  verified absent; personal profiles and settings were unchanged.
+
+This follow-up is tested in isolated services; it does not restart or reconfigure the previously
+documented local development stack.
 
 ## Qualification boundary
 

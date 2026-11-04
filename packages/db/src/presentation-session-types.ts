@@ -136,6 +136,11 @@ export interface PresentationSessionCredentialRecord {
   revokedAt: Date | null;
 }
 
+export type PresentationActiveCredentialRevocation =
+  | { status: "revoked"; credential: PresentationSessionCredentialRecord }
+  | { status: "stale" }
+  | { status: "not_found" };
+
 export interface PresentationSessionCommandReceiptRecord {
   id: string;
   workspaceId: string;
@@ -378,6 +383,14 @@ export interface PresentationSessionRepository {
     revokedAt?: Date,
     role?: PresentationSessionCredentialRole,
   ): Promise<PresentationSessionCredentialRecord | null>;
+  /** Revokes only this exact active, unexpired role-scoped pass; stale passes change nothing. */
+  revokeActiveCredential(
+    workspaceId: string,
+    sessionId: string,
+    credentialId: string,
+    revokedAt: Date,
+    role: PresentationSessionCredentialRole,
+  ): Promise<PresentationActiveCredentialRevocation>;
 }
 
 export class PresentationSessionConflictError extends Error {

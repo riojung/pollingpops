@@ -631,6 +631,9 @@ scroll dense content; the header keeps the join code accessible in short windows
 
 The stage pass expires within one hour. Opening a replacement stage invalidates the previous
 stage pass; **Revoke audience stage access** closes access without changing host controls.
+If another host tab has replaced the pass, revoking from the older tab shows a warning instead
+of reporting success. Use the tab that opened the current stage, or open a replacement stage
+here and then revoke it. The older tab cannot silently revoke a different tab's newer pass.
 Refreshing the stage retains access in that tab when browser storage is available. On a lost
 connection it labels the last confirmed slide; expired or revoked access clears that content.
 

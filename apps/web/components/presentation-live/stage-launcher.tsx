@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PresentationStagePassResponseSchema } from "@openround/contracts";
-import { apiFetch, humanError } from "../../lib/api";
+import { apiFetch, ApiClientError, humanError } from "../../lib/api";
 import { isolatePresentationCompanionWindow } from "../../lib/presentation-companion-pass";
 import { presentationStageLaunchUrl } from "../../lib/presentation-stage-pass";
 import styles from "./presentation-delivery.module.css";
@@ -20,6 +20,7 @@ export function PresentationStageLauncher({
   const [fallback, setFallback] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [staleRevocation, setStaleRevocation] = useState(false);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const key = `openround:presentation-stage-credential:${sessionId}`;
@@ -42,6 +43,7 @@ export function PresentationStageLauncher({
     setBusy(true);
     setFallback(null);
     setError("");
+    setStaleRevocation(false);
     let popup: Window | null = null;
     try {
       popup = isolatePresentationCompanionWindow(
@@ -77,6 +79,7 @@ export function PresentationStageLauncher({
     inFlight.current = true;
     setBusy(true);
     setError("");
+    setStaleRevocation(false);
     try {
       await apiFetch(`/v1/presentation-sessions/${sessionId}/stage-passes/${credentialId}`, {
         method: "DELETE",
@@ -90,7 +93,10 @@ export function PresentationStageLauncher({
         /* Server revocation is authoritative. */
       }
     } catch (caught) {
-      if (mounted.current) setError(humanError(caught));
+      if (mounted.current) {
+        setError(humanError(caught));
+        setStaleRevocation(caught instanceof ApiClientError && caught.status === 409);
+      }
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(false);
@@ -131,6 +137,12 @@ export function PresentationStageLauncher({
       {error ? (
         <p role="alert" className="error">
           {error}
+        </p>
+      ) : null}
+      {staleRevocation ? (
+        <p>
+          Use the host tab that opened the current stage, or open a replacement stage here and then
+          revoke it.
         </p>
       ) : null}
     </section>

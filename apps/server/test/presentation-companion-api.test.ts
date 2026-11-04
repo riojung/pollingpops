@@ -490,6 +490,29 @@ describe("Presentation scoped stage API", () => {
     const replacement = (
       await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie } })
     ).json<PresentationStagePassResponse>();
+    const staleRevocation = await app.inject({
+      method: "DELETE",
+      url: `${base}/stage-passes/${pass.credentialId}`,
+      headers: { cookie: editor },
+    });
+    expect(staleRevocation.statusCode).toBe(409);
+    expect(staleRevocation.headers["cache-control"]).toContain("no-store");
+    expect(staleRevocation.json()).toMatchObject({
+      error: {
+        code: "CONFLICT",
+        details: { reason: "STALE_STAGE_PASS" },
+        message: expect.stringContaining("No current stage access was revoked"),
+      },
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/stage`,
+          headers: { authorization: `Bearer ${replacement.stageToken}` },
+        })
+      ).statusCode,
+    ).toBe(200);
     expect((await app.inject({ method: "GET", url: `${base}/stage`, headers })).statusCode).toBe(
       401,
     );

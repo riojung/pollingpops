@@ -670,4 +670,167 @@ for (const suffix of ["", " @mobile"]) {
       await stage.close();
     }
   });
+
+  test(`stale host tabs cannot claim to revoke a newer audience stage${suffix}`, async ({
+    page,
+    browser,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    annotateDeliveryEmulation(
+      testInfo,
+      "Two host tabs share creator cookies and retain independent session storage; window.open is controlled to keep both stage launches on their direct-link fallback.",
+    );
+    const fixture = await createDeliverySession(page);
+    const otherHost = await page.context().newPage();
+    const scopedContext = await deliveryContext(browser, page, testInfo);
+    const stageEndpoint = `${e01ApiUrl}/v1/presentation-sessions/${fixture.sessionId}/stage`;
+    const credentialKey = `openround:presentation-stage-credential:${fixture.sessionId}`;
+    let hostPassRequests = 0;
+    page.context().on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname ===
+          `/v1/presentation-sessions/${fixture.sessionId}/control-pass`
+      ) {
+        hostPassRequests += 1;
+      }
+    });
+    try {
+      await page.goto(`/presentation-session/${fixture.sessionId}/host`);
+      await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
+      await page.evaluate(() => {
+        window.open = () => null;
+      });
+      const firstCreated = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname ===
+            `/v1/presentation-sessions/${fixture.sessionId}/stage-pass`,
+      );
+      await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      const firstResponse = await firstCreated;
+      expect(firstResponse.status()).toBe(201);
+      const firstPass = (await firstResponse.json()) as PresentationStagePassResponse;
+      const firstControls = page.getByRole("region", {
+        name: "Audience stage controls",
+        exact: true,
+      });
+      const firstRevoke = firstControls.getByRole("button", {
+        name: "Revoke audience stage access",
+        exact: true,
+      });
+      await expect(firstRevoke).toBeEnabled();
+
+      // Reuse the control pass so this test isolates stage rotation from host handoff.
+      await otherHost.addInitScript(
+        ({ sessionId, token }) => {
+          sessionStorage.setItem(`openround:presentation-host:${sessionId}`, token);
+          window.open = () => null;
+        },
+        { sessionId: fixture.sessionId, token: fixture.controlToken },
+      );
+      await otherHost.goto(`/presentation-session/${fixture.sessionId}/host`);
+      expect((await otherHost.request.get(`${e01ApiUrl}/v1/auth/me`)).status()).toBe(200);
+      expect(
+        await otherHost.evaluate((key) => sessionStorage.getItem(key) === null, credentialKey),
+      ).toBe(true);
+      const secondCreated = otherHost.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname ===
+            `/v1/presentation-sessions/${fixture.sessionId}/stage-pass`,
+      );
+      await otherHost.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      const secondResponse = await secondCreated;
+      expect(secondResponse.status()).toBe(201);
+      const secondPass = (await secondResponse.json()) as PresentationStagePassResponse;
+      const secondControls = otherHost.getByRole("region", {
+        name: "Audience stage controls",
+        exact: true,
+      });
+      const secondRevoke = secondControls.getByRole("button", {
+        name: "Revoke audience stage access",
+        exact: true,
+      });
+      await expect(secondRevoke).toBeEnabled();
+      expect(hostPassRequests).toBe(0);
+      expect(
+        (
+          await scopedContext.request.get(stageEndpoint, {
+            headers: { authorization: `Bearer ${firstPass.stageToken}` },
+          })
+        ).status(),
+      ).toBe(401);
+
+      const staleRevoked = page.waitForResponse(
+        (response) =>
+          response.request().method() === "DELETE" &&
+          new URL(response.url()).pathname ===
+            `/v1/presentation-sessions/${fixture.sessionId}/stage-passes/${firstPass.credentialId}`,
+      );
+      await firstRevoke.click();
+      const staleResponse = await staleRevoked;
+      expect(staleResponse.status()).toBe(409);
+      const staleError = (await staleResponse.json()).error as {
+        code: string;
+        details: { reason: string };
+      };
+      expect(staleError.code).toBe("CONFLICT");
+      expect(staleError.details.reason).toBe("STALE_STAGE_PASS");
+      await expect(firstControls.getByRole("alert")).toContainText(
+        "No current stage access was revoked; a newer stage may still be open.",
+      );
+      await expect(firstControls).toContainText(
+        "Use the host tab that opened the current stage, or open a replacement stage here and then revoke it.",
+      );
+      await expect(firstRevoke).toBeEnabled();
+      await expect(
+        firstControls.getByRole("link", { name: "Open audience stage in a new tab", exact: true }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(({ key, id }) => sessionStorage.getItem(key) === id, {
+          key: credentialKey,
+          id: firstPass.credentialId,
+        }),
+      ).toBe(true);
+      const stillOpen = await scopedContext.request.get(stageEndpoint, {
+        headers: { authorization: `Bearer ${secondPass.stageToken}` },
+      });
+      expect(stillOpen.status()).toBe(200);
+      expect(
+        ((await stillOpen.json()).snapshot as PresentationStageSnapshot).currentBlock?.id,
+      ).toBe(fixture.slides[0]!.id);
+
+      const currentRevoked = otherHost.waitForResponse(
+        (response) =>
+          response.request().method() === "DELETE" &&
+          new URL(response.url()).pathname ===
+            `/v1/presentation-sessions/${fixture.sessionId}/stage-passes/${secondPass.credentialId}`,
+      );
+      await secondRevoke.click();
+      expect((await currentRevoked).status()).toBe(204);
+      await expect(secondRevoke).toHaveCount(0);
+      await expect(secondControls.getByRole("alert")).toHaveCount(0);
+      expect(
+        await otherHost.evaluate((key) => sessionStorage.getItem(key) === null, credentialKey),
+      ).toBe(true);
+      expect(
+        (
+          await scopedContext.request.get(stageEndpoint, {
+            headers: { authorization: `Bearer ${secondPass.stageToken}` },
+          })
+        ).status(),
+      ).toBe(401);
+      await expect(firstRevoke).toBeEnabled();
+      expect(
+        await page.evaluate(({ key, id }) => sessionStorage.getItem(key) === id, {
+          key: credentialKey,
+          id: firstPass.credentialId,
+        }),
+      ).toBe(true);
+    } finally {
+      await otherHost.close();
+      await scopedContext.close();
+    }
+  });
 }

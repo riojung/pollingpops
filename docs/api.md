@@ -793,7 +793,11 @@ Presentation REST endpoints additionally include:
 - `POST /v1/presentation-sessions/{id}/stage-pass` — creator owner/editor only; returns
   `{credentialId,stageToken,expiresAt}` and replaces stage access only. Expiry is capped at one
   hour and the session lifetime. `DELETE /v1/presentation-sessions/{id}/stage-passes/{credentialId}`
-  revokes only a stage credential.
+  atomically revokes only that active, unexpired stage credential. A replaced, already-revoked
+  or expired pass returns `409 CONFLICT` with `details.reason:"STALE_STAGE_PASS"`; a missing,
+  wrong-role or cross-session/workspace identifier returns `404`. A stale request does not revoke
+  a newer pass or record a successful revocation. Host/Companion revocation retains its existing
+  idempotent behavior.
 - `GET /v1/presentation-sessions/{id}/stage` — requires an explicit stage Bearer pass; returns
   `{snapshot}` with projection `stage`. `GET /v1/presentation-sessions/{id}/stage-media/{mediaId}`
   permits current-block media only. These routes use no-store responses and cannot use host,

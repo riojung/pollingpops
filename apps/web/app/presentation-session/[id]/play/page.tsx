@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { normalizeTextResponse } from "@openround/contracts";
 import type {
   ConfidenceValue,
   PresentationParticipantQuestionBlock,
@@ -28,6 +29,13 @@ import {
 } from "../../../../lib/presentation-realtime";
 import { clientUuid } from "../../../../lib/uuid";
 import { RankingChoices } from "../../../../components/ranking-choices";
+import { TextResponseControl } from "../../../../components/text-response-control";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import {
+  isTextQuestion,
+  textResponseError,
+  textResponseReceipt,
+} from "../../../../lib/text-response";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import {
   initialPresentationChoiceIds,
@@ -47,6 +55,7 @@ export default function PresentationParticipantPage() {
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([]);
   const [numericValue, setNumericValue] = useState("");
   const [ratingValue, setRatingValue] = useState<number | null>(null);
+  const [textValue, setTextValue] = useState("");
   const [confidence, setConfidence] = useState<ConfidenceValue | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -72,12 +81,14 @@ export default function PresentationParticipantPage() {
       );
       setNumericValue("");
       setRatingValue(null);
+      setTextValue("");
       setConfidence(null);
       setSaveStatus({
         blockId: incoming.currentBlock?.id ?? null,
         state: incoming.responseSubmitted ? "saved" : "idle",
       });
     }
+    if (incoming.responseSubmitted) setTextValue("");
     setSnapshot(incoming);
   }, []);
 
@@ -155,21 +166,22 @@ export default function PresentationParticipantPage() {
     const currentSnapshot = snapshot;
     if (!currentSnapshot) return;
     const question = block.question;
-    const response =
-      question.type === "numeric"
-        ? { numericValue, ...(confidence ? { confidence } : {}) }
-        : question.type === "rating"
-          ? { ratingValue: ratingValue!, ...(confidence ? { confidence } : {}) }
-          : {
-              ...presentationChoiceResponse(question, selectedChoiceIds),
-              ...(question.type !== "poll" && question.type !== "ranking" && confidence
-                ? { confidence }
-                : {}),
-            };
     setBusy(true);
     setError("");
     const idempotencyKey = `${id}:${block.id}:${clientUuid()}`;
     try {
+      const response = isTextQuestion(question.type)
+        ? { textValue: normalizeTextResponse(textValue, question.type) }
+        : question.type === "numeric"
+          ? { numericValue, ...(confidence ? { confidence } : {}) }
+          : question.type === "rating"
+            ? { ratingValue: ratingValue!, ...(confidence ? { confidence } : {}) }
+            : {
+                ...presentationChoiceResponse(question, selectedChoiceIds),
+                ...(question.type !== "poll" && question.type !== "ranking" && confidence
+                  ? { confidence }
+                  : {}),
+              };
       await controller.submitResponse(
         {
           sessionId: id,
@@ -226,11 +238,13 @@ export default function PresentationParticipantPage() {
     snapshot?.phase === "question_open" &&
     snapshot.acceptingResponses &&
     !snapshot.responseSubmitted &&
-    (block.question.type === "numeric"
-      ? numericValue.trim() !== ""
-      : block.question.type === "rating"
-        ? ratingValue !== null
-        : validPresentationChoiceSelection(block.question, selectedChoiceIds)) &&
+    (isTextQuestion(block.question.type)
+      ? textResponseError(block.question.type, textValue) === null
+      : block.question.type === "numeric"
+        ? numericValue.trim() !== ""
+        : block.question.type === "rating"
+          ? ratingValue !== null
+          : validPresentationChoiceSelection(block.question, selectedChoiceIds)) &&
     (block.question.confidence !== "required" || confidence !== null);
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
   const inputDisabled =
@@ -337,7 +351,16 @@ export default function PresentationParticipantPage() {
                   participant
                   sessionId={id}
                 />
-                {block.question.type === "ranking" ? (
+                {isTextQuestion(block.question.type) ? (
+                  !snapshot?.responseSubmitted ? (
+                    <TextResponseControl
+                      type={block.question.type}
+                      value={textValue}
+                      disabled={inputDisabled}
+                      onChange={setTextValue}
+                    />
+                  ) : null
+                ) : block.question.type === "ranking" ? (
                   snapshot?.responseSubmitted ? (
                     <>
                       <p lang="en-CA">Your ranking is saved.</p>
@@ -424,7 +447,9 @@ export default function PresentationParticipantPage() {
                     </select>
                   </label>
                 )}
-                {block.question.confidence !== "off" && snapshot?.acceptingResponses ? (
+                {!isTextQuestion(block.question.type) &&
+                block.question.confidence !== "off" &&
+                snapshot?.acceptingResponses ? (
                   <label className={styles.formStack}>
                     {t("live.presentationPlay.confidence", {
                       requirement:
@@ -451,7 +476,13 @@ export default function PresentationParticipantPage() {
                   </label>
                 ) : null}
                 <div className={styles.responseActions}>
-                  {snapshot?.responseResult ? (
+                  {isTextQuestion(block.question.type) && snapshot?.responseSubmitted ? (
+                    <p className="notice" role="status">
+                      {snapshot.ownTextResponse?.blockId === block.id
+                        ? t(textResponseReceipt(snapshot.ownTextResponse.status))
+                        : t("live.presentationPlay.responseSaved")}
+                    </p>
+                  ) : snapshot?.responseResult ? (
                     <p className="notice" role="status">
                       {snapshot.responseResult.correct === null
                         ? t("live.presentationPlay.responseRecorded")
@@ -488,6 +519,18 @@ export default function PresentationParticipantPage() {
                   )}
                 </div>
                 {opinionSummary ? <PresentationOpinionResults summary={opinionSummary} /> : null}
+                {isTextQuestion(block.question.type) && snapshot && audienceToken ? (
+                  <PresentationTextResults
+                    sessionId={id}
+                    blockId={block.id}
+                    type={block.question.type}
+                    revision={snapshot.revision}
+                    seq={snapshot.seq}
+                    phase={snapshot.phase}
+                    projection="participant"
+                    credential={audienceToken}
+                  />
+                ) : null}
                 {snapshot?.phase === "intervention" && snapshot.recoveryPackIntervention ? (
                   <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
                 ) : null}

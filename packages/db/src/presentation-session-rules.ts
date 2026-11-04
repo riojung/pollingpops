@@ -1,6 +1,9 @@
+import { PresentationTextCapacityError } from "./presentation-text-types.js";
 import {
   PresentationContentSchema,
   isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  normalizeTextResponse,
   PresentationRecoveryPackInterventionSchema,
 } from "@openround/contracts";
 import type {
@@ -54,6 +57,7 @@ export function normalizeSession(input: PresentationSessionCreateInput): Present
     joinPasswordHash: input.joinPasswordHash ?? null,
     content,
     settings,
+    ...(content.schemaVersion === 10 ? { textModerationSeq: input.textModerationSeq ?? 0 } : {}),
     trustMode: input.trustMode ?? "learning",
     recoveryPackCardsEnabled,
     recoveryPackIntervention,
@@ -159,7 +163,8 @@ export function responseWindowOpen(
   const block = session.content.blocks[session.currentBlockIndex];
   if (
     block?.kind !== "question" ||
-    (isPresentationOpinionResultQuestion(block.question)
+    (isPresentationOpinionResultQuestion(block.question) ||
+    isPresentationTextResultQuestion(block.question)
       ? block.id.toLowerCase() !== response.blockId.toLowerCase() ||
         block.question.id.toLowerCase() !== response.questionId.toLowerCase()
       : block.id !== response.blockId || block.question.id !== response.questionId) ||
@@ -183,26 +188,71 @@ export function presentationResponseBlockId(
     session?.content.blocks.find(
       (block) =>
         block.kind === "question" &&
-        isPresentationOpinionResultQuestion(block.question) &&
+        (isPresentationOpinionResultQuestion(block.question) ||
+          isPresentationTextResultQuestion(block.question)) &&
         block.id.toLowerCase() === blockId.toLowerCase(),
     )?.id ?? blockId
   );
+}
+
+/** Private text rows keep a complete retry fingerprint even after their body is erased. */
+export function assertPresentationTextReceiptIdentity(
+  input: PresentationSessionResponseRecord,
+): void {
+  if (input.responseSchemaVersion !== 3 && input.response.textValue === undefined) return;
+  if (
+    typeof input.idempotencyKey !== "string" ||
+    input.idempotencyKey.length < 1 ||
+    input.idempotencyKey.length > 160 ||
+    typeof input.requestHash !== "string" ||
+    !/^[a-f0-9]{64}$/.test(input.requestHash)
+  )
+    throw new Error("Presentation text responses require a complete retry receipt");
 }
 
 export function normalizePresentationResponse(
   session: PresentationSessionRecord | undefined,
   input: PresentationSessionResponseRecord,
 ): PresentationSessionResponseRecord {
+  assertPresentationTextReceiptIdentity(input);
   const block = session?.content.blocks.find(
     (candidate) =>
       candidate.id === input.blockId ||
       (candidate.kind === "question" &&
-        isPresentationOpinionResultQuestion(candidate.question) &&
+        (isPresentationOpinionResultQuestion(candidate.question) ||
+          isPresentationTextResultQuestion(candidate.question)) &&
         candidate.id.toLowerCase() === input.blockId.toLowerCase()),
   );
   const question = block?.kind === "question" ? block.question : undefined;
   const responseSchemaVersion =
     input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response, question);
+  if (question && isPresentationTextResultQuestion(question)) {
+    if (
+      session?.content.schemaVersion !== 10 ||
+      responseSchemaVersion !== 3 ||
+      input.correct !== null ||
+      input.score !== 0 ||
+      question.id.toLowerCase() !== input.questionId.toLowerCase() ||
+      input.response.textValue === undefined ||
+      input.response.choiceIds !== undefined ||
+      input.response.orderedChoiceIds !== undefined ||
+      input.response.numericValue !== undefined ||
+      input.response.ratingValue !== undefined ||
+      input.response.confidence != null
+    )
+      throw new Error("Invalid unscored Presentation text response");
+    normalizeTextResponse(input.response.textValue, question.type);
+    return {
+      ...clone(input),
+      blockId: block!.id,
+      questionId: question.id,
+      response: {},
+      responseSchemaVersion: 3,
+      moderationStatus: "pending",
+      moderationVersion: 0,
+      moderatedAt: null,
+    };
+  }
   const response = upcastPresentationResponse(input.response, responseSchemaVersion);
   const opinion = question && isPresentationOpinionResultQuestion(question);
   if (opinion || response.orderedChoiceIds !== undefined) {
@@ -216,7 +266,7 @@ export function normalizePresentationResponse(
           : 0;
     if (
       !opinion ||
-      session?.content.schemaVersion !== 9 ||
+      (session?.content.schemaVersion !== 9 && session?.content.schemaVersion !== 10) ||
       responseSchemaVersion !== 2 ||
       question?.id.toLowerCase() !== input.questionId.toLowerCase() ||
       input.correct !== null ||
@@ -246,4 +296,33 @@ export function normalizePresentationResponse(
     responseSchemaVersion,
     response,
   };
+}
+
+export function presentationTextValue(
+  session: PresentationSessionRecord,
+  input: PresentationSessionResponseRecord,
+): string | null {
+  const block = session.content.blocks.find(
+    (block) => block.id.toLowerCase() === input.blockId.toLowerCase(),
+  );
+  return block?.kind === "question" &&
+    isPresentationTextResultQuestion(block.question) &&
+    input.response.textValue !== undefined
+    ? normalizeTextResponse(input.response.textValue, block.question.type)
+    : null;
+}
+export function assertPresentationTextCapacity(
+  session: PresentationSessionRecord,
+  responses: PresentationSessionResponseRecord[],
+  blockId: string,
+) {
+  if (
+    responses.filter((response) => response.responseSchemaVersion === 3).length >= 2500 ||
+    responses.filter(
+      (response) =>
+        response.responseSchemaVersion === 3 &&
+        response.blockId.toLowerCase() === blockId.toLowerCase(),
+    ).length >= 250
+  )
+    throw new PresentationTextCapacityError();
 }

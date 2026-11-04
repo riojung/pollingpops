@@ -973,6 +973,14 @@
   color: var(--ui-on-hero-muted);
 }
 
+.previewQuestion :global(.field) > label {
+  color: var(--ui-on-hero);
+}
+
+.previewQuestion :global(.field) > small {
+  color: var(--ui-on-hero-muted);
+}
+
 .previewChoices {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -315,8 +315,11 @@ function expectSafe(value: unknown) {
     expect(text).not.toContain(`"${field}"`);
 }
 describe("Companion standalone published Round questions", () => {
-  it("catalogs supported opinion formats and inserts them at v9 with unchanged fences while excluding text", async () => {
+  it("catalogs supported opinion formats and inserts them at v9/v10 with unchanged source and phase fences", async () => {
     const f = await fixture();
+    expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).not.toHaveProperty(
+      "textModerationAvailable",
+    );
     const question = sourceQuestion("Multiple opinion priorities");
     const source = await f.publishRound([
       {
@@ -351,7 +354,7 @@ describe("Companion standalone published Round questions", () => {
       ...(["open_text", "word_cloud"] as const).map((type) => ({
         id: randomUUID(),
         type,
-        prompt: `Unsupported ${type} opinion`,
+        prompt: `Moderated ${type} opinion`,
         purpose: "opinion" as const,
         confidence: "off" as const,
         delivery: "main" as const,
@@ -375,15 +378,20 @@ describe("Companion standalone published Round questions", () => {
     const catalog = response
       .json<{ questions: Array<PresentationPublishedQuestionSelection & { type: string }> }>()
       .questions.filter((entry) => entry.sourceQuizVersionId === source.version.id);
-    expect(catalog).toHaveLength(2);
-    expect(catalog.map(({ type }) => type).sort()).toEqual(["poll", "ranking"]);
+    expect(catalog).toHaveLength(4);
+    expect(catalog.map(({ type }) => type).sort()).toEqual([
+      "open_text",
+      "poll",
+      "ranking",
+      "word_cloud",
+    ]);
     const selection = (index: number): PresentationPublishedQuestionSelection => ({
       sourceQuizVersionId: source.version.id,
       sourceQuestionId: source.version.content.questions[index]!.id,
       contentHash: source.version.contentHash,
     });
     expect(catalog.map(({ sourceQuestionId }) => sourceQuestionId).sort()).toEqual(
-      [selection(0).sourceQuestionId, selection(1).sourceQuestionId].sort(),
+      [0, 1, 2, 3].map((index) => selection(index).sourceQuestionId).sort(),
     );
     const command = f.command(0, selection(0));
     const opened = await f.service.companionCommand(command);
@@ -410,8 +418,6 @@ describe("Companion standalone published Round questions", () => {
     expect(await f.sessions.listTimeline(f.sessionId)).toEqual(timeline);
     await expectNoMutation(f, f.command(1, selection(1)), "PHASE_CLOSED");
     await f.advance();
-    for (const index of [2, 3])
-      await expectNoMutation(f, f.command(2, selection(index)), "VALIDATION_ERROR");
     const ranked = await f.service.companionCommand(f.command(2, selection(1)));
     expectSafe(ranked);
     expect(ranked).toMatchObject({
@@ -424,6 +430,40 @@ describe("Companion standalone published Round questions", () => {
     });
     expect((await f.current()).content).toMatchObject({ schemaVersion: 9 });
     expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 2);
+    expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).not.toHaveProperty(
+      "textModerationAvailable",
+    );
+    for (const [index, type] of [
+      [2, "open_text"],
+      [3, "word_cloud"],
+    ] as const) {
+      await f.advance();
+      const revision = (await f.current()).revision;
+      const textCommand = f.command(revision, selection(index));
+      const text = await f.service.companionCommand(textCommand);
+      expectSafe(text);
+      expect(text).toMatchObject({
+        phase: "question_open",
+        revision: revision + 1,
+        currentBlock: { kind: "question", question: { type, confidence: "off", basePoints: 0 } },
+      });
+      expect((await f.current()).content.schemaVersion).toBe(10);
+      expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).toHaveProperty(
+        "textModerationAvailable",
+        true,
+      );
+      expect(await f.restartService().getHostSnapshot(f.workspaceId, f.sessionId)).toHaveProperty(
+        "textModerationAvailable",
+        true,
+      );
+      expect(text).not.toHaveProperty("textModerationAvailable");
+      await expect(f.service.companionCommand(textCommand)).resolves.toMatchObject({
+        revision: revision + 1,
+        currentBlock: { id: text.currentBlock!.id },
+      });
+      await expectNoMutation(f, f.command(revision + 1, selection(index)), "PHASE_CLOSED");
+    }
+    expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 4);
     expect((await f.repository.getQuizVersion(f.workspaceId, source.version.id))?.content).toEqual(
       source.version.content,
     );

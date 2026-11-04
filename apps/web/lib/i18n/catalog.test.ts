@@ -114,6 +114,7 @@ describe("localized message catalogs", () => {
     ]);
     expect(localeDomainsForPath("/create/presentation")).toEqual([
       "delivery-authoring",
+      "live-delivery",
       "idea-boards",
     ]);
     expect(localeDomainsForPath("/recovery-packs")).toEqual(["delivery-authoring"]);
@@ -141,6 +142,7 @@ describe("localized message catalogs", () => {
     expect(localeDomainsForPath("/presentation-session/example/play")).toEqual(["live-delivery"]);
     expect(localeDomainsForPath("/presentation/example")).toEqual([
       "delivery-authoring",
+      "live-delivery",
       "idea-boards",
     ]);
     expect(localeDomainsForPath("/presentation/example/host")).toEqual([
@@ -175,6 +177,21 @@ describe("localized message catalogs", () => {
     expect(surveyResultsMessages["summary.open"]).toBe("Share summary");
     expect(surveyResultsMessages["live.audience.chat"]).toBeUndefined();
   });
+
+  it.each(["/presentation/example", "/presentation/example/?from=library", "/create/presentation"])(
+    "loads the participant text-preview labels for the Presentation builder at %s",
+    async (path) => {
+      const domains = localeDomainsForPath(path);
+      expect(domains).toContain("live-delivery");
+      const messages = await loadMessages("en-CA", domains);
+      expect(translate(messages, "live.text.responseLabel")).toBe("Your response");
+      expect(translate(messages, "live.text.phraseLabel")).toBe("A word or short phrase");
+      expect(translate(messages, "live.text.characterLimit", { count: 0, limit: 1000 })).toBe(
+        "0 of 1000 characters",
+      );
+      expect(translate(messages, "live.text.reviewPrivacy")).toContain("Only approved responses");
+    },
+  );
 
   it("keeps shared site chrome in core while loading exact Round-route domains", async () => {
     expect(localeDomainsForPath("/quiz/round-1?mode=edit")).toEqual([

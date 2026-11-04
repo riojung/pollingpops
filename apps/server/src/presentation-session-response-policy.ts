@@ -4,6 +4,8 @@ import {
   type QuestionDraft,
   presentationQuestionSupported,
   isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  normalizeTextResponse,
   questionTypeDefinition,
 } from "@openround/contracts";
 import type { PresentationSessionRecord } from "@openround/db";
@@ -25,6 +27,35 @@ export function presentationResponseRequestHash(input: {
   expectedRevision: number;
   response: PresentationSessionResponse;
 }) {
+  // Text has a separate versioned fingerprint. Keep every existing response byte-for-byte.
+  if (input.response.textValue !== undefined) {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          blockId: input.blockId,
+          expectedRevision: input.expectedRevision,
+          response: {
+            textValue: input.response.textValue.normalize("NFC").trim(),
+            ...(input.response.choiceIds !== undefined
+              ? { choiceIds: [...input.response.choiceIds].sort() }
+              : {}),
+            ...(input.response.orderedChoiceIds !== undefined
+              ? { orderedChoiceIds: input.response.orderedChoiceIds }
+              : {}),
+            ...(input.response.numericValue !== undefined
+              ? { numericValue: input.response.numericValue }
+              : {}),
+            ...(input.response.ratingValue !== undefined
+              ? { ratingValue: input.response.ratingValue }
+              : {}),
+            ...(input.response.confidence !== undefined
+              ? { confidence: input.response.confidence }
+              : {}),
+          },
+        }),
+      )
+      .digest("hex");
+  }
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -84,9 +115,29 @@ export function presentationResponseValidationMessage(
   if (!presentationQuestionSupported(question)) {
     return "This response format currently supports Live Rounds only";
   }
-  if (isPresentationOpinionResultQuestion(question) && response.confidence != null) {
+  if (
+    (isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)) &&
+    response.confidence != null
+  ) {
     return "Confidence is not collected for opinion responses";
   }
+  if (isPresentationTextResultQuestion(question)) {
+    if (
+      response.textValue === undefined ||
+      response.choiceIds !== undefined ||
+      response.orderedChoiceIds !== undefined ||
+      response.numericValue !== undefined ||
+      response.ratingValue !== undefined
+    )
+      return "Enter a valid text response";
+    try {
+      normalizeTextResponse(response.textValue, question.type);
+    } catch {
+      return "Enter a valid text response";
+    }
+    return null;
+  }
+  if (response.textValue !== undefined) return "Choose a valid response option";
   if (question.type === "ranking") {
     const selected = response.orderedChoiceIds ?? [];
     const validIds = new Set(question.choices.map((choice) => choice.id.toLowerCase()));
@@ -170,7 +221,8 @@ export function presentationResponseCorrect(
     !presentationQuestionSupported(question) ||
     question.type === "poll" ||
     question.type === "rating" ||
-    question.type === "ranking"
+    question.type === "ranking" ||
+    isPresentationTextResultQuestion(question)
   )
     return null;
   if (question.type === "numeric") {

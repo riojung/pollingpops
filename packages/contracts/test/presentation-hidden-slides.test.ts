@@ -345,7 +345,7 @@ describe("Presentation slide visibility contract", () => {
   it("retains legacy slides under document 9 and continues rejecting future document formats", () => {
     for (const schema of [PresentationDraftSchema, PresentationContentSchema]) {
       expect(schema.parse({ ...deck([legacySlide()]), schemaVersion: 9 }).schemaVersion).toBe(9);
-      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 10 }).success).toBe(false);
+      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 11 }).success).toBe(false);
     }
   });
 });

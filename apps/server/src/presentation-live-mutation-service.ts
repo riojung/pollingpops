@@ -14,10 +14,13 @@ import {
   type PresentationOpinionResultSummary,
   type Entitlements,
   isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  normalizeTextResponse,
 } from "@openround/contracts";
 import {
   PresentationPublishedQuestionSourceUnavailableError,
   PresentationSessionConflictError,
+  PresentationTextCapacityError,
   WorkspaceDeletionInProgressError,
   type PresentationResponseAcknowledgementState,
   type PresentationSessionRecord,
@@ -273,6 +276,12 @@ export class PresentationLiveMutationService {
     try {
       return await this.dependencies.sessions.acceptResponse(response, expectedRevision);
     } catch (error) {
+      if (error instanceof PresentationTextCapacityError)
+        throw new PresentationSessionServiceError(
+          422,
+          "VALIDATION_ERROR",
+          "Text response capacity reached",
+        );
       if (error instanceof WorkspaceDeletionInProgressError) {
         throw this.workspaceDeletionClosed();
       }
@@ -536,6 +545,12 @@ export class PresentationLiveMutationService {
       }
       return snapshot(accepted.session);
     } catch (error) {
+      if (error instanceof PresentationTextCapacityError)
+        throw new PresentationSessionServiceError(
+          422,
+          "VALIDATION_ERROR",
+          "Text opinion questions support up to 250 participants and 10 text questions",
+        );
       if (
         input.action === "insert_published_question" &&
         (error instanceof PresentationPublishedQuestionSourceUnavailableError ||
@@ -744,8 +759,19 @@ export class PresentationLiveMutationService {
         participantId: participant.id,
         blockId: submittedBlock.id,
         questionId: submittedBlock.question.id,
-        response: input.response,
-        responseSchemaVersion: isPresentationOpinionResultQuestion(submittedBlock.question) ? 2 : 1,
+        response: isPresentationTextResultQuestion(submittedBlock.question)
+          ? {
+              textValue: normalizeTextResponse(
+                input.response.textValue!,
+                submittedBlock.question.type,
+              ),
+            }
+          : input.response,
+        responseSchemaVersion: isPresentationTextResultQuestion(submittedBlock.question)
+          ? 3
+          : isPresentationOpinionResultQuestion(submittedBlock.question)
+            ? 2
+            : 1,
         correct,
         score: presentationResponseScore(submittedBlock.question, correct, timing.remainingRatio),
         responseMs: timing.responseMs,

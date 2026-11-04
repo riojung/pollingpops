@@ -59,7 +59,7 @@ describe("Presentation v9 durable readers", () => {
       expect(JSON.stringify(parse(JSON.parse(bytes), 9))).toBe(bytes);
       for (const version of [1, 2, 3, 4, 5, 6, 7, 8])
         expect(() => parse(document, version)).toThrow("schema version 9");
-      expect(() => parse(document, 10)).toThrow(UnsupportedArtifactSchemaVersionError);
+      expect(() => parse(document, 11)).toThrow(UnsupportedArtifactSchemaVersionError);
     }
     const block = document.blocks[0]!;
     if (block.kind !== "question") throw new Error("Expected ranking");
@@ -214,12 +214,12 @@ describe("Presentation v9 durable readers", () => {
     expect(presentationResponseSchemaVersion({ choiceIds: ids }, { type: "multi_select" })).toBe(1);
     expect(upcastPresentationResponse(response, 2)).toEqual(response);
     expect(() => upcastPresentationResponse(response, 1)).toThrow("schema version 2");
-    expect(() => upcastPresentationResponse(response, 3)).toThrow(
-      "Unsupported Presentation response schema version 3",
+    expect(() => upcastPresentationResponse(response, 4)).toThrow(
+      "Unsupported Presentation response schema version 4",
     );
     expect(() => mapResponse({ response, response_schema_version: 1 })).toThrow("schema version 2");
-    expect(() => mapResponse({ response, response_schema_version: 3 })).toThrow(
-      "Unsupported Presentation response schema version 3",
+    expect(() => mapResponse({ response, response_schema_version: 4 })).toThrow(
+      "Unsupported Presentation response schema version 4",
     );
     expect(upcastPresentationResponse({ choiceIds: ids }, 1)).toEqual({ choiceIds: ids });
   });

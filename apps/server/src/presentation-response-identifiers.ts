@@ -1,5 +1,6 @@
 import {
   isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
   type PresentationBlock,
   type PresentationContent,
 } from "@openround/contracts";
@@ -11,7 +12,8 @@ export function presentationResponseMatchesBlock(block: PresentationBlock | null
     block &&
     (block.id === blockId ||
       (block.kind === "question" &&
-        isPresentationOpinionResultQuestion(block.question) &&
+        (isPresentationOpinionResultQuestion(block.question) ||
+          isPresentationTextResultQuestion(block.question)) &&
         block.id.toLowerCase() === blockId.toLowerCase())),
   );
 }
@@ -22,7 +24,13 @@ export function presentationResponseForBlock(
   response: PresentationSessionResponseRecord,
 ): PresentationSessionResponseRecord | undefined {
   if (!presentationResponseMatchesBlock(block, response.blockId)) return undefined;
-  if (block.kind !== "question" || !isPresentationOpinionResultQuestion(block.question))
+  if (
+    block.kind !== "question" ||
+    !(
+      isPresentationOpinionResultQuestion(block.question) ||
+      isPresentationTextResultQuestion(block.question)
+    )
+  )
     return response;
   const choices = "choices" in block.question ? block.question.choices : [];
   const authoredChoices = new Map(choices.map(({ id }) => [id.toLowerCase(), id]));
@@ -49,7 +57,9 @@ export function presentationResponsesForContent(
 ) {
   const opinionBlocks = new Map(
     content.blocks.flatMap((block) =>
-      block.kind === "question" && isPresentationOpinionResultQuestion(block.question)
+      block.kind === "question" &&
+      (isPresentationOpinionResultQuestion(block.question) ||
+        isPresentationTextResultQuestion(block.question))
         ? [[block.id.toLowerCase(), block] as const]
         : [],
     ),

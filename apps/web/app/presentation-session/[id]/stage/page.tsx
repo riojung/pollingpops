@@ -17,6 +17,8 @@ import {
 } from "../../../../lib/presentation-realtime";
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import { isTextQuestion } from "../../../../lib/text-response";
 import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
@@ -201,6 +203,10 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
 
   const remaining = presentationRemainingSeconds(snapshot, receivedAt.current, now);
   const opinionSummary = presentationOpinionSummaryFor(snapshot);
+  const textResults =
+    snapshot?.currentBlock?.kind === "question" &&
+    isTextQuestion(snapshot.currentBlock.question.type) &&
+    ["question_reveal", "intervention"].includes(snapshot.phase);
   return (
     <main className={styles.stagePage} lang="en-CA">
       <div className={styles.stageLayout}>
@@ -236,7 +242,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
             ) : null}
             <section
               aria-label="Audience slide"
-              className={`${styles.stageCanvas}${opinionSummary ? ` ${styles.stageOpinionCanvas}` : ""}`}
+              className={`${styles.stageCanvas}${opinionSummary || textResults ? ` ${styles.stageOpinionCanvas}` : ""}`}
               tabIndex={0}
             >
               {snapshot.phase === "lobby" ? (
@@ -251,10 +257,37 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                 </div>
               ) : snapshot.currentBlock ? (
                 <div
-                  className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}${opinionSummary ? ` ${styles.stageOpinionBody}` : ""}`}
+                  className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}${opinionSummary || textResults ? ` ${styles.stageOpinionBody}` : ""}`}
                 >
                   {remaining !== null ? <p aria-live="off">{remaining}s remaining</p> : null}
-                  {opinionSummary && snapshot.currentBlock.kind === "question" ? (
+                  {textResults &&
+                  snapshot.currentBlock.kind === "question" &&
+                  isTextQuestion(snapshot.currentBlock.question.type) ? (
+                    <>
+                      <h1 lang="">{snapshot.currentBlock.question.prompt}</h1>
+                      <PresentationTextResults
+                        sessionId={id}
+                        blockId={snapshot.currentBlock.id}
+                        type={snapshot.currentBlock.question.type}
+                        revision={snapshot.revision}
+                        seq={snapshot.seq}
+                        phase={snapshot.phase}
+                        projection="stage"
+                        credential={token}
+                        compact
+                      />
+                      <StageMedia
+                        key={`${snapshot.currentBlock.id}:${snapshot.currentBlock.question.mediaId}`}
+                        sessionId={id}
+                        token={token}
+                        mediaId={snapshot.currentBlock.question.mediaId}
+                        altText={snapshot.currentBlock.question.mediaAlt}
+                      />
+                      {snapshot.revealedAnswer?.explanation ? (
+                        <p lang="">{snapshot.revealedAnswer.explanation}</p>
+                      ) : null}
+                    </>
+                  ) : opinionSummary && snapshot.currentBlock.kind === "question" ? (
                     <>
                       <h1 lang="">{snapshot.currentBlock.question.prompt}</h1>
                       <PresentationOpinionResults summary={opinionSummary} compact />

@@ -101,6 +101,10 @@ describe("native design across a Presentation", () => {
     [9, 2, 9],
     [9, 3, 9],
     [9, 4, 9],
+    [10, 1, 10],
+    [10, 2, 10],
+    [10, 3, 10],
+    [10, 4, 10],
   ] as const)(
     "preserves/promotes document %s for scene %s to %s",
     (current, sceneVersion, expected) => {
@@ -120,6 +124,18 @@ describe("native design across a Presentation", () => {
     if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
     expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(9);
     expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(9);
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+  });
+  it("retains text-opinion v10 across bulk design, native edits and hidden state", () => {
+    const original = draft();
+    original.schemaVersion = 10;
+    original.blocks.push(createQuestionBlock("open_text"));
+    const changed = applyNativeDesignToDeck(original, design);
+    expect(changed.schemaVersion).toBe(10);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(10);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(10);
     expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
   });
 

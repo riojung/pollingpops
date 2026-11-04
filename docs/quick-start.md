@@ -13,8 +13,8 @@ Core-parity includes Presentation Q&A, a gated self-paced Survey beta, and gated
 multiple-selection polls, ranking, moderated open text and word clouds. Standalone Q&A feedback
 rooms and advanced feedback exports remain pending.
 The first Presentation opinion-format increment adds multiple-selection polls and full/top-N
-rankings after migration 091 and the matching reader/writer release. Presentation moderated text
-and word clouds remain pending.
+rankings after migration 091 and the matching reader/writer release. Moderated Presentation text
+and word clouds additionally require migration 092 and document-v10/response-v3/report-V5 readers.
 
 ## Try the new creation workflows
 
@@ -435,6 +435,14 @@ Round's multiple-selection poll or ranking can also be copied into an independen
 Operators must complete the [migration-091/document-v9 rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
 before these writes; older content/default creation versions remain unchanged. See the
 [poll/ranking walkthrough](user-guide.md#collect-presentation-polls-and-rankings).
+
+For written feedback, choose **Open text** (1,000 characters) or **Word cloud** (80 characters).
+Participants submit once and wait for **Saved**. The host uses **Text response moderation** to
+approve or remove each response. **Reveal and close question** displays only approved responses,
+with a minimum of five approved respondents. Removing a response erases its body; fewer than
+five approvals hide all text results. **Export evidence CSV** includes qualified approved
+results. See the [text walkthrough](user-guide.md#collect-moderated-presentation-text) and
+[migration-092 rollout](runbooks/upgrade.md#presentation-moderated-text-compatibility).
 
 In an eligible live Presentation, **Open audience stage** creates a separate read-only window for
 screen sharing; use its new-tab link when popups are blocked. Keep the presenter workspace for

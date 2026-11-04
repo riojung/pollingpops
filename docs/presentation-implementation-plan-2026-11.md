@@ -282,9 +282,15 @@ remain unchanged. Closed-question results are anonymous aggregates, with no part
 correct answer, confidence or recovery link. Migration 091 and coordinated readers/writers are
 required before accepting the new formats. See the [first-family evidence record](evidence/presentation-e04-opinion-formats.md)
 and [rollout boundary](runbooks/upgrade.md#presentation-opinion-formats-compatibility).
-Automated verification passed; the record preserves executed runs and their limits. Moderated open text and word clouds are
-the next family; this increment does not complete the E04 epic or establish manual/device or
-competitive parity acceptance.
+Automated first-family verification passed; the record preserves executed runs and their limits.
+The second family on `codex/presentation-e04-moderated-text` adds document v10 moderated open
+text and word clouds, private-body storage, host review, current-block approved results and V5
+report/CSV evidence. Together the two families complete E04's software scope. Its
+[verification record](evidence/presentation-e04-moderated-text.md) records the repository check,
+sixteen real PostgreSQL cases and 48 unique browser cases across documented slices. Software
+completion does not establish manual/device, hosted-rollout, cost-target or competitive parity
+acceptance. The second-family changes are prepared for pull-request review; hosted rollout
+remains pending.
 
 Acceptance per format: author, publish, open, submit, acknowledge, reconnect, close, reveal,
 moderate where applicable, report and export all work. Never expose pending or removed text in

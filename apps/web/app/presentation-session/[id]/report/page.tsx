@@ -20,6 +20,8 @@ import { apiFetch, humanError } from "../../../../lib/api";
 import { SessionSummaryButton } from "../../../../components/session-summary/summary-dialog";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import { presentationReportCsv } from "../../../../lib/presentation-report-export";
+import { TextResultsView } from "../../../../components/text-results-view";
+import { isTextQuestion } from "../../../../lib/text-response";
 
 function PresentationReportContent() {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +48,7 @@ function PresentationReportContent() {
     const load = async () => {
       try {
         const result = await apiFetch<PresentationReportWithSessionContextEnvelope>(
-          `/v1/presentation-sessions/${id}/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true`,
+          `/v1/presentation-sessions/${id}/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true&includeTextResults=true`,
         );
         if (cancelled) return;
         setError("");
@@ -220,7 +222,8 @@ function PresentationReportContent() {
                         <span>{t("live.presentationReport.respondents")}</span>
                       </div>
                       <div className={styles.metric}>
-                        {"opinionSummary" in block && block.opinionSummary ? (
+                        {("opinionSummary" in block && block.opinionSummary) ||
+                        isTextQuestion(block.questionType) ? (
                           <>
                             <strong lang="en-CA">Unscored opinion</strong>
                             <span lang="en-CA">Assessment</span>
@@ -257,6 +260,32 @@ function PresentationReportContent() {
                   "opinionSummary" in block &&
                   block.opinionSummary ? (
                     <PresentationOpinionResults summary={block.opinionSummary} />
+                  ) : null}
+                  {block.kind === "question" && isTextQuestion(block.questionType) ? (
+                    "textResults" in block && block.textResults ? (
+                      <TextResultsView
+                        type={block.textResults.kind}
+                        respondents={block.textResults.respondents}
+                        items={
+                          block.textResults.kind === "open_text"
+                            ? block.textResults.entries.map((entry, index) => ({
+                                answerId: `${block.blockId}:${index}`,
+                                body: entry.value,
+                              }))
+                            : undefined
+                        }
+                        terms={
+                          block.textResults.kind === "word_cloud"
+                            ? block.textResults.buckets
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      <p lang="en-CA">
+                        Text results require reveal and at least five approved responses. Pending
+                        and removed responses are excluded.
+                      </p>
+                    )
                   ) : null}
                 </article>
               ))}

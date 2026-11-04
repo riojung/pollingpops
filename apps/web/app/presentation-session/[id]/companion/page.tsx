@@ -3,6 +3,8 @@
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import { isTextQuestion } from "../../../../lib/text-response";
 import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -227,9 +229,13 @@ export default function PresentationCompanionPage() {
 
   const results = companionResults(snapshot);
   const opinionResults = presentationOpinionSummaryFor(snapshot);
+  const textResults =
+    snapshot?.currentBlock?.kind === "question" &&
+    isTextQuestion(snapshot.currentBlock.question.type) &&
+    ["question_reveal", "intervention"].includes(snapshot.phase);
   useEffect(() => {
-    if (!results && !opinionResults && overlay === "results") setOverlay(null);
-  }, [overlay, results, opinionResults]);
+    if (!results && !opinionResults && !textResults && overlay === "results") setOverlay(null);
+  }, [overlay, results, opinionResults, textResults]);
 
   function closeOverlay() {
     catalogRequest.current += 1;
@@ -532,7 +538,7 @@ export default function PresentationCompanionPage() {
               <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
                 {t("live.companion.showJoin")}
               </button>
-              {results || opinionResults ? (
+              {results || opinionResults || textResults ? (
                 <button
                   className="button-quiet"
                   onClick={() => setOverlay("results")}
@@ -622,14 +628,29 @@ export default function PresentationCompanionPage() {
           </a>
         </CompanionOverlay>
       ) : null}
-      {overlay === "results" && (results || opinionResults) && block?.kind === "question" ? (
+      {overlay === "results" &&
+      (results || opinionResults || textResults) &&
+      block?.kind === "question" ? (
         <CompanionOverlay title={t("live.companion.resultTitle")} onClose={closeOverlay}>
           <p lang="">{block.question.prompt}</p>
-          <p>
-            {t("live.companion.answered")}:{" "}
-            {formatNumber(locale, (opinionResults ?? results)!.responseCount)}
-          </p>
-          {opinionResults ? (
+          {results || opinionResults ? (
+            <p>
+              {t("live.companion.answered")}:{" "}
+              {formatNumber(locale, (opinionResults ?? results)!.responseCount)}
+            </p>
+          ) : null}
+          {textResults && snapshot && pass && isTextQuestion(block.question.type) ? (
+            <PresentationTextResults
+              sessionId={id}
+              blockId={block.id}
+              type={block.question.type}
+              revision={snapshot.revision}
+              seq={snapshot.seq}
+              phase={snapshot.phase}
+              projection="companion"
+              credential={pass}
+            />
+          ) : opinionResults ? (
             <PresentationOpinionResults summary={opinionResults} />
           ) : results?.choiceCounts.length ? (
             <dl className={styles.results}>

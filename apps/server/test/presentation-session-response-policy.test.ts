@@ -334,7 +334,7 @@ describe("Presentation response policy", () => {
   );
 
   it.each(["open_text", "word_cloud"] as const)(
-    "rejects %s before legacy Presentation delivery",
+    "requires an exclusive text response for %s and exposes only its public prompt",
     (type) => {
       const common: Record<string, unknown> = { ...choiceQuestion() };
       delete common.choices;
@@ -348,14 +348,16 @@ describe("Presentation response policy", () => {
         linkedRecheckQuestionId: null,
       });
       const response = { choiceIds: [correctChoiceId] };
-      expect(presentationResponseValidationMessage(question, response)).toContain(
-        "Live Rounds only",
+      expect(presentationResponseValidationMessage(question, response)).toBe(
+        "Enter a valid text response",
       );
       expect(presentationResponseCorrect(question, response)).toBeNull();
       expect(presentationResponseScore(question, true, 1)).toBe(0);
-      expect(() =>
+      expect(
         presentationParticipantBlock({ id: randomUUID(), kind: "question", question }),
-      ).toThrow("Live Rounds only");
+      ).toMatchObject({
+        question: { type, confidence: "off", prompt: question.prompt },
+      });
     },
   );
   it("canonicalizes multi-select choice order without weakening the revision or payload fence", () => {

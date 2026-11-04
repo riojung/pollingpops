@@ -37,7 +37,7 @@ afterEach(async () => {
 });
 
 describe("presentation authoring API", () => {
-  it("imports published opinion formats with a v9 floor and stable copy receipts while rejecting text", async () => {
+  it("imports published opinion formats with v9/v10 floors and stable copy receipts", async () => {
     const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });
     const built = await buildApp(
       ConfigSchema.parse({
@@ -82,7 +82,8 @@ describe("presentation authoring API", () => {
           })),
           ...(type === "poll" ? { maxSelections: 2 } : { rankCount: 3 }),
         })),
-        { ...common, id: randomUUID(), type: "open_text", prompt: "Unsupported text" },
+        { ...common, id: randomUUID(), type: "open_text", prompt: "Moderated open text" },
+        { ...common, id: randomUUID(), type: "word_cloud", prompt: "Moderated word cloud" },
       ],
     });
     const now = new Date();
@@ -164,19 +165,31 @@ describe("presentation authoring API", () => {
       insertedBlockIds: result.insertedBlockIds,
       presentation: { draftRevision: 1, draft: { schemaVersion: 9, blocks: copiedDraft.blocks } },
     });
-    const unsupported = await app.inject({
+    const textImport = await app.inject({
       method: "POST",
       url: `/v1/presentations/${presentation.id}/blocks/import`,
       headers: { cookie },
       payload: {
         ...payload,
-        questionIds: [content.questions[2]!.id],
+        questionIds: content.questions.slice(2).map(({ id }) => id),
         expectedRevision: 1,
         mutationId: randomUUID(),
       },
     });
-    expect(unsupported.statusCode).toBe(422);
-    expect(unsupported.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+    expect(textImport.statusCode, textImport.body).toBe(200);
+    const textDraft = PresentationDraftSchema.parse(
+      textImport.json<{ presentation: { draft: unknown } }>().presentation.draft,
+    );
+    expect(textDraft.schemaVersion).toBe(10);
+    const textCopied = textDraft.blocks.filter((block) => block.kind === "question");
+    expect(textCopied.map((block) => block.question.type)).toEqual([
+      "poll",
+      "ranking",
+      "open_text",
+      "word_cloud",
+    ]);
+    for (const block of textCopied.slice(2))
+      expect(content.questions.map((question) => question.id)).not.toContain(block.question.id);
     expect(JSON.stringify(await repository.getQuizVersion(BETA_WORKSPACE_ID, version.id))).toBe(
       sourceJson,
     );
@@ -185,8 +198,8 @@ describe("presentation authoring API", () => {
       url: `/v1/presentations/${presentation.id}/draft`,
       headers: { cookie },
       payload: {
-        draft: { ...copiedDraft, blocks: copied },
-        expectedRevision: 1,
+        draft: { ...textDraft, blocks: textCopied },
+        expectedRevision: 2,
         mutationId: randomUUID(),
         schemaVersion: 2,
       },
@@ -196,10 +209,10 @@ describe("presentation authoring API", () => {
       method: "POST",
       url: `/v1/presentations/${presentation.id}/publish`,
       headers: { cookie },
-      payload: { expectedDraftRevision: 2 },
+      payload: { expectedDraftRevision: 3 },
     });
     expect(published.statusCode, published.body).toBe(200);
-    expect(published.json()).toMatchObject({ version: { content: { schemaVersion: 9 } } });
+    expect(published.json()).toMatchObject({ version: { content: { schemaVersion: 10 } } });
   });
 
   it("creates, revision-saves, restores, and publishes a mixed live deck", async () => {

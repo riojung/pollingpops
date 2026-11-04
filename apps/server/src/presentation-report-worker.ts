@@ -1,4 +1,5 @@
 import type { PresentationSessionRepository } from "@openround/db";
+import { requiresPresentationTextOpinions } from "@openround/contracts";
 import type { MetricsService } from "./metrics.js";
 import type { ReportWorkerProductEvents, ReportWorkerResult } from "./report-worker.js";
 import { generatePresentationReport } from "./presentation-reporting.js";
@@ -20,12 +21,24 @@ export class PresentationReportWorker {
       if (!session || session.workspaceId !== job.workspaceId) {
         throw new Error("The Presentation report session no longer exists");
       }
-      const [participants, responses, timeline] = await Promise.all([
+      const [participants, responses, timeline, textEvidence] = await Promise.all([
         this.sessions.listParticipants(job.sessionId),
         this.sessions.listResponses(job.sessionId),
         this.sessions.listTimeline(job.sessionId),
+        requiresPresentationTextOpinions(session.content)
+          ? this.sessions.getTextReportEvidence({
+              workspaceId: job.workspaceId,
+              sessionId: job.sessionId,
+            })
+          : Promise.resolve([]),
       ]);
-      const report = generatePresentationReport({ session, participants, responses, timeline });
+      const report = generatePresentationReport({
+        session,
+        participants,
+        responses,
+        timeline,
+        textEvidence,
+      });
       await this.sessions.completeReportJob(job, {
         reportId: job.reportId,
         sessionId: job.sessionId,

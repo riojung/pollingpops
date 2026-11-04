@@ -64,6 +64,7 @@ export const PRESENTATION_DESIGN_SCHEMA_VERSION = 7;
 export const PRESENTATION_COMPOSITION_SCHEMA_VERSION = 8;
 /** Explicit unscored multiple-selection polls and rankings opt into embedded v9. */
 export const PRESENTATION_OPINION_SCHEMA_VERSION = 9;
+export const PRESENTATION_TEXT_OPINION_SCHEMA_VERSION = 10;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -190,6 +191,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_OPINION_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 9)),
   ],
+  [
+    PRESENTATION_TEXT_OPINION_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 10)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -231,6 +236,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_OPINION_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 9)),
+  ],
+  [
+    PRESENTATION_TEXT_OPINION_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 10)),
   ],
 ]);
 
@@ -308,6 +317,7 @@ export function upcastPresentationSessionContent(
     schemaVersion === PRESENTATION_DESIGN_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_COMPOSITION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_OPINION_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_TEXT_OPINION_SCHEMA_VERSION ||
     (value &&
       typeof value === "object" &&
       ("liveQuickCheck" in value || "livePublishedQuestions" in value))

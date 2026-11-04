@@ -11,6 +11,8 @@ import {
   presentationSceneTitle,
   preparePresentationPublication,
   requiresPresentationOpinionFormats,
+  requiresPresentationTextOpinions,
+  questionTypeDefinition,
   type ContentSlideDraft,
   type ContentSlideFrame,
   type ContentSlideLayout,
@@ -55,9 +57,7 @@ function choiceSet(
 }
 
 export function createPresentationQuestion(type: QuestionType): QuestionDraft {
-  if (type === "open_text" || type === "word_cloud")
-    throw new Error("Moderated text polls currently support live Rounds only.");
-  const opinionOnly = type === "rating" || type === "poll" || type === "ranking";
+  const opinionOnly = !questionTypeDefinition(type).scored;
   const common = {
     id: clientUuid(),
     prompt: "",
@@ -78,18 +78,26 @@ export function createPresentationQuestion(type: QuestionType): QuestionDraft {
   if (type === "rating") {
     return { ...common, type, min: 1, max: 5, minLabel: "Low", maxLabel: "High" };
   }
+  if (type === "open_text" || type === "word_cloud") return { ...common, type };
   return { ...common, type, choices: choiceSet(type) };
 }
 
-/** New formats opt into v9 on write; later edits and history retain the existing v9 floor. */
+/** New formats opt in on write; edits and history retain the highest document version. */
 export function promotePresentationOpinionFormats(
   draft: PresentationDraft,
   currentVersion: PresentationDraft["schemaVersion"] = draft.schemaVersion,
 ): PresentationDraft {
-  if (draft.schemaVersion >= 9) return draft;
-  return currentVersion >= 9 || requiresPresentationOpinionFormats(draft)
-    ? { ...draft, schemaVersion: 9 }
-    : draft;
+  const requiredVersion = requiresPresentationTextOpinions(draft)
+    ? 10
+    : requiresPresentationOpinionFormats(draft)
+      ? 9
+      : draft.schemaVersion;
+  const schemaVersion = Math.max(
+    draft.schemaVersion,
+    currentVersion,
+    requiredVersion,
+  ) as PresentationDraft["schemaVersion"];
+  return draft.schemaVersion === schemaVersion ? draft : { ...draft, schemaVersion };
 }
 
 export function createContentBlock(layout: ContentSlideLayout = "title_body"): ContentSlideDraft {
@@ -441,9 +449,8 @@ export function changePresentationQuestionType(
   if (!selected || selected.question.type === type) return draft;
 
   const previous = selected.question;
-  const opinionOnly = type === "poll" || type === "rating" || type === "ranking";
-  const previousOpinionOnly =
-    previous.type === "poll" || previous.type === "rating" || previous.type === "ranking";
+  const opinionOnly = !questionTypeDefinition(type).scored;
+  const previousOpinionOnly = !questionTypeDefinition(previous.type).scored;
   const next: QuestionDraft = {
     ...createPresentationQuestion(type),
     id: previous.id,
@@ -490,20 +497,39 @@ export function updatePresentationQuestion(
   const previous = selected.question;
   const next = updater(previous);
   if (next === previous) return draft;
-  const opinionOnly = next.type === "poll" || next.type === "rating" || next.type === "ranking";
-  const normalized: QuestionDraft = opinionOnly
-    ? {
-        ...next,
-        purpose: "opinion",
-        confidence: "off",
-        basePoints: 0,
-        delivery: "main",
-        linkedRecheckQuestionId: null,
-        ...("choices" in next
-          ? { choices: next.choices.map((choice) => ({ ...choice, isCorrect: false })) }
-          : {}),
-      }
-    : next;
+  const opinionOnly = !questionTypeDefinition(next.type).scored;
+  const normalized: QuestionDraft =
+    next.type === "open_text" || next.type === "word_cloud"
+      ? {
+          id: next.id,
+          type: next.type,
+          prompt: next.prompt,
+          purpose: "opinion",
+          confidence: "off",
+          basePoints: 0,
+          delivery: "main",
+          linkedRecheckQuestionId: null,
+          conceptKeys: next.conceptKeys,
+          timeLimitSeconds: next.timeLimitSeconds,
+          explanation: next.explanation,
+          mediaId: next.mediaId,
+          mediaAlt: next.mediaAlt,
+          ...(next.sourceCitations ? { sourceCitations: next.sourceCitations } : {}),
+          ...(next.recoveryPackSource ? { recoveryPackSource: next.recoveryPackSource } : {}),
+        }
+      : opinionOnly
+        ? {
+            ...next,
+            purpose: "opinion",
+            confidence: "off",
+            basePoints: 0,
+            delivery: "main",
+            linkedRecheckQuestionId: null,
+            ...("choices" in next
+              ? { choices: next.choices.map((choice) => ({ ...choice, isCorrect: false })) }
+              : {}),
+          }
+        : next;
   const detachedRecheck = opinionOnly && (previous.delivery ?? "main") === "recheck";
   const detachedTargetId = opinionOnly ? previous.linkedRecheckQuestionId : null;
   const detachedTargetHasAnotherSource =

@@ -18,6 +18,9 @@ import {
   PresentationRestV1SessionListItemSchema,
   PresentationRestV1SessionListResponseSchema,
   PresentationRestResponseSubmitSchema,
+  PresentationTextModerationRequestSchema,
+  PresentationTextModerationQuerySchema,
+  PresentationTextResultsQuerySchema,
 } from "@openround/contracts";
 import type {
   CreatorContext,
@@ -54,6 +57,7 @@ const PresentationReportQuerySchema = z
     includeSessionContext: z.literal("true").optional(),
     includeQuickChecks: z.literal("true").optional(),
     includeOpinionResults: z.literal("true").optional(),
+    includeTextResults: z.literal("true").optional(),
   })
   .strict();
 
@@ -480,6 +484,111 @@ export async function registerPresentationSessionRoutes(
     sendServiceError,
   });
 
+  const textReadRateLimit = {
+    rateLimit: { max: 120, timeWindow: "1 minute", keyGenerator: presentationSnapshotRateLimitKey },
+  };
+  app.get(
+    "/v1/presentation-sessions/:id/response-moderation",
+    { config: textReadRateLimit },
+    async (request, reply) => {
+      noStore(reply);
+      const { id } = IdParamsSchema.parse(request.params);
+      const token = bearerToken(request);
+      if (!token)
+        return apiError(
+          reply,
+          401,
+          "UNAUTHORIZED",
+          "A host control credential is required",
+          request.id,
+        );
+      const parsed = PresentationTextModerationQuerySchema.safeParse(request.query);
+      if (!parsed.success)
+        return apiError(
+          reply,
+          422,
+          "VALIDATION_ERROR",
+          "Choose a valid moderation page",
+          request.id,
+        );
+      try {
+        return await service.getTextModerationPage(id, token, parsed.data);
+      } catch (error) {
+        return sendServiceError(error, reply, request.id);
+      }
+    },
+  );
+  app.post(
+    "/v1/presentation-sessions/:id/response-moderation/:responseId",
+    { config: textReadRateLimit },
+    async (request, reply) => {
+      noStore(reply);
+      const { id, responseId } = z
+        .object({ id: z.string().uuid(), responseId: z.string().uuid() })
+        .parse(request.params);
+      const token = bearerToken(request);
+      if (!token)
+        return apiError(
+          reply,
+          401,
+          "UNAUTHORIZED",
+          "A host control credential is required",
+          request.id,
+        );
+      const parsed = PresentationTextModerationRequestSchema.safeParse(request.body);
+      if (!parsed.success)
+        return apiError(
+          reply,
+          422,
+          "VALIDATION_ERROR",
+          "Choose a valid moderation action",
+          request.id,
+        );
+      try {
+        return await service.moderateTextResponse(id, token, responseId, parsed.data);
+      } catch (error) {
+        return sendServiceError(error, reply, request.id);
+      }
+    },
+  );
+  app.get(
+    "/v1/presentation-sessions/:id/response-results",
+    { config: textReadRateLimit },
+    async (request, reply) => {
+      noStore(reply);
+      const { id } = IdParamsSchema.parse(request.params);
+      const parsed = PresentationTextResultsQuerySchema.safeParse(request.query);
+      if (!parsed.success)
+        return apiError(
+          reply,
+          422,
+          "VALIDATION_ERROR",
+          "Choose a valid text results page",
+          request.id,
+        );
+      const query = parsed.data;
+      // Auth is selected by the explicit role. A bad bearer must never fall back to cookies.
+      if (query.role === "creator") {
+        const creator = await auth.requireCreator(request, reply);
+        if (!creator) return;
+        if (requireEditor(creator, reply, request.id) !== true) return;
+        try {
+          return await service.getTextResponseResults({ sessionId: id, query, creator });
+        } catch (error) {
+          return sendServiceError(error, reply, request.id);
+        }
+      }
+      const token = bearerToken(request);
+      if (!token)
+        return apiError(reply, 401, "UNAUTHORIZED", "A room credential is required", request.id);
+      try {
+        return await service.getTextResponseResults({ sessionId: id, query, token });
+      } catch (error) {
+        return sendServiceError(error, reply, request.id);
+      }
+    },
+  );
+
   app.post("/v1/presentation-sessions/:id/control-pass", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
@@ -758,7 +867,23 @@ export async function registerPresentationSessionRoutes(
         );
       try {
         const { id } = IdParamsSchema.parse(request.params);
-        const input = PresentationRestResponseSubmitSchema.parse(request.body);
+        const parsed = PresentationRestResponseSubmitSchema.safeParse(request.body);
+        if (!parsed.success) {
+          const candidate = request.body as { response?: unknown } | null;
+          const response = candidate?.response;
+          if (response !== null && typeof response === "object" && "textValue" in response) {
+            recordResponse("rejected");
+            return apiError(
+              reply,
+              422,
+              "VALIDATION_ERROR",
+              "Enter a valid text response without other answer fields",
+              request.id,
+            );
+          }
+          throw parsed.error;
+        }
+        const input = parsed.data;
         const acceptance =
           "blockId" in input
             ? await service.submitResponse({
@@ -808,7 +933,7 @@ export async function registerPresentationSessionRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     const { id } = IdParamsSchema.parse(request.params);
-    const { includeSessionContext, includeQuickChecks, includeOpinionResults } =
+    const { includeSessionContext, includeQuickChecks, includeOpinionResults, includeTextResults } =
       PresentationReportQuerySchema.parse(request.query);
     try {
       const result = await service.getReport(
@@ -817,6 +942,7 @@ export async function registerPresentationSessionRoutes(
         includeSessionContext === "true",
         includeQuickChecks === "true",
         includeOpinionResults === "true",
+        includeTextResults === "true",
       );
       return reply
         .code(result.reportStatus === "pending" && !result.report ? 202 : 200)

@@ -1,4 +1,25 @@
 import {
+  requiresPresentationTextOpinions,
+  isPresentationTextResultQuestion,
+} from "@openround/contracts";
+import {
+  assertTextReadSession,
+  textModerationPage,
+  textResponseResults,
+  textReportEvidence,
+  presentationTextPageOffset,
+  samePresentationUuid,
+} from "./presentation-text-rules.js";
+import {
+  PresentationTextReadError,
+  PresentationTextCapacityError,
+  type PresentationTextModerationInput,
+  type PresentationTextModerationAcceptance,
+  type PresentationTextModerationReceiptRecord,
+  type PresentationTextModerationPageInput,
+  type PresentationTextResultsInput,
+} from "./presentation-text-types.js";
+import {
   presentationResponseSchemaVersion,
   upcastPresentationResponse,
 } from "./response-schemas.js";
@@ -14,6 +35,8 @@ import type { PostgresRepository } from "./postgres.js";
 import { WorkspaceDeletionInProgressError } from "./types.js";
 import {
   PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL,
+  presentationResponseMetadataColumns,
+  presentationResponseMetadataJson,
   PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL,
   mapCommandReceipt,
   mapCredential,
@@ -25,6 +48,9 @@ import {
 } from "./presentation-session-postgres-support.js";
 import {
   normalizeSession,
+  normalizePresentationResponse,
+  presentationTextValue,
+  assertPresentationTextReceiptIdentity,
   assertCommandRequestHash,
   commandReceiptMatches,
   responseWindowOpen,
@@ -106,11 +132,12 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       `SELECT to_jsonb(session) || jsonb_build_object(
                 'event_seq', session.event_seq_offset
                   + session.revision
+                  + session.text_moderation_seq
                   + participant_totals.participant_count
                   + response_totals.response_count
               ) AS response_session,
               participant_totals.participant_count::integer AS participant_count,
-              (SELECT row_to_json(current_response)
+              (SELECT ${presentationResponseMetadataJson("current_response")}
                  FROM presentation_live_responses current_response
                 WHERE current_response.session_id = session.id
                   AND current_response.participant_id = $3
@@ -142,11 +169,12 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         `SELECT to_jsonb(session) || jsonb_build_object(
                   'event_seq', session.event_seq_offset
                     + session.revision
+                  + session.text_moderation_seq
                     + participant_totals.participant_count
                     + response_totals.response_count
                 ) AS response_session,
                 participant_totals.participant_count::integer AS participant_count,
-                (SELECT row_to_json(current_response)
+                (SELECT ${presentationResponseMetadataJson("current_response")}
                    FROM presentation_live_responses current_response
                   WHERE current_response.session_id = session.id
                     AND current_response.participant_id = $3
@@ -399,6 +427,19 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     session: PresentationSessionRecord;
   } | null> {
     if (command) {
+      const textReceipt = await client.query(
+        "SELECT 1 FROM presentation_text_moderation_receipts WHERE workspace_id=$1 AND session_id=$2 AND command_id=$3",
+        [input.workspaceId, input.sessionId, command.commandId],
+      );
+      if (textReceipt.rows[0]) {
+        const current = await client.query(
+          `SELECT session.*, ${PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL} AS event_seq FROM presentation_live_sessions session WHERE workspace_id=$1 AND id=$2`,
+          [input.workspaceId, input.sessionId],
+        );
+        return current.rows[0]
+          ? { status: "idempotency_conflict", session: mapSession(current.rows[0]) }
+          : null;
+      }
       const prior = await client.query(
         `SELECT * FROM presentation_session_command_receipts
          WHERE workspace_id = $1 AND session_id = $2 AND command_id = $3`,
@@ -427,6 +468,19 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     );
     if (!locked.rows[0]) return null;
     if (command) {
+      const textReceipt = await client.query(
+        "SELECT 1 FROM presentation_text_moderation_receipts WHERE workspace_id=$1 AND session_id=$2 AND command_id=$3",
+        [input.workspaceId, input.sessionId, command.commandId],
+      );
+      if (textReceipt.rows[0]) {
+        const current = await client.query(
+          `SELECT session.*, ${PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL} AS event_seq FROM presentation_live_sessions session WHERE workspace_id=$1 AND id=$2`,
+          [input.workspaceId, input.sessionId],
+        );
+        return current.rows[0]
+          ? { status: "idempotency_conflict", session: mapSession(current.rows[0]) }
+          : null;
+      }
       const prior = await client.query(
         `SELECT * FROM presentation_session_command_receipts
          WHERE workspace_id = $1 AND session_id = $2 AND command_id = $3`,
@@ -475,6 +529,16 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       throw new Error("Recovery Pack cards were not enabled when this session was created");
     }
     const content = transitionContent(session, input);
+    if (requiresPresentationTextOpinions(content)) {
+      const participants = await client.query(
+        "SELECT count(*)::integer AS count FROM presentation_live_participants WHERE session_id=$1",
+        [session.id],
+      );
+      if (participants.rows[0].count > 250)
+        throw new PresentationTextCapacityError(
+          "Text opinion rooms support at most 250 participants",
+        );
+    }
     const window = transitionWindow({ ...session, content }, input, occurredAt);
     await client.query(
       `UPDATE presentation_live_sessions
@@ -613,7 +677,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     return this.transaction(input.workspaceId, async (client) => {
       await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
       const locked = await client.query(
-        `SELECT status, live_expires_at
+        `SELECT status, live_expires_at, content_snapshot
          FROM presentation_live_sessions
          WHERE workspace_id = $1 AND id = $2
          FOR UPDATE`,
@@ -631,7 +695,13 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         "SELECT count(*)::text AS count FROM presentation_live_participants WHERE session_id = $1",
         [input.sessionId],
       );
-      if (Number(count.rows[0]?.count ?? 0) >= participantLimit) return { status: "full" };
+      if (
+        Number(count.rows[0]?.count ?? 0) >=
+        (requiresPresentationTextOpinions(locked.rows[0].content_snapshot)
+          ? Math.min(participantLimit, 250)
+          : participantLimit)
+      )
+        return { status: "full" };
       await assertAudienceAdmissionForTransaction(client, input.workspaceId);
       const result = await client.query(
         `INSERT INTO presentation_live_participants
@@ -681,7 +751,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                   -- fence scans here; the post-commit acknowledgement performs the authoritative
                   -- sequence read that is returned to the participant.
                   to_jsonb(session) AS response_session,
-                  (SELECT row_to_json(prior_response)
+                  (SELECT ${presentationResponseMetadataJson("prior_response")}
                      FROM presentation_live_responses AS prior_response
                     WHERE prior_response.session_id = participant.session_id
                       AND prior_response.participant_id = participant.id
@@ -710,6 +780,18 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
   }
 
   async saveResponse(input: PresentationSessionResponseRecord) {
+    if (input.responseSchemaVersion === 3 || input.response.textValue !== undefined) {
+      const session = await this.getSessionById(input.sessionId);
+      if (!session) throw new Error("Session not found");
+      const result = await this.acceptTextResponse(input, session.revision);
+      if (
+        result.status === "accepted" ||
+        result.status === "duplicate" ||
+        result.status === "already_responded"
+      )
+        return result.response;
+      throw new Error("Text response was not accepted");
+    }
     const responseSchemaVersion =
       input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response);
     upcastPresentationResponse(input.response, responseSchemaVersion);
@@ -721,7 +803,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          ON CONFLICT (session_id, participant_id, block_id)
          DO NOTHING
-         RETURNING *`,
+         RETURNING ${presentationResponseMetadataColumns()}`,
         [
           input.id,
           input.workspaceId,
@@ -741,7 +823,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       );
       if (result.rows[0]) return mapResponse(result.rows[0]);
       const existing = await client.query(
-        `SELECT * FROM presentation_live_responses
+        `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses
          WHERE session_id = $1 AND participant_id = $2 AND block_id = $3`,
         [input.sessionId, input.participantId, input.blockId],
       );
@@ -753,6 +835,8 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     input: PresentationSessionResponseRecord,
     expectedSessionRevision: number,
   ): Promise<PresentationResponseAcceptance> {
+    if (input.responseSchemaVersion === 3 || input.response.textValue !== undefined)
+      return this.acceptTextResponse(input, expectedSessionRevision);
     const responseSchemaVersion =
       input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response);
     upcastPresentationResponse(input.response, responseSchemaVersion);
@@ -778,7 +862,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       const findIdempotentResponse = async () => {
         if (!input.idempotencyKey) return null;
         const result = await client.query(
-          `SELECT * FROM presentation_live_responses
+          `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses
            WHERE session_id = $1 AND participant_id = $2 AND idempotency_key = $3`,
           [input.sessionId, input.participantId, input.idempotencyKey],
         );
@@ -830,7 +914,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
          SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$15
            FROM eligible_session
          ON CONFLICT DO NOTHING
-         RETURNING *`,
+         RETURNING ${presentationResponseMetadataColumns()}`,
         [
           input.id,
           input.workspaceId,
@@ -875,7 +959,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         return { status: "phase_closed" };
       }
       const existing = await client.query(
-        `SELECT * FROM presentation_live_responses
+        `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses
           WHERE session_id = $1 AND participant_id = $2 AND block_id = $3`,
         [input.sessionId, input.participantId, input.blockId],
       );
@@ -902,7 +986,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
   async listResponses(sessionId: string) {
     return this.transaction(null, async (client) => {
       const result = await client.query(
-        "SELECT * FROM presentation_live_responses WHERE session_id = $1 ORDER BY submitted_at",
+        `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses WHERE session_id = $1 ORDER BY submitted_at`,
         [sessionId],
       );
       return result.rows.map(mapResponse);
@@ -922,7 +1006,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         [sessionId, participantId, idempotencyKey],
       );
       const result = await client.query(
-        `SELECT * FROM presentation_live_responses
+        `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses
          WHERE session_id = $1 AND participant_id = $2 AND idempotency_key = $3`,
         [sessionId, participantId, idempotencyKey],
       );
@@ -957,7 +1041,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                FROM participant_scores
              )
              SELECT ranked.participant_count, ranked.score, ranked.rank,
-                    (SELECT row_to_json(current_response)
+                    (SELECT ${presentationResponseMetadataJson("current_response")}
                      FROM presentation_live_responses current_response
                      WHERE current_response.session_id = $1
                        AND current_response.participant_id = $2
@@ -974,7 +1058,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                WHERE session_id = $1
              )
              SELECT roster.participant_count,
-                    (SELECT row_to_json(current_response)
+                    (SELECT ${presentationResponseMetadataJson("current_response")}
                      FROM presentation_live_responses current_response
                      WHERE current_response.session_id = $1
                        AND current_response.participant_id = $2
@@ -1223,6 +1307,459 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       return result.rows[0]
         ? { status: "revoked", credential: mapCredential(result.rows[0]) }
         : { status: "stale" };
+    });
+  }
+  private async textSession(
+    client: PoolClient,
+    workspaceId: string,
+    sessionId: string,
+    update = false,
+  ) {
+    const row = await client.query(
+      `SELECT session.*, ${PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL} AS event_seq FROM presentation_live_sessions session WHERE workspace_id=$1 AND id=$2 ${update ? "FOR UPDATE" : "FOR SHARE"}`,
+      [workspaceId, sessionId],
+    );
+    return row.rows[0] ? mapSession(row.rows[0]) : null;
+  }
+  private textReceipt(row: Record<string, any>): PresentationTextModerationReceiptRecord {
+    return {
+      id: row.id,
+      workspaceId: row.workspace_id,
+      sessionId: row.session_id,
+      commandId: row.command_id,
+      responseId: row.response_id,
+      blockId: row.block_id,
+      hostCredentialId: row.host_credential_id,
+      requestHash: row.request_hash,
+      previousStatus: row.previous_status,
+      status: row.status,
+      expectedRevision: Number(row.expected_revision),
+      expectedModerationVersion: Number(row.expected_moderation_version),
+      resultingModerationVersion: Number(row.resulting_moderation_version),
+      acceptedAt: new Date(row.accepted_at),
+    };
+  }
+  private async hostTextCredential(
+    client: PoolClient,
+    workspaceId: string,
+    sessionId: string,
+    credentialId: string,
+    now: Date,
+  ) {
+    const result = await client.query(
+      "SELECT 1 FROM presentation_session_credentials WHERE workspace_id=$1 AND session_id=$2 AND id=$3 AND role='host' AND revoked_at IS NULL AND expires_at>$4 FOR SHARE",
+      [workspaceId, sessionId, credentialId, now],
+    );
+    return !!result.rows[0];
+  }
+  private async acceptTextResponse(
+    input: PresentationSessionResponseRecord,
+    expectedRevision: number,
+  ): Promise<PresentationResponseAcceptance> {
+    assertPresentationTextReceiptIdentity(input);
+    const write = await this.transaction(
+      input.workspaceId,
+      async (
+        client,
+      ): Promise<
+        | Exclude<PresentationResponseAcceptance, { status: "accepted" | "duplicate" }>
+        | { status: "accepted"; response: PresentationSessionResponseRecord }
+        | { status: "duplicate"; response: PresentationSessionResponseRecord }
+      > => {
+        await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
+        const session = await this.textSession(client, input.workspaceId, input.sessionId, true);
+        if (!session) return { status: "phase_closed" };
+        if (input.idempotencyKey) {
+          const previous = await client.query(
+            `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses WHERE session_id=$1 AND participant_id=$2 AND idempotency_key=$3`,
+            [input.sessionId, input.participantId, input.idempotencyKey],
+          );
+          if (previous.rows[0]) {
+            const record = mapResponse(previous.rows[0]);
+            return record.requestHash &&
+              input.requestHash &&
+              record.requestHash !== input.requestHash
+              ? { status: "idempotency_conflict", response: record }
+              : { status: "duplicate", response: record };
+          }
+        }
+        if (!responseWindowOpen(session, input, expectedRevision))
+          return { status: "phase_closed" };
+        const existing = await client.query(
+          `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses WHERE session_id=$1 AND participant_id=$2 AND block_id=$3`,
+          [input.sessionId, input.participantId, input.blockId],
+        );
+        if (existing.rows[0])
+          return input.idempotencyKey
+            ? { status: "already_responded", response: mapResponse(existing.rows[0]) }
+            : { status: "duplicate", response: mapResponse(existing.rows[0]) };
+        const participant = await client.query(
+          "SELECT 1 FROM presentation_live_participants WHERE workspace_id=$1 AND session_id=$2 AND id=$3 FOR SHARE",
+          [input.workspaceId, input.sessionId, input.participantId],
+        );
+        if (!participant.rows[0]) return { status: "phase_closed" };
+        const counts = await client.query(
+          "SELECT count(*)::integer AS total,count(*) FILTER(WHERE block_id=$2)::integer AS block FROM presentation_live_responses WHERE session_id=$1 AND response_schema_version=3",
+          [input.sessionId, input.blockId],
+        );
+        if (counts.rows[0].total >= 2500 || counts.rows[0].block >= 250)
+          throw new PresentationTextCapacityError();
+        const record = normalizePresentationResponse(session, input);
+        const value = presentationTextValue(session, input);
+        const row = await client.query(
+          `INSERT INTO presentation_live_responses (id,workspace_id,session_id,participant_id,block_id,question_id,response,response_schema_version,correct,score,response_ms,submitted_at,idempotency_key,request_hash,text_value,moderation_status,moderation_version)
+        VALUES ($1,$2,$3,$4,$5,$6,'{}',3,NULL,0,$7,$8,$9,$10,$11,'pending',0) RETURNING ${presentationResponseMetadataColumns()}`,
+          [
+            record.id,
+            record.workspaceId,
+            record.sessionId,
+            record.participantId,
+            record.blockId,
+            record.questionId,
+            record.responseMs,
+            record.submittedAt,
+            record.idempotencyKey ?? null,
+            record.requestHash ?? null,
+            value,
+          ],
+        );
+        return { status: "accepted", response: mapResponse(row.rows[0]) };
+      },
+    );
+    if (write.status !== "accepted" && write.status !== "duplicate") return write;
+    const acknowledgement = await this.transaction(input.workspaceId, (client) =>
+      this.responseAcknowledgementState(
+        client,
+        input.workspaceId,
+        input.sessionId,
+        input.participantId,
+      ),
+    );
+    return { ...write, acknowledgement };
+  }
+  async findTextModerationReceipt(workspaceId: string, sessionId: string, commandId: string) {
+    return this.transaction(workspaceId, async (client) => {
+      const row = await client.query(
+        "SELECT * FROM presentation_text_moderation_receipts WHERE workspace_id=$1 AND session_id=$2 AND command_id=$3",
+        [workspaceId, sessionId, commandId],
+      );
+      return row.rows[0] ? this.textReceipt(row.rows[0]) : null;
+    });
+  }
+  async moderateTextResponse(
+    input: PresentationTextModerationInput,
+  ): Promise<PresentationTextModerationAcceptance> {
+    return this.transaction<PresentationTextModerationAcceptance>(
+      input.workspaceId,
+      async (client) => {
+        await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
+        const session = await this.textSession(client, input.workspaceId, input.sessionId, true);
+        if (!session) return { status: "not_found" };
+        const checkedAt = new Date(
+          Math.max(
+            input.occurredAt.getTime(),
+            (
+              await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+            ).rows[0]!.now.getTime(),
+          ),
+        );
+        if (
+          !(await this.hostTextCredential(
+            client,
+            input.workspaceId,
+            input.sessionId,
+            input.hostCredentialId,
+            checkedAt,
+          ))
+        )
+          return { status: "unauthorized" };
+        const row = await client.query(
+          `SELECT ${presentationResponseMetadataColumns()} FROM presentation_live_responses WHERE workspace_id=$1 AND session_id=$2 AND id=$3 AND response_schema_version=3 FOR UPDATE`,
+          [input.workspaceId, input.sessionId, input.responseId],
+        );
+        if (!row.rows[0]) return { status: "not_found" };
+        const response = mapResponse(row.rows[0]);
+        const prior = await client.query(
+          "SELECT * FROM presentation_text_moderation_receipts WHERE session_id=$1 AND command_id=$2",
+          [input.sessionId, input.commandId],
+        );
+        if (prior.rows[0]) {
+          const receipt = this.textReceipt(prior.rows[0]);
+          return receipt.requestHash === input.requestHash &&
+            receipt.hostCredentialId === input.hostCredentialId
+            ? { status: "duplicate", session, receipt, response }
+            : { status: "idempotency_conflict" };
+        }
+        if (
+          (
+            await client.query(
+              "SELECT 1 FROM presentation_session_command_receipts WHERE session_id=$1 AND command_id=$2",
+              [input.sessionId, input.commandId],
+            )
+          ).rows[0]
+        )
+          return { status: "idempotency_conflict" };
+        if (
+          session.status !== "active" ||
+          session.liveExpiresAt <= checkedAt ||
+          session.retentionExpiresAt <= checkedAt
+        )
+          return { status: "phase_closed" };
+        if (
+          session.revision !== input.expectedRevision ||
+          response.moderationVersion !== input.expectedModerationVersion
+        )
+          return {
+            status: "stale",
+            session,
+            actualModerationVersion: response.moderationVersion ?? 0,
+          };
+        if (
+          response.moderationStatus === "removed" ||
+          (response.moderationStatus === "approved" && input.status !== "removed")
+        )
+          return { status: "not_found" };
+        if (
+          (
+            await client.query(
+              "SELECT count(*)::integer AS count FROM presentation_text_moderation_receipts WHERE session_id=$1",
+              [input.sessionId],
+            )
+          ).rows[0].count >= 5000
+        )
+          return { status: "limit_reached" };
+        const changed = await client.query(
+          `UPDATE presentation_live_responses SET moderation_status=$2,moderation_version=moderation_version+1,moderated_at=$3,text_value=CASE WHEN $2='removed' THEN NULL ELSE text_value END WHERE id=$1 RETURNING ${presentationResponseMetadataColumns()}`,
+          [input.responseId, input.status, input.occurredAt],
+        );
+        const receipt = await client.query(
+          `INSERT INTO presentation_text_moderation_receipts (id,workspace_id,session_id,command_id,response_id,block_id,host_credential_id,request_hash,previous_status,status,expected_revision,expected_moderation_version,resulting_moderation_version,accepted_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+          [
+            randomUUID(),
+            input.workspaceId,
+            input.sessionId,
+            input.commandId,
+            input.responseId,
+            response.blockId,
+            input.hostCredentialId,
+            input.requestHash,
+            response.moderationStatus,
+            input.status,
+            input.expectedRevision,
+            input.expectedModerationVersion,
+            input.expectedModerationVersion + 1,
+            input.occurredAt,
+          ],
+        );
+        return {
+          status: "accepted",
+          session: (await this.textSession(client, input.workspaceId, input.sessionId))!,
+          receipt: this.textReceipt(receipt.rows[0]),
+          response: mapResponse(changed.rows[0]),
+        };
+      },
+    ).catch(async (error): Promise<PresentationTextModerationAcceptance> => {
+      if (
+        error?.code !== "23514" ||
+        ![
+          "Invalid or closed Presentation text moderation transition",
+          "Invalid text moderation receipt or command namespace",
+        ].some((message) => String(error.message).includes(message))
+      )
+        throw error;
+      return this.transaction(
+        input.workspaceId,
+        async (client): Promise<PresentationTextModerationAcceptance> => {
+          const session = await this.textSession(client, input.workspaceId, input.sessionId);
+          if (!session) return { status: "not_found" };
+          const now = new Date(
+            Math.max(
+              input.occurredAt.getTime(),
+              (
+                await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+              ).rows[0]!.now.getTime(),
+            ),
+          );
+          if (
+            !(await this.hostTextCredential(
+              client,
+              input.workspaceId,
+              input.sessionId,
+              input.hostCredentialId,
+              now,
+            ))
+          )
+            return { status: "unauthorized" };
+          if (
+            session.status !== "active" ||
+            session.liveExpiresAt <= now ||
+            session.retentionExpiresAt <= now
+          )
+            return { status: "phase_closed" };
+          throw error;
+        },
+      );
+    });
+  }
+  async getTextModerationPage(input: PresentationTextModerationPageInput) {
+    return this.transaction(input.workspaceId, async (client) => {
+      await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
+      const now = input.now ?? new Date();
+      const session = await this.textSession(client, input.workspaceId, input.sessionId);
+      assertTextReadSession(session, input.workspaceId, now);
+      if (
+        !(await this.hostTextCredential(
+          client,
+          input.workspaceId,
+          input.sessionId,
+          input.hostCredentialId,
+          now,
+        ))
+      )
+        throw new PresentationTextReadError("UNAUTHORIZED", "Host credential required");
+      const page = presentationTextPageOffset(
+        session,
+        ["moderation", input.blockId?.toLowerCase() ?? null, input.status],
+        input.cursor,
+        input.limit,
+      );
+      const rows = await client.query(
+        `SELECT ${presentationResponseMetadataColumns("response")},response.text_value,participant.nickname FROM presentation_live_responses response JOIN presentation_live_participants participant ON participant.session_id=response.session_id AND participant.id=response.participant_id WHERE response.session_id=$1 AND response.response_schema_version=3 AND response.moderation_status=$2 AND ($3::uuid IS NULL OR response.block_id=$3) ORDER BY response.submitted_at,response.id LIMIT $4 OFFSET $5`,
+        [session.id, input.status, input.blockId ?? null, input.limit + 1, page.start],
+      );
+      const readAt = new Date(
+        Math.max(
+          now.getTime(),
+          (
+            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+          ).rows[0]!.now.getTime(),
+        ),
+      );
+      assertTextReadSession(session, input.workspaceId, readAt);
+      if (
+        !(await this.hostTextCredential(
+          client,
+          input.workspaceId,
+          input.sessionId,
+          input.hostCredentialId,
+          readAt,
+        ))
+      )
+        throw new PresentationTextReadError("UNAUTHORIZED", "Host credential required");
+      return textModerationPage(
+        session,
+        rows.rows.map((row) => ({ record: mapResponse(row), textValue: row.text_value })),
+        new Map(rows.rows.map((row) => [String(row.participant_id), String(row.nickname)])),
+        input,
+        true,
+      );
+    });
+  }
+  async getTextResponseResults(input: PresentationTextResultsInput) {
+    return this.transaction(input.workspaceId, async (client) => {
+      await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
+      const now = input.now ?? new Date();
+      const session = await this.textSession(client, input.workspaceId, input.sessionId);
+      assertTextReadSession(session, input.workspaceId, now);
+      const actor = input.actor;
+      let authorized: boolean;
+      if (actor.role === "creator")
+        authorized = !!(
+          await client.query(
+            "SELECT 1 FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+            [input.workspaceId, actor.userId],
+          )
+        ).rows[0];
+      else if (actor.role === "participant")
+        authorized = !!(
+          await client.query(
+            "SELECT 1 FROM presentation_live_participants WHERE workspace_id=$1 AND session_id=$2 AND id=$3",
+            [input.workspaceId, input.sessionId, actor.participantId],
+          )
+        ).rows[0];
+      else
+        authorized = !!(
+          await client.query(
+            "SELECT 1 FROM presentation_session_credentials WHERE workspace_id=$1 AND session_id=$2 AND id=$3 AND role=$4 AND revoked_at IS NULL AND expires_at>$5 FOR SHARE",
+            [input.workspaceId, input.sessionId, actor.credentialId, actor.role, now],
+          )
+        ).rows[0];
+      if (!authorized)
+        throw new PresentationTextReadError("UNAUTHORIZED", "Live text access required");
+      const block = session.content.blocks[session.currentBlockIndex];
+      if (
+        block?.kind !== "question" ||
+        !isPresentationTextResultQuestion(block.question) ||
+        !samePresentationUuid(block.id, input.blockId)
+      )
+        throw new PresentationTextReadError("NOT_FOUND", "Current text checkpoint not found");
+      const events = await client.query(
+        "SELECT * FROM presentation_session_timeline WHERE session_id=$1 AND event_type='question.revealed' AND block_id=$2",
+        [session.id, block.id],
+      );
+      const rows = events.rows.length
+        ? await client.query(
+            `SELECT ${presentationResponseMetadataColumns()},text_value FROM presentation_live_responses WHERE session_id=$1 AND block_id=$2 AND response_schema_version=3 AND moderation_status='approved' ORDER BY submitted_at,id LIMIT 251`,
+            [session.id, block.id],
+          )
+        : { rows: [] };
+      const readAt = new Date(
+        Math.max(
+          now.getTime(),
+          (
+            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+          ).rows[0]!.now.getTime(),
+        ),
+      );
+      assertTextReadSession(session, input.workspaceId, readAt);
+      if (
+        actor.role !== "creator" &&
+        actor.role !== "participant" &&
+        !(
+          await client.query(
+            "SELECT 1 FROM presentation_session_credentials WHERE workspace_id=$1 AND session_id=$2 AND id=$3 AND role=$4 AND revoked_at IS NULL AND expires_at>$5",
+            [input.workspaceId, input.sessionId, actor.credentialId, actor.role, readAt],
+          )
+        ).rows[0]
+      )
+        throw new PresentationTextReadError("UNAUTHORIZED", "Live text access required");
+      return textResponseResults(
+        session,
+        rows.rows.map((row) => ({ record: mapResponse(row), textValue: row.text_value })),
+        events.rows.map(mapTimeline),
+        input,
+      );
+    });
+  }
+  async getTextReportEvidence(input: { workspaceId: string; sessionId: string; now?: Date }) {
+    return this.transaction(input.workspaceId, async (client) => {
+      await this.assertWorkspaceMutationAllowed(client, input.workspaceId);
+      const session = await this.textSession(client, input.workspaceId, input.sessionId);
+      assertTextReadSession(session, input.workspaceId, input.now ?? new Date(), true);
+      if (session.status !== "finished") return [];
+      const rows = await client.query(
+        `SELECT ${presentationResponseMetadataColumns()},text_value FROM presentation_live_responses WHERE session_id=$1 AND response_schema_version=3 AND moderation_status='approved' ORDER BY submitted_at,id LIMIT 2501`,
+        [session.id],
+      );
+      const events = await client.query(
+        "SELECT * FROM presentation_session_timeline WHERE session_id=$1 AND event_type='question.revealed'",
+        [session.id],
+      );
+      const readAt = new Date(
+        Math.max(
+          input.now?.getTime() ?? 0,
+          (
+            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+          ).rows[0]!.now.getTime(),
+        ),
+      );
+      assertTextReadSession(session, input.workspaceId, readAt, true);
+      return textReportEvidence(
+        session,
+        rows.rows.map((row) => ({ record: mapResponse(row), textValue: row.text_value })),
+        events.rows.map(mapTimeline),
+      );
     });
   }
 }

@@ -142,4 +142,81 @@ describe("Presentation report evidence CSV", () => {
     expect(records(presentationReportCsv(legacy))).toHaveLength(2);
     expect(() => presentationReportCsv({ ...current, schemaVersion: 99 } as never)).toThrow();
   });
+
+  it("exports approved V5 text and cloud evidence alongside opinions without changing legacy columns", () => {
+    const previous = report();
+    const base = previous.evidence[0]!;
+    if (base.kind !== "question") throw new Error("Question fixture required");
+    const { opinionSummary: removed, ...question } = base as typeof base & {
+      opinionSummary?: unknown;
+    };
+    expect(removed).toEqual(summary);
+    const approved = ["=SUM(1)", 'Plan, "A"\nNext', "Practice", "Feedback", "Review"];
+    const value = PresentationReportSchema.parse({
+      ...previous,
+      schemaVersion: 5,
+      participantCount: 5,
+      responseCount: 12,
+      timeline: [20, 21].map((number, index) => ({
+        sequence: index + 1,
+        type: "question.revealed",
+        blockIndex: index + 1,
+        blockId: id(number),
+        occurredAt: "2026-11-04T00:00:30.000Z",
+      })),
+      evidence: [
+        base,
+        {
+          ...question,
+          blockId: id(20),
+          blockIndex: 1,
+          questionType: "open_text",
+          questionTypeLabel: "Open text",
+          respondents: 5,
+          textResults: {
+            kind: "open_text",
+            respondents: 5,
+            entries: approved.map((value) => ({ value })),
+          },
+        },
+        {
+          ...question,
+          blockId: id(21),
+          blockIndex: 2,
+          questionType: "word_cloud",
+          questionTypeLabel: "Word cloud",
+          respondents: 5,
+          textResults: {
+            kind: "word_cloud",
+            respondents: 5,
+            buckets: [
+              { value: "café", label: "Café", count: 3, percent: 60 },
+              { value: "practice", label: "Practice", count: 2, percent: 40 },
+            ],
+          },
+        },
+        {
+          blockId: id(22),
+          blockIndex: 3,
+          kind: "content",
+          title: "Wrap-up",
+          assessmentStatus: "not_assessed",
+        },
+      ],
+    });
+    const before = JSON.stringify(value);
+    const rows = records(presentationReportCsv(value));
+    const legacyRows = records(presentationReportCsv(previous));
+    expect(rows.every((row) => row.length === 31)).toBe(true);
+    expect(rows.slice(0, 4).map((row) => row.slice(0, 26))).toEqual(legacyRows);
+    const at = (column: string) => rows[0]!.indexOf(column);
+    expect(rows[4]![at("approved_text")]).toBe("'=SUM(1)");
+    expect(rows[5]![at("approved_text")]).toBe('Plan, "A"\nNext');
+    expect(rows[9]![at("word_or_phrase")]).toBe("Café");
+    expect(rows[9]![at("term_count")]).toBe("3");
+    expect(rows[9]![at("approved_respondents")]).toBe("5");
+    expect(rows[9]![at("percent_of_approved_respondents")]).toBe("60");
+    expect(rows.at(-1)!.slice(26)).toEqual(Array(5).fill(""));
+    expect(JSON.stringify(value)).toBe(before);
+  });
 });

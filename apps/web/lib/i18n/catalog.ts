@@ -201,7 +201,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
     path === "/create/presentation" ||
     path.startsWith("/create/presentation/")
   )
-    return ["delivery-authoring", "idea-boards"];
+    return ["delivery-authoring", "live-delivery", "idea-boards"];
   if (
     ["/signin", "/invite", "/presentation"].some(
       (prefix) => path === prefix || path.startsWith(`${prefix}/`),

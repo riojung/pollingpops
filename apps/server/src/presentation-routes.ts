@@ -13,6 +13,7 @@ import {
   preparePresentationPublication,
   presentationQuestionSupported,
   requiresPresentationOpinionFormats,
+  requiresPresentationTextOpinions,
   PublishPresentationSchema,
   type AuthoringDraft,
   type ContentSlideRegion,
@@ -740,7 +741,11 @@ export async function registerPresentationRoutes(
     }
     const nextDraft = PresentationDraftSchema.parse({
       ...presentation.draft,
-      ...(requiresPresentationOpinionFormats({ blocks }) ? { schemaVersion: 9 } : {}),
+      ...(requiresPresentationTextOpinions({ blocks })
+        ? { schemaVersion: 10 }
+        : requiresPresentationOpinionFormats({ blocks }) && presentation.draft.schemaVersion < 9
+          ? { schemaVersion: 9 }
+          : {}),
       blocks,
     });
     const draftHash = jsonHash({

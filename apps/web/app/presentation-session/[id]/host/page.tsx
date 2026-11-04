@@ -42,6 +42,9 @@ import { createPresentationHostPassManager } from "../../../../lib/presentation-
 import { presentationPresenterAction } from "../../../../lib/presentation-presenter-controls";
 import { PresenterTimer } from "../../../../components/presentation-live/presenter-timer";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import { PresentationTextModerationPanel } from "../../../../components/presentation-live/text-moderation";
+import { isTextQuestion } from "../../../../lib/text-response";
 import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { PresentationStageLauncher } from "../../../../components/presentation-live/stage-launcher";
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
@@ -528,6 +531,8 @@ function PresentationHostContent() {
                           </div>
                         ) : block.question.type === "numeric" ? (
                           <p>{t("live.presentationSession.numericResponse")}</p>
+                        ) : isTextQuestion(block.question.type) ? (
+                          <p lang="en-CA">Responses are reviewed before they appear.</p>
                         ) : (
                           <p>{t("live.presentationSession.ratingResponse")}</p>
                         )}
@@ -547,6 +552,17 @@ function PresentationHostContent() {
                         ) : null}
                         {opinionSummary ? (
                           <PresentationOpinionResults summary={opinionSummary} />
+                        ) : null}
+                        {isTextQuestion(block.question.type) ? (
+                          <PresentationTextResults
+                            sessionId={id}
+                            blockId={block.id}
+                            type={block.question.type}
+                            revision={snapshot.revision}
+                            seq={snapshot.seq}
+                            phase={snapshot.phase}
+                            projection="creator"
+                          />
                         ) : null}
                         {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
                           <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
@@ -734,6 +750,27 @@ function PresentationHostContent() {
           </>
         )}
       </div>
+      {snapshot?.textModerationAvailable && audienceToken ? (
+        <PresentationTextModerationPanel
+          sessionId={id}
+          blockId={
+            block?.kind === "question" && isTextQuestion(block.question.type) ? block.id : null
+          }
+          revision={snapshot.revision}
+          seq={snapshot.seq}
+          phase={snapshot.phase}
+          credential={audienceToken}
+          disabled={
+            busy ||
+            !hasControlPass ||
+            !!commandState.pendingCommand ||
+            !controllerRef.current?.canMutate()
+          }
+          onChanged={() => {
+            void controllerRef.current?.reconcile();
+          }}
+        />
+      ) : null}
       {snapshot && audienceToken ? (
         <PresentationQnaPanel
           key={id}

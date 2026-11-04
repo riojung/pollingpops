@@ -101,8 +101,42 @@ reader/writer set or a reviewed forward repair. Keep migration 091 and its const
 never strip opinion results, sort ranking order, rewrite immutable content/hashes, or regenerate
 retry envelopes to fit an older binary. Do not send existing E04 rooms to a legacy response writer.
 
-Moderated open text and word clouds remain a later E04 family. This rollout does not enable them
-in Presentation authoring, published-question insertion, participant responses or reports.
+Moderated open text and word clouds use the separate boundary below; migration 091 alone
+does not enable them in Presentation authoring, insertion, responses or reports.
+
+## Presentation moderated text compatibility
+
+The second E04 family adds **Presentation document v10**, **response storage v3** and
+**Presentation Report V5**. Apply `092_presentation_text_opinions.sql` after the complete earlier
+sequence. Coordinate API, job/report worker, artifact/history/account-export, retention and web
+readers/writers before reopening text authoring or live insertion. Existing v1–v9 content, old
+hashes and default creation versions stay unchanged. Any existing v10 document keeps its floor
+through edits, copies and history; disabling new writes does not make it safe for older readers.
+
+The migration adds private text bodies, moderation metadata, a session moderation sequence and
+forced-RLS moderation receipts. Raw response records retain `{}` rather than a body; generic
+account exports strip the private field. Removed bodies are erased and cannot be restored by an
+old approval retry. Ordinary and moderation command identifiers share a session namespace.
+Host-only moderation changes event sequence, per-response version and receipt atomically, while
+preserving host revision and the response window. Finishing closes new moderation.
+
+Before accepting writes, rehearse author/save/publish, Round copying and live insertion, six
+independent participants, saved-status reload, a lost response acknowledgement, a lost moderation
+acknowledgement, exact retries, wrong-role/cross-session credentials, reveal and minimum-five
+approval suppression, removal/erasure, stage/Companion and stale result reads. Verify the 250
+participant cap, 10 text blocks, 2,500 entries and 5,000 moderation receipts under session locks.
+Run restricted PostgreSQL conformance and direct SQL guards, then verify deletion/retention.
+Record actual runs in the [moderated-text evidence record](../evidence/presentation-e04-moderated-text.md).
+
+Report V5 requires `includeTextResults=true`; mixed opinion summaries additionally require
+`includeOpinionResults=true`. Quick Check attribution remains an independent opt-in. Only actual
+revealed blocks with five approved respondents carry anonymous text evidence. Raw pending and
+removed bodies never enter reports or CSV. Aggregate summaries suppress participant text.
+
+After accepting these meanings, rollback requires a compatible full reader/writer set or a
+reviewed forward repair. Keep migration 092 and its private-column/receipt/erasure constraints.
+Do not downgrade stored reports, rewrite immutable content or regenerate accepted retry intents
+for an older binary. This source change does not change deployed flags or upgrade a running app.
 
 ## Content-only Presentation compatibility
 

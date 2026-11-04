@@ -239,7 +239,7 @@ describe("Presentation E04 opinion format contracts", () => {
           mediaId: null,
           mediaAlt: null,
         }).success,
-      ).toBe(false);
+      ).toBe(true);
     },
   );
 

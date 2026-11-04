@@ -12,6 +12,8 @@ import {
   presentationQuestionSupported,
   questionPurpose,
   isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  requiresPresentationTextOpinions,
 } from "@openround/contracts";
 import {
   comparePresentationLeaderboardEntries,
@@ -128,7 +130,10 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
     id: question.id,
     type: question.type,
     prompt: question.prompt,
-    confidence: isPresentationOpinionResultQuestion(question) ? "off" : question.confidence,
+    confidence:
+      isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)
+        ? "off"
+        : question.confidence,
     timeLimitSeconds: question.timeLimitSeconds,
     mediaId: question.mediaId,
     mediaAlt: question.mediaAlt,
@@ -139,7 +144,8 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
       ? { rankCount: question.rankCount ?? question.choices.length }
       : {}),
   };
-  if (question.type === "numeric") return { id: block.id, kind: block.kind, question: base };
+  if (question.type === "numeric" || isPresentationTextResultQuestion(question))
+    return { id: block.id, kind: block.kind, question: base };
   if (question.type === "rating") {
     return {
       id: block.id,
@@ -172,9 +178,10 @@ function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean)
     id: question.id,
     type: question.type,
     prompt: question.prompt,
-    confidence: isPresentationOpinionResultQuestion(question)
-      ? "off"
-      : (question.confidence ?? "off"),
+    confidence:
+      isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)
+        ? "off"
+        : (question.confidence ?? "off"),
     choices:
       "choices" in question
         ? question.choices.map((choice) => ({ id: choice.id, label: choice.label }))
@@ -191,7 +198,10 @@ function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean)
         }
       : {}),
     timeLimitSeconds: question.timeLimitSeconds,
-    basePoints: isPresentationOpinionResultQuestion(question) ? 0 : question.basePoints,
+    basePoints:
+      isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)
+        ? 0
+        : question.basePoints,
     mediaId: question.mediaId,
     mediaAlt: question.mediaAlt,
     ...(question.type === "poll" && question.maxSelections !== undefined
@@ -223,7 +233,12 @@ function presentationRevealedAnswer(question: QuestionDraft) {
       explanation: question.explanation,
     };
   }
-  if (question.type === "poll" || question.type === "rating" || question.type === "ranking") {
+  if (
+    question.type === "poll" ||
+    question.type === "rating" ||
+    question.type === "ranking" ||
+    isPresentationTextResultQuestion(question)
+  ) {
     return { kind: "unscored" as const, explanation: question.explanation };
   }
   if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
@@ -342,6 +357,7 @@ export function buildPresentationHostSnapshot(
     ...(recoveryPackCards.length ? { recoveryPackCards } : {}),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "host",
+    ...(requiresPresentationTextOpinions(session.content) ? { textModerationAvailable: true } : {}),
     presenter: {
       speakerNotes: block?.kind === "content" ? block.speakerNotes : "",
       nextBlock:
@@ -455,6 +471,17 @@ export function buildPresentationParticipantSnapshot(
   const opinionSummary = resultVisible
     ? presentationOpinionSummary(block, data.responses)
     : undefined;
+  const ownTextResponse =
+    block?.kind === "question" &&
+    isPresentationTextResultQuestion(block.question) &&
+    currentResponse?.moderationStatus
+      ? {
+          responseId: currentResponse.id,
+          blockId: block.id,
+          status: currentResponse.moderationStatus,
+          moderationVersion: currentResponse.moderationVersion ?? 0,
+        }
+      : undefined;
   return PresentationParticipantSnapshotSchema.parse({
     sessionId: session.id,
     artifactType: "presentation",
@@ -479,6 +506,7 @@ export function buildPresentationParticipantSnapshot(
     currentBlock: presentationRealtimeBlock(block, false),
     participantCount: data.participants.length,
     responseSubmitted: Boolean(currentResponse),
+    ...(ownTextResponse ? { ownTextResponse } : {}),
     responseReceipt: latestResponse?.idempotencyKey
       ? {
           responseId: latestResponse.id,
@@ -495,7 +523,11 @@ export function buildPresentationParticipantSnapshot(
     responseResult:
       resultVisible &&
       currentResponse &&
-      !(block?.kind === "question" && isPresentationOpinionResultQuestion(block.question))
+      !(
+        block?.kind === "question" &&
+        (isPresentationOpinionResultQuestion(block.question) ||
+          isPresentationTextResultQuestion(block.question))
+      )
         ? { correct: currentResponse.correct, score: currentResponse.score }
         : null,
     finishedAt: session.finishedAt?.toISOString() ?? null,
@@ -516,8 +548,23 @@ export function buildTargetedPresentationParticipantSnapshot(
     : null;
   const block = presentationCurrentBlock(session);
   const currentResponse = presentationResponseMatchesBlock(block, acknowledgedResponse.blockId)
-    ? acknowledgedResponse
+    ? block?.kind === "question" &&
+      isPresentationTextResultQuestion(block.question) &&
+      projectedCurrentResponse?.id === acknowledgedResponse.id
+      ? projectedCurrentResponse
+      : acknowledgedResponse
     : projectedCurrentResponse;
+  const ownTextResponse =
+    block?.kind === "question" &&
+    isPresentationTextResultQuestion(block.question) &&
+    currentResponse?.moderationStatus
+      ? {
+          responseId: currentResponse.id,
+          blockId: block.id,
+          status: currentResponse.moderationStatus,
+          moderationVersion: currentResponse.moderationVersion ?? 0,
+        }
+      : undefined;
   const resultVisible =
     session.phase === "question_reveal" ||
     session.phase === "intervention" ||
@@ -547,6 +594,7 @@ export function buildTargetedPresentationParticipantSnapshot(
     currentBlock: presentationRealtimeBlock(block, false),
     participantCount: projection.participantCount,
     responseSubmitted: Boolean(currentResponse),
+    ...(ownTextResponse ? { ownTextResponse } : {}),
     standing:
       presentationHasParticipantStandings(session) && session.phase !== "question_open"
         ? projection.standing
@@ -554,7 +602,11 @@ export function buildTargetedPresentationParticipantSnapshot(
     responseResult:
       resultVisible &&
       currentResponse &&
-      !(block?.kind === "question" && isPresentationOpinionResultQuestion(block.question))
+      !(
+        block?.kind === "question" &&
+        (isPresentationOpinionResultQuestion(block.question) ||
+          isPresentationTextResultQuestion(block.question))
+      )
         ? { correct: currentResponse.correct, score: currentResponse.score }
         : null,
     finishedAt: session.finishedAt?.toISOString() ?? null,
@@ -622,7 +674,10 @@ export function buildPresentationCompanionSnapshot(
         }
       : {}),
     resultSummary:
-      resultVisible && block?.kind === "question" && block.question.type !== "ranking"
+      resultVisible &&
+      block?.kind === "question" &&
+      block.question.type !== "ranking" &&
+      !isPresentationTextResultQuestion(block.question)
         ? { blockId: block.id, responseCount: currentResponses.length, choiceCounts }
         : null,
     ...(host.opinionSummary ? { opinionSummary: host.opinionSummary } : {}),

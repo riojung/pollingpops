@@ -2111,7 +2111,7 @@ export class PostgresRepository implements Repository {
          WITH ORDINALITY AS source(question, ordinal)
        WHERE quiz.workspace_id = $1 AND quiz.status <> 'archived'
          AND source.question ->> 'mediaId' IS NULL
-         AND source.question ->> 'type' IN ('single_select', 'true_false', 'multi_select', 'poll', 'numeric', 'rating', 'ranking')
+         AND source.question ->> 'type' IN ('single_select', 'true_false', 'multi_select', 'poll', 'numeric', 'rating', 'ranking', 'open_text', 'word_cloud')
          AND COALESCE(source.question ->> 'delivery', 'main') = 'main'
          AND source.question ->> 'linkedRecheckQuestionId' IS NULL
          AND source.question ->> 'recoveryPackSource' IS NULL
@@ -7864,9 +7864,13 @@ export class PostgresRepository implements Repository {
           : { rows: [] };
         const presentationSessionResponses = await queryWorkspaceData(
           `SELECT id, workspace_id, session_id, participant_id, block_id, question_id,
-                  response, correct, score, response_ms, idempotency_key, submitted_at
+                  CASE WHEN response_schema_version=3 THEN '{}'::jsonb ELSE response-'textValue' END AS response, correct, score, response_ms, idempotency_key, submitted_at
            FROM presentation_live_responses WHERE workspace_id = ANY($1::uuid[])
            ORDER BY submitted_at, id`,
+        );
+        const presentationTextModerationReceipts = await queryWorkspaceData(
+          `SELECT id,workspace_id,session_id,command_id,response_id,block_id,host_credential_id,request_hash,previous_status,status,expected_revision,expected_moderation_version,resulting_moderation_version,accepted_at
+           FROM presentation_text_moderation_receipts WHERE workspace_id=ANY($1::uuid[]) ORDER BY session_id,accepted_at,id`,
         );
         const presentationSessionTimeline = await queryWorkspaceData(
           `SELECT id, workspace_id, session_id, sequence, event_type, block_index, block_id,
@@ -8185,6 +8189,7 @@ export class PostgresRepository implements Repository {
           scopedQnaAudit: scopedQnaAudit.rows,
           presentationSessionParticipants: presentationSessionParticipants.rows,
           presentationSessionResponses: presentationSessionResponses.rows,
+          presentationTextModerationReceipts: presentationTextModerationReceipts.rows,
           presentationSessionTimeline: presentationSessionTimeline.rows,
           presentationSessionCommandReceipts: presentationSessionCommandReceipts.rows,
           presentationSessionCredentials: presentationSessionCredentials.rows,

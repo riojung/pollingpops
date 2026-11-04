@@ -8,6 +8,8 @@ export { PRODUCT_BRAND } from "./product-brand";
 export * from "./audience-scopes";
 export * from "./qna-policy";
 export * from "./text-opinions";
+export * from "./presentation-text";
+import { PresentationTextResponseMetadataSchema } from "./presentation-text";
 export * from "./session-summaries";
 export * from "./canvas-boards";
 export * from "./canvas-sharing";
@@ -4708,6 +4710,8 @@ export function presentationQuestionSupported(question: { type?: QuestionType })
     "numeric",
     "rating",
     "ranking",
+    "open_text",
+    "word_cloud",
   ].includes(question.type ?? "");
 }
 
@@ -4760,7 +4764,9 @@ function applyPresentationTopology(
   const choiceIds = new Set<string>();
   for (const [blockIndex, block] of presentation.blocks.entries()) {
     const opinionFormat =
-      block.kind === "question" && isPresentationOpinionResultQuestion(block.question);
+      block.kind === "question" &&
+      (isPresentationOpinionResultQuestion(block.question) ||
+        isTextOpinionQuestion(block.question));
     const blockUuidConflict = recordPresentationLogicalId(logicalBlockIds, block.id, opinionFormat);
     if (blockIds.has(block.id) || blockUuidConflict) {
       ctx.addIssue({
@@ -4771,14 +4777,17 @@ function applyPresentationTopology(
     }
     blockIds.add(block.id);
     if (block.kind !== "question") continue;
-    if (isTextOpinionQuestion(block.question)) {
+    if (isTextOpinionQuestion(block.question) && presentation.schemaVersion !== 10) {
       ctx.addIssue({
         code: "custom",
-        message: "Text opinions are not supported in Presentations",
-        path: ["blocks", blockIndex, "question", "type"],
+        message: "Text opinions require Presentation schema version 10",
+        path: ["schemaVersion"],
       });
     }
-    if (isPresentationOpinionResultQuestion(block.question)) {
+    if (
+      isPresentationOpinionResultQuestion(block.question) ||
+      isTextOpinionQuestion(block.question)
+    ) {
       if (presentation.schemaVersion < 9) {
         ctx.addIssue({
           code: "custom",
@@ -4831,6 +4840,17 @@ function applyPresentationTopology(
       choiceIds.add(choice.id);
     }
   }
+  if (
+    presentation.blocks.filter(
+      (block) => block.kind === "question" && isTextOpinionQuestion(block.question),
+    ).length > TEXT_RESPONSE_MAX_QUESTIONS
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "A Presentation supports at most ten text opinion checkpoints",
+      path: ["blocks"],
+    });
+  }
   if (!publishReady) return;
   const linkedSources = new Map<string, number[]>();
   for (const [blockIndex, block] of presentation.blocks.entries()) {
@@ -4877,7 +4897,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4916,7 +4936,7 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
     blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 | 4 }; hidden?: true }>;
   },
   ctx: z.RefinementCtx,
@@ -5018,6 +5038,7 @@ export const PresentationDraftSchema = z
         z.literal(7),
         z.literal(8),
         z.literal(9),
+        z.literal(10),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5055,6 +5076,7 @@ export const PresentationContentSchema = z
       z.literal(7),
       z.literal(8),
       z.literal(9),
+      z.literal(10),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
@@ -5172,7 +5194,8 @@ export function migratePresentationV1(value: unknown): unknown {
     presentation.schemaVersion === 6 ||
     presentation.schemaVersion === 7 ||
     presentation.schemaVersion === 8 ||
-    presentation.schemaVersion === 9
+    presentation.schemaVersion === 9 ||
+    presentation.schemaVersion === 10
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };
@@ -5353,10 +5376,10 @@ function validatePresentationLiveQuestion(
     });
   }
   if (
-    isPresentationOpinionResultQuestion(question) &&
+    (isPresentationOpinionResultQuestion(question) || isTextOpinionQuestion(question)) &&
     (question.confidence !== "off" ||
       question.basePoints !== 0 ||
-      (question.maxSelections ?? 1) > question.choices.length ||
+      (question.type === "poll" && (question.maxSelections ?? 1) > question.choices.length) ||
       (question.rankCount ?? question.choices.length) > question.choices.length)
   ) {
     ctx.addIssue({ code: "custom", message: "Presentation opinion settings are invalid" });
@@ -5701,6 +5724,7 @@ export const PresentationHostSnapshotSchema = z
     presenter: PresentationPresenterSnapshotSchema.optional(),
     recoveryPackCards: z.array(RecoveryPackLiveCardSchema).min(1).max(5).optional(),
     currentBlock: PresentationHostCurrentBlockSchema.nullable(),
+    textModerationAvailable: z.literal(true).optional(),
     participantCount: z.number().int().nonnegative(),
     responseCount: z.number().int().nonnegative(),
     participants: z.array(PresentationHostParticipantSchema),
@@ -5765,6 +5789,25 @@ export const PresentationResponseReceiptSchema = z
   .strict();
 export type PresentationResponseReceipt = z.infer<typeof PresentationResponseReceiptSchema>;
 
+function validatePresentationOwnTextResponse(
+  snapshot: {
+    ownTextResponse?: { blockId: string };
+    currentBlock: { id: string; kind: string; question?: { type?: string } } | null;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    snapshot.ownTextResponse &&
+    (snapshot.currentBlock?.kind !== "question" ||
+      !isTextOpinionQuestion(snapshot.currentBlock.question) ||
+      snapshot.currentBlock.id.toLowerCase() !== snapshot.ownTextResponse.blockId.toLowerCase())
+  )
+    ctx.addIssue({
+      code: "custom",
+      message: "Own text status must describe the current text checkpoint",
+      path: ["ownTextResponse"],
+    });
+}
 export const PresentationParticipantSnapshotSchema = z
   .object({
     ...PresentationSnapshotBaseFields,
@@ -5774,6 +5817,7 @@ export const PresentationParticipantSnapshotSchema = z
     participantCount: z.number().int().nonnegative(),
     responseSubmitted: z.boolean(),
     responseReceipt: PresentationResponseReceiptSchema.nullable().optional(),
+    ownTextResponse: PresentationTextResponseMetadataSchema.optional(),
     standing: z
       .object({
         rank: z.number().int().positive(),
@@ -5792,7 +5836,8 @@ export const PresentationParticipantSnapshotSchema = z
   })
   .strict()
   .superRefine(validatePresentationRecoveryPackPlayback)
-  .superRefine(validatePresentationOpinionSummary);
+  .superRefine(validatePresentationOpinionSummary)
+  .superRefine(validatePresentationOwnTextResponse);
 export type PresentationParticipantSnapshot = z.infer<typeof PresentationParticipantSnapshotSchema>;
 
 const PresentationRestSnapshotAliasFields = {
@@ -5980,6 +6025,7 @@ export const PresentationRestV1ParticipantSnapshotSchema = z
     validatePresentationRestV1SnapshotAliases(snapshot, ctx);
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
     validatePresentationOpinionSummary(snapshot, ctx);
+    validatePresentationOwnTextResponse(snapshot, ctx);
   });
 export type PresentationRestV1ParticipantSnapshot = z.infer<
   typeof PresentationRestV1ParticipantSnapshotSchema
@@ -6133,6 +6179,10 @@ export const PresentationCompanionPublishedQuestionSchema =
       "numeric",
       "rating",
       "ranking",
+      "open_text",
+      "word_cloud",
+      "open_text",
+      "word_cloud",
     ]),
   }).strict();
 export type PresentationCompanionPublishedQuestion = z.infer<
@@ -6475,6 +6525,7 @@ export const PresentationSessionResponseSchema = z
   .object({
     choiceIds: z.array(z.string().uuid()).max(10).optional(),
     orderedChoiceIds: z.array(z.string().uuid()).min(1).max(6).optional(),
+    textValue: TextResponseValueSchema.optional(),
     numericValue: z.string().trim().max(100).optional(),
     ratingValue: z.number().int().optional(),
     confidence: ConfidenceValueSchema.nullable().optional(),
@@ -6483,11 +6534,26 @@ export const PresentationSessionResponseSchema = z
     (response) =>
       response.choiceIds !== undefined ||
       response.orderedChoiceIds !== undefined ||
+      response.textValue !== undefined ||
       response.numericValue !== undefined ||
       response.ratingValue !== undefined,
     { message: "Add a response before submitting" },
   )
   .superRefine((response, ctx) => {
+    if (
+      response.textValue !== undefined &&
+      (response.choiceIds !== undefined ||
+        response.orderedChoiceIds !== undefined ||
+        response.numericValue !== undefined ||
+        response.ratingValue !== undefined ||
+        response.confidence != null)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Submit only a text response without confidence",
+        path: ["textValue"],
+      });
+    }
     if (
       response.orderedChoiceIds !== undefined &&
       (new Set(response.orderedChoiceIds).size !== response.orderedChoiceIds.length ||
@@ -6823,11 +6889,81 @@ export const PresentationReportV4Schema = PresentationReportV3Schema.extend({
   ),
 });
 export type PresentationReportV4 = z.infer<typeof PresentationReportV4Schema>;
+export const PresentationReportV5Schema = PresentationReportV4Schema.extend({
+  schemaVersion: z.literal(5),
+  evidence: z.array(
+    z.discriminatedUnion("kind", [
+      PresentationReportEvidenceSchema.options[0],
+      PresentationReportEvidenceSchema.options[1]
+        .extend({
+          sessionOnly: z.literal("quick_check").optional(),
+          opinionSummary: PresentationOpinionResultSummarySchema.optional(),
+          textResults: TextResponseDistributionSchema.optional(),
+        })
+        .superRefine((evidence, ctx) => {
+          const priorEvidence = { ...evidence };
+          delete priorEvidence.textResults;
+          const prior = PresentationReportV4Schema.shape.evidence.element.safeParse(priorEvidence);
+          if (!prior.success) for (const issue of prior.error.issues) ctx.addIssue({ ...issue });
+          if (
+            isTextOpinionQuestion({ type: evidence.questionType }) &&
+            (evidence.correct !== null ||
+              evidence.accuracyPercent !== null ||
+              evidence.totalScore !== 0 ||
+              evidence.delivery !== "main" ||
+              evidence.sessionOnly ||
+              evidence.opinionSummary)
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Text checkpoints are unscored main opinions",
+            });
+          }
+          if (
+            evidence.textResults &&
+            (evidence.questionType !== evidence.textResults.kind ||
+              evidence.correct !== null ||
+              evidence.accuracyPercent !== null ||
+              evidence.totalScore !== 0 ||
+              evidence.delivery !== "main" ||
+              evidence.sessionOnly ||
+              evidence.opinionSummary ||
+              evidence.textResults.respondents > evidence.respondents)
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Text results require unscored matching approved evidence",
+              path: ["textResults"],
+            });
+          }
+        }),
+    ]),
+  ),
+}).superRefine((report, ctx) => {
+  report.evidence.forEach((entry, index) => {
+    if (
+      entry.kind === "question" &&
+      entry.textResults &&
+      !report.timeline.some(
+        (event) =>
+          event.type === "question.revealed" &&
+          event.blockId?.toLowerCase() === entry.blockId.toLowerCase(),
+      )
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Text report results require the actual block reveal",
+        path: ["evidence", index, "textResults"],
+      });
+  });
+});
+export type PresentationReportV5 = z.infer<typeof PresentationReportV5Schema>;
 export const PresentationReportSchema = z.discriminatedUnion("schemaVersion", [
   PresentationReportV1Schema,
   PresentationReportV2Schema,
   PresentationReportV3Schema,
   PresentationReportV4Schema,
+  PresentationReportV5Schema,
 ]);
 export type PresentationReport = z.infer<typeof PresentationReportSchema>;
 

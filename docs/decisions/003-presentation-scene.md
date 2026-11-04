@@ -221,10 +221,32 @@ Reports derive native titles from the frozen scene. See the
 [upgrade requirements](../runbooks/upgrade.md#native-presentation-scene-compatibility) before enabling
 version-4 writers or selecting a rollback image.
 
-This increment does not complete E01. Rich text, pointer dragging, multiselection, grouping,
-advanced themes and creator/device/accessibility acceptance remain open. The
+This increment does not complete E01. Later increments cover pointer editing, multiselection and
+rich text below. Grouping, advanced themes and creator/device/accessibility acceptance remain open. The
 [native verification record](../evidence/presentation-native-scenes.md) separates executed local
 checks from those outstanding observations.
+
+## Structured text increment
+
+Explicit formatting opts a text object into closed paragraph/run content, promotes its scene to
+version 2 and its document to version 5 in the same authoring mutation. Plain `text` remains a
+required exact fallback for existing title, label and reporting paths. Legacy scene-v1 documents
+are parsed and rendered without added fields or automatic conversion. Scene v1 is also valid in
+v5 documents so adding ordinary native slides never downgrades formatted decks.
+
+Runs support bold, italic and absolute safe HTTP(S) links; body paragraphs support flat bullet and
+numbered lists. Renderers use escaped semantic React elements, never persisted HTML or arbitrary
+styles. Links explicitly open new tabs without opener/referrer access and remain inactive in the
+editor. Ordinary edits and plain-text paste preserve unchanged spans; invalid or over-budget edits
+retain the previous content. Paragraph/run/character bounds sit within existing scene and native
+document byte limits. Persistent selection, nested markup and paid editor dependencies are absent.
+
+Pack insertion, persisted readers and session projections retain v5 and unchanged frozen baselines.
+Media paths and migration 089 remain unchanged. Old strict clients cannot read scene v2 merely
+because a text fallback exists; the
+[reader rollout](../runbooks/upgrade.md#native-presentation-rich-text-compatibility) is coordinated.
+The [rich-text verification record](../evidence/presentation-rich-text.md) records the executed
+checks and remaining qualifications.
 
 ## Verification and open evidence
 

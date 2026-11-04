@@ -5,6 +5,9 @@ import {
   CanvasColorSchema,
   CanvasShapeVariantSchema,
   PRESENTATION_SCENE_MAX_NODES,
+  PresentationSceneDraftSchema,
+  plainTextToPresentationRichText,
+  presentationRichTextToPlainText,
   type PresentationScene,
   type PresentationSceneNode,
 } from "@openround/contracts";
@@ -17,6 +20,7 @@ import {
 } from "../../lib/presentation-native-scene";
 import { type SceneImageRenderer } from "./native-scene-view";
 import { NativeSceneCanvas } from "./native-scene-canvas";
+import { NativeRichTextEditor } from "./native-rich-text-editor";
 import {
   moveNativeSceneNodes,
   removeNativeSceneNodes,
@@ -39,6 +43,8 @@ export function NativeSceneEditor({
   mediaState,
   attachmentPending = false,
   onUploadImage,
+  onUndo,
+  onRedo,
 }: {
   scene: PresentationScene;
   onChange: (scene: PresentationScene, historyField?: string) => void;
@@ -47,9 +53,12 @@ export function NativeSceneEditor({
   mediaState: "idle" | "uploading" | "scanning";
   attachmentPending?: boolean;
   onUploadImage: (file: File, altText: string) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
+  const [formatError, setFormatError] = useState("");
   const validSelection = selection.filter((id) => scene.nodes.some((node) => node.id === id));
   const selectedIds = validSelection.length ? validSelection : [scene.nodes[0]!.id];
   const selected = scene.nodes.find((node) => node.id === selectedIds.at(-1))!;
@@ -87,6 +96,27 @@ export function NativeSceneEditor({
       readingOrder: [...scene.readingOrder, node.id],
     });
     setSelection([node.id]);
+  }
+  function restoreHistory(action: () => void) {
+    const active = document.activeElement;
+    const textInput =
+      active instanceof HTMLTextAreaElement && active.hasAttribute("data-native-text-input")
+        ? active
+        : null;
+    const fields = textInput?.closest<HTMLElement>("[data-native-text-fields]");
+    const start = textInput?.selectionStart ?? 0;
+    const end = textInput?.selectionEnd ?? 0;
+    action();
+    if (!textInput || !fields) return;
+    requestAnimationFrame(() => {
+      // Undoing the first formatting action replaces the rich textarea with its plain sibling.
+      // Keep keyboard history usable without taking focus from another control or a new slide.
+      if (textInput.isConnected || !fields.isConnected || document.activeElement !== document.body)
+        return;
+      const replacement = fields.querySelector<HTMLTextAreaElement>("[data-native-text-input]");
+      replacement?.focus({ preventScroll: true });
+      replacement?.setSelectionRange(start, end);
+    });
   }
   return (
     <div className={styles.editor}>
@@ -243,23 +273,91 @@ export function NativeSceneEditor({
                     : "Uploads are unavailable until malware scanning is configured."}
           </p>
         </fieldset>
-        <fieldset>
+        <fieldset
+          data-native-text-fields="true"
+          onKeyDown={(event) => {
+            if (
+              !(event.target instanceof HTMLTextAreaElement) ||
+              !event.target.hasAttribute("data-native-text-input") ||
+              event.altKey ||
+              (!event.metaKey && !event.ctrlKey)
+            )
+              return;
+            const key = event.key.toLowerCase();
+            if (key !== "z" && !(event.ctrlKey && key === "y")) return;
+            const action = key === "y" || event.shiftKey ? onRedo : onUndo;
+            if (!action) return;
+            event.preventDefault();
+            event.stopPropagation();
+            restoreHistory(action);
+          }}
+        >
           <legend>{multiple ? "Last selected object" : "Selected object"}</legend>
-          {selected.type === "text" ? (
-            <label>
-              {selected.role === "title" ? "Native slide title" : "Node text"}
-              <textarea
-                aria-label={selected.role === "title" ? "Native slide title" : "Node text"}
-                maxLength={selected.role === "title" ? 160 : 4000}
-                value={selected.text}
-                onChange={(event) =>
-                  update(
-                    (node) => (node.type === "text" ? { ...node, text: event.target.value } : node),
-                    "text",
-                  )
-                }
-              />
-            </label>
+          {selected.type === "text" && selected.richText ? (
+            <NativeRichTextEditor
+              key={selected.id}
+              node={selected}
+              onUndo={onUndo ? () => restoreHistory(onUndo) : undefined}
+              onRedo={onRedo ? () => restoreHistory(onRedo) : undefined}
+              onChange={(node, field) => {
+                const next = updateNativeNode(scene, selected.id, () => node);
+                onChange(
+                  PresentationSceneDraftSchema.parse({ ...next, schemaVersion: 2 }),
+                  field ? `native:${selected.id}:${field}` : undefined,
+                );
+              }}
+            />
+          ) : selected.type === "text" ? (
+            <>
+              <label>
+                {selected.role === "title" ? "Native slide title" : "Node text"}
+                <textarea
+                  data-native-text-input="true"
+                  aria-label={selected.role === "title" ? "Native slide title" : "Node text"}
+                  maxLength={selected.role === "title" ? 160 : 4000}
+                  value={selected.text}
+                  onChange={(event) =>
+                    update(
+                      (node) =>
+                        node.type === "text" ? { ...node, text: event.target.value } : node,
+                      "text",
+                    )
+                  }
+                />
+              </label>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const richText = plainTextToPresentationRichText(selected.text);
+                      setFormatError("");
+                      onChange(
+                        PresentationSceneDraftSchema.parse({
+                          ...updateNativeNode(scene, selected.id, () => ({
+                            ...selected,
+                            text: presentationRichTextToPlainText(richText),
+                            richText,
+                          })),
+                          schemaVersion: 2,
+                        }),
+                      );
+                    } catch {
+                      setFormatError(
+                        "This text cannot be formatted within the slide's limits. Use at most 100 paragraphs, remove unsupported control characters, or reduce the slide's content.",
+                      );
+                    }
+                  }}
+                >
+                  Format text
+                </button>
+              </div>
+              {formatError ? (
+                <p role="alert" className={styles.formatError}>
+                  {formatError}
+                </p>
+              ) : null}
+            </>
           ) : null}
           {selected.type === "image" ? (
             <label>

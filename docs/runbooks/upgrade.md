@@ -72,6 +72,33 @@ against draft, history and immutable-version retention; compare JS and SQL colle
 that notes/source metadata stay outside audience projections and that live Quick Checks do not
 create rankings for an otherwise content-only deck.
 
+## Native Presentation rich-text compatibility
+
+Formatted native text opts into embedded Presentation draft/content version 5 and scene version 2.
+Existing plain native slides remain document v4/scene v1 until an author chooses **Format text**.
+Document v5 may contain both scene versions. The draft mutation envelope stays version 2; Pack
+and report schemas are independent. Required plain text matches the structured paragraphs exactly,
+supporting existing labels and reports without rewriting legacy JSON or accepted hashes.
+
+Deploy compatible server, jobs, web and artifact readers before reopening formatted-text writers.
+Fence draft mutations, publication and session creation at ingress and drain accepted operations
+during the reader transition. Existing clients with literal scene-v1 validators cannot consume
+scene-v2 projections merely because a plain-text fallback exists. Reload active creator/presenter
+clients onto compatible assets before starting formatted sessions. This change does not add a
+client capability negotiation protocol.
+
+No new migration is required. Migration 089's collector already traverses image nodes independently
+of scene version; formatted text introduces no new media-reference path. Retain that migration,
+existing tenant/scan/lifecycle checks and v5-capable cleanup/artifact readers. Once v5 drafts,
+history or publications exist, rollback requires a compatible image. Disabling the formatting
+button does not make stored v5 content readable by older processes; do not downgrade stored
+documents or strip their formatting to fit an old reader.
+
+Verify formatting and plain-text edits, safe links, paste, Undo/Redo, reload, publication and
+participant/host/Companion projections. Check that adding/converting a plain native slide and
+inserting a Pack during authoring or live delivery retain document v5 and frozen baselines.
+Native image authorization, immutable versions and notes/source privacy must remain unchanged.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.

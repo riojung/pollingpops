@@ -67,6 +67,7 @@ PostgreSQL checks are historical evidence for the foundation, not new runs for t
 
 ## Remaining work
 
-Rich text, persistent grouping, marquee selection, multi-object scaling, slide hiding and advanced
+Rich text is covered by the subsequent [formatting increment](presentation-rich-text.md).
+Persistent grouping, marquee selection, multi-object scaling, slide hiding and advanced
 design tools remain open. This is local implementation evidence, with no physical-device,
 assistive-technology, human task-time, deployed-capacity or competitor-parity claim.

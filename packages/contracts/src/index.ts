@@ -19,6 +19,7 @@ export * from "./canvas-template-catalog";
 export * from "./canvas-template-factory";
 export * from "./presentation-scene-prototype";
 export * from "./presentation-scene";
+export * from "./presentation-rich-text";
 export * from "./presentation-scene-adapter";
 import { PresentationSceneDraftSchema, PresentationSceneSchema } from "./presentation-scene";
 import {
@@ -4781,7 +4782,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4;
+    schemaVersion: 2 | 3 | 4 | 5;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4820,22 +4821,33 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4;
-    blocks: Array<{ kind: string; scene?: unknown }>;
+    schemaVersion: 2 | 3 | 4 | 5;
+    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 } }>;
   },
   ctx: z.RefinementCtx,
 ) {
   for (const [index, block] of presentation.blocks.entries()) {
-    if (block.kind === "content" && block.scene && presentation.schemaVersion !== 4) {
+    if (block.kind === "content" && block.scene && presentation.schemaVersion < 4) {
       ctx.addIssue({
         code: "custom",
         path: ["blocks", index, "scene"],
-        message: "Native scenes require Presentation schema version 4",
+        message: "Native scenes require Presentation schema version 4 or later",
+      });
+    }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === 2 &&
+      presentation.schemaVersion < 5
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Formatted scenes require Presentation schema version 5",
       });
     }
   }
   if (
-    presentation.schemaVersion === 4 &&
+    presentation.schemaVersion >= 4 &&
     new TextEncoder().encode(JSON.stringify(presentation)).byteLength >
       PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES
   ) {
@@ -4851,7 +4863,7 @@ export const PresentationDraftSchema = z
     title: z.string().trim().max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).default(2),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockDraftSchema).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -4868,7 +4880,7 @@ export const PresentationContentSchema = z
     title: z.string().trim().min(1, "Enter a presentation title").max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -4978,7 +4990,12 @@ const legacyRegionByLayout = {
 export function migratePresentationV1(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const presentation = value as { blocks?: unknown; [key: string]: unknown };
-  if (presentation.schemaVersion === 3 || presentation.schemaVersion === 4) return presentation;
+  if (
+    presentation.schemaVersion === 3 ||
+    presentation.schemaVersion === 4 ||
+    presentation.schemaVersion === 5
+  )
+    return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };
   return {
     ...presentation,

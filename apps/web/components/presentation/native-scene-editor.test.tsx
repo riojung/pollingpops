@@ -1,6 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneCanvas } from "./native-scene-canvas";
@@ -32,7 +32,7 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 
-function editorHarness() {
+function editorHarness(history: { onUndo?: () => void; onRedo?: () => void } = {}) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
   const scene = createNativeContentBlock().scene!;
   scene.nodes.push({
@@ -60,6 +60,7 @@ function editorHarness() {
           mediaState,
           attachmentPending,
           onUploadImage: vi.fn(),
+          ...history,
         });
       } finally {
         mocked.hooks = null;
@@ -72,6 +73,75 @@ function editorHarness() {
     },
   };
 }
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("native text history focus", () => {
+  it("keeps keyboard Undo and Redo reachable when formatting replaces the textarea", () => {
+    const frames: (() => void)[] = [];
+    const body = {};
+    const documentState = { body, activeElement: null as unknown };
+    let replacement: FakeTextarea;
+    const fields = { isConnected: true, querySelector: () => replacement };
+    class FakeTextarea {
+      isConnected = true;
+      selectionStart = 2;
+      selectionEnd = 4;
+      hasAttribute = (name: string) => name === "data-native-text-input";
+      closest = () => fields;
+      focus = vi.fn(() => {
+        documentState.activeElement = this;
+      });
+      setSelectionRange = vi.fn();
+    }
+    const original = new FakeTextarea();
+    const plain = new FakeTextarea();
+    const rich = new FakeTextarea();
+    replacement = plain;
+    documentState.activeElement = original;
+    vi.stubGlobal("document", documentState);
+    vi.stubGlobal("HTMLTextAreaElement", FakeTextarea);
+    vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+      frames.push(callback);
+      return 1;
+    });
+    const onUndo = vi.fn(() => {
+      original.isConnected = false;
+      documentState.activeElement = body;
+    });
+    const onRedo = vi.fn(() => {
+      plain.isConnected = false;
+      documentState.activeElement = body;
+      replacement = rich;
+    });
+    const editor = editorHarness({ onUndo, onRedo });
+    editor.render("idle");
+    const fieldset = editor.find((element) => element.props["data-native-text-fields"] === "true");
+    function key(target: FakeTextarea, shiftKey: boolean) {
+      const event = {
+        target,
+        key: "z",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      };
+      (fieldset.props.onKeyDown as (event: unknown) => void)(event);
+      expect(event.preventDefault).toHaveBeenCalled();
+      frames.splice(0).forEach((frame) => frame());
+    }
+    key(original, false);
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(documentState.activeElement).toBe(plain);
+    expect(plain.setSelectionRange).toHaveBeenCalledWith(2, 4);
+    key(plain, true);
+    expect(onRedo).toHaveBeenCalledTimes(1);
+    expect(documentState.activeElement).toBe(rich);
+    expect(rich.setSelectionRange).toHaveBeenCalledWith(2, 4);
+  });
+});
 
 describe("native upload capacity guard", () => {
   it.each([
@@ -144,6 +214,25 @@ describe("native upload capacity guard", () => {
 });
 
 describe("native multi-object selection", () => {
+  it("opts only the selected text into structured formatting in one scene edit", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const format = editor.find(
+      (element) => element.type === "button" && element.props.children === "Format text",
+    );
+    (format.props.onClick as () => void)();
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    const scene = editor.onChange.mock.calls[0]![0];
+    expect(scene.schemaVersion).toBe(2);
+    expect(scene.nodes[0]).toMatchObject({
+      text: "",
+      richText: { paragraphs: [{ kind: "paragraph", runs: [{ text: "" }] }] },
+    });
+    expect(scene.nodes[1]).toEqual(editor.scene.nodes[1]);
+    expect(scene.nodes[1]).not.toHaveProperty("richText");
+    expect(scene.readingOrder).toEqual(editor.scene.readingOrder);
+  });
+
   it("exposes explicit selection toggles, moves selected frames together and protects the title on batch delete", () => {
     const editor = editorHarness();
     editor.render("idle");

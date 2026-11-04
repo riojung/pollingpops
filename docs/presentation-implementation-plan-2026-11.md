@@ -124,8 +124,9 @@ and the [prototype record](evidence/presentation-scene-prototype.md). The later 
 packages remain planned. E01 is in progress.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
-multiselection using the same scene and persistence path. Rich text and the remaining editor tools
-remain subsequent E01 work.
+multiselection using the same scene and persistence path. The following rich-text increment adds
+bounded emphasis, lists and links through explicit formatting. Remaining filmstrip tools and
+editor qualification remain subsequent E01 work.
 Use separate branches and PRs for contract/persistence, renderer and UI slices when a package is
 too large for coherent review. Dependencies describe technical order; product selection and the
 existing rollout gates still apply.
@@ -180,7 +181,9 @@ existing formats. See [native verification](evidence/presentation-native-scenes.
 The following [direct-editing increment](evidence/presentation-direct-editing.md) adds pointer
 move/resize, Shift-click and checkbox selection, group movement and safe multi-object deletion.
 Gestures preview locally and commit on release; narrow screens retain the readable column and
-keyboard/numeric controls. Rich text and complete filmstrip hide behavior remain open;
+keyboard/numeric controls. The [rich-text increment](evidence/presentation-rich-text.md) adds
+structured paragraphs, bold/italic ranges, bullet/numbered lists and safe web links under opt-in
+document v5/scene v2, retaining legacy JSON and hashes. Complete filmstrip hide behavior remains open;
 these slices do not mark all E01 acceptance criteria complete.
 
 Touch points: current builder/helpers, contracts, `packages/db/src/presentations.ts`,

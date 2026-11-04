@@ -108,6 +108,19 @@ describe("media references", () => {
     });
   });
 
+  it("retains v5 rich-text scene and Pack media across publication, retries, history and account lifecycle", async () => {
+    const repository = new MemoryRepository();
+    const creator = await owner(repository);
+    const other = await owner(repository);
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: creator.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: creator.userId,
+      richText: true,
+    });
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const repository = new MemoryRepository();
     const creator = await owner(repository);

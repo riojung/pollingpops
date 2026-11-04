@@ -54,6 +54,8 @@ export const PRESENTATION_CONTENT_SCHEMA_VERSION = 2;
 export const PRESENTATION_RECOVERY_PACK_SCHEMA_VERSION = 3;
 /** Bounded native scenes use v4 without changing ordinary v2 or frozen Pack v3 artifacts. */
 export const PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION = 4;
+/** Structured native text opts into v5; plain scene-v1 documents retain v4. */
+export const PRESENTATION_RICH_TEXT_SCHEMA_VERSION = 5;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -160,6 +162,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 4)),
   ],
+  [
+    PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 5)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -181,6 +187,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 4)),
+  ],
+  [
+    PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 5)),
   ],
 ]);
 

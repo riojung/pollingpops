@@ -236,22 +236,25 @@ describe("persisted artifact schema upcasters", () => {
   });
 
   it.each([
-    ["Round draft", () => upcastRoundDraft({}, 5)],
-    ["Round content", () => upcastRoundContent({}, 5)],
-    ["Presentation draft", () => upcastPresentationDraft({}, 5)],
-    ["Presentation content", () => upcastPresentationContent({}, 5)],
-  ])("rejects an unknown schema version for %s", (label, parse) => {
-    expect(parse).toThrow(UnsupportedArtifactSchemaVersionError);
-    try {
-      parse();
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "UNSUPPORTED_ARTIFACT_SCHEMA_VERSION",
-        schemaVersion: 5,
-        supportedVersions: [1, 2, 3, 4],
-      });
-    }
-  });
+    ["Round draft", () => upcastRoundDraft({}, 5), 5, [1, 2, 3, 4]],
+    ["Round content", () => upcastRoundContent({}, 5), 5, [1, 2, 3, 4]],
+    ["Presentation draft", () => upcastPresentationDraft({}, 6), 6, [1, 2, 3, 4, 5]],
+    ["Presentation content", () => upcastPresentationContent({}, 6), 6, [1, 2, 3, 4, 5]],
+  ])(
+    "rejects an unknown schema version for %s",
+    (label, parse, schemaVersion, supportedVersions) => {
+      expect(parse).toThrow(UnsupportedArtifactSchemaVersionError);
+      try {
+        parse();
+      } catch (error) {
+        expect(error).toMatchObject({
+          code: "UNSUPPORTED_ARTIFACT_SCHEMA_VERSION",
+          schemaVersion,
+          supportedVersions,
+        });
+      }
+    },
+  );
 
   it("enforces schema versions at Memory repository write and recovery boundaries", async () => {
     const repository = new MemoryRepository();
@@ -335,7 +338,7 @@ describe("persisted artifact schema upcasters", () => {
             },
             1,
           ),
-          contentSchemaVersion: 5,
+          contentSchemaVersion: 6,
           contentHash: "unknown-version",
           sourceDraftRevision: 0,
           publishedAt: now,

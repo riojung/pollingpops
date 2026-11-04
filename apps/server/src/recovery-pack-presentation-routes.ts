@@ -133,7 +133,8 @@ export async function registerRecoveryPackPresentationRoutes(
         );
         const draft = PresentationDraftSchema.parse({
           ...presentation.draft,
-          schemaVersion: presentation.draft.schemaVersion === 4 ? 4 : 3,
+          schemaVersion:
+            presentation.draft.schemaVersion >= 4 ? presentation.draft.schemaVersion : 3,
           blocks,
           recoveryPackInsertions: [
             ...(presentation.draft.recoveryPackInsertions ?? []),

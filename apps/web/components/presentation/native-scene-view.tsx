@@ -19,6 +19,7 @@ import {
 } from "@openround/contracts";
 import { boundNativeSceneFrame, nativeNodeLabel } from "../../lib/presentation-native-scene";
 import styles from "./native-scene.module.css";
+import { NativeRichTextView } from "./native-rich-text-view";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
 type Connector = Extract<PresentationSceneNode, { type: "connector" }>;
@@ -70,7 +71,7 @@ function Shape({ node }: { node: Extract<FramedNode, { type: "shape" }> }) {
   );
 }
 
-/** Closed geometry and plain text only; image authority belongs to the calling surface. */
+/** Closed geometry and structured text; image authority belongs to the calling surface. */
 export function NativeSceneView({
   scene,
   renderImage,
@@ -188,7 +189,13 @@ export function NativeSceneView({
             }
           >
             {node.type === "text" ? (
-              node.role === "title" ? (
+              node.richText ? (
+                <NativeRichTextView
+                  richText={node.richText}
+                  title={node.role === "title"}
+                  editing={editing}
+                />
+              ) : node.role === "title" ? (
                 <h1>{node.text || (editing ? "Slide title" : "")}</h1>
               ) : (
                 <p>{node.text || (editing ? "Body text" : "")}</p>

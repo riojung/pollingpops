@@ -678,8 +678,26 @@ that refer to it. Duplicating a slide creates independent nodes and reconnects i
 Native edits use the same autosave, **Undo**, **Redo**, recovery and conflict review as the existing
 builder. Wait for **Saved**, reload to verify the saved slide, then preview and publish. Publication
 freezes that version; later draft edits do not change a running Presentation. Speaker notes and
-source information remain private. Text is plain text in this first native editing increment;
-rich text, grouping, themes, charts and advanced layout tools remain later work.
+source information remain private. Grouping, themes, charts and advanced layout tools remain later work.
+
+To add formatting, select a native text object and choose **Format text**. Select characters in its
+text field, then choose **Bold** or **Italic**. **Paragraph style** changes the current or selected
+paragraphs to ordinary paragraphs, bullets or a numbered list. Titles support emphasis and links;
+use body text for lists. Each line in the text field is a separate paragraph.
+
+For a link, select its text, enter a complete `https://` or `http://` address and choose **Apply link**.
+Links with usernames, passwords, unsupported schemes or whitespace are rejected. **Remove link**
+removes a link from the selected characters. Links open in a new tab in preview and during delivery;
+clicks in the editor keep you in the editor. Pasting adds plain text and preserves formatting on
+unchanged text. Image, file and other clipboard payloads without plain text leave selected text unchanged.
+Edits that exceed text, formatting or slide limits show an error and leave the previous text intact.
+**Remove formatting** returns the object to plain text; **Undo** restores its formatting.
+While editing native text, use Cmd/Ctrl+Z for **Undo** and Cmd/Ctrl+Shift+Z (or Ctrl+Y) for **Redo**.
+These commands restore text and formatting together, including the initial formatting change.
+
+Choosing **Format text** upgrades that slide and deck to the compatible rich-text format. Other
+objects stay unchanged, and plain-text slides continue to work. Formatting supports up to 100
+paragraphs per object within the existing 160-character title and 4,000-character body limits.
 
 ## Organize and manage the Library
 

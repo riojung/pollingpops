@@ -8,6 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation rich-text E01 slice November 3, 2026
+
+Native text can explicitly opt into structured paragraphs, selected-range bold/italic, bullet and
+numbered lists, and safe HTTP(S) links. Plain-text editing and paste preserve unchanged formatting;
+rendering uses semantic React elements. Titles, object labels and reports use a validated exact
+plain-text fallback. Existing plain-text slides retain their representations.
+
+Formatted text uses Presentation v5 and scene v2; v4/scene v1 readers remain supported. Draft,
+history, publication, session and Pack-insertion paths retain the selected version and immutable
+baselines. This adds no dependency, migration or subscription entitlement. Compatible readers
+must precede writers; older live clients require a reload before consuming formatted scenes.
+See the [verification record](evidence/presentation-rich-text.md) and
+[upgrade boundary](runbooks/upgrade.md#native-presentation-rich-text-compatibility).
+
+Slide hiding, persistent grouping, design tools and the remaining E01 qualification remain open.
+This implementation checkpoint does not establish deployment or broad competitor parity.
+
 ### Presentation direct editing E01 slice November 3, 2026
 
 Native slides support pointer movement and bottom-right resizing on desktop, temporary
@@ -19,7 +36,7 @@ their endpoints without changing IDs or semantic reading order.
 Phones retain the reading column and keyboard, numeric and selection movement controls. This
 increment changes no persisted contract, database schema, media authority or subscription cost.
 The [verification record](evidence/presentation-direct-editing.md) describes its checks and limits.
-Rich text, persistent grouping, slide hiding, themes and charts remain open, along with creator
+Rich text is covered by the next increment above. Persistent grouping, slide hiding, themes and charts remain open, along with creator
 observations and deployment qualification. E01 is still in progress.
 
 ### Native Presentation E01 slice November 3, 2026
@@ -40,7 +57,7 @@ See [ADR 003](decisions/003-presentation-scene.md), the
 [verification record](evidence/presentation-native-scenes.md) and the
 [version-4 upgrade requirements](runbooks/upgrade.md#native-presentation-scene-compatibility).
 This is a local implementation checkpoint. Pointer editing and temporary multiselection are
-covered by the subsequent increment above. Rich text, persistent grouping,
+covered by the subsequent increments above. Persistent grouping,
 themes, charts, creator timings, assistive-technology acceptance and deployment qualification
 remain open; it does not complete E01 or establish broad competitor parity.
 

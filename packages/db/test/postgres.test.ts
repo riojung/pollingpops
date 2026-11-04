@@ -2898,6 +2898,26 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
   });
 
+  it("retains v5 rich-text scene and Pack media across publication, retries, history and account lifecycle", async () => {
+    const owner = await creator("presentation-rich-text-scene");
+    const other = await creator("presentation-rich-text-scene-other");
+    const { draft, expectedMediaIds } = await expectPresentationSceneConformance({
+      repository,
+      workspaceId: owner.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: owner.userId,
+      richText: true,
+    });
+    const collected = await repository.pool.query<{ media_id: string }>(
+      "SELECT media_id FROM openround_presentation_media_ids($1::jsonb) ORDER BY media_id",
+      [JSON.stringify(draft)],
+    );
+    expect(collected.rows.map(({ media_id }) => media_id)).toEqual(expectedMediaIds);
+    expect(collected.rows.map(({ media_id }) => media_id)).toEqual(
+      presentationMediaIds(draft).sort(),
+    );
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const owner = await creator("presentation-pack-media");
     await expectPresentationPackMediaConformance({

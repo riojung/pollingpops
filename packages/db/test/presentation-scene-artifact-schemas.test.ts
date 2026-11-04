@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { PresentationDraftSchema, type PresentationDraft } from "@openround/contracts";
+import {
+  PresentationContentSchema,
+  PresentationDraftSchema,
+  preparePresentationPublication,
+  type PresentationDraft,
+} from "@openround/contracts";
 import { describe, expect, it } from "vitest";
 import { MemoryPresentationRepository } from "../src/presentations.js";
 import {
@@ -7,6 +12,7 @@ import {
   PRESENTATION_DRAFT_SCHEMA_VERSION,
   PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
   PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
+  PRESENTATION_VISIBILITY_SCHEMA_VERSION,
   upcastPresentationContent,
   upcastPresentationDraft,
   upcastPresentationSessionContent,
@@ -92,6 +98,17 @@ function richTextPresentation(): PresentationDraft {
   return PresentationDraftSchema.parse(draft);
 }
 
+function visibilityPresentation(): PresentationDraft {
+  const draft = richTextPresentation();
+  const hidden = structuredClone(draft.blocks[0]!);
+  if (hidden.kind !== "content") throw new Error("Expected native slide");
+  return PresentationDraftSchema.parse({
+    ...draft,
+    schemaVersion: 6,
+    blocks: [draft.blocks[0]!, { ...hidden, id: randomUUID(), hidden: true }],
+  });
+}
+
 describe("durable native Presentation artifact version", () => {
   it("opts into v4 and retains ordinary v2 defaults", () => {
     expect(PRESENTATION_DRAFT_SCHEMA_VERSION).toBe(2);
@@ -128,11 +145,17 @@ describe("durable native Presentation artifact version", () => {
     expect(() => upcastPresentationContent(draft, 4)).toThrow("Describe the image");
   });
 
-  it.each([4, 5] as const)(
+  it.each([4, 5, 6] as const)(
     "reads v%s draft, history and immutable version without rewriting hash or native IDs",
     async (schemaVersion) => {
       const repository = new MemoryPresentationRepository();
-      const draft = schemaVersion === 5 ? richTextPresentation() : presentation();
+      const draft =
+        schemaVersion === 6
+          ? visibilityPresentation()
+          : schemaVersion === 5
+            ? richTextPresentation()
+            : presentation();
+      const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
       const workspaceId = randomUUID();
       const presentationId = randomUUID();
       const versionId = randomUUID();
@@ -170,9 +193,9 @@ describe("durable native Presentation artifact version", () => {
         workspaceId,
         presentationId,
         version: 1,
-        content: draft,
+        content,
         contentSchemaVersion: schemaVersion,
-        contentHash: createHash("sha256").update(JSON.stringify(draft)).digest("hex"),
+        contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
         sourceDraftRevision: 1,
         publishedAt: now,
       };
@@ -189,6 +212,70 @@ describe("durable native Presentation artifact version", () => {
       expect(repository.versions.get(versionId)).toEqual(published);
     },
   );
+});
+
+describe("durable visibility Presentation artifact version", () => {
+  it("opts into v6 while preserving the full editable draft and exact visible publication", () => {
+    expect(PRESENTATION_VISIBILITY_SCHEMA_VERSION).toBe(6);
+    expect(PRESENTATION_DRAFT_SCHEMA_VERSION).toBe(2);
+    expect(PRESENTATION_CONTENT_SCHEMA_VERSION).toBe(2);
+    const draft = visibilityPresentation();
+    const serialized = JSON.stringify(draft);
+    expect(upcastPresentationDraft(JSON.parse(serialized), 6)).toEqual(draft);
+    expect(JSON.stringify(upcastPresentationDraft(JSON.parse(serialized), 6))).toBe(serialized);
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    expect(content.blocks).toEqual([draft.blocks[0]]);
+    const contentJson = JSON.stringify(content);
+    const expectedHash = createHash("sha256").update(contentJson).digest("hex");
+    for (const parse of [upcastPresentationContent, upcastPresentationSessionContent]) {
+      const parsed = parse(JSON.parse(contentJson), 6);
+      expect(parsed).toEqual(content);
+      expect(JSON.stringify(parsed)).toBe(contentJson);
+      expect(createHash("sha256").update(JSON.stringify(parsed)).digest("hex")).toBe(expectedHash);
+    }
+  });
+
+  it.each([undefined, null, 1, 2, 3, 4, 5])(
+    "rejects hidden content under an old stored column %s without silently revealing it",
+    (schemaVersion) => {
+      const draft = visibilityPresentation();
+      const hidden = draft.blocks[1]!;
+      if (hidden.kind !== "content") throw new Error("Expected hidden content");
+      delete hidden.scene;
+      hidden.textElements = [
+        {
+          id: randomUUID(),
+          role: "title",
+          text: "Hidden legacy slide",
+          region: "middle_center",
+          order: 0,
+        },
+      ];
+      draft.blocks = [hidden];
+      expect(upcastPresentationDraft(draft, 6)).toEqual(draft);
+      for (const parse of [
+        upcastPresentationDraft,
+        upcastPresentationContent,
+        upcastPresentationSessionContent,
+      ])
+        expect(() => parse(draft, schemaVersion)).toThrow();
+    },
+  );
+
+  it("rejects hidden or incomplete v6 session content instead of using legacy draft validation", () => {
+    const draft = visibilityPresentation();
+    expect(() => upcastPresentationContent(draft, 6)).toThrow();
+    expect(() => upcastPresentationSessionContent(draft, 6)).toThrow();
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    const block = content.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected native slide");
+    const image = block.scene.nodes.find((node) => node.type === "image")!;
+    if (image.type !== "image") throw new Error("Expected image");
+    image.altText = null;
+    expect(upcastPresentationDraft(content, 6)).toEqual(content);
+    expect(() => upcastPresentationContent(content, 6)).toThrow("Describe the image");
+    expect(() => upcastPresentationSessionContent(content, 6)).toThrow("Describe the image");
+  });
 });
 
 describe("durable rich-text Presentation artifact version", () => {

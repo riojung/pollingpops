@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PresentationDraftSchema, type PresentationDraft } from "@openround/contracts";
+import {
+  PresentationDraftSchema,
+  preparePresentationPublication,
+  type PresentationDraft,
+} from "@openround/contracts";
 import {
   MemoryRepository,
   type MemoryPresentationRepository,
@@ -86,7 +90,7 @@ function expectPublicScene(snapshot: unknown, scene: unknown) {
 }
 
 describe("native Presentation scenes API", () => {
-  it.each([4, 5] as const)(
+  it.each([4, 5, 6] as const)(
     "saves exact retries and delivers immutable v%s scenes through completion",
     async (schemaVersion) => {
       const built = await setup();
@@ -107,16 +111,49 @@ describe("native Presentation scenes API", () => {
           altText: "Source image description",
           createdAt: new Date(),
         });
-      const sceneBlock = schemaVersion === 5 ? richTextSceneBlock : nativeSceneBlock;
+      const hiddenMediaId = randomUUID();
+      if (schemaVersion === 6)
+        await built.repository.createMediaAsset({
+          id: hiddenMediaId,
+          workspaceId,
+          objectKey: `hidden/${hiddenMediaId}.png`,
+          mimeType: "image/png",
+          sizeBytes: 128,
+          scanStatus: "pending",
+          altText: "Pending hidden image",
+          createdAt: new Date(),
+        });
+      const hidden = nativeSceneBlock([hiddenMediaId], "HIDDEN draft-only scene");
+      const hiddenImage = hidden.scene.nodes.find((node) => node.type === "image")!;
+      if (hiddenImage.type === "image") hiddenImage.altText = "";
+      const sceneBlock = schemaVersion >= 5 ? richTextSceneBlock : nativeSceneBlock;
       const draft = PresentationDraftSchema.parse({
         title: "Native content-only deck",
         schemaVersion,
         blocks: [
           sceneBlock(mediaIds.slice(0, 2)),
+          ...(schemaVersion === 6 ? [{ ...hidden, hidden: true }] : []),
           sceneBlock(mediaIds.slice(2), "Native next steps"),
+          ...(schemaVersion === 6
+            ? [
+                {
+                  id: randomUUID(),
+                  kind: "content",
+                  layout: "title_body",
+                  hidden: true,
+                  textElements: [
+                    { id: "hidden-title", role: "title", text: "", region: "top_center", order: 0 },
+                  ],
+                  mediaId: null,
+                  mediaAlt: null,
+                  speakerNotes: "HIDDEN legacy notes",
+                },
+              ]
+            : []),
         ],
       });
-      const firstBlock = draft.blocks[0]!;
+      const content = preparePresentationPublication(draft);
+      const firstBlock = content.blocks[0]!;
       if (firstBlock.kind !== "content" || !firstBlock.scene)
         throw new Error("Expected native content");
       const originalScene = structuredClone(firstBlock.scene);
@@ -150,7 +187,7 @@ describe("native Presentation scenes API", () => {
       });
       expect(published.statusCode, published.body).toBe(200);
       const version = published.json().version;
-      expect(version).toMatchObject({ contentSchemaVersion: schemaVersion, content: draft });
+      expect(version).toMatchObject({ contentSchemaVersion: schemaVersion, content });
       const republished = await target.inject({
         method: "POST",
         url: `/v1/presentations/${id}/publish`,
@@ -158,7 +195,17 @@ describe("native Presentation scenes API", () => {
         payload: { expectedDraftRevision: 1 },
       });
       expect(republished.json().version).toEqual(version);
+      expect(version.content.blocks).toHaveLength(2);
+      expect(JSON.stringify(version.content)).not.toContain("HIDDEN");
+      expect((await built.presentations.getPresentation(workspaceId, id))?.draft).toEqual(draft);
       const laterDraft = structuredClone(draft);
+      if (schemaVersion === 6)
+        laterDraft.blocks = laterDraft.blocks.map((block) => {
+          if (block.kind !== "content") return block;
+          const { hidden: _hidden, ...shown } = block;
+          void _hidden;
+          return shown;
+        });
       const laterBlock = laterDraft.blocks[0]!;
       if (laterBlock.kind !== "content" || !laterBlock.scene) throw new Error("Expected scene");
       const titleNode = laterBlock.scene.nodes.find((node) => node.type === "text")!;
@@ -201,6 +248,8 @@ describe("native Presentation scenes API", () => {
       });
       expect(advanced.statusCode, advanced.body).toBe(200);
       expectPublicScene(advanced.json().snapshot, originalScene);
+      expect(advanced.json().snapshot.blockCount).toBe(2);
+      expect(JSON.stringify(advanced.json().snapshot)).not.toContain("HIDDEN");
       const participant = await target.inject({
         method: "GET",
         url: `/v1/presentation-sessions/${sessionId}/participant`,
@@ -232,6 +281,17 @@ describe("native Presentation scenes API", () => {
         url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
       });
       expect(unauthorized.statusCode).toBe(401);
+      if (schemaVersion === 6) {
+        for (const path of ["media", "host-media"]) {
+          const hiddenAccess = await target.inject({
+            method: "GET",
+            url: `/v1/presentation-sessions/${sessionId}/${path}/${hiddenMediaId}`,
+            headers:
+              path === "media" ? { authorization: `Bearer ${participantToken}` } : { cookie },
+          });
+          expect(hiddenAccess.statusCode, hiddenAccess.body).toBe(404);
+        }
+      }
       const hostMedia = await target.inject({
         method: "GET",
         url: `/v1/presentation-sessions/${sessionId}/host-media/${mediaIds[1]}`,
@@ -244,6 +304,7 @@ describe("native Presentation scenes API", () => {
         payload: command(1),
       });
       expect(second.statusCode).toBe(200);
+      expect(second.json().snapshot.currentBlockIndex).toBe(1);
       const previousAsset = await target.inject({
         method: "GET",
         url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
@@ -281,11 +342,68 @@ describe("native Presentation scenes API", () => {
       });
       expect(JSON.stringify(report.json())).not.toContain("PRIVATE");
       expect(JSON.stringify(report.json())).not.toContain("UNPUBLISHED");
+      expect(JSON.stringify(report.json())).not.toContain("HIDDEN");
       expect(
         await built.presentations.getPresentationVersion(workspaceId, version.id),
-      ).toMatchObject({ content: draft, contentHash: version.contentHash });
+      ).toMatchObject({ content, contentHash: version.contentHash });
     },
   );
+
+  it("maps visible publication errors to stable IDs and rejects an all-hidden deck", async () => {
+    const built = await setup();
+    const hidden = { ...nativeSceneBlock([], "HIDDEN first"), hidden: true };
+    const visible = nativeSceneBlock([], "Visible needs a label");
+    const shape = visible.scene.nodes.find((node) => node.type === "shape")!;
+    if (shape.type === "shape") shape.label = "";
+    const draft = PresentationDraftSchema.parse({
+      title: "Visibility validation",
+      schemaVersion: 6,
+      blocks: [hidden, visible],
+    });
+    const { id } = await saveDraft(built.app, built.cookie, draft);
+    const publish = (expectedDraftRevision: number) =>
+      built.app.inject({
+        method: "POST",
+        url: `/v1/presentations/${id}/publish`,
+        headers: { cookie: built.cookie },
+        payload: { expectedDraftRevision },
+      });
+    const invalid = await publish(1);
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.json().validation.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ blockId: visible.id, field: "label" })]),
+    );
+    expect(
+      invalid
+        .json()
+        .validation.issues.some((issue: { blockId: string | null }) => issue.blockId === hidden.id),
+    ).toBe(false);
+    const allHidden = await built.app.inject({
+      method: "PUT",
+      url: `/v1/presentations/${id}/draft`,
+      headers: { cookie: built.cookie },
+      payload: {
+        schemaVersion: 2,
+        mutationId: randomUUID(),
+        expectedRevision: 1,
+        draft: { ...draft, blocks: draft.blocks.map((block) => ({ ...block, hidden: true })) },
+      },
+    });
+    expect(allHidden.statusCode, allHidden.body).toBe(200);
+    const empty = await publish(2);
+    expect(empty.statusCode, empty.body).toBe(422);
+    expect(empty.json().validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          blockId: null,
+          message: "Show a slide or add an activity before publishing",
+        }),
+      ]),
+    );
+    expect(
+      (await built.presentations.getPresentation(workspaceId, id))?.currentVersionId,
+    ).toBeNull();
+  });
 
   it("reports scene image scan, ownership and accessibility blockers at the image placement", async () => {
     const built = await setup();

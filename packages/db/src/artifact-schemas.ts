@@ -56,6 +56,8 @@ export const PRESENTATION_RECOVERY_PACK_SCHEMA_VERSION = 3;
 export const PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION = 4;
 /** Structured native text opts into v5; plain scene-v1 documents retain v4. */
 export const PRESENTATION_RICH_TEXT_SCHEMA_VERSION = 5;
+/** Editable slide visibility opts into v6; publications contain visible content only. */
+export const PRESENTATION_VISIBILITY_SCHEMA_VERSION = 6;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -166,6 +168,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 5)),
   ],
+  [
+    PRESENTATION_VISIBILITY_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 6)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -191,6 +197,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 5)),
+  ],
+  [
+    PRESENTATION_VISIBILITY_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 6)),
   ],
 ]);
 
@@ -256,15 +266,18 @@ export function upcastPresentationContent(
  * Legacy live snapshots used draft validation, including partially authored old snapshots.
  * Preserve that read path, but validate session-only metadata with the frozen content contract
  * so it cannot be stripped by the authoring parser or restore invalid live insertion metadata.
+ * Version 6 always uses the publication parser: hidden editable content must never enter a
+ * session through the legacy partial-snapshot path.
  */
 export function upcastPresentationSessionContent(
   value: unknown,
   schemaVersion?: unknown,
 ): PresentationContent {
   if (
-    value &&
-    typeof value === "object" &&
-    ("liveQuickCheck" in value || "livePublishedQuestions" in value)
+    schemaVersion === PRESENTATION_VISIBILITY_SCHEMA_VERSION ||
+    (value &&
+      typeof value === "object" &&
+      ("liveQuickCheck" in value || "livePublishedQuestions" in value))
   ) {
     return upcastPresentationContent(value, schemaVersion);
   }

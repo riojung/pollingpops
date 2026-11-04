@@ -127,6 +127,7 @@ async function fixture(
     intervening?: boolean;
     native?: boolean;
     richText?: boolean;
+    visibility?: boolean;
     cardsEnabled?: boolean;
     linkedPurpose?: "diagnostic" | "practice";
   } = {},
@@ -161,7 +162,7 @@ async function fixture(
   const publishedContent = options.native
     ? PresentationContentSchema.parse({
         ...legacyContent,
-        schemaVersion: options.richText ? 5 : 4,
+        schemaVersion: options.visibility ? 6 : options.richText ? 5 : 4,
         blocks: [
           options.richText ? richTextSceneBlock() : nativeSceneBlock(),
           ...legacyContent.blocks.slice(1),
@@ -332,10 +333,14 @@ async function expectCommandNoMutation(
 }
 
 describe("Companion live Recovery Packs", () => {
-  it.each([4, 5] as const)(
+  it.each([4, 5, 6] as const)(
     "preserves native v%s scenes and publication when a frozen Pack is inserted live",
     async (schemaVersion) => {
-      const f = await fixture({ native: true, richText: schemaVersion === 5 });
+      const f = await fixture({
+        native: true,
+        richText: schemaVersion >= 5,
+        visibility: schemaVersion === 6,
+      });
       const command = f.insertion();
       const opened = await f.service.companionCommand(command);
       expect(opened).toMatchObject({ phase: "question_open", blockCount: 4, revision: 1 });

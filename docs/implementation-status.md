@@ -8,6 +8,25 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E01 completion November 4, 2026
+
+E01 is implemented locally, including visual slide hiding, linked-question filmstrip safeguards,
+and durable ordinary-save retry receipts. Hidden slides remain editable and retained in draft
+history/export; preview and immutable publication contain visible blocks only. Activities remain
+explicitly visible. All-hidden decks require a visible slide or activity before publication.
+
+An uncertain save retains its exact envelope across Retry and refresh, settles before subsequent
+writes, and keeps the original revision fence. Divergent local recovery can be previewed,
+downloaded or duplicated without silently replacing the current server draft. Recheck copies and
+source removal preserve valid standalone activities; moves preserve source-before-recheck order.
+
+Document v6 requires compatible web/server/readers and retains the existing scene and mutation
+formats. No paid SDK, hosted API, new entitlement or SQL migration is introduced. See the
+[E01 acceptance record](evidence/presentation-e01-completion.md) and
+[rollout boundary](runbooks/upgrade.md#presentation-slide-visibility-and-save-recovery-compatibility).
+Creator task observations, manual accessibility, physical devices and production qualification
+remain open. E02 design quality and reusable components are the next implementation package.
+
 ### Presentation rich-text E01 slice November 3, 2026
 
 Native text can explicitly opt into structured paragraphs, selected-range bold/italic, bullet and
@@ -22,7 +41,8 @@ must precede writers; older live clients require a reload before consuming forma
 See the [verification record](evidence/presentation-rich-text.md) and
 [upgrade boundary](runbooks/upgrade.md#native-presentation-rich-text-compatibility).
 
-Slide hiding, persistent grouping, design tools and the remaining E01 qualification remain open.
+Slide hiding is covered by the completion increment above. Persistent grouping, design tools and
+release qualification remain open.
 This implementation checkpoint does not establish deployment or broad competitor parity.
 
 ### Presentation direct editing E01 slice November 3, 2026
@@ -36,8 +56,8 @@ their endpoints without changing IDs or semantic reading order.
 Phones retain the reading column and keyboard, numeric and selection movement controls. This
 increment changes no persisted contract, database schema, media authority or subscription cost.
 The [verification record](evidence/presentation-direct-editing.md) describes its checks and limits.
-Rich text is covered by the next increment above. Persistent grouping, slide hiding, themes and charts remain open, along with creator
-observations and deployment qualification. E01 is still in progress.
+Rich text and slide hiding are covered by the increments above. Persistent grouping, themes and
+charts remain open, along with creator observations and deployment qualification.
 
 ### Native Presentation E01 slice November 3, 2026
 

@@ -4,6 +4,7 @@ import { recoveryPackDraftFromPair } from "./recovery-packs";
 import {
   addContentTextElement,
   applyContentSlideLayout,
+  canMovePresentationBlock,
   changePresentationQuestionType,
   contentSlideTitle,
   createContentBlock,
@@ -20,8 +21,12 @@ import {
   removePresentationBlock,
   setContentTextElementFrame,
   setContentSlideMedia,
+  setPresentationSlideHidden,
 } from "./presentation-builder";
+import { createNativeContentBlock } from "./presentation-native-scene";
 import {
+  PresentationContentSchema,
+  PresentationDraftSchema,
   RecoveryPackContentSchema,
   recoveryPackContentHash,
   resolveContentSlideFrames,
@@ -353,7 +358,10 @@ describe("presentation builder model", () => {
     expect(normalizePresentationRecoveryDraft({ ...current, schemaVersion: 5 }).schemaVersion).toBe(
       5,
     );
-    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 6 })).toThrow();
+    expect(normalizePresentationRecoveryDraft({ ...current, schemaVersion: 6 }).schemaVersion).toBe(
+      6,
+    );
+    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 7 })).toThrow();
     expect(() =>
       normalizePresentationRecoveryDraft({ schemaVersion: 1, blocks: "invalid" }),
     ).toThrow();
@@ -489,6 +497,114 @@ describe("presentation builder model", () => {
     expect(moved.blocks[0]?.id).toBe(second.id);
     expect(source.blocks[0]?.id).not.toBe(second.id);
     expect(removePresentationBlock(moved, second.id).blocks).toHaveLength(1);
+  });
+
+  function linkedDraft(): PresentationDraft {
+    const main = createQuestionBlock("numeric");
+    const recheck = createQuestionBlock("numeric");
+    for (const block of [main, recheck]) {
+      block.question.prompt = "How much evidence?";
+      if (block.question.type === "numeric") block.question.correctValue = "2";
+    }
+    main.question.linkedRecheckQuestionId = recheck.question.id;
+    recheck.question.delivery = "recheck";
+    const hidden = createContentBlock();
+    return {
+      ...draft(),
+      schemaVersion: 6,
+      blocks: [main, { ...hidden, hidden: true }, recheck],
+    };
+  }
+
+  it("keeps linked question order while permitting moves across hidden visual slides", () => {
+    const source = linkedDraft();
+    const [main, hidden, recheck] = source.blocks;
+    expect(
+      PresentationContentSchema.safeParse({ ...source, blocks: [main, recheck] }).success,
+    ).toBe(true);
+    expect(canMovePresentationBlock(source, main!.id, 1)).toBe(true);
+    const adjacent = movePresentationBlock(source, main!.id, 1);
+    expect(adjacent.blocks.map((block) => block.id)).toEqual([hidden!.id, main!.id, recheck!.id]);
+    expect(canMovePresentationBlock(adjacent, main!.id, 1)).toBe(false);
+    expect(canMovePresentationBlock(adjacent, recheck!.id, -1)).toBe(false);
+    expect(movePresentationBlock(adjacent, main!.id, 1)).toBe(adjacent);
+    expect(movePresentationBlock(adjacent, recheck!.id, -1)).toBe(adjacent);
+    expect(presentationReadiness(adjacent)).toEqual([]);
+    expect(source.blocks[0]).toBe(main);
+  });
+
+  it("keeps valid question delivery after duplicating or deleting either end of a linked pair", () => {
+    const source = linkedDraft();
+    const main = source.blocks[0]!;
+    const recheck = source.blocks[2]!;
+    const duplicate = duplicatePresentationBlock(recheck);
+    expect(duplicate.kind === "question" && duplicate.question.delivery).toBe("main");
+    expect(presentationReadiness({ ...source, blocks: [...source.blocks, duplicate] })).toEqual([]);
+    const withoutMain = removePresentationBlock(source, main.id);
+    expect(
+      withoutMain.blocks[1]?.kind === "question" && withoutMain.blocks[1].question.delivery,
+    ).toBe("main");
+    expect(presentationReadiness(withoutMain)).toEqual([]);
+    const withoutRecheck = removePresentationBlock(source, recheck.id);
+    expect(
+      withoutRecheck.blocks[0]?.kind === "question" &&
+        withoutRecheck.blocks[0].question.linkedRecheckQuestionId,
+    ).toBeNull();
+    expect(presentationReadiness(withoutRecheck)).toEqual([]);
+    expect(recheck.kind === "question" && recheck.question.delivery).toBe("recheck");
+  });
+
+  it("only demotes an orphaned recheck after its final diagnostic is removed", () => {
+    const source = linkedDraft();
+    const first = source.blocks[0]!;
+    const second = duplicatePresentationBlock(first);
+    if (first.kind !== "question" || second.kind !== "question")
+      throw new Error("Expected questions");
+    second.question.linkedRecheckQuestionId = first.question.linkedRecheckQuestionId;
+    const withTwoSources = { ...source, blocks: [first, second, ...source.blocks.slice(1)] };
+    const oneSource = removePresentationBlock(withTwoSources, first.id);
+    const stillPaired = oneSource.blocks.at(-1);
+    expect(stillPaired?.kind === "question" && stillPaired.question.delivery).toBe("recheck");
+    const noSources = removePresentationBlock(oneSource, second.id);
+    const standalone = noSources.blocks.at(-1);
+    expect(standalone?.kind === "question" && standalone.question.delivery).toBe("main");
+  });
+
+  it("atomically hides legacy and native slides without lowering document versions when restored", () => {
+    for (const block of [createContentBlock(), createNativeContentBlock()]) {
+      const source = {
+        ...draft(),
+        schemaVersion: block.scene ? (4 as const) : (2 as const),
+        blocks: [block],
+      };
+      const hidden = setPresentationSlideHidden(source, block.id, true);
+      expect(hidden.schemaVersion).toBe(6);
+      expect(hidden.blocks[0]).toHaveProperty("hidden", true);
+      expect(PresentationDraftSchema.safeParse(hidden).success).toBe(true);
+      expect(setPresentationSlideHidden(hidden, block.id, true)).toBe(hidden);
+      const restored = setPresentationSlideHidden(hidden, block.id, false);
+      expect(restored.schemaVersion).toBe(6);
+      expect(restored.blocks[0]).not.toHaveProperty("hidden");
+      expect(block).not.toHaveProperty("hidden");
+      expect(duplicatePresentationBlock(hidden.blocks[0]!)).toHaveProperty("hidden", true);
+    }
+    const source = draft();
+    expect(setPresentationSlideHidden(source, source.blocks[1]!.id, true)).toBe(source);
+  });
+
+  it("validates only visible slides and maps compacted publication errors to their original IDs", () => {
+    const hidden = { ...createContentBlock(), hidden: true as const };
+    const invalid = createNativeContentBlock();
+    const source: PresentationDraft = { ...draft(), schemaVersion: 6, blocks: [hidden, invalid] };
+    const issues = presentationReadiness(source);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.blockId !== hidden.id)).toBe(true);
+    expect(issues.some((issue) => issue.blockId === invalid.id)).toBe(true);
+    expect(
+      presentationReadiness({ ...source, blocks: [hidden] }).some((issue) =>
+        issue.message.includes("Show a slide or add an activity"),
+      ),
+    ).toBe(true);
   });
 
   it("treats invalid and boundary moves as stable no-ops", () => {

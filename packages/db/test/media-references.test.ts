@@ -121,6 +121,19 @@ describe("media references", () => {
     });
   });
 
+  it("retains v6 hidden scene and visible publication media across retries, restore, export and cleanup", async () => {
+    const repository = new MemoryRepository();
+    const creator = await owner(repository);
+    const other = await owner(repository);
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: creator.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: creator.userId,
+      visibility: true,
+    });
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const repository = new MemoryRepository();
     const creator = await owner(repository);

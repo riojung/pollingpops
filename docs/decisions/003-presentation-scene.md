@@ -2,7 +2,7 @@
 
 Date: November 3, 2026
 
-Status: selected in E00; the first production native-scene E01 slice is implemented locally.
+Status: selected in E00; E01 is implemented locally. Release qualification remains open.
 Deployment and broader editor qualification remain separate work.
 
 ## Decision
@@ -247,6 +247,29 @@ because a text fallback exists; the
 [reader rollout](../runbooks/upgrade.md#native-presentation-rich-text-compatibility) is coordinated.
 The [rich-text verification record](../evidence/presentation-rich-text.md) records the executed
 checks and remaining qualifications.
+
+## Visibility and durable-save completion
+
+Presentation document v6 adds an optional `hidden: true` only to visual content slides. It does not
+change scene v1/v2, default document v2, mutation envelope v2 or stored legacy JSON/hashes. Hidden
+slides remain fully validated and retained in drafts/history/export. Activities reject the flag.
+
+`preparePresentationPublication` removes hidden blocks before preview, publish validation and
+media admission. Published content rejects hidden flags and empty results. Immutable versions and
+live/report traversal therefore contain only visible blocks, with their original IDs and order.
+Hidden draft/history assets remain retained; a pending hidden asset cannot block visible publication.
+The v6 session reader is strict rather than using the legacy partial-draft fallback.
+
+Ordinary saves persist an immutable mutation envelope before sending it. Unknown outcomes retain
+that envelope across bounded transport retries, manual Retry and browser refresh. Accepted receipts
+settle before newer writes; historical receipts never grant permission to rebase divergent local
+work silently. Local recovery with a different base offers preview, download or duplication.
+Definitive request rejection releases the pending attempt so a corrected draft can be submitted.
+
+Filmstrip movement preserves source-before-recheck topology. Removing a diagnostic normalizes its
+orphan recheck; copying a recheck creates a standalone activity. Existing IDs and Pack baselines
+remain intact. See the [E01 acceptance record](../evidence/presentation-e01-completion.md) and
+[compatible-reader rollout](../runbooks/upgrade.md#presentation-slide-visibility-and-save-recovery-compatibility).
 
 ## Verification and open evidence
 

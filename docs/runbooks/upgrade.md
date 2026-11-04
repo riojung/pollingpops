@@ -99,6 +99,41 @@ participant/host/Companion projections. Check that adding/converting a plain nat
 inserting a Pack during authoring or live delivery retain document v5 and frozen baselines.
 Native image authorization, immutable versions and notes/source privacy must remain unchanged.
 
+## Presentation slide visibility and save recovery compatibility
+
+Hiding a visual slide opts its draft into Presentation document v6; scene v1/v2 and mutation
+envelope v2 are unchanged. Older documents reject the visibility flag and keep their original
+representations and hashes. Activities cannot be hidden. Showing every slide again retains v6.
+
+Deploy v6-compatible server, jobs, artifact readers and web clients before accepting these writes.
+Fence draft mutations, publication and session creation at ingress and drain accepted operations
+during the coordinated transition. Reload creator/presenter clients onto compatible assets.
+Keep the existing feature/workspace policies. There is no additional visibility admission flag.
+
+Draft/history/export retain hidden slides and their asset references. Preview and publication
+compile them out before readiness and media checks; published content contains visible blocks
+only, with original IDs/order, and rejects hidden flags or an empty result. Session readers parse
+v6 strictly; legacy partial-draft admission is retained only for older document versions. Check
+that hidden unscanned assets do not block visible publication or become audience-readable.
+
+No additional SQL migration is required. Keep migration 089 and v6-capable cleanup/readers; its
+existing collector retains hidden draft/history images independently of document version.
+Once v6 drafts, history, versions or sessions exist, rollback requires compatible images or a
+forward repair. Disabling the Hide button cannot make an old reader/writer safe. Do not rewrite
+immutable versions, Pack baselines, mutation fingerprints or hidden draft data to downgrade them.
+
+The web client persists the original ordinary-save envelope in browser recovery before sending.
+Unknown outcomes replay that exact envelope on Retry or refresh before newer writes. Explicit
+rejection permits correction; revision conflicts preserve local work and stop writes. Historical
+accepted receipts cannot rebase divergent work onto a later revision. Browser recovery is local
+to the origin/profile and is removed by site-data clearing; it is not a server backup.
+
+Rehearse hide/show with Undo/Redo, all-hidden publication refusal, immutable sessions after
+showing a draft slide, hidden-only media retention, linked-question moves/delete/copy, lost save
+acknowledgements, pending receipt reload, newer remote edits and local preview/download/duplicate.
+The [E01 acceptance record](../evidence/presentation-e01-completion.md) records local verification;
+it does not replace staging, scanner/storage, physical-device or manual-accessibility qualification.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.

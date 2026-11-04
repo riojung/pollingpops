@@ -9,6 +9,7 @@ import {
   resolveContentSlideFrames,
   starterContentSlideFrames,
   presentationSceneTitle,
+  preparePresentationPublication,
   type ContentSlideDraft,
   type ContentSlideFrame,
   type ContentSlideLayout,
@@ -493,10 +494,50 @@ export function movePresentationBlock(
 ): PresentationDraft {
   const source = draft.blocks.findIndex((block) => block.id === blockId);
   const target = source + direction;
-  if (source < 0 || target < 0 || target >= draft.blocks.length) return draft;
+  if (!canMovePresentationBlock(draft, blockId, direction)) return draft;
   const blocks = [...draft.blocks];
   [blocks[source], blocks[target]] = [blocks[target]!, blocks[source]!];
   return { ...draft, blocks };
+}
+
+export function canMovePresentationBlock(
+  draft: PresentationDraft,
+  blockId: string,
+  direction: -1 | 1,
+): boolean {
+  const source = draft.blocks.findIndex((block) => block.id === blockId);
+  const target = source + direction;
+  if (source < 0 || target < 0 || target >= draft.blocks.length) return false;
+  const movedIndex = (index: number) =>
+    index === source ? target : index === target ? source : index;
+  return draft.blocks.every((block, index) => {
+    if (block.kind !== "question" || !block.question.linkedRecheckQuestionId) return true;
+    const recheck = draft.blocks.findIndex(
+      (candidate) =>
+        candidate.kind === "question" &&
+        candidate.question.id === block.question.linkedRecheckQuestionId,
+    );
+    // Keep every currently ordered pair ordered, while allowing repairs of an older invalid draft.
+    return recheck <= index || movedIndex(recheck) > movedIndex(index);
+  });
+}
+
+export function setPresentationSlideHidden(
+  draft: PresentationDraft,
+  blockId: string,
+  hidden: boolean,
+): PresentationDraft {
+  const selected = draft.blocks.find((block) => block.id === blockId);
+  if (selected?.kind !== "content" || Boolean(selected.hidden) === hidden) return draft;
+  const { hidden: _hidden, ...visible } = selected;
+  void _hidden;
+  return {
+    ...draft,
+    schemaVersion: hidden ? 6 : draft.schemaVersion,
+    blocks: draft.blocks.map((block) =>
+      block.id === blockId ? (hidden ? { ...selected, hidden: true } : visible) : block,
+    ),
+  };
 }
 
 export function removePresentationBlock(
@@ -504,20 +545,36 @@ export function removePresentationBlock(
   blockId: string,
 ): PresentationDraft {
   const removed = draft.blocks.find((block) => block.id === blockId);
+  if (!removed) return draft;
   const removedQuestionId = removed?.kind === "question" ? removed.question.id : null;
+  const orphanTarget =
+    removed.kind === "question" ? removed.question.linkedRecheckQuestionId : null;
+  const targetStillLinked =
+    orphanTarget &&
+    draft.blocks.some(
+      (block) =>
+        block.id !== blockId &&
+        block.kind === "question" &&
+        block.question.linkedRecheckQuestionId === orphanTarget,
+    );
   return {
     ...draft,
     blocks: draft.blocks
       .filter((block) => block.id !== blockId)
       .map((block) =>
-        removedQuestionId &&
+        orphanTarget &&
+        !targetStillLinked &&
         block.kind === "question" &&
-        block.question.linkedRecheckQuestionId === removedQuestionId
-          ? {
-              ...block,
-              question: { ...block.question, linkedRecheckQuestionId: null },
-            }
-          : block,
+        block.question.id === orphanTarget
+          ? { ...block, question: { ...block.question, delivery: "main" as const } }
+          : removedQuestionId &&
+              block.kind === "question" &&
+              block.question.linkedRecheckQuestionId === removedQuestionId
+            ? {
+                ...block,
+                question: { ...block.question, linkedRecheckQuestionId: null },
+              }
+            : block,
       ),
   };
 }
@@ -535,6 +592,7 @@ export function duplicatePresentationBlock(block: PresentationBlockDraft): Prese
   const question = structuredClone(block.question);
   question.id = clientUuid();
   question.linkedRecheckQuestionId = null;
+  question.delivery = "main";
   if ("choices" in question) {
     question.choices = question.choices.map((choice) => {
       const id = clientUuid();
@@ -546,6 +604,7 @@ export function duplicatePresentationBlock(block: PresentationBlockDraft): Prese
 }
 
 export function presentationReadiness(draft: PresentationDraft): PresentationIssue[] {
+  draft = preparePresentationPublication(draft);
   const issues: PresentationIssue[] = [];
   if (!draft.title.trim()) {
     issues.push({ blockId: null, field: "title", message: "Give this presentation a title." });

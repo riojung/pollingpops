@@ -26,7 +26,9 @@ for (const suffix of ["desktop", "@mobile"]) {
     browser,
   }) => {
     const host = page;
-    test.setTimeout(90_000);
+    // Allow one real 60s join rate window on the shared loopback fixture. Action (15s)
+    // and assertion (10s) deadlines stay unchanged; the remaining journey has its original 90s.
+    test.setTimeout(150_000);
     if (suffix === "@mobile") await host.setViewportSize({ width: 320, height: 740 });
     else await host.setViewportSize({ width: 1366, height: 768 });
     await host.addInitScript(() => {
@@ -512,7 +514,9 @@ for (const suffix of ["desktop", "@mobile"]) {
     page: host,
     browser,
   }) => {
-    test.setTimeout(60_000);
+    // Allow one real 60s join rate window on the shared loopback fixture. Action (15s)
+    // and assertion (10s) deadlines stay unchanged; the remaining journey has its original 60s.
+    test.setTimeout(120_000);
     await signInBeta(host);
     const choices = ["True", "False"].map((label) => ({
       id: randomUUID(),

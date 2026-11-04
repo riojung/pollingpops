@@ -68,7 +68,7 @@ export function applyNativeDesignToDeck(
   if (!changed) return draft;
   const next = {
     ...draft,
-    schemaVersion: draft.schemaVersion === 8 ? (8 as const) : (7 as const),
+    schemaVersion: draft.schemaVersion >= 7 ? draft.schemaVersion : (7 as const),
     blocks,
   };
   // Check the complete document budget before applying an all-slide operation. Keep existing

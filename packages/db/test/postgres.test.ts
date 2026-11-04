@@ -302,6 +302,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         phase("complete");
       }
     },
+    15_000,
   );
   it("splits legacy shared folders by content type while retaining Round IDs and frozen versions", async () => {
     const database = `openround_folder_upgrade_${randomUUID().replaceAll("-", "")}`;
@@ -1410,6 +1411,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 88, name: "idea_board_rounds" },
       { version: 89, name: "presentation_native_scene_media" },
       { version: 90, name: "presentation_stage_credentials" },
+      { version: 91, name: "presentation_opinion_formats" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -4313,6 +4315,216 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
     expect(await repository.getMediaAsset(owner.workspaceId, mediaId)).not.toBeNull();
   });
+
+  it("guards raw Presentation opinion document versions and keeps v9 media discovery compatible", async () => {
+    const questionMedia = randomUUID();
+    const sceneMedia = randomUUID();
+    const question = {
+      id: randomUUID(),
+      type: "ranking",
+      prompt: "Priorities",
+      purpose: "opinion",
+      confidence: "off",
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+      basePoints: 0,
+      rankCount: 2,
+      mediaId: questionMedia,
+      mediaAlt: "Context",
+      choices: ["A", "B", "C"].map((label) => ({ id: randomUUID(), label, isCorrect: false })),
+    };
+    const document = {
+      schemaVersion: 9,
+      blocks: [
+        { id: randomUUID(), kind: "question", question },
+        {
+          id: randomUUID(),
+          kind: "content",
+          scene: { nodes: [{ type: "image", mediaId: sceneMedia }] },
+        },
+      ],
+    };
+    const valid = async (value: unknown, version = 9) =>
+      (
+        await repository.pool.query<{ valid: boolean }>(
+          "SELECT openround_presentation_opinion_formats_valid($1::jsonb, $2::integer) AS valid",
+          [JSON.stringify(value), version],
+        )
+      ).rows[0]!.valid;
+    expect(await valid(document)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 8 })).toBe(false);
+    expect(await valid(document, 8)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 10 }, 10)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
+    expect(await valid(document, 10)).toBe(false);
+    const uppercase = {
+      ...document,
+      blocks: [
+        {
+          ...document.blocks[0]!,
+          id: document.blocks[0]!.id.toUpperCase(),
+          question: {
+            ...question,
+            id: question.id.toUpperCase(),
+            choices: question.choices.map((choice) => ({ ...choice, id: choice.id.toUpperCase() })),
+          },
+        },
+      ],
+    };
+    expect(await valid(uppercase)).toBe(true);
+    for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8]) {
+      expect(
+        await valid(
+          {
+            schemaVersion,
+            blocks: [
+              {
+                id: randomUUID(),
+                kind: "question",
+                question: {
+                  ...question,
+                  type: "single_select",
+                  purpose: "opinion",
+                  basePoints: 1_000,
+                  rankCount: undefined,
+                  choices: question.choices.map((choice, index) => ({
+                    ...choice,
+                    isCorrect: index === 0,
+                  })),
+                },
+              },
+            ],
+          },
+          schemaVersion,
+        ),
+      ).toBe(true);
+    }
+    for (const extra of [
+      { type: "open_text" },
+      { type: "word_cloud" },
+      { basePoints: 1 },
+      { confidence: "required" },
+      { delivery: "recheck" },
+      { linkedRecheckQuestionId: randomUUID() },
+      { rankCount: 4 },
+      { rankCount: null },
+      { rankCount: "2" },
+      { basePoints: "0" },
+      { choices: question.choices.map((choice) => ({ ...choice, isCorrect: true })) },
+    ]) {
+      expect(
+        await valid({
+          ...document,
+          blocks: [{ id: randomUUID(), kind: "question", question: { ...question, ...extra } }],
+        }),
+      ).toBe(false);
+    }
+    expect(
+      (
+        await repository.pool.query<{ media_id: string }>(
+          "SELECT media_id FROM openround_presentation_media_ids($1::jsonb) ORDER BY media_id",
+          [JSON.stringify(document)],
+        )
+      ).rows.map(({ media_id }) => media_id),
+    ).toEqual([questionMedia, sceneMedia].sort());
+  });
+
+  it.each(["poll", "ranking"] as const)(
+    "rejects raw %s response question IDs that differ from the frozen E04 block",
+    async (type) => {
+      const owner = await creator(`presentation-wrong-question-${type}`);
+      const published = await createPublishedPresentationFixture(owner, "Frozen response identity");
+      const sessions = new PostgresPresentationSessionRepository(repository);
+      const question = {
+        id: randomUUID().toUpperCase(),
+        type,
+        prompt: "Choose priorities",
+        purpose: "opinion",
+        confidence: "off",
+        delivery: "main",
+        linkedRecheckQuestionId: null,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+        choices: ["One", "Two", "Three"].map((label) => ({
+          id: randomUUID().toUpperCase(),
+          label,
+          isCorrect: false,
+        })),
+        ...(type === "poll" ? { maxSelections: 2 } : { rankCount: 2 }),
+      };
+      const blockId = randomUUID().toUpperCase();
+      const content = PresentationContentSchema.parse({
+        title: "Frozen opinion identity",
+        schemaVersion: 9,
+        blocks: [{ id: blockId, kind: "question", question }],
+      });
+      for (const currentBlock of [true, false]) {
+        const now = new Date();
+        const session = await sessions.createSession({
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          presentationId: published.presentation.id,
+          presentationVersionId: published.version.id,
+          title: content.title,
+          content,
+          code: String(randomInt(1_000_000, 10_000_000)),
+          status: "active",
+          phase: currentBlock ? "question_open" : "lobby",
+          currentBlockIndex: currentBlock ? 0 : -1,
+          revision: 1,
+          settings: { timeMode: "flex" },
+          trustMode: "learning",
+          questionOpenedAt: currentBlock ? now : null,
+          questionClosesAt: null,
+          createdBy: owner.userId,
+          createdAt: now,
+          updatedAt: now,
+          finishedAt: null,
+          liveExpiresAt: new Date(now.getTime() + 60_000),
+          retentionExpiresAt: new Date(now.getTime() + 86_400_000),
+        });
+        const participantId = randomUUID();
+        await sessions.addParticipant({
+          id: participantId,
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          nickname: "Identity guard",
+          tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+          joinedAt: now,
+          lastSeenAt: now,
+        });
+        const selections = question.choices.slice(0, 2).map((choice) => choice.id.toLowerCase());
+        const response =
+          type === "poll" ? { choiceIds: selections } : { orderedChoiceIds: selections };
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              `INSERT INTO presentation_live_responses
+            (id,workspace_id,session_id,participant_id,block_id,question_id,response,response_schema_version,
+             correct,score,response_ms,submitted_at,idempotency_key,request_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,2,NULL,0,1000,$8,$9,$10)`,
+              [
+                randomUUID(),
+                owner.workspaceId,
+                session.id,
+                participantId,
+                blockId.toLowerCase(),
+                randomUUID(),
+                JSON.stringify(response),
+                new Date(now.getTime() + 1000),
+                randomUUID(),
+                createHash("sha256").update(JSON.stringify(response)).digest("hex"),
+              ],
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+        await expect(sessions.listResponses(session.id)).resolves.toEqual([]);
+      }
+    },
+  );
 
   it("keeps PostgreSQL on the shared Presentation repository conformance contract", async () => {
     const owner = await creator("presentation-repository-conformance");

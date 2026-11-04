@@ -58,12 +58,14 @@ import {
   moveContentTextElement,
   normalizePresentationRecoveryDraft,
   presentationReadiness,
+  promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
   setContentTextElementFrame,
   setContentSlideMedia,
   removePresentationBlock,
   updateContentTextElement,
+  updatePresentationQuestion,
 } from "../../lib/presentation-builder";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import {
@@ -86,7 +88,6 @@ import { ContentSlideView, contentSlideRegionLabels } from "./content-slide-view
 import { isChoiceQuestion } from "../editor/types";
 import { useLocale } from "../locale-provider";
 import { questionTypeOptions, responseTypeLabel } from "../workspace/workspace-model";
-import { multipleSelectionPoll } from "../../lib/participant-response";
 import { recordAuthoringEvent } from "../workspace/product-events";
 import { useWorkspace } from "../workspace/workspace-provider";
 import {
@@ -674,7 +675,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         return;
       setDraft((current) => {
         if (!current) return current;
-        const next = typeof value === "function" ? value(current) : value;
+        const next = promotePresentationOpinionFormats(
+          typeof value === "function" ? value(current) : value,
+          current.schemaVersion,
+        );
         if (next === current || JSON.stringify(next) === JSON.stringify(current)) return current;
         const now = Date.now();
         const previousHistoryCommit = lastHistoryCommit.current;
@@ -939,10 +943,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     updater: (question: QuestionDraft) => QuestionDraft,
     historyField?: string,
   ) {
-    updateSelected(
-      (block) =>
-        block.kind === "question" ? { ...block, question: updater(block.question) } : block,
-      historyField ? `question:${historyField}` : undefined,
+    if (!selectedBlockId) return;
+    commit(
+      (current) => updatePresentationQuestion(current, selectedBlockId, updater),
+      historyField ? `${selectedBlockId}:question:${historyField}` : undefined,
     );
   }
 
@@ -1024,8 +1028,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       packUpdatePending.current
     )
       return;
-    const previous = undoStack.at(-1);
-    if (!previous || !draft) return;
+    const checkpoint = undoStack.at(-1);
+    if (!checkpoint || !draft) return;
+    const previous = promotePresentationOpinionFormats(checkpoint, draft.schemaVersion);
     setRedoStack((history) => [...history, draft].slice(-HISTORY_LIMIT));
     setUndoStack((history) => history.slice(0, -1));
     lastHistoryCommit.current = null;
@@ -1048,8 +1053,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       packUpdatePending.current
     )
       return;
-    const next = redoStack.at(-1);
-    if (!next || !draft) return;
+    const checkpoint = redoStack.at(-1);
+    if (!checkpoint || !draft) return;
+    const next = promotePresentationOpinionFormats(checkpoint, draft.schemaVersion);
     setUndoStack((history) => [...history, draft].slice(-HISTORY_LIMIT));
     setRedoStack((history) => history.slice(0, -1));
     lastHistoryCommit.current = null;
@@ -1610,13 +1616,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
 
   function toggleImportedQuestion(questionId: string) {
     const question = publishedRound?.questions.find((candidate) => candidate.id === questionId);
-    if (
-      question &&
-      (multipleSelectionPoll(question) ||
-        question.type === "ranking" ||
-        isTextQuestion(question.type))
-    )
-      return;
+    if (question && isTextQuestion(question.type)) return;
     setSelectedQuestionIds((current) =>
       current.includes(questionId)
         ? current.filter((candidate) => candidate !== questionId)
@@ -2481,6 +2481,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               ) : null}
               <div className={styles.responseSurface}>
                 <ResponseEditor
+                  multiSelectPollsEnabled
+                  rankingPollsEnabled
                   onStructuralChange={(question) => updateQuestion(() => question)}
                   onUpdateChoiceQuestion={(updater) =>
                     updateQuestion(
@@ -2492,9 +2494,6 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                   question={selectedBlock.question}
                   uxBeta
                 />
-                {selectedBlock.question.type === "poll" ? (
-                  <p className="muted">{t("delivery.builder.pollMultipleLiveOnly")}</p>
-                ) : null}
               </div>
             </section>
           )}
@@ -2940,9 +2939,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         value={selectedBlock.question.type}
                       >
                         {questionTypeOptions
-                          .filter(
-                            (option) => option.type !== "ranking" && !isTextQuestion(option.type),
-                          )
+                          .filter((option) => !isTextQuestion(option.type))
                           .map((option) => (
                             <option key={option.type} value={option.type}>
                               {t(questionTypeMessageKeys[option.type])}
@@ -2974,7 +2971,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <select
                         disabled={
                           selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating"
+                          selectedBlock.question.type === "rating" ||
+                          selectedBlock.question.type === "ranking"
                         }
                         onChange={(event) =>
                           updateQuestion((question) => ({
@@ -3009,13 +3007,25 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <span lang="en-CA">Purpose</span>
                       <select
                         lang="en-CA"
+                        disabled={
+                          selectedBlock.question.type === "poll" ||
+                          selectedBlock.question.type === "rating" ||
+                          selectedBlock.question.type === "ranking"
+                        }
                         onChange={(event) =>
                           updateQuestion((question) => ({
                             ...question,
                             purpose: event.target.value as "diagnostic" | "practice" | "opinion",
                           }))
                         }
-                        value={selectedBlock.question.purpose ?? "diagnostic"}
+                        value={
+                          selectedBlock.question.purpose ??
+                          (selectedBlock.question.type === "poll" ||
+                          selectedBlock.question.type === "rating" ||
+                          selectedBlock.question.type === "ranking"
+                            ? "opinion"
+                            : "diagnostic")
+                        }
                       >
                         <option value="diagnostic">Diagnostic</option>
                         <option value="practice">Practice</option>
@@ -3028,7 +3038,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         lang="en-CA"
                         disabled={
                           selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating"
+                          selectedBlock.question.type === "rating" ||
+                          selectedBlock.question.type === "ranking"
                         }
                         onChange={(event) =>
                           updateQuestion((question) => ({
@@ -3070,6 +3081,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <span lang="en-CA">Delivery role</span>
                       <select
                         lang="en-CA"
+                        disabled={
+                          selectedBlock.question.type === "poll" ||
+                          selectedBlock.question.type === "rating" ||
+                          selectedBlock.question.type === "ranking"
+                        }
                         onChange={(event) =>
                           updateQuestion((question) => ({
                             ...question,
@@ -3082,7 +3098,13 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         }
                         value={selectedBlock.question.delivery ?? "main"}
                       >
-                        <option value="main">Main diagnostic</option>
+                        <option value="main">
+                          {selectedBlock.question.type === "poll" ||
+                          selectedBlock.question.type === "rating" ||
+                          selectedBlock.question.type === "ranking"
+                            ? "Main activity"
+                            : "Main diagnostic"}
+                        </option>
                         <option value="recheck">Recovery recheck</option>
                       </select>
                     </label>
@@ -3090,6 +3112,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <label className={styles.field}>
                         <span>{t("delivery.builder.pairedRecheckQuestion")}</span>
                         <select
+                          disabled={
+                            selectedBlock.question.type === "poll" ||
+                            selectedBlock.question.type === "rating" ||
+                            selectedBlock.question.type === "ranking"
+                          }
                           onChange={(event) =>
                             updateQuestion((question) => ({
                               ...question,
@@ -3189,11 +3216,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 <label key={question.id}>
                   <input
                     checked={selectedQuestionIds.includes(question.id)}
-                    disabled={
-                      multipleSelectionPoll(question) ||
-                      question.type === "ranking" ||
-                      isTextQuestion(question.type)
-                    }
+                    disabled={isTextQuestion(question.type)}
                     onChange={() => toggleImportedQuestion(question.id)}
                     type="checkbox"
                   />
@@ -3203,20 +3226,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     </strong>
                     <small>
                       {responseTypeLabel(question.type)} · {question.delivery ?? "main"}
-                      {multipleSelectionPoll(question) ||
-                      question.type === "ranking" ||
-                      isTextQuestion(question.type) ? (
-                        <span lang={locale}>
-                          {" "}
-                          ·{" "}
-                          {t(
-                            question.type === "ranking"
-                              ? "delivery.builder.rankingLiveOnly"
-                              : isTextQuestion(question.type)
-                                ? "delivery.builder.textLiveOnly"
-                                : "delivery.builder.pollMultipleLiveOnly",
-                          )}
-                        </span>
+                      {isTextQuestion(question.type) ? (
+                        <span lang={locale}> · {t("delivery.builder.textLiveOnly")}</span>
                       ) : null}
                     </small>
                   </span>

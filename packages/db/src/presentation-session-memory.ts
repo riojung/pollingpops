@@ -17,6 +17,7 @@ import {
   assertCommandRequestHash,
   commandReceiptMatches,
   normalizeSession,
+  normalizePresentationResponse,
   responseWindowOpen,
   transitionWindow,
   transitionRecoveryPackIntervention,
@@ -629,7 +630,7 @@ export class MemoryPresentationSessionRepository
     const key = `${input.sessionId}:${input.participantId}:${input.blockId}`;
     const existing = this.responses.get(key);
     if (existing) return clone(existing);
-    const stored = clone(input);
+    const stored = normalizePresentationResponse(this.sessions.get(input.sessionId), input);
     this.responses.set(key, stored);
     const session = this.sessions.get(input.sessionId);
     if (session?.workspaceId === input.workspaceId) session.eventSeq += 1;
@@ -693,8 +694,8 @@ export class MemoryPresentationSessionRepository
     }
     // A response changes participant/answer aggregates while the host revision stays fixed.
     // Advance the independent sequence so delayed snapshots cannot roll those aggregates back.
+    const stored = normalizePresentationResponse(session, input);
     session.eventSeq += 1;
-    const stored = clone(input);
     this.responses.set(key, stored);
     return {
       status: "accepted",

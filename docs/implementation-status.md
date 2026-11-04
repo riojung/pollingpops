@@ -8,6 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E04 opinion polls and rankings November 4, 2026
+
+The first E04 family adds multiple-selection opinion polls and full/top-N rankings across
+authoring, independent published Round copies, live responses, audience stage/Companion results,
+and report/CSV evidence. Accepted responses remain unscored. Poll percentages count respondents;
+ranking weights decrease from the total choice count and are separate from participant scores.
+Results are anonymous aggregates for the current revealed question only.
+
+These formats explicitly use document v9, response storage v2 and Report V4. Migration 091 and
+a coordinated API/job/web reader-writer cutover are required; default document versions, legacy
+content/hashes and existing report meanings remain unchanged. V4 retrieval requires
+`includeOpinionResults=true`. See the [rollout instructions](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
+and [first-family verification record](evidence/presentation-e04-opinion-formats.md).
+
+Repository checks, restricted PostgreSQL 17 and the final four-profile opinion workflows passed;
+see the verification record for exact runs and limits. Moderated open text and
+word clouds remain the next E04 family. This increment does not close the epic or establish
+physical-device, manual accessibility, hosted rollout, capacity, operating-cost or competitor
+parity acceptance.
+
 ### Presentation E03 desktop delivery November 4, 2026
 
 The presenter workspace now separates private speaker notes and next-slide preview from a

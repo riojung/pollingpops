@@ -3,6 +3,8 @@ import {
   questionDelivery,
   questionPurpose,
   questionTypeDefinition,
+  isPresentationOpinionResultQuestion,
+  requiresPresentationOpinionFormats,
 } from "@openround/contracts";
 import {
   comparePresentationLeaderboardEntries,
@@ -17,6 +19,42 @@ export function presentationHasQuestions(session: Pick<PresentationSessionRecord
   return session.content.blocks.some(
     (block) => block.kind === "question" && block.id !== session.content.liveQuickCheck?.blockId,
   );
+}
+
+export function presentationHasScoredQuestions(
+  session: Pick<PresentationSessionRecord, "content">,
+) {
+  return session.content.blocks.some(
+    (block) =>
+      block.kind === "question" &&
+      block.id !== session.content.liveQuickCheck?.blockId &&
+      questionTypeDefinition(block.question.type).scored &&
+      block.question.basePoints > 0,
+  );
+}
+
+/** New E04 opinion responses cannot contribute points, even if an imported row contains a score. */
+export function presentationScoredResponses(
+  session: Pick<PresentationSessionRecord, "content">,
+  responses: PresentationSessionResponseRecord[],
+) {
+  const excludedIds = new Set(
+    session.content.blocks.flatMap((block) =>
+      block.kind === "question" && isPresentationOpinionResultQuestion(block.question)
+        ? [block.id.toLowerCase()]
+        : [],
+    ),
+  );
+  return responses.filter((response) => !excludedIds.has(response.blockId.toLowerCase()));
+}
+
+/** Legacy decks retain their established standing behavior; E04-only opinions have no ranking. */
+export function presentationHasParticipantStandings(
+  session: Pick<PresentationSessionRecord, "content">,
+) {
+  return requiresPresentationOpinionFormats(session.content)
+    ? presentationHasScoredQuestions(session)
+    : presentationHasQuestions(session);
 }
 
 /** Staff-only competition view; this does not expand Presentation audience identity access. */

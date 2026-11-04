@@ -11,6 +11,8 @@ import {
   PresentationDraftSchema,
   PresentationDraftMutationSchema,
   preparePresentationPublication,
+  presentationQuestionSupported,
+  requiresPresentationOpinionFormats,
   PublishPresentationSchema,
   type AuthoringDraft,
   type ContentSlideRegion,
@@ -692,13 +694,7 @@ export async function registerPresentationRoutes(
     const selected: QuestionDraft[] = source.content.questions.filter((question) =>
       selectedQuestionIds.has(question.id),
     );
-    if (
-      selected.some(
-        (question) =>
-          ["ranking", "open_text", "word_cloud"].includes(question.type) ||
-          (question.type === "poll" && (question.maxSelections ?? 1) > 1),
-      )
-    ) {
+    if (selected.some((question) => !presentationQuestionSupported(question))) {
       return apiError(
         reply,
         422,
@@ -742,7 +738,11 @@ export async function registerPresentationRoutes(
       }
       blocks.splice(insertionIndex, 0, ...imported);
     }
-    const nextDraft = PresentationDraftSchema.parse({ ...presentation.draft, blocks });
+    const nextDraft = PresentationDraftSchema.parse({
+      ...presentation.draft,
+      ...(requiresPresentationOpinionFormats({ blocks }) ? { schemaVersion: 9 } : {}),
+      blocks,
+    });
     const draftHash = jsonHash({
       kind: "round-question-import",
       sourceQuizVersionId: input.sourceQuizVersionId,

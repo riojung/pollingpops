@@ -41,6 +41,8 @@ import {
 import { createPresentationHostPassManager } from "../../../../lib/presentation-host-pass";
 import { presentationPresenterAction } from "../../../../lib/presentation-presenter-controls";
 import { PresenterTimer } from "../../../../components/presentation-live/presenter-timer";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { PresentationStageLauncher } from "../../../../components/presentation-live/stage-launcher";
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
 import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
@@ -373,6 +375,7 @@ function PresentationHostContent() {
   }
 
   const block = snapshot?.currentBlock ?? null;
+  const opinionSummary = presentationOpinionSummaryFor(snapshot);
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
   const busy = commandState.busy || legacyAdvanceBusy || controlPassBusy;
 
@@ -541,6 +544,9 @@ function PresentationHostContent() {
                           <p className="notice" lang="">
                             {block.revealedAnswer.explanation}
                           </p>
+                        ) : null}
+                        {opinionSummary ? (
+                          <PresentationOpinionResults summary={opinionSummary} />
                         ) : null}
                         {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
                           <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />

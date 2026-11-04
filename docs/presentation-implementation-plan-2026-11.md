@@ -274,6 +274,18 @@ Dependencies: current live foundations; can proceed independently of most scene 
 Sequence: multi-select opinion polls and ranking, then moderated open text and word clouds.
 Reuse Round semantics without treating a shared question union as surface support.
 
+The first-family software increment on `codex/presentation-e04-opinion-formats` implements
+multiple-selection opinion polls and full/top-N rankings in Presentation authoring, independent
+Round copies, live delivery, scoped stage/Companion views, and report/CSV evidence. These formats
+explicitly opt into document v9; existing document v1–v8 meanings and default creation versions
+remain unchanged. Closed-question results are anonymous aggregates, with no participant scoring,
+correct answer, confidence or recovery link. Migration 091 and coordinated readers/writers are
+required before accepting the new formats. See the [first-family evidence record](evidence/presentation-e04-opinion-formats.md)
+and [rollout boundary](runbooks/upgrade.md#presentation-opinion-formats-compatibility).
+Automated verification passed; the record preserves executed runs and their limits. Moderated open text and word clouds are
+the next family; this increment does not complete the E04 epic or establish manual/device or
+competitive parity acceptance.
+
 Acceptance per format: author, publish, open, submit, acknowledge, reconnect, close, reveal,
 moderate where applicable, report and export all work. Never expose pending or removed text in
 stage/participant/replay/history projections. Question copies, recovery links, scoring exclusions,

@@ -188,6 +188,7 @@ export function projectPresentationSummary(report: PresentationReport): Aggregat
       };
     const text = evidence.questionType === "open_text" || evidence.questionType === "word_cloud";
     const adequate = evidence.respondents >= 5;
+    const opinionSummary = "opinionSummary" in evidence ? evidence.opinionSummary : undefined;
     return {
       index,
       prompt: summaryPlainText(evidence.prompt),
@@ -196,9 +197,15 @@ export function projectPresentationSummary(report: PresentationReport): Aggregat
       respondents: adequate ? evidence.respondents : null,
       accuracy: !text && adequate ? accuracy(evidence.correct, evidence.respondents) : null,
       suppression: text ? "participant_text" : adequate ? "none" : "insufficient_sample",
-      measure: "respondents",
-      maxSelections: null,
-      results: [],
+      measure: opinionSummary?.kind === "ranking" ? "weighted_points" : "respondents",
+      maxSelections: opinionSummary?.kind === "poll" ? opinionSummary.maxSelections : null,
+      results:
+        adequate && opinionSummary
+          ? opinionSummary.choices.map((choice) => ({
+              label: summaryPlainText(choice.label),
+              value: "count" in choice ? choice.count : choice.weightedScore,
+            }))
+          : [],
     };
   });
   summary.recovery = report.recovery

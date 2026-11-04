@@ -96,6 +96,8 @@ export interface PresentationSessionResponseRecord {
   blockId: string;
   questionId: string;
   response: PresentationSessionResponse;
+  /** Explicit response encoding; absent only for legacy in-process callers. */
+  responseSchemaVersion?: 1 | 2;
   correct: boolean | null;
   score: number;
   responseMs: number;

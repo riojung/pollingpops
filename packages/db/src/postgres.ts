@@ -2111,6 +2111,7 @@ export class PostgresRepository implements Repository {
          WITH ORDINALITY AS source(question, ordinal)
        WHERE quiz.workspace_id = $1 AND quiz.status <> 'archived'
          AND source.question ->> 'mediaId' IS NULL
+         AND source.question ->> 'type' IN ('single_select', 'true_false', 'multi_select', 'poll', 'numeric', 'rating', 'ranking')
          AND COALESCE(source.question ->> 'delivery', 'main') = 'main'
          AND source.question ->> 'linkedRecheckQuestionId' IS NULL
          AND source.question ->> 'recoveryPackSource' IS NULL

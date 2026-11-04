@@ -4674,8 +4674,59 @@ export const PresentationBlockSchema = z.discriminatedUnion("kind", [
 ]);
 export type PresentationBlock = z.infer<typeof PresentationBlockSchema>;
 
+/** E04 opinion formats explicitly opt into Presentation document version 9. */
+export function isPresentationOpinionResultQuestion(question: {
+  type?: QuestionType;
+  maxSelections?: number;
+}): boolean {
+  return (
+    question.type === "ranking" || (question.type === "poll" && (question.maxSelections ?? 1) > 1)
+  );
+}
+
+/** Select v9 only for documents that actually contain an E04 opinion format. */
+export function requiresPresentationOpinionFormats(presentation: {
+  blocks: ReadonlyArray<{
+    kind: string;
+    question?: { type?: QuestionType; maxSelections?: number };
+  }>;
+}): boolean {
+  return presentation.blocks.some(
+    (block) =>
+      block.kind === "question" &&
+      block.question &&
+      isPresentationOpinionResultQuestion(block.question),
+  );
+}
+
+export function presentationQuestionSupported(question: { type?: QuestionType }): boolean {
+  return [
+    "single_select",
+    "true_false",
+    "multi_select",
+    "poll",
+    "numeric",
+    "rating",
+    "ranking",
+  ].includes(question.type ?? "");
+}
+
+/** Only E04 identifiers add semantic UUID uniqueness; legacy JSON spelling stays untouched. */
+function recordPresentationLogicalId(
+  seen: Map<string, boolean>,
+  id: string,
+  opinionFormat: boolean,
+): boolean {
+  const logicalId = id.toLowerCase();
+  const priorOpinionFormat = seen.get(logicalId);
+  const conflict = seen.has(logicalId) && (opinionFormat || priorOpinionFormat === true);
+  seen.set(logicalId, opinionFormat || priorOpinionFormat === true);
+  return conflict;
+}
+
 function applyPresentationTopology(
   presentation: {
+    schemaVersion: number;
     blocks: Array<
       | { id: string; kind: "content" }
       | {
@@ -4685,9 +4736,12 @@ function applyPresentationTopology(
             id: string;
             type?: QuestionType;
             maxSelections?: number;
+            purpose?: QuestionPurpose;
+            confidence?: ConfidenceMode;
+            basePoints: number;
             delivery?: QuestionDelivery;
             linkedRecheckQuestionId?: string | null;
-            choices?: Array<{ id: string }>;
+            choices?: Array<{ id: string; isCorrect: boolean }>;
           };
         }
     >;
@@ -4696,13 +4750,19 @@ function applyPresentationTopology(
   publishReady: boolean,
 ) {
   const blockIds = new Set<string>();
+  const logicalBlockIds = new Map<string, boolean>();
+  const logicalQuestionIds = new Map<string, boolean>();
+  const logicalChoiceIds = new Map<string, boolean>();
   const questionIds = new Map<
     string,
     { delivery?: QuestionDelivery; linkedRecheckQuestionId?: string | null; blockIndex: number }
   >();
   const choiceIds = new Set<string>();
   for (const [blockIndex, block] of presentation.blocks.entries()) {
-    if (blockIds.has(block.id)) {
+    const opinionFormat =
+      block.kind === "question" && isPresentationOpinionResultQuestion(block.question);
+    const blockUuidConflict = recordPresentationLogicalId(logicalBlockIds, block.id, opinionFormat);
+    if (blockIds.has(block.id) || blockUuidConflict) {
       ctx.addIssue({
         code: "custom",
         message: "Every presentation block needs a unique ID",
@@ -4711,18 +4771,43 @@ function applyPresentationTopology(
     }
     blockIds.add(block.id);
     if (block.kind !== "question") continue;
-    if (
-      block.question.type === "ranking" ||
-      isTextOpinionQuestion(block.question) ||
-      (block.question.type === "poll" && (block.question.maxSelections ?? 1) > 1)
-    ) {
+    if (isTextOpinionQuestion(block.question)) {
       ctx.addIssue({
         code: "custom",
-        message: "Multiple-selection polls currently support live Rounds only",
-        path: ["blocks", blockIndex, "question", "maxSelections"],
+        message: "Text opinions are not supported in Presentations",
+        path: ["blocks", blockIndex, "question", "type"],
       });
     }
-    if (questionIds.has(block.question.id)) {
+    if (isPresentationOpinionResultQuestion(block.question)) {
+      if (presentation.schemaVersion < 9) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Multiple-selection polls and rankings require Presentation schema version 9",
+          path: ["schemaVersion"],
+        });
+      }
+      if (
+        (block.question.purpose ?? "opinion") !== "opinion" ||
+        (block.question.confidence ?? "off") !== "off" ||
+        block.question.basePoints !== 0 ||
+        (block.question.delivery ?? "main") !== "main" ||
+        block.question.linkedRecheckQuestionId ||
+        block.question.choices?.some((choice) => choice.isCorrect)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "Presentation opinions must be unscored, have no correct answers or confidence, and cannot link rechecks",
+          path: ["blocks", blockIndex, "question"],
+        });
+      }
+    }
+    const questionUuidConflict = recordPresentationLogicalId(
+      logicalQuestionIds,
+      block.question.id,
+      opinionFormat,
+    );
+    if (questionIds.has(block.question.id) || questionUuidConflict) {
       ctx.addIssue({
         code: "custom",
         message: "Every presentation question needs a unique ID",
@@ -4731,7 +4816,12 @@ function applyPresentationTopology(
     }
     questionIds.set(block.question.id, { ...block.question, blockIndex });
     for (const [choiceIndex, choice] of (block.question.choices ?? []).entries()) {
-      if (choiceIds.has(choice.id)) {
+      const choiceUuidConflict = recordPresentationLogicalId(
+        logicalChoiceIds,
+        choice.id,
+        opinionFormat,
+      );
+      if (choiceIds.has(choice.id) || choiceUuidConflict) {
         ctx.addIssue({
           code: "custom",
           message: "Every answer choice needs a unique ID",
@@ -4787,7 +4877,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4826,7 +4916,7 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
     blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 | 4 }; hidden?: true }>;
   },
   ctx: z.RefinementCtx,
@@ -4927,6 +5017,7 @@ export const PresentationDraftSchema = z
         z.literal(6),
         z.literal(7),
         z.literal(8),
+        z.literal(9),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -4963,6 +5054,7 @@ export const PresentationContentSchema = z
       z.literal(6),
       z.literal(7),
       z.literal(8),
+      z.literal(9),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
@@ -5079,7 +5171,8 @@ export function migratePresentationV1(value: unknown): unknown {
     presentation.schemaVersion === 5 ||
     presentation.schemaVersion === 6 ||
     presentation.schemaVersion === 7 ||
-    presentation.schemaVersion === 8
+    presentation.schemaVersion === 8 ||
+    presentation.schemaVersion === 9
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };
@@ -5241,12 +5334,48 @@ export const PresentationLiveContentBlockSchema = z
   .strict();
 export type PresentationLiveContentBlock = z.infer<typeof PresentationLiveContentBlockSchema>;
 
+function validatePresentationLiveQuestion(
+  question: {
+    type: QuestionType;
+    maxSelections?: number;
+    rankCount?: number;
+    confidence: ConfidenceMode;
+    basePoints: number;
+    choices: Array<{ id: string }>;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (!presentationQuestionSupported(question)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Text opinions are not supported in Presentations",
+      path: ["type"],
+    });
+  }
+  if (
+    isPresentationOpinionResultQuestion(question) &&
+    (question.confidence !== "off" ||
+      question.basePoints !== 0 ||
+      (question.maxSelections ?? 1) > question.choices.length ||
+      (question.rankCount ?? question.choices.length) > question.choices.length)
+  ) {
+    ctx.addIssue({ code: "custom", message: "Presentation opinion settings are invalid" });
+  }
+}
+
+export const PresentationParticipantQuestionSchema = ParticipantQuestionSchema.superRefine(
+  validatePresentationLiveQuestion,
+);
+export const PresentationFacilitatorQuestionSchema = FacilitatorQuestionSchema.superRefine(
+  validatePresentationLiveQuestion,
+);
+
 /** Learner and companion question projection. It intentionally excludes answer and authoring data. */
 export const PresentationParticipantQuestionBlockSchema = z
   .object({
     id: z.string().uuid(),
     kind: z.literal("question"),
-    question: ParticipantQuestionSchema,
+    question: PresentationParticipantQuestionSchema,
   })
   .strict();
 export type PresentationParticipantQuestionBlock = z.infer<
@@ -5284,7 +5413,7 @@ export const PresentationHostQuestionBlockSchema = z
   .object({
     id: z.string().uuid(),
     kind: z.literal("question"),
-    question: FacilitatorQuestionSchema,
+    question: PresentationFacilitatorQuestionSchema,
     revealedAnswer: PresentationRevealedAnswerSchema.nullable().default(null),
   })
   .strict();
@@ -5332,6 +5461,174 @@ export const PresentationRoomStatusSchema = z
   });
 export type PresentationRoomStatus = z.infer<typeof PresentationRoomStatusSchema>;
 
+const PresentationOpinionSummaryBaseFields = {
+  blockId: z.string().uuid(),
+  responseCount: z.number().int().nonnegative(),
+};
+const PresentationOpinionChoiceBaseFields = {
+  choiceId: z.string().uuid(),
+  label: z.string().min(1).max(500),
+};
+
+/** Anonymous result evidence; response ordering and participant identities never enter this DTO. */
+export const PresentationOpinionResultSummarySchema = z
+  .discriminatedUnion("kind", [
+    z
+      .object({
+        ...PresentationOpinionSummaryBaseFields,
+        kind: z.literal("poll"),
+        maxSelections: z.number().int().min(2).max(6),
+        totalSelections: z.number().int().nonnegative(),
+        choices: z
+          .array(
+            z
+              .object({
+                ...PresentationOpinionChoiceBaseFields,
+                count: z.number().int().nonnegative(),
+                percentOfRespondents: z.number().min(0).max(100),
+              })
+              .strict(),
+          )
+          .min(2)
+          .max(6),
+      })
+      .strict(),
+    z
+      .object({
+        ...PresentationOpinionSummaryBaseFields,
+        kind: z.literal("ranking"),
+        rankCount: z.number().int().min(1).max(6),
+        totalRankings: z.number().int().nonnegative(),
+        choices: z
+          .array(
+            z
+              .object({
+                ...PresentationOpinionChoiceBaseFields,
+                weightedScore: z.number().int().nonnegative(),
+                rankedRespondents: z.number().int().nonnegative(),
+                averageRank: z.number().min(1).max(6).nullable(),
+                rankCounts: z.array(z.number().int().nonnegative()).min(1).max(6),
+              })
+              .strict(),
+          )
+          .min(2)
+          .max(6),
+      })
+      .strict(),
+  ])
+  .superRefine((summary, ctx) => {
+    if (new Set(summary.choices.map((choice) => choice.choiceId)).size !== summary.choices.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Opinion choices must be unique",
+        path: ["choices"],
+      });
+    }
+    if (summary.kind === "poll") {
+      if (
+        summary.maxSelections > summary.choices.length ||
+        summary.totalSelections !==
+          summary.choices.reduce((total, choice) => total + choice.count, 0) ||
+        summary.totalSelections < summary.responseCount ||
+        summary.totalSelections > summary.responseCount * summary.maxSelections ||
+        summary.choices.some(
+          (choice) =>
+            choice.count > summary.responseCount ||
+            Math.abs(
+              choice.percentOfRespondents -
+                (summary.responseCount ? (choice.count / summary.responseCount) * 100 : 0),
+            ) > 0.011,
+        )
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "Poll aggregate counts must match the respondent population",
+          path: ["choices"],
+        });
+    } else {
+      if (
+        summary.rankCount > summary.choices.length ||
+        summary.totalRankings !== summary.responseCount * summary.rankCount ||
+        summary.choices.some((choice) => {
+          const ranked = choice.rankCounts.reduce((total, count) => total + count, 0);
+          const weighted = choice.rankCounts.reduce(
+            (total, count, index) => total + count * (summary.choices.length - index),
+            0,
+          );
+          const average = ranked
+            ? choice.rankCounts.reduce((total, count, index) => total + count * (index + 1), 0) /
+              ranked
+            : null;
+          return (
+            choice.rankCounts.length !== summary.rankCount ||
+            ranked !== choice.rankedRespondents ||
+            ranked > summary.responseCount ||
+            weighted !== choice.weightedScore ||
+            (average === null
+              ? choice.averageRank !== null
+              : choice.averageRank === null || Math.abs(choice.averageRank - average) > 0.011)
+          );
+        }) ||
+        Array.from({ length: summary.rankCount }, (_, index) =>
+          summary.choices.reduce((total, choice) => total + (choice.rankCounts[index] ?? 0), 0),
+        ).some((count) => count !== summary.responseCount)
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "Ranking aggregates must match the submitted rank positions",
+          path: ["choices"],
+        });
+    }
+  });
+export type PresentationOpinionResultSummary = z.infer<
+  typeof PresentationOpinionResultSummarySchema
+>;
+
+function validatePresentationOpinionSummary(
+  snapshot: {
+    phase: PresentationSessionPhase;
+    acceptingResponses: boolean;
+    currentBlock: {
+      id: string;
+      kind: string;
+      question?: {
+        type: QuestionType;
+        maxSelections?: number;
+        rankCount?: number;
+        choices: Array<{ id: string }>;
+      };
+    } | null;
+    opinionSummary?: PresentationOpinionResultSummary;
+  },
+  ctx: z.RefinementCtx,
+) {
+  const summary = snapshot.opinionSummary;
+  if (!summary) return;
+  const block = snapshot.currentBlock;
+  const question = block?.question;
+  if (
+    !["question_reveal", "intervention", "finished"].includes(snapshot.phase) ||
+    snapshot.acceptingResponses ||
+    block?.kind !== "question" ||
+    block.id !== summary.blockId ||
+    !question ||
+    question.type !== summary.kind ||
+    !isPresentationOpinionResultQuestion(question) ||
+    question.choices.length !== summary.choices.length ||
+    summary.choices.some(
+      (choice) => !question.choices.some((candidate) => candidate.id === choice.choiceId),
+    ) ||
+    (summary.kind === "poll" && summary.maxSelections !== (question.maxSelections ?? 1)) ||
+    (summary.kind === "ranking" &&
+      summary.rankCount !== (question.rankCount ?? question.choices.length))
+  )
+    ctx.addIssue({
+      code: "custom",
+      message: "Opinion results require the current revealed opinion question",
+      path: ["opinionSummary"],
+    });
+}
+
 const PresentationSnapshotBaseFields = {
   sessionId: z.string().uuid(),
   artifactType: z.literal("presentation"),
@@ -5351,6 +5648,7 @@ const PresentationSnapshotBaseFields = {
   acceptingResponses: z.boolean(),
   settings: PresentationSessionSettingsSchema,
   recoveryPackIntervention: PresentationRecoveryPackPlaybackSchema.optional(),
+  opinionSummary: PresentationOpinionResultSummarySchema.optional(),
 };
 
 function validatePresentationRecoveryPackPlayback(
@@ -5413,6 +5711,7 @@ export const PresentationHostSnapshotSchema = z
   .strict()
   .superRefine((snapshot, ctx) => {
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
+    validatePresentationOpinionSummary(snapshot, ctx);
     if (
       snapshot.currentBlock?.kind === "question" &&
       !["question_reveal", "intervention", "finished"].includes(snapshot.phase) &&
@@ -5441,6 +5740,7 @@ export const PresentationStageSnapshotSchema = z
   .strict()
   .superRefine((snapshot, ctx) => {
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
+    validatePresentationOpinionSummary(snapshot, ctx);
     if (
       snapshot.revealedAnswer !== null &&
       (snapshot.currentBlock?.kind !== "question" ||
@@ -5491,7 +5791,8 @@ export const PresentationParticipantSnapshotSchema = z
     finishedAt: z.string().datetime().nullable(),
   })
   .strict()
-  .superRefine(validatePresentationRecoveryPackPlayback);
+  .superRefine(validatePresentationRecoveryPackPlayback)
+  .superRefine(validatePresentationOpinionSummary);
 export type PresentationParticipantSnapshot = z.infer<typeof PresentationParticipantSnapshotSchema>;
 
 const PresentationRestSnapshotAliasFields = {
@@ -5550,7 +5851,8 @@ export const PresentationRestV1ParticipantQuestionSchema = z
     ...PresentationRestV1RatingAliasFields,
   })
   .strict()
-  .superRefine(validatePresentationRestV1RatingAliases);
+  .superRefine(validatePresentationRestV1RatingAliases)
+  .superRefine(validatePresentationLiveQuestion);
 
 export const PresentationRestV1HostQuestionSchema = z
   .object({
@@ -5558,7 +5860,8 @@ export const PresentationRestV1HostQuestionSchema = z
     ...PresentationRestV1RatingAliasFields,
   })
   .strict()
-  .superRefine(validatePresentationRestV1RatingAliases);
+  .superRefine(validatePresentationRestV1RatingAliases)
+  .superRefine(validatePresentationLiveQuestion);
 
 export const PresentationRestV1ParticipantCurrentBlockSchema = z.discriminatedUnion("kind", [
   PresentationLiveContentBlockSchema,
@@ -5631,6 +5934,7 @@ export const PresentationRestV1HostSnapshotSchema = z
   .superRefine((snapshot, ctx) => {
     validatePresentationRestV1SnapshotAliases(snapshot, ctx);
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
+    validatePresentationOpinionSummary(snapshot, ctx);
     if (
       snapshot.currentBlock?.kind === "question" &&
       !["question_reveal", "intervention", "finished"].includes(snapshot.phase) &&
@@ -5675,6 +5979,7 @@ export const PresentationRestV1ParticipantSnapshotSchema = z
   .superRefine((snapshot, ctx) => {
     validatePresentationRestV1SnapshotAliases(snapshot, ctx);
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
+    validatePresentationOpinionSummary(snapshot, ctx);
   });
 export type PresentationRestV1ParticipantSnapshot = z.infer<
   typeof PresentationRestV1ParticipantSnapshotSchema
@@ -5712,6 +6017,7 @@ export const PresentationRestV1SessionListItemSchema = z
     trustMode: TrustModeSchema,
     eventSeq: z.number().int().nonnegative(),
     currentBlock: PresentationRestV1HostCurrentBlockSchema.nullable(),
+    opinionSummary: PresentationOpinionResultSummarySchema.optional(),
     questionOpenedAt: z.string().datetime().nullable(),
     questionClosesAt: z.string().datetime().nullable(),
     acceptingResponses: z.boolean(),
@@ -5726,6 +6032,7 @@ export const PresentationRestV1SessionListItemSchema = z
   })
   .strict()
   .superRefine((snapshot, ctx) => {
+    validatePresentationOpinionSummary(snapshot, ctx);
     if (snapshot.trustMode !== snapshot.settings.trustMode) {
       ctx.addIssue({
         code: "custom",
@@ -5818,7 +6125,15 @@ export const PresentationCompanionPublishedQuestionSchema =
     sourceQuizVersion: z.number().int().positive(),
     title: z.string().trim().min(1).max(160),
     prompt: z.string().trim().min(1).max(500),
-    type: z.enum(["single_select", "true_false", "multi_select", "poll", "numeric", "rating"]),
+    type: z.enum([
+      "single_select",
+      "true_false",
+      "multi_select",
+      "poll",
+      "numeric",
+      "rating",
+      "ranking",
+    ]),
   }).strict();
 export type PresentationCompanionPublishedQuestion = z.infer<
   typeof PresentationCompanionPublishedQuestionSchema
@@ -5877,6 +6192,7 @@ export const PresentationCompanionSnapshotSchema = z
   .strict()
   .superRefine((snapshot, ctx) => {
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
+    validatePresentationOpinionSummary(snapshot, ctx);
     if (
       snapshot.canInsertPublishedQuestion &&
       (snapshot.status !== "active" ||
@@ -6158,6 +6474,7 @@ export const JoinPresentationSessionSchema = z.object({
 export const PresentationSessionResponseSchema = z
   .object({
     choiceIds: z.array(z.string().uuid()).max(10).optional(),
+    orderedChoiceIds: z.array(z.string().uuid()).min(1).max(6).optional(),
     numericValue: z.string().trim().max(100).optional(),
     ratingValue: z.number().int().optional(),
     confidence: ConfidenceValueSchema.nullable().optional(),
@@ -6165,10 +6482,27 @@ export const PresentationSessionResponseSchema = z
   .refine(
     (response) =>
       response.choiceIds !== undefined ||
+      response.orderedChoiceIds !== undefined ||
       response.numericValue !== undefined ||
       response.ratingValue !== undefined,
     { message: "Add a response before submitting" },
-  );
+  )
+  .superRefine((response, ctx) => {
+    if (
+      response.orderedChoiceIds !== undefined &&
+      (new Set(response.orderedChoiceIds).size !== response.orderedChoiceIds.length ||
+        response.choiceIds !== undefined ||
+        response.numericValue !== undefined ||
+        response.ratingValue !== undefined ||
+        response.confidence != null)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Rank each choice once and submit only an ordered ranking without confidence",
+        path: ["orderedChoiceIds"],
+      });
+    }
+  });
 export type PresentationSessionResponse = z.infer<typeof PresentationSessionResponseSchema>;
 
 const PresentationResponseFenceFields = {
@@ -6441,10 +6775,59 @@ export const PresentationReportV3Schema = PresentationReportV2Schema.extend({
   evidence: z.array(PresentationReportQuickCheckEvidenceSchema),
 });
 export type PresentationReportV3 = z.infer<typeof PresentationReportV3Schema>;
+/** E04 adds immutable anonymous opinion distributions without changing older report documents. */
+export const PresentationReportV4Schema = PresentationReportV3Schema.extend({
+  schemaVersion: z.literal(4),
+  evidence: z.array(
+    z.discriminatedUnion("kind", [
+      PresentationReportEvidenceSchema.options[0],
+      PresentationReportEvidenceSchema.options[1]
+        .extend({
+          sessionOnly: z.literal("quick_check").optional(),
+          opinionSummary: PresentationOpinionResultSummarySchema.optional(),
+        })
+        .superRefine((evidence, ctx) => {
+          if (
+            evidence.sessionOnly &&
+            (evidence.questionType !== "poll" ||
+              evidence.delivery !== "main" ||
+              evidence.correct !== null ||
+              evidence.accuracyPercent !== null ||
+              evidence.totalScore !== 0 ||
+              evidence.opinionSummary)
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Quick Checks remain unscored participation evidence",
+              path: ["sessionOnly"],
+            });
+          }
+          if (
+            evidence.opinionSummary &&
+            (evidence.blockId !== evidence.opinionSummary.blockId ||
+              evidence.questionType !== evidence.opinionSummary.kind ||
+              evidence.respondents !== evidence.opinionSummary.responseCount ||
+              evidence.delivery !== "main" ||
+              evidence.correct !== null ||
+              evidence.accuracyPercent !== null ||
+              evidence.totalScore !== 0)
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Opinion evidence must match an unscored checkpoint",
+              path: ["opinionSummary"],
+            });
+          }
+        }),
+    ]),
+  ),
+});
+export type PresentationReportV4 = z.infer<typeof PresentationReportV4Schema>;
 export const PresentationReportSchema = z.discriminatedUnion("schemaVersion", [
   PresentationReportV1Schema,
   PresentationReportV2Schema,
   PresentationReportV3Schema,
+  PresentationReportV4Schema,
 ]);
 export type PresentationReport = z.infer<typeof PresentationReportSchema>;
 

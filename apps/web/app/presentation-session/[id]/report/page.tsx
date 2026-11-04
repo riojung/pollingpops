@@ -18,6 +18,8 @@ import {
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { SessionSummaryButton } from "../../../../components/session-summary/summary-dialog";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { presentationReportCsv } from "../../../../lib/presentation-report-export";
 
 function PresentationReportContent() {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +30,7 @@ function PresentationReportContent() {
   const [timeMode, setTimeMode] = useState<PresentationTimeMode | null>(null);
   const [reportFailed, setReportFailed] = useState(false);
   const [error, setError] = useState("");
+  const [exportError, setExportError] = useState("");
   const [summaryReady, setSummaryReady] = useState(false);
   const hasQuestionEvidence = report?.evidence.some((block) => block.kind === "question") ?? false;
 
@@ -43,7 +46,7 @@ function PresentationReportContent() {
     const load = async () => {
       try {
         const result = await apiFetch<PresentationReportWithSessionContextEnvelope>(
-          `/v1/presentation-sessions/${id}/report?includeSessionContext=true&includeQuickChecks=true`,
+          `/v1/presentation-sessions/${id}/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true`,
         );
         if (cancelled) return;
         setError("");
@@ -84,11 +87,35 @@ function PresentationReportContent() {
     };
   }, [id, router]);
 
+  function exportEvidence() {
+    if (!report) return;
+    setExportError("");
+    try {
+      const url = URL.createObjectURL(
+        new Blob(["\ufeff", presentationReportCsv(report)], { type: "text/csv;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `presentation-${id}-evidence.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    } catch {
+      setExportError("This report could not be exported. Refresh the report and try again.");
+    }
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
         <CreatorBrand productFeatures={productFeatures} />
         <div className="button-row">
+          {report ? (
+            <button type="button" className="button-quiet" lang="en-CA" onClick={exportEvidence}>
+              Export evidence CSV
+            </button>
+          ) : null}
           {summaryReady && report ? (
             <SessionSummaryButton source={{ kind: "presentation", id }} />
           ) : null}
@@ -99,6 +126,11 @@ function PresentationReportContent() {
         </div>
       </header>
       <div className={`${styles.stage} ${styles.report}`}>
+        {exportError ? (
+          <p className="error" lang="en-CA" role="alert">
+            {exportError}
+          </p>
+        ) : null}
         {error ? (
           <p className="error" lang="en-CA" role="alert">
             {error}
@@ -188,12 +220,21 @@ function PresentationReportContent() {
                         <span>{t("live.presentationReport.respondents")}</span>
                       </div>
                       <div className={styles.metric}>
-                        <strong>
-                          {block.accuracyPercent === null
-                            ? t("live.common.notScored")
-                            : `${block.accuracyPercent.toLocaleString(locale)}%`}
-                        </strong>
-                        <span>{t("live.presentationReport.accuracy")}</span>
+                        {"opinionSummary" in block && block.opinionSummary ? (
+                          <>
+                            <strong lang="en-CA">Unscored opinion</strong>
+                            <span lang="en-CA">Assessment</span>
+                          </>
+                        ) : (
+                          <>
+                            <strong>
+                              {block.accuracyPercent === null
+                                ? t("live.common.notScored")
+                                : `${block.accuracyPercent.toLocaleString(locale)}%`}
+                            </strong>
+                            <span>{t("live.presentationReport.accuracy")}</span>
+                          </>
+                        )}
                       </div>
                       <div className={styles.metric}>
                         <strong lang="en-CA">{block.questionTypeLabel}</strong>
@@ -211,6 +252,11 @@ function PresentationReportContent() {
                         <span>{t("live.presentationReport.averageResponse")}</span>
                       </div>
                     </div>
+                  ) : null}
+                  {block.kind === "question" &&
+                  "opinionSummary" in block &&
+                  block.opinionSummary ? (
+                    <PresentationOpinionResults summary={block.opinionSummary} />
                   ) : null}
                 </article>
               ))}

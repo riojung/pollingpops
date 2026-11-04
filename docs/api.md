@@ -99,8 +99,12 @@ account exports. Moderation metadata survives round advancement; finished report
 
 Legacy readers reject newer meanings in older versions; unknown future versions fail closed.
 CSV carries optional `max_selections` and `rank_count`; older polls default to one selection.
-QTI, Presentations, Companion insertion, practice and Recovery Packs explicitly reject these new
-live formats. Surveys retain their independent version-2 multiple-selection support.
+QTI, practice and Recovery Packs explicitly reject these new live formats. Presentations and
+their published-question Companion insertion support multiple-selection opinion polls and rankings
+through the separate [Presentation document-v9 boundary](#presentation-opinion-formats); moderated
+open text and word clouds remain unsupported there. Surveys retain their independent version-2
+multiple-selection support. Round protocol/state numbers in this table do not identify Presentation
+document, response-row or report versions.
 
 Flag-off new sessions retain state schema 5 or 6 without protocol metadata. Readers preserve
 existing schema-7/8/9 sessions even after the writer flag is disabled. Legacy scoring and deadlines
@@ -729,6 +733,88 @@ extracted sections plus the linked Recovery pair. Each proposed block retains ci
 provider/model disclosure. Nothing mutates an artifact until a creator confirms a proposal
 selection, and source-created artifacts remain unpublished drafts.
 
+### Presentation opinion formats
+
+Embedded Presentation draft/content **`schemaVersion: 9`** explicitly permits `poll` questions with
+`maxSelections > 1` and `ranking` questions. A poll's optional `maxSelections` is 1–6 and cannot
+exceed the choice count; omission or one retains the existing single-choice poll meaning.
+Rankings have two to six choices and an optional `rankCount` from one to the choice count.
+Omission ranks every choice; a specified count requires exactly that many ordered IDs.
+
+The new formats require opinion purpose, confidence off, `basePoints:0`, main delivery,
+no linked recheck and no correct choice. Omitted purpose/confidence use opinion/off semantics;
+authors normally write `purpose:"opinion"` and `confidence:"off"` explicitly. Text opinions remain
+rejected even in v9. Promotion
+occurs only when an actual multiple-selection poll or ranking enters the document. Existing v9
+documents retain that floor through editing, design changes, duplication and history operations.
+The draft mutation envelope remains v2. Default API creation remains document v2, the blank native
+launcher document v7/scene v3, and native scenario templates document v8/scene v4. Existing
+document v1–v8 JSON, immutable hashes and accepted retry fingerprints are not rewritten.
+
+Authoring `POST /v1/presentations/{id}/blocks/import` may copy these formats from an exact retained
+Round version, preserving choices and limits with fresh block/question/choice IDs and promoting
+the destination to v9 when needed. Text opinions remain rejected. Companion's existing
+`insert_published_question` can independently copy eligible standalone text-only main poll/ranking
+questions into a live session, applying the same v9 floor. Existing source-access, safe phase,
+recovery-topology, provenance, receipt and revision fences remain in force. New source publications
+do not update already copied authoring questions or frozen live insertions. Quick Check creation
+retains its existing single-choice poll contract.
+
+For `presentation.response.submit` and `POST /v1/presentation-sessions/{id}/responses`, preserve the
+existing session/block/revision/idempotency envelope. The `response` member is:
+
+```json
+{ "choiceIds": ["choice-uuid-a", "choice-uuid-b"] }
+```
+
+for an unordered multiple-selection poll, or:
+
+```json
+{ "orderedChoiceIds": ["choice-uuid-b", "choice-uuid-a", "choice-uuid-c"] }
+```
+
+for a ranking in highest-priority-first order. Examples use placeholder IDs; actual values must
+be valid unique choice UUIDs from the current frozen question. Rankings reject `choiceIds`,
+numeric/rating response members and confidence. Polls accept one to `maxSelections` choices;
+rankings require exactly `rankCount` choices, or all choices when that count is omitted. The
+database marks new-format accepted rows with `response_schema_version:2`; this storage field is
+not a replacement REST or Socket.IO envelope version.
+
+Acknowledgements follow durable commit and retain existing receipt recovery. Poll choice order
+does not change the selected set; ranking order is part of the intent. Reusing a ranking's
+idempotency key with a different order returns `409 IDEMPOTENCY_CONFLICT` without changing the
+original receipt. Accepted new-format responses store null correctness and zero participant
+score. Their participant snapshots and acknowledgements keep `responseResult:null`, including
+after reveal and finish; the receipt still confirms acceptance. Opinion-only rooms have no
+participant standings, while a mixed room retains its assessment standings. Legacy question
+semantics and existing response hashes remain unchanged.
+
+Host, participant, stage and Companion projections may include anonymous `opinionSummary` only
+for the current, closed/revealed opinion block. It is absent while that block accepts responses
+and must not carry a previous block's summary across navigation. Poll summaries contain
+`maxSelections`, `responseCount`, `totalSelections`, and per-choice `count` and
+`percentOfRespondents`. Percentages divide by accepted respondents, so their sum may exceed 100%.
+Ranking summaries contain `rankCount`, `responseCount`, `totalRankings`, and per-choice
+`weightedScore`, `rankedRespondents`, `averageRank` and `rankCounts`. With N available choices,
+rank position i (zero based) contributes N−i; unranked choices contribute zero. Summary fields
+exclude participant identities, individual response order, private notes, citations and answer keys.
+
+Any report carrying this new evidence uses **Presentation Report V4**. Fetch it with
+`GET /v1/presentation-sessions/{id}/report?includeOpinionResults=true`, optionally combined with
+`includeSessionContext=true` and `includeQuickChecks=true`. A V4 read without the opinion opt-in
+returns `422 VALIDATION_ERROR`; there is no lossy V1/V2/V3 projection of its new result meaning.
+Question evidence carries its anonymous `opinionSummary`, null correctness/accuracy and zero
+participant score. Opinion-only reports have empty scored leaderboards and recovery evidence.
+The report page's **Export evidence CSV** downloads `presentation-{sessionId}-evidence.csv` with
+poll counts/respondent percentages, ranking weights/rank counts and the existing assessment
+columns. Cells are quoted, embedded quotes escaped, and authored formula-like prefixes made
+literal. Stored reports and legacy V1–V3 meanings remain unchanged.
+
+Apply migration `091_presentation_opinion_formats.sql` and complete the coordinated
+[reader/writer rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility) before new
+writes. The first-family [verification record](evidence/presentation-e04-opinion-formats.md) tracks
+the remaining acceptance checks.
+
 ## Media APIs
 
 - `POST /v1/media` — constrained signed quarantine upload.
@@ -804,8 +890,8 @@ Presentation REST endpoints additionally include:
   participant or Companion passes. A stage pass cannot issue commands, submit answers, use Q&A,
   edit a deck or mint another role's pass. Existing creator-cookie authority is independent.
 - `GET /v1/presentation-sessions/{id}/report` — private creator response; `202` while pending
-  without a report, otherwise `200`. The default strict envelope and stored Presentation Report V1
-  remain compatible.
+  without a report, otherwise `200`. Legacy report contracts remain compatible; new opinion-format
+  Report V4 requires `includeOpinionResults=true` as described above.
 
 New Presentation rooms require their workspace and realtime creation eligibility. Creator control
 requires an owner/editor; guest routes use session-scoped credentials. Deleting a room disconnects
@@ -828,8 +914,9 @@ Round snapshots and ready reports expose their effective `timeMode`. Live Presen
 top-level `timeMode` and defaults to timed. Its flex questions have no `questionClosesAt` and
 remain open until the host reveals/closes them. Both creation paths require the deployment flag
 and workspace allowlist for flex; existing rooms remain usable if eligibility changes later. The
-stored Presentation V1 report and default report response remain unchanged for strict legacy
-readers; `GET /v1/presentation-sessions/{id}/report?includeSessionContext=true` adds
+stored legacy Presentation V1 report and its default response remain unchanged for strict legacy
+readers. New opinion results use the separate V4 read boundary above;
+`GET /v1/presentation-sessions/{id}/report?includeSessionContext=true` adds
 `sessionContext.timeMode` to an opt-in response.
 
 Live Round creation also accepts optional `settings.confidenceEnabled`. `false` turns confidence
@@ -1198,6 +1285,8 @@ Companion snapshots contain a participant-safe current block and aggregate room 
 `resultSummary` contains only `{ blockId, responseCount, choiceCounts: [{ choiceId, count }] }` for
 the current question after reveal. It contains no correctness, keys, explanations, citations,
 participant responses, raw numeric/rating values, or leaderboard. Before reveal it is `null`.
+New v9 opinion formats use the separate anonymous `opinionSummary` described above for selection
+percentages or ordered-ranking aggregates; do not interpret a ranking as legacy choice counts.
 The browser consumes `#pass=...`, removes it from URL history before requests, and keeps the pass
 in session storage, with no inherited host passes or creator cookies on companion API fetches.
 
@@ -1205,7 +1294,9 @@ Optional `canInsertPublishedQuestion` uses the same safe closed-boundary/pending
 New catalog access and insertion require current professional Presentation, Companion/realtime,
 and workspace eligibility, independently of Pack flags and the Pack session-creation latch.
 Only standalone text-only main questions are eligible, including supported choice, numeric,
-poll, and rating types. Both outgoing and incoming recovery links and Pack provenance are
+poll, rating and document-v9 ranking types. Multiple-selection poll/ranking insertion requires
+the [opinion-format reader/writer floor](#presentation-opinion-formats); moderated text and word
+clouds remain excluded. Both outgoing and incoming recovery links and Pack provenance are
 excluded. A selected retained version remains valid after a newer publication, but new insertion
 requires a still-present, non-archived workspace source and an exact version hash.
 Source eligibility is revalidated and locked in the insertion transaction through the state,
@@ -1218,8 +1309,9 @@ question IDs, version number, and version hash. This metadata exists only in liv
 survives durable reads/restoration, and is not copied into authoring drafts. Content, timer,
 revision, sequence, event, and receipt commit atomically. Existing sources/drafts remain unchanged.
 Timed/flex behavior and ordinary scoring/confidence follow the frozen question and room settings.
-Reports use existing question evidence with no new provenance fields or schema version; this
-standalone insertion creates no linked/paired recovery claim. Existing snapshots retain the
+Legacy-format reports use existing question evidence with no new provenance fields or schema
+version. A new opinion-format insertion instead requires Report V4 and its explicit read opt-in;
+the standalone insertion creates no linked/paired recovery claim. Existing snapshots retain the
 internal provenance for session export and retention/deletion with their parent session.
 
 Exact receipt recovery occurs before source, phase, gate, or stale-revision rejection, including
@@ -1268,7 +1360,8 @@ have no deadline/countdown and the facilitator closes responses. The frozen live
 PostgreSQL reads/restoration. Published sources remain unchanged. Presentation Report V3
 question evidence optionally carries `sessionOnly: "quick_check"`, with null correctness/accuracy
 and zero score. This records participation/opinion only, not learning or recovery evidence.
-Reports without a Quick Check still use V1/V2; those strict formats are unchanged. Add
+Reports without a Quick Check or new v9 opinion-format evidence still use V1/V2; those strict
+formats are unchanged. V9 opinion results use V4 and require `includeOpinionResults=true`. Add
 `?includeQuickChecks=true` to report retrieval for V3 evidence (combinable with
 `includeSessionContext=true`). Default retrieval projects V3 to a compatible unscored V1/V2
 response without session-only metadata; the ready stored report is never rewritten.

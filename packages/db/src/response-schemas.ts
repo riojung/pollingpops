@@ -1,4 +1,11 @@
-import { ResponsePayloadSchema, type ResponsePayload } from "@openround/contracts";
+import {
+  PresentationSessionResponseSchema,
+  isPresentationOpinionResultQuestion,
+  type PresentationSessionResponse,
+  type QuestionType,
+  ResponsePayloadSchema,
+  type ResponsePayload,
+} from "@openround/contracts";
 
 export function roundResponseSchemaVersion(response: ResponsePayload): 2 | 3 | 4 | 5 {
   return response.kind === "text"
@@ -34,4 +41,28 @@ export function upcastRoundResponse(value: unknown, schemaVersion: unknown = 1):
     throw new Error("Legacy response schema version 1 requires one choice");
   }
   return response;
+}
+
+/** Presentation retains unordered legacy choice responses separately from explicit rankings. */
+export function presentationResponseSchemaVersion(
+  response: PresentationSessionResponse,
+  question?: { type?: QuestionType; maxSelections?: number },
+): 1 | 2 {
+  return response.orderedChoiceIds !== undefined ||
+    (question && isPresentationOpinionResultQuestion(question))
+    ? 2
+    : 1;
+}
+
+export function upcastPresentationResponse(
+  value: unknown,
+  schemaVersion: unknown = 1,
+): PresentationSessionResponse {
+  if (schemaVersion !== 1 && schemaVersion !== 2) {
+    throw new Error(`Unsupported Presentation response schema version ${String(schemaVersion)}`);
+  }
+  if (schemaVersion === 1 && value && typeof value === "object" && "orderedChoiceIds" in value) {
+    throw new Error("Ordered rankings require Presentation response schema version 2");
+  }
+  return PresentationSessionResponseSchema.parse(value);
 }

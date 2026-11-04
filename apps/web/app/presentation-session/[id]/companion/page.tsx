@@ -2,6 +2,8 @@
 
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   PresentationCompanionSnapshotSchema,
@@ -224,9 +226,10 @@ export default function PresentationCompanionPage() {
   }, [applySnapshot, id, pass, rejectPass]);
 
   const results = companionResults(snapshot);
+  const opinionResults = presentationOpinionSummaryFor(snapshot);
   useEffect(() => {
-    if (!results && overlay === "results") setOverlay(null);
-  }, [overlay, results]);
+    if (!results && !opinionResults && overlay === "results") setOverlay(null);
+  }, [overlay, results, opinionResults]);
 
   function closeOverlay() {
     catalogRequest.current += 1;
@@ -529,7 +532,7 @@ export default function PresentationCompanionPage() {
               <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
                 {t("live.companion.showJoin")}
               </button>
-              {results ? (
+              {results || opinionResults ? (
                 <button
                   className="button-quiet"
                   onClick={() => setOverlay("results")}
@@ -619,13 +622,16 @@ export default function PresentationCompanionPage() {
           </a>
         </CompanionOverlay>
       ) : null}
-      {overlay === "results" && results && block?.kind === "question" ? (
+      {overlay === "results" && (results || opinionResults) && block?.kind === "question" ? (
         <CompanionOverlay title={t("live.companion.resultTitle")} onClose={closeOverlay}>
           <p lang="">{block.question.prompt}</p>
           <p>
-            {t("live.companion.answered")}: {formatNumber(locale, results.responseCount)}
+            {t("live.companion.answered")}:{" "}
+            {formatNumber(locale, (opinionResults ?? results)!.responseCount)}
           </p>
-          {results.choiceCounts.length ? (
+          {opinionResults ? (
+            <PresentationOpinionResults summary={opinionResults} />
+          ) : results?.choiceCounts.length ? (
             <dl className={styles.results}>
               {results.choiceCounts.map(({ choiceId, count }) => {
                 const choice = block.question.choices.find(

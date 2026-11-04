@@ -9,6 +9,7 @@ import type {
   PresentationSessionResponseRecord,
   PresentationSessionTimelineRecord,
 } from "./presentation-session-types.js";
+import { upcastPresentationResponse } from "./response-schemas.js";
 import { upcastPresentationSessionContent } from "./artifact-schemas.js";
 
 // Revision and live child rows are monotonic for the lifetime of a Presentation session. Their
@@ -105,7 +106,8 @@ export function mapResponse(row: QueryResultRow): PresentationSessionResponseRec
     participantId: String(row.participant_id),
     blockId: String(row.block_id),
     questionId: String(row.question_id),
-    response: row.response,
+    response: upcastPresentationResponse(row.response, row.response_schema_version ?? 1),
+    responseSchemaVersion: row.response_schema_version ?? 1,
     correct: row.correct == null ? null : Boolean(row.correct),
     score: Number(row.score ?? 0),
     responseMs: Number(row.response_ms ?? 0),

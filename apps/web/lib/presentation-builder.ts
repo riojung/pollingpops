@@ -10,6 +10,7 @@ import {
   starterContentSlideFrames,
   presentationSceneTitle,
   preparePresentationPublication,
+  requiresPresentationOpinionFormats,
   type ContentSlideDraft,
   type ContentSlideFrame,
   type ContentSlideLayout,
@@ -37,7 +38,7 @@ export function normalizePresentationRecoveryDraft(value: unknown): Presentation
 }
 
 function choiceSet(
-  type: Extract<QuestionType, "single_select" | "true_false" | "multi_select" | "poll">,
+  type: Extract<QuestionType, "single_select" | "true_false" | "multi_select" | "poll" | "ranking">,
 ) {
   if (type === "true_false") {
     return [
@@ -46,7 +47,7 @@ function choiceSet(
     ];
   }
   return [
-    { id: clientUuid(), label: "", isCorrect: type !== "poll" },
+    { id: clientUuid(), label: "", isCorrect: type !== "poll" && type !== "ranking" },
     { id: clientUuid(), label: "", isCorrect: false },
     { id: clientUuid(), label: "", isCorrect: false },
     { id: clientUuid(), label: "", isCorrect: false },
@@ -56,17 +57,17 @@ function choiceSet(
 export function createPresentationQuestion(type: QuestionType): QuestionDraft {
   if (type === "open_text" || type === "word_cloud")
     throw new Error("Moderated text polls currently support live Rounds only.");
-  if (type === "ranking") throw new Error("Ranking polls currently support live Rounds only.");
+  const opinionOnly = type === "rating" || type === "poll" || type === "ranking";
   const common = {
     id: clientUuid(),
     prompt: "",
-    purpose: type === "rating" || type === "poll" ? ("opinion" as const) : ("diagnostic" as const),
+    purpose: opinionOnly ? ("opinion" as const) : ("diagnostic" as const),
     confidence: "off" as const,
     delivery: "main" as const,
     conceptKeys: [],
     linkedRecheckQuestionId: null,
     timeLimitSeconds: 20,
-    basePoints: type === "rating" || type === "poll" ? 0 : 1_000,
+    basePoints: opinionOnly ? 0 : 1_000,
     explanation: "",
     mediaId: null,
     mediaAlt: null,
@@ -78,6 +79,17 @@ export function createPresentationQuestion(type: QuestionType): QuestionDraft {
     return { ...common, type, min: 1, max: 5, minLabel: "Low", maxLabel: "High" };
   }
   return { ...common, type, choices: choiceSet(type) };
+}
+
+/** New formats opt into v9 on write; later edits and history retain the existing v9 floor. */
+export function promotePresentationOpinionFormats(
+  draft: PresentationDraft,
+  currentVersion: PresentationDraft["schemaVersion"] = draft.schemaVersion,
+): PresentationDraft {
+  if (draft.schemaVersion >= 9) return draft;
+  return currentVersion >= 9 || requiresPresentationOpinionFormats(draft)
+    ? { ...draft, schemaVersion: 9 }
+    : draft;
 }
 
 export function createContentBlock(layout: ContentSlideLayout = "title_body"): ContentSlideDraft {
@@ -429,7 +441,9 @@ export function changePresentationQuestionType(
   if (!selected || selected.question.type === type) return draft;
 
   const previous = selected.question;
-  const opinionOnly = type === "poll" || type === "rating";
+  const opinionOnly = type === "poll" || type === "rating" || type === "ranking";
+  const previousOpinionOnly =
+    previous.type === "poll" || previous.type === "rating" || previous.type === "ranking";
   const next: QuestionDraft = {
     ...createPresentationQuestion(type),
     id: previous.id,
@@ -437,7 +451,7 @@ export function changePresentationQuestionType(
     explanation: previous.explanation,
     delivery: opinionOnly ? "main" : previous.delivery,
     conceptKeys: previous.conceptKeys,
-    purpose: opinionOnly ? "opinion" : previous.purpose,
+    purpose: opinionOnly ? "opinion" : previousOpinionOnly ? "diagnostic" : previous.purpose,
     confidence: opinionOnly ? "off" : previous.confidence,
     linkedRecheckQuestionId: opinionOnly ? null : previous.linkedRecheckQuestionId,
     mediaId: previous.mediaId,
@@ -445,6 +459,51 @@ export function changePresentationQuestionType(
     sourceCitations: previous.sourceCitations,
     recoveryPackSource: previous.recoveryPackSource,
   };
+  if ("choices" in previous && "choices" in next && type !== "true_false") {
+    const firstCorrect = Math.max(
+      0,
+      previous.choices.findIndex((choice) => choice.isCorrect),
+    );
+    next.choices = previous.choices.map((choice, index) => ({
+      ...choice,
+      isCorrect: opinionOnly
+        ? false
+        : type === "multi_select"
+          ? choice.isCorrect || (index === 0 && !previous.choices.some((item) => item.isCorrect))
+          : index === firstCorrect,
+    }));
+  }
+  return updatePresentationQuestion(draft, blockId, () => next);
+}
+
+/** Keep opinion settings and recovery topology valid when a response or limit is edited. */
+export function updatePresentationQuestion(
+  draft: PresentationDraft,
+  blockId: string,
+  updater: (question: QuestionDraft) => QuestionDraft,
+): PresentationDraft {
+  const selected = draft.blocks.find(
+    (block): block is InteractiveQuestionBlockDraft =>
+      block.id === blockId && block.kind === "question",
+  );
+  if (!selected) return draft;
+  const previous = selected.question;
+  const next = updater(previous);
+  if (next === previous) return draft;
+  const opinionOnly = next.type === "poll" || next.type === "rating" || next.type === "ranking";
+  const normalized: QuestionDraft = opinionOnly
+    ? {
+        ...next,
+        purpose: "opinion",
+        confidence: "off",
+        basePoints: 0,
+        delivery: "main",
+        linkedRecheckQuestionId: null,
+        ...("choices" in next
+          ? { choices: next.choices.map((choice) => ({ ...choice, isCorrect: false })) }
+          : {}),
+      }
+    : next;
   const detachedRecheck = opinionOnly && (previous.delivery ?? "main") === "recheck";
   const detachedTargetId = opinionOnly ? previous.linkedRecheckQuestionId : null;
   const detachedTargetHasAnotherSource =
@@ -457,10 +516,10 @@ export function changePresentationQuestionType(
         )
       : false;
 
-  return {
+  return promotePresentationOpinionFormats({
     ...draft,
     blocks: draft.blocks.map((block) => {
-      if (block.id === blockId) return { ...selected, question: next };
+      if (block.id === blockId) return { ...selected, question: normalized };
       if (
         detachedRecheck &&
         block.kind === "question" &&
@@ -484,7 +543,7 @@ export function changePresentationQuestionType(
       }
       return block;
     }),
-  };
+  });
 }
 
 export function movePresentationBlock(
@@ -650,14 +709,19 @@ export function presentationReadiness(draft: PresentationDraft): PresentationIss
         });
       }
       const correct = question.choices.filter((choice) => choice.isCorrect).length;
-      if (question.type !== "poll" && correct === 0) {
+      if (question.type !== "poll" && question.type !== "ranking" && correct === 0) {
         issues.push({
           blockId: block.id,
           field: "choices",
           message: "Mark at least one correct answer.",
         });
       }
-      if (question.type !== "poll" && question.type !== "multi_select" && correct > 1) {
+      if (
+        question.type !== "poll" &&
+        question.type !== "ranking" &&
+        question.type !== "multi_select" &&
+        correct > 1
+      ) {
         issues.push({
           blockId: block.id,
           field: "choices",

@@ -27,6 +27,16 @@ import {
   type PresentationSaveStatus,
 } from "../../../../lib/presentation-realtime";
 import { clientUuid } from "../../../../lib/uuid";
+import { RankingChoices } from "../../../../components/ranking-choices";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import {
+  initialPresentationChoiceIds,
+  presentationOpinionSummaryFor,
+  presentationChoiceLimit,
+  presentationChoiceResponse,
+  togglePresentationChoice,
+  validPresentationChoiceSelection,
+} from "../../../../lib/presentation-opinion-response";
 
 export default function PresentationParticipantPage() {
   const { locale, t } = useLocale();
@@ -55,7 +65,11 @@ export default function PresentationParticipantPage() {
     snapshotReceivedAt.current = Date.now();
     if (incoming.currentBlock?.id !== blockId.current) {
       blockId.current = incoming.currentBlock?.id ?? null;
-      setSelectedChoiceIds([]);
+      setSelectedChoiceIds(
+        incoming.currentBlock?.kind === "question"
+          ? initialPresentationChoiceIds(incoming.currentBlock.question, incoming.responseSubmitted)
+          : [],
+      );
       setNumericValue("");
       setRatingValue(null);
       setConfidence(null);
@@ -130,15 +144,7 @@ export default function PresentationParticipantPage() {
     question: PresentationParticipantQuestionBlock["question"],
     choiceId: string,
   ) {
-    if (question.type !== "multi_select") {
-      setSelectedChoiceIds([choiceId]);
-      return;
-    }
-    setSelectedChoiceIds((current) =>
-      current.includes(choiceId)
-        ? current.filter((candidate) => candidate !== choiceId)
-        : [...current, choiceId],
-    );
+    setSelectedChoiceIds((current) => togglePresentationChoice(question, current, choiceId));
   }
 
   async function submitResponse() {
@@ -154,7 +160,12 @@ export default function PresentationParticipantPage() {
         ? { numericValue, ...(confidence ? { confidence } : {}) }
         : question.type === "rating"
           ? { ratingValue: ratingValue!, ...(confidence ? { confidence } : {}) }
-          : { choiceIds: selectedChoiceIds, ...(confidence ? { confidence } : {}) };
+          : {
+              ...presentationChoiceResponse(question, selectedChoiceIds),
+              ...(question.type !== "poll" && question.type !== "ranking" && confidence
+                ? { confidence }
+                : {}),
+            };
     setBusy(true);
     setError("");
     const idempotencyKey = `${id}:${block.id}:${clientUuid()}`;
@@ -188,6 +199,18 @@ export default function PresentationParticipantPage() {
           return accepted;
         },
       );
+      // The receipt is already durable. A best-effort result refresh must not turn it into
+      // a failed save when an optional closed-result read was temporarily unavailable.
+      const confirmed = controller.latest();
+      if (
+        confirmed?.currentBlock?.kind === "question" &&
+        (confirmed.currentBlock.question.type === "ranking" ||
+          (confirmed.currentBlock.question.type === "poll" &&
+            (confirmed.currentBlock.question.maxSelections ?? 1) > 1)) &&
+        ["question_reveal", "intervention", "finished"].includes(confirmed.phase) &&
+        !presentationOpinionSummaryFor(confirmed)
+      )
+        void controller.reconcile().catch(() => undefined);
     } catch (caught) {
       setError(humanError(caught));
     } finally {
@@ -196,6 +219,7 @@ export default function PresentationParticipantPage() {
   }
 
   const block = snapshot?.currentBlock ?? null;
+  const opinionSummary = presentationOpinionSummaryFor(snapshot);
   const saveState = presentationSaveStateForBlock(saveStatus, block?.id ?? null);
   const canSubmit =
     block?.kind === "question" &&
@@ -206,9 +230,15 @@ export default function PresentationParticipantPage() {
       ? numericValue.trim() !== ""
       : block.question.type === "rating"
         ? ratingValue !== null
-        : selectedChoiceIds.length > 0) &&
+        : validPresentationChoiceSelection(block.question, selectedChoiceIds)) &&
     (block.question.confidence !== "required" || confidence !== null);
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
+  const inputDisabled =
+    !snapshot?.acceptingResponses ||
+    snapshot.responseSubmitted ||
+    busy ||
+    saveState === "saving" ||
+    saveState === "reconnecting_not_saved";
   const deliveryStatus =
     saveState === "saving"
       ? "Saving…"
@@ -307,27 +337,61 @@ export default function PresentationParticipantPage() {
                   participant
                   sessionId={id}
                 />
-                {block.question.choices.length ? (
-                  <div className={styles.choiceGrid}>
-                    {block.question.choices.map((choice) => (
-                      <button
-                        aria-pressed={selectedChoiceIds.includes(choice.id)}
-                        className={styles.choiceButton}
-                        disabled={!snapshot?.acceptingResponses || snapshot.responseSubmitted}
-                        key={choice.id}
-                        lang=""
-                        onClick={() => toggleChoice(block.question, choice.id)}
-                        type="button"
-                      >
-                        {choice.label}
-                      </button>
-                    ))}
-                  </div>
+                {block.question.type === "ranking" ? (
+                  snapshot?.responseSubmitted ? (
+                    <>
+                      <p lang="en-CA">Your ranking is saved.</p>
+                      <ul aria-label="Ranking choices">
+                        {block.question.choices.map((choice) => (
+                          <li key={choice.id} lang="">
+                            {choice.label}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <RankingChoices
+                      question={block.question}
+                      selectedChoiceIds={selectedChoiceIds}
+                      disabled={inputDisabled}
+                      onChange={setSelectedChoiceIds}
+                    />
+                  )
+                ) : block.question.choices.length ? (
+                  <>
+                    {block.question.type === "poll" && (block.question.maxSelections ?? 1) > 1 ? (
+                      <p lang="en-CA" role="status">
+                        Choose up to {block.question.maxSelections} options.{" "}
+                        {selectedChoiceIds.length} selected.
+                      </p>
+                    ) : null}
+                    <div className={styles.choiceGrid}>
+                      {block.question.choices.map((choice) => (
+                        <button
+                          aria-pressed={selectedChoiceIds.includes(choice.id)}
+                          className={styles.choiceButton}
+                          disabled={
+                            inputDisabled ||
+                            (block.question.type === "poll" &&
+                              (block.question.maxSelections ?? 1) > 1 &&
+                              !selectedChoiceIds.includes(choice.id) &&
+                              selectedChoiceIds.length >= presentationChoiceLimit(block.question))
+                          }
+                          key={choice.id}
+                          lang=""
+                          onClick={() => toggleChoice(block.question, choice.id)}
+                          type="button"
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 ) : block.question.type === "numeric" ? (
                   <label className={styles.formStack}>
                     {t("live.presentationPlay.numericResponse")}
                     <input
-                      disabled={!snapshot?.acceptingResponses || snapshot.responseSubmitted}
+                      disabled={inputDisabled}
                       inputMode="decimal"
                       onChange={(event) => setNumericValue(event.target.value)}
                       value={numericValue}
@@ -337,7 +401,7 @@ export default function PresentationParticipantPage() {
                   <label className={styles.formStack}>
                     {t("live.presentationPlay.rating")}
                     <select
-                      disabled={!snapshot?.acceptingResponses || snapshot.responseSubmitted}
+                      disabled={inputDisabled}
                       onChange={(event) => setRatingValue(Number(event.target.value))}
                       value={ratingValue ?? ""}
                     >
@@ -369,7 +433,7 @@ export default function PresentationParticipantPage() {
                           : t("live.presentationPlay.optional"),
                     })}
                     <select
-                      disabled={snapshot.responseSubmitted}
+                      disabled={inputDisabled}
                       onChange={(event) =>
                         setConfidence(
                           event.target.value
@@ -396,7 +460,10 @@ export default function PresentationParticipantPage() {
                               score: formatNumber(locale, snapshot.responseResult.score),
                             })
                           : t("live.presentationPlay.notQuite")}
-                      {snapshot.standing
+                      {snapshot.standing &&
+                      block.question.type !== "poll" &&
+                      block.question.type !== "ranking" &&
+                      block.question.type !== "rating"
                         ? t("live.presentationPlay.rankPoints", {
                             rank: formatNumber(locale, snapshot.standing.rank),
                             score: formatNumber(locale, snapshot.standing.score),
@@ -420,6 +487,7 @@ export default function PresentationParticipantPage() {
                     <p className="muted">{t("live.presentationPlay.closed")}</p>
                   )}
                 </div>
+                {opinionSummary ? <PresentationOpinionResults summary={opinionSummary} /> : null}
                 {snapshot?.phase === "intervention" && snapshot.recoveryPackIntervention ? (
                   <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
                 ) : null}

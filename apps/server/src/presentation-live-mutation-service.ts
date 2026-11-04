@@ -11,7 +11,9 @@ import {
   type PresentationResponseAck,
   type PresentationResponseSubmit,
   type PresentationSessionResponse,
+  type PresentationOpinionResultSummary,
   type Entitlements,
+  isPresentationOpinionResultQuestion,
 } from "@openround/contracts";
 import {
   PresentationPublishedQuestionSourceUnavailableError,
@@ -55,6 +57,10 @@ import {
   presentationResponseTiming,
   presentationResponseValidationMessage,
 } from "./presentation-session-response-policy.js";
+import {
+  presentationResponseMatchesBlock,
+  presentationResponsesForContent,
+} from "./presentation-response-identifiers.js";
 
 export interface SubmitPresentationResponseInput {
   sessionId: string;
@@ -143,6 +149,9 @@ interface PresentationLiveMutationDependencies {
     session: PresentationSessionRecord,
   ): Promise<PresentationCompanionSnapshot>;
   restHostSnapshot(session: PresentationSessionRecord): Promise<PresentationRestHostSnapshot>;
+  closedOpinionSummary?: (
+    session: PresentationSessionRecord,
+  ) => Promise<PresentationOpinionResultSummary | undefined>;
   recordProductEvents(workspaceId: string, events: ProductEventInput[]): void;
 }
 
@@ -698,7 +707,9 @@ export class PresentationLiveMutationService {
     // Resolve the submitted block independently from the current pointer. The repository checks a
     // matching idempotency receipt before its live phase/revision fence, allowing a lost ack to be
     // recovered after the host advances without ever applying the payload to the next question.
-    const submittedBlock = session.content.blocks.find((block) => block.id === input.blockId);
+    const submittedBlock = session.content.blocks.find((block) =>
+      presentationResponseMatchesBlock(block, input.blockId),
+    );
     if (submittedBlock?.kind !== "question") {
       const replayed = await acknowledgePriorReceipt();
       if (replayed) return replayed;
@@ -734,6 +745,7 @@ export class PresentationLiveMutationService {
         blockId: submittedBlock.id,
         questionId: submittedBlock.question.id,
         response: input.response,
+        responseSchemaVersion: isPresentationOpinionResultQuestion(submittedBlock.question) ? 2 : 1,
         correct,
         score: presentationResponseScore(submittedBlock.question, correct, timing.remainingRatio),
         responseMs: timing.responseMs,
@@ -747,7 +759,10 @@ export class PresentationLiveMutationService {
       const currentSession =
         (await this.dependencies.sessions.getSessionById(input.sessionId)) ?? session;
       const current = presentationCurrentBlock(currentSession);
-      if (currentSession.revision !== input.expectedRevision || current?.id !== input.blockId) {
+      if (
+        currentSession.revision !== input.expectedRevision ||
+        !presentationResponseMatchesBlock(current, input.blockId)
+      ) {
         throw new PresentationSessionServiceError(
           409,
           "STALE_SESSION",
@@ -908,6 +923,7 @@ export class PresentationLiveMutationService {
     duplicate: boolean,
   ): Promise<PresentationResponseAck> {
     const { session, projection } = acknowledgement;
+    response = presentationResponsesForContent(session.content, [response])[0]!;
     const acceptedAt = response.submittedAt.toISOString();
     const snapshot = buildTargetedPresentationParticipantSnapshot(
       session,
@@ -915,6 +931,28 @@ export class PresentationLiveMutationService {
       projection,
       response,
     );
+    const block = presentationCurrentBlock(session);
+    if (
+      duplicate &&
+      ["question_reveal", "intervention", "finished"].includes(session.phase) &&
+      block?.kind === "question" &&
+      presentationResponseMatchesBlock(block, response.blockId) &&
+      isPresentationOpinionResultQuestion(block.question)
+    ) {
+      try {
+        const opinionSummary = await this.dependencies.closedOpinionSummary?.(session);
+        if (opinionSummary) {
+          const enriched = PresentationParticipantSnapshotSchema.safeParse({
+            ...snapshot,
+            opinionSummary,
+          });
+          if (enriched.success) snapshot.opinionSummary = enriched.data.opinionSummary;
+        }
+      } catch {
+        // A distribution read must never turn an accepted durable receipt into a failed save.
+        // Explicit sync can recover the optional aggregate independently.
+      }
+    }
     const acknowledgedSnapshot = PresentationParticipantSnapshotSchema.parse({
       ...snapshot,
       responseReceipt: {

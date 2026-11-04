@@ -271,6 +271,27 @@ orphan recheck; copying a recheck creates a standalone activity. Existing IDs an
 remain intact. See the [E01 acceptance record](../evidence/presentation-e01-completion.md) and
 [compatible-reader rollout](../runbooks/upgrade.md#presentation-slide-visibility-and-save-recovery-compatibility).
 
+## E02 native design foundation
+
+Explicit design/image actions opt into scene v3/document v7; geometry-only arrangement remains
+compatible with the existing scene version. Optional `design` contains closed theme/font/spacing
+tokens without parser defaults. Images may specify contain/cover and a bounded focal point; they
+retain the same private media ID. Old documents reject new fields rather than silently stripping
+them, and old JSON/hash fixtures remain unchanged.
+
+The shared native renderer resolves fixed colors and local system fonts. Design controls, preview
+and delivery use that renderer; semantic narrow layouts retain reading order and complete images.
+Layout presets require compatible object combinations and change only frames. Alignment and
+distribution preserve bounds; visual layer changes reorder nodes independently of reading order.
+Applying a design across existing native slides is one history operation and validates the entire
+document budget before changing the draft. It preserves content, IDs, hidden state, private metadata
+and frozen baselines, without converting ordinary slides or changing activities.
+
+There is no new media visitor path, migration, SDK, font service or paid entitlement. The
+[v7 rollout](../runbooks/upgrade.md#native-presentation-design-compatibility) coordinates readers and
+writers. The [verification record](../evidence/presentation-design-foundation.md) covers this first
+E02 increment; grouping, rotation, tables/charts, snap guides and full-deck templates remain open.
+
 ## Verification and open evidence
 
 The [prototype evidence record](../evidence/presentation-scene-prototype.md) identifies the fixtures,

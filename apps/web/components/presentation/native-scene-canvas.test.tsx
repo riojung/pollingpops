@@ -3,6 +3,7 @@ import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type PresentationScene } from "@openround/contracts";
 import { NativeSceneCanvas } from "./native-scene-canvas";
+import { NativeSceneView } from "./native-scene-view";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as null | {
@@ -134,6 +135,10 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     };
   }
   render();
+  const view = () =>
+    (tree.props.children as ReactElement<Record<string, any>>[]).find(
+      (child) => child.type === NativeSceneView,
+    )!;
   return {
     original,
     onChange,
@@ -141,9 +146,9 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     root,
     event,
     render,
-    view: () => tree.props.children as ReactElement<Record<string, any>>,
+    view,
     start: (ev = event(), id = "body", resize = false, handle = true) =>
-      tree.props.children.props.onNodePointerDown(ev, id, resize, handle),
+      view().props.onNodePointerDown(ev, id, resize, handle),
     move: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerMove(ev),
     finish: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerUp(ev),
     cancel: (kind: "onPointerCancel" | "onLostPointerCapture") => tree.props[kind](event()),

@@ -287,8 +287,9 @@ for (const mobile of [false, true]) {
       await guest.getByLabel("Your idea", { exact: true }).fill(firstIdea);
       await guest.getByRole("button", { name: "Submit idea", exact: true }).click();
       const own = guest
-        .locator("section")
-        .filter({ has: guest.getByRole("heading", { name: "Your submissions", exact: true }) });
+        .locator("details")
+        .filter({ has: guest.locator("summary").filter({ hasText: /^Your submissions\s*\d+$/ }) });
+      await expect(own).toHaveAttribute("open", "");
       await expect(own).toContainText("Synthetic first priority");
       await expect(own).toContainText("Awaiting review");
       await guest.getByLabel("Your idea", { exact: true }).fill("Synthetic idea to remove");

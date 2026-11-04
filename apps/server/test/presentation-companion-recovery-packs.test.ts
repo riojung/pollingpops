@@ -1,4 +1,8 @@
-import { nativeSceneBlock, richTextSceneBlock } from "./support/presentation-native-scene.js";
+import {
+  designSceneBlock,
+  nativeSceneBlock,
+  richTextSceneBlock,
+} from "./support/presentation-native-scene.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -128,6 +132,7 @@ async function fixture(
     native?: boolean;
     richText?: boolean;
     visibility?: boolean;
+    design?: boolean;
     cardsEnabled?: boolean;
     linkedPurpose?: "diagnostic" | "practice";
   } = {},
@@ -162,9 +167,13 @@ async function fixture(
   const publishedContent = options.native
     ? PresentationContentSchema.parse({
         ...legacyContent,
-        schemaVersion: options.visibility ? 6 : options.richText ? 5 : 4,
+        schemaVersion: options.design ? 7 : options.visibility ? 6 : options.richText ? 5 : 4,
         blocks: [
-          options.richText ? richTextSceneBlock() : nativeSceneBlock(),
+          options.design
+            ? designSceneBlock()
+            : options.richText
+              ? richTextSceneBlock()
+              : nativeSceneBlock(),
           ...legacyContent.blocks.slice(1),
         ],
       })
@@ -333,13 +342,14 @@ async function expectCommandNoMutation(
 }
 
 describe("Companion live Recovery Packs", () => {
-  it.each([4, 5, 6] as const)(
+  it.each([4, 5, 6, 7] as const)(
     "preserves native v%s scenes and publication when a frozen Pack is inserted live",
     async (schemaVersion) => {
       const f = await fixture({
         native: true,
         richText: schemaVersion >= 5,
-        visibility: schemaVersion === 6,
+        visibility: schemaVersion >= 6,
+        design: schemaVersion === 7,
       });
       const command = f.insertion();
       const opened = await f.service.companionCommand(command);

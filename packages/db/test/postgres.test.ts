@@ -2944,6 +2944,32 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     }
   });
 
+  it("retains v7 design tokens, image crops and hidden media across retries, restore, export and cleanup", async () => {
+    const owner = await creator("presentation-design-scene");
+    const other = await creator("presentation-design-scene-other");
+    const { draft, content, expectedMediaIds, expectedPublishedMediaIds } =
+      await expectPresentationSceneConformance({
+        repository,
+        workspaceId: owner.workspaceId,
+        otherWorkspaceId: other.workspaceId,
+        editorId: owner.userId,
+        design: true,
+      });
+    for (const [document, expected] of [
+      [draft, expectedMediaIds],
+      [content, expectedPublishedMediaIds],
+    ] as const) {
+      const collected = await repository.pool.query<{ media_id: string }>(
+        "SELECT media_id FROM openround_presentation_media_ids($1::jsonb) ORDER BY media_id",
+        [JSON.stringify(document)],
+      );
+      expect(collected.rows.map(({ media_id }) => media_id)).toEqual(expected);
+      expect(collected.rows.map(({ media_id }) => media_id)).toEqual(
+        presentationMediaIds(document).sort(),
+      );
+    }
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const owner = await creator("presentation-pack-media");
     await expectPresentationPackMediaConformance({

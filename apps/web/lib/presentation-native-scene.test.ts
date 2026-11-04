@@ -18,6 +18,7 @@ import {
   nativeImageAttachmentStatus,
   type NativeImageAttachment,
   createNativeContentBlock,
+  createDesignedNativeContentBlock,
   removeNativeNode,
   reorderNativeNode,
   updateNativeNode,
@@ -76,6 +77,26 @@ function draft(): PresentationDraft {
 }
 
 describe("native Presentation authoring operations", () => {
+  it("starts the visible New slide action with independent designed title and body objects", () => {
+    const first = createDesignedNativeContentBlock();
+    const second = createDesignedNativeContentBlock();
+    expect(first.scene).toMatchObject({
+      schemaVersion: 3,
+      design: { theme: "paper", font: "sans", spacing: "relaxed" },
+    });
+    expect(
+      first.scene!.nodes.map((node) => (node.type === "text" ? node.role : node.type)),
+    ).toEqual(["title", "body"]);
+    expect(PresentationSceneDraftSchema.safeParse(first.scene).success).toBe(true);
+    expect(first.id).not.toBe(second.id);
+    expect(
+      second.scene!.nodes.every(
+        (node) => !first.scene!.nodes.some((source) => source.id === node.id),
+      ),
+    ).toBe(true);
+    expect(createNativeContentBlock().scene!.schemaVersion).toBe(1);
+  });
+
   it("retains rich formatting and canonical text through recovery and node-remapping duplication", () => {
     const input = draft();
     input.schemaVersion = 5;

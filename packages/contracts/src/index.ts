@@ -4787,7 +4787,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4826,8 +4826,8 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6;
-    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 }; hidden?: true }>;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7;
+    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 }; hidden?: true }>;
   },
   ctx: z.RefinementCtx,
   published = false,
@@ -4867,10 +4867,21 @@ function applyPresentationSceneRules(
         message: "Formatted scenes require Presentation schema version 5",
       });
     }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === 3 &&
+      presentation.schemaVersion < 7
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Designed scenes require Presentation schema version 7",
+      });
+    }
   }
   if (
     published &&
-    presentation.schemaVersion === 6 &&
+    presentation.schemaVersion >= 6 &&
     !presentation.blocks.some((block) => block.kind !== "content" || !block.hidden)
   ) {
     ctx.addIssue({
@@ -4897,7 +4908,7 @@ export const PresentationDraftSchema = z
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
     schemaVersion: z
-      .union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)])
+      .union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7)])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockDraftSchema).max(200),
@@ -4925,7 +4936,14 @@ export const PresentationContentSchema = z
     title: z.string().trim().min(1, "Enter a presentation title").max(160),
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
+    schemaVersion: z.union([
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+      z.literal(6),
+      z.literal(7),
+    ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
@@ -5039,7 +5057,8 @@ export function migratePresentationV1(value: unknown): unknown {
     presentation.schemaVersion === 3 ||
     presentation.schemaVersion === 4 ||
     presentation.schemaVersion === 5 ||
-    presentation.schemaVersion === 6
+    presentation.schemaVersion === 6 ||
+    presentation.schemaVersion === 7
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };
@@ -5097,6 +5116,7 @@ export function migratePresentationV1(value: unknown): unknown {
 export const CreatePresentationSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(1_000).default(""),
+  initialSlide: z.enum(["native", "classic"]).optional(),
 });
 
 export const PresentationDraftMutationSchema = z.object({

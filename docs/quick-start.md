@@ -394,10 +394,13 @@ roles and entitlements; flags do not complete production or institutional readin
 
 The evidence-feature allowlist is independent of the UX beta allowlist. Enable only the workflows
 you intend to inspect. For Presentation authoring, start from **Create → Presentation**, add
-content slides and question blocks, save, preview, and publish. Content slides support six layouts
-and eight text elements total, including one title, with bounded move/resize controls, keyboard
-adjustment, layout guides, and image-area reservation. The preview and live views share the
-arrangement. See [the Presentation walkthrough](user-guide.md#create-and-host-a-presentation).
+content slides and question blocks, save, preview, and publish. Blank presentations now open a
+native slide with Design controls above the canvas; **New slide** adds another designed slide.
+Existing ordinary slides offer **Convert to native slide** in the toolbar above the canvas.
+Ordinary slides retain their six structured layouts and eight-element limit. Native slides add
+bounded text, images, shapes, connectors and design tools without requiring an activity.
+The preview and live views share the arrangement. See
+[the Presentation walkthrough](user-guide.md#create-and-host-a-presentation).
 
 In an eligible live Presentation host, select **Launch companion** to open the compact sidecar.
 Its dedicated pass expires within one hour; launching a replacement revokes the old companion

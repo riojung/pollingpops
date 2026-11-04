@@ -245,7 +245,7 @@ for (const suffix of ["", " @mobile"]) {
     await expectImageClear(slide);
     await page.getByRole("button", { name: "Redo", exact: true }).click();
     await expectImageClear(slide);
-    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
     await page.reload();
     await expectImageClear(slide);
 
@@ -431,7 +431,7 @@ test("authors can edit, save, publish, and deliver the same slide arrangement", 
   await page
     .getByRole("combobox", { name: "Selected text element" })
     .selectOption({ label: "Text box 2" });
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await expectReadableSlide(canvas.locator("[data-layout]"));
   await page.screenshot({ path: test.info().outputPath("bounded-layout-editor.png") });
 

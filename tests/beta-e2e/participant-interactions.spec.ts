@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { joinBetaRound } from "./round-join";
 import { signInBeta } from "./sign-in";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
@@ -25,7 +26,9 @@ for (const suffix of ["desktop", "@mobile"]) {
     browser,
   }) => {
     const host = page;
-    test.setTimeout(90_000);
+    // Allow one real 60s join rate window on the shared loopback fixture. Action (15s)
+    // and assertion (10s) deadlines stay unchanged; the remaining journey has its original 90s.
+    test.setTimeout(150_000);
     if (suffix === "@mobile") await host.setViewportSize({ width: 320, height: 740 });
     else await host.setViewportSize({ width: 1366, height: 768 });
     await host.addInitScript(() => {
@@ -175,13 +178,7 @@ for (const suffix of ["desktop", "@mobile"]) {
         path: `artifacts/participant-join-${suffix === "@mobile" ? "320" : "desktop"}.png`,
         fullPage: true,
       });
-      const admission = guest.waitForResponse(
-        (response) =>
-          response.request().method() === "POST" &&
-          new URL(response.url()).pathname === "/v1/sessions/join",
-      );
-      await guest.getByRole("button", { name: "Join Round", exact: true }).click();
-      const joined = await admission;
+      const joined = await joinBetaRound(guest);
       expect(joined.status()).toBe(201);
       const { participantToken } = (await joined.json()) as { participantToken: string };
       await expect(guest).toHaveURL(/\/play\//);
@@ -193,12 +190,12 @@ for (const suffix of ["desktop", "@mobile"]) {
       await unsaved
         .getByRole("textbox", { name: /^Nickname/ })
         .fill("UnsavedDraftWithLongNickname");
-      await unsaved.getByRole("button", { name: "Join Round", exact: true }).click();
+      await joinBetaRound(unsaved);
       await expect(unsaved).toHaveURL(/\/play\//);
       const confidenceFirst = await context.newPage();
       await confidenceFirst.goto(`/join?code=${session.code}`);
       await confidenceFirst.getByRole("textbox", { name: /^Nickname/ }).fill("Confidence First");
-      await confidenceFirst.getByRole("button", { name: "Join Round", exact: true }).click();
+      await joinBetaRound(confidenceFirst);
       await expect(confidenceFirst).toHaveURL(/\/play\//);
       // Return to the host after interacting with the participant tabs.
       await host.bringToFront();
@@ -517,7 +514,9 @@ for (const suffix of ["desktop", "@mobile"]) {
     page: host,
     browser,
   }) => {
-    test.setTimeout(60_000);
+    // Allow one real 60s join rate window on the shared loopback fixture. Action (15s)
+    // and assertion (10s) deadlines stay unchanged; the remaining journey has its original 60s.
+    test.setTimeout(120_000);
     await signInBeta(host);
     const choices = ["True", "False"].map((label) => ({
       id: randomUUID(),
@@ -611,13 +610,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       }
       await guest.goto(`/join?code=${session.code}`);
       await guest.getByRole("textbox", { name: /^Nickname/ }).fill("Single Tap Learner");
-      const admission = guest.waitForResponse(
-        (response) =>
-          response.request().method() === "POST" &&
-          new URL(response.url()).pathname === "/v1/sessions/join",
-      );
-      await guest.getByRole("button", { name: "Join Round", exact: true }).click();
-      const joined = await admission;
+      const joined = await joinBetaRound(guest);
       expect(joined.status()).toBe(201);
       const { participantToken } = (await joined.json()) as { participantToken: string };
       await expect(guest).toHaveURL(/\/play\//);

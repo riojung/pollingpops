@@ -66,6 +66,10 @@ import {
   updateContentTextElement,
 } from "../../lib/presentation-builder";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
+import {
+  applyNativeDesignToDeck,
+  nativeSceneDocumentVersion,
+} from "../../lib/presentation-deck-design";
 import { RecoverableOperationQueue } from "../../lib/recoverable-operation-queue";
 import { isRetryableSaveError, retryWithBackoff } from "../../lib/retry";
 import {
@@ -98,6 +102,7 @@ import {
   adaptContentSlideToScene,
   attachNativeImage,
   createNativeContentBlock,
+  createDesignedNativeContentBlock,
   nativeImageAttachmentStatus,
   type NativeImageAttachment,
 } from "../../lib/presentation-native-scene";
@@ -1001,12 +1006,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         blocks,
         ...(block.kind === "content" && block.scene
           ? {
-              schemaVersion:
-                current.schemaVersion >= 5
-                  ? current.schemaVersion
-                  : block.scene.schemaVersion === 2
-                    ? (5 as const)
-                    : (4 as const),
+              schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, block.scene),
             }
           : {}),
       };
@@ -2182,6 +2182,157 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               {t("delivery.presentationBuilder.openMap")}
             </button>
           ) : null}
+          {selectedBlock ? (
+            <div className={styles.canvasToolbar} aria-label="Selected block actions" lang="en-CA">
+              <button
+                className={styles.primarySlideAction}
+                onClick={() => addBlock(createDesignedNativeContentBlock())}
+                type="button"
+              >
+                New slide
+              </button>
+              <button
+                className={styles.compactHistory}
+                disabled={!undoStack.length}
+                onClick={undo}
+                type="button"
+              >
+                {t("delivery.builder.undo")}
+              </button>
+              <button
+                className={styles.compactHistory}
+                disabled={!redoStack.length}
+                onClick={redo}
+                type="button"
+              >
+                {t("delivery.builder.redo")}
+              </button>
+              {selectedBlock.kind === "content" && !selectedBlock.scene ? (
+                <>
+                  <button
+                    disabled={selectedBlock.textElements.length >= 8}
+                    onClick={addTextBox}
+                    type="button"
+                  >
+                    Add text box
+                  </button>
+                  <button
+                    disabled={!selectedTextElement}
+                    onClick={() => {
+                      if (!selectedTextElement) return;
+                      updateSelected((block) =>
+                        block.kind === "content"
+                          ? reorderContentTextElement(block, selectedTextElement.id, -1)
+                          : block,
+                      );
+                    }}
+                    type="button"
+                  >
+                    Move text earlier
+                  </button>
+                  <button
+                    disabled={!selectedTextElement}
+                    onClick={() => {
+                      if (!selectedTextElement) return;
+                      updateSelected((block) =>
+                        block.kind === "content"
+                          ? reorderContentTextElement(block, selectedTextElement.id, 1)
+                          : block,
+                      );
+                    }}
+                    type="button"
+                  >
+                    Move text later
+                  </button>
+                  <button
+                    className={styles.dangerButton}
+                    disabled={!selectedTextElement || selectedTextElement.role === "title"}
+                    onClick={deleteSelectedTextBox}
+                    type="button"
+                  >
+                    Delete text box
+                  </button>
+                </>
+              ) : null}
+              {selectedBlock.kind === "content" && !selectedBlock.scene ? (
+                <button
+                  className={styles.primarySlideAction}
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const converted = adaptContentSlideToScene(selectedBlock);
+                      commit((current) => ({
+                        ...updateBlock(current, selectedBlock.id, () => converted),
+                        schemaVersion: current.schemaVersion >= 5 ? current.schemaVersion : 4,
+                      }));
+                    } catch (caught) {
+                      setError(humanError(caught));
+                    }
+                  }}
+                >
+                  Convert to native slide
+                </button>
+              ) : null}
+              <button
+                disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
+                title="Keep linked rechecks after their source question."
+                onClick={() =>
+                  commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
+                }
+                type="button"
+              >
+                Move earlier
+              </button>
+              <button
+                disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
+                title="Keep linked rechecks after their source question."
+                onClick={() =>
+                  commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
+                }
+                type="button"
+              >
+                Move later
+              </button>
+              {selectedBlock.kind === "content" ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    commit((current) =>
+                      setPresentationSlideHidden(current, selectedBlock.id, !selectedBlock.hidden),
+                    )
+                  }
+                >
+                  {selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                </button>
+              ) : (
+                <p className={styles.helpText} lang="en-CA">
+                  Activities stay in the presentation. Remove an activity to exclude it; linked
+                  rechecks keep their order.
+                </p>
+              )}
+              <button
+                onClick={() => {
+                  const copy = duplicatePresentationBlock(selectedBlock);
+                  addBlock(copy);
+                }}
+                type="button"
+              >
+                Duplicate
+              </button>
+              <button
+                className={styles.dangerButton}
+                onClick={() => {
+                  const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
+                  const remaining = draft.blocks.filter((block) => block.id !== selectedBlock.id);
+                  commit((current) => removePresentationBlock(current, selectedBlock.id));
+                  setSelectedBlockId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
+                }}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          ) : null}
           {selectedBlock?.kind === "content" && selectedBlock.hidden ? (
             <p
               className={styles.hiddenBanner}
@@ -2199,6 +2350,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               <h1>{t("delivery.presentationBuilder.emptyTitle")}</h1>
               <p>{t("delivery.presentationBuilder.emptyDescription")}</p>
               <div>
+                <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
+                  New slide
+                </button>
                 <button onClick={() => addBlock(createContentBlock())} type="button">
                   {t("delivery.presentationBuilder.addContentSlide")}
                 </button>
@@ -2220,18 +2374,23 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 scene={selectedBlock.scene}
                 onUndo={undo}
                 onRedo={redo}
+                onApplyDesignToDeck={(design) => {
+                  commit((current) => {
+                    try {
+                      return applyNativeDesignToDeck(current, design);
+                    } catch (caught) {
+                      setError(humanError(caught));
+                      return current;
+                    }
+                  });
+                }}
                 onChange={(scene: PresentationScene, historyField) =>
                   commit(
                     (current) => ({
                       ...updateBlock(current, selectedBlock.id, (block) =>
                         block.kind === "content" && block.scene ? { ...block, scene } : block,
                       ),
-                      schemaVersion:
-                        current.schemaVersion >= 5
-                          ? current.schemaVersion
-                          : scene.schemaVersion === 2
-                            ? 5
-                            : 4,
+                      schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, scene),
                     }),
                     historyField ? `${selectedBlock.id}:${historyField}` : undefined,
                   )
@@ -2320,149 +2479,6 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               </div>
             </section>
           )}
-          {selectedBlock ? (
-            <div className={styles.canvasToolbar} aria-label="Selected block actions" lang="en-CA">
-              <button
-                className={styles.compactHistory}
-                disabled={!undoStack.length}
-                onClick={undo}
-                type="button"
-              >
-                {t("delivery.builder.undo")}
-              </button>
-              <button
-                className={styles.compactHistory}
-                disabled={!redoStack.length}
-                onClick={redo}
-                type="button"
-              >
-                {t("delivery.builder.redo")}
-              </button>
-              {selectedBlock.kind === "content" && !selectedBlock.scene ? (
-                <>
-                  <button
-                    disabled={selectedBlock.textElements.length >= 8}
-                    onClick={addTextBox}
-                    type="button"
-                  >
-                    Add text box
-                  </button>
-                  <button
-                    disabled={!selectedTextElement}
-                    onClick={() => {
-                      if (!selectedTextElement) return;
-                      updateSelected((block) =>
-                        block.kind === "content"
-                          ? reorderContentTextElement(block, selectedTextElement.id, -1)
-                          : block,
-                      );
-                    }}
-                    type="button"
-                  >
-                    Move text earlier
-                  </button>
-                  <button
-                    disabled={!selectedTextElement}
-                    onClick={() => {
-                      if (!selectedTextElement) return;
-                      updateSelected((block) =>
-                        block.kind === "content"
-                          ? reorderContentTextElement(block, selectedTextElement.id, 1)
-                          : block,
-                      );
-                    }}
-                    type="button"
-                  >
-                    Move text later
-                  </button>
-                  <button
-                    className={styles.dangerButton}
-                    disabled={!selectedTextElement || selectedTextElement.role === "title"}
-                    onClick={deleteSelectedTextBox}
-                    type="button"
-                  >
-                    Delete text box
-                  </button>
-                </>
-              ) : null}
-              {selectedBlock.kind === "content" && !selectedBlock.scene ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      const converted = adaptContentSlideToScene(selectedBlock);
-                      commit((current) => ({
-                        ...updateBlock(current, selectedBlock.id, () => converted),
-                        schemaVersion: current.schemaVersion >= 5 ? current.schemaVersion : 4,
-                      }));
-                    } catch (caught) {
-                      setError(humanError(caught));
-                    }
-                  }}
-                >
-                  Convert to native slide
-                </button>
-              ) : null}
-              <button
-                disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
-                title="Keep linked rechecks after their source question."
-                onClick={() =>
-                  commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
-                }
-                type="button"
-              >
-                Move earlier
-              </button>
-              <button
-                disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
-                title="Keep linked rechecks after their source question."
-                onClick={() =>
-                  commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
-                }
-                type="button"
-              >
-                Move later
-              </button>
-              {selectedBlock.kind === "content" ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    commit((current) =>
-                      setPresentationSlideHidden(current, selectedBlock.id, !selectedBlock.hidden),
-                    )
-                  }
-                >
-                  {selectedBlock.hidden ? "Show slide" : "Hide slide"}
-                </button>
-              ) : (
-                <p className={styles.helpText} lang="en-CA">
-                  Activities stay in the presentation. Remove an activity to exclude it; linked
-                  rechecks keep their order.
-                </p>
-              )}
-              <button
-                onClick={() => {
-                  const copy = duplicatePresentationBlock(selectedBlock);
-                  addBlock(copy);
-                }}
-                type="button"
-              >
-                Duplicate
-              </button>
-              <button
-                className={styles.dangerButton}
-                onClick={() => {
-                  const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
-                  const remaining = draft.blocks.filter((block) => block.id !== selectedBlock.id);
-                  commit((current) => removePresentationBlock(current, selectedBlock.id));
-                  setSelectedBlockId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
-                }}
-                type="button"
-              >
-                Delete
-              </button>
-            </div>
-          ) : null}
         </main>
 
         <aside

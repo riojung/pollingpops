@@ -4,6 +4,11 @@
   background: var(--ui-canvas);
 }
 
+/* Keep the editor responsive when page zoom makes its available width smaller than 320px. */
+:global(html):has(.builder) {
+  min-width: 0;
+}
+
 .packReviews {
   margin: 12px 18px;
 }
@@ -27,8 +32,8 @@
   position: sticky;
   z-index: 20;
   top: 0;
-  display: grid;
-  grid-template-columns: minmax(210px, 1fr) minmax(260px, 520px) minmax(520px, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 18px;
   align-items: center;
   min-height: 70px;
@@ -49,7 +54,22 @@
 }
 
 .commandActions {
+  flex: 1 1 520px;
+  min-width: 0;
+  flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.commandStart {
+  flex: 1 1 210px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.titleField {
+  flex: 2 1 260px;
+  min-width: 0;
+  max-width: 520px;
 }
 
 .commandBar button,
@@ -213,6 +233,11 @@
 
 .workspace.mapClosed.inspectorClosed {
   grid-template-columns: 0 minmax(640px, 1fr) 0;
+}
+
+.mapClosed .map,
+.inspectorClosed .inspector {
+  display: none;
 }
 
 .map,
@@ -384,6 +409,13 @@
   z-index: 2;
   top: 16px;
   left: 16px;
+}
+
+.canvasToolbar .primarySlideAction,
+.canvasToolbar .primarySlideAction:hover:not(:disabled) {
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
 }
 
 .slideCanvas,
@@ -593,7 +625,7 @@
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
-  margin: 20px auto 0;
+  margin: 0 auto 18px;
 }
 
 .compactHistory {
@@ -1011,7 +1043,7 @@
   }
 
   .commandBar {
-    grid-template-columns: auto minmax(220px, 1fr) auto;
+    column-gap: 12px;
   }
 
   .saveStatus,
@@ -1026,13 +1058,18 @@
 }
 
 @media (max-width: 920px) {
-  .commandBar {
-    grid-template-columns: 1fr auto;
+  .commandStart {
+    flex: 1 1 auto;
+  }
+
+  .commandActions {
+    flex: 0 1 auto;
   }
 
   .titleField {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    flex-basis: 100%;
+    max-width: none;
+    order: 1;
   }
 
   .workspace,

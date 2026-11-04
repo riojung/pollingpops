@@ -4,6 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneCanvas } from "./native-scene-canvas";
+import { NativeRichTextEditor } from "./native-rich-text-editor";
+import {
+  NativeSceneDesignControls,
+  NativeSceneLayoutControls,
+} from "./native-scene-design-controls";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -278,4 +283,79 @@ describe("native multi-object selection", () => {
     ).toEqual([editor.scene.nodes[0]!.id]);
     expect(editor.onChange).not.toHaveBeenCalled();
   });
+});
+
+describe("native design and rich text coexistence", () => {
+  it("keeps scene 3 and design when formatting, editing and removing formatting", () => {
+    const editor = editorHarness();
+    editor.scene.schemaVersion = 3;
+    editor.scene.design = { theme: "midnight", font: "serif", spacing: "compact" };
+    editor.render("idle");
+    const format = editor.find(
+      (element) => element.type === "button" && element.props.children === "Format text",
+    );
+    (format.props.onClick as () => void)();
+    const formatted = editor.onChange.mock.calls[0]![0];
+    expect(formatted.schemaVersion).toBe(3);
+    expect(formatted.design).toEqual(editor.scene.design);
+    editor.scene.nodes = formatted.nodes;
+    editor.render("idle");
+    const richEditor = editor.find((element) => element.type === NativeRichTextEditor);
+    const richNode = formatted.nodes[0];
+    (richEditor.props.onChange as (node: unknown) => void)({
+      ...richNode,
+      text: "Revised",
+      richText: { paragraphs: [{ kind: "paragraph", runs: [{ text: "Revised", bold: true }] }] },
+    });
+    expect(editor.onChange.mock.calls[1]![0]).toMatchObject({
+      schemaVersion: 3,
+      design: editor.scene.design,
+    });
+    const { richText: _richText, ...plain } = richNode;
+    void _richText;
+    (richEditor.props.onChange as (node: unknown) => void)(plain);
+    expect(editor.onChange.mock.calls[2]![0]).toMatchObject({
+      schemaVersion: 3,
+      design: editor.scene.design,
+    });
+    expect(editor.onChange.mock.calls[2]![0].nodes[0]).not.toHaveProperty("richText");
+  });
+});
+
+describe("native design discoverability", () => {
+  it.each(["legacy", "designed"] as const)(
+    "places one %s design fieldset above the canvas while object controls stay below",
+    (kind) => {
+      const editor = editorHarness();
+      if (kind === "designed") {
+        editor.scene.schemaVersion = 3;
+        editor.scene.design = { theme: "paper", font: "sans", spacing: "relaxed" };
+      }
+      const original = structuredClone(editor.scene);
+      editor.render("idle");
+      const root = editor.find((element) => element.type === "div");
+      const children = root.props.children as ReactElement<Record<string, unknown>>[];
+      const design = elements(children[0]).filter(
+        (element) => element.type === NativeSceneDesignControls,
+      );
+      expect(design).toHaveLength(1);
+      expect(
+        elements(root).filter((element) => element.type === NativeSceneDesignControls),
+      ).toHaveLength(1);
+      expect(design[0]!.props.scene).toBe(editor.scene);
+      expect(design[0]!.props.onChange).toBe(editor.onChange);
+      expect(children[1]!.type).toBe(NativeSceneCanvas);
+      const lower = children[2]!;
+      expect(lower.props["aria-label"]).toBe("Native slide editor");
+      expect(children[0]!.props.className).toBe(lower.props.className);
+      expect(elements(lower).some((element) => element.type === NativeSceneLayoutControls)).toBe(
+        true,
+      );
+      expect(
+        elements(lower).some((element) => element.props["data-native-text-fields"] === "true"),
+      ).toBe(true);
+      expect(editor.onChange).not.toHaveBeenCalled();
+      expect(editor.scene).toEqual(original);
+    },
+  );
 });

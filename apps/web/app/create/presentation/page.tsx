@@ -30,6 +30,7 @@ function PresentationLauncher() {
         body: JSON.stringify({
           title: "Untitled presentation",
           description: "",
+          initialSlide: "native",
         }),
       });
       recordCreationEvent("creation_completed", "blank", "presentation");

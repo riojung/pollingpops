@@ -5,6 +5,7 @@ import {
   ApplyPresentationAuthoringJobSchema,
   CopyRoundQuestionsToPresentationSchema,
   CreatePresentationSchema,
+  createPresentationDesignScene,
   InsertAuthoringProposalsIntoPresentationSchema,
   PresentationContentSchema,
   PresentationDraftSchema,
@@ -422,16 +423,22 @@ export async function registerPresentationRoutes(
       title: input.title,
       description: input.description,
       experiencePreset: { id: "pops", version: 1 },
-      schemaVersion: 2,
+      schemaVersion: input.initialSlide === "native" ? 7 : 2,
       blocks: [
         {
           id: firstBlockId,
           kind: "content",
           layout: "title_body",
-          textElements: initialTextElements(firstBlockId, "title_body", "", ""),
+          textElements:
+            input.initialSlide === "native"
+              ? []
+              : initialTextElements(firstBlockId, "title_body", "", ""),
           mediaId: null,
           mediaAlt: null,
           speakerNotes: "",
+          ...(input.initialSlide === "native"
+            ? { scene: createPresentationDesignScene(randomUUID(), randomUUID()) }
+            : {}),
         },
       ],
     };
@@ -443,7 +450,7 @@ export async function registerPresentationRoutes(
       status: "draft",
       draft,
       draftRevision: 0,
-      draftSchemaVersion: 2,
+      draftSchemaVersion: draft.schemaVersion,
       currentVersionId: null,
       folderId: null,
       publishedDraftRevision: null,

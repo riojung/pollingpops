@@ -549,7 +549,7 @@ export function BoardGuest({ id }: { id: string }) {
         {notice ? t(notice) : ""}
       </p>
       <div className={guestStyles.workspace}>
-        <div className={guestStyles.canvas} aria-label={copy.sharedCanvas}>
+        <div className={guestStyles.canvas} role="region" aria-label={copy.sharedCanvas}>
           {guest && token.current ? (
             <PublishedWorkshopCanvas
               sourceBoardId={id}

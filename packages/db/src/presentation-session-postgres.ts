@@ -14,6 +14,7 @@ import type { PostgresRepository } from "./postgres.js";
 import { WorkspaceDeletionInProgressError } from "./types.js";
 import {
   PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL,
+  PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL,
   mapCommandReceipt,
   mapCredential,
   mapParticipant,
@@ -114,8 +115,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                 WHERE current_response.session_id = session.id
                   AND current_response.participant_id = $3
                   AND session.current_block_index >= 0
-                  AND current_response.block_id::text =
-                    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+                  AND ${PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL}
                 LIMIT 1) AS current_response
          FROM presentation_live_sessions session
          CROSS JOIN LATERAL (
@@ -151,8 +151,7 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
                   WHERE current_response.session_id = session.id
                     AND current_response.participant_id = $3
                     AND session.current_block_index >= 0
-                    AND current_response.block_id::text =
-                      session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+                    AND ${PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL}
                   LIMIT 1) AS current_response,
               standing.score AS standing_score,
               standing.rank AS standing_rank

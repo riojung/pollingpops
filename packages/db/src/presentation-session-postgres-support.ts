@@ -29,6 +29,23 @@ export const PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL = `(
       WHERE response.session_id = session.id)
 )`;
 
+/** Match E04 frozen UUID spelling without changing literal legacy acknowledgement semantics. */
+export const PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL = `(
+  CASE WHEN (
+    session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
+    OR (
+      session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'poll'
+      AND COALESCE(session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'maxSelections', '1')
+        IN ('2', '3', '4', '5', '6')
+    )
+  ) THEN openround_presentation_uuid_equal(
+    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id',
+    current_response.block_id::text
+  ) ELSE current_response.block_id::text =
+    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+  END
+)`;
+
 export function mapSession(row: QueryResultRow): PresentationSessionRecord {
   return {
     id: String(row.id),

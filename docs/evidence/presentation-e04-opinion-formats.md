@@ -228,6 +228,17 @@ and ready reports under all eight opinion/Quick Check/session-context flag combi
 verifies unchanged stored/canonical payloads and hashes. All 28 focused server tests, server
 typecheck, scoped lint and formatting passed. Independent review cleared both fixes.
 
+Fresh PostgreSQL CI then exposed a related acknowledgement lookup: two queries compared frozen
+uppercase E04 IDs to canonical lowercase UUID text and returned a null current response. Both
+queries now use E04-only semantic UUID comparison while retaining literal legacy comparison.
+Shared conformance asserts the current response on initial acceptance and open/revealed retries.
+A fresh restricted PostgreSQL 17 run passed all 91 migrations/checksums twice, 65 invalid-write
+probes and ten selected PG tests, including actual acknowledgement reads for uppercase poll and
+ranking blocks. Its owned container/forward were removed and all fourteen existing containers
+were unchanged. Evidence: `/tmp/pollingpops-e04-pg/result-fc0f28df90.json` (15.65 seconds; test
+portion 7.67 seconds). The narrow query correction also passed 26 focused DB tests, DB typecheck,
+lint, formatting and independent review.
+
 The original PR's cancelled Chromium mobile job exhausted its 25-minute budget downloading
 Playwright OS dependencies; no browser tests ran in that job. Its aggregate gate failed because
 core was cancelled. No product or test threshold change was made for that infrastructure failure.

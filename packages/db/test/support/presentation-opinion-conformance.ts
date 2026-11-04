@@ -145,6 +145,7 @@ export async function expectPresentationOpinionResponseConformance(
     await expect(input.repository.acceptResponse(record, 1)).resolves.toMatchObject({
       status: "accepted",
       response: { response, responseSchemaVersion: 2, correct: null, score: 0 },
+      acknowledgement: { projection: { currentResponse: { id: record.id, response } } },
     });
     if (upper) {
       await expect(
@@ -223,6 +224,7 @@ export async function expectPresentationOpinionResponseConformance(
     await expect(input.repository.acceptResponse(record, 1)).resolves.toMatchObject({
       status: "duplicate",
       response: { response },
+      acknowledgement: { projection: { currentResponse: { id: record.id, response } } },
     });
     await expect(
       input.repository.getResponseContext(session.id, tokenHash, record.idempotencyKey!),

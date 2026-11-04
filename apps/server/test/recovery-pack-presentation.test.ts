@@ -1,4 +1,8 @@
-import { nativeSceneBlock, richTextSceneBlock } from "./support/presentation-native-scene.js";
+import {
+  designSceneBlock,
+  nativeSceneBlock,
+  richTextSceneBlock,
+} from "./support/presentation-native-scene.js";
 import { signInFromVerificationResponse } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -265,15 +269,20 @@ async function updateFixture() {
 }
 
 describe("Recovery Pack Presentation insertion", () => {
-  it.each([4, 5, 6] as const)(
+  it.each([4, 5, 6, 7] as const)(
     "preserves native v%s scenes when inserting and publishing a frozen Pack baseline",
     async (schemaVersion) => {
       const { app, cookie } = await setup();
       const { version, presentation } = await material(app, cookie);
-      const block = schemaVersion >= 5 ? richTextSceneBlock() : nativeSceneBlock();
+      const block =
+        schemaVersion === 7
+          ? designSceneBlock()
+          : schemaVersion >= 5
+            ? richTextSceneBlock()
+            : nativeSceneBlock();
       const blocks = [
         block,
-        ...(schemaVersion === 6
+        ...(schemaVersion >= 6
           ? [{ ...nativeSceneBlock([], "HIDDEN Pack neighbor"), hidden: true as const }]
           : []),
       ];

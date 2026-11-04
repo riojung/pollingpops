@@ -254,6 +254,9 @@ test("dense native slides keep mobile map and inspector controls above their nod
   const layeredText = page.locator(`[data-native-scene] [data-node-id="${highNode.id}"]`);
   await expect(layeredText).toHaveCSS("z-index", "31");
   await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
+  // Design and slide actions now precede the canvas. Put the dense node behind the fixed
+  // drawers explicitly so this remains a test of overlapping layers and pointer access.
+  await layeredText.scrollIntoViewIfNeeded();
   const slide = page
     .getByRole("complementary", { name: "Presentation map", exact: true })
     .getByRole("button", { name: new RegExp(title) });

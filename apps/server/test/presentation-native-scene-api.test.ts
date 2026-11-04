@@ -15,7 +15,11 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
-import { nativeSceneBlock, richTextSceneBlock } from "./support/presentation-native-scene.js";
+import {
+  designSceneBlock,
+  nativeSceneBlock,
+  richTextSceneBlock,
+} from "./support/presentation-native-scene.js";
 
 const workspaceId = "10000000-0000-4000-8000-00000000c004";
 let app: FastifyInstance | undefined;
@@ -90,7 +94,48 @@ function expectPublicScene(snapshot: unknown, scene: unknown) {
 }
 
 describe("native Presentation scenes API", () => {
-  it.each([4, 5, 6] as const)(
+  it("creates a styled native starter atomically when requested while retaining classic API creation", async () => {
+    const built = await setup();
+    for (const initialSlide of ["native", "classic", undefined] as const) {
+      const response = await built.app.inject({
+        method: "POST",
+        url: "/v1/presentations",
+        headers: { cookie: built.cookie },
+        payload: { title: "Blank creation", ...(initialSlide ? { initialSlide } : {}) },
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      const record = response.json().presentation;
+      expect(record.draftRevision).toBe(0);
+      expect(record.draft.schemaVersion).toBe(initialSlide === "native" ? 7 : 2);
+      expect(record.draft.blocks).toHaveLength(1);
+      const block = record.draft.blocks[0];
+      if (initialSlide === "native") {
+        expect(block.scene).toMatchObject({
+          schemaVersion: 3,
+          design: { theme: "paper", font: "sans", spacing: "relaxed" },
+        });
+        expect(block.textElements).toEqual([]);
+        expect(
+          block.scene.nodes.map((node: { type: string; role: string; text: string }) => ({
+            type: node.type,
+            role: node.role,
+            text: node.text,
+          })),
+        ).toEqual([
+          { type: "text", role: "title", text: "" },
+          { type: "text", role: "body", text: "" },
+        ]);
+      } else {
+        expect(block.scene).toBeUndefined();
+        expect(block.textElements).toHaveLength(2);
+      }
+      expect((await built.presentations.getPresentation(workspaceId, record.id))?.draft).toEqual(
+        record.draft,
+      );
+    }
+  });
+
+  it.each([4, 5, 6, 7] as const)(
     "saves exact retries and delivers immutable v%s scenes through completion",
     async (schemaVersion) => {
       const built = await setup();
@@ -112,7 +157,7 @@ describe("native Presentation scenes API", () => {
           createdAt: new Date(),
         });
       const hiddenMediaId = randomUUID();
-      if (schemaVersion === 6)
+      if (schemaVersion >= 6)
         await built.repository.createMediaAsset({
           id: hiddenMediaId,
           workspaceId,
@@ -126,15 +171,20 @@ describe("native Presentation scenes API", () => {
       const hidden = nativeSceneBlock([hiddenMediaId], "HIDDEN draft-only scene");
       const hiddenImage = hidden.scene.nodes.find((node) => node.type === "image")!;
       if (hiddenImage.type === "image") hiddenImage.altText = "";
-      const sceneBlock = schemaVersion >= 5 ? richTextSceneBlock : nativeSceneBlock;
+      const sceneBlock =
+        schemaVersion === 7
+          ? designSceneBlock
+          : schemaVersion >= 5
+            ? richTextSceneBlock
+            : nativeSceneBlock;
       const draft = PresentationDraftSchema.parse({
         title: "Native content-only deck",
         schemaVersion,
         blocks: [
           sceneBlock(mediaIds.slice(0, 2)),
-          ...(schemaVersion === 6 ? [{ ...hidden, hidden: true }] : []),
+          ...(schemaVersion >= 6 ? [{ ...hidden, hidden: true }] : []),
           sceneBlock(mediaIds.slice(2), "Native next steps"),
-          ...(schemaVersion === 6
+          ...(schemaVersion >= 6
             ? [
                 {
                   id: randomUUID(),
@@ -199,7 +249,7 @@ describe("native Presentation scenes API", () => {
       expect(JSON.stringify(version.content)).not.toContain("HIDDEN");
       expect((await built.presentations.getPresentation(workspaceId, id))?.draft).toEqual(draft);
       const laterDraft = structuredClone(draft);
-      if (schemaVersion === 6)
+      if (schemaVersion >= 6)
         laterDraft.blocks = laterDraft.blocks.map((block) => {
           if (block.kind !== "content") return block;
           const { hidden: _hidden, ...shown } = block;
@@ -281,7 +331,7 @@ describe("native Presentation scenes API", () => {
         url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
       });
       expect(unauthorized.statusCode).toBe(401);
-      if (schemaVersion === 6) {
+      if (schemaVersion >= 6) {
         for (const path of ["media", "host-media"]) {
           const hiddenAccess = await target.inject({
             method: "GET",

@@ -595,6 +595,10 @@ learning efficacy.
 ## Presentation authoring and Library APIs
 
 - `GET|POST /v1/presentations`; `GET` accepts `archived=true|false`.
+  Creation accepts optional `initialSlide: "native" | "classic"`. `native` atomically creates a
+  document-v7/scene-v3 title/body starter with paper/sans/relaxed design. Omitted or `classic`
+  retains the existing document-v2 starter. The blank web launcher explicitly requests `native`;
+  existing drafts and immutable versions are never converted automatically.
 - `GET /v1/presentations/{id}` — saved draft and version metadata, with a draft ETag.
 - `PUT /v1/presentations/{id}/draft` — fenced, idempotent save with
   `{ draft, expectedRevision, mutationId, schemaVersion: 2 }`.

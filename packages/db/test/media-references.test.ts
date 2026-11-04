@@ -134,6 +134,19 @@ describe("media references", () => {
     });
   });
 
+  it("retains v7 design tokens, image crops and hidden media across retries, restore, export and cleanup", async () => {
+    const repository = new MemoryRepository();
+    const creator = await owner(repository);
+    const other = await owner(repository);
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: creator.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: creator.userId,
+      design: true,
+    });
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const repository = new MemoryRepository();
     const creator = await owner(repository);

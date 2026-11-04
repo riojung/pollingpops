@@ -8,6 +8,30 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation design foundation E02 slice November 4, 2026
+
+Native slides can opt into four color themes and system font/spacing tokens. Authors can apply a
+design to all existing native slides, including hidden ones, without converting ordinary slides
+or changing activities. Five layout presets reposition compatible existing objects; alignment,
+distribution and visual layer controls preserve content, IDs, connectors and semantic reading order.
+Image contain/cover and focal positions use existing private media, with complete images in the
+narrow reading column. Fit feedback identifies text that needs more space.
+
+The blank launcher now explicitly creates a styled native title/body slide; existing API creation
+without that option retains its classic representation. Design and slide actions appear above
+the canvas, with a prominent New slide/conversion path. Per-slide design/image limit failures
+show local recovery guidance and preserve content without creating a save or history entry.
+
+New design/image options use scene v3 and document v7. Existing scenes retain their JSON and
+rendering until an author opts in; readers must precede writers. There is no new SQL migration,
+font download, SDK or subscription entitlement. See the
+[verification record](evidence/presentation-design-foundation.md) and
+[upgrade boundary](runbooks/upgrade.md#native-presentation-design-compatibility).
+
+E02 remains in progress. Snap guides, grouping, rotation, tables/charts and complete scenario
+templates remain later increments. Creator observations, manual accessibility, physical devices,
+capacity, operating-cost measurements and deployed qualification remain open.
+
 ### Presentation E01 completion November 4, 2026
 
 E01 is implemented locally, including visual slide hiding, linked-question filmstrip safeguards,

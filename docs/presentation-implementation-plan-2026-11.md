@@ -120,8 +120,9 @@ the subscription floor without completing the customer workflow.
 ## Codex implementation work packages
 
 E00 now has an isolated local implementation; see [ADR 003](decisions/003-presentation-scene.md)
-and the [prototype record](evidence/presentation-scene-prototype.md). The later production work
-packages remain planned. E01 implementation is complete locally; release qualification remains open.
+and the [prototype record](evidence/presentation-scene-prototype.md). E01 implementation is complete
+locally; release qualification remains open. E02's first design-foundation increment is implemented
+below; its remaining scope and later packages remain planned.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -204,6 +205,16 @@ extract bounded components rather than growing the existing builder into a secon
 Included in the native-deck milestone.
 
 ### E02 Deliver design quality and reusable information components
+
+The first E02 increment implements the native design foundation: four bounded color themes,
+system font/spacing tokens, five content-preserving layout presets, image contain/cover with a
+focal point, selection alignment/distribution and independent visual layer controls. It uses
+opt-in scene v3/document v7 and adds no hosted service or paid dependency. See the
+[verification record](evidence/presentation-design-foundation.md) and
+[reader rollout](runbooks/upgrade.md#native-presentation-design-compatibility).
+This is the first E02 slice, not completion of the package. Snap guides, persistent grouping,
+rotation, editable tables/charts and the 10–15 full-deck templates remain subsequent work, along
+with the human and deployment qualifications below.
 
 Dependencies: E01. Add theme tokens for fonts/colors/spacing, reusable layout presets, image
 crop/fit, alignment/distribution, snap guides, grouping, layer controls and bounded rotation.

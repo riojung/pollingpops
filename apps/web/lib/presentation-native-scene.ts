@@ -1,5 +1,6 @@
 import {
   adaptContentSlideToScene,
+  createPresentationDesignScene,
   PRESENTATION_SCENE_MAX_NODES,
   type PresentationDraft,
   type ContentSlideDraft,
@@ -37,6 +38,15 @@ export function createNativeContentBlock(): ContentSlideDraft {
 }
 
 export { adaptContentSlideToScene };
+
+/** The visible New slide action starts with design controls and editable title/body content. */
+export function createDesignedNativeContentBlock(): ContentSlideDraft {
+  const block = createNativeContentBlock();
+  return {
+    ...block,
+    scene: createPresentationDesignScene(block.scene!.nodes[0]!.id, clientUuid()),
+  };
+}
 
 export function boundNativeSceneFrame(frame: PresentationSceneFrame): PresentationSceneFrame {
   const width = Math.max(1, Math.min(100, frame.width));

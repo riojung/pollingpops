@@ -1,5 +1,22 @@
 import { randomUUID } from "node:crypto";
 
+export function designSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
+  const block = richTextSceneBlock(mediaIds, title);
+  return {
+    ...block,
+    scene: {
+      ...block.scene,
+      schemaVersion: 3 as const,
+      design: { theme: "midnight" as const, font: "serif" as const, spacing: "relaxed" as const },
+      nodes: block.scene.nodes.map((node) =>
+        node.type === "image"
+          ? { ...node, fit: "cover" as const, focalPoint: { x: 25, y: 75 } }
+          : node,
+      ),
+    },
+  };
+}
+
 export function richTextSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
   const block = nativeSceneBlock(mediaIds, title);
   const body = {

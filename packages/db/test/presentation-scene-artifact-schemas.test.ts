@@ -10,6 +10,7 @@ import { MemoryPresentationRepository } from "../src/presentations.js";
 import {
   PRESENTATION_CONTENT_SCHEMA_VERSION,
   PRESENTATION_DRAFT_SCHEMA_VERSION,
+  PRESENTATION_DESIGN_SCHEMA_VERSION,
   PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
   PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
   PRESENTATION_VISIBILITY_SCHEMA_VERSION,
@@ -109,6 +110,22 @@ function visibilityPresentation(): PresentationDraft {
   });
 }
 
+function designPresentation(): PresentationDraft {
+  const draft = visibilityPresentation();
+  draft.schemaVersion = 7;
+  for (const block of draft.blocks) {
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected native slide");
+    block.scene.schemaVersion = 3;
+    block.scene.design = { theme: "ocean", font: "serif", spacing: "compact" };
+    for (const node of block.scene.nodes) {
+      if (node.type !== "image") continue;
+      node.fit = "cover";
+      node.focalPoint = { x: 25, y: 75 };
+    }
+  }
+  return PresentationDraftSchema.parse(draft);
+}
+
 describe("durable native Presentation artifact version", () => {
   it("opts into v4 and retains ordinary v2 defaults", () => {
     expect(PRESENTATION_DRAFT_SCHEMA_VERSION).toBe(2);
@@ -145,16 +162,18 @@ describe("durable native Presentation artifact version", () => {
     expect(() => upcastPresentationContent(draft, 4)).toThrow("Describe the image");
   });
 
-  it.each([4, 5, 6] as const)(
+  it.each([4, 5, 6, 7] as const)(
     "reads v%s draft, history and immutable version without rewriting hash or native IDs",
     async (schemaVersion) => {
       const repository = new MemoryPresentationRepository();
       const draft =
-        schemaVersion === 6
-          ? visibilityPresentation()
-          : schemaVersion === 5
-            ? richTextPresentation()
-            : presentation();
+        schemaVersion === 7
+          ? designPresentation()
+          : schemaVersion === 6
+            ? visibilityPresentation()
+            : schemaVersion === 5
+              ? richTextPresentation()
+              : presentation();
       const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
       const workspaceId = randomUUID();
       const presentationId = randomUUID();
@@ -319,5 +338,65 @@ describe("durable rich-text Presentation artifact version", () => {
     image.altText = null;
     expect(upcastPresentationSessionContent(draft, 5)).toEqual(draft);
     expect(() => upcastPresentationContent(draft, 5)).toThrow("Describe the image");
+  });
+});
+
+describe("durable design Presentation artifact version", () => {
+  it("opts into v7 and retains design, crops and full editable hidden content with exact publication hashes", () => {
+    expect(PRESENTATION_DESIGN_SCHEMA_VERSION).toBe(7);
+    expect(PRESENTATION_DRAFT_SCHEMA_VERSION).toBe(2);
+    expect(PRESENTATION_CONTENT_SCHEMA_VERSION).toBe(2);
+    const draft = designPresentation();
+    const serialized = JSON.stringify(draft);
+    expect(upcastPresentationDraft(JSON.parse(serialized), 7)).toEqual(draft);
+    expect(JSON.stringify(upcastPresentationDraft(JSON.parse(serialized), 7))).toBe(serialized);
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    expect(content.blocks).toEqual([draft.blocks[0]]);
+    expect(content.blocks[0]).toMatchObject({
+      scene: {
+        schemaVersion: 3,
+        design: { theme: "ocean", font: "serif", spacing: "compact" },
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ type: "image", fit: "cover", focalPoint: { x: 25, y: 75 } }),
+        ]),
+      },
+    });
+    const contentJson = JSON.stringify(content);
+    const expectedHash = createHash("sha256").update(contentJson).digest("hex");
+    for (const parse of [upcastPresentationContent, upcastPresentationSessionContent]) {
+      const parsed = parse(JSON.parse(contentJson), 7);
+      expect(parsed).toEqual(content);
+      expect(JSON.stringify(parsed)).toBe(contentJson);
+      expect(createHash("sha256").update(JSON.stringify(parsed)).digest("hex")).toBe(expectedHash);
+    }
+  });
+
+  it.each([undefined, null, 1, 2, 3, 4, 5, 6])(
+    "rejects designed scenes under an old stored column %s without discarding appearance",
+    (schemaVersion) => {
+      const draft = designPresentation();
+      for (const block of draft.blocks) if (block.kind === "content") delete block.hidden;
+      for (const parse of [
+        upcastPresentationDraft,
+        upcastPresentationContent,
+        upcastPresentationSessionContent,
+      ])
+        expect(() => parse(draft, schemaVersion)).toThrow("schema version 7");
+    },
+  );
+
+  it("rejects hidden or incomplete v7 session content instead of using legacy draft validation", () => {
+    const draft = designPresentation();
+    for (const parse of [upcastPresentationContent, upcastPresentationSessionContent])
+      expect(() => parse(draft, 7)).toThrow();
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    const block = content.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected native slide");
+    const image = block.scene.nodes.find((node) => node.type === "image")!;
+    if (image.type !== "image") throw new Error("Expected image");
+    image.altText = null;
+    expect(upcastPresentationDraft(content, 7)).toEqual(content);
+    for (const parse of [upcastPresentationContent, upcastPresentationSessionContent])
+      expect(() => parse(content, 7)).toThrow("Describe the image");
   });
 });

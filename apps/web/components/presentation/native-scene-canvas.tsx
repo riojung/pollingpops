@@ -8,6 +8,7 @@ import {
 } from "../../lib/presentation-native-geometry";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import styles from "./native-scene.module.css";
+import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
 
 type Gesture = {
   base: PresentationScene;
@@ -184,6 +185,7 @@ export function NativeSceneCanvas({
           if (next !== scene) onChange(next);
         }}
       />
+      <NativeSceneFitFeedback root={root} scene={preview?.base === scene ? preview.scene : scene} />
     </div>
   );
 }

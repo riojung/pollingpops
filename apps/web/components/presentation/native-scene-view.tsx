@@ -19,6 +19,7 @@ import {
 } from "@openround/contracts";
 import { boundNativeSceneFrame, nativeNodeLabel } from "../../lib/presentation-native-scene";
 import styles from "./native-scene.module.css";
+import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
 import { NativeRichTextView } from "./native-rich-text-view";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
@@ -97,6 +98,22 @@ export function NativeSceneView({
   ) => void;
 }) {
   const markerId = useId();
+  const design = scene.design;
+  const palette = design ? NATIVE_DESIGN_THEMES[design.theme] : undefined;
+  const designStyle =
+    design && palette
+      ? ({
+          "--native-background": palette.background,
+          "--native-text": palette.text,
+          "--native-link": palette.link,
+          "--native-border": palette.border,
+          "--native-font": NATIVE_DESIGN_FONTS[design.font],
+          "--native-padding": design.spacing === "compact" ? "5px" : "10px",
+          "--native-body-leading": design.spacing === "compact" ? 1.2 : 1.45,
+          "--native-title-leading": design.spacing === "compact" ? 1.04 : 1.12,
+          "--native-paragraph-gap": design.spacing === "compact" ? "0.25em" : "0.55em",
+        } as CSSProperties)
+      : undefined;
   const nodes = new Map(scene.nodes.map((node) => [node.id, node]));
   const editing = Boolean(onSelect);
   function frameKey(event: KeyboardEvent<HTMLButtonElement>, node: FramedNode, resize: boolean) {
@@ -128,6 +145,10 @@ export function NativeSceneView({
       className={styles.stage}
       aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
       data-native-scene="true"
+      data-native-theme={design?.theme}
+      data-native-font={design?.font}
+      data-native-spacing={design?.spacing}
+      style={designStyle}
     >
       <svg
         className={styles.connections}
@@ -180,6 +201,7 @@ export function NativeSceneView({
             className={`${styles.node} ${editing ? styles.editableNode : ""} ${(selectedNodeIds?.includes(id) ?? selectedNodeId === id) ? styles.selected : ""}`}
             style={style}
             data-node-id={id}
+            data-node-type={node.type}
             data-frame={JSON.stringify(node.frame)}
             onClick={
               editing && !onNodePointerDown ? (event) => onSelect?.(id, event.shiftKey) : undefined
@@ -203,7 +225,16 @@ export function NativeSceneView({
             ) : null}
             {node.type === "shape" ? <Shape node={node} /> : null}
             {node.type === "image" ? (
-              <div className={styles.image}>
+              <div
+                className={styles.image}
+                data-image-fit={node.fit ?? "contain"}
+                style={
+                  {
+                    "--native-image-fit": node.fit ?? "contain",
+                    "--native-image-position": `${node.focalPoint?.x ?? 50}% ${node.focalPoint?.y ?? 50}%`,
+                  } as CSSProperties
+                }
+              >
                 {renderImage ? (
                   renderImage(node.mediaId, node.altText)
                 ) : (

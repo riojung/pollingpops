@@ -1,0 +1,46 @@
+import {
+  PresentationDraftSchema,
+  PresentationSceneDesignSchema,
+  type PresentationDraft,
+  type PresentationScene,
+  type PresentationSceneDesign,
+} from "@openround/contracts";
+
+/** Promote only when needed; adding plain slides or formatting never downgrades a deck. */
+export function nativeSceneDocumentVersion(
+  current: PresentationDraft["schemaVersion"],
+  scene: Pick<PresentationScene, "schemaVersion">,
+): PresentationDraft["schemaVersion"] {
+  const minimum = scene.schemaVersion === 3 ? 7 : scene.schemaVersion === 2 ? 5 : 4;
+  return current >= minimum ? current : minimum;
+}
+
+/** Apply public design tokens without converting ordinary slides or rewriting any content. */
+export function applyNativeDesignToDeck(
+  draft: PresentationDraft,
+  value: PresentationSceneDesign,
+): PresentationDraft {
+  const design = PresentationSceneDesignSchema.parse(value);
+  let changed = false;
+  const blocks = draft.blocks.map((block) => {
+    if (block.kind !== "content" || !block.scene) return block;
+    if (
+      block.scene.schemaVersion === 3 &&
+      block.scene.design?.theme === design.theme &&
+      block.scene.design.font === design.font &&
+      block.scene.design.spacing === design.spacing
+    )
+      return block;
+    changed = true;
+    return {
+      ...block,
+      scene: { ...block.scene, schemaVersion: 3 as const, design: { ...design } },
+    };
+  });
+  if (!changed) return draft;
+  const next = { ...draft, schemaVersion: 7 as const, blocks };
+  // Check the complete document budget before applying an all-slide operation. Keep existing
+  // objects and frozen baselines rather than replacing them with a parsed/canonicalized copy.
+  PresentationDraftSchema.parse(next);
+  return next;
+}

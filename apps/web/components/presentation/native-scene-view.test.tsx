@@ -143,3 +143,63 @@ describe("production native scene rendering", () => {
     expect(markup).toMatch(/aria-label="Add native image"[^>]*disabled=""/);
   });
 });
+
+describe("shared native design rendering", () => {
+  it.each(["preview", "live", "editor"] as const)(
+    "renders the same fixed design for %s",
+    (variant) => {
+      const scene = nativeSceneFixture();
+      scene.schemaVersion = 3;
+      scene.design = { theme: "midnight", font: "serif", spacing: "compact" };
+      const markup = renderToStaticMarkup(
+        <ContentSlideView block={{ ...createNativeContentBlock(), scene }} variant={variant} />,
+      );
+      expect(markup).toContain('data-native-theme="midnight"');
+      expect(markup).toContain('data-native-font="serif"');
+      expect(markup).toContain('data-native-spacing="compact"');
+      expect(markup).toContain("--native-background:#111b2e");
+      expect(markup).toContain("--native-text:#f6f8ff");
+      expect(markup).toContain("--native-padding:5px");
+      expect(markup).not.toContain("fonts.googleapis");
+    },
+  );
+
+  it("scopes image crop settings around caller-owned image wrappers and keeps alt text", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 3;
+    scene.nodes.push({
+      id: "image",
+      type: "image",
+      mediaId: "11111111-1111-4111-8111-111111111111",
+      altText: "Complete evidence",
+      fit: "cover",
+      focalPoint: { x: 12, y: 88 },
+      frame: { x: 70, y: 40, width: 20, height: 30 },
+    });
+    scene.readingOrder.push("image");
+    const markup = renderToStaticMarkup(
+      <NativeSceneView
+        scene={scene}
+        renderImage={(_id, alt) => (
+          <figure>
+            <img src="/authorized-image" alt={alt ?? ""} />
+          </figure>
+        )}
+      />,
+    );
+    expect(markup).toContain('data-image-fit="cover"');
+    expect(markup).toContain("--native-image-fit:cover");
+    expect(markup).toContain("--native-image-position:12% 88%");
+    expect(markup).toContain('alt="Complete evidence"');
+    expect(markup).toContain("<figure>");
+  });
+
+  it("leaves legacy scenes without implicit design fields or design styles", () => {
+    const scene = nativeSceneFixture();
+    const original = structuredClone(scene);
+    const markup = renderToStaticMarkup(<NativeSceneView scene={scene} />);
+    expect(markup).not.toContain("data-native-theme");
+    expect(markup).not.toContain("--native-background");
+    expect(scene).toEqual(original);
+  });
+});

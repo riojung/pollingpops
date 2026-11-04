@@ -9,6 +9,7 @@ import {
   plainTextToPresentationRichText,
   presentationRichTextToPlainText,
   type PresentationScene,
+  type PresentationSceneDesign,
   type PresentationSceneNode,
 } from "@openround/contracts";
 import { clientUuid } from "../../lib/uuid";
@@ -21,6 +22,12 @@ import {
 import { type SceneImageRenderer } from "./native-scene-view";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import {
+  NativeSceneArrangementControls,
+  NativeSceneDesignControls,
+  NativeSceneImageDesignControls,
+  NativeSceneLayoutControls,
+} from "./native-scene-design-controls";
 import {
   moveNativeSceneNodes,
   removeNativeSceneNodes,
@@ -45,6 +52,7 @@ export function NativeSceneEditor({
   onUploadImage,
   onUndo,
   onRedo,
+  onApplyDesignToDeck,
 }: {
   scene: PresentationScene;
   onChange: (scene: PresentationScene, historyField?: string) => void;
@@ -55,6 +63,7 @@ export function NativeSceneEditor({
   onUploadImage: (file: File, altText: string) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onApplyDesignToDeck?: (design: PresentationSceneDesign) => void;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
@@ -120,6 +129,13 @@ export function NativeSceneEditor({
   }
   return (
     <div className={styles.editor}>
+      <div className={styles.controls} lang="en-CA">
+        <NativeSceneDesignControls
+          scene={scene}
+          onChange={onChange}
+          onApplyDesignToDeck={onApplyDesignToDeck}
+        />
+      </div>
       <NativeSceneCanvas
         scene={scene}
         renderImage={renderImage}
@@ -128,6 +144,13 @@ export function NativeSceneEditor({
         onChange={onChange}
       />
       <div className={styles.controls} aria-label="Native slide editor" lang="en-CA">
+        <NativeSceneLayoutControls scene={scene} onChange={onChange} />
+        <NativeSceneArrangementControls
+          scene={scene}
+          selectedIds={selectedIds}
+          selectedId={selected.id}
+          onChange={onChange}
+        />
         <fieldset>
           <legend>Slide objects · reading order</legend>
           <ol className={styles.nodeList}>
@@ -302,7 +325,10 @@ export function NativeSceneEditor({
               onChange={(node, field) => {
                 const next = updateNativeNode(scene, selected.id, () => node);
                 onChange(
-                  PresentationSceneDraftSchema.parse({ ...next, schemaVersion: 2 }),
+                  PresentationSceneDraftSchema.parse({
+                    ...next,
+                    schemaVersion: scene.schemaVersion === 3 ? 3 : 2,
+                  }),
                   field ? `native:${selected.id}:${field}` : undefined,
                 );
               }}
@@ -339,7 +365,7 @@ export function NativeSceneEditor({
                             text: presentationRichTextToPlainText(richText),
                             richText,
                           })),
-                          schemaVersion: 2,
+                          schemaVersion: scene.schemaVersion === 3 ? 3 : 2,
                         }),
                       );
                     } catch {
@@ -376,6 +402,9 @@ export function NativeSceneEditor({
                 }
               />
             </label>
+          ) : null}
+          {selected.type === "image" ? (
+            <NativeSceneImageDesignControls scene={scene} node={selected} onChange={onChange} />
           ) : null}
           {selected.type === "shape" ? (
             <>

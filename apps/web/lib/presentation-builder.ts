@@ -533,7 +533,7 @@ export function setPresentationSlideHidden(
   void _hidden;
   return {
     ...draft,
-    schemaVersion: hidden ? 6 : draft.schemaVersion,
+    schemaVersion: hidden && draft.schemaVersion < 6 ? 6 : draft.schemaVersion,
     blocks: draft.blocks.map((block) =>
       block.id === blockId ? (hidden ? { ...selected, hidden: true } : visible) : block,
     ),

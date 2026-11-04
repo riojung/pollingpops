@@ -606,6 +606,12 @@ not remove previously activated Q&A.
 
 ### Organize Presentation slides and recover edits
 
+Choose **Create → Presentation → Blank presentation** to open a native slide with its Design panel
+ready above the canvas. **New slide** in the top slide toolbar adds another designed slide.
+For an existing ordinary slide, **Convert to native slide** is in that same toolbar; conversion
+retains content and notes and supports Undo. Hide/show, duplicate and reorder actions are above
+the canvas as well. Existing decks are converted only when you choose that action.
+
 Use the slide map to add, duplicate, move or delete slides. **Hide slide** keeps a visual slide in
 the editable deck and its history while omitting it from preview and the next published version.
 Choose **Show slide** to include it again. Hiding and showing support **Undo** and **Redo**.
@@ -698,7 +704,26 @@ that refer to it. Duplicating a slide creates independent nodes and reconnects i
 Native edits use the same autosave, **Undo**, **Redo**, recovery and conflict review as the existing
 builder. Wait for **Saved**, reload to verify the saved slide, then preview and publish. Publication
 freezes that version; later draft edits do not change a running Presentation. Speaker notes and
-source information remain private. Grouping, themes, charts and advanced layout tools remain later work.
+source information remain private. Persistent grouping, charts and advanced layout tools remain later work.
+
+In **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
+**Apply design to all native slides** applies those choices to existing native slides, including
+hidden ones. Ordinary slides and activities keep their current appearance. Undo/Redo restores
+the complete design change. System fonts use those available on the viewer's device; review fit
+feedback after changing the font or layout.
+
+Choose an available layout button to reposition existing text and images. Presets require the
+shown object combination and never delete content to make it fit. Use **Undo** to restore the
+previous positions. Select multiple objects to align them or distribute at least three evenly.
+Distribution is unavailable when their sizes cannot fit without overlap. Layer controls move the
+last selected object in front of or behind other visual objects; reading order stays unchanged.
+Connectors follow their objects and stay behind them.
+
+For an image, **Contain** shows the whole image; **Cover** crops it to fill the frame. Adjust its
+focal X/Y position to keep the important area in view. Narrow screens show the complete image in
+the reading column. Cropping never changes the source image or its access permissions. Preview
+and published delivery use the same design; later draft changes leave existing sessions unchanged.
+Grouping, rotation, tables/charts and complete deck templates remain later E02 work.
 
 To add formatting, select a native text object and choose **Format text**. Select characters in its
 text field, then choose **Bold** or **Italic**. **Paragraph style** changes the current or selected
@@ -711,6 +736,8 @@ removes a link from the selected characters. Links open in a new tab in preview 
 clicks in the editor keep you in the editor. Pasting adds plain text and preserves formatting on
 unchanged text. Image, file and other clipboard payloads without plain text leave selected text unchanged.
 Edits that exceed text, formatting or slide limits show an error and leave the previous text intact.
+Design and image-fit changes also leave the slide unchanged when they exceed its limit. Follow
+the displayed guidance to shorten text or remove an object, then retry the change.
 **Remove formatting** returns the object to plain text; **Undo** restores its formatting.
 While editing native text, use Cmd/Ctrl+Z for **Undo** and Cmd/Ctrl+Shift+Z (or Ctrl+Y) for **Redo**.
 These commands restore text and formatting together, including the initial formatting change.

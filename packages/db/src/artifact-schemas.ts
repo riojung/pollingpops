@@ -58,6 +58,8 @@ export const PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION = 4;
 export const PRESENTATION_RICH_TEXT_SCHEMA_VERSION = 5;
 /** Editable slide visibility opts into v6; publications contain visible content only. */
 export const PRESENTATION_VISIBILITY_SCHEMA_VERSION = 6;
+/** Native design tokens and image framing opt into v7 without rewriting legacy scenes. */
+export const PRESENTATION_DESIGN_SCHEMA_VERSION = 7;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -172,6 +174,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_VISIBILITY_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 6)),
   ],
+  [
+    PRESENTATION_DESIGN_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 7)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -201,6 +207,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_VISIBILITY_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 6)),
+  ],
+  [
+    PRESENTATION_DESIGN_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 7)),
   ],
 ]);
 
@@ -266,7 +276,7 @@ export function upcastPresentationContent(
  * Legacy live snapshots used draft validation, including partially authored old snapshots.
  * Preserve that read path, but validate session-only metadata with the frozen content contract
  * so it cannot be stripped by the authoring parser or restore invalid live insertion metadata.
- * Version 6 always uses the publication parser: hidden editable content must never enter a
+ * Versions 6 and 7 always use the publication parser: hidden editable content must never enter a
  * session through the legacy partial-snapshot path.
  */
 export function upcastPresentationSessionContent(
@@ -275,6 +285,7 @@ export function upcastPresentationSessionContent(
 ): PresentationContent {
   if (
     schemaVersion === PRESENTATION_VISIBILITY_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_DESIGN_SCHEMA_VERSION ||
     (value &&
       typeof value === "object" &&
       ("liveQuickCheck" in value || "livePublishedQuestions" in value))

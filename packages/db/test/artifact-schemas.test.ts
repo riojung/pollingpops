@@ -6,6 +6,7 @@ import {
   UnsupportedArtifactSchemaVersionError,
   upcastPresentationContent,
   upcastPresentationDraft,
+  upcastPresentationSessionContent,
   upcastRoundContent,
   upcastRoundDraft,
 } from "../src/index.js";
@@ -238,8 +239,14 @@ describe("persisted artifact schema upcasters", () => {
   it.each([
     ["Round draft", () => upcastRoundDraft({}, 5), 5, [1, 2, 3, 4]],
     ["Round content", () => upcastRoundContent({}, 5), 5, [1, 2, 3, 4]],
-    ["Presentation draft", () => upcastPresentationDraft({}, 7), 7, [1, 2, 3, 4, 5, 6]],
-    ["Presentation content", () => upcastPresentationContent({}, 7), 7, [1, 2, 3, 4, 5, 6]],
+    ["Presentation draft", () => upcastPresentationDraft({}, 8), 8, [1, 2, 3, 4, 5, 6, 7]],
+    ["Presentation content", () => upcastPresentationContent({}, 8), 8, [1, 2, 3, 4, 5, 6, 7]],
+    [
+      "Presentation session",
+      () => upcastPresentationSessionContent({}, 8),
+      8,
+      [1, 2, 3, 4, 5, 6, 7],
+    ],
   ])(
     "rejects an unknown schema version for %s",
     (label, parse, schemaVersion, supportedVersions) => {
@@ -338,7 +345,7 @@ describe("persisted artifact schema upcasters", () => {
             },
             1,
           ),
-          contentSchemaVersion: 7,
+          contentSchemaVersion: 8,
           contentHash: "unknown-version",
           sourceDraftRevision: 0,
           publishedAt: now,

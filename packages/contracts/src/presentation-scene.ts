@@ -5,11 +5,34 @@ import {
   presentationRichTextToPlainText,
 } from "./presentation-rich-text";
 
-/** Plain scenes opt into Presentation v4; formatted scene v2 requires Presentation v5. */
+/** Scene versions opt into Presentation document v4, v5 and v7 respectively. */
 export const PRESENTATION_SCENE_SCHEMA_VERSION = 1 as const;
 export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
+export const PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION = 3 as const;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
+
+/** Named, closed design tokens; omission preserves the scene's established appearance. */
+export const PresentationSceneDesignSchema = z
+  .object({
+    theme: z.enum(["paper", "midnight", "ocean", "sunset"]),
+    font: z.enum(["sans", "serif", "mono"]),
+    spacing: z.enum(["relaxed", "compact"]),
+  })
+  .strict();
+export type PresentationSceneDesign = z.infer<typeof PresentationSceneDesignSchema>;
+
+export const PresentationSceneImageFitSchema = z.enum(["contain", "cover"]);
+export type PresentationSceneImageFit = z.infer<typeof PresentationSceneImageFitSchema>;
+
+/** Percentages within the source image, used only by a cover crop. */
+export const PresentationSceneFocalPointSchema = z
+  .object({
+    x: z.number().finite().min(0).max(100),
+    y: z.number().finite().min(0).max(100),
+  })
+  .strict();
+export type PresentationSceneFocalPoint = z.infer<typeof PresentationSceneFocalPointSchema>;
 
 function hasControlCharacters(value: string, allowTextWhitespace = false) {
   return Array.from(value).some((character) => {
@@ -104,8 +127,19 @@ const imageNode = z
     // This is an authorization reference, never an unrestricted URL or storage path.
     mediaId: z.string().uuid().toLowerCase(),
     altText: plainText(300).nullable(),
+    fit: PresentationSceneImageFitSchema.optional(),
+    focalPoint: PresentationSceneFocalPointSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((node, context) => {
+    if ("focalPoint" in node && node.fit !== "cover") {
+      context.addIssue({
+        code: "custom",
+        path: ["focalPoint"],
+        message: "Image focal points require cover fit",
+      });
+    }
+  });
 const shapeNode = z
   .object({
     ...framedNode,
@@ -146,13 +180,22 @@ export const PresentationSceneDraftSchema = z
     schemaVersion: z.union([
       z.literal(PRESENTATION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION),
     ]),
     aspectRatio: z.literal("16:9"),
+    design: PresentationSceneDesignSchema.optional(),
     nodes: z.array(PresentationSceneNodeSchema).min(1).max(PRESENTATION_SCENE_MAX_NODES),
     readingOrder: z.array(identifier).min(1).max(PRESENTATION_SCENE_MAX_NODES),
   })
   .strict()
   .superRefine((scene, context) => {
+    if (scene.schemaVersion < PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION && "design" in scene) {
+      context.addIssue({
+        code: "custom",
+        path: ["design"],
+        message: "Slide design requires scene schema version 3",
+      });
+    }
     const byId = new Map(scene.nodes.map((node) => [node.id, node]));
     if (byId.size !== scene.nodes.length) {
       context.addIssue({ code: "custom", path: ["nodes"], message: "Node IDs must be unique" });
@@ -177,6 +220,16 @@ export const PresentationSceneDraftSchema = z
       });
     }
     for (const [index, node] of scene.nodes.entries()) {
+      if (scene.schemaVersion < PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION && node.type === "image") {
+        for (const field of ["fit", "focalPoint"] as const) {
+          if (!(field in node)) continue;
+          context.addIssue({
+            code: "custom",
+            path: ["nodes", index, field],
+            message: "Image design requires scene schema version 3",
+          });
+        }
+      }
       if (scene.schemaVersion === 1 && node.type === "text" && "richText" in node) {
         context.addIssue({
           code: "custom",
@@ -247,6 +300,35 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
   },
 );
 export type PresentationScene = z.infer<typeof PresentationSceneSchema>;
+
+/** Explicit native-creation entry point; parsing older scenes never installs these defaults. */
+export function createPresentationDesignScene(
+  titleId: string,
+  bodyId: string,
+): PresentationSceneDraft {
+  return {
+    schemaVersion: 3,
+    aspectRatio: "16:9",
+    design: { theme: "paper", font: "sans", spacing: "relaxed" },
+    nodes: [
+      {
+        id: titleId,
+        type: "text",
+        role: "title",
+        text: "",
+        frame: { x: 7, y: 7, width: 86, height: 20 },
+      },
+      {
+        id: bodyId,
+        type: "text",
+        role: "body",
+        text: "",
+        frame: { x: 7, y: 33, width: 86, height: 59 },
+      },
+    ],
+    readingOrder: [titleId, bodyId],
+  };
+}
 
 export function presentationSceneTitle(scene: PresentationSceneDraft): string {
   const title = scene.nodes.find((node) => node.type === "text" && node.role === "title");

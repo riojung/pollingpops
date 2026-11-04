@@ -134,6 +134,32 @@ acknowledgements, pending receipt reload, newer remote edits and local preview/d
 The [E01 acceptance record](../evidence/presentation-e01-completion.md) records local verification;
 it does not replace staging, scanner/storage, physical-device or manual-accessibility qualification.
 
+## Native Presentation design compatibility
+
+Design tokens and image fit/focal points opt a native scene into version 3 and its Presentation
+document into version 7. Themes, fonts and spacing use closed tokens; no HTML, arbitrary CSS,
+font download or remote asset URL is admitted. Existing scene v1/v2 and document v1–v6 JSON,
+default document v2, accepted mutation-envelope v2 and frozen Pack baselines remain unchanged.
+Geometry-only layout, alignment, distribution and layer edits do not require promotion.
+
+Fence draft mutations, publication and session creation at ingress, drain accepted writes and
+deploy matching v7-capable server, jobs, artifact readers and web clients before reopening writers.
+Reload active clients onto compatible assets; old strict scene readers cannot consume scene v3.
+Existing feature/workspace and private-image scanning/lifecycle policies remain authoritative.
+
+No additional SQL migration is required. Image references remain scene image nodes; migration 089
+already retains them independently of scene version, including hidden draft/history assets. Keep
+that migration. Once v7 data exists, rollback requires v7-compatible readers and writers or a
+forward repair. Disabling the new controls cannot make an old binary safe. Never rewrite stored
+versions, baseline hashes or retry identities to downgrade them.
+
+Verify scene3/doc7 save/retry/reload, all-slide design Undo/Redo, hidden slides, ordinary slides,
+layout/reading-order independence, image ownership/crop, immutable publication, host/participant/
+Companion and live Pack insertion. v7 session reads use strict publication validation. Check
+text-fit feedback and complete images in the narrow reading column. See the
+[verification record](../evidence/presentation-design-foundation.md) for executed checks and
+remaining manual/device/production qualification. This slice adds no commercial entitlement.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.

@@ -5,6 +5,8 @@ import { type PresentationScene } from "@openround/contracts";
 import {
   moveNativeSceneNodes,
   resizeNativeSceneNode,
+  snapNativeSceneMove,
+  type NativeSnapGuide,
 } from "../../lib/presentation-native-geometry";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import styles from "./native-scene.module.css";
@@ -42,6 +44,7 @@ export function NativeSceneCanvas({
   const [preview, setPreview] = useState<{
     base: PresentationScene;
     scene: PresentationScene;
+    guides: NativeSnapGuide[];
   } | null>(null);
 
   function release(active: Gesture) {
@@ -122,20 +125,33 @@ export function NativeSceneCanvas({
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
     if (Math.hypot(dx, dy) < 2 && active.preview === active.base) return;
-    active.preview = active.resize
-      ? resizeNativeSceneNode(
-          active.base,
-          active.id,
-          (dx / active.width) * 100,
-          (dy / active.height) * 100,
-        )
-      : moveNativeSceneNodes(
-          active.base,
-          active.ids,
-          (dx / active.width) * 100,
-          (dy / active.height) * 100,
-        );
-    setPreview({ base: active.base, scene: active.preview });
+    const snapped =
+      !active.resize && !event.altKey
+        ? snapNativeSceneMove(
+            active.base,
+            active.ids,
+            (dx / active.width) * 100,
+            (dy / active.height) * 100,
+            active.width,
+            active.height,
+          )
+        : null;
+    active.preview =
+      snapped?.scene ??
+      (active.resize
+        ? resizeNativeSceneNode(
+            active.base,
+            active.id,
+            (dx / active.width) * 100,
+            (dy / active.height) * 100,
+          )
+        : moveNativeSceneNodes(
+            active.base,
+            active.ids,
+            (dx / active.width) * 100,
+            (dy / active.height) * 100,
+          ));
+    setPreview({ base: active.base, scene: active.preview, guides: snapped?.guides ?? [] });
   }
   function finish(event: PointerEvent<HTMLDivElement>) {
     const active = gesture.current;
@@ -169,22 +185,43 @@ export function NativeSceneCanvas({
         }
       }}
     >
-      <NativeSceneView
-        scene={preview?.base === scene ? preview.scene : scene}
-        renderImage={renderImage}
-        selectedNodeIds={selectedNodeIds}
-        onSelect={onSelect}
-        onNodePointerDown={start}
-        onGeometryKey={(id, dx, dy, resize) => {
-          cancel();
-          const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
-          if (!selectedNodeIds.includes(id)) onSelect(id);
-          const next = resize
-            ? resizeNativeSceneNode(scene, id, dx, dy)
-            : moveNativeSceneNodes(scene, ids, dx, dy);
-          if (next !== scene) onChange(next);
-        }}
-      />
+      <div className={styles.canvasSurface}>
+        <NativeSceneView
+          scene={preview?.base === scene ? preview.scene : scene}
+          renderImage={renderImage}
+          selectedNodeIds={selectedNodeIds}
+          onSelect={onSelect}
+          onNodePointerDown={start}
+          onGeometryKey={(id, dx, dy, resize) => {
+            cancel();
+            const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
+            if (!selectedNodeIds.includes(id)) onSelect(id);
+            const next = resize
+              ? resizeNativeSceneNode(scene, id, dx, dy)
+              : moveNativeSceneNodes(scene, ids, dx, dy);
+            if (next !== scene) onChange(next);
+          }}
+        />
+        {preview?.base === scene && preview.guides.length ? (
+          <svg
+            className={styles.snapGuides}
+            viewBox="0 0 1600 900"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            data-native-snap-guides="true"
+          >
+            {preview.guides.map((guide) => (
+              <line
+                key={guide.axis}
+                x1={guide.axis === "x" ? guide.position * 16 : 0}
+                x2={guide.axis === "x" ? guide.position * 16 : 1600}
+                y1={guide.axis === "y" ? guide.position * 9 : 0}
+                y2={guide.axis === "y" ? guide.position * 9 : 900}
+              />
+            ))}
+          </svg>
+        ) : null}
+      </div>
       <NativeSceneFitFeedback root={root} scene={preview?.base === scene ? preview.scene : scene} />
     </div>
   );

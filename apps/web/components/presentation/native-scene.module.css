@@ -129,6 +129,43 @@
 .canvas {
   min-width: 0;
 }
+.canvasSurface {
+  position: relative;
+  min-width: 0;
+}
+.snapGuides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 60;
+}
+.snapGuides line {
+  stroke: #367bad;
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  vector-effect: non-scaling-stroke;
+}
+.groupOutline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px dashed #1769aa;
+  pointer-events: none;
+}
+.groupOutline button {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  pointer-events: auto;
+  touch-action: none;
+  min-width: 28px;
+  min-height: 28px;
+  color: #102a43;
+  background: white;
+  border: 1px solid #1769aa;
+  border-radius: 4px;
+}
 .editableNode {
   cursor: grab;
 }
@@ -305,6 +342,11 @@
     top: auto !important;
     width: 100% !important;
     height: auto !important;
+    transform: none !important;
+  }
+  .groupOutline,
+  .snapGuides {
+    display: none;
   }
   .node h1,
   .node p {

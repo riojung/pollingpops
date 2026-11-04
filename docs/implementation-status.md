@@ -8,6 +8,30 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E02 composition and information components November 4, 2026
+
+The remaining E02 software scope is implemented locally: transient snap guides, persistent flat
+groups, proportional group resizing, bounded rotation with attached connector anchors, editable
+tables and deterministic bar/line/pie charts. Group arrangement preserves internal geometry,
+semantic reading order and existing media authority. New information objects have visible data
+tables, authored descriptions and staged CSV/TSV editing with discrete Apply/Undo steps.
+
+Twelve original eight-slide native scenario decks cover broad creation without required activities;
+the nine existing facilitated templates remain available. The gallery provides shared-renderer
+thumbnails and keyboard-accessible full-deck previews. Explicit external HTTPS video and
+captions/transcript links use existing rich text without provider embeds or automatic requests.
+
+New persisted composition and data fields opt into scene v4/document v8. Older documents and
+hashes, classic API default v2, blank native creation v7 and mutation envelope v2 retain their
+representations. Full-document validation rejects oversized edits before history or autosave and
+retains staged data/link inputs. No SQL migration, paid service, font download or entitlement is
+added. See the [E02 acceptance record](evidence/presentation-e02-completion.md) and
+[reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
+
+Verification is recorded separately from observed creator usability, manual assistive technology,
+physical devices, native browser zoom, operating-cost/capacity measurements and hosted deployment
+qualification. Those evidence gates remain open; this is not a broad competitor-parity claim.
+
 ### Presentation design foundation E02 slice November 4, 2026
 
 Native slides can opt into four color themes and system font/spacing tokens. Authors can apply a
@@ -28,9 +52,10 @@ font download, SDK or subscription entitlement. See the
 [verification record](evidence/presentation-design-foundation.md) and
 [upgrade boundary](runbooks/upgrade.md#native-presentation-design-compatibility).
 
-E02 remains in progress. Snap guides, grouping, rotation, tables/charts and complete scenario
-templates remain later increments. Creator observations, manual accessibility, physical devices,
-capacity, operating-cost measurements and deployed qualification remain open.
+At this earlier checkpoint, snap guides, grouping, rotation, tables/charts and complete scenario
+templates were subsequent work. They are covered by the completion increment above. Creator
+observations, manual accessibility, physical devices, capacity, operating-cost measurements and
+deployed qualification remain open.
 
 ### Presentation E01 completion November 4, 2026
 

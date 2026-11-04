@@ -636,12 +636,75 @@ body text at most 4,000. Layout is `title`, `title_body`, `media`, `quote`, `sec
 Optional `frame: { x, y, width, height }` values are finite canvas percentages: coordinates 0–100, width 12–100, height 6–100, and the rectangle must fit inside the
 canvas. Arbitrary CSS is not accepted. Drafts may keep empty text or incomplete image descriptions;
 publishing requires slide text or an image, and nonblank `mediaAlt` for an image. A Presentation
-contains at most 200 blocks and publication requires a valid interactive main question.
+contains at most 200 blocks and publication requires at least one visible content slide or valid
+interactive question. Content-only decks do not require an artificial activity.
 
 Read upcasters project legacy content-slide `title`/`body` fields into v2 text elements with
 stable IDs; they do not rewrite immutable published rows. Unsupported future schema versions fail
 closed. Public live content projections include layout, text elements, media ID, and image alt,
 while excluding speaker notes, citations, and source disclosure.
+
+### Native scenes and composition versions
+
+Native visuals remain `kind: "content"` blocks with an authoritative `scene`, empty
+`textElements`, and null block-level `mediaId`/`mediaAlt`. Scene v1 uses Presentation document v4;
+rich text adds scene v2/document v5, visibility adds document v6, and design/image fit adds scene
+v3/document v7. Composition adds **scene v4/document v8**. Document v8 also accepts older scene
+versions; older documents reject scene v4 rather than discarding its fields. Persisted draft,
+history, immutable-content and session readers must support v8 before writers are enabled.
+The draft mutation envelope remains **`schemaVersion: 2`**, independently of `draft.schemaVersion`.
+Default API creation remains v2; the explicit blank web starter remains scene3/document7.
+
+All scenes retain the 16:9 aspect ratio, at most 50 nodes, 128 KiB serialized UTF-8 scene budget,
+stable IDs and an explicit `readingOrder` containing every node exactly once. Native documents
+retain the 3 MiB budget, including hidden blocks and frozen Pack baselines. Existing v1–v7 JSON
+and immutable hashes are not rewritten. Document-v8 publication/session admission validates the
+complete visible content and excludes hidden editable blocks.
+
+Scene v4 adds the following closed fields and node types:
+
+- `groups?: [{ id, nodeIds }]`: at most 25 flat groups, each containing 2–50 distinct existing
+  framed nodes. A node belongs to at most one group. Group IDs are distinct from node IDs;
+  groups cannot contain connectors or other groups. Movement, proportional resizing, alignment
+  and layers operate on stored groups without changing semantic reading order.
+- Framed nodes may declare finite `rotation` from −180 to 180 degrees. Both their raw frame and
+  their rotated painted bounds must stay inside the slide. Geometry uses the physical 16:9
+  ratio, not square percentage coordinates. The presence of rotation, including zero, requires
+  scene4/document8; readers do not install a rotation default in old JSON.
+- A table node is `{ id, type: "table", frame, rotation?, caption, headers, rows }`.
+  `caption` is at most 160 characters; `headers` has 1–6 strings of at most 120 characters;
+  `rows` has 1–20 rows with exactly one string per header, at most 300 characters per cell.
+  Publication requires a nonblank caption and headings; cells remain literal text.
+- A chart node is `{ id, type: "chart", frame, rotation?, chartType, title, summary, categories, series }`,
+  with `chartType: "bar" | "line" | "pie"`. Title is at most 160 characters,
+  summary 800, category/series labels 80, categories 1–20, and series 1–4. Each series is
+  `{ name, values }`, with exactly one finite numeric value per category and absolute values
+  at most `1e12`. Pie charts require exactly one nonnegative series with a positive total.
+  Publication requires nonblank title, summary, category and series labels. Rendering uses local
+  SVG and a full labeled data table; no remote chart or spreadsheet service is called.
+
+CSV/TSV parsing and cell editing are local authoring operations. **Preview pasted data** stages a
+replacement grid; **Apply table changes**/**Apply chart changes** commits one existing revisioned
+draft mutation and one Undo operation. **Discard staged changes** restores the object's current
+data. Transient snap guides use a six-screen-pixel movement tolerance, with Alt bypass and Escape
+cancellation; guide state is never serialized. No new endpoint is required for these operations.
+
+The web catalogue combines 12 original eight-slide native scenarios with nine retained facilitated
+v2 templates, 21 entries in total. The native factories explicitly create document8/scene4 decks, use fresh block/node
+IDs and carry no asset media IDs or external assets. Template creation uses the existing
+`POST /v1/presentations` then fenced `PUT …/draft`, always with envelope v2. A failed PUT retry in
+the open chooser reuses its exact pending draft, revision and mutation ID instead of creating a
+second blank shell. Read-only shared-renderer preview does not create a presentation.
+
+**External video** creates an ordinary rich-text node containing a title, an HTTPS video link and
+a required HTTPS captions/transcript fallback. The helper rejects embedded URL credentials; the
+existing general rich-text link contract remains unchanged. Links open only on an explicit click,
+in a new tab with opener/referrer protection. There is no provider metadata request, iframe,
+script, thumbnail or video-byte load during authoring/preview, no availability probe and no
+uploaded-video transcoding. The existing `frame-src 'none'` and `media-src 'self'` CSP remains
+unchanged. Images retain the existing private reference and scan/lifecycle rules; table/chart
+data and links add no media-reference path or SQL migration. See the
+[v8 reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
 
 ## Source-grounded authoring APIs
 

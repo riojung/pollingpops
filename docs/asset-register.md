@@ -19,6 +19,47 @@ Written feature guides are original project copy in `apps/web/lib/help-feature-g
 Their cover cards and individual Help pages do not embed production screenshots, private
 workspace content, or external artwork. Adding a guide does not enable the documented feature.
 
+## Native Presentation scenarios and information components
+
+The 12 native scenario decks are original project-authored copy, worked examples, speaker notes,
+layout compositions and illustrative inline data, distributed under Apache-2.0. Their source is
+`apps/web/lib/presentation-native-template-content.json`; the factory is
+`apps/web/lib/presentation-native-templates.ts`. Each deck has eight slides. The nine existing
+facilitated templates in `apps/web/lib/presentation-templates.ts` remain available separately in
+the combined 21-template catalogue.
+
+| Workflow                | Original worked example                               |
+| ----------------------- | ----------------------------------------------------- |
+| Startup pitch           | HarborTask: a clearer repair queue                    |
+| Client proposal         | Northline Museum: a practical visit-planning redesign |
+| Project update          | Canopy portal migration: a decision-ready update      |
+| Quarterly strategy      | Aster's next quarter: focus before expansion          |
+| Portfolio case study    | Cedar Station: a wayfinding case study                |
+| Event talk              | Small decisions, visible consequences                 |
+| Product demo            | Mapline: follow a handoff from request to completion  |
+| Customer onboarding     | Wren Studio: your first useful week                   |
+| Practical workshop      | From booking friction to a small service experiment   |
+| Lesson/explainer        | A change is not yet an explanation                    |
+| Research findings       | Field notes offline: an illustrative research readout |
+| Business decision brief | Community print room: repair, replace or share?       |
+
+The organizations, situations and numerical values in these worked examples are explicitly
+fictional/illustrative. They are not customer evidence, interview quotations, study findings,
+vendor offers or validated outcome claims. Notes tell authors which assumptions and example details to
+replace with their own sourced information. No private workspace content, stored media IDs,
+external assets or provider links are bundled into these factories.
+
+| Component                                                      | Origin and license                                                                   | Distribution                                                                                                                                                       |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native scene layouts, groups, rotation and snap-guide geometry | Original project code and bounded geometry; Apache-2.0                               | `apps/web/lib/presentation-native-geometry.ts`, `presentation-native-design.ts` and the native scene components; no imported competitor drawing or editor asset    |
+| Inline table and bar/line/pie chart visuals                    | Original local SVG/DOM rendering and illustrative numeric data; Apache-2.0           | `apps/web/components/presentation/native-scene-data-view.tsx` and its CSS; full data alternatives accompany plots; no charting-service image or external data feed |
+| Native scenario thumbnails and full-deck preview               | Original scenario content rendered by the existing shared slide renderer; Apache-2.0 | `apps/web/components/workspace/presentation-template-preview.tsx`; no copied screenshots or remote thumbnail service                                               |
+| Theme and font choices                                         | Original palette/token code; Apache-2.0 for project code                             | System font stacks reference fonts already available on the viewer's device; no third-party font files are distributed by this feature                             |
+
+External-video controls add authored HTTPS destinations and captions/transcript links only. They
+bundle no provider media, player, SDK, artwork, downloaded font or transcoding output and do not
+change the licence of any destination content.
+
 ## Onboarding video guides
 
 The Help page uses fresh Polling Pops screen recordings of isolated, synthetic demo

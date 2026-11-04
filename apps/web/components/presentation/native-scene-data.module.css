@@ -1,0 +1,209 @@
+.editor {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.editor label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.editor input,
+.editor select,
+.editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+}
+.editor textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.editor input[readonly],
+.editor textarea[readonly] {
+  background: var(--ui-surface-muted, #f0f4f8);
+}
+.help,
+.error {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.error {
+  color: var(--ui-danger, #a42828);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.actions button {
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.actions button:disabled {
+  opacity: 0.5;
+}
+.gridWrap {
+  min-width: 0;
+  max-width: 100%;
+}
+.editGrid,
+.dataTable {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+.editGrid caption {
+  margin-bottom: 8px;
+  text-align: start;
+  font-weight: 700;
+}
+.editGrid td,
+.editGrid th {
+  min-width: 0;
+  padding: 3px;
+}
+.editor .editGrid textarea {
+  min-height: 42px;
+}
+.dataView {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: var(--native-padding, 6px);
+  overflow: auto;
+  color: var(--native-text, #102a43);
+  background: var(--native-background, #fff);
+  font-size: clamp(12px, 1.7cqw, 20px);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.dataTable caption {
+  padding-block: 0 8px;
+  font-weight: 700;
+  text-align: start;
+  white-space: pre-wrap;
+}
+.dataTable th,
+.dataTable td {
+  padding: 6px;
+  text-align: start;
+  vertical-align: top;
+  border: 1px solid var(--native-border, #94a3b8);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.dataTable th {
+  font-weight: 700;
+}
+.chart {
+  container-type: inline-size;
+  container-name: native-data-chart;
+}
+.chart figcaption {
+  display: grid;
+  gap: 6px;
+  white-space: pre-wrap;
+}
+.chart figcaption strong {
+  font-size: 1.1em;
+}
+.chartColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+  min-width: 0;
+  align-items: start;
+}
+.chartVisual,
+.chartColumns > table {
+  min-width: 0;
+}
+.plot {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-block: 8px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.legend li {
+  min-width: 0;
+  max-width: 100%;
+}
+.swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-inline-end: 5px;
+}
+.categoryHelp {
+  margin-block: 8px;
+  font-size: 0.9em;
+}
+@media (min-width: 701px) {
+  @container native-data-chart (min-width: 600px) {
+    .chartColumns {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+  }
+}
+@media (max-width: 700px) {
+  .dataView {
+    height: auto;
+    overflow: visible;
+    font-size: 16px;
+  }
+  .editGrid tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 5px;
+    border-bottom: 1px solid var(--ui-border, #cbd5e1);
+  }
+  .editGrid th,
+  .editGrid td {
+    display: block;
+  }
+  .dataTable,
+  .dataTable thead,
+  .dataTable tbody,
+  .dataTable tr,
+  .dataTable td,
+  .dataTable th,
+  .dataTable caption {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .dataTable tr {
+    margin-block: 8px;
+  }
+  .dataTable td::before {
+    content: attr(data-label) ": ";
+    font-weight: 700;
+  }
+}

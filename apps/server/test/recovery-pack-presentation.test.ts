@@ -1,4 +1,5 @@
 import {
+  compositionSceneBlock,
   designSceneBlock,
   nativeSceneBlock,
   richTextSceneBlock,
@@ -269,17 +270,19 @@ async function updateFixture() {
 }
 
 describe("Recovery Pack Presentation insertion", () => {
-  it.each([4, 5, 6, 7] as const)(
+  it.each([4, 5, 6, 7, 8] as const)(
     "preserves native v%s scenes when inserting and publishing a frozen Pack baseline",
     async (schemaVersion) => {
       const { app, cookie } = await setup();
       const { version, presentation } = await material(app, cookie);
       const block =
-        schemaVersion === 7
-          ? designSceneBlock()
-          : schemaVersion >= 5
-            ? richTextSceneBlock()
-            : nativeSceneBlock();
+        schemaVersion === 8
+          ? compositionSceneBlock()
+          : schemaVersion === 7
+            ? designSceneBlock()
+            : schemaVersion >= 5
+              ? richTextSceneBlock()
+              : nativeSceneBlock();
       const blocks = [
         block,
         ...(schemaVersion >= 6

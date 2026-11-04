@@ -147,6 +147,19 @@ describe("media references", () => {
     });
   });
 
+  it("retains v8 flat groups, rotation and inline data with exact media, history and retry behavior", async () => {
+    const repository = new MemoryRepository();
+    const creator = await owner(repository);
+    const other = await owner(repository);
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: creator.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: creator.userId,
+      composition: true,
+    });
+  });
+
   it("retains Presentation Pack originals and accepted baselines after source deletion and local edits", async () => {
     const repository = new MemoryRepository();
     const creator = await owner(repository);

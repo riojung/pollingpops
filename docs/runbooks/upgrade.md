@@ -160,6 +160,57 @@ text-fit feedback and complete images in the narrow reading column. See the
 [verification record](../evidence/presentation-design-foundation.md) for executed checks and
 remaining manual/device/production qualification. This slice adds no commercial entitlement.
 
+## Native Presentation composition compatibility
+
+Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,
+rotation and table/chart nodes. Scene-v4 fields are rejected by older document contracts rather
+than stripped. Document v8 accepts older scene versions, and retained document v1–v7 JSON,
+canonical hashes, retry identities and frozen Pack baselines remain unchanged. Draft mutation
+envelopes stay v2. API creation without `initialSlide`, or with `classic`, still starts at v2;
+the blank web launcher's `initialSlide: "native"` still starts at document7/scene3. New native
+scenario templates explicitly create document8/scene4, and composition actions promote only the
+edited content when required. There is no automatic rewrite of existing decks.
+
+Before accepting any v8 writes:
+
+1. Fence Presentation creation/mutation, publication, history restore and session creation at
+   ingress; drain accepted operations and preserve pending receipt identities.
+2. Deploy matching **v8-capable server, jobs, artifact/history/export readers, web clients and
+   live host/participant/Companion projections**. Report/retention/cleanup paths must also read
+   the new scenes. Reload active browser assets before reopening writers; a text fallback does
+   not make a strict older scene reader compatible.
+3. Verify the complete serving/worker image set and effective workspace feature policy. Keep the
+   existing private-image scan, ownership, tenant and lifecycle rules. No additional flag,
+   subscription entitlement or service is introduced by composition.
+4. Reopen writers only after the reader floor is satisfied and the release-specific acceptance
+   checks below have been recorded.
+
+No new SQL migration is required. Keep `089_presentation_native_scene_media.sql` and its existing
+checksum: image references remain image nodes at the same field paths. Group IDs, rotation,
+inline data and rich-text external links introduce no private-media collector path. Table/chart
+limits remain within the existing 50-node, 128 KiB scene and 3 MiB native-document budgets.
+
+Once v8 drafts, history, publications or sessions exist, rollback requires **v8-compatible readers
+and writers or a forward repair**. Turning off controls or removing templates cannot make an old
+binary safe. Never strip new nodes/groups/rotation, rewrite immutable JSON or hashes, replace
+frozen baselines, or regenerate accepted retry envelopes to force a downgrade. Retain compatible
+media/cleanup workers and applied migrations throughout rollback.
+
+Verify save/retry/conflict/reload/history/export/cleanup with groups, physical-16:9 rotation,
+raw/painted bounds and mixed legacy scenes. Exercise whole-group movement, proportional resize,
+alignment/layers, snap bypass/cancel, reading-order preservation and duplicate-ID remapping.
+Check staged CSV/TSV preview, Apply/Discard, one-step Undo/Redo, table/series bounds, malformed
+input and complete visible data alternatives. Verify immutable content and private-field exclusion
+through host/participant/Companion and live Pack insertion. V8 sessions use strict publication
+validation rather than the old partial-draft read path.
+
+Exercise all 12 native scenario factories, the nine retained v2 templates, read-only shared
+preview and template creation/retry with literal envelope2. External video remains a user-followed
+HTTPS link with a captions/transcript fallback; preserve `frame-src 'none'` and `media-src 'self'`
+and verify that preview performs no provider request. Record executed outcomes separately from
+human assistive-technology, physical-device, native-browser zoom, capacity/cost and hosted
+deployment qualifications; this runbook does not mark those qualifications passed.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.

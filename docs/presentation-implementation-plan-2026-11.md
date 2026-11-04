@@ -121,8 +121,8 @@ the subscription floor without completing the customer workflow.
 
 E00 now has an isolated local implementation; see [ADR 003](decisions/003-presentation-scene.md)
 and the [prototype record](evidence/presentation-scene-prototype.md). E01 implementation is complete
-locally; release qualification remains open. E02's first design-foundation increment is implemented
-below; its remaining scope and later packages remain planned.
+locally; release qualification remains open. E02's design foundation and remaining composition,
+information and scenario-template software are implemented locally; later packages remain planned.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -212,9 +212,15 @@ focal point, selection alignment/distribution and independent visual layer contr
 opt-in scene v3/document v7 and adds no hosted service or paid dependency. See the
 [verification record](evidence/presentation-design-foundation.md) and
 [reader rollout](runbooks/upgrade.md#native-presentation-design-compatibility).
-This is the first E02 slice, not completion of the package. Snap guides, persistent grouping,
-rotation, editable tables/charts and the 10–15 full-deck templates remain subsequent work, along
-with the human and deployment qualifications below.
+The completion increment adds transient snap guides, persistent flat groups and proportional
+resize, physical 16:9 rotation/connector geometry, bounded editable tables and bar/line/pie charts,
+and twelve original eight-slide native scenario decks. The nine facilitated templates remain;
+explicit external video plus captions/transcript links fulfill the conditional media scope without
+provider embeds. New persisted composition/data uses scene v4/document v8; existing creation and
+mutation defaults remain compatible. See the [E02 acceptance record](evidence/presentation-e02-completion.md)
+and [composition reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
+Software implementation does not close the observed creator, device, accessibility, operating-cost
+or deployment qualifications below.
 
 Dependencies: E01. Add theme tokens for fonts/colors/spacing, reusable layout presets, image
 crop/fit, alignment/distribution, snap guides, grouping, layer controls and bounded rotation.

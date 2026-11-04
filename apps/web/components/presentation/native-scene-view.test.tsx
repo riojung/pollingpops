@@ -48,6 +48,26 @@ function nativeSceneFixture(): PresentationScene {
 
 describe("production native scene rendering", () => {
   it.each(["preview", "live", "editor"] as const)(
+    "keeps rotated connector anchors and group content consistent in %s",
+    (variant) => {
+      const scene = nativeSceneFixture();
+      scene.schemaVersion = 4;
+      const body = scene.nodes.find((node) => node.id === "body")!;
+      if (body.type === "connector") throw new Error("Expected a body object");
+      body.frame = { x: 20, y: 40, width: 20, height: 10 };
+      body.rotation = 90;
+      scene.groups = [{ id: "group", nodeIds: ["body", "shape"] }];
+      const block = { ...createNativeContentBlock(), scene, speakerNotes: "PRIVATE rotated cue" };
+      const markup = renderToStaticMarkup(<ContentSlideView block={block} variant={variant} />);
+      expect(markup).toContain("M480 565 L640 495");
+      expect(markup).toContain("transform:rotate(90deg)");
+      expect(markup.indexOf('data-node-id="body"')).toBeLessThan(
+        markup.indexOf('data-node-id="shape"'),
+      );
+      expect(markup).not.toContain("PRIVATE");
+    },
+  );
+  it.each(["preview", "live", "editor"] as const)(
     "dispatches %s to the same public renderer with independent reading/stacking order",
     (variant) => {
       const block = {

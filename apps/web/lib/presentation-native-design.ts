@@ -6,6 +6,11 @@ import {
   type PresentationSceneNode,
 } from "@openround/contracts";
 import { boundNativeSceneFrame } from "./presentation-native-scene";
+import {
+  moveNativeSceneNodes,
+  nativeSceneSelectionUnits,
+  selectedNativeSceneBounds,
+} from "./presentation-native-geometry";
 
 export const NATIVE_DESIGN_THEMES = {
   paper: { background: "#fffdf7", text: "#172b4d", link: "#174d8c", border: "#a6b0ba" },
@@ -31,7 +36,11 @@ export function applyNativeSceneDesign(
   scene: PresentationScene,
   design: PresentationSceneDesign,
 ): PresentationScene {
-  return PresentationSceneDraftSchema.parse({ ...scene, schemaVersion: 3, design });
+  return PresentationSceneDraftSchema.parse({
+    ...scene,
+    schemaVersion: scene.schemaVersion === 4 ? 4 : 3,
+    design,
+  });
 }
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
@@ -53,6 +62,7 @@ export const NATIVE_LAYOUT_PRESETS = [
     label: "Three columns",
     help: "Requires a title and three body text objects.",
   },
+  { id: "title_data", label: "Title and data", help: "Requires a title and one table or chart." },
 ] as const;
 export type NativeLayoutPreset = (typeof NATIVE_LAYOUT_PRESETS)[number]["id"];
 
@@ -67,6 +77,15 @@ function layoutFrames(
   const titles = ordered.filter((node) => node.type === "text" && node.role === "title");
   const bodies = ordered.filter((node) => node.type === "text" && node.role === "body");
   const images = ordered.filter((node) => node.type === "image");
+  const data = ordered.filter((node) => node.type === "table" || node.type === "chart");
+  if (preset === "title_data") {
+    return titles.length === 1 && data.length === 1 && ordered.length === 2
+      ? new Map([
+          [titles[0]!.id, { x: 7, y: 7, width: 86, height: 20 }],
+          [data[0]!.id, { x: 7, y: 33, width: 86, height: 59 }],
+        ])
+      : null;
+  }
   const bodyCount = preset === "three_columns" ? 3 : preset === "split" ? 2 : 1;
   const imageCount = preset === "image_left" || preset === "image_right" ? 1 : 0;
   if (
@@ -126,22 +145,49 @@ export function applyNativeLayout(
 export type NativeAlignment = "left" | "center" | "right" | "top" | "middle" | "bottom";
 export type NativeDistribution = "horizontal" | "vertical";
 
-function selectedFrames(scene: PresentationScene, ids: readonly string[]) {
-  const selected = new Set(ids);
-  return scene.nodes.filter(
-    (node): node is FramedNode => node.type !== "connector" && selected.has(node.id),
-  );
+function alignmentResult(
+  scene: PresentationScene,
+  ids: readonly string[],
+  alignment: NativeAlignment,
+): PresentationScene | null {
+  const nodes = nativeSceneSelectionUnits(scene, ids);
+  if (nodes.length < 2) return null;
+  const left = Math.min(...nodes.map((node) => node.bounds.x));
+  const right = Math.max(...nodes.map((node) => node.bounds.x + node.bounds.width));
+  const top = Math.min(...nodes.map((node) => node.bounds.y));
+  const bottom = Math.max(...nodes.map((node) => node.bounds.y + node.bounds.height));
+  let possible = true;
+  const result = nodes.reduce((current, { ids, bounds: frame }) => {
+    const x =
+      alignment === "left"
+        ? left
+        : alignment === "right"
+          ? right - frame.width
+          : alignment === "center"
+            ? (left + right - frame.width) / 2
+            : frame.x;
+    const y =
+      alignment === "top"
+        ? top
+        : alignment === "bottom"
+          ? bottom - frame.height
+          : alignment === "middle"
+            ? (top + bottom - frame.height) / 2
+            : frame.y;
+    const next = moveNativeSceneNodes(current, ids, x - frame.x, y - frame.y);
+    const actual = selectedNativeSceneBounds(next, ids)!;
+    if (Math.abs(actual.x - x) > 1e-7 || Math.abs(actual.y - y) > 1e-7) possible = false;
+    return next;
+  }, scene);
+  return possible ? result : null;
 }
 
-function withFrames(scene: PresentationScene, frames: Map<string, PresentationSceneFrame>) {
-  return {
-    ...scene,
-    nodes: scene.nodes.map((node) =>
-      node.type !== "connector" && frames.has(node.id)
-        ? { ...node, frame: boundNativeSceneFrame(frames.get(node.id)!) }
-        : node,
-    ),
-  };
+export function canAlignNativeSceneNodes(
+  scene: PresentationScene,
+  ids: readonly string[],
+  alignment: NativeAlignment,
+) {
+  return alignmentResult(scene, ids, alignment) !== null;
 }
 
 export function alignNativeSceneNodes(
@@ -149,39 +195,7 @@ export function alignNativeSceneNodes(
   ids: readonly string[],
   alignment: NativeAlignment,
 ): PresentationScene {
-  const nodes = selectedFrames(scene, ids);
-  if (nodes.length < 2) return scene;
-  const left = Math.min(...nodes.map((node) => node.frame.x));
-  const right = Math.max(...nodes.map((node) => node.frame.x + node.frame.width));
-  const top = Math.min(...nodes.map((node) => node.frame.y));
-  const bottom = Math.max(...nodes.map((node) => node.frame.y + node.frame.height));
-  return withFrames(
-    scene,
-    new Map(
-      nodes.map(({ id, frame }) => [
-        id,
-        {
-          ...frame,
-          x:
-            alignment === "left"
-              ? left
-              : alignment === "right"
-                ? right - frame.width
-                : alignment === "center"
-                  ? (left + right - frame.width) / 2
-                  : frame.x,
-          y:
-            alignment === "top"
-              ? top
-              : alignment === "bottom"
-                ? bottom - frame.height
-                : alignment === "middle"
-                  ? (top + bottom - frame.height) / 2
-                  : frame.y,
-        },
-      ]),
-    ),
-  );
+  return alignmentResult(scene, ids, alignment) ?? scene;
 }
 
 function distributionFrames(
@@ -191,29 +205,36 @@ function distributionFrames(
 ) {
   const position = axis === "horizontal" ? "x" : "y";
   const size = axis === "horizontal" ? "width" : "height";
-  const nodes = selectedFrames(scene, ids).sort(
-    (a, b) => a.frame[position] - b.frame[position] || a.id.localeCompare(b.id, "en"),
+  const nodes = nativeSceneSelectionUnits(scene, ids).sort(
+    (a, b) => a.bounds[position] - b.bounds[position] || a.ids[0]!.localeCompare(b.ids[0]!, "en"),
   );
   if (nodes.length < 3) return null;
   const first = nodes[0]!;
   const last = nodes.at(-1)!;
-  const start = first.frame[position];
-  const end = last.frame[position] + last.frame[size];
-  const occupied = nodes.reduce((total, node) => total + node.frame[size], 0);
+  const start = first.bounds[position];
+  const end = last.bounds[position] + last.bounds[size];
+  const occupied = nodes.reduce((total, node) => total + node.bounds[size], 0);
   const gap = (end - start - occupied) / (nodes.length - 1);
   // Keep both outer objects fixed. Reject layouts that would require negative gaps.
   if (gap < 0 || !Number.isFinite(gap)) return null;
   let cursor = start;
-  return new Map(
-    nodes.map((node, index) => {
-      const frame =
-        index === 0 || index === nodes.length - 1
-          ? node.frame
-          : { ...node.frame, [position]: cursor };
-      cursor += node.frame[size] + gap;
-      return [node.id, frame] as const;
-    }),
-  );
+  const changes = nodes.map((node, index) => {
+    const delta = index === 0 || index === nodes.length - 1 ? 0 : cursor - node.bounds[position];
+    cursor += node.bounds[size] + gap;
+    return { ids: node.ids, dx: position === "x" ? delta : 0, dy: position === "y" ? delta : 0 };
+  });
+  if (
+    changes.some((unit, index) => {
+      const next = moveNativeSceneNodes(scene, unit.ids, unit.dx, unit.dy);
+      const actual = selectedNativeSceneBounds(next, unit.ids)!;
+      return (
+        Math.abs(actual.x - (nodes[index]!.bounds.x + unit.dx)) > 1e-7 ||
+        Math.abs(actual.y - (nodes[index]!.bounds.y + unit.dy)) > 1e-7
+      );
+    })
+  )
+    return null;
+  return changes;
 }
 
 export function canDistributeNativeSceneNodes(
@@ -230,18 +251,37 @@ export function distributeNativeSceneNodes(
   axis: NativeDistribution,
 ): PresentationScene {
   const frames = distributionFrames(scene, ids, axis);
-  return frames ? withFrames(scene, frames) : scene;
+  return frames
+    ? frames.reduce(
+        (current, unit) => moveNativeSceneNodes(current, unit.ids, unit.dx, unit.dy),
+        scene,
+      )
+    : scene;
 }
 
 export type NativeLayerAction = "back" | "backward" | "forward" | "front";
+
+function layerUnits(scene: PresentationScene) {
+  const framed = scene.nodes.filter((node): node is FramedNode => node.type !== "connector");
+  const seen = new Set<string>();
+  return framed.flatMap((node) => {
+    if (seen.has(node.id)) return [];
+    const ids = scene.groups?.find((group) => group.nodeIds.includes(node.id))?.nodeIds ?? [
+      node.id,
+    ];
+    const unit = framed.filter((item) => ids.includes(item.id));
+    unit.forEach((item) => seen.add(item.id));
+    return [unit];
+  });
+}
 
 export function canLayerNativeSceneNode(
   scene: PresentationScene,
   id: string,
   action: NativeLayerAction,
 ) {
-  const nodes = scene.nodes.filter((node) => node.type !== "connector");
-  const index = nodes.findIndex((node) => node.id === id);
+  const nodes = layerUnits(scene);
+  const index = nodes.findIndex((unit) => unit.some((node) => node.id === id));
   return (
     index >= 0 &&
     (action === "back" || action === "backward" ? index > 0 : index < nodes.length - 1)
@@ -255,16 +295,17 @@ export function layerNativeSceneNode(
   action: NativeLayerAction,
 ): PresentationScene {
   if (!canLayerNativeSceneNode(scene, id, action)) return scene;
-  const framed = scene.nodes.filter((node) => node.type !== "connector");
-  const index = framed.findIndex((node) => node.id === id);
+  const units = layerUnits(scene);
+  const index = units.findIndex((unit) => unit.some((node) => node.id === id));
   const destination =
     action === "back"
       ? 0
       : action === "front"
-        ? framed.length - 1
+        ? units.length - 1
         : index + (action === "backward" ? -1 : 1);
-  const [node] = framed.splice(index, 1);
-  framed.splice(destination, 0, node!);
+  const [unit] = units.splice(index, 1);
+  units.splice(destination, 0, unit!);
+  const framed = units.flat();
   let cursor = 0;
   return {
     ...scene,

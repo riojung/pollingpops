@@ -4787,7 +4787,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4826,8 +4826,8 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7;
-    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 }; hidden?: true }>;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 | 4 }; hidden?: true }>;
   },
   ctx: z.RefinementCtx,
   published = false,
@@ -4878,6 +4878,17 @@ function applyPresentationSceneRules(
         message: "Designed scenes require Presentation schema version 7",
       });
     }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === 4 &&
+      presentation.schemaVersion < 8
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Composed scenes require Presentation schema version 8",
+      });
+    }
   }
   if (
     published &&
@@ -4908,7 +4919,15 @@ export const PresentationDraftSchema = z
     description: z.string().trim().max(1_000).default(""),
     experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
     schemaVersion: z
-      .union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7)])
+      .union([
+        z.literal(2),
+        z.literal(3),
+        z.literal(4),
+        z.literal(5),
+        z.literal(6),
+        z.literal(7),
+        z.literal(8),
+      ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockDraftSchema).max(200),
@@ -4943,6 +4962,7 @@ export const PresentationContentSchema = z
       z.literal(5),
       z.literal(6),
       z.literal(7),
+      z.literal(8),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
@@ -5058,7 +5078,8 @@ export function migratePresentationV1(value: unknown): unknown {
     presentation.schemaVersion === 4 ||
     presentation.schemaVersion === 5 ||
     presentation.schemaVersion === 6 ||
-    presentation.schemaVersion === 7
+    presentation.schemaVersion === 7 ||
+    presentation.schemaVersion === 8
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };

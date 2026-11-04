@@ -15,12 +15,14 @@ import {
   alignNativeSceneNodes,
   applyNativeLayout,
   canApplyNativeLayout,
+  canAlignNativeSceneNodes,
   canDistributeNativeSceneNodes,
   canLayerNativeSceneNode,
   distributeNativeSceneNodes,
   layerNativeSceneNode,
 } from "../../lib/presentation-native-design";
 import { updateNativeNode } from "../../lib/presentation-native-scene";
+import { nativeSceneSelectionUnits } from "../../lib/presentation-native-geometry";
 import styles from "./native-scene.module.css";
 
 type SceneChange = (scene: PresentationScene, historyField?: string) => void;
@@ -41,7 +43,7 @@ export function NativeSceneDesignControls({
   function update(next: PresentationSceneDesign) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...scene,
-      schemaVersion: 3,
+      schemaVersion: scene.schemaVersion === 4 ? 4 : 3,
       design: next,
     });
     if (!result.success) {
@@ -198,9 +200,7 @@ export function NativeSceneArrangementControls({
   selectedId: string;
   onChange: SceneChange;
 }) {
-  const framedCount = scene.nodes.filter(
-    (node) => node.type !== "connector" && selectedIds.includes(node.id),
-  ).length;
+  const framedCount = nativeSceneSelectionUnits(scene, selectedIds).length;
   return (
     <fieldset className={styles.designControls}>
       <legend>Arrange objects</legend>
@@ -209,9 +209,10 @@ export function NativeSceneArrangementControls({
           <button
             key={alignment}
             type="button"
-            disabled={framedCount < 2}
+            disabled={framedCount < 2 || !canAlignNativeSceneNodes(scene, selectedIds, alignment)}
             onClick={() => {
-              if (framedCount >= 2) onChange(alignNativeSceneNodes(scene, selectedIds, alignment));
+              if (canAlignNativeSceneNodes(scene, selectedIds, alignment))
+                onChange(alignNativeSceneNodes(scene, selectedIds, alignment));
             }}
           >
             Align {alignment}
@@ -236,9 +237,11 @@ export function NativeSceneArrangementControls({
         })}
       </div>
       <p className={styles.help}>
-        Align at least two selected objects within their combined bounds. Distribute at least three
-        with equal gaps, keeping the outer objects fixed. Distribution is unavailable when the
-        objects cannot fit without overlap.
+        Align at least two selected objects within their combined bounds. Stored groups count as one
+        object. Distribute at least three with equal gaps, keeping the outer objects fixed.
+        Distribution is unavailable when the objects cannot fit without overlap. Arrangement is
+        unavailable when rotated objects cannot reach the target while keeping their frames inside
+        the slide.
       </p>
       <div className={styles.actions} aria-label="Last selected object layer">
         {(
@@ -263,8 +266,9 @@ export function NativeSceneArrangementControls({
         ))}
       </div>
       <p className={styles.help}>
-        Layer controls change the last selected object on wide slides. Reading order stays the same,
-        including on narrow screens. Connectors follow objects and stay behind them.
+        Layer controls change the last selected object or its stored group on wide slides. Reading
+        order stays the same, including on narrow screens. Connectors follow objects and stay behind
+        them.
       </p>
     </fieldset>
   );
@@ -285,7 +289,7 @@ export function NativeSceneImageDesignControls({
   function update(next: typeof node, historyField?: string) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...updateNativeNode(scene, node.id, () => next),
-      schemaVersion: 3,
+      schemaVersion: scene.schemaVersion === 4 ? 4 : 3,
     });
     if (!result.success) {
       setFailure({

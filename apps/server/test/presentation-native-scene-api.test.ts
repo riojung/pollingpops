@@ -16,6 +16,7 @@ import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import {
+  compositionSceneBlock,
   designSceneBlock,
   nativeSceneBlock,
   richTextSceneBlock,
@@ -135,7 +136,7 @@ describe("native Presentation scenes API", () => {
     }
   });
 
-  it.each([4, 5, 6, 7] as const)(
+  it.each([4, 5, 6, 7, 8] as const)(
     "saves exact retries and delivers immutable v%s scenes through completion",
     async (schemaVersion) => {
       const built = await setup();
@@ -172,11 +173,13 @@ describe("native Presentation scenes API", () => {
       const hiddenImage = hidden.scene.nodes.find((node) => node.type === "image")!;
       if (hiddenImage.type === "image") hiddenImage.altText = "";
       const sceneBlock =
-        schemaVersion === 7
-          ? designSceneBlock
-          : schemaVersion >= 5
-            ? richTextSceneBlock
-            : nativeSceneBlock;
+        schemaVersion === 8
+          ? compositionSceneBlock
+          : schemaVersion === 7
+            ? designSceneBlock
+            : schemaVersion >= 5
+              ? richTextSceneBlock
+              : nativeSceneBlock;
       const draft = PresentationDraftSchema.parse({
         title: "Native content-only deck",
         schemaVersion,
@@ -398,6 +401,68 @@ describe("native Presentation scenes API", () => {
       ).toMatchObject({ content, contentHash: version.contentHash });
     },
   );
+
+  it("retains incomplete v8 information drafts but rejects malformed data and inaccessible publication atomically", async () => {
+    const built = await setup();
+    const visible = compositionSceneBlock();
+    const table = visible.scene.nodes.find((node) => node.type === "table")!;
+    const chart = visible.scene.nodes.find((node) => node.type === "chart")!;
+    if (table.type !== "table" || chart.type !== "chart")
+      throw new Error("Expected information nodes");
+    table.caption = "";
+    chart.summary = "";
+    const hidden = {
+      ...compositionSceneBlock([], "PRIVATE hidden information"),
+      hidden: true as const,
+    };
+    const draft = PresentationDraftSchema.parse({
+      title: "Information validation",
+      schemaVersion: 8,
+      blocks: [visible, hidden],
+    });
+    const { id } = await saveDraft(built.app, built.cookie, draft);
+    const malformed = structuredClone(draft);
+    const first = malformed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected content");
+    const malformedTable = first.scene.nodes.find((node) => node.type === "table")!;
+    if (malformedTable.type !== "table") throw new Error("Expected table");
+    malformedTable.rows = [["Wrong column count"]];
+    const rejected = await built.app.inject({
+      method: "PUT",
+      url: `/v1/presentations/${id}/draft`,
+      headers: { cookie: built.cookie },
+      payload: {
+        draft: malformed,
+        expectedRevision: 1,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(rejected.statusCode).toBe(400);
+    expect((await built.presentations.getPresentation(workspaceId, id))?.draftRevision).toBe(1);
+    const published = await built.app.inject({
+      method: "POST",
+      url: `/v1/presentations/${id}/publish`,
+      headers: { cookie: built.cookie },
+      payload: { expectedDraftRevision: 1 },
+    });
+    expect(published.statusCode).toBe(422);
+    expect(published.json().validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blockId: visible.id, field: "caption" }),
+        expect.objectContaining({ blockId: visible.id, field: "summary" }),
+      ]),
+    );
+    expect(
+      published
+        .json()
+        .validation.issues.some((issue: { blockId: string | null }) => issue.blockId === hidden.id),
+    ).toBe(false);
+    expect(
+      (await built.presentations.getPresentation(workspaceId, id))?.currentVersionId,
+    ).toBeNull();
+    expect((await built.presentations.getPresentation(workspaceId, id))?.draft).toEqual(draft);
+  });
 
   it("maps visible publication errors to stable IDs and rejects an all-hidden deck", async () => {
     const built = await setup();

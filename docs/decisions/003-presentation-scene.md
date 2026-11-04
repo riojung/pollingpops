@@ -181,8 +181,8 @@ Acceptance for the slice:
 ## First production native-scene increment
 
 The first E01 native increment uses embedded Presentation version 4 and a separately versioned
-public scene. [The production contract](../../packages/contracts/src/presentation-scene.ts)
-contains only `schemaVersion: 1`, a fixed 16:9 aspect ratio, bounded nodes and an explicit reading
+public scene. At that increment, [the production contract](../../packages/contracts/src/presentation-scene.ts)
+used `schemaVersion: 1`, a fixed 16:9 aspect ratio, bounded nodes and an explicit reading
 order. It is separate from the experimental artifact. Plain text, private image references,
 palette-colored labeled shapes and connectors are supported. Notes, citations, source disclosures,
 question answers and arbitrary URLs/markup are absent from the scene.
@@ -221,8 +221,9 @@ Reports derive native titles from the frozen scene. See the
 [upgrade requirements](../runbooks/upgrade.md#native-presentation-scene-compatibility) before enabling
 version-4 writers or selecting a rollback image.
 
-This increment does not complete E01. Later increments cover pointer editing, multiselection and
-rich text below. Grouping, advanced themes and creator/device/accessibility acceptance remain open. The
+This first increment did not complete E01. Later increments below cover pointer editing,
+multiselection and rich text; the E02 sections add design and composition. Creator, device and
+assistive-technology acceptance remain separate qualifications. The
 [native verification record](../evidence/presentation-native-scenes.md) separates executed local
 checks from those outstanding observations.
 
@@ -290,7 +291,57 @@ and frozen baselines, without converting ordinary slides or changing activities.
 There is no new media visitor path, migration, SDK, font service or paid entitlement. The
 [v7 rollout](../runbooks/upgrade.md#native-presentation-design-compatibility) coordinates readers and
 writers. The [verification record](../evidence/presentation-design-foundation.md) covers this first
-E02 increment; grouping, rotation, tables/charts, snap guides and full-deck templates remain open.
+E02 increment. The following composition increment extends the format and authoring surfaces.
+
+## E02 composition, inline data and scenario decks
+
+Optional flat groups, bounded rotation and editable table/chart nodes opt into **scene v4 and
+Presentation document v8**. Older scene/document JSON and hashes remain unchanged, and parsers do
+not add group or rotation defaults. Default API creation remains document v2; the explicit blank
+web starter remains document v7/scene v3 until a new feature is applied. The mutation envelope is
+still v2. New native scenario factories explicitly produce v8/scene4; the nine existing facilitated
+templates remain v2.
+
+Groups reference existing framed-node IDs, are disjoint and do not nest or contain connectors.
+Selection, movement, proportional resizing, alignment and layers respect group membership while
+preserving reading order. Rotation uses physical 16:9 coordinates; both raw frames and rotated
+painted bounds must remain inside the slide. Connectors follow transformed endpoints. The shared
+narrow reading view retains semantic order and renders readable, unrotated content. Local
+six-screen-pixel movement snapping supplies temporary guides; Alt bypasses snapping and Escape
+cancels the gesture. Guide state and tolerance are not persisted.
+
+Tables contain a caption, up to six headings and 20 rectangular rows of literal text. Charts
+contain a title, authored summary, up to 20 categories and four finite numeric series; pie charts
+use one nonnegative series with a positive total. The existing scene/document budgets still apply.
+CSV/TSV paste and cell edits are staged locally. **Preview pasted data** changes the staging grid;
+**Apply table changes**/**Apply chart changes** validates and creates one discrete history edit;
+**Discard staged changes** restores current object data. Invalid input leaves the authored object
+unchanged and retains the staged correction. Charts render deterministic local SVG with the full
+data table and summary; no charting service, formula engine or live spreadsheet sync is introduced.
+
+The catalogue adds 12 original, eight-slide ordinary scenarios: startup pitch, client proposal,
+project update, quarterly strategy, portfolio case study, event talk, product demo, customer
+onboarding, practical workshop, lesson/explainer, research findings and business decision brief.
+All work without required activities and identify their sample stories/data as illustrative.
+Speaker notes retain adaptation guidance and the full explanatory copy behind short data/column
+leads. Factories create independent IDs and no private media references or external assets.
+The combined catalogue contains 21 templates. Shared-renderer thumbnails and a navigable
+read-only preview mount only the active preview slide; creation separately stages the exact draft
+and retains its revision/mutation identity for an uncertain-save retry.
+
+Video scope is an explicit external HTTPS link plus a required captions/transcript fallback,
+encoded through existing rich text. No provider iframe, SDK, metadata request, remote thumbnail,
+availability probe or uploaded-video transcoding is introduced. Links open only after an audience
+click, with opener/referrer protection. The existing CSP remains unchanged; an embedded player
+would require its own policy and acceptance decision.
+
+No additional SQL migration or media-reference visitor path is required. Migration 089 remains
+authoritative for scene images. Deploy matching v8 readers, clients and workers before admitting
+v8 writers; once v8 data exists, rollback requires a v8-compatible image or forward repair. See the
+[composition reader rollout](../runbooks/upgrade.md#native-presentation-composition-compatibility).
+Feature/workspace policies, entitlements and authoring roles are unchanged. This implementation
+does not establish deployment qualification, human usability, assistive-technology or
+physical-device acceptance, native-browser zoom behavior, capacity or operating cost.
 
 ## Verification and open evidence
 

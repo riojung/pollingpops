@@ -1,4 +1,5 @@
 import {
+  compositionSceneBlock,
   designSceneBlock,
   nativeSceneBlock,
   richTextSceneBlock,
@@ -133,6 +134,7 @@ async function fixture(
     richText?: boolean;
     visibility?: boolean;
     design?: boolean;
+    composition?: boolean;
     cardsEnabled?: boolean;
     linkedPurpose?: "diagnostic" | "practice";
   } = {},
@@ -167,13 +169,23 @@ async function fixture(
   const publishedContent = options.native
     ? PresentationContentSchema.parse({
         ...legacyContent,
-        schemaVersion: options.design ? 7 : options.visibility ? 6 : options.richText ? 5 : 4,
+        schemaVersion: options.composition
+          ? 8
+          : options.design
+            ? 7
+            : options.visibility
+              ? 6
+              : options.richText
+                ? 5
+                : 4,
         blocks: [
-          options.design
-            ? designSceneBlock()
-            : options.richText
-              ? richTextSceneBlock()
-              : nativeSceneBlock(),
+          options.composition
+            ? compositionSceneBlock()
+            : options.design
+              ? designSceneBlock()
+              : options.richText
+                ? richTextSceneBlock()
+                : nativeSceneBlock(),
           ...legacyContent.blocks.slice(1),
         ],
       })
@@ -342,14 +354,15 @@ async function expectCommandNoMutation(
 }
 
 describe("Companion live Recovery Packs", () => {
-  it.each([4, 5, 6, 7] as const)(
+  it.each([4, 5, 6, 7, 8] as const)(
     "preserves native v%s scenes and publication when a frozen Pack is inserted live",
     async (schemaVersion) => {
       const f = await fixture({
         native: true,
         richText: schemaVersion >= 5,
         visibility: schemaVersion >= 6,
-        design: schemaVersion === 7,
+        design: schemaVersion >= 7,
+        composition: schemaVersion === 8,
       });
       const command = f.insertion();
       const opened = await f.service.companionCommand(command);

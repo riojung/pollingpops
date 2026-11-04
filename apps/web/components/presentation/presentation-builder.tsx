@@ -68,6 +68,7 @@ import {
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import {
   applyNativeDesignToDeck,
+  applyNativeSceneToDeck,
   nativeSceneDocumentVersion,
 } from "../../lib/presentation-deck-design";
 import { RecoverableOperationQueue } from "../../lib/recoverable-operation-queue";
@@ -2384,17 +2385,35 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     }
                   });
                 }}
-                onChange={(scene: PresentationScene, historyField) =>
+                onChange={(scene: PresentationScene, historyField) => {
+                  if (builderMutationBlocked) return false;
+                  try {
+                    applyNativeSceneToDeck(
+                      JSON.parse(latestDraftJson.current) as PresentationDraft,
+                      selectedBlock.id,
+                      scene,
+                    );
+                  } catch {
+                    setError(
+                      "This edit exceeds the Presentation’s limits. Shorten content or remove a slide, then try again. Your saved draft is unchanged.",
+                    );
+                    return false;
+                  }
                   commit(
-                    (current) => ({
-                      ...updateBlock(current, selectedBlock.id, (block) =>
-                        block.kind === "content" && block.scene ? { ...block, scene } : block,
-                      ),
-                      schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, scene),
-                    }),
+                    (current) => {
+                      try {
+                        return applyNativeSceneToDeck(current, selectedBlock.id, scene);
+                      } catch {
+                        setError(
+                          "This edit exceeds the Presentation’s limits. Shorten content or remove a slide, then try again.",
+                        );
+                        return current;
+                      }
+                    },
                     historyField ? `${selectedBlock.id}:${historyField}` : undefined,
-                  )
-                }
+                  );
+                  return true;
+                }}
                 renderImage={(mediaId, altText) => (
                   <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
                 )}

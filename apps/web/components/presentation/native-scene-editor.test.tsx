@@ -286,39 +286,96 @@ describe("native multi-object selection", () => {
 });
 
 describe("native design and rich text coexistence", () => {
-  it("keeps scene 3 and design when formatting, editing and removing formatting", () => {
+  it.each([3, 4] as const)(
+    "keeps scene %s and its composition when formatting, editing and removing formatting",
+    (version) => {
+      const editor = editorHarness();
+      editor.scene.schemaVersion = version;
+      editor.scene.design = { theme: "midnight", font: "serif", spacing: "compact" };
+      if (version === 4) {
+        editor.scene.groups = [{ id: "group", nodeIds: editor.scene.nodes.map((node) => node.id) }];
+        const body = editor.scene.nodes[1]!;
+        if (body.type !== "connector") body.rotation = 5;
+      }
+      editor.render("idle");
+      const format = editor.find(
+        (element) => element.type === "button" && element.props.children === "Format text",
+      );
+      (format.props.onClick as () => void)();
+      const formatted = editor.onChange.mock.calls[0]![0];
+      expect(formatted.schemaVersion).toBe(version);
+      expect(formatted.design).toEqual(editor.scene.design);
+      expect(formatted.groups).toEqual(editor.scene.groups);
+      expect(formatted.nodes[1]).toEqual(editor.scene.nodes[1]);
+      editor.scene.nodes = formatted.nodes;
+      editor.render("idle");
+      const richEditor = editor.find((element) => element.type === NativeRichTextEditor);
+      const richNode = formatted.nodes[0];
+      (richEditor.props.onChange as (node: unknown) => void)({
+        ...richNode,
+        text: "Revised",
+        richText: { paragraphs: [{ kind: "paragraph", runs: [{ text: "Revised", bold: true }] }] },
+      });
+      expect(editor.onChange.mock.calls[1]![0]).toMatchObject({
+        schemaVersion: version,
+        design: editor.scene.design,
+      });
+      const { richText: _richText, ...plain } = richNode;
+      void _richText;
+      (richEditor.props.onChange as (node: unknown) => void)(plain);
+      expect(editor.onChange.mock.calls[2]![0]).toMatchObject({
+        schemaVersion: version,
+        design: editor.scene.design,
+      });
+      expect(editor.onChange.mock.calls[2]![0].nodes[0]).not.toHaveProperty("richText");
+    },
+  );
+});
+
+describe("native edit validation", () => {
+  it("retains the slide and selection when the presentation rejects a new information object", () => {
     const editor = editorHarness();
-    editor.scene.schemaVersion = 3;
-    editor.scene.design = { theme: "midnight", font: "serif", spacing: "compact" };
+    editor.onChange.mockReturnValue(false);
     editor.render("idle");
-    const format = editor.find(
-      (element) => element.type === "button" && element.props.children === "Format text",
+    const add = () =>
+      editor.find((element) => element.type === "button" && element.props.children === "Add table");
+    (add().props.onClick as () => void)();
+    editor.render("idle");
+    expect(
+      editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+    ).toEqual([editor.scene.nodes[0]!.id]);
+    expect(editor.find((element) => element.props.role === "alert").props.children).toContain(
+      "current slide is retained",
     );
-    (format.props.onClick as () => void)();
-    const formatted = editor.onChange.mock.calls[0]![0];
-    expect(formatted.schemaVersion).toBe(3);
-    expect(formatted.design).toEqual(editor.scene.design);
-    editor.scene.nodes = formatted.nodes;
-    editor.render("idle");
-    const richEditor = editor.find((element) => element.type === NativeRichTextEditor);
-    const richNode = formatted.nodes[0];
-    (richEditor.props.onChange as (node: unknown) => void)({
-      ...richNode,
-      text: "Revised",
-      richText: { paragraphs: [{ kind: "paragraph", runs: [{ text: "Revised", bold: true }] }] },
-    });
+    expect(editor.scene.nodes).toHaveLength(2);
+    editor.onChange.mockReturnValue(undefined);
+    (add().props.onClick as () => void)();
+    expect(editor.onChange).toHaveBeenCalledTimes(2);
     expect(editor.onChange.mock.calls[1]![0]).toMatchObject({
-      schemaVersion: 3,
-      design: editor.scene.design,
+      schemaVersion: 4,
+      nodes: expect.arrayContaining([expect.objectContaining({ type: "table" })]),
     });
-    const { richText: _richText, ...plain } = richNode;
-    void _richText;
-    (richEditor.props.onChange as (node: unknown) => void)(plain);
-    expect(editor.onChange.mock.calls[2]![0]).toMatchObject({
-      schemaVersion: 3,
-      design: editor.scene.design,
+  });
+
+  it("rejects invalid scene edits before calling history or saving, and accepts a corrected edit", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const change = editor.find((element) => element.type === NativeSceneCanvas).props.onChange as (
+      scene: unknown,
+    ) => void;
+    change({ ...editor.scene, readingOrder: [] });
+    editor.render("idle");
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(editor.find((element) => element.props.role === "alert").props.children).toContain(
+      "slide’s limits",
+    );
+    change({
+      ...editor.scene,
+      nodes: editor.scene.nodes.map((node) =>
+        node.type === "text" && node.role === "body" ? { ...node, text: "Corrected" } : node,
+      ),
     });
-    expect(editor.onChange.mock.calls[2]![0].nodes[0]).not.toHaveProperty("richText");
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -343,7 +400,6 @@ describe("native design discoverability", () => {
         elements(root).filter((element) => element.type === NativeSceneDesignControls),
       ).toHaveLength(1);
       expect(design[0]!.props.scene).toBe(editor.scene);
-      expect(design[0]!.props.onChange).toBe(editor.onChange);
       expect(children[1]!.type).toBe(NativeSceneCanvas);
       const lower = children[2]!;
       expect(lower.props["aria-label"]).toBe("Native slide editor");

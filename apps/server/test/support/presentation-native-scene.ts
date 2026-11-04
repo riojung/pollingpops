@@ -1,4 +1,44 @@
 import { randomUUID } from "node:crypto";
+import { type PresentationSceneNode } from "@openround/contracts";
+
+export function compositionSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
+  const block = designSceneBlock(mediaIds, title);
+  const nodes: PresentationSceneNode[] = [
+    ...block.scene.nodes.map((node) => (node.type === "image" ? { ...node, rotation: 12 } : node)),
+    {
+      id: "table",
+      type: "table",
+      caption: "Delivery evidence",
+      headers: ["Stage", "Count"],
+      rows: [
+        ["Plan", "12"],
+        ["Deliver", "18"],
+      ],
+      rotation: 10,
+      frame: { x: 8, y: 33, width: 38, height: 28 },
+    },
+    {
+      id: "chart",
+      type: "chart",
+      chartType: "bar",
+      title: "Delivery evidence",
+      summary: "Deliveries increased from 12 to 18.",
+      categories: ["Plan", "Deliver"],
+      series: [{ name: "Count", values: [12, 18] }],
+      frame: { x: 54, y: 33, width: 38, height: 28 },
+    },
+  ];
+  return {
+    ...block,
+    scene: {
+      ...block.scene,
+      schemaVersion: 4 as const,
+      groups: [{ id: "evidence-group", nodeIds: ["table", "chart"] }],
+      nodes,
+      readingOrder: nodes.map(({ id }) => id),
+    },
+  };
+}
 
 export function designSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
   const block = richTextSceneBlock(mediaIds, title);

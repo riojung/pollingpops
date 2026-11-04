@@ -22,7 +22,7 @@
 
 .sectionHeader p,
 .muted,
-.starterCard p,
+.starterCard > p,
 .emptyState p {
   color: var(--ui-text-subtle);
   line-height: 1.55;
@@ -204,7 +204,7 @@
   font-size: 1.2rem;
 }
 
-.starterCard p {
+.starterCard > p {
   margin: 0;
 }
 

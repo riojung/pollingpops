@@ -11,8 +11,32 @@ export function nativeSceneDocumentVersion(
   current: PresentationDraft["schemaVersion"],
   scene: Pick<PresentationScene, "schemaVersion">,
 ): PresentationDraft["schemaVersion"] {
-  const minimum = scene.schemaVersion === 3 ? 7 : scene.schemaVersion === 2 ? 5 : 4;
+  const minimum =
+    scene.schemaVersion === 4
+      ? 8
+      : scene.schemaVersion === 3
+        ? 7
+        : scene.schemaVersion === 2
+          ? 5
+          : 4;
   return current >= minimum ? current : minimum;
+}
+
+/** Validate the entire document before a native edit enters history or an autosave envelope. */
+export function applyNativeSceneToDeck(
+  draft: PresentationDraft,
+  blockId: string,
+  scene: PresentationScene,
+): PresentationDraft {
+  const block = draft.blocks.find((block) => block.id === blockId);
+  if (block?.kind !== "content" || !block.scene) return draft;
+  const next = {
+    ...draft,
+    schemaVersion: nativeSceneDocumentVersion(draft.schemaVersion, scene),
+    blocks: draft.blocks.map((block) => (block.id === blockId ? { ...block, scene } : block)),
+  };
+  PresentationDraftSchema.parse(next);
+  return next;
 }
 
 /** Apply public design tokens without converting ordinary slides or rewriting any content. */
@@ -25,7 +49,7 @@ export function applyNativeDesignToDeck(
   const blocks = draft.blocks.map((block) => {
     if (block.kind !== "content" || !block.scene) return block;
     if (
-      block.scene.schemaVersion === 3 &&
+      block.scene.schemaVersion >= 3 &&
       block.scene.design?.theme === design.theme &&
       block.scene.design.font === design.font &&
       block.scene.design.spacing === design.spacing
@@ -34,11 +58,19 @@ export function applyNativeDesignToDeck(
     changed = true;
     return {
       ...block,
-      scene: { ...block.scene, schemaVersion: 3 as const, design: { ...design } },
+      scene: {
+        ...block.scene,
+        schemaVersion: block.scene.schemaVersion === 4 ? (4 as const) : (3 as const),
+        design: { ...design },
+      },
     };
   });
   if (!changed) return draft;
-  const next = { ...draft, schemaVersion: 7 as const, blocks };
+  const next = {
+    ...draft,
+    schemaVersion: draft.schemaVersion === 8 ? (8 as const) : (7 as const),
+    blocks,
+  };
   // Check the complete document budget before applying an all-slide operation. Keep existing
   // objects and frozen baselines rather than replacing them with a parsed/canonicalized copy.
   PresentationDraftSchema.parse(next);

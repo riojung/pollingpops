@@ -344,10 +344,10 @@ describe("Presentation slide visibility contract", () => {
 
   it("continues rejecting future document formats", () => {
     expect(
-      PresentationDraftSchema.safeParse({ ...deck([legacySlide()]), schemaVersion: 8 }).success,
+      PresentationDraftSchema.safeParse({ ...deck([legacySlide()]), schemaVersion: 9 }).success,
     ).toBe(false);
     expect(
-      PresentationContentSchema.safeParse({ ...deck([legacySlide()]), schemaVersion: 8 }).success,
+      PresentationContentSchema.safeParse({ ...deck([legacySlide()]), schemaVersion: 9 }).success,
     ).toBe(false);
   });
 });

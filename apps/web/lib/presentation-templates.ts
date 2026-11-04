@@ -6,6 +6,12 @@ import {
 } from "@openround/contracts";
 import { createContentBlock } from "./presentation-builder";
 import { clientUuid } from "./uuid";
+import {
+  instantiateNativePresentationTemplate,
+  isNativePresentationTemplateId,
+  nativePresentationTemplates,
+  type NativePresentationTemplateId,
+} from "./presentation-native-templates";
 
 type Slide = { kind: "content"; title: string; body: string; notes: string };
 type Check = {
@@ -388,9 +394,21 @@ export const presentationTemplates = [
   },
 ] as const;
 
-export type PresentationTemplateId = (typeof presentationTemplates)[number]["id"];
+export const legacyPresentationTemplates = presentationTemplates;
+export const allPresentationTemplates = [
+  ...nativePresentationTemplates,
+  ...legacyPresentationTemplates.map((template) => ({
+    ...template,
+    collection: "facilitated" as const,
+    scenarioLabel: "Facilitated learning and discussion",
+  })),
+];
+
+export type PresentationTemplateId =
+  (typeof presentationTemplates)[number]["id"] | NativePresentationTemplateId;
 
 export function instantiatePresentationTemplate(id: PresentationTemplateId): PresentationDraft {
+  if (isNativePresentationTemplateId(id)) return instantiateNativePresentationTemplate(id);
   const template = presentationTemplates.find((entry) => entry.id === id)!;
   const blocks: readonly TemplateBlock[] = template.blocks;
   const questionIds = new Map(

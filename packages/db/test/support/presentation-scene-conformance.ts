@@ -18,15 +18,60 @@ import {
   presentationPackMediaDraft,
 } from "./presentation-pack-media-conformance.js";
 
-export function presentationSceneBlock(mediaIds: string[]) {
+export function presentationSceneBlock(mediaIds: string[], richText = false) {
   const nodes = [
     {
       id: "title",
       type: "text" as const,
       role: "title" as const,
       text: "Native evidence",
+      ...(richText
+        ? {
+            richText: {
+              paragraphs: [
+                {
+                  kind: "paragraph" as const,
+                  runs: [
+                    { text: "Native ", bold: true as const },
+                    { text: "evidence", italic: true as const },
+                  ],
+                },
+              ],
+            },
+          }
+        : {}),
       frame: { x: 5, y: 5, width: 90, height: 15 },
     },
+    ...(richText
+      ? [
+          {
+            id: "body",
+            type: "text" as const,
+            role: "body" as const,
+            text: "Review evidence\nShare findings\nConfirm next step",
+            richText: {
+              paragraphs: [
+                {
+                  kind: "paragraph" as const,
+                  runs: [{ text: "Review evidence", bold: true as const }],
+                },
+                {
+                  kind: "bullet" as const,
+                  runs: [
+                    {
+                      text: "Share findings",
+                      italic: true as const,
+                      href: "https://example.com/review",
+                    },
+                  ],
+                },
+                { kind: "numbered" as const, runs: [{ text: "Confirm next step" }] },
+              ],
+            },
+            frame: { x: 5, y: 70, width: 90, height: 10 },
+          },
+        ]
+      : []),
     ...mediaIds.map((mediaId, index) => ({
       id: `image-${index}`,
       type: "image" as const,
@@ -60,7 +105,7 @@ export function presentationSceneBlock(mediaIds: string[]) {
     mediaAlt: null,
     speakerNotes: "Private native presenter note",
     scene: {
-      schemaVersion: 1 as const,
+      schemaVersion: richText ? (2 as const) : (1 as const),
       aspectRatio: "16:9" as const,
       nodes,
       readingOrder: nodes.map(({ id }) => id),
@@ -78,8 +123,10 @@ export async function expectPresentationSceneConformance(input: {
   workspaceId: string;
   otherWorkspaceId: string;
   editorId: string;
+  richText?: boolean;
 }) {
-  const { repository, workspaceId, otherWorkspaceId, editorId } = input;
+  const { repository, workspaceId, otherWorkspaceId, editorId, richText = false } = input;
+  const schemaVersion = richText ? 5 : 4;
   const presentations = createPresentationRepository(repository);
   const sessions = createPresentationSessionRepository(repository);
   const now = new Date();
@@ -109,8 +156,8 @@ export async function expectPresentationSceneConformance(input: {
   const baseline = presentationPackContent(baselineIds);
   const draft = PresentationDraftSchema.parse({
     ...packDraft,
-    schemaVersion: 4,
-    blocks: [presentationSceneBlock(sceneIds), ...packDraft.blocks],
+    schemaVersion,
+    blocks: [presentationSceneBlock(sceneIds, richText), ...packDraft.blocks],
     recoveryPackInsertions: [
       {
         ...packDraft.recoveryPackInsertions![0]!,
@@ -133,7 +180,7 @@ export async function expectPresentationSceneConformance(input: {
     status: "draft",
     draft,
     draftRevision: 0,
-    draftSchemaVersion: 4,
+    draftSchemaVersion: schemaVersion,
     currentVersionId: null,
     folderId: null,
     publishedDraftRevision: null,
@@ -149,7 +196,7 @@ export async function expectPresentationSceneConformance(input: {
       presentationId: presentation.id,
       version: 1,
       content,
-      contentSchemaVersion: 4,
+      contentSchemaVersion: schemaVersion,
       contentHash: hash(content),
       sourceDraftRevision: 0,
       publishedAt: now,
@@ -157,6 +204,9 @@ export async function expectPresentationSceneConformance(input: {
     0,
   );
   for (const mediaId of expectedMediaIds) {
+    expect(await repository.getMediaAsset(workspaceId, mediaId)).toMatchObject({
+      scanStatus: "clean",
+    });
     const references = await repository.listMediaReferences(workspaceId, mediaId);
     expect(references).toEqual(
       expect.arrayContaining([
@@ -169,7 +219,7 @@ export async function expectPresentationSceneConformance(input: {
   }
   for (const mediaId of [foreignId, deletingId, randomUUID()]) {
     const invalid = structuredClone(draft);
-    invalid.blocks[0] = presentationSceneBlock([mediaId]);
+    invalid.blocks[0] = presentationSceneBlock([mediaId], richText);
     await expect(
       presentations.updatePresentationDraft({
         workspaceId,
@@ -189,7 +239,7 @@ export async function expectPresentationSceneConformance(input: {
     );
   }
   const changed = structuredClone(draft);
-  changed.blocks[0] = presentationSceneBlock([sceneIds[1]!]);
+  changed.blocks[0] = presentationSceneBlock([sceneIds[1]!], richText);
   const mutation = {
     workspaceId,
     presentationId: presentation.id,
@@ -200,7 +250,11 @@ export async function expectPresentationSceneConformance(input: {
     draftHash: hash(changed),
   };
   const saved = await presentations.updatePresentationDraft(mutation);
-  expect(saved).toMatchObject({ draftRevision: 1, draftSchemaVersion: 4, draft: changed });
+  expect(saved).toMatchObject({
+    draftRevision: 1,
+    draftSchemaVersion: schemaVersion,
+    draft: changed,
+  });
   const removedImageReferences = await repository.listMediaReferences(workspaceId, sceneIds[0]!);
   expect(removedImageReferences).toEqual(
     expect.arrayContaining([
@@ -229,7 +283,7 @@ export async function expectPresentationSceneConformance(input: {
     mutationId: randomUUID(),
     editorId,
   });
-  expect(restored).toMatchObject({ draftRevision: 2, draftSchemaVersion: 4, draft });
+  expect(restored).toMatchObject({ draftRevision: 2, draftSchemaVersion: schemaVersion, draft });
   expect(await presentations.updatePresentationDraft(mutation)).toMatchObject({
     draftRevision: 1,
     draft: changed,

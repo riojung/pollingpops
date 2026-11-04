@@ -845,7 +845,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       return {
         ...current,
         blocks,
-        ...(block.kind === "content" && block.scene ? { schemaVersion: 4 as const } : {}),
+        ...(block.kind === "content" && block.scene
+          ? {
+              schemaVersion:
+                current.schemaVersion === 5 || block.scene.schemaVersion === 2
+                  ? (5 as const)
+                  : (4 as const),
+            }
+          : {}),
       };
     });
     setSelectedBlockId(block.id);
@@ -1965,11 +1972,18 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               <NativeSceneEditor
                 key={selectedBlock.id}
                 scene={selectedBlock.scene}
+                onUndo={undo}
+                onRedo={redo}
                 onChange={(scene: PresentationScene, historyField) =>
-                  updateSelected(
-                    (block) =>
-                      block.kind === "content" && block.scene ? { ...block, scene } : block,
-                    historyField,
+                  commit(
+                    (current) => ({
+                      ...updateBlock(current, selectedBlock.id, (block) =>
+                        block.kind === "content" && block.scene ? { ...block, scene } : block,
+                      ),
+                      schemaVersion:
+                        current.schemaVersion === 5 || scene.schemaVersion === 2 ? 5 : 4,
+                    }),
+                    historyField ? `${selectedBlock.id}:${historyField}` : undefined,
                   )
                 }
                 renderImage={(mediaId, altText) => (
@@ -2129,7 +2143,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       const converted = adaptContentSlideToScene(selectedBlock);
                       commit((current) => ({
                         ...updateBlock(current, selectedBlock.id, () => converted),
-                        schemaVersion: 4,
+                        schemaVersion: current.schemaVersion === 5 ? 5 : 4,
                       }));
                     } catch (caught) {
                       setError(humanError(caught));

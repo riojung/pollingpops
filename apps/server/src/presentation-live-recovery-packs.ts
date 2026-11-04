@@ -92,7 +92,7 @@ export function presentationRecoveryPackInsertionTransition(
   blocks.splice(insertionIndex, 0, ...insertedBlocks);
   const content = PresentationContentSchema.parse({
     ...session.content,
-    schemaVersion: session.content.schemaVersion === 4 ? 4 : 3,
+    schemaVersion: session.content.schemaVersion >= 4 ? session.content.schemaVersion : 3,
     blocks,
     recoveryPackInsertions: [
       ...(session.content.recoveryPackInsertions ?? []),

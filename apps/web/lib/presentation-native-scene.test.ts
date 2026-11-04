@@ -76,6 +76,37 @@ function draft(): PresentationDraft {
 }
 
 describe("native Presentation authoring operations", () => {
+  it("retains rich formatting and canonical text through recovery and node-remapping duplication", () => {
+    const input = draft();
+    input.schemaVersion = 5;
+    const block = input.blocks[0]!;
+    if (block.kind !== "content") throw new Error("fixture");
+    block.scene!.schemaVersion = 2;
+    const body = block.scene!.nodes.find((node) => node.id === "body");
+    if (!body || body.type !== "text") throw new Error("fixture");
+    body.richText = {
+      paragraphs: [
+        {
+          kind: "bullet",
+          runs: [
+            { text: "Start", bold: true },
+            { text: " here", href: "https://example.com" },
+          ],
+        },
+      ],
+    };
+    const restored = normalizePresentationRecoveryDraft(JSON.parse(JSON.stringify(input)));
+    expect(restored).toEqual(input);
+    const copied = duplicatePresentationBlock(block);
+    if (copied.kind !== "content") throw new Error("fixture");
+    const copiedBody = copied.scene!.nodes.find(
+      (node) => node.type === "text" && node.role === "body",
+    );
+    expect(copiedBody).toMatchObject({ text: "Start here", richText: body.richText });
+    expect(copiedBody!.id).not.toBe(body.id);
+    expect(PresentationDraftSchema.parse({ ...input, blocks: [copied] }).schemaVersion).toBe(5);
+  });
+
   it("creates a valid incomplete scene and preserves all visual edits through recovery", () => {
     expect(PresentationSceneDraftSchema.safeParse(createNativeContentBlock().scene).success).toBe(
       true,

@@ -1,4 +1,4 @@
-import { nativeSceneBlock } from "./support/presentation-native-scene.js";
+import { nativeSceneBlock, richTextSceneBlock } from "./support/presentation-native-scene.js";
 import { signInFromVerificationResponse } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -265,42 +265,45 @@ async function updateFixture() {
 }
 
 describe("Recovery Pack Presentation insertion", () => {
-  it("preserves native v4 scenes when inserting and publishing a frozen Pack baseline", async () => {
-    const { app, cookie } = await setup();
-    const { version, presentation } = await material(app, cookie);
-    const block = nativeSceneBlock();
-    const saved = await save(app, cookie, presentation, {
-      ...presentation.draft,
-      schemaVersion: 4,
-      blocks: [block],
-    });
-    expect(saved.statusCode, saved.body).toBe(200);
-    const request = { packVersionId: version.id, expectedRevision: 2, mutationId: randomUUID() };
-    const inserted = await insert(app, cookie, presentation.id, request);
-    expect(inserted.statusCode, inserted.body).toBe(200);
-    expect(inserted.json().presentation).toMatchObject({
-      draftSchemaVersion: 4,
-      draft: {
-        schemaVersion: 4,
-        blocks: [block, { kind: "question" }, { kind: "question" }],
-        recoveryPackInsertions: [{ originalContent: version.content }],
-      },
-    });
-    const retried = await insert(app, cookie, presentation.id, request);
-    expect(retried.statusCode).toBe(200);
-    expect(retried.json().presentation.draft).toEqual(inserted.json().presentation.draft);
-    const published = await app.inject({
-      method: "POST",
-      url: `/v1/presentations/${presentation.id}/publish`,
-      headers: { cookie },
-      payload: { expectedDraftRevision: 3 },
-    });
-    expect(published.statusCode, published.body).toBe(200);
-    expect(published.json().version).toMatchObject({
-      contentSchemaVersion: 4,
-      content: { schemaVersion: 4, blocks: [block, { kind: "question" }, { kind: "question" }] },
-    });
-  });
+  it.each([4, 5] as const)(
+    "preserves native v%s scenes when inserting and publishing a frozen Pack baseline",
+    async (schemaVersion) => {
+      const { app, cookie } = await setup();
+      const { version, presentation } = await material(app, cookie);
+      const block = schemaVersion === 5 ? richTextSceneBlock() : nativeSceneBlock();
+      const saved = await save(app, cookie, presentation, {
+        ...presentation.draft,
+        schemaVersion,
+        blocks: [block],
+      });
+      expect(saved.statusCode, saved.body).toBe(200);
+      const request = { packVersionId: version.id, expectedRevision: 2, mutationId: randomUUID() };
+      const inserted = await insert(app, cookie, presentation.id, request);
+      expect(inserted.statusCode, inserted.body).toBe(200);
+      expect(inserted.json().presentation).toMatchObject({
+        draftSchemaVersion: schemaVersion,
+        draft: {
+          schemaVersion,
+          blocks: [block, { kind: "question" }, { kind: "question" }],
+          recoveryPackInsertions: [{ originalContent: version.content }],
+        },
+      });
+      const retried = await insert(app, cookie, presentation.id, request);
+      expect(retried.statusCode).toBe(200);
+      expect(retried.json().presentation.draft).toEqual(inserted.json().presentation.draft);
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/presentations/${presentation.id}/publish`,
+        headers: { cookie },
+        payload: { expectedDraftRevision: 3 },
+      });
+      expect(published.statusCode, published.body).toBe(200);
+      expect(published.json().version).toMatchObject({
+        contentSchemaVersion: schemaVersion,
+        content: { schemaVersion, blocks: [block, { kind: "question" }, { kind: "question" }] },
+      });
+    },
+  );
 
   it("freezes the complete baseline and remaps the pair, then publishes without leaking private references", async () => {
     const { app, cookie } = await setup();

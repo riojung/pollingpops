@@ -1,8 +1,13 @@
 import { z } from "zod";
 import { CanvasColorSchema, CanvasShapeVariantSchema } from "./canvas-content-v4";
+import {
+  PresentationRichTextSchema,
+  presentationRichTextToPlainText,
+} from "./presentation-rich-text";
 
-/** The scene has its own version; documents containing it opt into Presentation v4. */
+/** Plain scenes opt into Presentation v4; formatted scene v2 requires Presentation v5. */
 export const PRESENTATION_SCENE_SCHEMA_VERSION = 1 as const;
+export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
 
@@ -62,6 +67,7 @@ const textNode = z
     type: z.literal("text"),
     role: z.enum(["title", "body"]),
     text: plainText(4_000),
+    richText: PresentationRichTextSchema.optional(),
   })
   .strict()
   .superRefine((node, context) => {
@@ -70,6 +76,23 @@ const textNode = z
         code: "custom",
         path: ["text"],
         message: "Slide titles support at most 160 characters",
+      });
+    }
+    if (node.richText && presentationRichTextToPlainText(node.richText) !== node.text) {
+      context.addIssue({
+        code: "custom",
+        path: ["text"],
+        message: "Plain text must exactly match the formatted text content",
+      });
+    }
+    if (
+      node.role === "title" &&
+      node.richText?.paragraphs.some((paragraph) => paragraph.kind !== "paragraph")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["richText"],
+        message: "Slide titles use paragraphs rather than lists",
       });
     }
   });
@@ -120,7 +143,10 @@ export type PresentationSceneNode = z.infer<typeof PresentationSceneNodeSchema>;
 /** Public slide content only. Notes, provenance and source disclosure stay on the block. */
 export const PresentationSceneDraftSchema = z
   .object({
-    schemaVersion: z.literal(PRESENTATION_SCENE_SCHEMA_VERSION),
+    schemaVersion: z.union([
+      z.literal(PRESENTATION_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION),
+    ]),
     aspectRatio: z.literal("16:9"),
     nodes: z.array(PresentationSceneNodeSchema).min(1).max(PRESENTATION_SCENE_MAX_NODES),
     readingOrder: z.array(identifier).min(1).max(PRESENTATION_SCENE_MAX_NODES),
@@ -151,6 +177,13 @@ export const PresentationSceneDraftSchema = z
       });
     }
     for (const [index, node] of scene.nodes.entries()) {
+      if (scene.schemaVersion === 1 && node.type === "text" && "richText" in node) {
+        context.addIssue({
+          code: "custom",
+          path: ["nodes", index, "richText"],
+          message: "Formatted text requires scene schema version 2",
+        });
+      }
       if (node.type !== "connector") continue;
       for (const side of ["from", "to"] as const) {
         const target = byId.get(node[side].nodeId);

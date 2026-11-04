@@ -1,5 +1,37 @@
 import { randomUUID } from "node:crypto";
 
+export function richTextSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
+  const block = nativeSceneBlock(mediaIds, title);
+  const body = {
+    id: "rich-body",
+    type: "text" as const,
+    role: "body" as const,
+    text: "Review the evidence\nChoose an owner",
+    richText: {
+      paragraphs: [
+        {
+          kind: "paragraph" as const,
+          runs: [{ text: "Review the evidence", bold: true as const }],
+        },
+        {
+          kind: "bullet" as const,
+          runs: [{ text: "Choose an owner", href: "https://example.com/next" }],
+        },
+      ],
+    },
+    frame: { x: 5, y: 60, width: 90, height: 15 },
+  };
+  return {
+    ...block,
+    scene: {
+      ...block.scene,
+      schemaVersion: 2 as const,
+      nodes: [...block.scene.nodes, body],
+      readingOrder: [...block.scene.readingOrder, body.id],
+    },
+  };
+}
+
 export function nativeSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
   const nodes = [
     {

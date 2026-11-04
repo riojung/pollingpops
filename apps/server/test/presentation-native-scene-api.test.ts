@@ -11,7 +11,7 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
-import { nativeSceneBlock } from "./support/presentation-native-scene.js";
+import { nativeSceneBlock, richTextSceneBlock } from "./support/presentation-native-scene.js";
 
 const workspaceId = "10000000-0000-4000-8000-00000000c004";
 let app: FastifyInstance | undefined;
@@ -86,202 +86,206 @@ function expectPublicScene(snapshot: unknown, scene: unknown) {
 }
 
 describe("native Presentation scenes API", () => {
-  it("saves exact retries, publishes immutable scenes and delivers authorized role projections through completion", async () => {
-    const built = await setup();
-    vi.spyOn(built.storage, "createDownloadUrl").mockImplementation(
-      async (asset) => `https://storage.example.test/${asset.id}`,
-    );
-    const target = built.app;
-    const { cookie } = built;
-    const mediaIds = [randomUUID(), randomUUID(), randomUUID()];
-    for (const id of mediaIds)
-      await built.repository.createMediaAsset({
-        id,
-        workspaceId,
-        objectKey: `native/${id}.png`,
-        mimeType: "image/png",
-        sizeBytes: 128,
-        scanStatus: "clean",
-        altText: "Source image description",
-        createdAt: new Date(),
+  it.each([4, 5] as const)(
+    "saves exact retries and delivers immutable v%s scenes through completion",
+    async (schemaVersion) => {
+      const built = await setup();
+      vi.spyOn(built.storage, "createDownloadUrl").mockImplementation(
+        async (asset) => `https://storage.example.test/${asset.id}`,
+      );
+      const target = built.app;
+      const { cookie } = built;
+      const mediaIds = [randomUUID(), randomUUID(), randomUUID()];
+      for (const id of mediaIds)
+        await built.repository.createMediaAsset({
+          id,
+          workspaceId,
+          objectKey: `native/${id}.png`,
+          mimeType: "image/png",
+          sizeBytes: 128,
+          scanStatus: "clean",
+          altText: "Source image description",
+          createdAt: new Date(),
+        });
+      const sceneBlock = schemaVersion === 5 ? richTextSceneBlock : nativeSceneBlock;
+      const draft = PresentationDraftSchema.parse({
+        title: "Native content-only deck",
+        schemaVersion,
+        blocks: [
+          sceneBlock(mediaIds.slice(0, 2)),
+          sceneBlock(mediaIds.slice(2), "Native next steps"),
+        ],
       });
-    const draft = PresentationDraftSchema.parse({
-      title: "Native content-only deck",
-      schemaVersion: 4,
-      blocks: [
-        nativeSceneBlock(mediaIds.slice(0, 2)),
-        nativeSceneBlock(mediaIds.slice(2), "Native next steps"),
-      ],
-    });
-    const firstBlock = draft.blocks[0]!;
-    if (firstBlock.kind !== "content" || !firstBlock.scene)
-      throw new Error("Expected native content");
-    const originalScene = structuredClone(firstBlock.scene);
-    const { id, mutation } = await saveDraft(target, cookie, draft);
-    const retry = await target.inject({
-      method: "PUT",
-      url: `/v1/presentations/${id}/draft`,
-      headers: { cookie },
-      payload: mutation,
-    });
-    expect(retry.statusCode).toBe(200);
-    expect(retry.json().presentation).toMatchObject({
-      draftRevision: 1,
-      draftSchemaVersion: 4,
-      draft,
-    });
-    const different = structuredClone(draft);
-    different.description = "Changed request under an accepted mutation identifier";
-    const mismatch = await target.inject({
-      method: "PUT",
-      url: `/v1/presentations/${id}/draft`,
-      headers: { cookie },
-      payload: { ...mutation, draft: different },
-    });
-    expect(mismatch.statusCode).toBe(409);
-    const published = await target.inject({
-      method: "POST",
-      url: `/v1/presentations/${id}/publish`,
-      headers: { cookie },
-      payload: { expectedDraftRevision: 1 },
-    });
-    expect(published.statusCode, published.body).toBe(200);
-    const version = published.json().version;
-    expect(version).toMatchObject({ contentSchemaVersion: 4, content: draft });
-    const republished = await target.inject({
-      method: "POST",
-      url: `/v1/presentations/${id}/publish`,
-      headers: { cookie },
-      payload: { expectedDraftRevision: 1 },
-    });
-    expect(republished.json().version).toEqual(version);
-    const laterDraft = structuredClone(draft);
-    const laterBlock = laterDraft.blocks[0]!;
-    if (laterBlock.kind !== "content" || !laterBlock.scene) throw new Error("Expected scene");
-    const titleNode = laterBlock.scene.nodes.find((node) => node.type === "text")!;
-    if (titleNode.type !== "text") throw new Error("Expected text");
-    titleNode.text = "UNPUBLISHED changed title";
-    const changed = await target.inject({
-      method: "PUT",
-      url: `/v1/presentations/${id}/draft`,
-      headers: { cookie },
-      payload: { ...mutation, expectedRevision: 1, mutationId: randomUUID(), draft: laterDraft },
-    });
-    expect(changed.statusCode).toBe(200);
-    const hosted = await target.inject({
-      method: "POST",
-      url: "/v1/presentation-sessions",
-      headers: { cookie },
-      payload: { presentationId: id },
-    });
-    expect(hosted.statusCode, hosted.body).toBe(201);
-    const { snapshot: lobby, controlToken } = hosted.json();
-    const sessionId = lobby.sessionId as string;
-    const joined = await target.inject({
-      method: "POST",
-      url: "/v1/presentation-sessions/join",
-      payload: { code: lobby.code, nickname: "River" },
-    });
-    expect(joined.statusCode).toBe(201);
-    const participantToken = joined.json().participantToken as string;
-    const command = (expectedRevision: number) => ({
-      sessionId,
-      controlToken,
-      action: "advance",
-      commandId: randomUUID(),
-      expectedRevision,
-    });
-    const advanced = await target.inject({
-      method: "POST",
-      url: `/v1/presentation-sessions/${sessionId}/command`,
-      payload: command(0),
-    });
-    expect(advanced.statusCode, advanced.body).toBe(200);
-    expectPublicScene(advanced.json().snapshot, originalScene);
-    const participant = await target.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${sessionId}/participant`,
-      headers: { authorization: `Bearer ${participantToken}` },
-    });
-    expectPublicScene(participant.json().snapshot, originalScene);
-    const pass = await built.presentationService.createCompanionPass({
-      workspaceId,
-      userId: built.creator.userId,
-      sessionId,
-      requestId: randomUUID(),
-    });
-    for (const input of [
-      { projection: "host" as const, sessionId, controlToken },
-      { projection: "participant" as const, sessionId, participantToken },
-      { projection: "companion" as const, sessionId, companionToken: pass.companionToken },
-    ])
-      expectPublicScene((await built.presentationService.sync(input)).snapshot, originalScene);
-    for (const mediaId of mediaIds) {
-      const asset = await target.inject({
+      const firstBlock = draft.blocks[0]!;
+      if (firstBlock.kind !== "content" || !firstBlock.scene)
+        throw new Error("Expected native content");
+      const originalScene = structuredClone(firstBlock.scene);
+      const { id, mutation } = await saveDraft(target, cookie, draft);
+      const retry = await target.inject({
+        method: "PUT",
+        url: `/v1/presentations/${id}/draft`,
+        headers: { cookie },
+        payload: mutation,
+      });
+      expect(retry.statusCode).toBe(200);
+      expect(retry.json().presentation).toMatchObject({
+        draftRevision: 1,
+        draftSchemaVersion: schemaVersion,
+        draft,
+      });
+      const different = structuredClone(draft);
+      different.description = "Changed request under an accepted mutation identifier";
+      const mismatch = await target.inject({
+        method: "PUT",
+        url: `/v1/presentations/${id}/draft`,
+        headers: { cookie },
+        payload: { ...mutation, draft: different },
+      });
+      expect(mismatch.statusCode).toBe(409);
+      const published = await target.inject({
+        method: "POST",
+        url: `/v1/presentations/${id}/publish`,
+        headers: { cookie },
+        payload: { expectedDraftRevision: 1 },
+      });
+      expect(published.statusCode, published.body).toBe(200);
+      const version = published.json().version;
+      expect(version).toMatchObject({ contentSchemaVersion: schemaVersion, content: draft });
+      const republished = await target.inject({
+        method: "POST",
+        url: `/v1/presentations/${id}/publish`,
+        headers: { cookie },
+        payload: { expectedDraftRevision: 1 },
+      });
+      expect(republished.json().version).toEqual(version);
+      const laterDraft = structuredClone(draft);
+      const laterBlock = laterDraft.blocks[0]!;
+      if (laterBlock.kind !== "content" || !laterBlock.scene) throw new Error("Expected scene");
+      const titleNode = laterBlock.scene.nodes.find((node) => node.type === "text")!;
+      if (titleNode.type !== "text") throw new Error("Expected text");
+      titleNode.text = "UNPUBLISHED changed title";
+      const changed = await target.inject({
+        method: "PUT",
+        url: `/v1/presentations/${id}/draft`,
+        headers: { cookie },
+        payload: { ...mutation, expectedRevision: 1, mutationId: randomUUID(), draft: laterDraft },
+      });
+      expect(changed.statusCode).toBe(200);
+      const hosted = await target.inject({
+        method: "POST",
+        url: "/v1/presentation-sessions",
+        headers: { cookie },
+        payload: { presentationId: id },
+      });
+      expect(hosted.statusCode, hosted.body).toBe(201);
+      const { snapshot: lobby, controlToken } = hosted.json();
+      const sessionId = lobby.sessionId as string;
+      const joined = await target.inject({
+        method: "POST",
+        url: "/v1/presentation-sessions/join",
+        payload: { code: lobby.code, nickname: "River" },
+      });
+      expect(joined.statusCode).toBe(201);
+      const participantToken = joined.json().participantToken as string;
+      const command = (expectedRevision: number) => ({
+        sessionId,
+        controlToken,
+        action: "advance",
+        commandId: randomUUID(),
+        expectedRevision,
+      });
+      const advanced = await target.inject({
+        method: "POST",
+        url: `/v1/presentation-sessions/${sessionId}/command`,
+        payload: command(0),
+      });
+      expect(advanced.statusCode, advanced.body).toBe(200);
+      expectPublicScene(advanced.json().snapshot, originalScene);
+      const participant = await target.inject({
         method: "GET",
-        url: `/v1/presentation-sessions/${sessionId}/media/${mediaId}`,
+        url: `/v1/presentation-sessions/${sessionId}/participant`,
         headers: { authorization: `Bearer ${participantToken}` },
       });
-      expect(asset.statusCode, asset.body).toBe(mediaId === mediaIds[2] ? 404 : 200);
-    }
-    const unauthorized = await target.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
-    });
-    expect(unauthorized.statusCode).toBe(401);
-    const hostMedia = await target.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${sessionId}/host-media/${mediaIds[1]}`,
-      headers: { cookie },
-    });
-    expect(hostMedia.statusCode).toBe(200);
-    const second = await target.inject({
-      method: "POST",
-      url: `/v1/presentation-sessions/${sessionId}/command`,
-      payload: command(1),
-    });
-    expect(second.statusCode).toBe(200);
-    const previousAsset = await target.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
-      headers: { authorization: `Bearer ${participantToken}` },
-    });
-    expect(previousAsset.statusCode).toBe(404);
-    const currentAsset = await target.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[2]}`,
-      headers: { authorization: `Bearer ${participantToken}` },
-    });
-    expect(currentAsset.statusCode).toBe(200);
-    const finished = await target.inject({
-      method: "POST",
-      url: `/v1/presentation-sessions/${sessionId}/command`,
-      payload: command(2),
-    });
-    expect(finished.json()).toMatchObject({ snapshot: { phase: "finished" } });
-    await built.presentationReportWorker.runUntilIdle();
-    const report = await target.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${sessionId}/report`,
-      headers: { cookie },
-    });
-    expect(report.json()).toMatchObject({
-      reportStatus: "ready",
-      report: {
-        leaderboard: [],
-        responseCount: 0,
-        evidence: [
-          { title: "Native evidence", kind: "content" },
-          { title: "Native next steps", kind: "content" },
-        ],
-      },
-    });
-    expect(JSON.stringify(report.json())).not.toContain("PRIVATE");
-    expect(JSON.stringify(report.json())).not.toContain("UNPUBLISHED");
-    expect(await built.presentations.getPresentationVersion(workspaceId, version.id)).toMatchObject(
-      { content: draft, contentHash: version.contentHash },
-    );
-  });
+      expectPublicScene(participant.json().snapshot, originalScene);
+      const pass = await built.presentationService.createCompanionPass({
+        workspaceId,
+        userId: built.creator.userId,
+        sessionId,
+        requestId: randomUUID(),
+      });
+      for (const input of [
+        { projection: "host" as const, sessionId, controlToken },
+        { projection: "participant" as const, sessionId, participantToken },
+        { projection: "companion" as const, sessionId, companionToken: pass.companionToken },
+      ])
+        expectPublicScene((await built.presentationService.sync(input)).snapshot, originalScene);
+      for (const mediaId of mediaIds) {
+        const asset = await target.inject({
+          method: "GET",
+          url: `/v1/presentation-sessions/${sessionId}/media/${mediaId}`,
+          headers: { authorization: `Bearer ${participantToken}` },
+        });
+        expect(asset.statusCode, asset.body).toBe(mediaId === mediaIds[2] ? 404 : 200);
+      }
+      const unauthorized = await target.inject({
+        method: "GET",
+        url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
+      });
+      expect(unauthorized.statusCode).toBe(401);
+      const hostMedia = await target.inject({
+        method: "GET",
+        url: `/v1/presentation-sessions/${sessionId}/host-media/${mediaIds[1]}`,
+        headers: { cookie },
+      });
+      expect(hostMedia.statusCode).toBe(200);
+      const second = await target.inject({
+        method: "POST",
+        url: `/v1/presentation-sessions/${sessionId}/command`,
+        payload: command(1),
+      });
+      expect(second.statusCode).toBe(200);
+      const previousAsset = await target.inject({
+        method: "GET",
+        url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[0]}`,
+        headers: { authorization: `Bearer ${participantToken}` },
+      });
+      expect(previousAsset.statusCode).toBe(404);
+      const currentAsset = await target.inject({
+        method: "GET",
+        url: `/v1/presentation-sessions/${sessionId}/media/${mediaIds[2]}`,
+        headers: { authorization: `Bearer ${participantToken}` },
+      });
+      expect(currentAsset.statusCode).toBe(200);
+      const finished = await target.inject({
+        method: "POST",
+        url: `/v1/presentation-sessions/${sessionId}/command`,
+        payload: command(2),
+      });
+      expect(finished.json()).toMatchObject({ snapshot: { phase: "finished" } });
+      await built.presentationReportWorker.runUntilIdle();
+      const report = await target.inject({
+        method: "GET",
+        url: `/v1/presentation-sessions/${sessionId}/report`,
+        headers: { cookie },
+      });
+      expect(report.json()).toMatchObject({
+        reportStatus: "ready",
+        report: {
+          leaderboard: [],
+          responseCount: 0,
+          evidence: [
+            { title: "Native evidence", kind: "content" },
+            { title: "Native next steps", kind: "content" },
+          ],
+        },
+      });
+      expect(JSON.stringify(report.json())).not.toContain("PRIVATE");
+      expect(JSON.stringify(report.json())).not.toContain("UNPUBLISHED");
+      expect(
+        await built.presentations.getPresentationVersion(workspaceId, version.id),
+      ).toMatchObject({ content: draft, contentHash: version.contentHash });
+    },
+  );
 
   it("reports scene image scan, ownership and accessibility blockers at the image placement", async () => {
     const built = await setup();

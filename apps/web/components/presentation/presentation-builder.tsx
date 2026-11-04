@@ -621,7 +621,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           previousHistoryCommit?.key === historyKey &&
           now - previousHistoryCommit.at <= TEXT_EDIT_COALESCE_MS;
         if (!coalescesWithPreviousEdit) {
-          setUndoStack((history) => [...history, current].slice(-HISTORY_LIMIT));
+          // React may replay this draft updater. Keep one checkpoint for the same snapshot.
+          setUndoStack((history) =>
+            history.at(-1) === current ? history : [...history, current].slice(-HISTORY_LIMIT),
+          );
         }
         lastHistoryCommit.current = historyKey ? { key: historyKey, at: now } : null;
         setRedoStack([]);

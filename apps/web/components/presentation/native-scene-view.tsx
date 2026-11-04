@@ -1,6 +1,12 @@
 "use client";
 
-import { useId, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useId,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import {
   CANVAS_FILL_COLORS,
   CANVAS_STROKE_COLORS,
@@ -69,14 +75,25 @@ export function NativeSceneView({
   scene,
   renderImage,
   selectedNodeId,
+  selectedNodeIds,
   onSelect,
   onFrameChange,
+  onGeometryKey,
+  onNodePointerDown,
 }: {
   scene: PresentationScene;
   renderImage?: SceneImageRenderer;
   selectedNodeId?: string;
-  onSelect?: (id: string) => void;
+  selectedNodeIds?: readonly string[];
+  onSelect?: (id: string, additive?: boolean) => void;
   onFrameChange?: (id: string, frame: PresentationSceneFrame) => void;
+  onGeometryKey?: (id: string, dx: number, dy: number, resize: boolean) => void;
+  onNodePointerDown?: (
+    event: PointerEvent<HTMLElement>,
+    id: string,
+    resize: boolean,
+    handle: boolean,
+  ) => void;
 }) {
   const markerId = useId();
   const nodes = new Map(scene.nodes.map((node) => [node.id, node]));
@@ -87,6 +104,10 @@ export function NativeSceneView({
     const dy = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
     if (!dx && !dy) return;
     event.preventDefault();
+    if (onGeometryKey) {
+      onGeometryKey(node.id, dx, dy, resize);
+      return;
+    }
     onSelect?.(node.id);
     onFrameChange?.(
       node.id,
@@ -155,11 +176,16 @@ export function NativeSceneView({
         return (
           <div
             key={id}
-            className={`${styles.node} ${selectedNodeId === id ? styles.selected : ""}`}
+            className={`${styles.node} ${editing ? styles.editableNode : ""} ${(selectedNodeIds?.includes(id) ?? selectedNodeId === id) ? styles.selected : ""}`}
             style={style}
             data-node-id={id}
             data-frame={JSON.stringify(node.frame)}
-            onClick={editing ? () => onSelect?.(id) : undefined}
+            onClick={
+              editing && !onNodePointerDown ? (event) => onSelect?.(id, event.shiftKey) : undefined
+            }
+            onPointerDown={
+              onNodePointerDown ? (event) => onNodePointerDown(event, id, false, false) : undefined
+            }
           >
             {node.type === "text" ? (
               node.role === "title" ? (
@@ -185,16 +211,39 @@ export function NativeSceneView({
                 <button
                   type="button"
                   aria-label={`Move ${nativeNodeLabel(node)}. Use arrow keys to nudge.`}
-                  onFocus={() => onSelect?.(id)}
+                  onFocus={() => {
+                    if (!selectedNodeIds?.includes(id)) onSelect?.(id);
+                  }}
                   onKeyDown={(event) => frameKey(event, node, false)}
+                  onPointerDown={
+                    onNodePointerDown
+                      ? (event) => {
+                          event.stopPropagation();
+                          onNodePointerDown(event, id, false, true);
+                        }
+                      : undefined
+                  }
+                  onClick={(event) => event.stopPropagation()}
                 >
                   ↔
                 </button>
                 <button
                   type="button"
                   aria-label={`Resize ${nativeNodeLabel(node)}. Use arrow keys to change size.`}
-                  onFocus={() => onSelect?.(id)}
+                  onFocus={() => {
+                    if (!selectedNodeIds?.includes(id)) onSelect?.(id);
+                  }}
                   onKeyDown={(event) => frameKey(event, node, true)}
+                  className={styles.resizeHandle}
+                  onPointerDown={
+                    onNodePointerDown
+                      ? (event) => {
+                          event.stopPropagation();
+                          onNodePointerDown(event, id, true, true);
+                        }
+                      : undefined
+                  }
+                  onClick={(event) => event.stopPropagation()}
                 >
                   ↗
                 </button>

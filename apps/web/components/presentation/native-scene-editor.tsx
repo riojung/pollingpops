@@ -12,11 +12,15 @@ import { clientUuid } from "../../lib/uuid";
 import {
   boundNativeSceneFrame,
   nativeNodeLabel,
-  removeNativeNode,
   reorderNativeNode,
   updateNativeNode,
 } from "../../lib/presentation-native-scene";
-import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
+import { type SceneImageRenderer } from "./native-scene-view";
+import { NativeSceneCanvas } from "./native-scene-canvas";
+import {
+  moveNativeSceneNodes,
+  removeNativeSceneNodes,
+} from "../../lib/presentation-native-geometry";
 import styles from "./native-scene.module.css";
 
 const shapes = [
@@ -44,9 +48,25 @@ export function NativeSceneEditor({
   attachmentPending?: boolean;
   onUploadImage: (file: File, altText: string) => void;
 }) {
-  const [selection, setSelection] = useState(scene.nodes[0]?.id);
+  const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
-  const selected = scene.nodes.find((node) => node.id === selection) ?? scene.nodes[0]!;
+  const validSelection = selection.filter((id) => scene.nodes.some((node) => node.id === id));
+  const selectedIds = validSelection.length ? validSelection : [scene.nodes[0]!.id];
+  const selected = scene.nodes.find((node) => node.id === selectedIds.at(-1))!;
+  const multiple = selectedIds.length > 1;
+  const canMoveSelection = scene.nodes.some(
+    (node) => selectedIds.includes(node.id) && node.type !== "connector",
+  );
+  function select(id: string, additive = false) {
+    setSelection((current) => {
+      if (!additive) return [id];
+      const valid = current.filter((candidate) =>
+        scene.nodes.some((node) => node.id === candidate),
+      );
+      if (!valid.includes(id)) return [...valid, id];
+      return valid.length > 1 ? valid.filter((candidate) => candidate !== id) : valid;
+    });
+  }
   const canAdd =
     mediaState === "idle" &&
     !attachmentPending &&
@@ -66,22 +86,16 @@ export function NativeSceneEditor({
       nodes: [...scene.nodes, node],
       readingOrder: [...scene.readingOrder, node.id],
     });
-    setSelection(node.id);
+    setSelection([node.id]);
   }
   return (
     <div className={styles.editor}>
-      <NativeSceneView
+      <NativeSceneCanvas
         scene={scene}
         renderImage={renderImage}
-        selectedNodeId={selected.id}
-        onSelect={setSelection}
-        onFrameChange={(id, frame) =>
-          onChange(
-            updateNativeNode(scene, id, (node) =>
-              node.type === "connector" ? node : { ...node, frame },
-            ),
-          )
-        }
+        selectedNodeIds={selectedIds}
+        onSelect={select}
+        onChange={onChange}
       />
       <div className={styles.controls} aria-label="Native slide editor" lang="en-CA">
         <fieldset>
@@ -93,15 +107,54 @@ export function NativeSceneEditor({
                 <li key={id}>
                   <button
                     type="button"
-                    aria-pressed={selected.id === id}
-                    onClick={() => setSelection(id)}
+                    aria-pressed={selectedIds.includes(id)}
+                    onClick={(event) => select(id, event.shiftKey)}
                   >
                     {index + 1}. {nativeNodeLabel(node)}
                   </button>
+                  <label className={styles.selectionToggle}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Include ${nativeNodeLabel(node)} in selection`}
+                      checked={selectedIds.includes(id)}
+                      onChange={() => select(id, true)}
+                    />
+                    Include in selection
+                  </label>
                 </li>
               );
             })}
           </ol>
+          <p role="status" className={styles.help}>
+            {selectedIds.length} {multiple ? "objects selected" : "object selected"}
+          </p>
+          {multiple ? (
+            <div className={styles.actions} aria-label="Selection actions">
+              {(
+                [
+                  ["left", -1, 0],
+                  ["right", 1, 0],
+                  ["up", 0, -1],
+                  ["down", 0, 1],
+                ] as const
+              ).map(([direction, dx, dy]) => (
+                <button
+                  key={direction}
+                  type="button"
+                  disabled={!canMoveSelection}
+                  onClick={() => onChange(moveNativeSceneNodes(scene, selectedIds, dx, dy))}
+                >
+                  Move selection {direction}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => onChange(removeNativeSceneNodes(scene, selectedIds))}
+              >
+                Delete selected objects
+              </button>
+            </div>
+          ) : null}
           <div className={styles.actions}>
             <button
               type="button"
@@ -191,7 +244,7 @@ export function NativeSceneEditor({
           </p>
         </fieldset>
         <fieldset>
-          <legend>Selected object</legend>
+          <legend>{multiple ? "Last selected object" : "Selected object"}</legend>
           {selected.type === "text" ? (
             <label>
               {selected.role === "title" ? "Native slide title" : "Node text"}
@@ -403,14 +456,18 @@ export function NativeSceneEditor({
             <button
               type="button"
               disabled={selected.type === "text" && selected.role === "title"}
-              onClick={() => onChange(removeNativeNode(scene, selected.id))}
+              onClick={() => onChange(removeNativeSceneNodes(scene, [selected.id]))}
             >
               Delete object
             </button>
           </div>
           <p className={styles.help}>
-            Use the move and resize buttons on the slide with arrow keys for 1% steps, or hold Shift
-            for 5%. Deleting an object also removes its connectors. The title stays on the slide.
+            On wide screens, drag an object or its move button; drag its resize button to change
+            size. Press Escape to cancel a drag. Shift-click objects or use the selection checkboxes
+            to move several together. Arrow keys on a move button nudge the selection by 1%, or 5%
+            with Shift. Resize keys change the focused object; numeric fields change the last
+            selected object. Narrow screens use the reading-order view with keyboard and numeric
+            controls. Deleting objects also removes their connectors. The title stays on the slide.
           </p>
         </fieldset>
       </div>

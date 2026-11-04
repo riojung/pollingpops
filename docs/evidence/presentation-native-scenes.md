@@ -157,7 +157,8 @@ apply migration 089, deploy compatible readers/media cleanup workers before reop
 writers, and retain a compatible rollback image after version-4 data exists. Older processes
 cannot read or safely clean up native node assets. No new paid dependency, AI call or paywall is added.
 
-Rich text, pointer dragging, multiselection, grouping, slide hiding, advanced themes and charts
-remain later work. Creator timings, assistive-technology acceptance, physical-device behavior,
+Pointer editing and temporary multiselection are covered by the subsequent
+[direct-editing record](presentation-direct-editing.md). Rich text, persistent grouping, slide
+hiding, advanced themes and charts remain later work. Creator timings, assistive-technology acceptance, physical-device behavior,
 real image-byte/scanner qualification and deployed capacity remain unmeasured here. This record
 does not close release-ledger gates or establish parity with Genially or Prezi.

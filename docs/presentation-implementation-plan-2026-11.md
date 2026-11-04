@@ -123,7 +123,8 @@ E00 now has an isolated local implementation; see [ADR 003](decisions/003-presen
 and the [prototype record](evidence/presentation-scene-prototype.md). The later production work
 packages remain planned. E01 is in progress.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
-implemented locally. Rich text, pointer dragging, multiselection and the remaining editor tools
+implemented locally. The direct-editing increment adds pointer move/resize and temporary
+multiselection using the same scene and persistence path. Rich text and the remaining editor tools
 remain subsequent E01 work.
 Use separate branches and PRs for contract/persistence, renderer and UI slices when a package is
 too large for coherent review. Dependencies describe technical order; product selection and the
@@ -176,8 +177,11 @@ autosave/undo/recovery/conflict controls. JS/SQL media visitors, publication aut
 history/version retention and audience projections are integrated. Legacy documents retain their
 existing formats. See [native verification](evidence/presentation-native-scenes.md) and the
 [version-4 rollout boundary](runbooks/upgrade.md#native-presentation-scene-compatibility).
-Rich text, pointer dragging, multiselection and complete filmstrip hide behavior remain open;
-this slice does not mark all E01 acceptance criteria complete.
+The following [direct-editing increment](evidence/presentation-direct-editing.md) adds pointer
+move/resize, Shift-click and checkbox selection, group movement and safe multi-object deletion.
+Gestures preview locally and commit on release; narrow screens retain the readable column and
+keyboard/numeric controls. Rich text and complete filmstrip hide behavior remain open;
+these slices do not mark all E01 acceptance criteria complete.
 
 Touch points: current builder/helpers, contracts, `packages/db/src/presentations.ts`,
 `apps/server/src/presentation-routes.ts` and media retention. New scene modules are proposed;

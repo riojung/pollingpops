@@ -146,10 +146,50 @@ export async function expectPresentationOpinionResponseConformance(
       status: "accepted",
       response: { response, responseSchemaVersion: 2, correct: null, score: 0 },
     });
+    if (upper) {
+      await expect(
+        input.repository.acceptResponse(
+          {
+            ...record,
+            id: randomUUID(),
+            blockId,
+            questionId,
+            idempotencyKey: randomUUID(),
+          },
+          1,
+        ),
+      ).resolves.toMatchObject({ status: "already_responded", response: { id: record.id } });
+      await expect(
+        input.repository.saveResponse({
+          ...record,
+          id: randomUUID(),
+          blockId,
+          questionId,
+          idempotencyKey: randomUUID(),
+        }),
+      ).resolves.toMatchObject({ id: record.id, response });
+      for (const currentBlockId of [blockId, blockId.toLowerCase()]) {
+        await expect(
+          input.repository.getParticipantSnapshotProjection(
+            session.id,
+            participantId,
+            currentBlockId,
+            true,
+          ),
+        ).resolves.toMatchObject({ currentResponse: { id: record.id, response } });
+      }
+      await expect(
+        input.repository.getResponseContext(session.id, tokenHash, record.idempotencyKey!),
+      ).resolves.toMatchObject({
+        priorResponse: { id: record.id, requestHash: record.requestHash, response },
+      });
+      await expect(input.repository.listResponses(session.id)).resolves.toHaveLength(1);
+    }
     const retry = await input.repository.acceptResponse({ ...record, id: randomUUID() }, 0);
     expect(retry).toMatchObject({
       status: "duplicate",
       response: { id: record.id, response, idempotencyKey: record.idempotencyKey },
+      acknowledgement: { projection: { currentResponse: { id: record.id, response } } },
     });
     await expect(
       input.repository.acceptResponse(

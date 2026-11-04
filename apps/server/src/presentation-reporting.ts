@@ -3,6 +3,7 @@ import {
   PresentationReportSchema,
   PresentationReportV1Schema,
   PresentationReportV2Schema,
+  PresentationReportV4Schema,
   isPresentationOpinionResultQuestion,
   requiresPresentationOpinionFormats,
   questionTypeDefinition,
@@ -227,17 +228,20 @@ export function presentationReportRestProjection(
       "This report includes opinion results. Use includeOpinionResults=true.",
     );
   }
-  if (includeQuickChecks || report.schemaVersion !== 3) return report;
+  if (includeQuickChecks || (report.schemaVersion !== 3 && report.schemaVersion !== 4))
+    return report;
+  const evidence = report.evidence.map((entry) => {
+    if (entry.kind !== "question") return entry;
+    const compatible = { ...entry };
+    delete compatible.sessionOnly;
+    return compatible;
+  });
+  if (report.schemaVersion === 4) return PresentationReportV4Schema.parse({ ...report, evidence });
   const includesPackEvidence = report.timeline.some((event) => event.recoveryPackIntervention);
   const legacy = {
     ...report,
     schemaVersion: includesPackEvidence ? 2 : 1,
-    evidence: report.evidence.map((entry) => {
-      if (entry.kind !== "question") return entry;
-      const evidence = { ...entry };
-      delete evidence.sessionOnly;
-      return evidence;
-    }),
+    evidence,
   };
   return includesPackEvidence
     ? PresentationReportV2Schema.parse(legacy)

@@ -174,6 +174,21 @@ export function responseWindowOpen(
   );
 }
 
+/** E04 UUIDs share the frozen block identity; legacy key spelling remains literal. */
+export function presentationResponseBlockId(
+  session: PresentationSessionRecord | undefined,
+  blockId: string,
+): string {
+  return (
+    session?.content.blocks.find(
+      (block) =>
+        block.kind === "question" &&
+        isPresentationOpinionResultQuestion(block.question) &&
+        block.id.toLowerCase() === blockId.toLowerCase(),
+    )?.id ?? blockId
+  );
+}
+
 export function normalizePresentationResponse(
   session: PresentationSessionRecord | undefined,
   input: PresentationSessionResponseRecord,
@@ -225,5 +240,10 @@ export function normalizePresentationResponse(
       );
     }
   }
-  return { ...clone(input), responseSchemaVersion, response };
+  return {
+    ...clone(input),
+    ...(opinion && block && question ? { blockId: block.id, questionId: question.id } : {}),
+    responseSchemaVersion,
+    response,
+  };
 }

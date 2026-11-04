@@ -212,6 +212,26 @@ The full-repository, PostgreSQL and production-browser results above precede thi
 follow-up; those broader checks were not repeated for it. Persistence and browser code are
 unchanged by this follow-up.
 
+## PR 195 review follow-up
+
+The in-memory repository now derives E04 response map keys from the frozen block identity for
+acceptance, compatibility saves and reads. Alternate UUID casing with a fresh key cannot create
+a second response; canonical storage IDs preserve the original response payload and request hash.
+Shared poll/ranking conformance checks cover alternate-case retries, one-answer enforcement,
+compatibility saves, both lookup spellings and reconnect receipt recovery. The 26 focused DB
+tests, DB typecheck, scoped lint and formatting passed.
+
+V4 report reads now honor the Quick Check opt-in independently of opinion-results opt-in. Without
+`includeQuickChecks=true`, the compatibility projection strips `sessionOnly` while retaining V4
+and its opinion evidence. Missing opinion opt-in still returns 422. The REST matrix covers pending
+and ready reports under all eight opinion/Quick Check/session-context flag combinations and
+verifies unchanged stored/canonical payloads and hashes. All 28 focused server tests, server
+typecheck, scoped lint and formatting passed. Independent review cleared both fixes.
+
+The original PR's cancelled Chromium mobile job exhausted its 25-minute budget downloading
+Playwright OS dependencies; no browser tests ran in that job. Its aggregate gate failed because
+core was cancelled. No product or test threshold change was made for that infrastructure failure.
+
 ## Deployment boundary
 
 This record covers local implementation and validation. No hosted or local Docker application was redeployed, and

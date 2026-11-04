@@ -474,7 +474,7 @@ class PostgresScopedQnaRepository implements ScopedQnaRepository {
         };
       else {
         const credential = await client.query(
-          "SELECT id, role FROM presentation_session_credentials WHERE workspace_id = $1 AND session_id = $2 AND token_hash = $3 AND revoked_at IS NULL AND expires_at > $4 FOR SHARE",
+          "SELECT id, role FROM presentation_session_credentials WHERE workspace_id = $1 AND session_id = $2 AND token_hash = $3 AND role IN ('host', 'companion') AND revoked_at IS NULL AND expires_at > $4 FOR SHARE",
           [input.workspaceId, input.scopeId, input.tokenHash, input.now],
         );
         if (!credential.rows[0])

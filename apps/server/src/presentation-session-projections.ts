@@ -2,10 +2,12 @@ import {
   PresentationCompanionSnapshotSchema,
   PresentationHostSnapshotSchema,
   PresentationParticipantSnapshotSchema,
+  PresentationStageSnapshotSchema,
   type PresentationBlock,
   type PresentationCompanionSnapshot,
   type PresentationHostSnapshot,
   type PresentationParticipantSnapshot,
+  type PresentationStageSnapshot,
   type QuestionDraft,
   questionPurpose,
   requiresExtendedRoundResponses,
@@ -314,6 +316,16 @@ export function buildPresentationHostSnapshot(
     ...(recoveryPackCards.length ? { recoveryPackCards } : {}),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "host",
+    presenter: {
+      speakerNotes: block?.kind === "content" ? block.speakerNotes : "",
+      nextBlock:
+        session.status === "finished"
+          ? null
+          : presentationRealtimeBlock(
+              session.content.blocks[session.currentBlockIndex + 1] ?? null,
+              false,
+            ),
+    },
     currentBlock: presentationRealtimeBlock(
       block,
       true,
@@ -348,6 +360,47 @@ export function buildPresentationHostSnapshot(
       responseCount,
       sampledAt: sampledAt.toISOString(),
     },
+    finishedAt: session.finishedAt?.toISOString() ?? null,
+  });
+}
+
+export function buildPresentationStageSnapshot(
+  session: PresentationSessionRecord,
+  data: PresentationProjectionData,
+): PresentationStageSnapshot {
+  const block = presentationCurrentBlock(session);
+  const recoveryPackIntervention = presentationRecoveryPackPlayback(session);
+  const answerVisible = ["question_reveal", "intervention", "finished"].includes(session.phase);
+  return PresentationStageSnapshotSchema.parse({
+    sessionId: session.id,
+    artifactType: "presentation",
+    presentationId: session.presentationId,
+    presentationVersionId: session.presentationVersionId,
+    title: session.title,
+    code: session.code,
+    status: session.status,
+    phase: session.phase,
+    currentBlockIndex: session.currentBlockIndex,
+    blockCount: session.content.blocks.length,
+    revision: session.revision,
+    seq: session.eventSeq,
+    serverTime: new Date().toISOString(),
+    questionOpenedAt: session.questionOpenedAt?.toISOString() ?? null,
+    questionClosesAt: presentationQuestionDeadline(session)?.toISOString() ?? null,
+    acceptingResponses: presentationAcceptingResponses(session),
+    settings: presentationSnapshotSettings(session),
+    ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
+    projection: "stage",
+    currentBlock: presentationRealtimeBlock(block, false),
+    revealedAnswer:
+      answerVisible && block?.kind === "question"
+        ? presentationRevealedAnswer(block.question)
+        : null,
+    participantCount: data.participants.length,
+    responseCount:
+      block?.kind === "question"
+        ? data.responses.filter((response) => response.blockId === block.id).length
+        : 0,
     finishedAt: session.finishedAt?.toISOString() ?? null,
   });
 }

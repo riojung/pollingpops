@@ -35,6 +35,7 @@ import {
   type PresentationResponseAcceptance,
   type PresentationResponseAcknowledgementState,
   type PresentationResponseContext,
+  type PresentationActiveCredentialRevocation,
   type PresentationSessionCommandInput,
   type PresentationSessionCreateInput,
   type PresentationSessionCredentialRecord,
@@ -1180,6 +1181,37 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         [workspaceId, sessionId, credentialId, revokedAt, role ?? null],
       );
       return result.rows[0] ? mapCredential(result.rows[0]) : null;
+    });
+  }
+
+  async revokeActiveCredential(
+    workspaceId: string,
+    sessionId: string,
+    credentialId: string,
+    revokedAt: Date,
+    role: PresentationSessionCredentialRole,
+  ): Promise<PresentationActiveCredentialRevocation> {
+    return this.transaction(workspaceId, async (client) => {
+      // Hold the exact row through classification and the conditional UPDATE. A concurrent
+      // rotation/revocation cannot turn an already inactive pass into a success acknowledgement.
+      const target = await client.query(
+        `SELECT id FROM presentation_session_credentials
+         WHERE workspace_id = $1 AND session_id = $2 AND id = $3 AND role = $4
+         FOR UPDATE`,
+        [workspaceId, sessionId, credentialId, role],
+      );
+      if (!target.rows[0]) return { status: "not_found" };
+      const result = await client.query(
+        `UPDATE presentation_session_credentials
+         SET revoked_at = GREATEST(created_at, $4::timestamptz)
+         WHERE workspace_id = $1 AND session_id = $2 AND id = $3 AND role = $5
+           AND revoked_at IS NULL AND expires_at > $4
+         RETURNING *`,
+        [workspaceId, sessionId, credentialId, revokedAt, role],
+      );
+      return result.rows[0]
+        ? { status: "revoked", credential: mapCredential(result.rows[0]) }
+        : { status: "stale" };
     });
   }
 }

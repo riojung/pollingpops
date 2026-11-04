@@ -128,7 +128,11 @@ export class PresentationAudienceAccess {
       undefined,
       now,
     );
-    if (credential?.workspaceId !== session.workspaceId || credential.sessionId !== sessionId) {
+    if (
+      credential?.workspaceId !== session.workspaceId ||
+      credential.sessionId !== sessionId ||
+      (credential.role !== "host" && credential.role !== "companion")
+    ) {
       throw new AudienceAccessError(
         "UNAUTHORIZED",
         "Presentation credential is invalid or expired",

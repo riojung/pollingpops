@@ -243,6 +243,14 @@ transcoding are separate E14 work. Included in design/information milestones.
 
 ### E03 Improve presenter and audience delivery
 
+The desktop implementation is on `codex/presentation-e03-delivery`: private frozen notes and
+next-slide preview, a local elapsed timer, fenced advance shortcuts, persistent join access and a
+separate read-only audience stage with popup fallback. Stage credentials use migration 090 and
+must not be minted until every server reader enforces the new role. Verification is tracked in
+the [delivery evidence](evidence/presentation-e03-delivery.md); observed screen sharing, managed
+browser policies, manual accessibility and physical-device qualification remain open. The richer
+phone remote remains an optional follow-up to the existing scoped Companion.
+
 Dependencies: E01. Audit and extend the existing host/participant/Companion flow and add a clean
 scoped stage. Add clear private notes, next-slide preview, timer, keyboard/clicker actions,
 persistent join access and stage preview. A scoped browser phone remote can follow after the

@@ -790,6 +790,19 @@ Presentation REST endpoints additionally include:
   idempotency key, and validated response payload; acknowledge only after durable commit.
 - `GET /v1/presentation-sessions/{id}/host-media/{mediaId}`;
   `GET /v1/presentation-sessions/{id}/media/{mediaId}` — role-scoped frozen media access.
+- `POST /v1/presentation-sessions/{id}/stage-pass` — creator owner/editor only; returns
+  `{credentialId,stageToken,expiresAt}` and replaces stage access only. Expiry is capped at one
+  hour and the session lifetime. `DELETE /v1/presentation-sessions/{id}/stage-passes/{credentialId}`
+  atomically revokes only that active, unexpired stage credential. A replaced, already-revoked
+  or expired pass returns `409 CONFLICT` with `details.reason:"STALE_STAGE_PASS"`; a missing,
+  wrong-role or cross-session/workspace identifier returns `404`. A stale request does not revoke
+  a newer pass or record a successful revocation. Host/Companion revocation retains its existing
+  idempotent behavior.
+- `GET /v1/presentation-sessions/{id}/stage` — requires an explicit stage Bearer pass; returns
+  `{snapshot}` with projection `stage`. `GET /v1/presentation-sessions/{id}/stage-media/{mediaId}`
+  permits current-block media only. These routes use no-store responses and cannot use host,
+  participant or Companion passes. A stage pass cannot issue commands, submit answers, use Q&A,
+  edit a deck or mint another role's pass. Existing creator-cookie authority is independent.
 - `GET /v1/presentation-sessions/{id}/report` — private creator response; `202` while pending
   without a report, otherwise `200`. The default strict envelope and stored Presentation Report V1
   remain compatible.
@@ -799,6 +812,13 @@ requires an owner/editor; guest routes use session-scoped credentials. Deleting 
 its sockets through the shared adapter and removes credentials, pending broadcasts, and durable
 report work. In-flight projections and report completions recheck durable existence so deletion
 cannot recreate the room or its report.
+
+Host snapshots add optional `presenter:{speakerNotes,nextBlock}` from the frozen session version.
+The next block uses the participant-safe content shape; its media is available through creator-only
+host-media alongside current-block media. Stage, participant and Companion snapshots omit this
+private field. Stage answer material appears only for the current question after explicit reveal.
+Apply migration 090 and deploy all compatible readers before creating any stage credential;
+see the [coordinated rollout](runbooks/upgrade.md#presentation-stage-credential-compatibility).
 
 Live Round creation accepts `settings.timeMode: "timed" | "flex"`; omission preserves the
 existing timed behavior. Flex is frozen at creation: an open question has no deadline, the host

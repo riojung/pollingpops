@@ -9,6 +9,7 @@ import {
   type PresentationSessionRepository,
   type PresentationSessionCommandInput,
   type PresentationSessionResponseRecord,
+  type PresentationSessionCredentialRole,
 } from "../../src/index.js";
 /*
  * This suite intentionally exercises both durable backends through their public repository
@@ -108,6 +109,94 @@ export async function expectPresentationSessionRepositoryConformance(
   expect((await input.repository.getSessionByCode(session.code))?.joinPasswordHash).toBe(
     "salted-presentation-verifier",
   );
+
+  const credentialInput = (role: PresentationSessionCredentialRole) => ({
+    id: randomUUID(),
+    workspaceId: input.workspaceId,
+    sessionId,
+    role,
+    tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+    createdAt: now,
+    expiresAt: session.liveExpiresAt,
+    revokedAt: null,
+  });
+  const host = await input.repository.createCredential(credentialInput("host"));
+  const companion = await input.repository.createCredential(credentialInput("companion"));
+  const stageA = await input.repository.rotateCredential(credentialInput("stage"));
+  const stageB = await input.repository.rotateCredential(credentialInput("stage"));
+  const revokeStage = (credentialId: string, workspaceId = input.workspaceId) =>
+    input.repository.revokeActiveCredential(workspaceId, sessionId, credentialId, now, "stage");
+  await expect(revokeStage(stageA.id)).resolves.toEqual({ status: "stale" });
+  await expect(
+    input.repository.findValidCredential(sessionId, stageA.tokenHash, "stage", now),
+  ).resolves.toBeNull();
+  await expect(
+    input.repository.findValidCredential(sessionId, stageB.tokenHash, "stage", now),
+  ).resolves.toMatchObject({ id: stageB.id });
+  for (const credentialId of [host.id, companion.id, randomUUID()]) {
+    await expect(revokeStage(credentialId)).resolves.toEqual({ status: "not_found" });
+  }
+  await expect(revokeStage(stageB.id, randomUUID())).resolves.toEqual({ status: "not_found" });
+  await expect(
+    input.repository.revokeActiveCredential(
+      input.workspaceId,
+      randomUUID(),
+      stageB.id,
+      now,
+      "stage",
+    ),
+  ).resolves.toEqual({ status: "not_found" });
+  await expect(revokeStage(stageB.id)).resolves.toMatchObject({
+    status: "revoked",
+    credential: { id: stageB.id, role: "stage", revokedAt: now },
+  });
+  await expect(revokeStage(stageB.id)).resolves.toEqual({ status: "stale" });
+  await expect(
+    input.repository.findValidCredential(sessionId, stageB.tokenHash, "stage", now),
+  ).resolves.toBeNull();
+
+  const stageC = await input.repository.rotateCredential(credentialInput("stage"));
+  const competingRevocations = await Promise.all([revokeStage(stageC.id), revokeStage(stageC.id)]);
+  expect(competingRevocations.map(({ status }) => status).sort()).toEqual(["revoked", "stale"]);
+  const expired = await input.repository.rotateCredential({
+    ...credentialInput("stage"),
+    expiresAt: new Date(now.getTime() + 1_000),
+  });
+  await expect(
+    input.repository.revokeActiveCredential(
+      input.workspaceId,
+      sessionId,
+      expired.id,
+      expired.expiresAt,
+      "stage",
+    ),
+  ).resolves.toEqual({ status: "stale" });
+
+  // Existing host/Companion exact-ID revocation remains idempotent and keeps its first timestamp.
+  for (const credential of [host, companion]) {
+    await expect(
+      input.repository.findValidCredential(sessionId, credential.tokenHash, credential.role, now),
+    ).resolves.toMatchObject({ id: credential.id });
+    await input.repository.revokeCredential(
+      input.workspaceId,
+      sessionId,
+      credential.id,
+      now,
+      credential.role,
+    );
+    await expect(
+      input.repository.revokeCredential(
+        input.workspaceId,
+        sessionId,
+        credential.id,
+        new Date(now.getTime() + 1_000),
+        credential.role,
+      ),
+    ).resolves.toMatchObject({
+      id: credential.id,
+      revokedAt: now,
+    });
+  }
   expect(session.settings).not.toHaveProperty("joinPasswordHash");
 
   const openCommand = {

@@ -614,6 +614,40 @@ answered** after addressing a question verbally. At Presentation end, retained Q
 until credential expiry/revocation or session retention/deletion. Disabling new activation does
 not remove previously activated Q&A.
 
+### Present with private notes and an audience stage
+
+In an eligible live Presentation, the presenter workspace shows **Current slide**, **Private
+speaker notes** and **Next slide preview**. These use the version frozen when the session began.
+Editing or republishing the deck later does not change those live cues. Hidden planning slides
+are excluded. Notes remain read-only in this workspace; edit the deck for a future session.
+
+Choose **Open audience stage**, then share that separate window with the audience. If your browser
+blocks it, follow **Open audience stage in a new tab**. The stage shows the current public slide
+or question and keeps the join code, visible address and QR available. **Enter full screen** is
+optional; the stage remains usable when the browser does not permit it. Share only the audience
+stage window because the presenter workspace contains private information.
+Native slides fit the available canvas. Use Tab to focus **Audience slide** when you need to
+scroll dense content; the header keeps the join code accessible in short windows.
+
+The stage pass expires within one hour. Opening a replacement stage invalidates the previous
+stage pass; **Revoke audience stage access** closes access without changing host controls.
+If another host tab has replaced the pass, revoking from the older tab shows a warning instead
+of reporting success. Use the tab that opened the current stage, or open a replacement stage
+here and then revoke it. The older tab cannot silently revoke a different tab's newer pass.
+Refreshing the stage retains access in that tab when browser storage is available. On a lost
+connection it labels the last confirmed slide; expired or revoked access clears that content.
+
+The **Presentation timer** measures local elapsed time with **Start**, **Pause** and **Reset**.
+It recovers running/paused time after refresh when tab storage is available. It does not change
+the response deadline or advance the room. Right Arrow, Page Down and Space advance the current
+phase using the same server confirmation as the main button. Shortcuts pause while an action is
+pending and leave focused controls, scrollable data, editing and modal dialogs alone.
+
+See the [stage rollout instructions](runbooks/upgrade.md#presentation-stage-credential-compatibility)
+before enabling these routes in a deployment. Joining as a participant or receiving a stage pass
+does not grant presenter control or deck editing. The existing Companion remains a separate
+scoped control surface.
+
 ### Organize Presentation slides and recover edits
 
 Choose **Create → Presentation → Blank presentation** to open a native slide with its Design panel

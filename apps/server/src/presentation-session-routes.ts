@@ -30,6 +30,7 @@ import { createRecoveryPackRepository } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { MetricsService } from "./metrics.js";
 import { registerPresentationCompanionRoutes } from "./presentation-companion-routes.js";
+import { registerPresentationStageRoutes } from "./presentation-stage-routes.js";
 import { presentationRecoveryPackLiveInsertionEnabled } from "./presentation-live-recovery-packs.js";
 import { presentationLiveInsertionEnabled } from "./presentation-live-insertion.js";
 import {
@@ -450,6 +451,19 @@ export async function registerPresentationSessionRoutes(
       }
     },
   );
+
+  registerPresentationStageRoutes(app, {
+    repository: dependencies.repository,
+    config: dependencies.config,
+    auth,
+    service,
+    requireEditor,
+    noStore,
+    bearerToken,
+    apiError,
+    sendServiceError,
+    enforceSharedAdmission,
+  });
 
   registerPresentationCompanionRoutes(app, {
     repository: dependencies.repository,

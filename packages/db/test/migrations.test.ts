@@ -27,6 +27,16 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds a distinct stage credential role without changing credentials, content or isolation", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 90)!;
+    expect(migration.name).toBe("presentation_stage_credentials");
+    expect(migration.sql).toContain("CHECK (role IN ('host', 'companion', 'stage'))");
+    expect(migration.sql).not.toMatch(
+      /INSERT INTO|UPDATE |DELETE |TRUNCATE |DISABLE ROW LEVEL SECURITY/i,
+    );
+  });
   it("adds optional reveal rosters without fabricating legacy membership", async () => {
     const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
     const migrations = await discoverMigrations(migrationsDirectory);

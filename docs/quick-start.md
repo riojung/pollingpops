@@ -421,6 +421,14 @@ before accepting the new composition/template writes. Existing feature policies 
 are unchanged. See
 [the Presentation walkthrough](user-guide.md#create-and-host-a-presentation).
 
+In an eligible live Presentation, **Open audience stage** creates a separate read-only window for
+screen sharing; use its new-tab link when popups are blocked. Keep the presenter workspace for
+private notes, next-slide preview and the local **Presentation timer**. The audience stage keeps
+the join code/address/QR visible. Right Arrow, Page Down and Space advance when controls/dialogs
+are not focused and the previous action is confirmed. Operators must apply migration 090 and
+complete the [coordinated stage-reader rollout](runbooks/upgrade.md#presentation-stage-credential-compatibility)
+before minting stage passes. See [delivery guidance](user-guide.md#present-with-private-notes-and-an-audience-stage).
+
 In an eligible live Presentation host, select **Launch companion** to open the compact sidecar.
 Its dedicated pass expires within one hour; launching a replacement revokes the old companion
 pass without rotating host controls. The host can also select **Revoke companion pass**. The

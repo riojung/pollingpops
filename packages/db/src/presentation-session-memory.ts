@@ -31,6 +31,7 @@ import {
   type PresentationResponseAcceptance,
   type PresentationResponseAcknowledgementState,
   type PresentationResponseContext,
+  type PresentationActiveCredentialRevocation,
   type PresentationSessionCommandInput,
   type PresentationSessionCommandReceiptRecord,
   type PresentationSessionCreateInput,
@@ -575,10 +576,13 @@ export class MemoryPresentationSessionRepository
         candidate.sessionId === sessionId &&
         candidate.workspaceId === workspaceId &&
         candidate.tokenHash === tokenHash &&
+        (candidate.role === "host" || candidate.role === "companion") &&
         !candidate.revokedAt &&
         candidate.expiresAt > now,
     );
-    return credential ? { role: credential.role, id: credential.id, alias: "Facilitator" } : null;
+    return credential && credential.role !== "stage"
+      ? { role: credential.role, id: credential.id, alias: "Facilitator" }
+      : null;
   }
 
   async findParticipant(sessionId: string, tokenHash: string) {
@@ -1010,5 +1014,28 @@ export class MemoryPresentationSessionRepository
     }
     credential.revokedAt ??= revokedAt;
     return clone(credential);
+  }
+
+  async revokeActiveCredential(
+    workspaceId: string,
+    sessionId: string,
+    credentialId: string,
+    revokedAt: Date,
+    role: PresentationSessionCredentialRole,
+  ): Promise<PresentationActiveCredentialRevocation> {
+    // No await separates the exact-role lookup, active test and mutation in memory.
+    const credential = this.credentials.get(credentialId);
+    if (
+      !credential ||
+      credential.workspaceId !== workspaceId ||
+      credential.sessionId !== sessionId ||
+      credential.role !== role
+    )
+      return { status: "not_found" };
+    if (credential.revokedAt !== null || credential.expiresAt <= revokedAt) {
+      return { status: "stale" };
+    }
+    credential.revokedAt = new Date(Math.max(credential.createdAt.getTime(), revokedAt.getTime()));
+    return { status: "revoked", credential: clone(credential) };
   }
 }

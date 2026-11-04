@@ -13,6 +13,7 @@ import {
   type PresentationCompanionSnapshot,
   type PresentationHostSnapshot,
   type PresentationParticipantSnapshot,
+  type PresentationStageSnapshot,
   type PresentationResponseAck,
   type PresentationResponseSubmit,
   type PresentationRoleSnapshot,
@@ -30,6 +31,7 @@ import {
   type PresentationRepository,
   type PresentationSessionRecord,
   type PresentationSessionRepository,
+  type PresentationSessionCredentialRole,
   type RecoveryPackRepository,
   type Repository,
 } from "@openround/db";
@@ -59,6 +61,7 @@ import {
   buildPresentationHostSnapshot,
   buildPresentationListSnapshot,
   buildPresentationParticipantSnapshot,
+  buildPresentationStageSnapshot,
   buildPresentationProjectionData,
   presentationCurrentBlock,
   type PresentationProjectionData,
@@ -72,6 +75,7 @@ import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 
 const PRESENTATION_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const PRESENTATION_COMPANION_PASS_LIFETIME_MS = 60 * 60 * 1_000;
+const PRESENTATION_STAGE_PASS_LIFETIME_MS = 60 * 60 * 1_000;
 
 export {
   presentationCurrentBlock,
@@ -653,6 +657,111 @@ export class PresentationSessionService {
     };
   }
 
+  async createStagePass(input: {
+    workspaceId: string;
+    userId: string;
+    sessionId: string;
+    requestId: string;
+  }) {
+    const session = await this.sessions.getSessionForWorkspace(input.workspaceId, input.sessionId);
+    if (!session) {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Presentation session not found");
+    }
+    const now = new Date();
+    if (session.status === "finished" || presentationLiveSessionExpired(session, now)) {
+      throw new PresentationSessionServiceError(
+        409,
+        "PHASE_CLOSED",
+        "This Presentation session is no longer accepting stage passes",
+      );
+    }
+    const stageToken = presentationCredentialToken();
+    const credential = await this.sessions.rotateCredential({
+      id: randomUUID(),
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      role: "stage",
+      tokenHash: presentationParticipantTokenHash(stageToken),
+      createdAt: now,
+      expiresAt: new Date(
+        Math.min(
+          now.getTime() + PRESENTATION_STAGE_PASS_LIFETIME_MS,
+          session.liveExpiresAt.getTime(),
+        ),
+      ),
+      revokedAt: null,
+    });
+    // Rotation is durable; an audit outage must not lose the replacement credential.
+    await this.dependencies.repository
+      .recordAudit({
+        workspaceId: input.workspaceId,
+        actorId: input.userId,
+        action: "presentation.session.stage_pass.create",
+        targetType: "presentation_live_session",
+        targetId: session.id,
+        requestId: input.requestId,
+        metadata: { credentialId: credential.id },
+      })
+      .catch(() => undefined);
+    return {
+      credentialId: credential.id,
+      stageToken,
+      expiresAt: credential.expiresAt.toISOString(),
+    };
+  }
+
+  async revokeStagePass(input: {
+    workspaceId: string;
+    userId: string;
+    sessionId: string;
+    credentialId: string;
+    requestId: string;
+  }) {
+    const session = await this.sessions.getSessionForWorkspace(input.workspaceId, input.sessionId);
+    if (!session) {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Presentation session not found");
+    }
+    const result = await this.sessions.revokeActiveCredential(
+      input.workspaceId,
+      input.sessionId,
+      input.credentialId,
+      new Date(),
+      "stage",
+    );
+    if (result.status === "not_found") {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Stage pass not found");
+    }
+    if (result.status === "stale") {
+      throw new PresentationSessionServiceError(
+        409,
+        "CONFLICT",
+        "This stage pass is no longer current. No current stage access was revoked; a newer stage may still be open.",
+        { reason: "STALE_STAGE_PASS" },
+      );
+    }
+    await this.dependencies.repository.recordAudit({
+      workspaceId: input.workspaceId,
+      actorId: input.userId,
+      action: "presentation.session.stage_pass.revoke",
+      targetType: "presentation_live_session",
+      targetId: input.sessionId,
+      requestId: input.requestId,
+      metadata: { credentialId: result.credential.id },
+    });
+  }
+
+  async getStageSnapshot(
+    sessionId: string,
+    stageToken: string,
+  ): Promise<PresentationStageSnapshot> {
+    const authorized = await this.authorizeCredential(sessionId, stageToken, "stage");
+    const projection = await this.consistentProjection(authorized);
+    if (!projection) {
+      throw new PresentationSessionServiceError(401, "UNAUTHORIZED", "Stage credential is invalid");
+    }
+    return buildPresentationStageSnapshot(projection.session, projection.data);
+  }
+
   async revokeCompanionPass(input: {
     workspaceId: string;
     userId: string;
@@ -875,17 +984,28 @@ export class PresentationSessionService {
     if (!session || presentationLiveSessionExpired(session)) {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Media not found");
     }
+    return this.getCurrentMedia(session, mediaId, true);
+  }
+
+  async getStageMedia(sessionId: string, mediaId: string, stageToken: string) {
+    const session = await this.authorizeCredential(sessionId, stageToken, "stage");
     return this.getCurrentMedia(session, mediaId);
   }
 
-  private async getCurrentMedia(session: PresentationSessionRecord, mediaId: string) {
-    const block = presentationCurrentBlock(session);
-    const referenced =
+  private async getCurrentMedia(
+    session: PresentationSessionRecord,
+    mediaId: string,
+    includeNext = false,
+  ) {
+    const blocks = [presentationCurrentBlock(session)];
+    if (includeNext && session.status !== "finished") {
+      blocks.push(session.content.blocks[session.currentBlockIndex + 1] ?? null);
+    }
+    const referenced = blocks.some((block) =>
       block?.kind === "content"
         ? presentationContentBlockMediaIds(block).includes(mediaId)
-        : block?.kind === "question"
-          ? block.question.mediaId === mediaId
-          : false;
+        : block?.kind === "question" && block.question.mediaId === mediaId,
+    );
     if (!referenced) {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Media not found");
     }
@@ -1128,14 +1248,18 @@ export class PresentationSessionService {
     return { session, participantId: participant.id };
   }
 
-  private async authorizeCredential(sessionId: string, token: string, role: "host" | "companion") {
+  private async authorizeCredential(
+    sessionId: string,
+    token: string,
+    role: PresentationSessionCredentialRole,
+  ) {
     return this.authorizeCredentialHash(sessionId, presentationParticipantTokenHash(token), role);
   }
 
   private async authorizeCredentialHash(
     sessionId: string,
     tokenHash: string,
-    role: "host" | "companion",
+    role: PresentationSessionCredentialRole,
   ) {
     const session = await this.sessions.getSessionById(sessionId);
     if (!session || presentationLiveSessionExpired(session)) {

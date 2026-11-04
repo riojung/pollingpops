@@ -8,6 +8,27 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E03 desktop delivery November 4, 2026
+
+The presenter workspace now separates private speaker notes and next-slide preview from a
+read-only audience stage. Notes and preview come from the session's frozen published version;
+hidden planning slides and later draft/publication edits do not enter an existing session.
+The local elapsed timer has explicit Start/Pause/Reset and refresh recovery. Right Arrow,
+Page Down and Space advance through existing command receipts and revision fences while native
+controls, editable content, modal dialogs and pending commands retain their keyboard behavior.
+
+The audience stage has persistent join code, address and QR access, full-screen controls and an
+explicit new-tab fallback when a popup is blocked. Its separate pass expires within one hour and
+can be rotated or revoked without replacing host control. Stage reads omit creator cookies and
+exclude private notes, future slides, participant records, moderation and unrevealed answers.
+Migration 090 adds the stage credential role; deploy all matching readers before the first mint.
+
+Repository checks, real PostgreSQL 17 and the production browser matrix plus focused viewport
+rerun passed; see the [E03 delivery record](evidence/presentation-e03-delivery.md).
+Actual screen sharing, managed-browser policy, manual assistive technology, physical devices,
+operating cost/capacity and hosted rollout qualification remain open. A richer phone remote is
+separate optional work; existing Companion scope and host control-pass rotation remain intact.
+
 ### Presentation E02 composition and information components November 4, 2026
 
 The remaining E02 software scope is implemented locally: transient snap guides, persistent flat

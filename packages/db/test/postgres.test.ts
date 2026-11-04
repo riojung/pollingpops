@@ -1,3 +1,4 @@
+import { expectPresentationTextConformance } from "./support/presentation-text-conformance.js";
 import { expectPresentationSceneConformance } from "./support/presentation-scene-conformance.js";
 import { presentationMediaIds } from "../src/media-references.js";
 import { expectFolderConformance } from "./support/folder-conformance.js";
@@ -1412,6 +1413,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 89, name: "presentation_native_scene_media" },
       { version: 90, name: "presentation_stage_credentials" },
       { version: 91, name: "presentation_opinion_formats" },
+      { version: 92, name: "presentation_text_opinions" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -4354,7 +4356,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(await valid(document)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 8 })).toBe(false);
     expect(await valid(document, 8)).toBe(false);
-    expect(await valid({ ...document, schemaVersion: 10 }, 10)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 10 }, 10)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 11 }, 11)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
     expect(await valid(document, 10)).toBe(false);
     const uppercase = {
@@ -4525,6 +4528,605 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       }
     },
   );
+
+  it("returns typed text moderation expiry after waiting for the session fence", async () => {
+    const owner = await creator("text-moderation-expiry-wait");
+    const published = await createPublishedPresentationFixture(owner, "Expiry fence");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    for (const expires of ["credential", "session"] as const) {
+      const now = new Date();
+      const blockId = randomUUID(),
+        questionId = randomUUID();
+      const content = PresentationContentSchema.parse({
+        title: "Expiry text",
+        schemaVersion: 10,
+        blocks: [
+          {
+            id: blockId,
+            kind: "question",
+            question: {
+              id: questionId,
+              type: "open_text",
+              prompt: "Share",
+              purpose: "opinion",
+              confidence: "off",
+              delivery: "main",
+              linkedRecheckQuestionId: null,
+              timeLimitSeconds: 30,
+              basePoints: 0,
+              explanation: "",
+              mediaId: null,
+              mediaAlt: null,
+            },
+          },
+        ],
+      });
+      const session = await sessions.createSession({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: published.presentation.id,
+        presentationVersionId: published.version.id,
+        title: content.title,
+        content,
+        code: String(randomInt(1000000, 10000000)),
+        status: "active",
+        phase: "question_open",
+        currentBlockIndex: 0,
+        revision: 1,
+        settings: { timeMode: "flex" },
+        questionOpenedAt: now,
+        questionClosesAt: null,
+        createdBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      const credential = await sessions.createCredential({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        role: "host",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        createdAt: now,
+        expiresAt: session.liveExpiresAt,
+        revokedAt: null,
+      });
+      const participantId = randomUUID();
+      await sessions.addParticipant({
+        id: participantId,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        nickname: "Private",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+      const responseId = randomUUID();
+      await sessions.acceptResponse(
+        {
+          id: responseId,
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          participantId,
+          blockId,
+          questionId,
+          response: { textValue: "Waiting private text" },
+          responseSchemaVersion: 3,
+          correct: null,
+          score: 0,
+          responseMs: 1,
+          submittedAt: new Date(now.getTime() + 1),
+          idempotencyKey: randomUUID(),
+          requestHash: "a".repeat(64),
+        },
+        1,
+      );
+      const blocker = await runtimePool.connect();
+      let moderation: ReturnType<typeof sessions.moderateTextResponse> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        await blocker.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+        await blocker.query("SELECT id FROM presentation_live_sessions WHERE id=$1 FOR UPDATE", [
+          session.id,
+        ]);
+        if (expires === "credential")
+          await blocker.query(
+            "UPDATE presentation_session_credentials SET expires_at=clock_timestamp()+interval '100 milliseconds' WHERE id=$1",
+            [credential.id],
+          );
+        else
+          await blocker.query(
+            "UPDATE presentation_live_sessions SET live_expires_at=clock_timestamp()+interval '100 milliseconds' WHERE id=$1",
+            [session.id],
+          );
+        moderation = sessions.moderateTextResponse({
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          hostCredentialId: credential.id,
+          commandId: randomUUID(),
+          responseId,
+          expectedRevision: 1,
+          expectedModerationVersion: 0,
+          status: "approved",
+          requestHash: "b".repeat(64),
+          occurredAt: new Date(),
+        });
+        await blocker.query("SELECT pg_sleep(0.2)");
+        await blocker.query("COMMIT");
+        await expect(moderation).resolves.toMatchObject({
+          status: expires === "credential" ? "unauthorized" : "phase_closed",
+        });
+        expect((await sessions.listResponses(session.id))[0]).toMatchObject({
+          moderationStatus: "pending",
+          moderationVersion: 0,
+        });
+      } finally {
+        await blocker.query("ROLLBACK");
+        blocker.release();
+        if (moderation) await Promise.allSettled([moderation]);
+      }
+    }
+  });
+
+  it("fences raw joins against first-text promotion at the 250 participant limit", async () => {
+    const owner = await creator("text-promotion-join-race");
+    const published = await createPublishedPresentationFixture(owner, "Promotion fence");
+    const { sessions, session } = await createPresentationSessionFixture(
+      owner,
+      published,
+      String(randomInt(1000000, 10000000)),
+    );
+    await packPracticeScoped(owner.workspaceId, (client) =>
+      client.query(
+        `INSERT INTO presentation_live_participants(id,workspace_id,session_id,nickname,token_hash) SELECT gen_random_uuid(),$1,$2,'Person '||number,md5(random()::text)||md5(random()::text) FROM generate_series(1,249) number`,
+        [owner.workspaceId, session.id],
+      ),
+    );
+    const blockId = randomUUID();
+    const content = PresentationContentSchema.parse({
+      title: "Text promoted",
+      schemaVersion: 10,
+      blocks: [
+        {
+          id: blockId,
+          kind: "question",
+          question: {
+            id: randomUUID(),
+            type: "open_text",
+            prompt: "Share",
+            purpose: "opinion",
+            confidence: "off",
+            delivery: "main",
+            linkedRecheckQuestionId: null,
+            timeLimitSeconds: 30,
+            basePoints: 0,
+            explanation: "",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        },
+      ],
+    });
+    const blocker = await runtimePool.connect();
+    let promotion: Promise<unknown> | undefined;
+    let joins: Array<Promise<unknown>> = [];
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      await blocker.query("SELECT id FROM presentation_live_sessions WHERE id=$1 FOR UPDATE", [
+        session.id,
+      ]);
+      promotion = sessions.transitionSessionCommand({
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        commandId: randomUUID(),
+        expectedRevision: 0,
+        requestHash: "a".repeat(64),
+        phase: "lobby",
+        currentBlockIndex: -1,
+        status: "active",
+        content,
+        event: { type: "presentation.started", blockIndex: null, blockId: null },
+      });
+      const deadline = Date.now() + 2000;
+      let waiting = false;
+      while (Date.now() < deadline) {
+        const row = await runtimePool.query(
+          "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM presentation_live_sessions WHERE workspace_id%'",
+        );
+        if (row.rows[0].count > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting).toBe(true);
+      joins = [0, 1].map((index) =>
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query(
+            "INSERT INTO presentation_live_participants(id,workspace_id,session_id,nickname,token_hash) VALUES($1,$2,$3,$4,$5)",
+            [
+              randomUUID(),
+              owner.workspaceId,
+              session.id,
+              `Racing ${index}`,
+              createHash("sha256").update(randomUUID()).digest("hex"),
+            ],
+          ),
+        ),
+      );
+      await blocker.query("COMMIT");
+      await expect(promotion).resolves.toMatchObject({ status: "accepted" });
+      const results = await Promise.allSettled(joins);
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const rejection = results.find((result) => result.status === "rejected");
+      expect(rejection).toMatchObject({ status: "rejected", reason: { code: "23514" } });
+      expect(await sessions.listParticipants(session.id)).toHaveLength(250);
+      expect((await sessions.getSessionById(session.id))?.content.schemaVersion).toBe(10);
+      const join = await sessions.joinParticipantWithinLimit(
+        {
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          nickname: "Over capacity",
+          tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+          joinedAt: new Date(),
+          lastSeenAt: new Date(),
+        },
+        500,
+      );
+      expect(join.status).toBe("full");
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await Promise.allSettled([...(promotion ? [promotion] : []), ...joins]);
+    }
+  });
+
+  it("keeps ordinary Presentation response writes concurrent alongside text guards", async () => {
+    const owner = await creator("ordinary-concurrent-with-text");
+    const published = await createPublishedPresentationFixture(
+      owner,
+      "Ordinary concurrent responses",
+    );
+    const sessions = new PostgresPresentationSessionRepository(repository, {
+      concurrentResponseWrites: true,
+    });
+    const now = new Date();
+    const block = published.content.blocks[0]!;
+    if (block.kind !== "question") throw new Error("Expected question");
+    const session = await sessions.createSession({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      title: published.content.title,
+      content: published.content,
+      code: String(randomInt(1000000, 10000000)),
+      status: "active",
+      phase: "question_open",
+      currentBlockIndex: 0,
+      revision: 1,
+      settings: { timeMode: "flex" },
+      questionOpenedAt: now,
+      questionClosesAt: null,
+      createdBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+      liveExpiresAt: new Date(now.getTime() + 60000),
+      retentionExpiresAt: new Date(now.getTime() + 86400000),
+    });
+    const participants = [randomUUID(), randomUUID()];
+    for (const id of participants)
+      await sessions.addParticipant({
+        id,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        nickname: "Concurrent",
+        tokenHash: createHash("sha256").update(id).digest("hex"),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "INSERT INTO presentation_live_responses(id,workspace_id,session_id,participant_id,block_id,question_id,response,correct,score,response_ms,submitted_at) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,true,1000,1,$8)",
+          [
+            randomUUID(),
+            owner.workspaceId,
+            session.id,
+            participants[0],
+            block.id,
+            block.question.id,
+            JSON.stringify({ numericValue: "1", textValue: "legacy-private-leak" }),
+            new Date(now.getTime() + 1),
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const results = await Promise.all(
+      participants.map((participantId) =>
+        sessions.acceptResponse(
+          {
+            id: randomUUID(),
+            workspaceId: owner.workspaceId,
+            sessionId: session.id,
+            participantId,
+            blockId: block.id,
+            questionId: block.question.id,
+            response: { numericValue: "1" },
+            correct: true,
+            score: 1000,
+            responseMs: 1,
+            submittedAt: new Date(now.getTime() + 1),
+            idempotencyKey: randomUUID(),
+            requestHash: "a".repeat(64),
+          },
+          1,
+        ),
+      ),
+    );
+    expect(results.map((result) => result.status)).toEqual(["accepted", "accepted"]);
+    expect(await sessions.listResponses(session.id)).toHaveLength(2);
+  });
+
+  it("guards raw Presentation text storage, Unicode bounds, erasure and command namespaces", async () => {
+    const owner = await creator("presentation-text-sql");
+    const published = await createPublishedPresentationFixture(owner, "Text SQL guards");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    for (const type of ["open_text", "word_cloud"] as const) {
+      const now = new Date();
+      const blockId = randomUUID().toUpperCase(),
+        questionId = randomUUID().toUpperCase();
+      const content = PresentationContentSchema.parse({
+        title: "Text guards",
+        schemaVersion: 10,
+        blocks: [
+          {
+            id: blockId,
+            kind: "question",
+            question: {
+              id: questionId,
+              type,
+              prompt: "Share",
+              purpose: "opinion",
+              confidence: "off",
+              delivery: "main",
+              linkedRecheckQuestionId: null,
+              timeLimitSeconds: 30,
+              basePoints: 0,
+              explanation: "",
+              mediaId: null,
+              mediaAlt: null,
+            },
+          },
+        ],
+      });
+      const session = await sessions.createSession({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: published.presentation.id,
+        presentationVersionId: published.version.id,
+        title: content.title,
+        content,
+        code: String(randomInt(1000000, 10000000)),
+        status: "active",
+        phase: "question_open",
+        currentBlockIndex: 0,
+        revision: 1,
+        settings: { timeMode: "flex" },
+        trustMode: "learning",
+        questionOpenedAt: now,
+        questionClosesAt: null,
+        createdBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      const credential = await sessions.createCredential({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        role: "host",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        createdAt: now,
+        expiresAt: session.liveExpiresAt,
+        revokedAt: null,
+      });
+      const participantId = randomUUID();
+      await sessions.addParticipant({
+        id: participantId,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        nickname: "Private text",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+      const limit = type === "open_text" ? 1000 : 80;
+      for (const [text, expected] of [
+        ["😀".repeat(limit / 2), true],
+        ["😀".repeat(limit / 2 + 1), false],
+        ["e\u0301", false],
+        ["é", true],
+        ["\u00a0private", false],
+        ["a\u0001b", false],
+        ["a\nb", type === "open_text"],
+      ] as const) {
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_text_value_valid($1,$2) AS valid",
+              [text, type],
+            )
+          ).rows[0].valid,
+        ).toBe(expected);
+      }
+      const marker = `raw-private-text-${type}`;
+      const responseId = randomUUID();
+      const nonce = randomUUID();
+      const insert = `INSERT INTO presentation_live_responses(id,workspace_id,session_id,participant_id,block_id,question_id,response,response_schema_version,correct,score,response_ms,submitted_at,idempotency_key,request_hash,text_value,moderation_status,moderation_version) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,1,$11,$12,$13,$14,$15,$16)`;
+      const defaults = {
+        questionId,
+        response: {},
+        version: 3,
+        correct: null as boolean | null,
+        score: 0,
+        textValue: marker,
+        status: "pending",
+        moderationVersion: 0,
+        idempotencyKey: nonce as string | null,
+        requestHash: "a".repeat(64) as string | null,
+      };
+      for (const patch of [
+        { idempotencyKey: null },
+        { idempotencyKey: "" },
+        { requestHash: null },
+        { requestHash: "A".repeat(64) },
+        { questionId: randomUUID() },
+        { response: { textValue: marker } },
+        { version: 2 },
+        { version: 4 },
+        { correct: true },
+        { score: 1 },
+        { textValue: "" },
+        { textValue: "😀".repeat(limit / 2 + 1) },
+        { textValue: "e\u0301" },
+        { status: "approved", moderationVersion: 1 },
+        { status: "removed", textValue: null },
+      ]) {
+        const row = { ...defaults, ...patch };
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(insert, [
+              responseId,
+              owner.workspaceId,
+              session.id,
+              participantId,
+              blockId,
+              row.questionId,
+              JSON.stringify(row.response),
+              row.version,
+              row.correct,
+              row.score,
+              new Date(now.getTime() + 1),
+              row.idempotencyKey,
+              row.requestHash,
+              row.textValue,
+              row.status,
+              row.moderationVersion,
+            ]),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+      }
+      const input = {
+        id: responseId,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        participantId,
+        blockId: blockId.toLowerCase(),
+        questionId: questionId.toLowerCase(),
+        response: { textValue: marker },
+        responseSchemaVersion: 3 as const,
+        correct: null,
+        score: 0,
+        responseMs: 1,
+        submittedAt: new Date(now.getTime() + 1),
+        idempotencyKey: nonce,
+        requestHash: "a".repeat(64),
+      };
+      expect((await sessions.acceptResponse(input, 1)).status).toBe("accepted");
+      expect(JSON.stringify(await repository.exportAccount(owner.userId))).not.toContain(marker);
+      const command = {
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        hostCredentialId: credential.id,
+        commandId: randomUUID(),
+        expectedRevision: 1,
+        expectedModerationVersion: 0,
+        responseId,
+        status: "approved" as const,
+        requestHash: "b".repeat(64),
+        occurredAt: new Date(now.getTime() + 10),
+      };
+      expect((await sessions.moderateTextResponse(command)).status).toBe("accepted");
+      expect(
+        (
+          await sessions.moderateTextResponse({
+            ...command,
+            commandId: randomUUID(),
+            expectedModerationVersion: 1,
+            status: "removed",
+            requestHash: "c".repeat(64),
+          })
+        ).status,
+      ).toBe("accepted");
+      expect(
+        (
+          await packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "SELECT text_value,response,moderation_status,moderation_version FROM presentation_live_responses WHERE id=$1",
+              [responseId],
+            ),
+          )
+        ).rows,
+      ).toEqual([
+        { text_value: null, response: {}, moderation_status: "removed", moderation_version: 2 },
+      ]);
+      await expect(
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query(
+            "UPDATE presentation_live_responses SET text_value=$2,moderation_status='approved',moderation_version=3 WHERE id=$1",
+            [responseId, marker],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await expect(
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query(
+            "INSERT INTO presentation_session_command_receipts(id,workspace_id,session_id,command_id,expected_revision,resulting_revision,event_type) VALUES($1,$2,$3,$4,1,2,'question.revealed')",
+            [randomUUID(), owner.workspaceId, session.id, command.commandId],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await packPracticeScoped(owner.workspaceId, (client) =>
+        client.query("DELETE FROM presentation_session_credentials WHERE id=$1", [credential.id]),
+      );
+      expect(
+        await sessions.findTextModerationReceipt(owner.workspaceId, session.id, command.commandId),
+      ).toMatchObject({ hostCredentialId: credential.id, status: "approved" });
+      await sessions.transitionSession({
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        expectedRevision: 1,
+        phase: "finished",
+        currentBlockIndex: 0,
+        status: "finished",
+        event: { type: "presentation.finished", blockIndex: null, blockId: null },
+      });
+      await sessions.deleteSession(owner.workspaceId, session.id);
+      expect(
+        await sessions.findTextModerationReceipt(owner.workspaceId, session.id, command.commandId),
+      ).toBeNull();
+    }
+  });
+
+  it("moderates Presentation text privately with erasure, versioned receipts, reveal and deletion", async () => {
+    const owner = await creator("presentation-text-conformance");
+    const published = await createPublishedPresentationFixture(owner, "Moderated text");
+    await expectPresentationTextConformance({
+      repository: new PostgresPresentationSessionRepository(repository),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+    });
+  });
 
   it("keeps PostgreSQL on the shared Presentation repository conformance contract", async () => {
     const owner = await creator("presentation-repository-conformance");

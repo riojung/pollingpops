@@ -101,10 +101,41 @@ describe("presentation builder model", () => {
     ).toBe(true);
   });
 
-  it("rejects text and cloud formats rather than silently creating ratings", () => {
-    for (const type of ["open_text", "word_cloud"] as const)
-      expect(() => createPresentationQuestion(type)).toThrow("live Rounds only");
-  });
+  it.each(["open_text", "word_cloud"] as const)(
+    "creates %s opinions without incompatible answer fields and opts into document v10",
+    (type) => {
+      const original = draft();
+      const block = original.blocks[1]!;
+      const next = changePresentationQuestionType(original, block.id, type);
+      expect(next.schemaVersion).toBe(10);
+      const question = next.blocks[1]!;
+      if (question.kind !== "question") throw new Error("Expected text question");
+      expect(question.question).toMatchObject({
+        id: block.kind === "question" ? block.question.id : "",
+        type,
+        purpose: "opinion",
+        confidence: "off",
+        basePoints: 0,
+        delivery: "main",
+        linkedRecheckQuestionId: null,
+      });
+      expect(question.question).not.toHaveProperty("choices");
+      expect(question.question).not.toHaveProperty("correctValue");
+      expect(presentationReadiness(next)).toEqual([]);
+      expect(original.schemaVersion).toBe(2);
+      const duplicate = duplicatePresentationBlock(question);
+      expect(duplicate.id).not.toBe(question.id);
+      if (duplicate.kind !== "question") throw new Error("Expected duplicate question");
+      expect(duplicate.question.id).not.toBe(question.question.id);
+      expect(duplicate.question).toMatchObject({ type, purpose: "opinion" });
+      const restored = promotePresentationOpinionFormats(original, next.schemaVersion);
+      expect(restored.schemaVersion).toBe(10);
+      expect(normalizePresentationRecoveryDraft(next)).toEqual(next);
+      const removed = removePresentationBlock(next, question.id);
+      expect(removed.schemaVersion).toBe(10);
+      expect(promotePresentationOpinionFormats(removed)).toBe(removed);
+    },
+  );
   it("creates full rankings as unscored opinions and requires their explicit document opt-in", () => {
     const ranking = createPresentationQuestion("ranking");
     expect(ranking).toMatchObject({
@@ -382,7 +413,10 @@ describe("presentation builder model", () => {
     expect(normalizePresentationRecoveryDraft({ ...current, schemaVersion: 9 }).schemaVersion).toBe(
       9,
     );
-    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 10 })).toThrow();
+    expect(
+      normalizePresentationRecoveryDraft({ ...current, schemaVersion: 10 }).schemaVersion,
+    ).toBe(10);
+    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 11 })).toThrow();
     expect(() =>
       normalizePresentationRecoveryDraft({ schemaVersion: 1, blocks: "invalid" }),
     ).toThrow();
@@ -911,7 +945,7 @@ describe("presentation builder model", () => {
     },
   );
 
-  it.each(["poll", "ranking"] as const)(
+  it.each(["poll", "ranking", "open_text", "word_cloud"] as const)(
     "clears inbound recovery links when a recheck becomes a %s opinion",
     (type) => {
       const main = createQuestionBlock();
@@ -941,7 +975,7 @@ describe("presentation builder model", () => {
     },
   );
 
-  it.each(["rating", "ranking"] as const)(
+  it.each(["rating", "ranking", "open_text", "word_cloud"] as const)(
     "promotes a detached recheck when its diagnostic becomes a %s opinion",
     (type) => {
       const main = createQuestionBlock();

@@ -1,3 +1,4 @@
+import type { PresentationTextRepository } from "./presentation-text-types.js";
 import type {
   PresentationContent,
   PresentationRecoveryPackIntervention,
@@ -29,6 +30,7 @@ export interface PresentationSessionRecord {
   /** Frozen aggregate attribution for the intervention currently being presented. */
   recoveryPackIntervention?: PresentationRecoveryPackIntervention | null;
   eventSeq: number;
+  textModerationSeq?: number;
   questionOpenedAt: Date | null;
   questionClosesAt: Date | null;
   createdBy: string;
@@ -97,7 +99,10 @@ export interface PresentationSessionResponseRecord {
   questionId: string;
   response: PresentationSessionResponse;
   /** Explicit response encoding; absent only for legacy in-process callers. */
-  responseSchemaVersion?: 1 | 2;
+  responseSchemaVersion?: 1 | 2 | 3;
+  moderationStatus?: "pending" | "approved" | "removed" | null;
+  moderationVersion?: number | null;
+  moderatedAt?: Date | null;
   correct: boolean | null;
   score: number;
   responseMs: number;
@@ -273,7 +278,7 @@ export type PresentationSessionCommandInput = PresentationSessionTransitionInput
   };
 };
 
-export interface PresentationSessionRepository {
+export interface PresentationSessionRepository extends PresentationTextRepository {
   listSessions(
     workspaceId: string,
     now?: Date,

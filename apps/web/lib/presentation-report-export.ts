@@ -10,6 +10,16 @@ function csvCell(value: unknown): string {
 
 export function presentationReportCsv(input: PresentationReport): string {
   const report = PresentationReportSchema.parse(input);
+  const textColumns =
+    report.schemaVersion === 5
+      ? [
+          "approved_text",
+          "word_or_phrase",
+          "term_count",
+          "approved_respondents",
+          "percent_of_approved_respondents",
+        ]
+      : [];
   const rows: unknown[][] = [
     [
       "block_number",
@@ -33,6 +43,7 @@ export function presentationReportCsv(input: PresentationReport): string {
       "weighted_rank_points",
       "average_rank",
       ...Array.from({ length: 6 }, (_, index) => `rank_${index + 1}_count`),
+      ...textColumns,
     ],
   ];
   for (const block of report.evidence) {
@@ -52,8 +63,27 @@ export function presentationReportCsv(input: PresentationReport): string {
           ];
     const summary =
       block.kind === "question" && "opinionSummary" in block ? block.opinionSummary : undefined;
+    const text =
+      block.kind === "question" && "textResults" in block ? block.textResults : undefined;
+    if (text) {
+      if (text.kind === "open_text")
+        for (const entry of text.entries)
+          rows.push([...base, ...Array(17).fill(""), entry.value, "", "", text.respondents, ""]);
+      else
+        for (const term of text.buckets)
+          rows.push([
+            ...base,
+            ...Array(17).fill(""),
+            "",
+            term.label,
+            term.count,
+            text.respondents,
+            term.percent,
+          ]);
+      continue;
+    }
     if (!summary) {
-      rows.push([...base, ...Array(17).fill("")]);
+      rows.push([...base, ...Array(17 + textColumns.length).fill("")]);
       continue;
     }
     for (const choice of summary.choices) {
@@ -72,6 +102,7 @@ export function presentationReportCsv(input: PresentationReport): string {
           "",
           "",
           ...Array(6).fill(""),
+          ...Array(textColumns.length).fill(""),
         ]);
       else if (summary.kind === "ranking" && "weightedScore" in choice)
         rows.push([
@@ -88,6 +119,7 @@ export function presentationReportCsv(input: PresentationReport): string {
           choice.weightedScore,
           choice.averageRank,
           ...Array.from({ length: 6 }, (_, index) => choice.rankCounts[index] ?? ""),
+          ...Array(textColumns.length).fill(""),
         ]);
     }
   }

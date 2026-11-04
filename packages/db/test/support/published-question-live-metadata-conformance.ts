@@ -205,25 +205,24 @@ export async function expectPublishedQuestionLiveMetadataConformance(input: {
       poll,
     ],
   });
-  // Unsupported text must be filtered before the SQL page boundary, never promoted by Round v4.
+  // All supported opinion types remain safely bounded before pagination.
   expect(
     await repository.listPublishedQuizQuestionMetadata(workspaceId, "Opinion catalog", 1),
   ).toMatchObject({
-    questions: [
-      {
-        sourceQuizVersionId: opinionVersion.version.id,
-        sourceQuestionId: ranking.id,
-        type: "ranking",
-      },
-    ],
+    questions: [{ sourceQuizVersionId: opinionVersion.version.id, type: "open_text" }],
     hasMore: true,
   });
-  expect(
-    await repository.listPublishedQuizQuestionMetadata(workspaceId, "Opinion catalog", 2),
-  ).toMatchObject({
-    questions: [{ sourceQuestionId: ranking.id }, { sourceQuestionId: poll.id }],
-    hasMore: false,
-  });
+  const textCatalog = await repository.listPublishedQuizQuestionMetadata(
+    workspaceId,
+    "Opinion catalog",
+    12,
+  );
+  expect(textCatalog.questions.map((entry) => entry.type)).toEqual([
+    ...Array.from({ length: 10 }, () => "open_text"),
+    "ranking",
+    "poll",
+  ]);
+  expect(textCatalog.hasMore).toBe(false);
 }
 
 /** Unsupported current versions fail before JSON interpretation, filtering, or pagination. */

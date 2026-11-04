@@ -8,6 +8,19 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E04 moderated text November 4, 2026
+
+Software complete locally on `codex/presentation-e04-moderated-text` after PR #195 merged.
+The second family adds open text and word clouds, host-only pending/approved/removed moderation,
+body erasure, minimum-five approved public results and V5 report/CSV evidence. Moderation
+advances event sequence without changing the response revision/window. Document v10,
+response storage v3 and migration 092 require coordinated readers/writers; defaults and
+historical meanings stay unchanged. See the [verification record](evidence/presentation-e04-moderated-text.md)
+for the repository check, sixteen real PostgreSQL cases and 48 unique browser cases across
+documented slices, plus remaining manual/device, hosted-rollout, cost and parity gates. This
+increment is prepared for pull-request review and remains undeployed. See the
+[rollout instructions](runbooks/upgrade.md#presentation-moderated-text-compatibility).
+
 ### Presentation E04 opinion polls and rankings November 4, 2026
 
 The first E04 family adds multiple-selection opinion polls and full/top-N rankings across
@@ -23,8 +36,8 @@ content/hashes and existing report meanings remain unchanged. V4 retrieval requi
 and [first-family verification record](evidence/presentation-e04-opinion-formats.md).
 
 Repository checks, restricted PostgreSQL 17 and the final four-profile opinion workflows passed;
-see the verification record for exact runs and limits. Moderated open text and
-word clouds remain the next E04 family. This increment does not close the epic or establish
+see the verification record for exact runs and limits. The moderated text and word-cloud
+family is tracked in the newer entry above. This first increment did not close the epic or establish
 physical-device, manual accessibility, hosted rollout, capacity, operating-cost or competitor
 parity acceptance.
 

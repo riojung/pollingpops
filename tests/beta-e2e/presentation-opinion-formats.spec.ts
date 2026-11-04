@@ -627,7 +627,7 @@ for (const suffix of ["", " @mobile"]) {
     const text: QuestionDraft = {
       id: randomUUID(),
       type: "open_text",
-      prompt: `Unsupported moderated text ${suffixId}`,
+      prompt: `Available moderated text ${suffixId}`,
       purpose: "opinion",
       confidence: "off",
       delivery: "main",
@@ -671,7 +671,9 @@ for (const suffix of ["", " @mobile"]) {
     const pollCopy = picker.getByRole("checkbox", { name: new RegExp(poll.prompt) });
     await expect(rankingCopy).toBeEnabled();
     await expect(pollCopy).toBeEnabled();
-    await expect(picker.getByRole("checkbox", { name: new RegExp(text.prompt) })).toBeDisabled();
+    const textCopy = picker.getByRole("checkbox", { name: new RegExp(text.prompt) });
+    await expect(textCopy).toBeEnabled();
+    await expect(textCopy).not.toBeChecked();
     await rankingCopy.check();
     await pollCopy.check();
     const copiedResponse = page.waitForResponse(

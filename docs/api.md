@@ -102,7 +102,7 @@ CSV carries optional `max_selections` and `rank_count`; older polls default to o
 QTI, practice and Recovery Packs explicitly reject these new live formats. Presentations and
 their published-question Companion insertion support multiple-selection opinion polls and rankings
 through the separate [Presentation document-v9 boundary](#presentation-opinion-formats); moderated
-open text and word clouds remain unsupported there. Surveys retain their independent version-2
+open text and word clouds require the [document-v10 boundary](#presentation-moderated-text). Surveys retain their independent version-2
 multiple-selection support. Round protocol/state numbers in this table do not identify Presentation
 document, response-row or report versions.
 
@@ -753,7 +753,7 @@ document v1–v8 JSON, immutable hashes and accepted retry fingerprints are not 
 
 Authoring `POST /v1/presentations/{id}/blocks/import` may copy these formats from an exact retained
 Round version, preserving choices and limits with fresh block/question/choice IDs and promoting
-the destination to v9 when needed. Text opinions remain rejected. Companion's existing
+the destination to v9 when needed. Text opinions require v10 as described below. Companion's existing
 `insert_published_question` can independently copy eligible standalone text-only main poll/ranking
 questions into a live session, applying the same v9 floor. Existing source-access, safe phase,
 recovery-topology, provenance, receipt and revision fences remain in force. New source publications
@@ -799,7 +799,8 @@ Ranking summaries contain `rankCount`, `responseCount`, `totalRankings`, and per
 rank position i (zero based) contributes N−i; unranked choices contribute zero. Summary fields
 exclude participant identities, individual response order, private notes, citations and answer keys.
 
-Any report carrying this new evidence uses **Presentation Report V4**. Fetch it with
+Opinion-format reports without text use **Presentation Report V4**; mixed text rooms use V5
+as described below. Fetch V4 with
 `GET /v1/presentation-sessions/{id}/report?includeOpinionResults=true`, optionally combined with
 `includeSessionContext=true` and `includeQuickChecks=true`. A V4 read without the opinion opt-in
 returns `422 VALIDATION_ERROR`; there is no lossy V1/V2/V3 projection of its new result meaning.
@@ -812,8 +813,69 @@ literal. Stored reports and legacy V1–V3 meanings remain unchanged.
 
 Apply migration `091_presentation_opinion_formats.sql` and complete the coordinated
 [reader/writer rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility) before new
-writes. The first-family [verification record](evidence/presentation-e04-opinion-formats.md) tracks
-the remaining acceptance checks.
+writes. The first-family [verification record](evidence/presentation-e04-opinion-formats.md) records its executed checks.
+
+### Presentation moderated text
+
+Embedded Presentation document **v10** adds `open_text` and `word_cloud` as main, unscored
+opinion questions, with no choices, correct answer, confidence, recovery link or participant points.
+Adding either type promotes the document to v10; later editing, design changes, copies and history
+retain that floor. Versions 1–9 and the default creation versions keep their existing meanings.
+The authoring import and eligible Companion published-question insertion can independently copy
+published Round text questions, with new destination identifiers and a frozen source version.
+
+Submit `response:{"textValue":"..."}` through the existing REST or Socket.IO response envelope.
+The server normalizes NFC and trims before validating and hashing. Open text accepts at most
+1,000 UTF-16 code units and permits internal tabs/newlines; word clouds accept at most 80 and
+reject control characters. Empty, excessive or mixed text/choice/numeric/rating/confidence payloads
+are rejected. There is one accepted response per participant and block, including after removal.
+Limits are 10 text blocks, 250 text respondents per block, 2,500 text entries per room and 5,000
+moderation receipts. Text-capable rooms and live insertion enforce the 250-participant limit atomically.
+
+New text rows use **response storage v3**, an empty public response object and a separate private
+body. Ordinary snapshots, acknowledgements and raw account exports never contain that body.
+Malformed primitive responses return the existing sanitized `400 VALIDATION_ERROR`; invalid
+text values or incompatible text answer fields return `422 VALIDATION_ERROR`.
+The participant's current-block `ownTextResponse` carries only response/block identifiers,
+moderation status and moderation version. A durable receipt confirms saving; an approval is a
+separate operation. Pending is the initial status, approval is explicit, and removal is terminal
+and erases the private body. A removed response cannot be submitted again.
+
+- `GET /v1/presentation-sessions/{id}/response-moderation` requires the exact active host Bearer
+  pass. Query `status=pending|approved|removed`, optional `blockId`, `limit` (1–50) and `cursor`.
+  It returns a private queue with aliases and bodies; removed bodies are null.
+- `POST /v1/presentation-sessions/{id}/response-moderation/{responseId}` requires the same host
+  pass and `{commandId,expectedRevision,expectedModerationVersion,status:"approved"|"removed"}`.
+  Per-response compare-and-swap and the session lock protect transitions. Moderation advances the
+  event sequence without changing the host revision or response window. Exact retries recover
+  the original receipt, including after later removal; conflicting reuse of a command ID fails.
+  A lost acknowledgement must retry the original intent. Finishing closes new moderation.
+- `GET /v1/presentation-sessions/{id}/response-results` requires `blockId` and explicit
+  `role=creator|host|participant|companion|stage`, with optional `limit` (1–50) and `cursor`.
+  Creator reads use the eligible workspace cookie; all other roles require their exact Bearer
+  pass and omit cookies. An invalid pass never falls back to creator authorization. Results are
+  current-block only and contain no participant/response identifiers or submission timestamps.
+
+Public results require a durable reveal for that block and at least five approved respondents.
+Pending and removed responses are excluded. Removing an approved response below five hides
+all bodies and cloud counts. Cloud groups collapse whitespace, normalize NFC and ignore case;
+percentages divide by approved respondents. Cursors are bounded and tied to the session,
+block, filter, revision and event sequence; stale pagination returns `409` and starts again.
+Wrong, missing, expired, revoked or cross-session passes return `401`; invalid inputs return
+`422`, missing/current-block mismatches `404`, and stale versions or intent conflicts `409`.
+
+Text rooms produce **Presentation Report V5**. Retrieve with `includeTextResults=true`; mixed
+V5 reports containing poll/ranking summaries also require `includeOpinionResults=true`.
+`includeQuickChecks=true` independently opts into Quick Check attribution. There is no lossy
+legacy downgrade. `textResults` contains only revealed, threshold-qualified approved text or
+cloud frequencies. The immutable report and evidence CSV exclude pending and removed bodies.
+CSV V5 appends five text columns; V1–V4 keep their previous columns. Formula-like prefixes are
+made literal. Aggregate session summaries continue to suppress participant text.
+
+Apply migration `092_presentation_text_opinions.sql` and deploy matching API, worker, artifact,
+history/export, retention and web readers before accepting v10 writes. See the
+[rollout boundary](runbooks/upgrade.md#presentation-moderated-text-compatibility) and
+[verification record](evidence/presentation-e04-moderated-text.md).
 
 ## Media APIs
 
@@ -891,7 +953,9 @@ Presentation REST endpoints additionally include:
   edit a deck or mint another role's pass. Existing creator-cookie authority is independent.
 - `GET /v1/presentation-sessions/{id}/report` — private creator response; `202` while pending
   without a report, otherwise `200`. Legacy report contracts remain compatible; new opinion-format
-  Report V4 requires `includeOpinionResults=true` as described above.
+  Report V4 requires `includeOpinionResults=true`. V5 requires `includeTextResults=true` and,
+  when it also carries opinion summaries, `includeOpinionResults=true`. Quick Check attribution
+  independently requires `includeQuickChecks=true` as described above.
 
 New Presentation rooms require their workspace and realtime creation eligibility. Creator control
 requires an owner/editor; guest routes use session-scoped credentials. Deleting a room disconnects
@@ -900,6 +964,9 @@ report work. In-flight projections and report completions recheck durable existe
 cannot recreate the room or its report.
 
 Host snapshots add optional `presenter:{speakerNotes,nextBlock}` from the frozen session version.
+Text-capable rooms also expose host-only `textModerationAvailable:true`, derived from the full
+frozen content. It keeps review available after advancing to a nontext slide; ordinary rooms
+omit it and the host UI makes no moderation-queue reads.
 The next block uses the participant-safe content shape; its media is available through creator-only
 host-media alongside current-block media. Stage, participant and Companion snapshots omit this
 private field. Stage answer material appears only for the current question after explicit reveal.
@@ -1296,7 +1363,7 @@ and workspace eligibility, independently of Pack flags and the Pack session-crea
 Only standalone text-only main questions are eligible, including supported choice, numeric,
 poll, rating and document-v9 ranking types. Multiple-selection poll/ranking insertion requires
 the [opinion-format reader/writer floor](#presentation-opinion-formats); moderated text and word
-clouds remain excluded. Both outgoing and incoming recovery links and Pack provenance are
+clouds additionally require the [text reader/writer floor](#presentation-moderated-text). Both outgoing and incoming recovery links and Pack provenance are
 excluded. A selected retained version remains valid after a newer publication, but new insertion
 requires a still-present, non-archived workspace source and an exact version hash.
 Source eligibility is revalidated and locked in the insertion transaction through the state,

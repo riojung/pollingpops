@@ -11,7 +11,8 @@ using single- or multiple-selection opinion polls and ratings. Presentation repl
 Q&A-only feedback rooms and advanced feedback exports remain pending. Live Rounds support gated
 multiple-selection polls, ranking, moderated open text and word clouds.
 Presentations also support multiple-selection opinion polls and full/top-N rankings after the
-matching release is deployed. Moderated open text and word clouds remain unavailable in Presentations.
+matching release is deployed. Moderated open text and word clouds additionally require the
+document-v10/response-v3/report-V5 release and migration 092.
 Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
@@ -604,7 +605,7 @@ paired recovery question. Their opinion/scoring/recovery controls are locked. Ch
 assessment into a poll or ranking clears its correctness and incompatible recovery links while
 preserving compatible choice text. **From published Round** can copy multiple-selection polls
 and rankings with fresh destination IDs; later source edits do not update those independent
-copies. Moderated open text and word clouds remain disabled in this picker.
+copies. Moderated open text and word clouds use the separate workflow below.
 
 Wait for **Saved**, preview and publish, then host the immutable version. Later draft edits or a
 new publication do not change a running session's question, choices or limits. Participants
@@ -640,6 +641,42 @@ assessment questions in a mixed deck retain their own scoring and recovery behav
 Operators must complete the [document-v9/report-v4 rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
 before enabling these writes. See the [first-family implementation record](evidence/presentation-e04-opinion-formats.md)
 for verification status and remaining scope.
+
+### Collect moderated Presentation text
+
+Add an interactive question and select **Open text** or **Word cloud**. Open text accepts one
+response up to 1,000 characters; a word cloud accepts one short phrase up to 80. Both are
+unscored opinions without correct answers, confidence or recovery links. **From published Round**
+can copy these questions independently. Save, preview and publish before starting the session.
+
+Participants type on their own device and select **Submit response**. Wait for **Saved**;
+**Saving…** and **Reconnecting—not yet saved** mean receipt confirmation is pending. Reload
+restores saved/moderation status without restoring the private body into the input. The session
+accepts one response per person and question, including after the facilitator removes it.
+
+In the host tab, use **Text response moderation**, choose the current or all questions, and select
+**Pending**, **Approved** or **Removed**. The facilitator can see aliases and pending bodies.
+Choose **Approve response** to make a response eligible for public results, or **Remove response**
+to erase the body permanently. An approval can later be removed. If an update is unconfirmed,
+use **Retry review acknowledgement** to check the original operation before reviewing another.
+Moderation leaves the question's response window open until the host closes it.
+
+Use **Reveal and close question** to show approved results. The host, participant and audience
+stage show the current question; Companion uses **Show results**. At least five approved
+respondents are required. Pending and removed bodies never appear there. Removing an approved
+response below five hides all text and cloud counts. Cloud grouping ignores case, composes
+Unicode characters and collapses whitespace. The decorative cloud has an equivalent **Word-cloud
+counts** table; focus the table region to scroll its columns with the keyboard.
+
+Use queue filters and pagination for larger rooms. Text activities support at most 250 people
+and ten text questions in a room. Finish after reviewing: new moderation closes when the
+session ends. The report and **Export evidence CSV** contain only revealed results meeting the
+five-approval threshold. Raw pending and removed responses are excluded. These results do not
+establish learning accuracy or participant scores; aliases remain visible to the facilitator.
+
+Operators must complete the [migration-092 rollout](runbooks/upgrade.md#presentation-moderated-text-compatibility)
+before accepting these formats. The [verification record](evidence/presentation-e04-moderated-text.md)
+distinguishes executed checks from remaining manual/device and cost acceptance.
 
 ### Collect Presentation Q&A
 

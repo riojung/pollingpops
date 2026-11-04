@@ -1,0 +1,23 @@
+.results {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--ui-text);
+  text-align: left;
+}
+.results h2 {
+  font-size: 1.2rem;
+}
+.results p {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.compact h2 {
+  margin: 8px 0;
+}
+.compact p {
+  margin: 8px 0;
+}
+.compact :global(.word-cloud) {
+  padding: 8px 8px;
+  gap: 8px 12px;
+}

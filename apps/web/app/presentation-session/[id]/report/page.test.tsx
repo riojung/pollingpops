@@ -236,13 +236,86 @@ describe("Presentation Quick Check report compatibility", () => {
       const harness = reportHarness();
       await settle();
       expect(fixtures.apiFetch.mock.calls[0]?.[0]).toBe(
-        "/v1/presentation-sessions/11111111-1111-4111-8111-111111111111/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true",
+        "/v1/presentation-sessions/11111111-1111-4111-8111-111111111111/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true&includeTextResults=true",
       );
       const markup = renderToStaticMarkup(harness.render());
       expect(markup).toContain("Which approach should we discuss?");
       expect(markup).toContain("Flex — facilitator closes responses");
       expect(markup.includes("Session-only Quick Check · unscored")).toBe(schemaVersion === 3);
       expect(markup).not.toContain("Recovery evidence");
+    },
+  );
+
+  it.each(["open_text", "word_cloud"] as const)(
+    "renders approved V5 %s evidence as escaped unscored results",
+    async (type) => {
+      const legacy = reportFixture(1);
+      const question = legacy.evidence[0]!;
+      if (question.kind !== "question") throw new Error("Question fixture required");
+      const report = PresentationReportSchema.parse({
+        ...legacy,
+        schemaVersion: 5,
+        participantCount: 5,
+        responseCount: 9,
+        timeline: [
+          {
+            sequence: 1,
+            type: "question.revealed",
+            blockIndex: 0,
+            blockId: question.blockId,
+            occurredAt: "2026-10-08T12:01:00.000Z",
+          },
+        ],
+        evidence: [
+          {
+            ...question,
+            questionType: type,
+            questionTypeLabel: type,
+            respondents: 5,
+            textResults:
+              type === "open_text"
+                ? {
+                    kind: type,
+                    respondents: 5,
+                    entries: ["<script>approved</script>", "Two", "Three", "Four", "Five"].map(
+                      (value) => ({ value }),
+                    ),
+                  }
+                : {
+                    kind: type,
+                    respondents: 5,
+                    buckets: [
+                      {
+                        value: "<script>approved</script>",
+                        label: "<script>approved</script>",
+                        count: 5,
+                        percent: 100,
+                      },
+                    ],
+                  },
+          },
+          {
+            ...question,
+            blockId: "66666666-6666-4666-8666-666666666666",
+            blockIndex: 1,
+            questionType: type,
+            questionTypeLabel: type,
+            prompt: "Suppressed question",
+            respondents: 4,
+          },
+        ],
+      });
+      fixtures.apiFetch.mockResolvedValue({ reportStatus: "ready", report });
+      const harness = reportHarness();
+      await settle();
+      const markup = renderToStaticMarkup(harness.render());
+      expect(markup).toContain("&lt;script&gt;approved&lt;/script&gt;");
+      expect(markup).not.toContain("<script>approved</script>");
+      expect(markup).toContain("Unscored opinion");
+      expect(markup).toContain("Text results require reveal and at least five approved responses");
+      expect(markup).not.toContain("Leaderboard");
+      expect(markup).not.toContain("Recovery evidence");
+      expect(markup).toContain("Export evidence CSV");
     },
   );
 

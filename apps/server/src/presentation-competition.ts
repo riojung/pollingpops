@@ -4,7 +4,9 @@ import {
   questionPurpose,
   questionTypeDefinition,
   isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
   requiresPresentationOpinionFormats,
+  requiresPresentationTextOpinions,
 } from "@openround/contracts";
 import {
   comparePresentationLeaderboardEntries,
@@ -40,7 +42,9 @@ export function presentationScoredResponses(
 ) {
   const excludedIds = new Set(
     session.content.blocks.flatMap((block) =>
-      block.kind === "question" && isPresentationOpinionResultQuestion(block.question)
+      block.kind === "question" &&
+      (isPresentationOpinionResultQuestion(block.question) ||
+        isPresentationTextResultQuestion(block.question))
         ? [block.id.toLowerCase()]
         : [],
     ),
@@ -52,7 +56,8 @@ export function presentationScoredResponses(
 export function presentationHasParticipantStandings(
   session: Pick<PresentationSessionRecord, "content">,
 ) {
-  return requiresPresentationOpinionFormats(session.content)
+  return requiresPresentationOpinionFormats(session.content) ||
+    requiresPresentationTextOpinions(session.content)
     ? presentationHasScoredQuestions(session)
     : presentationHasQuestions(session);
 }

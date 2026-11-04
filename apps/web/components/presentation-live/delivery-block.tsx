@@ -49,7 +49,9 @@ export function PresentationDeliveryBlock({
         <p lang="en-CA">
           {block.question.type === "numeric"
             ? "Enter a number on your device."
-            : "Choose a rating on your device."}
+            : block.question.type === "open_text" || block.question.type === "word_cloud"
+              ? "Respond on your device. Responses are reviewed before they appear."
+              : "Choose a rating on your device."}
         </p>
       ) : null}
       {revealedAnswer?.kind === "numeric" ? (

@@ -121,7 +121,7 @@ describe("multiple-selection opinion contracts", () => {
       }
       const supported = schema.parse({ ...presentation, schemaVersion: 9 });
       expect(supported.blocks[0]).toMatchObject({ question: { type: "poll", maxSelections: 2 } });
-      expect(schema.safeParse({ ...presentation, schemaVersion: 10 }).success).toBe(false);
+      expect(schema.safeParse({ ...presentation, schemaVersion: 11 }).success).toBe(false);
       for (const type of ["open_text", "word_cloud"]) {
         const { choices, maxSelections, ...fields } = poll();
         expect(choices).toHaveLength(3);
@@ -137,9 +137,7 @@ describe("multiple-selection opinion contracts", () => {
         expect(unsupported.success).toBe(false);
         if (!unsupported.success)
           expect(
-            unsupported.error.issues.some((issue) =>
-              issue.message.includes("Text opinions are not supported"),
-            ),
+            unsupported.error.issues.some((issue) => issue.message.includes("schema version 10")),
           ).toBe(true);
       }
     }

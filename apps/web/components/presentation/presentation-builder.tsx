@@ -82,6 +82,7 @@ import {
 import { AuthoringAssistant } from "../authoring-assistant";
 import { CanvasArtifactLinks } from "../canvas-artifact-links/links";
 import { ResponseEditor } from "../editor/response-editor";
+import { TextResponseControl } from "../text-response-control";
 import { MediaEditor } from "../editor/media-editor";
 import type { RecoveryPackUpdateUndo } from "../editor/recovery-pack-update-panel";
 import { ContentSlideView, contentSlideRegionLabels } from "./content-slide-view";
@@ -313,9 +314,9 @@ function PresentationPreview({
                 <div className={styles.previewAnswer}>
                   {block.question.min} — {block.question.max}
                 </div>
-              ) : (
-                <p>This response format is available in live Rounds only.</p>
-              )}
+              ) : isTextQuestion(block.question.type) ? (
+                <TextResponseControl type={block.question.type} disabled />
+              ) : null}
             </article>
           )}
         </div>
@@ -452,6 +453,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   }, []);
 
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  const selectedOpinionOnly =
+    selectedBlock?.kind === "question" &&
+    (isTextQuestion(selectedBlock.question.type) ||
+      ["poll", "rating", "ranking"].includes(selectedBlock.question.type));
   const selectedTextElement =
     selectedBlock?.kind === "content"
       ? (selectedBlock.textElements.find((element) => element.id === selectedTextElementId) ?? null)
@@ -1615,8 +1620,6 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   }
 
   function toggleImportedQuestion(questionId: string) {
-    const question = publishedRound?.questions.find((candidate) => candidate.id === questionId);
-    if (question && isTextQuestion(question.type)) return;
     setSelectedQuestionIds((current) =>
       current.includes(questionId)
         ? current.filter((candidate) => candidate !== questionId)
@@ -2938,13 +2941,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         }}
                         value={selectedBlock.question.type}
                       >
-                        {questionTypeOptions
-                          .filter((option) => !isTextQuestion(option.type))
-                          .map((option) => (
-                            <option key={option.type} value={option.type}>
-                              {t(questionTypeMessageKeys[option.type])}
-                            </option>
-                          ))}
+                        {questionTypeOptions.map((option) => (
+                          <option key={option.type} value={option.type}>
+                            {t(questionTypeMessageKeys[option.type])}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <label className={styles.field}>
@@ -2969,11 +2970,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     <label className={styles.field}>
                       <span>{t("delivery.builder.points")}</span>
                       <select
-                        disabled={
-                          selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating" ||
-                          selectedBlock.question.type === "ranking"
-                        }
+                        disabled={selectedOpinionOnly}
                         onChange={(event) =>
                           updateQuestion((question) => ({
                             ...question,
@@ -3007,11 +3004,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <span lang="en-CA">Purpose</span>
                       <select
                         lang="en-CA"
-                        disabled={
-                          selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating" ||
-                          selectedBlock.question.type === "ranking"
-                        }
+                        disabled={selectedOpinionOnly}
                         onChange={(event) =>
                           updateQuestion((question) => ({
                             ...question,
@@ -3020,11 +3013,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         }
                         value={
                           selectedBlock.question.purpose ??
-                          (selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating" ||
-                          selectedBlock.question.type === "ranking"
-                            ? "opinion"
-                            : "diagnostic")
+                          (selectedOpinionOnly ? "opinion" : "diagnostic")
                         }
                       >
                         <option value="diagnostic">Diagnostic</option>
@@ -3036,11 +3025,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <span>{t("delivery.builder.confidence")}</span>
                       <select
                         lang="en-CA"
-                        disabled={
-                          selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating" ||
-                          selectedBlock.question.type === "ranking"
-                        }
+                        disabled={selectedOpinionOnly}
                         onChange={(event) =>
                           updateQuestion((question) => ({
                             ...question,
@@ -3081,11 +3066,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <span lang="en-CA">Delivery role</span>
                       <select
                         lang="en-CA"
-                        disabled={
-                          selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating" ||
-                          selectedBlock.question.type === "ranking"
-                        }
+                        disabled={selectedOpinionOnly}
                         onChange={(event) =>
                           updateQuestion((question) => ({
                             ...question,
@@ -3099,11 +3080,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                         value={selectedBlock.question.delivery ?? "main"}
                       >
                         <option value="main">
-                          {selectedBlock.question.type === "poll" ||
-                          selectedBlock.question.type === "rating" ||
-                          selectedBlock.question.type === "ranking"
-                            ? "Main activity"
-                            : "Main diagnostic"}
+                          {selectedOpinionOnly ? "Main activity" : "Main diagnostic"}
                         </option>
                         <option value="recheck">Recovery recheck</option>
                       </select>
@@ -3112,11 +3089,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                       <label className={styles.field}>
                         <span>{t("delivery.builder.pairedRecheckQuestion")}</span>
                         <select
-                          disabled={
-                            selectedBlock.question.type === "poll" ||
-                            selectedBlock.question.type === "rating" ||
-                            selectedBlock.question.type === "ranking"
-                          }
+                          disabled={selectedOpinionOnly}
                           onChange={(event) =>
                             updateQuestion((question) => ({
                               ...question,
@@ -3216,7 +3189,6 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 <label key={question.id}>
                   <input
                     checked={selectedQuestionIds.includes(question.id)}
-                    disabled={isTextQuestion(question.type)}
                     onChange={() => toggleImportedQuestion(question.id)}
                     type="checkbox"
                   />
@@ -3226,9 +3198,6 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                     </strong>
                     <small>
                       {responseTypeLabel(question.type)} · {question.delivery ?? "main"}
-                      {isTextQuestion(question.type) ? (
-                        <span lang={locale}> · {t("delivery.builder.textLiveOnly")}</span>
-                      ) : null}
                     </small>
                   </span>
                 </label>

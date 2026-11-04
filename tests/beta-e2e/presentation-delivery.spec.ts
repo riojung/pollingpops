@@ -184,6 +184,11 @@ for (const suffix of ["", " @mobile"]) {
   }, testInfo) => {
     test.setTimeout(180_000);
     annotateDeliveryEmulation(testInfo, "A separate browser tab exercises the scoped stage.");
+    const moderationReads: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.endsWith("/response-moderation"))
+        moderationReads.push(request.method());
+    });
     const fixture = await createDeliverySession(page);
     const audienceContext = await deliveryContext(browser, page, testInfo);
     try {
@@ -325,6 +330,10 @@ for (const suffix of ["", " @mobile"]) {
           stage.getByText(fixture.question.question.explanation, { exact: true }),
         ).toBeVisible();
         await expectAudienceSafe(stage);
+        await expect(
+          page.getByRole("region", { name: "Text response moderation", exact: true }),
+        ).toHaveCount(0);
+        expect(moderationReads).toEqual([]);
       } finally {
         await stage.close();
       }

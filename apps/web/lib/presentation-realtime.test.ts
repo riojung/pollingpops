@@ -1387,63 +1387,83 @@ describe("Presentation participant acknowledgement recovery", () => {
     controller.stop();
   });
 
-  it("synchronizes after reconnect and replays one pending submission with the same key", async () => {
-    const socket = new FakeSocket();
-    const saveStates: string[] = [];
-    const controller = createPresentationRealtimeController({
-      sessionId: participantSnapshot().sessionId,
-      credential: { projection: "participant", participantToken: "p".repeat(32) },
-      fetchSnapshot: async () => participantSnapshot(),
-      onSnapshot: () => undefined,
-      onConnectionState: () => undefined,
-      onSaveState: (state) => saveStates.push(state),
-      socketFactory: () => socket as unknown as Socket,
-      acknowledgementTimeoutMs: 50,
-    });
-    controller.start();
-    sync(socket, participantSnapshot());
+  it.each(["choice", "text"] as const)(
+    "replays the exact pending %s response after reconnect and a newer sequence",
+    async (kind) => {
+      const initial = participantSnapshot();
+      if (kind === "text" && initial.currentBlock?.kind === "question") {
+        initial.currentBlock.question = {
+          ...initial.currentBlock.question,
+          type: "open_text",
+          choices: [],
+          basePoints: 0,
+        };
+      }
+      const snapshot = (overrides: Partial<PresentationParticipantSnapshot> = {}) => ({
+        ...initial,
+        ...overrides,
+      });
+      const socket = new FakeSocket();
+      const saveStates: string[] = [];
+      const controller = createPresentationRealtimeController({
+        sessionId: initial.sessionId,
+        credential: { projection: "participant", participantToken: "p".repeat(32) },
+        fetchSnapshot: async () => snapshot(),
+        onSnapshot: () => undefined,
+        onConnectionState: () => undefined,
+        onSaveState: (state) => saveStates.push(state),
+        socketFactory: () => socket as unknown as Socket,
+        acknowledgementTimeoutMs: 50,
+      });
+      controller.start();
+      sync(socket, snapshot());
 
-    const idempotencyKey = randomUUID();
-    const submission = controller.submitResponse(
-      {
-        sessionId: participantSnapshot().sessionId,
-        participantToken: "p".repeat(32),
-        blockId: participantSnapshot().currentBlock!.id,
-        expectedRevision: 3,
+      const idempotencyKey = randomUUID();
+      const submission = controller.submitResponse(
+        {
+          sessionId: initial.sessionId,
+          participantToken: "p".repeat(32),
+          blockId: initial.currentBlock!.id,
+          expectedRevision: 3,
+          idempotencyKey,
+          response:
+            kind === "text"
+              ? { textValue: "Private café\nnext step" }
+              : { choiceIds: ["6846c45c-7c3c-4348-86a5-c6e4e5bff962"] },
+        },
+        async () => {
+          throw new Error("REST should not be used");
+        },
+      );
+      socket.disconnect();
+      socket.connect();
+      sync(socket, snapshot({ seq: 6 }));
+
+      const attempts = socket.emitted.filter(
+        (entry) => entry.event === "presentation.response.submit",
+      );
+      expect(attempts).toHaveLength(2);
+      expect(attempts[1]!.payload).toEqual(attempts[0]!.payload);
+      expect(
+        attempts.map(({ payload }) => (payload as { idempotencyKey: string }).idempotencyKey),
+      ).toEqual([idempotencyKey, idempotencyKey]);
+
+      const ack: PresentationResponseAck = {
+        sessionId: initial.sessionId,
+        blockId: initial.currentBlock!.id,
         idempotencyKey,
-        response: { choiceIds: ["6846c45c-7c3c-4348-86a5-c6e4e5bff962"] },
-      },
-      async () => {
-        throw new Error("REST should not be used");
-      },
-    );
-    socket.disconnect();
-    socket.connect();
-    sync(socket, participantSnapshot({ seq: 6 }));
-
-    const attempts = socket.emitted.filter(
-      (entry) => entry.event === "presentation.response.submit",
-    );
-    expect(attempts).toHaveLength(2);
-    expect(
-      attempts.map(({ payload }) => (payload as { idempotencyKey: string }).idempotencyKey),
-    ).toEqual([idempotencyKey, idempotencyKey]);
-
-    const ack: PresentationResponseAck = {
-      sessionId: participantSnapshot().sessionId,
-      blockId: participantSnapshot().currentBlock!.id,
-      idempotencyKey,
-      accepted: true,
-      duplicate: true,
-      responseId: randomUUID(),
-      acceptedAt: NOW,
-      snapshot: participantSnapshot({ seq: 7, responseSubmitted: true }),
-    };
-    attempts[1]!.ack?.({ data: ack });
-    await expect(submission).resolves.toEqual(ack);
-    expect(saveStates.at(-1)).toBe("saved");
-    controller.stop();
-  });
+        accepted: true,
+        duplicate: true,
+        responseId: randomUUID(),
+        acceptedAt: NOW,
+        snapshot: snapshot({ seq: 7, responseSubmitted: true }),
+      };
+      attempts[1]!.ack?.({ data: ack });
+      await expect(submission).resolves.toEqual(ack);
+      expect(saveStates.at(-1)).toBe("saved");
+      controller.stop();
+    },
+  );
 
   it.each([
     ["session", { sessionId: randomUUID() }],

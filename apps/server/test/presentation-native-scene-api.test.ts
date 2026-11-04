@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PresentationDraftSchema,
+  PresentationHostSnapshotSchema,
   preparePresentationPublication,
   type PresentationDraft,
 } from "@openround/contracts";
@@ -90,8 +91,19 @@ async function saveDraft(target: FastifyInstance, cookie: string, draft: Present
 
 function expectPublicScene(snapshot: unknown, scene: unknown) {
   expect(snapshot).toMatchObject({ currentBlock: { scene } });
-  expect(JSON.stringify(snapshot)).not.toContain("PRIVATE");
-  expect(JSON.stringify(snapshot)).not.toContain("downloadUrl");
+  let audienceFields = snapshot;
+  if ((snapshot as { projection?: unknown }).projection === "host") {
+    const host = PresentationHostSnapshotSchema.parse(snapshot);
+    expect(host.presenter?.speakerNotes).toBe("PRIVATE native speaker note");
+    // Only the current private notes are permitted. Keep the full next-block preview and every
+    // other host field in the same privacy assertions as audience snapshots.
+    const checked = structuredClone(host);
+    checked.presenter!.speakerNotes = "";
+    audienceFields = checked;
+  }
+  for (const privateMarker of ["PRIVATE", "HIDDEN", "UNPUBLISHED", "downloadUrl"]) {
+    expect(JSON.stringify(audienceFields)).not.toContain(privateMarker);
+  }
 }
 
 describe("native Presentation scenes API", () => {

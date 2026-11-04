@@ -1,7 +1,12 @@
 import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  type PresentationContent,
+  type PresentationStagePassResponse,
+  type PresentationStageSnapshot,
+} from "@openround/contracts";
 import {
   MemoryRepository,
   type CreatorContext,
@@ -33,6 +38,7 @@ async function fixture(
     companionEnabled?: boolean;
     allowlisted?: boolean;
     presentationsEnabled?: boolean;
+    realtimeEnabled?: boolean;
   } = {},
 ) {
   const repository = new MemoryRepository({
@@ -49,7 +55,7 @@ async function fixture(
     FEATURE_UX_BETA: "true",
     UX_BETA_WORKSPACE_ALLOWLIST: WORKSPACE_ID,
     FEATURE_PRESENTATIONS: options.presentationsEnabled === false ? "false" : "true",
-    FEATURE_PRESENTATION_REALTIME: "true",
+    FEATURE_PRESENTATION_REALTIME: options.realtimeEnabled === false ? "false" : "true",
     FEATURE_PRESENTATION_COMPANION: options.companionEnabled === false ? "false" : "true",
     EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST:
       options.allowlisted === false ? randomUUID() : WORKSPACE_ID,
@@ -75,6 +81,7 @@ async function fixture(
   async function seedSession(
     workspaceId = creator.workspaceId,
     state: "active" | "finished" | "expired" = "active",
+    blocks?: PresentationContent["blocks"],
   ) {
     const now = new Date();
     const session: PresentationSessionRecord = {
@@ -119,6 +126,7 @@ async function fixture(
       liveExpiresAt: new Date(now.getTime() + (state === "expired" ? -1 : 86_400_000)),
       retentionExpiresAt: new Date(now.getTime() + 30 * 86_400_000),
     };
+    if (blocks) session.content.blocks = blocks;
     const controlToken = `${randomUUID()}.${randomUUID()}`;
     const created = await built.presentationSessions.createSessionWithCredential(session, {
       id: randomUUID(),
@@ -360,4 +368,376 @@ describe("Presentation companion API", () => {
       ).toBe(409);
     }
   });
+});
+
+describe("Presentation scoped stage API", () => {
+  it("expires stage reads at the server's one-hour deadline and refuses finished/expired issuance", async () => {
+    const { app, cookie, creator, seedSession } = await fixture();
+    const { session } = await seedSession();
+    const base = `/v1/presentation-sessions/${session.id}`;
+    const pass = (
+      await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie } })
+    ).json<PresentationStagePassResponse>();
+    const headers = { authorization: `Bearer ${pass.stageToken}` };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(pass.expiresAt));
+      for (const path of [`${base}/stage`, `${base}/stage-media/${randomUUID()}`]) {
+        const response = await app.inject({ method: "GET", url: path, headers });
+        expect(response.statusCode).toBe(401);
+        expect(response.headers["cache-control"]).toContain("no-store");
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+    for (const state of ["finished", "expired"] as const) {
+      const seeded = await seedSession(creator.workspaceId, state);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/v1/presentation-sessions/${seeded.session.id}/stage-pass`,
+            headers: { cookie },
+          })
+        ).statusCode,
+      ).toBe(409);
+    }
+  });
+
+  it("requires creator authority to mint/revoke while stage reads accept only their own bearer", async () => {
+    const { app, cookie, seedSession, memberCookie } = await fixture();
+    const { session, credential, controlToken } = await seedSession();
+    const base = `/v1/presentation-sessions/${session.id}`;
+    expect((await app.inject({ method: "POST", url: `${base}/stage-pass` })).statusCode).toBe(401);
+    const viewer = await memberCookie("viewer");
+    expect(
+      (await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie: viewer } }))
+        .statusCode,
+    ).toBe(403);
+    const editor = await memberCookie("editor");
+    const issued = await app.inject({
+      method: "POST",
+      url: `${base}/stage-pass`,
+      headers: { cookie: editor },
+    });
+    expect(issued.statusCode).toBe(201);
+    expect(issued.headers["cache-control"]).toContain("no-store");
+    const pass = issued.json<PresentationStagePassResponse>();
+    const headers = { authorization: `Bearer ${pass.stageToken}` };
+    const read = await app.inject({ method: "GET", url: `${base}/stage`, headers });
+    expect(read.statusCode).toBe(200);
+    expect(read.headers["cache-control"]).toContain("no-store");
+    expect(read.json()).toMatchObject({
+      snapshot: { projection: "stage", currentBlock: null, revealedAnswer: null },
+    });
+    for (const invalidHeaders of [{ cookie }, { authorization: `Bearer ${controlToken}` }]) {
+      expect(
+        (await app.inject({ method: "GET", url: `${base}/stage`, headers: invalidHeaders }))
+          .statusCode,
+      ).toBe(401);
+    }
+    const joined = await app.inject({
+      method: "POST",
+      url: "/v1/presentation-sessions/join",
+      payload: { code: session.code, nickname: "Audience" },
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/stage`,
+          headers: { authorization: `Bearer ${joined.json().participantToken}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    const foreign = await seedSession(randomUUID());
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/v1/presentation-sessions/${foreign.session.id}/stage`,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/v1/presentation-sessions/${foreign.session.id}/stage-pass`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `${base}/stage-passes/${credential.id}`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `${base}/stage-passes/${pass.credentialId}`,
+          headers: { cookie: viewer },
+        })
+      ).statusCode,
+    ).toBe(403);
+    const replacement = (
+      await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie } })
+    ).json<PresentationStagePassResponse>();
+    expect((await app.inject({ method: "GET", url: `${base}/stage`, headers })).statusCode).toBe(
+      401,
+    );
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `${base}/stage-passes/${replacement.credentialId}`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/stage`,
+          headers: { authorization: `Bearer ${replacement.stageToken}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${base}/command`,
+          payload: {
+            sessionId: session.id,
+            controlToken,
+            expectedRevision: 0,
+            commandId: randomUUID(),
+            action: "advance",
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  it("never turns an anonymous stage bearer into host, participant, Companion or creator authority", async () => {
+    const { app, cookie, seedSession } = await fixture();
+    const { session } = await seedSession();
+    const base = `/v1/presentation-sessions/${session.id}`;
+    const pass = (
+      await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie } })
+    ).json<PresentationStagePassResponse>();
+    const headers = { authorization: `Bearer ${pass.stageToken}` };
+    for (const path of [
+      base,
+      `${base}/participant`,
+      `${base}/companion`,
+      `${base}/host-media/${randomUUID()}`,
+    ]) {
+      expect((await app.inject({ method: "GET", url: path, headers })).statusCode).toBe(401);
+    }
+    for (const path of ["stage-pass", "control-pass", "companion-pass", "advance"]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `${base}/${path}`,
+            headers,
+            payload: { expectedRevision: 0 },
+          })
+        ).statusCode,
+      ).toBe(401);
+    }
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `${base}/stage-passes/${pass.credentialId}`,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(401);
+    const command = {
+      sessionId: session.id,
+      commandId: randomUUID(),
+      expectedRevision: 0,
+      action: "advance",
+    };
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${base}/command`,
+          payload: { ...command, controlToken: pass.stageToken },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${base}/companion-command`,
+          payload: { ...command, companionToken: pass.stageToken },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${base}/responses`,
+          payload: {
+            participantToken: pass.stageToken,
+            blockId: session.content.blocks[0]!.id,
+            expectedRevision: 0,
+            idempotencyKey: randomUUID(),
+            response: { choiceIds: [randomUUID()] },
+          },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: `/v1/presentations/${session.presentationId}/draft`,
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+
+  it("exposes only current safe content and media while creator previews the frozen next block", async () => {
+    const built = await fixture();
+    const { app, cookie, creator, repository, storage, seedSession } = built;
+    vi.spyOn(storage, "createDownloadUrl").mockImplementation(
+      async (asset) => `https://storage.example.test/${asset.id}`,
+    );
+    const mediaIds = [randomUUID(), randomUUID(), randomUUID()];
+    for (const id of mediaIds)
+      await repository.createMediaAsset({
+        id,
+        workspaceId: creator.workspaceId,
+        objectKey: `stage/${id}.png`,
+        mimeType: "image/png",
+        sizeBytes: 128,
+        scanStatus: "clean",
+        altText: "Image",
+        createdAt: new Date(),
+      });
+    const blocks: PresentationContent["blocks"] = mediaIds.map((mediaId, index) => ({
+      id: randomUUID(),
+      kind: "content",
+      layout: "title_body",
+      textElements: [
+        {
+          id: `title-${index}`,
+          role: "title",
+          text: `Public slide ${index + 1}`,
+          region: "top_center",
+          order: 0,
+        },
+      ],
+      mediaId,
+      mediaAlt: "Image",
+      speakerNotes: `PRIVATE note ${index}`,
+      citations: [{ locator: "internal", excerpt: `PRIVATE source ${index}` }],
+    }));
+    const { session, controlToken } = await seedSession(creator.workspaceId, "active", blocks);
+    const base = `/v1/presentation-sessions/${session.id}`;
+    const pass = (
+      await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie } })
+    ).json<PresentationStagePassResponse>();
+    const headers = { authorization: `Bearer ${pass.stageToken}` };
+    const command = {
+      sessionId: session.id,
+      controlToken,
+      commandId: randomUUID(),
+      expectedRevision: 0,
+      action: "advance",
+    };
+    const host = await app.inject({ method: "POST", url: `${base}/command`, payload: command });
+    expect(host.json()).toMatchObject({
+      snapshot: { presenter: { speakerNotes: "PRIVATE note 0", nextBlock: { id: blocks[1]!.id } } },
+    });
+    const read = await app.inject({ method: "GET", url: `${base}/stage`, headers });
+    const snapshot = read.json<{ snapshot: PresentationStageSnapshot }>().snapshot;
+    expect(snapshot).toMatchObject({ currentBlock: { id: blocks[0]!.id }, revealedAnswer: null });
+    for (const secret of [
+      "PRIVATE",
+      "Public slide 2",
+      "Public slide 3",
+      "presenter",
+      "participants",
+      "roomStatus",
+      "citations",
+    ])
+      expect(JSON.stringify(snapshot)).not.toContain(secret);
+    for (const [index, mediaId] of mediaIds.entries()) {
+      expect(
+        (await app.inject({ method: "GET", url: `${base}/stage-media/${mediaId}`, headers }))
+          .statusCode,
+      ).toBe(index === 0 ? 200 : 404);
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `${base}/host-media/${mediaId}`,
+            headers: { cookie },
+          })
+        ).statusCode,
+      ).toBe(index < 2 ? 200 : 404);
+    }
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/stage-media/${mediaIds[0]}`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(401);
+    await app.inject({
+      method: "POST",
+      url: `${base}/command`,
+      payload: { ...command, commandId: randomUUID(), expectedRevision: 1 },
+    });
+    expect(
+      (await app.inject({ method: "GET", url: `${base}/stage-media/${mediaIds[0]}`, headers }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({ method: "GET", url: `${base}/stage-media/${mediaIds[1]}`, headers }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: `${base}/stage`, headers })).json(),
+    ).toMatchObject({ snapshot: { revision: 2, currentBlock: { id: blocks[1]!.id } } });
+  });
+
+  it.each([{ realtimeEnabled: false }, { allowlisted: false }, { presentationsEnabled: false }])(
+    "gates stage issuance for disabled rollout %j",
+    async (options) => {
+      const { app, cookie, seedSession } = await fixture(options);
+      const { session } = await seedSession();
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/v1/presentation-sessions/${session.id}/stage-pass`,
+            headers: { cookie },
+          })
+        ).statusCode,
+      ).toBe(404);
+    },
+  );
 });

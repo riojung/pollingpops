@@ -575,10 +575,13 @@ export class MemoryPresentationSessionRepository
         candidate.sessionId === sessionId &&
         candidate.workspaceId === workspaceId &&
         candidate.tokenHash === tokenHash &&
+        (candidate.role === "host" || candidate.role === "companion") &&
         !candidate.revokedAt &&
         candidate.expiresAt > now,
     );
-    return credential ? { role: credential.role, id: credential.id, alias: "Facilitator" } : null;
+    return credential && credential.role !== "stage"
+      ? { role: credential.role, id: credential.id, alias: "Facilitator" }
+      : null;
   }
 
   async findParticipant(sessionId: string, tokenHash: string) {

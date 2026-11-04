@@ -18,6 +18,43 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Presentation stage credential compatibility
+
+Apply `090_presentation_stage_credentials.sql` before enabling the E03 delivery server/web
+build. It adds the distinct `stage` role to the existing credential check without changing
+host/Companion credentials, published JSON, immutable hashes, response fingerprints or command
+receipts. It introduces no entitlement, service or additional feature flag. Stage issuance uses
+the existing Presentation realtime room grant; issued passes remain readable through a rollout
+rollback until their own one-hour/session-capped expiry, explicit revocation or session deletion.
+
+Before the first stage pass is minted, fence stage-pass issuance at ingress and deploy matching
+server, jobs and web readers to every process. Verify the entire serving pool has the explicit
+host/Companion role filters in audience-scope and Q&A authorization, then reopen stage issuance.
+Migration 090 alone does not make a mixed pool safe: old audience code accepts every credential
+role and must never receive a newly created stage bearer. Use a coordinated rollout rather than
+relying on the existing realtime flag, because accepted room grants can survive flag changes.
+
+Host snapshots now carry private `presenter` notes
+and next-block previews from the live session's frozen published content. Keep these fields out
+of shared displays. The clean stage uses its own bearer-only REST snapshot/media endpoints;
+stage passes cannot authenticate host, participant, Companion, audience-scope or Q&A APIs.
+Stage media is limited to the current frozen block; signed-in creator preview media additionally
+permits the next block. A stage pass grants no creator authority. An independently signed-in
+owner/editor retains their cookie-based creator authority.
+
+Stage-pass rotation revokes only the previous stage pass. Host control-pass creation continues
+to rotate host credentials and invalidate the previous controller; it does not rotate stage or
+Companion credentials. Finished rooms reject new stage passes, while an existing valid pass may
+display the finished state until expiry. Revoke stage access before stopping the display when
+needed. Stage refresh retains only its tab-scoped bearer; expired/revoked access must fail closed.
+
+Keep migration 090 during rollback. Old audience/Q&A code that treats every credential role as
+host/Companion is unsafe after a stage pass exists. Fence stage issuance/reads and revoke active
+stage credentials before any rollback to such a binary, or retain the E03 role filters in every
+serving process. Never relabel a stage credential as Companion or host to force compatibility.
+Actual screen sharing, physical-device/clicker and managed-browser popup behavior still require
+manual qualification; software tests do not establish those results.
+
 ## Content-only Presentation compatibility
 
 Content-only publication expands validation for existing Presentation content versions 2 and 3;
@@ -240,7 +277,7 @@ Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`089_presentation_native_scene_media.sql`. Apply the complete ordered migration set with the restricted
+`090_presentation_stage_credentials.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
 

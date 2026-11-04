@@ -74,10 +74,12 @@
 
 .commandBar button,
 .exitLink,
+.floatingMapButton,
 .canvasToolbar button,
 .compactCommands button,
 .addActions button,
 .emptyCanvas button,
+.previewBar button,
 .previewControls button,
 .recoveryBanner button,
 .errorBanner button {

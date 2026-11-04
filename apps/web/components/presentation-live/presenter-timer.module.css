@@ -1,0 +1,74 @@
+.timer {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-small);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.status,
+.description {
+  color: var(--ui-text-muted);
+  font-size: 0.85rem;
+}
+
+.time {
+  display: block;
+  margin-top: 12px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.description {
+  margin: 10px 0 14px;
+  line-height: 1.5;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.controls button {
+  min-height: 44px;
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 10px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.controls button:hover:not(:disabled) {
+  background: var(--ui-accent-soft);
+}
+
+.controls button:focus-visible {
+  outline: 3px solid var(--ui-accent-ink);
+  outline-offset: 3px;
+}
+
+.controls button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

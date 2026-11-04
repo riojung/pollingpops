@@ -5388,10 +5388,19 @@ export const PresentationHostParticipantSchema = z
   .strict();
 export type PresentationHostParticipant = z.infer<typeof PresentationHostParticipantSchema>;
 
+/** Private delivery aids from the immutable version used by this live session. */
+export const PresentationPresenterSnapshotSchema = z
+  .object({
+    speakerNotes: z.string().max(2_000),
+    nextBlock: PresentationParticipantCurrentBlockSchema.nullable(),
+  })
+  .strict();
+
 export const PresentationHostSnapshotSchema = z
   .object({
     ...PresentationSnapshotBaseFields,
     projection: z.literal("host"),
+    presenter: PresentationPresenterSnapshotSchema.optional(),
     recoveryPackCards: z.array(RecoveryPackLiveCardSchema).min(1).max(5).optional(),
     currentBlock: PresentationHostCurrentBlockSchema.nullable(),
     participantCount: z.number().int().nonnegative(),
@@ -5417,6 +5426,34 @@ export const PresentationHostSnapshotSchema = z
     }
   });
 export type PresentationHostSnapshot = z.infer<typeof PresentationHostSnapshotSchema>;
+
+/** A display-only projection: no private presenter, participant or moderation state. */
+export const PresentationStageSnapshotSchema = z
+  .object({
+    ...PresentationSnapshotBaseFields,
+    projection: z.literal("stage"),
+    currentBlock: PresentationParticipantCurrentBlockSchema.nullable(),
+    revealedAnswer: PresentationRevealedAnswerSchema.nullable(),
+    participantCount: z.number().int().nonnegative(),
+    responseCount: z.number().int().nonnegative(),
+    finishedAt: z.string().datetime().nullable(),
+  })
+  .strict()
+  .superRefine((snapshot, ctx) => {
+    validatePresentationRecoveryPackPlayback(snapshot, ctx);
+    if (
+      snapshot.revealedAnswer !== null &&
+      (snapshot.currentBlock?.kind !== "question" ||
+        !["question_reveal", "intervention", "finished"].includes(snapshot.phase))
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Stage answer material is available only for the current revealed question",
+        path: ["revealedAnswer"],
+      });
+    }
+  });
+export type PresentationStageSnapshot = z.infer<typeof PresentationStageSnapshotSchema>;
 
 export const PresentationResponseReceiptSchema = z
   .object({
@@ -5960,6 +5997,15 @@ const PresentationSyncFenceFields = {
   afterSeq: z.number().int().nonnegative().default(0),
 };
 const PresentationCredentialSchema = z.string().min(32).max(1_000);
+
+export const PresentationStagePassResponseSchema = z
+  .object({
+    credentialId: z.string().uuid(),
+    stageToken: PresentationCredentialSchema,
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+export type PresentationStagePassResponse = z.infer<typeof PresentationStagePassResponseSchema>;
 
 export const PresentationCompanionPassResponseSchema = z
   .object({

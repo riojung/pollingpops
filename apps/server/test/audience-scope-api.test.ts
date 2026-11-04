@@ -808,6 +808,63 @@ describe("core-parity foundation", () => {
     });
   });
 
+  it("rejects the stage role from audience-scope and Q&A reads and writes", async () => {
+    const f = await fixture();
+    await f.activate();
+    const stageToken = randomUUID();
+    await f.presentationSessions.createCredential({
+      id: randomUUID(),
+      workspaceId: f.workspaceId,
+      sessionId: f.session.id,
+      role: "stage",
+      tokenHash: hashToken(stageToken),
+      createdAt: new Date(),
+      expiresAt: f.session.liveExpiresAt,
+      revokedAt: null,
+    });
+    const headers = { authorization: `Bearer ${stageToken}` };
+    expect((await f.activate(stageToken)).statusCode).toBe(401);
+    expect(
+      (
+        await f.app.inject({
+          method: "GET",
+          url: `/v1/audience-scopes/${f.session.id}/qna/questions?kind=presentation`,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: `/v1/audience-scopes/${f.session.id}/sync`,
+          headers,
+          payload: { kind: "presentation", limit: 50 },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await f.app.inject({
+          method: "POST",
+          url: `/v1/audience-scopes/${f.session.id}/qna/commands`,
+          headers,
+          payload: {
+            kind: "presentation",
+            command: {
+              type: "question.create",
+              body: "No stage write",
+              idempotencyKey: randomUUID(),
+            },
+          },
+        })
+      ).statusCode,
+    ).toBe(401);
+    await expect(
+      new PresentationAudienceAccess(f.presentationSessions).authenticate(f.session.id, stageToken),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
   it("revalidates revoked Presentation credentials and never accepts a Round token across scopes", async () => {
     const f = await fixture();
     await f.activate();

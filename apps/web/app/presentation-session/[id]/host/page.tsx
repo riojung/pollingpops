@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CompetitionDashboard } from "../../../../components/competition-dashboard";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
   PresentationCommand,
   PresentationHostSnapshot,
@@ -39,6 +39,12 @@ import {
   type PresentationCommandRecoveryState,
 } from "../../../../lib/presentation-command-recovery";
 import { createPresentationHostPassManager } from "../../../../lib/presentation-host-pass";
+import { presentationPresenterAction } from "../../../../lib/presentation-presenter-controls";
+import { PresenterTimer } from "../../../../components/presentation-live/presenter-timer";
+import { PresentationStageLauncher } from "../../../../components/presentation-live/stage-launcher";
+import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
+import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
+import delivery from "../../../../components/presentation-live/presentation-delivery.module.css";
 
 function advanceMessageKey(
   snapshot: PresentationHostSnapshot,
@@ -367,11 +373,36 @@ function PresentationHostContent() {
   }
 
   const block = snapshot?.currentBlock ?? null;
-  const joinUrl = snapshot
-    ? `${typeof window === "undefined" ? "" : window.location.origin}/join?code=${snapshot.code}`
-    : "";
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
   const busy = commandState.busy || legacyAdvanceBusy || controlPassBusy;
+
+  const onPresenterKey = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      !snapshot ||
+      snapshot.phase === "finished" ||
+      busy ||
+      commandState.pendingCommand ||
+      legacyAdvanceInFlight.current ||
+      controlPassInFlight.current ||
+      !controllerRef.current?.canMutate()
+    )
+      return;
+    if (
+      presentationPresenterAction(event, {
+        dialogOpen: !!document.querySelector(
+          'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+        ),
+      }) !== "advance"
+    )
+      return;
+    event.preventDefault();
+    void advance();
+  });
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => onPresenterKey(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   return (
     <main className={styles.page}>
@@ -402,251 +433,299 @@ function PresentationHostContent() {
         {!snapshot ? (
           <section className={styles.canvas}>{t("live.presentationSession.loading")}</section>
         ) : (
-          <div className={styles.hostGrid}>
-            <section className={styles.canvas} aria-live="polite">
-              <div className={styles.canvasContent}>
-                {snapshot.phase === "lobby" ? (
-                  <>
-                    <span className={styles.statusPill}>
-                      {t("live.presentationSession.waitingRoom")}
-                    </span>
-                    <h1 lang="">{snapshot.title}</h1>
-                    <p>{t("live.presentationSession.participantsCanJoin")}</p>
-                  </>
-                ) : null}
-                {block?.kind === "content" ? (
-                  <>
-                    <span className={styles.statusPill}>
-                      {t("live.presentationSession.contentSlide")}
-                    </span>
-                    <ContentSlideView
-                      block={block}
-                      renderSceneImage={(mediaId, altText) => (
-                        <PresentationMedia
-                          key={mediaId}
-                          sessionId={id}
-                          mediaId={mediaId}
-                          altText={altText}
-                        />
-                      )}
-                      media={
-                        <PresentationMedia
-                          altText={block.mediaAlt}
-                          mediaId={block.mediaId}
-                          sessionId={id}
-                        />
-                      }
-                      variant="live"
-                    />
-                  </>
-                ) : null}
-                {block?.kind === "question" ? (
-                  <>
-                    <span className={styles.statusPill}>
-                      {snapshot.phase === "intervention"
-                        ? t("live.presentationSession.recoveryIntervention")
-                        : snapshot.phase === "question_reveal"
-                          ? t("live.presentationSession.responseReview")
-                          : snapshot.acceptingResponses
-                            ? t("live.presentationSession.questionOpen")
-                            : t("live.presentationSession.timeEnded")}
-                    </span>
-                    {remainingSeconds !== null ? (
-                      <p className={styles.timer} aria-live="off">
-                        {formatNumber(locale, remainingSeconds, {
-                          style: "unit",
-                          unit: "second",
-                          unitDisplay: "narrow",
-                        })}
-                      </p>
-                    ) : snapshot.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
-                      <p className="muted" lang={locale} role="status">
-                        {t("live.common.flexOpen")}
-                      </p>
+          <>
+            <p className={delivery.privateNotice} lang="en-CA">
+              Private presenter workspace. Share the audience stage window with your audience.
+            </p>
+            <div className={styles.hostGrid}>
+              <div className={delivery.presenterColumn}>
+                <section className={styles.canvas} aria-live="polite" aria-label="Current slide">
+                  <div className={styles.canvasContent}>
+                    {snapshot.phase === "lobby" ? (
+                      <>
+                        <span className={styles.statusPill}>
+                          {t("live.presentationSession.waitingRoom")}
+                        </span>
+                        <h1 lang="">{snapshot.title}</h1>
+                        <p>{t("live.presentationSession.participantsCanJoin")}</p>
+                      </>
                     ) : null}
-                    <h1 lang="">{block.question.prompt}</h1>
-                    <PresentationMedia
-                      altText={block.question.mediaAlt}
-                      mediaId={block.question.mediaId}
-                      sessionId={id}
-                    />
-                    {block.question.choices.length ? (
-                      <div className={styles.choiceGrid}>
-                        {block.question.choices.map((choice) => (
-                          <div
-                            className={styles.choice}
-                            data-correct={
-                              block.revealedAnswer?.kind === "choice"
-                                ? block.revealedAnswer.correctChoiceIds.includes(choice.id)
-                                : undefined
-                            }
-                            key={choice.id}
-                            lang=""
-                          >
-                            {choice.label}
+                    {block?.kind === "content" ? (
+                      <>
+                        <span className={styles.statusPill}>
+                          {t("live.presentationSession.contentSlide")}
+                        </span>
+                        <ContentSlideView
+                          block={block}
+                          renderSceneImage={(mediaId, altText) => (
+                            <PresentationMedia
+                              key={mediaId}
+                              sessionId={id}
+                              mediaId={mediaId}
+                              altText={altText}
+                            />
+                          )}
+                          media={
+                            <PresentationMedia
+                              altText={block.mediaAlt}
+                              mediaId={block.mediaId}
+                              sessionId={id}
+                            />
+                          }
+                          variant="live"
+                        />
+                      </>
+                    ) : null}
+                    {block?.kind === "question" ? (
+                      <>
+                        <span className={styles.statusPill}>
+                          {snapshot.phase === "intervention"
+                            ? t("live.presentationSession.recoveryIntervention")
+                            : snapshot.phase === "question_reveal"
+                              ? t("live.presentationSession.responseReview")
+                              : snapshot.acceptingResponses
+                                ? t("live.presentationSession.questionOpen")
+                                : t("live.presentationSession.timeEnded")}
+                        </span>
+                        {remainingSeconds !== null ? (
+                          <p className={styles.timer} aria-live="off">
+                            {formatNumber(locale, remainingSeconds, {
+                              style: "unit",
+                              unit: "second",
+                              unitDisplay: "narrow",
+                            })}
+                          </p>
+                        ) : snapshot.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
+                          <p className="muted" lang={locale} role="status">
+                            {t("live.common.flexOpen")}
+                          </p>
+                        ) : null}
+                        <h1 lang="">{block.question.prompt}</h1>
+                        <PresentationMedia
+                          altText={block.question.mediaAlt}
+                          mediaId={block.question.mediaId}
+                          sessionId={id}
+                        />
+                        {block.question.choices.length ? (
+                          <div className={styles.choiceGrid}>
+                            {block.question.choices.map((choice) => (
+                              <div
+                                className={styles.choice}
+                                data-correct={
+                                  block.revealedAnswer?.kind === "choice"
+                                    ? block.revealedAnswer.correctChoiceIds.includes(choice.id)
+                                    : undefined
+                                }
+                                key={choice.id}
+                                lang=""
+                              >
+                                {choice.label}
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        ) : block.question.type === "numeric" ? (
+                          <p>{t("live.presentationSession.numericResponse")}</p>
+                        ) : (
+                          <p>{t("live.presentationSession.ratingResponse")}</p>
+                        )}
+                        {block.revealedAnswer?.kind === "numeric" ? (
+                          <p className="notice" lang="">
+                            {block.revealedAnswer.correctValue}
+                            {block.revealedAnswer.tolerance !== "0"
+                              ? ` ± ${block.revealedAnswer.tolerance}`
+                              : ""}
+                            {block.revealedAnswer.unit ? ` ${block.revealedAnswer.unit}` : ""}
+                          </p>
+                        ) : null}
+                        {block.revealedAnswer?.explanation ? (
+                          <p className="notice" lang="">
+                            {block.revealedAnswer.explanation}
+                          </p>
+                        ) : null}
+                        {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
+                          <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
+                        ) : null}
+                      </>
+                    ) : null}
+                    {snapshot.phase === "finished" ? (
+                      <>
+                        <span className={styles.statusPill}>{t("live.common.complete")}</span>
+                        <h1>{t("live.presentationSession.finished")}</h1>
+                        <p>
+                          {t("live.common.joinedCount", {
+                            count: formatNumber(locale, snapshot.participantCount),
+                          })}
+                        </p>
+                        <Link className="button" href={`/presentation-session/${id}/report`}>
+                          {t("live.presentationSession.openReport")}
+                        </Link>
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+                <div className={delivery.backstage} lang="en-CA">
+                  <section className={delivery.panel} aria-label="Private speaker notes">
+                    <h2>Private speaker notes</h2>
+                    <div
+                      className={delivery.notes}
+                      tabIndex={0}
+                      role="group"
+                      aria-label="Speaker notes text"
+                    >
+                      <p lang={snapshot.presenter?.speakerNotes ? "" : "en-CA"}>
+                        {snapshot.presenter?.speakerNotes || "No speaker notes for this slide."}
+                      </p>
+                    </div>
+                  </section>
+                  <section className={delivery.panel} aria-label="Next slide preview">
+                    <h2>Next slide preview</h2>
+                    {snapshot.presenter?.nextBlock ? (
+                      <div
+                        className={delivery.nextPreview}
+                        tabIndex={0}
+                        role="group"
+                        aria-label="Next slide content"
+                      >
+                        <PresentationDeliveryBlock
+                          block={snapshot.presenter.nextBlock}
+                          renderMedia={(mediaId, altText) => (
+                            <PresentationMedia
+                              key={`${snapshot.presenter?.nextBlock?.id}:${mediaId}`}
+                              sessionId={id}
+                              mediaId={mediaId}
+                              altText={altText}
+                            />
+                          )}
+                        />
                       </div>
-                    ) : block.question.type === "numeric" ? (
-                      <p>{t("live.presentationSession.numericResponse")}</p>
                     ) : (
-                      <p>{t("live.presentationSession.ratingResponse")}</p>
+                      <p>
+                        {snapshot.phase === "finished"
+                          ? "Presentation complete."
+                          : "No further slides or activities."}
+                      </p>
                     )}
-                    {block.revealedAnswer?.kind === "numeric" ? (
-                      <p className="notice" lang="">
-                        {block.revealedAnswer.correctValue}
-                        {block.revealedAnswer.tolerance !== "0"
-                          ? ` ± ${block.revealedAnswer.tolerance}`
-                          : ""}
-                        {block.revealedAnswer.unit ? ` ${block.revealedAnswer.unit}` : ""}
-                      </p>
-                    ) : null}
-                    {block.revealedAnswer?.explanation ? (
-                      <p className="notice" lang="">
-                        {block.revealedAnswer.explanation}
-                      </p>
-                    ) : null}
-                    {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
-                      <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
-                    ) : null}
-                  </>
-                ) : null}
-                {snapshot.phase === "finished" ? (
-                  <>
-                    <span className={styles.statusPill}>{t("live.common.complete")}</span>
-                    <h1>{t("live.presentationSession.finished")}</h1>
-                    <p>
-                      {t("live.common.joinedCount", {
-                        count: formatNumber(locale, snapshot.participantCount),
-                      })}
-                    </p>
-                    <Link className="button" href={`/presentation-session/${id}/report`}>
-                      {t("live.presentationSession.openReport")}
-                    </Link>
-                  </>
-                ) : null}
-              </div>
-            </section>
-            <aside className={styles.sideCard}>
-              <h2 className="sr-only" lang="en-CA">
-                Facilitation controls
-              </h2>
-              <div>
-                <span className={styles.statusPill}>{t("live.presentationSession.joinCode")}</span>
-                <p className={styles.joinCode}>{snapshot.code}</p>
-                <Link href={`/join?code=${snapshot.code}`}>
-                  {t("live.presentationSession.openJoin")}
-                </Link>
-              </div>
-              <div className={styles.metricRow}>
-                <div className={styles.metric}>
-                  <strong>{formatNumber(locale, snapshot.roomStatus.joinedCount)}</strong>
-                  <span>{t("live.common.participants")}</span>
-                </div>
-                <div className={styles.metric}>
-                  <strong>{formatNumber(locale, snapshot.roomStatus.responseCount)}</strong>
-                  <span>{t("live.presentationSession.responsesNow")}</span>
+                  </section>
                 </div>
               </div>
-              <p className="muted" aria-live="polite">
-                {formatNumber(locale, snapshot.roomStatus.connectedCount)} connected ·{" "}
-                {formatNumber(locale, snapshot.roomStatus.notCurrentlyConnectedCount)} not currently
-                connected
-              </p>
-              <p>
-                {t("live.presentationSession.blockProgress", {
-                  current: formatNumber(locale, Math.max(snapshot.currentBlockIndex + 1, 0)),
-                  total: formatNumber(locale, snapshot.blockCount),
-                })}
-              </p>
-              {snapshot.phase !== "finished" ? (
-                <button
-                  className="button full-width"
-                  disabled={
-                    busy || !!commandState.pendingCommand || !controllerRef.current?.canMutate()
-                  }
-                  onClick={() => void advance()}
-                  type="button"
-                >
-                  {busy ? t("live.common.updating") : t(advanceMessageKey(snapshot))}
-                </button>
-              ) : null}
-              {!hasControlPass &&
-              (snapshot.phase !== "finished" || !!commandState.pendingCommand) ? (
-                <div lang="en-CA">
-                  <p className="muted" role="status">
-                    {commandState.pendingCommand
-                      ? "Reacquire a host control pass to confirm the pending action."
-                      : "Recovery Pack card actions require a host control pass. You can still advance using compatibility mode."}
-                    {controlPassError ? ` ${controlPassError}` : ""}
-                  </p>
+              <aside className={styles.sideCard}>
+                <h2 className="sr-only" lang="en-CA">
+                  Facilitation controls
+                </h2>
+                <PresentationDeliveryJoinAccess code={snapshot.code} />
+                <PresentationStageLauncher
+                  key={id}
+                  sessionId={id}
+                  canEdit={canEdit}
+                  finished={snapshot.phase === "finished"}
+                />
+                <PresenterTimer sessionId={id} />
+                <div className={styles.metricRow}>
+                  <div className={styles.metric}>
+                    <strong>{formatNumber(locale, snapshot.roomStatus.joinedCount)}</strong>
+                    <span>{t("live.common.participants")}</span>
+                  </div>
+                  <div className={styles.metric}>
+                    <strong>{formatNumber(locale, snapshot.roomStatus.responseCount)}</strong>
+                    <span>{t("live.presentationSession.responsesNow")}</span>
+                  </div>
+                </div>
+                <p className="muted" aria-live="polite">
+                  {formatNumber(locale, snapshot.roomStatus.connectedCount)} connected ·{" "}
+                  {formatNumber(locale, snapshot.roomStatus.notCurrentlyConnectedCount)} not
+                  currently connected
+                </p>
+                <p>
+                  {t("live.presentationSession.blockProgress", {
+                    current: formatNumber(locale, Math.max(snapshot.currentBlockIndex + 1, 0)),
+                    total: formatNumber(locale, snapshot.blockCount),
+                  })}
+                </p>
+                {snapshot.phase !== "finished" ? (
                   <button
-                    className="button-quiet full-width"
-                    disabled={busy}
-                    onClick={() => void retryControlPass()}
+                    className="button full-width"
+                    disabled={
+                      busy || !!commandState.pendingCommand || !controllerRef.current?.canMutate()
+                    }
+                    onClick={() => void advance()}
                     type="button"
                   >
-                    {controlPassBusy ? "Acquiring host control pass…" : "Retry host control pass"}
+                    {busy ? t("live.common.updating") : t(advanceMessageKey(snapshot))}
                   </button>
-                </div>
-              ) : null}
-              {commandState.pendingCommand ? (
-                <div lang="en-CA">
-                  <p className="muted" role="status" aria-live="polite">
-                    {commandState.busy
-                      ? "Waiting for server confirmation…"
-                      : "Action not yet confirmed. Retry to confirm the original action."}
-                  </p>
-                  {!commandState.busy ? (
+                ) : null}
+                {!hasControlPass &&
+                (snapshot.phase !== "finished" || !!commandState.pendingCommand) ? (
+                  <div lang="en-CA">
+                    <p className="muted" role="status">
+                      {commandState.pendingCommand
+                        ? "Reacquire a host control pass to confirm the pending action."
+                        : "Recovery Pack card actions require a host control pass. You can still advance using compatibility mode."}
+                      {controlPassError ? ` ${controlPassError}` : ""}
+                    </p>
                     <button
                       className="button-quiet full-width"
-                      disabled={!hasControlPass || busy || !controllerRef.current?.canMutate()}
-                      onClick={() => void retryCommand()}
+                      disabled={busy}
+                      onClick={() => void retryControlPass()}
                       type="button"
                     >
-                      {commandState.pendingCommand.action === "start_recovery_card"
-                        ? "Retry card action acknowledgement"
-                        : "Retry advance acknowledgement"}
+                      {controlPassBusy ? "Acquiring host control pass…" : "Retry host control pass"}
                     </button>
-                  ) : null}
-                </div>
-              ) : null}
-              {snapshot.phase === "question_reveal" && snapshot.recoveryPackCards?.length ? (
-                <RecoveryPackCardPicker
-                  key={snapshot.currentBlock?.id}
-                  cards={snapshot.recoveryPackCards}
-                  disabled={
-                    !hasControlPass ||
-                    busy ||
-                    !!commandState.pendingCommand ||
-                    !controllerRef.current?.canMutate()
-                  }
-                  onStart={(selection, type) => void startRecoveryCard(selection, type)}
+                  </div>
+                ) : null}
+                {commandState.pendingCommand ? (
+                  <div lang="en-CA">
+                    <p className="muted" role="status" aria-live="polite">
+                      {commandState.busy
+                        ? "Waiting for server confirmation…"
+                        : "Action not yet confirmed. Retry to confirm the original action."}
+                    </p>
+                    {!commandState.busy ? (
+                      <button
+                        className="button-quiet full-width"
+                        disabled={!hasControlPass || busy || !controllerRef.current?.canMutate()}
+                        onClick={() => void retryCommand()}
+                        type="button"
+                      >
+                        {commandState.pendingCommand.action === "start_recovery_card"
+                          ? "Retry card action acknowledgement"
+                          : "Retry advance acknowledgement"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {snapshot.phase === "question_reveal" && snapshot.recoveryPackCards?.length ? (
+                  <RecoveryPackCardPicker
+                    key={snapshot.currentBlock?.id}
+                    cards={snapshot.recoveryPackCards}
+                    disabled={
+                      !hasControlPass ||
+                      busy ||
+                      !!commandState.pendingCommand ||
+                      !controllerRef.current?.canMutate()
+                    }
+                    onStart={(selection, type) => void startRecoveryCard(selection, type)}
+                  />
+                ) : null}
+                <p className="muted" lang="en-CA">
+                  Advance with Right Arrow, Page Down or Space when no control or dialog is focused.
+                  Each action waits for server confirmation.
+                </p>
+                <PresentationCompanionLauncher
+                  sessionId={id}
+                  enabled={productFeatures?.presentationCompanion === true}
+                  canEdit={canEdit}
                 />
-              ) : null}
-              <button
-                className="button-quiet full-width"
-                disabled={!joinUrl}
-                onClick={() => void navigator.clipboard?.writeText(joinUrl)}
-                type="button"
-              >
-                {t("live.presentationSession.copyJoinLink")}
-              </button>
-              <PresentationCompanionLauncher
-                sessionId={id}
-                enabled={productFeatures?.presentationCompanion === true}
-                canEdit={canEdit}
-              />
-              {snapshot.competitionStandings ? (
-                <CompetitionDashboard
-                  variant="host"
-                  standings={snapshot.competitionStandings}
-                  finished={snapshot.phase === "finished"}
-                  compact={snapshot.phase !== "finished"}
-                />
-              ) : null}
-            </aside>
-          </div>
+                {snapshot.competitionStandings ? (
+                  <CompetitionDashboard
+                    variant="host"
+                    standings={snapshot.competitionStandings}
+                    finished={snapshot.phase === "finished"}
+                    compact={snapshot.phase !== "finished"}
+                  />
+                ) : null}
+              </aside>
+            </div>
+          </>
         )}
       </div>
       {snapshot && audienceToken ? (

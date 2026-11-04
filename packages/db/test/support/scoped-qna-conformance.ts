@@ -44,11 +44,12 @@ export async function expectScopedQnaConformance(input: {
   const hashes = {
     host: createHash("sha256").update(randomUUID()).digest("hex"),
     companion: createHash("sha256").update(randomUUID()).digest("hex"),
+    stage: createHash("sha256").update(randomUUID()).digest("hex"),
     participant: createHash("sha256").update(randomUUID()).digest("hex"),
     other: createHash("sha256").update(randomUUID()).digest("hex"),
   };
   const credentialIds: Record<string, string> = {};
-  for (const role of ["host", "companion"] as const) {
+  for (const role of ["host", "companion", "stage"] as const) {
     credentialIds[role] = randomUUID();
     await input.sessions.createCredential({
       id: credentialIds[role]!,
@@ -88,6 +89,10 @@ export async function expectScopedQnaConformance(input: {
     input.qna.page({ ...context(role), limit, ...(cursor ? { cursor } : {}) });
   const command = (role: keyof typeof hashes, command: ScopedQnaCommand) =>
     input.qna.mutate({ ...context(role), command });
+  await expect(page("stage")).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  await expect(
+    command("stage", { type: "question.create", body: "No", idempotencyKey: randomUUID() }),
+  ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   expect(ScopedQnaPageSchema.parse(await page("host"))).toMatchObject({
     schemaVersion: 1,
     audienceSeq: 1,

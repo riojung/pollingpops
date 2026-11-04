@@ -123,7 +123,7 @@ export interface PresentationResponseAcknowledgementState {
   projection: PresentationParticipantSnapshotProjection;
 }
 
-export type PresentationSessionCredentialRole = "host" | "companion";
+export type PresentationSessionCredentialRole = "host" | "companion" | "stage";
 
 export interface PresentationSessionCredentialRecord {
   id: string;

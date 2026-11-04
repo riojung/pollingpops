@@ -20,6 +20,7 @@ import type {
   PresentationSessionServiceError,
 } from "../src/presentation-session-service.js";
 import { StorageService } from "../src/storage.js";
+import { PresentationAudienceAccess } from "../src/audience-access.js";
 
 const config = ConfigSchema.parse({
   NODE_ENV: "test",
@@ -186,6 +187,7 @@ async function fixture(options: { failCreateAudit?: boolean } = {}) {
   const joined = await service.join(hosted.snapshot.code, "River");
   return {
     repository,
+    presentations,
     sessions,
     service,
     hosted,
@@ -203,7 +205,10 @@ async function fixture(options: { failCreateAudit?: boolean } = {}) {
 }
 
 function expectNoAuthoringSecrets(snapshot: unknown) {
-  const serialized = JSON.stringify(snapshot);
+  // Host delivery aids are explicitly private; the shared live block stays audience-safe.
+  const fields = { ...(snapshot as Record<string, unknown>) };
+  if (fields.projection === "host") delete fields.presenter;
+  const serialized = JSON.stringify(fields);
   for (const secret of AUTHORING_SECRETS) expect(serialized).not.toContain(secret);
   for (const privateField of [
     "speakerNotes",
@@ -221,6 +226,196 @@ function expectNoAuthoringSecrets(snapshot: unknown) {
 }
 
 describe("PresentationSessionService realtime integration", () => {
+  it("keeps frozen presenter aids private and stage authority distinct through control takeover", async () => {
+    const { repository, presentations, sessions, service, hosted, joined, ids } = await fixture();
+    const sessionId = hosted.snapshot.sessionId;
+    const input = {
+      workspaceId: ids.workspaceId,
+      userId: ids.userId,
+      sessionId,
+      requestId: randomUUID(),
+    };
+    const pass = await service.createStagePass(input);
+    const companion = await service.createCompanionPass(input);
+    expect(await service.getStageSnapshot(sessionId, pass.stageToken)).toMatchObject({
+      projection: "stage",
+      currentBlock: null,
+      revealedAnswer: null,
+    });
+    const stored = (await sessions.getSessionById(sessionId))!;
+    const originalHash = (await presentations.getPresentationVersion(
+      ids.workspaceId,
+      stored.presentationVersionId,
+    ))!.contentHash;
+    const draft = (await presentations.getPresentation(ids.workspaceId, ids.presentationId))!.draft;
+    const slide = draft.blocks[0]!;
+    if (slide.kind !== "content") throw new Error("Content fixture required");
+    slide.speakerNotes = "Changed unpublished note";
+    await presentations.updatePresentationDraft({
+      workspaceId: ids.workspaceId,
+      presentationId: ids.presentationId,
+      draft,
+      expectedRevision: 0,
+      mutationId: randomUUID(),
+      editorId: ids.userId,
+      draftHash: "a".repeat(64),
+    });
+    const command = {
+      sessionId,
+      controlToken: hosted.controlToken,
+      commandId: randomUUID(),
+      expectedRevision: 0,
+      action: "advance" as const,
+    };
+    const host = await service.command(command);
+    expect(host.presenter).toMatchObject({
+      speakerNotes: AUTHORING_SECRETS[0],
+      nextBlock: { id: ids.questionBlockId },
+    });
+    expect(JSON.stringify(host.presenter)).not.toContain("Changed unpublished note");
+    const stage = await service.getStageSnapshot(sessionId, pass.stageToken);
+    expect(stage.currentBlock?.id).toBe(ids.contentBlockId);
+    expect(JSON.stringify(stage)).not.toContain("Which option is safe to show?");
+    expect(stage).not.toHaveProperty("presenter");
+    expect(stage).not.toHaveProperty("participants");
+    expectNoAuthoringSecrets(stage);
+    expect(
+      (await presentations.getPresentationVersion(ids.workspaceId, stored.presentationVersionId))!
+        .contentHash,
+    ).toBe(originalHash);
+    for (const token of [hosted.controlToken, joined.participantToken, companion.companionToken]) {
+      await expect(service.getStageSnapshot(sessionId, token)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    }
+    await expect(
+      service.sync({ sessionId, projection: "host", controlToken: pass.stageToken }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(service.getCompanionSnapshot(sessionId, pass.stageToken)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(service.getParticipantSnapshot(sessionId, pass.stageToken)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      service.command({ ...command, controlToken: pass.stageToken }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(
+      service.companionCommand({
+        sessionId,
+        action: "advance",
+        expectedRevision: 1,
+        commandId: randomUUID(),
+        companionToken: pass.stageToken,
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(
+      new PresentationAudienceAccess(sessions).authenticate(sessionId, pass.stageToken),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    const takeover = await service.createControlPass(input);
+    await expect(
+      service.command({ ...command, commandId: randomUUID(), expectedRevision: 1 }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(service.getStageSnapshot(sessionId, pass.stageToken)).resolves.toMatchObject({
+      revision: 1,
+    });
+    const open = {
+      ...command,
+      controlToken: takeover.controlToken,
+      commandId: randomUUID(),
+      expectedRevision: 1,
+    };
+    await service.command(open);
+    await expect(service.command(open)).resolves.toMatchObject({ revision: 2 });
+    await expect(service.command({ ...open, commandId: randomUUID() })).rejects.toMatchObject({
+      code: "STALE_SESSION",
+    });
+    const openStage = await service.getStageSnapshot(sessionId, pass.stageToken);
+    expect(openStage).toMatchObject({ phase: "question_open", revealedAnswer: null });
+    expectNoAuthoringSecrets(openStage);
+    const revealed = await service.command({
+      ...open,
+      commandId: randomUUID(),
+      expectedRevision: 2,
+    });
+    const revealedStage = await service.getStageSnapshot(sessionId, pass.stageToken);
+    expect(revealedStage).toMatchObject({
+      phase: "question_reveal",
+      revealedAnswer: { kind: "choice", correctChoiceIds: [ids.correctChoiceId] },
+    });
+    await service.command({
+      ...open,
+      commandId: randomUUID(),
+      expectedRevision: revealed.revision,
+    });
+    await expect(service.getStageSnapshot(sessionId, pass.stageToken)).resolves.toMatchObject({
+      status: "finished",
+    });
+    await expect(service.createStagePass(input)).rejects.toMatchObject({ code: "PHASE_CLOSED" });
+    const audit = JSON.stringify(await repository.listAuditEvents(ids.workspaceId, null, 100));
+    expect(audit).not.toContain(pass.stageToken);
+  });
+
+  it("rotates and revokes stage passes by exact role and enforces one-hour/session expiry", async () => {
+    const { service, hosted, sessions, ids } = await fixture();
+    const sessionId = hosted.snapshot.sessionId;
+    const input = {
+      workspaceId: ids.workspaceId,
+      userId: ids.userId,
+      sessionId,
+      requestId: randomUUID(),
+    };
+    await expect(
+      service.createStagePass({ ...input, workspaceId: randomUUID() }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const previous = await service.createStagePass(input);
+    const pass = await service.createStagePass(input);
+    expect(Date.parse(pass.expiresAt) - Date.now()).toBeGreaterThan(59 * 60_000);
+    expect(Date.parse(pass.expiresAt) - Date.now()).toBeLessThanOrEqual(60 * 60_000);
+    await expect(service.getStageSnapshot(sessionId, previous.stageToken)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      service.revokeStagePass({ ...input, credentialId: hosted.controlCredentialId }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      service.revokeControlPass({ ...input, credentialId: pass.credentialId }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      service.revokeStagePass({
+        ...input,
+        workspaceId: randomUUID(),
+        credentialId: pass.credentialId,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await service.revokeStagePass({ ...input, credentialId: pass.credentialId });
+    await expect(service.getStageSnapshot(sessionId, pass.stageToken)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      service.sync({ sessionId, projection: "host", controlToken: hosted.controlToken }),
+    ).resolves.toMatchObject({ snapshot: { projection: "host" } });
+    const expired = await service.createStagePass(input);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(expired.expiresAt));
+      await expect(service.getStageSnapshot(sessionId, expired.stageToken)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    const stored = (await sessions.getSessionById(sessionId))!;
+    const sessionLookup = vi
+      .spyOn(sessions, "getSessionForWorkspace")
+      .mockResolvedValue({ ...stored, liveExpiresAt: new Date(Date.now() + 5 * 60_000) });
+    const capped = await service.createStagePass(input);
+    expect(Date.parse(capped.expiresAt) - Date.now()).toBeLessThanOrEqual(5 * 60_000);
+    sessionLookup.mockResolvedValue({ ...stored, liveExpiresAt: new Date(Date.now() - 1) });
+    await expect(service.createStagePass(input)).rejects.toMatchObject({ code: "PHASE_CLOSED" });
+    sessionLookup.mockRestore();
+  });
+
   // Four real scrypt derivations retain production password checks on shared CI CPUs.
   it("requires paid protection and checks passwords only for new Presentation admissions", async () => {
     const { repository, sessions, service, ids, hosted: open, joined: openJoin } = await fixture();

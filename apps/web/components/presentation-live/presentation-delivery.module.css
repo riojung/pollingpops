@@ -1,0 +1,215 @@
+.presenterColumn {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 18px;
+}
+.privateNotice {
+  margin: 0;
+  color: var(--ui-on-hero);
+}
+.backstage {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+.panel h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+.notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
+}
+.nextPreview {
+  max-height: 26rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.nextPreview:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+.block {
+  min-width: 0;
+  width: 100%;
+}
+.block h1 {
+  font-size: clamp(1.8rem, 4vw, 3.8rem);
+  overflow-wrap: anywhere;
+}
+.choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.choice {
+  border: 2px solid var(--ui-border-strong);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+.correct {
+  border-color: var(--ui-success-text);
+  background: var(--ui-success-bg);
+  color: var(--ui-success-text);
+}
+.joinAccess {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  min-width: 0;
+}
+.joinAccess > div {
+  min-width: 0;
+  flex: 1 1 200px;
+}
+.joinAccess p {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.joinAccess a {
+  color: var(--ui-link);
+  overflow-wrap: anywhere;
+}
+.joinCode {
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1em;
+}
+.joinAccess svg {
+  flex-shrink: 0;
+  background: #fff;
+  padding: 4px;
+}
+.stagePage {
+  min-height: 100dvh;
+  background: var(--ui-hero-start);
+  color: var(--ui-on-hero);
+  padding: clamp(12px, 3vw, 32px);
+}
+.stageLayout {
+  width: min(1440px, 100%);
+  height: calc(100dvh - clamp(12px, 3vw, 32px) - clamp(12px, 3vw, 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0 auto;
+}
+.stageHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  background: var(--ui-hero-start);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.stageHeader p {
+  margin: 0;
+}
+.stageCanvas {
+  min-width: 0;
+  min-height: 200px;
+  flex: 1;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(16px, 4vw, 50px);
+  border-radius: 18px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+.stageBody {
+  width: 100%;
+  flex-shrink: 0;
+  margin-block: auto;
+}
+.stageFrame {
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  max-width: 100%;
+}
+.stageCanvas:focus-visible {
+  outline: 3px solid var(--ui-on-hero);
+  outline-offset: 3px;
+}
+.stageCanvas h1,
+.stageCanvas p {
+  overflow-wrap: anywhere;
+}
+.stageFooter {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 18px;
+}
+.stageFooter button {
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  border: 2px solid var(--ui-border-strong);
+  border-radius: 12px;
+  padding: 12px 18px;
+  font: inherit;
+  cursor: pointer;
+  min-height: 44px;
+}
+.stageFooter button:focus-visible {
+  outline: 3px solid var(--ui-on-hero);
+  outline-offset: 3px;
+}
+.mediaFallback {
+  padding: 12px;
+  border: 1px solid var(--ui-border-strong);
+}
+.launch {
+  display: grid;
+  gap: 10px;
+}
+.launch p {
+  margin: 0;
+}
+.launch a {
+  color: var(--ui-link);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 850px) {
+  .backstage {
+    grid-template-columns: 1fr;
+  }
+  .stageFooter {
+    grid-template-columns: 1fr;
+  }
+  .choices {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .stageFrame {
+    width: 100%;
+  }
+}

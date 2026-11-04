@@ -3,7 +3,7 @@ import type * as ReactModule from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
-import { NativeSceneView } from "./native-scene-view";
+import { NativeSceneCanvas } from "./native-scene-canvas";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -17,8 +17,9 @@ vi.mock("react", async (original) => {
       if (!(index in hooks.slots)) hooks.slots[index] = initial;
       return [
         hooks.slots[index] as T,
-        (next: T) => {
-          hooks.slots[index] = next;
+        (next: T | ((value: T) => T)) => {
+          hooks.slots[index] =
+            typeof next === "function" ? (next as (value: T) => T)(hooks.slots[index] as T) : next;
         },
       ];
     },
@@ -117,12 +118,14 @@ describe("native upload capacity guard", () => {
       }),
       expect.any(String),
     );
-    const view = editor.find((element) => element.type === NativeSceneView);
-    (view.props.onFrameChange as (id: string, frame: unknown) => void)(editor.scene.nodes[0]!.id, {
-      x: 12,
-      y: 8,
-      width: 80,
-      height: 20,
+    const view = editor.find((element) => element.type === NativeSceneCanvas);
+    (view.props.onChange as (scene: unknown) => void)({
+      ...editor.scene,
+      nodes: editor.scene.nodes.map((node, index) =>
+        index === 0 && node.type !== "connector"
+          ? { ...node, frame: { x: 12, y: 8, width: 80, height: 20 } }
+          : node,
+      ),
     });
     expect(editor.onChange).toHaveBeenCalledTimes(2);
     editor.render("idle");
@@ -137,5 +140,53 @@ describe("native upload capacity guard", () => {
         (element) => element.type === "input" && element.props["aria-label"] === "Add native image",
       ).props.disabled,
     ).toBe(false);
+  });
+});
+
+describe("native multi-object selection", () => {
+  it("exposes explicit selection toggles, moves selected frames together and protects the title on batch delete", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const includeBody = editor.find(
+      (element) =>
+        element.type === "input" && element.props["aria-label"] === "Include Evidence in selection",
+    );
+    expect(includeBody.props.checked).toBe(false);
+    (includeBody.props.onChange as () => void)();
+    editor.render("idle");
+    const canvas = editor.find((element) => element.type === NativeSceneCanvas);
+    expect(canvas.props.selectedNodeIds).toEqual([editor.scene.nodes[0]!.id, "body"]);
+    const move = editor.find(
+      (element) =>
+        element.type === "button" &&
+        Array.isArray(element.props.children) &&
+        element.props.children.join("") === "Move selection right",
+    );
+    (move.props.onClick as () => void)();
+    const moved = editor.onChange.mock.calls[0]![0];
+    expect(moved.nodes[0].frame.x).toBe(9);
+    expect(moved.nodes[1].frame.x).toBe(9);
+    const remove = editor.find(
+      (element) =>
+        element.type === "button" && element.props.children === "Delete selected objects",
+    );
+    (remove.props.onClick as () => void)();
+    expect(editor.onChange.mock.calls[1]![0].nodes).toEqual([editor.scene.nodes[0]]);
+  });
+
+  it("keeps one object selected when its checkbox is toggled off", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const checkbox = editor.find(
+      (element) =>
+        element.type === "input" &&
+        element.props["aria-label"] === "Include Slide title in selection",
+    );
+    (checkbox.props.onChange as () => void)();
+    editor.render("idle");
+    expect(
+      editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+    ).toEqual([editor.scene.nodes[0]!.id]);
+    expect(editor.onChange).not.toHaveBeenCalled();
   });
 });

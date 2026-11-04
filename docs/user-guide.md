@@ -650,6 +650,18 @@ use percentages of the slide. Focus a move or resize button and use arrow keys f
 or hold Shift for 5% steps.
 Give shapes meaningful labels and images useful descriptions for people who cannot see them.
 
+On a desktop, drag an object or its move button to reposition it. Drag its resize button to change
+its width and height from the bottom-right corner. Release to save the change as one **Undo** step;
+press Escape before releasing to cancel. Movement stays inside the slide.
+
+Hold Shift while clicking objects or use their **Include … in selection** checkboxes to select
+several. Drag a selected object's move button, use its arrow keys, or use the **Move selection**
+buttons to move them together. They keep their spacing when reaching a slide edge. Resize and
+numeric fields apply to the object being inspected. **Delete selected objects** removes selected
+objects and their connectors while keeping the required slide title. Selection is temporary and
+does not create a saved group. On phones, use selection, movement buttons and numeric fields;
+the reading column keeps ordinary scrolling and does not support geometric dragging.
+
 Add images through the existing private upload and scan flow. Each image keeps its own placement
 and description. Uploads remain unavailable until the operator configures image storage and
 malware scanning; an unavailable or unscanned image cannot be published.

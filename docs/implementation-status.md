@@ -8,6 +8,20 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation direct editing E01 slice November 3, 2026
+
+Native slides support pointer movement and bottom-right resizing on desktop, temporary
+multiselection through Shift-click or checkboxes, shared group movement and safe selection
+deletion. A pointer gesture previews locally and commits once on release through existing
+autosave and Undo/Redo. Escape or pointer cancellation discards the preview. Connectors follow
+their endpoints without changing IDs or semantic reading order.
+
+Phones retain the reading column and keyboard, numeric and selection movement controls. This
+increment changes no persisted contract, database schema, media authority or subscription cost.
+The [verification record](evidence/presentation-direct-editing.md) describes its checks and limits.
+Rich text, persistent grouping, slide hiding, themes and charts remain open, along with creator
+observations and deployment qualification. E01 is still in progress.
+
 ### Native Presentation E01 slice November 3, 2026
 
 The first native production-code slice adds independently positioned plain text, multiple private
@@ -25,7 +39,8 @@ native titles appear in participation reports.
 See [ADR 003](decisions/003-presentation-scene.md), the
 [verification record](evidence/presentation-native-scenes.md) and the
 [version-4 upgrade requirements](runbooks/upgrade.md#native-presentation-scene-compatibility).
-This is a local implementation checkpoint. Rich text, pointer dragging, multiselection, grouping,
+This is a local implementation checkpoint. Pointer editing and temporary multiselection are
+covered by the subsequent increment above. Rich text, persistent grouping,
 themes, charts, creator timings, assistive-technology acceptance and deployment qualification
 remain open; it does not complete E01 or establish broad competitor parity.
 

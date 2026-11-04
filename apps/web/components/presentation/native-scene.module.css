@@ -77,14 +77,30 @@
   max-height: 100%;
   object-fit: contain;
 }
+.canvas {
+  min-width: 0;
+}
+.editableNode {
+  cursor: grab;
+}
 .handles {
   position: absolute;
-  top: 0;
-  right: 0;
+  inset: 0;
   display: flex;
-  gap: 3px;
+  justify-content: flex-end;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.handles .resizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
 }
 .handles button {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
   min-width: 28px;
   min-height: 28px;
   padding: 2px;
@@ -170,6 +186,16 @@
   gap: 6px;
   list-style: none;
 }
+.nodeList .selectionToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+.selectionToggle input {
+  width: auto;
+}
 .nodeList button {
   width: 100%;
   text-align: left;
@@ -231,9 +257,21 @@
   .image img {
     max-height: 40vh;
   }
+  .editableNode {
+    cursor: auto;
+  }
   .handles {
     position: relative;
+    inset: auto;
     justify-content: flex-end;
+    gap: 3px;
+  }
+  .handles .resizeHandle {
+    position: static;
+  }
+  .handles button {
+    touch-action: auto;
+    cursor: auto;
   }
   .connectorSummary {
     position: static;

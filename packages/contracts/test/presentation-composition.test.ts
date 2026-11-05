@@ -444,9 +444,9 @@ describe("composed Presentation document8", () => {
       const opinionDocumentVersion = schema.parse({ ...deck(), schemaVersion: 9 });
       expect(opinionDocumentVersion.schemaVersion).toBe(9);
       expect(opinionDocumentVersion.blocks[0]).toMatchObject({ scene: { schemaVersion: 4 } });
-      expect(schema.safeParse({ ...deck(), schemaVersion: 11 }).success).toBe(false);
+      expect(schema.safeParse({ ...deck(), schemaVersion: 12 }).success).toBe(false);
     }
-    expect(PresentationSceneDraftSchema.safeParse({ ...scene(), schemaVersion: 5 }).success).toBe(
+    expect(PresentationSceneDraftSchema.safeParse({ ...scene(), schemaVersion: 6 }).success).toBe(
       false,
     );
   });

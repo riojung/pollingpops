@@ -10,15 +10,18 @@ export function PresentationDeliveryBlock({
   block,
   renderMedia,
   revealedAnswer = null,
+  interactionSourceKey,
 }: {
   block: PresentationParticipantCurrentBlock;
   renderMedia: (mediaId: string | null, altText: string | null) => ReactNode;
   revealedAnswer?: PresentationRevealedAnswer | null;
+  interactionSourceKey?: string;
 }) {
   if (block.kind === "content") {
     return (
       <ContentSlideView
         block={block}
+        interactionSourceKey={interactionSourceKey}
         variant="live"
         media={renderMedia(block.mediaId, block.mediaAlt)}
         renderSceneImage={(id, alt) => renderMedia(id, alt)}

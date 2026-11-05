@@ -324,6 +324,37 @@ text-fit feedback and complete images in the narrow reading column. See the
 [verification record](../evidence/presentation-design-foundation.md) for executed checks and
 remaining manual/device/production qualification. This slice adds no commercial entitlement.
 
+## Presentation basic interactions compatibility
+
+Local reveal panels and safe external links opt into **Presentation document v11 and scene v5**.
+Apply `094_presentation_basic_interactions.sql` before enabling these writes, and deploy matching
+API, jobs, artifact/history/session readers and web/live clients. Refresh existing browser assets
+before reopening authoring, publication, history restore and session creation. An older strict
+reader cannot safely discard the new nodes. Existing mutation envelopes, defaults, stored JSON
+and immutable hashes remain unchanged.
+
+Migration 094 admits the new document version alongside existing opinion/text formats and adds
+raw interaction validation for drafts, history, publications and session content. Response storage
+versions, moderation, scoring and host commands retain their existing meanings. Keep the existing
+native-media migration and collectors: new controls contain text and external links, not media IDs.
+The serving image set still requires E05's Node 26 runtime where visual import is enabled.
+
+No new flag, AI provider, model call, service or subscription entitlement is introduced. A reveal
+is public audience text with state held on one screen; it is neither a host-broadcast command nor
+an assessment answer. Collapsing the UI does not make delivered text confidential. Continue using
+private speaker notes and the normal activity answer-reveal policy for their respective purposes.
+
+Verify save/retry/reload/history/duplicate/reorder and design changes with scene5 mixed with
+earlier scenes and all supported activity types. Check unsafe URLs and unknown actions fail,
+incomplete labels/body/URL block publication, and hidden/private fields stay absent from audience
+projections. Test keyboard/touch controls, readable outline, focus visibility, reduced motion and
+independent stage/participant/Companion reveals without shared revisions or response mutations.
+
+Once v11 data exists, rollback requires compatible readers/writers or a forward repair. Retain
+migration 094 and its checksum; never strip actions, downgrade documents, rewrite immutable hashes
+or change accepted mutation receipts to make an old binary read the new format. Hotspots, dialogs,
+internal navigation and answer-based branches remain separate future increments.
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

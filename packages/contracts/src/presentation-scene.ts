@@ -1,15 +1,17 @@
 import { z } from "zod";
 import { CanvasColorSchema, CanvasShapeVariantSchema } from "./canvas-content-v4";
 import {
+  isSafePresentationLink,
   PresentationRichTextSchema,
   presentationRichTextToPlainText,
 } from "./presentation-rich-text";
 
-/** Scene versions opt into Presentation document v4, v5, v7 and v8 respectively. */
+/** Scene versions opt into Presentation document v4, v5, v7, v8 and v11 respectively. */
 export const PRESENTATION_SCENE_SCHEMA_VERSION = 1 as const;
 export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
 export const PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION = 3 as const;
 export const PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION = 4 as const;
+export const PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION = 5 as const;
 export const PRESENTATION_SCENE_GEOMETRY_EPSILON = 1e-8;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
@@ -273,6 +275,35 @@ export const PresentationSceneChartNodeSchema = z
   });
 export type PresentationSceneChartNode = z.infer<typeof PresentationSceneChartNodeSchema>;
 
+/** Public audience content; reveal state belongs only to the local viewer. */
+export const PresentationSceneRevealNodeSchema = z
+  .object({
+    ...framedNode,
+    type: z.literal("reveal"),
+    scope: z.literal("local"),
+    label: plainText(120),
+    body: plainText(4_000),
+  })
+  .strict()
+  .superRefine(applyPaintedBounds);
+export type PresentationSceneRevealNode = z.infer<typeof PresentationSceneRevealNodeSchema>;
+
+export const PresentationSceneLinkNodeSchema = z
+  .object({
+    ...framedNode,
+    type: z.literal("link"),
+    label: plainText(120),
+    href: z
+      .string()
+      .max(2_048)
+      .refine((value) => value === "" || isSafePresentationLink(value), {
+        message: "Use an absolute HTTP or HTTPS link without credentials or whitespace",
+      }),
+  })
+  .strict()
+  .superRefine(applyPaintedBounds);
+export type PresentationSceneLinkNode = z.infer<typeof PresentationSceneLinkNodeSchema>;
+
 export const PresentationSceneGroupSchema = z
   .object({ id: identifier, nodeIds: z.array(identifier).min(2).max(PRESENTATION_SCENE_MAX_NODES) })
   .strict()
@@ -310,6 +341,8 @@ export const PresentationSceneNodeSchema = z.discriminatedUnion("type", [
   connectorNode,
   PresentationSceneTableNodeSchema,
   PresentationSceneChartNodeSchema,
+  PresentationSceneRevealNodeSchema,
+  PresentationSceneLinkNodeSchema,
 ]);
 export type PresentationSceneNode = z.infer<typeof PresentationSceneNodeSchema>;
 
@@ -321,6 +354,7 @@ export const PresentationSceneDraftSchema = z
       z.literal(PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION),
     ]),
     aspectRatio: z.literal("16:9"),
     design: PresentationSceneDesignSchema.optional(),
@@ -391,6 +425,16 @@ export const PresentationSceneDraftSchema = z
       });
     }
     for (const [index, node] of scene.nodes.entries()) {
+      if (
+        scene.schemaVersion < PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION &&
+        (node.type === "reveal" || node.type === "link")
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["nodes", index],
+          message: "Interactions require scene schema version 5",
+        });
+      }
       if (scene.schemaVersion < PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION) {
         if (node.type !== "connector" && "rotation" in node) {
           context.addIssue({
@@ -461,7 +505,8 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
           node.type === "image" ||
           (node.type === "table" && node.caption.trim()) ||
           (node.type === "chart" && node.title.trim()) ||
-          (node.type === "shape" && node.label.trim()),
+          ((node.type === "shape" || node.type === "reveal" || node.type === "link") &&
+            node.label.trim()),
       )
     ) {
       context.addIssue({
@@ -479,6 +524,17 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
             message: "Add a readable label before publishing",
           });
       };
+      if (node.type === "reveal" || node.type === "link") {
+        requireLabel(node.label, ["label"]);
+        if (node.type === "reveal") requireLabel(node.body, ["body"]);
+        else if (!isSafePresentationLink(node.href)) {
+          context.addIssue({
+            code: "custom",
+            path: ["nodes", index, "href"],
+            message: "Add a safe external link before publishing",
+          });
+        }
+      }
       if (node.type === "table") {
         requireLabel(node.caption, ["caption"]);
         node.headers.forEach((label, index) => requireLabel(label, ["headers", index]));

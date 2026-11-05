@@ -329,8 +329,8 @@ document semantics; migration 093 adds job/usage lifecycle records. Conversion r
 Node 26 runtime's network permission denial and the existing scanned-media facilities, without
 an AI provider. E05's PDF/image import software scope is complete: the repository check,
 restricted PostgreSQL, four production browser profiles and compiled renderer smoke pass in the
-[E05 evidence record](evidence/presentation-e05-visual-import.md). This increment is prepared for
-pull request review and remains undeployed; E13 export and the recorded manual/hosted/cost
+[E05 evidence record](evidence/presentation-e05-visual-import.md). This increment is merged in
+[PR #197](https://github.com/riojung/pollingpops/pull/197) and remains undeployed; E13 export and the recorded manual/hosted/cost
 acceptance gates remain separate.
 
 ### E06 Add accessible interactions and branching
@@ -348,6 +348,15 @@ or trigger model calls. Respect reduced motion and provide an outline alternativ
 Basic actions are included in the delivery milestone. Richer hotspots/dialogs/branch validation
 are an additional 2–4-week candidate. Drag/drop, variables and reusable game mechanics are later
 extensions of this model, each requiring a real authoring task and accessible alternative.
+
+The first source increment on `codex/presentation-e06-basic-interactions` implements the planned
+local reveal/hide panels and safe-link slice, using scene5/document11 and migration094. Native
+authoring/history/design operations preserve actions, and shared delivery offers an equivalent
+readable outline without changing responses, scores or host state. The full repository check,
+restricted PostgreSQL, focused checks and four production browser profiles pass in the
+[E06 basic evidence record](evidence/presentation-e06-basic-interactions.md). This increment is
+prepared for pull request review and undeployed; richer hotspots/dialogs/internal navigation/answer branches and
+host-broadcast reveals remain later E06 work.
 
 ### E07 Add sections and safe nonlinear navigation
 

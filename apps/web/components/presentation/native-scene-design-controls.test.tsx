@@ -8,7 +8,10 @@ import {
   type PresentationSceneDesign,
   type PresentationSceneNode,
 } from "@openround/contracts";
-import { createNativeContentBlock } from "../../lib/presentation-native-scene";
+import {
+  createNativeContentBlock,
+  createNativeRevealNode,
+} from "../../lib/presentation-native-scene";
 import {
   NativeSceneArrangementControls,
   NativeSceneDesignControls,
@@ -123,6 +126,37 @@ describe("native design controls", () => {
     expect(layout.props.disabled).toBe(true);
     click(layout);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("retains interaction controls through theme and image-fit changes", () => {
+    const reveal = { ...createNativeRevealNode(), label: "Show detail", body: "Audience detail" };
+    const image = {
+      id: "image",
+      type: "image" as const,
+      mediaId: "11111111-1111-4111-8111-111111111111",
+      altText: "Evidence",
+      frame: { x: 10, y: 30, width: 40, height: 50 },
+    };
+    const scene: PresentationScene = {
+      ...createNativeContentBlock().scene!,
+      schemaVersion: 5,
+      design,
+    };
+    scene.nodes.push(reveal, image);
+    scene.readingOrder.push(reveal.id, image.id);
+    const onChange = vi.fn();
+    change(input(NativeSceneDesignControls({ scene, onChange }), "Slide theme"), {
+      value: "ocean",
+    });
+    change(input(NativeSceneImageDesignControls({ scene, node: image, onChange }), "Image fit"), {
+      value: "cover",
+    });
+    expect(onChange).toHaveBeenCalledTimes(2);
+    for (const [changed] of onChange.mock.calls) {
+      expect(changed.schemaVersion).toBe(5);
+      expect(changed.nodes).toContainEqual(reveal);
+      expect(PresentationSceneDraftSchema.safeParse(changed).success).toBe(true);
+    }
   });
 
   it("protects arrangement thresholds and keeps connector layers unavailable", () => {

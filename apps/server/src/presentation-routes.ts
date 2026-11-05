@@ -741,7 +741,7 @@ export async function registerPresentationRoutes(
     }
     const nextDraft = PresentationDraftSchema.parse({
       ...presentation.draft,
-      ...(requiresPresentationTextOpinions({ blocks })
+      ...(requiresPresentationTextOpinions({ blocks }) && presentation.draft.schemaVersion < 10
         ? { schemaVersion: 10 }
         : requiresPresentationOpinionFormats({ blocks }) && presentation.draft.schemaVersion < 9
           ? { schemaVersion: 9 }

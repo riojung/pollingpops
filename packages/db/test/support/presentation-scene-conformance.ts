@@ -25,7 +25,9 @@ export function presentationSceneBlock(
   richText = false,
   design = false,
   composition = false,
+  interactions = false,
 ) {
+  composition ||= interactions;
   design ||= composition;
   richText ||= design;
   const nodes: PresentationSceneNode[] = [
@@ -132,6 +134,25 @@ export function presentationSceneBlock(
           },
         ]
       : []),
+    ...(interactions
+      ? [
+          {
+            id: "reveal",
+            type: "reveal" as const,
+            scope: "local" as const,
+            label: "Show evidence",
+            body: "Public audience evidence",
+            frame: { x: 10, y: 32, width: 30, height: 20 },
+          },
+          {
+            id: "link",
+            type: "link" as const,
+            label: "Read the source",
+            href: "https://example.com/evidence",
+            frame: { x: 55, y: 32, width: 30, height: 20 },
+          },
+        ]
+      : []),
   ];
   return {
     id: randomUUID(),
@@ -142,13 +163,15 @@ export function presentationSceneBlock(
     mediaAlt: null,
     speakerNotes: "Private native presenter note",
     scene: {
-      schemaVersion: composition
-        ? (4 as const)
-        : design
-          ? (3 as const)
-          : richText
-            ? (2 as const)
-            : (1 as const),
+      schemaVersion: interactions
+        ? (5 as const)
+        : composition
+          ? (4 as const)
+          : design
+            ? (3 as const)
+            : richText
+              ? (2 as const)
+              : (1 as const),
       ...(composition ? { groups: [{ id: "information", nodeIds: ["table", "chart"] }] } : {}),
       ...(design
         ? {
@@ -180,12 +203,24 @@ export async function expectPresentationSceneConformance(input: {
   visibility?: boolean;
   design?: boolean;
   composition?: boolean;
+  interactions?: boolean;
 }) {
-  const { repository, workspaceId, otherWorkspaceId, editorId, composition = false } = input;
+  const { repository, workspaceId, otherWorkspaceId, editorId, interactions = false } = input;
+  const composition = input.composition === true || interactions;
   const design = input.design === true || composition;
   const visibility = input.visibility === true || design;
   const richText = input.richText === true || visibility;
-  const schemaVersion = composition ? 8 : design ? 7 : visibility ? 6 : richText ? 5 : 4;
+  const schemaVersion = interactions
+    ? 11
+    : composition
+      ? 8
+      : design
+        ? 7
+        : visibility
+          ? 6
+          : richText
+            ? 5
+            : 4;
   const presentations = createPresentationRepository(repository);
   const sessions = createPresentationSessionRepository(repository);
   const now = new Date();
@@ -222,7 +257,10 @@ export async function expectPresentationSceneConformance(input: {
   const packDraft = presentationPackMediaDraft(presentationPackContent(originalIds));
   const baseline = presentationPackContent(baselineIds);
   const hiddenBlock = visibility
-    ? { ...presentationSceneBlock(hiddenIds, richText, design, composition), hidden: true as const }
+    ? {
+        ...presentationSceneBlock(hiddenIds, richText, design, composition, interactions),
+        hidden: true as const,
+      }
     : null;
   if (hiddenBlock) {
     const title = hiddenBlock.scene.nodes.find(
@@ -238,7 +276,7 @@ export async function expectPresentationSceneConformance(input: {
     ...packDraft,
     schemaVersion,
     blocks: [
-      presentationSceneBlock(sceneIds, richText, design, composition),
+      presentationSceneBlock(sceneIds, richText, design, composition, interactions),
       ...(hiddenBlock ? [hiddenBlock] : []),
       ...packDraft.blocks,
     ],
@@ -261,7 +299,7 @@ export async function expectPresentationSceneConformance(input: {
     for (const block of draft.blocks) {
       if (block.kind !== "content" || !block.scene) continue;
       expect(block.scene).toMatchObject({
-        schemaVersion: composition ? 4 : 3,
+        schemaVersion: interactions ? 5 : composition ? 4 : 3,
         design: { theme: "ocean", font: "serif", spacing: "compact" },
       });
       expect(block.scene.nodes.filter((node) => node.type === "image")).toEqual(
@@ -333,7 +371,13 @@ export async function expectPresentationSceneConformance(input: {
   }
   for (const mediaId of [foreignId, deletingId, randomUUID()]) {
     const invalid = structuredClone(draft);
-    invalid.blocks[0] = presentationSceneBlock([mediaId], richText, design, composition);
+    invalid.blocks[0] = presentationSceneBlock(
+      [mediaId],
+      richText,
+      design,
+      composition,
+      interactions,
+    );
     await expect(
       presentations.updatePresentationDraft({
         workspaceId,
@@ -353,7 +397,13 @@ export async function expectPresentationSceneConformance(input: {
     );
   }
   const changed = structuredClone(draft);
-  changed.blocks[0] = presentationSceneBlock([sceneIds[1]!], richText, design, composition);
+  changed.blocks[0] = presentationSceneBlock(
+    [sceneIds[1]!],
+    richText,
+    design,
+    composition,
+    interactions,
+  );
   const mutation = {
     workspaceId,
     presentationId: presentation.id,

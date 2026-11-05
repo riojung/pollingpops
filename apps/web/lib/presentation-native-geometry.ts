@@ -69,7 +69,7 @@ export function groupNativeSceneNodes(
   const members = new Set(units.flatMap((unit) => unit.ids));
   return {
     ...scene,
-    schemaVersion: 4,
+    schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : 4,
     groups: [
       ...(scene.groups ?? []).filter((group) => !group.nodeIds.some((id) => members.has(id))),
       { id: groupId, nodeIds: scene.readingOrder.filter((id) => members.has(id)) },
@@ -365,7 +365,10 @@ export function rotateNativeSceneNodes(
     };
   });
   if (!rotated.every(fits)) return scene;
-  return { ...withNodes(scene, rotated), schemaVersion: 4 as const };
+  return {
+    ...withNodes(scene, rotated),
+    schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : (4 as const),
+  };
 }
 
 export type NativeSnapGuide = { axis: "x" | "y"; position: number };

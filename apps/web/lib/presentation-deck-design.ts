@@ -12,13 +12,15 @@ export function nativeSceneDocumentVersion(
   scene: Pick<PresentationScene, "schemaVersion">,
 ): PresentationDraft["schemaVersion"] {
   const minimum =
-    scene.schemaVersion === 4
-      ? 8
-      : scene.schemaVersion === 3
-        ? 7
-        : scene.schemaVersion === 2
-          ? 5
-          : 4;
+    scene.schemaVersion === 5
+      ? 11
+      : scene.schemaVersion === 4
+        ? 8
+        : scene.schemaVersion === 3
+          ? 7
+          : scene.schemaVersion === 2
+            ? 5
+            : 4;
   return current >= minimum ? current : minimum;
 }
 
@@ -60,7 +62,7 @@ export function applyNativeDesignToDeck(
       ...block,
       scene: {
         ...block.scene,
-        schemaVersion: block.scene.schemaVersion === 4 ? (4 as const) : (3 as const),
+        schemaVersion: block.scene.schemaVersion >= 4 ? block.scene.schemaVersion : (3 as const),
         design: { ...design },
       },
     };

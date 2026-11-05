@@ -105,6 +105,13 @@ describe("native design across a Presentation", () => {
     [10, 2, 10],
     [10, 3, 10],
     [10, 4, 10],
+    [2, 5, 11],
+    [10, 5, 11],
+    [11, 1, 11],
+    [11, 2, 11],
+    [11, 3, 11],
+    [11, 4, 11],
+    [11, 5, 11],
   ] as const)(
     "preserves/promotes document %s for scene %s to %s",
     (current, sceneVersion, expected) => {
@@ -137,6 +144,38 @@ describe("native design across a Presentation", () => {
     expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(10);
     expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(10);
     expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+  });
+
+  it("promotes interaction edits and preserves actions across deck design, recovery and question edits", () => {
+    const original = draft();
+    const first = original.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    const reveal = {
+      id: "audience-detail",
+      type: "reveal" as const,
+      scope: "local" as const,
+      label: "Show detail",
+      body: "Audience detail",
+      frame: { x: 8, y: 35, width: 84, height: 40 },
+    };
+    const edited = applyNativeSceneToDeck(original, first.id, {
+      ...first.scene,
+      schemaVersion: 5,
+      nodes: [...first.scene.nodes, reveal],
+      readingOrder: [...first.scene.readingOrder, reveal.id],
+    });
+    expect(edited.schemaVersion).toBe(11);
+    edited.blocks.push(createQuestionBlock("open_text"));
+    const changed = applyNativeDesignToDeck(edited, design);
+    const updated = changed.blocks[0]!;
+    if (updated.kind !== "content" || !updated.scene) throw new Error("Expected scene");
+    expect(updated.scene.schemaVersion).toBe(5);
+    expect(updated.scene.nodes).toContainEqual(reveal);
+    expect(changed.schemaVersion).toBe(11);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(11);
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+    expect(original.schemaVersion).toBe(6);
+    expect(first.scene.schemaVersion).toBe(1);
   });
 
   it("refuses an all-slide design that exceeds the document budget without changing the source", () => {

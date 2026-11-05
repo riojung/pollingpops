@@ -463,6 +463,11 @@ function PresentationHostContent() {
                         </span>
                         <ContentSlideView
                           block={block}
+                          interactionSourceKey={JSON.stringify([
+                            id,
+                            audienceToken,
+                            connection === "fallback",
+                          ])}
                           renderSceneImage={(mediaId, altText) => (
                             <PresentationMedia
                               key={mediaId}
@@ -610,6 +615,11 @@ function PresentationHostContent() {
                       >
                         <PresentationDeliveryBlock
                           block={snapshot.presenter.nextBlock}
+                          interactionSourceKey={JSON.stringify([
+                            id,
+                            audienceToken,
+                            connection === "fallback",
+                          ])}
                           renderMedia={(mediaId, altText) => (
                             <PresentationMedia
                               key={`${snapshot.presenter?.nextBlock?.id}:${mediaId}`}

@@ -710,6 +710,35 @@ unchanged. Images retain the existing private reference and scan/lifecycle rules
 data and links add no media-reference path or SQL migration. See the
 [v8 reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
 
+### Basic interaction versions
+
+Native reveal panels and external link controls opt into **scene v5 / Presentation document v11**.
+The draft mutation envelope stays v2 and existing creation defaults remain unchanged. Document
+v11 also accepts earlier scene versions, polls, rankings and moderated text without changing
+their response formats, scores or reports. Migration 094 and compatible artifact/session readers
+must precede v11 writes. Existing stored JSON and immutable hashes are not rewritten.
+
+Two strict framed node types extend the existing union:
+
+- `{ id, type: "reveal", frame, rotation?, scope: "local", label, body }`: label at most 120
+  characters and plain-text body at most 4,000. The panel opens independently on the current
+  screen. There is no broadcast, response submission or stored reveal state.
+- `{ id, type: "link", frame, rotation?, label, href }`: label at most 120 characters and href
+  at most 2,048. Links use the existing absolute HTTP(S) allowlist, rejecting credentials,
+  whitespace, backslashes and executable schemes. No server fetch or embedded content is added.
+
+Drafts permit incomplete labels/body and an empty href; nonempty unsafe URLs are rejected.
+Publication requires readable labels, nonblank reveal content and a safe nonempty link. Scripts,
+arbitrary HTML, extra action fields and broadcast scope are rejected. Existing node/frame,
+reading-order, scene and document budgets still apply. Duplication remaps stable IDs and keeps
+inline panel content with its control; reordering never changes a target index.
+
+Revealed text is public audience content in the recipient-safe scene, not confidential data or an
+answer-key access mechanism. The renderer omits collapsed body text from the DOM, uses native
+buttons/anchors, and offers an equivalent readable outline. Local actions do not mutate live
+revisions, question phase, scoring or reports. Speaker notes, provenance and hidden slides retain
+their separate private projection rules. See the [v11 rollout](runbooks/upgrade.md#presentation-basic-interactions-compatibility).
+
 ## Presentation visual import APIs
 
 Visual import converts one PDF or an ordered PNG/JPEG/WebP image set without an AI provider.

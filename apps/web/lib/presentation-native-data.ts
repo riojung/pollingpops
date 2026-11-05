@@ -231,7 +231,7 @@ export function applyNativeDataDraft(
   } else return { success: false, error: "Select the data object again before applying changes." };
   const result = PresentationSceneDraftSchema.safeParse({
     ...scene,
-    schemaVersion: 4,
+    schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : 4,
     nodes: scene.nodes.map((candidate) => (candidate.id === nodeId ? next : candidate)),
   });
   if (!result.success)

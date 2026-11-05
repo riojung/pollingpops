@@ -64,37 +64,46 @@ describe("bounded local native data", () => {
     if (!result.success) expect(result.error).toContain(message);
   });
 
-  it("preserves newest geometry, scene design and persistent groups when applying staged data", () => {
-    const node = createNativeTableNode();
-    const draft = nativeDataDraft(node);
-    if (draft.type !== "table") throw new Error("Wrong fixture");
-    draft.caption = "Actual results";
-    draft.grid[1]![1] = "=literal text";
-    const scene = sceneWith({
-      ...node,
-      frame: { x: 20, y: 30, width: 60, height: 40 },
-      rotation: 10,
-    });
-    scene.design = { theme: "midnight", font: "serif", spacing: "compact" };
-    scene.groups = [{ id: "group", nodeIds: [scene.nodes[0]!.id, node.id] }];
-    const result = applyNativeDataDraft(scene, node.id, draft);
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.data.nodes.at(-1)).toMatchObject({
-      rotation: 10,
-      frame: { x: 20, y: 30, width: 60, height: 40 },
-      caption: "Actual results",
-      rows: [
-        ["Alpha", "=literal text"],
-        ["Beta", "20"],
-      ],
-    });
-    expect(result.data.design).toEqual(scene.design);
-    expect(result.data.groups).toEqual(scene.groups);
-    expect(nativeDataRevision(node)).toBe(
-      nativeDataRevision({ ...node, rotation: 10, frame: { x: 10, y: 20, width: 60, height: 40 } }),
-    );
-  });
+  it.each([4, 5] as const)(
+    "preserves scene %s, newest geometry, design and groups when applying staged data",
+    (version) => {
+      const node = createNativeTableNode();
+      const draft = nativeDataDraft(node);
+      if (draft.type !== "table") throw new Error("Wrong fixture");
+      draft.caption = "Actual results";
+      draft.grid[1]![1] = "=literal text";
+      const scene = sceneWith({
+        ...node,
+        frame: { x: 20, y: 30, width: 60, height: 40 },
+        rotation: 10,
+      });
+      scene.schemaVersion = version;
+      scene.design = { theme: "midnight", font: "serif", spacing: "compact" };
+      scene.groups = [{ id: "group", nodeIds: [scene.nodes[0]!.id, node.id] }];
+      const result = applyNativeDataDraft(scene, node.id, draft);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.schemaVersion).toBe(version);
+      expect(result.data.nodes.at(-1)).toMatchObject({
+        rotation: 10,
+        frame: { x: 20, y: 30, width: 60, height: 40 },
+        caption: "Actual results",
+        rows: [
+          ["Alpha", "=literal text"],
+          ["Beta", "20"],
+        ],
+      });
+      expect(result.data.design).toEqual(scene.design);
+      expect(result.data.groups).toEqual(scene.groups);
+      expect(nativeDataRevision(node)).toBe(
+        nativeDataRevision({
+          ...node,
+          rotation: 10,
+          frame: { x: 10, y: 20, width: 60, height: 40 },
+        }),
+      );
+    },
+  );
 
   it.each(["", "=1+1", "Infinity", "NaN", "0x10", "1e13"])(
     "rejects unsafe or missing chart value %j",

@@ -1,3 +1,5 @@
+import { interactionDocument } from "./support/presentation-interaction-fixture.js";
+import { expectPresentationOpinionResponseConformance } from "./support/presentation-opinion-conformance.js";
 import { expectPresentationTextConformance } from "./support/presentation-text-conformance.js";
 import { expectPresentationVisualImportConformance } from "./support/presentation-visual-import-conformance.js";
 import { expectPresentationSceneConformance } from "./support/presentation-scene-conformance.js";
@@ -36,6 +38,7 @@ import { Pool, type PoolClient } from "pg";
 import {
   ProductEventNameSchema,
   PresentationContentSchema,
+  PresentationDraftSchema,
   IdeaBoardCreateSchema,
   type AuthoringDraft,
   type PresentationDraft,
@@ -1417,6 +1420,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 91, name: "presentation_opinion_formats" },
       { version: 92, name: "presentation_text_opinions" },
       { version: 93, name: "presentation_visual_imports" },
+      { version: 94, name: "presentation_basic_interactions" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -3163,6 +3167,751 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     }
   });
 
+  it("retains v11 local interactions through restricted persistence, history and immutable snapshots", async () => {
+    const owner = await creator("presentation-interactions");
+    const other = await creator("presentation-interactions-other");
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: owner.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: owner.userId,
+      interactions: true,
+    });
+  });
+
+  it("preserves v11 interaction decks with opinion and text response meanings", async () => {
+    const owner = await creator("presentation-interaction-responses");
+    const published = await createPublishedPresentationFixture(
+      owner,
+      "Interaction response versions",
+    );
+    const input = {
+      repository: new PostgresPresentationSessionRepository(repository),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+    };
+    await expectPresentationOpinionResponseConformance({ ...input, schemaVersion: 11 });
+    await expectPresentationTextConformance({ ...input, schemaVersion: 11 });
+  });
+
+  it.each(
+    [
+      "https:///example.com",
+      "https:////example.com/path?contact=a@b#c@d",
+      "HTTP://///example.com:00000080/path",
+      "https:////[::1]:00000443/source",
+      "https:////例え.テスト/資料",
+      "https:////%65xample.com:00000443/source",
+      "https://@example.com/",
+      "https://:@example.com/",
+      "https:////:@example.com/",
+      "https://%65xample.com/source",
+      "https://%65xample%2Ecom/source",
+      "https://%C3%A9xample.com/source",
+      "https://%e4%be%8b%e3%81%88%2e%e3%83%86%e3%82%b9%e3%83%88/source",
+      "HTTPS:////:@%65xample%2Ecom:00000443/source",
+      "https://%EF%BB%BFexample.com/source",
+      "https://exa%C2%ADmple.com/source",
+      "https://%E2%80%8Bexample.com/source",
+      "https://%EF%BC%A5xample.com/source",
+      "https://example%E3%80%82com/source",
+      "https://example.com/source%zz?escaped=%#tail%0",
+      "https://example.com/%00/%FF/%2F?part=%C3%28",
+    ].flatMap((href) => (["link", "richText"] as const).map((mode) => ({ href, mode }))),
+  )(
+    "preserves safe URL variants for $mode $href through draft upgrade and publication",
+    async ({ href, mode }) => {
+      const owner = await creator("presentation-extra-slash-url");
+      const presentations = new PostgresPresentationRepository(repository);
+      const sessions = new PostgresPresentationSessionRepository(repository);
+      const now = new Date();
+      const scene = {
+        schemaVersion: 4,
+        aspectRatio: "16:9",
+        nodes: [
+          {
+            id: "title",
+            type: "text",
+            role: "title",
+            text: "Legacy linked evidence",
+            frame: { x: 8, y: 8, width: 84, height: 20 },
+          },
+          {
+            id: "body",
+            type: "text",
+            role: "body",
+            text: "Read the source",
+            frame: { x: 8, y: 35, width: 84, height: 25 },
+            richText: {
+              paragraphs: [
+                {
+                  kind: "paragraph",
+                  runs: [
+                    {
+                      text: "Read the source",
+                      href: mode === "richText" ? href : "https://example.com/legacy",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+        readingOrder: ["title", "body"],
+      };
+      const original = PresentationDraftSchema.parse({
+        title: "Existing linked slide",
+        schemaVersion: 8,
+        blocks: [
+          {
+            id: randomUUID(),
+            kind: "content",
+            layout: "title_body",
+            textElements: [],
+            mediaId: null,
+            mediaAlt: null,
+            speakerNotes: "",
+            scene,
+          },
+        ],
+      });
+      const presentation = await presentations.createPresentation({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        title: original.title,
+        description: original.description,
+        status: "draft",
+        draft: original,
+        draftRevision: 0,
+        draftSchemaVersion: 8,
+        currentVersionId: null,
+        folderId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const hash = (value: unknown) =>
+        createHash("sha256").update(JSON.stringify(value)).digest("hex");
+      const originalContent = PresentationContentSchema.parse(original);
+      const originalVersion = await presentations.publishPresentation(
+        {
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          presentationId: presentation.id,
+          version: 1,
+          content: originalContent,
+          contentSchemaVersion: 8,
+          contentHash: hash(originalContent),
+          sourceDraftRevision: 0,
+          publishedAt: now,
+        },
+        0,
+      );
+      const upgraded = structuredClone(original);
+      upgraded.schemaVersion = 11;
+      const block = upgraded.blocks[0]!;
+      if (block.kind !== "content" || !block.scene) throw new Error("Expected native scene");
+      block.scene.schemaVersion = 5;
+      if (mode === "link") {
+        block.scene.nodes.push({
+          id: "link",
+          type: "link",
+          label: "Open the source",
+          href,
+          frame: { x: 8, y: 65, width: 38, height: 20 },
+        });
+        block.scene.readingOrder.push("link");
+      } else {
+        // Adding the first control upgrades the scene without changing its existing rich-text URL.
+        block.scene.nodes.push({
+          id: "reveal",
+          type: "reveal",
+          scope: "local",
+          label: "Show evidence",
+          body: "Public evidence",
+          frame: { x: 8, y: 65, width: 38, height: 20 },
+        });
+        block.scene.readingOrder.push("reveal");
+      }
+      const content = PresentationContentSchema.parse(upgraded);
+      const mutation = {
+        workspaceId: owner.workspaceId,
+        presentationId: presentation.id,
+        draft: upgraded,
+        expectedRevision: 0,
+        mutationId: randomUUID(),
+        editorId: owner.userId,
+        draftHash: hash(upgraded),
+      };
+      await expect(presentations.updatePresentationDraft(mutation)).resolves.toMatchObject({
+        draftRevision: 1,
+        draftSchemaVersion: 11,
+        draft: upgraded,
+      });
+      await expect(presentations.updatePresentationDraft(mutation)).resolves.toMatchObject({
+        draftRevision: 1,
+        draft: upgraded,
+      });
+      const version = await presentations.publishPresentation(
+        {
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          presentationId: presentation.id,
+          version: 2,
+          content,
+          contentSchemaVersion: 11,
+          contentHash: hash(content),
+          sourceDraftRevision: 1,
+          publishedAt: now,
+        },
+        1,
+      );
+      expect(version).toMatchObject({ content, contentHash: hash(content) });
+      const session = await sessions.createSession({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: presentation.id,
+        presentationVersionId: version.id,
+        title: content.title,
+        content,
+        code: String(randomInt(1000000, 10000000)),
+        status: "active",
+        phase: "content",
+        currentBlockIndex: 0,
+        revision: 0,
+        createdBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      expect((await sessions.getSessionById(session.id))?.content).toEqual(content);
+      const history = await presentations.listPresentationHistory(
+        owner.workspaceId,
+        presentation.id,
+      );
+      expect(history.map((entry) => entry.draft)).toEqual([upgraded, original]);
+      expect(
+        await presentations.getPresentationVersion(owner.workspaceId, originalVersion.id),
+      ).toMatchObject({ content: originalContent, contentHash: hash(originalContent) });
+      const saved = await presentations.getPresentation(owner.workspaceId, presentation.id);
+      const savedBlock = saved!.draft.blocks[0]!;
+      if (savedBlock.kind !== "content" || !savedBlock.scene)
+        throw new Error("Expected saved native scene");
+      if (mode === "link")
+        expect(savedBlock.scene.nodes.find((node) => node.type === "link")).toMatchObject({ href });
+      else
+        expect(savedBlock.scene.nodes.find((node) => node.id === "body")).toMatchObject({
+          richText: { paragraphs: [{ runs: [{ href }] }] },
+        });
+      // Neither repository parsing nor SQL may canonicalize the caller's persisted URL spelling.
+      expect(JSON.stringify(saved!.draft)).toBe(
+        JSON.stringify(PresentationDraftSchema.parse(upgraded)),
+      );
+      expect(JSON.stringify(version.content)).toBe(JSON.stringify(content));
+    },
+  );
+
+  it("rejects unsafe extra-slash URLs in new controls and upgraded rich text", async () => {
+    const owner = await creator("presentation-extra-slash-rejection");
+    const published = await createPublishedPresentationFixture(
+      owner,
+      "Extra slash rejection guards",
+    );
+    const native = interactionDocument().blocks[0]!;
+    if (native.kind !== "content" || !native.scene) throw new Error("Expected native scene");
+    for (const href of [
+      "https:///user@example.com",
+      "https:////user@example.com/",
+      "https:////:password@example.com/",
+      "https:////@@example.com/",
+      "https:////user:password@example.com",
+      "http:////user:password@[::1]",
+      "https:////",
+      "https:////?host=example.com",
+      "https:////#example.com",
+      "https:////example.com:65536",
+      "https:////example.com\\bad",
+      "https:////example.com/\u0085",
+      "javascript:////example.com",
+      "data:////example.com",
+      "ftp:////example.com",
+    ]) {
+      for (const mode of ["link", "richText"] as const) {
+        const candidate = structuredClone(native);
+        const scene = candidate.scene!;
+        if (mode === "link") {
+          const link = scene.nodes.find((node) => node.type === "link")!;
+          if (link.type !== "link") throw new Error("Expected link");
+          link.href = href;
+        } else {
+          const text = scene.nodes.find((node) => node.type === "text")!;
+          if (text.type !== "text") throw new Error("Expected title");
+          text.richText = {
+            paragraphs: [{ kind: "paragraph", runs: [{ text: text.text, href }] }],
+          };
+        }
+        const document = { title: "Unsafe link", schemaVersion: 11, blocks: [candidate] };
+        expect(PresentationDraftSchema.safeParse(document).success).toBe(false);
+        expect(PresentationContentSchema.safeParse(document).success).toBe(false);
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_interactions_valid($1::jsonb,11,false) AS valid",
+              [JSON.stringify(document)],
+            )
+          ).rows[0]!.valid,
+        ).toBe(false);
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "UPDATE presentations SET draft=$1::jsonb,draft_schema_version=11 WHERE id=$2",
+              [JSON.stringify(document), published.presentation.id],
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+      }
+    }
+  });
+
+  it.each(
+    [
+      {
+        category: "malformed escapes",
+        hrefs: [
+          "https://%",
+          "https://%0",
+          "https://%zz.example",
+          "https://%g0.example",
+          "https://%0g.example",
+          "https://example%.com",
+          "https:////:@%zz.example/source",
+        ],
+      },
+      {
+        category: "invalid UTF8",
+        hrefs: [
+          "https://%C3.example/source",
+          "https://%C3%28.example/source",
+          "https://%E2%82.example/source",
+          "https://%E2%28%A1.example/source",
+          "https://%ED%A0%80.example/source",
+          "https://%C0%AF.example/source",
+          "https://%F0%80%80%80.example/source",
+          "https://%80.example/source",
+          "https://%FF.example/source",
+        ],
+      },
+      {
+        category: "forbidden decoded host characters",
+        hrefs: [
+          "https://prefix%00.example/source",
+          "https://prefix%01.example/source",
+          "https://prefix%02.example/source",
+          "https://prefix%03.example/source",
+          "https://prefix%04.example/source",
+          "https://prefix%05.example/source",
+          "https://prefix%06.example/source",
+          "https://prefix%07.example/source",
+          "https://prefix%08.example/source",
+          "https://prefix%09.example/source",
+          "https://prefix%0A.example/source",
+          "https://prefix%0B.example/source",
+          "https://prefix%0C.example/source",
+          "https://prefix%0D.example/source",
+          "https://prefix%0E.example/source",
+          "https://prefix%0F.example/source",
+          "https://prefix%10.example/source",
+          "https://prefix%11.example/source",
+          "https://prefix%12.example/source",
+          "https://prefix%13.example/source",
+          "https://prefix%14.example/source",
+          "https://prefix%15.example/source",
+          "https://prefix%16.example/source",
+          "https://prefix%17.example/source",
+          "https://prefix%18.example/source",
+          "https://prefix%19.example/source",
+          "https://prefix%1A.example/source",
+          "https://prefix%1B.example/source",
+          "https://prefix%1C.example/source",
+          "https://prefix%1D.example/source",
+          "https://prefix%1E.example/source",
+          "https://prefix%1F.example/source",
+          "https://prefix%20.example/source",
+          "https://prefix%23.example/source",
+          "https://prefix%25.example/source",
+          "https://prefix%2F.example/source",
+          "https://prefix%3A.example/source",
+          "https://prefix%3C.example/source",
+          "https://prefix%3E.example/source",
+          "https://prefix%3F.example/source",
+          "https://prefix%40.example/source",
+          "https://prefix%5B.example/source",
+          "https://prefix%5C.example/source",
+          "https://prefix%5D.example/source",
+          "https://prefix%5E.example/source",
+          "https://prefix%7C.example/source",
+          "https://prefix%7F.example/source",
+          "https://%C2%80.example/source",
+          "https://%C2%85.example/source",
+          "https://%252F.example/source",
+          "https://%2565xample.com/source",
+        ],
+      },
+      {
+        category: "mapped forbidden Unicode",
+        hrefs: [
+          "https://%C2%A0example.com/source",
+          "https://%EF%BC%8Fexample.com/source",
+          "https://%EF%BC%85example.com/source",
+          "https://%EF%BC%A0example.com/source",
+        ],
+      },
+      {
+        category: "empty IDNA host",
+        hrefs: ["https://%EF%BB%BF/source", "https://%C2%AD/source", "https://%E2%80%8B/source"],
+      },
+    ].flatMap((group) => (["link", "richText"] as const).map((mode) => ({ ...group, mode }))),
+  )(
+    "rejects percent-host $category for $mode without changing the parent",
+    async ({ hrefs, mode }) => {
+      const owner = await creator("presentation-percent-host-rejection");
+      const presentations = new PostgresPresentationRepository(repository);
+      const draft = interactionDocument();
+      if (mode === "richText") {
+        const legacy = draft.blocks[0]!;
+        if (legacy.kind !== "content" || !legacy.scene) throw new Error("Expected legacy scene");
+        draft.schemaVersion = 8;
+        draft.blocks = [legacy];
+        legacy.scene.schemaVersion = 4;
+        legacy.scene.nodes = legacy.scene.nodes.filter(
+          (node) => node.type !== "reveal" && node.type !== "link",
+        );
+        const ids = new Set(legacy.scene.nodes.map((node) => node.id));
+        legacy.scene.readingOrder = legacy.scene.readingOrder.filter((id) => ids.has(id));
+      }
+      const now = new Date();
+      const presentation = await presentations.createPresentation({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        title: draft.title,
+        description: draft.description,
+        status: "draft",
+        draft,
+        draftRevision: 0,
+        draftSchemaVersion: draft.schemaVersion,
+        currentVersionId: null,
+        folderId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const snapshot = async () =>
+        packPracticeScoped(
+          owner.workspaceId,
+          async (client) =>
+            (
+              await client.query(
+                "SELECT to_jsonb(parent) AS parent FROM presentations parent WHERE id=$1",
+                [presentation.id],
+              )
+            ).rows[0]!.parent,
+        );
+      const originalParent = await snapshot();
+      for (const href of hrefs) {
+        const document = structuredClone(draft);
+        const block = document.blocks[0]!;
+        if (block.kind !== "content" || !block.scene) throw new Error("Expected native scene");
+        document.schemaVersion = 11;
+        block.scene.schemaVersion = 5;
+        if (mode === "link") {
+          const link = block.scene.nodes.find((node) => node.type === "link")!;
+          if (link.type !== "link") throw new Error("Expected link");
+          link.href = href;
+        } else {
+          block.scene.nodes.push({
+            id: "new-reveal",
+            type: "reveal",
+            scope: "local",
+            label: "Show evidence",
+            body: "Public evidence",
+            frame: { x: 8, y: 65, width: 38, height: 20 },
+          });
+          block.scene.readingOrder.push("new-reveal");
+          const text = block.scene.nodes.find((node) => node.type === "text")!;
+          if (text.type !== "text") throw new Error("Expected title");
+          text.richText = {
+            paragraphs: [{ kind: "paragraph", runs: [{ text: text.text, href }] }],
+          };
+        }
+        expect(PresentationDraftSchema.safeParse(document).success, href).toBe(false);
+        expect(PresentationContentSchema.safeParse(document).success, href).toBe(false);
+        // Exercise the raw storage boundary before helper assertions: malformed URLs cannot
+        // commit an unreadable parent, a changed revision, or any other mutation fields.
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "UPDATE presentations SET draft=$1::jsonb,draft_schema_version=11,draft_revision=draft_revision+1,updated_at=$2 WHERE id=$3",
+              [JSON.stringify(document), new Date(now.getTime() + 1000), presentation.id],
+            ),
+          ),
+          href,
+        ).rejects.toMatchObject({ code: "23514" });
+        expect(await snapshot(), href).toEqual(originalParent);
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_interactions_valid($1::jsonb,11,false) AS valid",
+              [JSON.stringify(document)],
+            )
+          ).rows[0]!.valid,
+          href,
+        ).toBe(false);
+      }
+      expect(
+        (await presentations.getPresentation(owner.workspaceId, presentation.id))?.draft,
+      ).toEqual(draft);
+      expect(
+        await presentations.listPresentationHistory(owner.workspaceId, presentation.id),
+      ).toMatchObject([{ revision: 0, draft }]);
+    },
+  );
+
+  it("guards raw local interaction scenes and document version11", async () => {
+    const owner = await creator("presentation-interaction-raw");
+    const presentations = new PostgresPresentationRepository(repository);
+    const draft = interactionDocument();
+    const now = new Date();
+    const presentation = await presentations.createPresentation({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      title: draft.title,
+      description: draft.description,
+      status: "draft",
+      draft,
+      draftRevision: 0,
+      draftSchemaVersion: 11,
+      currentVersionId: null,
+      folderId: null,
+      publishedDraftRevision: null,
+      lastEditedBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const native = draft.blocks[0]!;
+    if (native.kind !== "content" || !native.scene) throw new Error("Expected interaction scene");
+    const scene = native.scene;
+    const revealIndex = scene.nodes.findIndex((node) => node.type === "reveal");
+    const linkIndex = scene.nodes.findIndex((node) => node.type === "link");
+    const valid = async (value: unknown, version = 11, published = false) =>
+      (
+        await repository.pool.query<{ valid: boolean }>(
+          "SELECT openround_presentation_interactions_valid($1::jsonb,$2,$3) AS valid",
+          [JSON.stringify(value), version, published],
+        )
+      ).rows[0]!.valid;
+    const documentWithScene = (candidate: unknown) => ({
+      ...draft,
+      blocks: [{ ...native, scene: candidate }, ...draft.blocks.slice(1)],
+    });
+    const nodeChange = (fields: Record<string, unknown>, index = revealIndex) => ({
+      ...scene,
+      nodes: scene.nodes.map((node, position) =>
+        position === index ? { ...node, ...fields } : node,
+      ),
+    });
+    expect(await valid(draft)).toBe(true);
+    expect(await valid(draft, 11, true)).toBe(true);
+    expect(
+      (
+        await repository.pool.query(
+          "SELECT openround_presentation_json_bytes($1::jsonb) AS bytes",
+          [JSON.stringify(draft)],
+        )
+      ).rows[0]!.bytes,
+    ).toBe(String(Buffer.byteLength(JSON.stringify(draft))));
+    const invalids: unknown[] = [
+      ...[2, 3, 4, 5, 6, 7, 8, 9, 10, "11", null].map((schemaVersion) => ({
+        ...draft,
+        schemaVersion,
+      })),
+      documentWithScene({ ...scene, schemaVersion: 4 }),
+      documentWithScene({ ...scene, schemaVersion: "5" }),
+      documentWithScene(nodeChange({ scope: "session" })),
+      documentWithScene(nodeChange({ scope: null })),
+      documentWithScene(nodeChange({ body: null })),
+      documentWithScene(nodeChange({ body: "x".repeat(4001) })),
+      documentWithScene(nodeChange({ label: "😀".repeat(121) })),
+      documentWithScene(nodeChange({ label: "x\u0001" })),
+      documentWithScene(nodeChange({ body: "x\u007f" })),
+      documentWithScene(nodeChange({ script: "alert(1)" })),
+      documentWithScene(nodeChange({ html: "<script>bad</script>" })),
+      documentWithScene(nodeChange({ targetId: "title" })),
+      documentWithScene(nodeChange({ action: { type: "navigate" } })),
+      documentWithScene(nodeChange({ style: { color: "red" } })),
+      documentWithScene(nodeChange({ type: "hotspot" })),
+      documentWithScene(nodeChange({ id: "title" })),
+      documentWithScene(nodeChange({ frame: { x: 95, y: 30, width: 20, height: 20 } })),
+      documentWithScene(
+        nodeChange({ rotation: 45, frame: { x: 0, y: 0, width: 100, height: 100 } }),
+      ),
+      documentWithScene({ ...scene, readingOrder: ["title"] }),
+      documentWithScene({
+        ...scene,
+        nodes: Array.from({ length: 51 }, (_, index) => ({
+          ...scene.nodes[revealIndex],
+          id: `panel-${index}`,
+        })),
+      }),
+      ...[
+        "javascript:alert(1)",
+        "data:text/html,hello",
+        "#title",
+        "/slide/2",
+        "https://user:password@example.com",
+        "https://user@example.com",
+        "https://exa mple.com",
+        "https://example.com\\bad",
+        "https://example.com/\u0085",
+        "https://",
+        "https://example.com:99999",
+      ].map((href) => documentWithScene(nodeChange({ href }, linkIndex))),
+    ];
+    for (const invalid of invalids) {
+      expect(await valid(invalid)).toBe(false);
+      await expect(
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query("UPDATE presentations SET draft=$1::jsonb WHERE id=$2", [
+            JSON.stringify(invalid),
+            presentation.id,
+          ]),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+    }
+    expect(await valid(draft, 10)).toBe(false);
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query("UPDATE presentations SET draft_schema_version=10 WHERE id=$1", [
+          presentation.id,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    for (const [index, fields] of [
+      [revealIndex, { label: "" }],
+      [revealIndex, { body: "\u00a0\n" }],
+      [linkIndex, { href: "" }],
+      [linkIndex, { label: "" }],
+    ] as const) {
+      const incomplete = documentWithScene(nodeChange(fields, index));
+      expect(await valid(incomplete)).toBe(true);
+      expect(await valid(incomplete, 11, true)).toBe(false);
+    }
+    for (const href of [
+      "HTTPS://example.com:443/path?contact=a@b#c@d",
+      "http://example.com",
+      "https://[::1]:8080/",
+      "https://例え.テスト/資料",
+      "https://example.com/#@username",
+      "https://example.com/?user=name@example.com",
+      "https://%65xample.com/",
+      "https://example.com:00000080/",
+    ]) {
+      const candidate = documentWithScene(nodeChange({ href }, linkIndex));
+      expect(PresentationContentSchema.safeParse(candidate).success).toBe(true);
+      expect(await valid(candidate, 11, true)).toBe(true);
+      await packPracticeScoped(owner.workspaceId, (client) =>
+        client.query("UPDATE presentations SET draft=$1::jsonb WHERE id=$2", [
+          JSON.stringify(candidate),
+          presentation.id,
+        ]),
+      );
+    }
+    for (const [index, field, maximum] of [
+      [revealIndex, "label", 120],
+      [revealIndex, "body", 4000],
+    ] as const) {
+      for (const [count, expected] of [
+        [maximum, true],
+        [maximum + 1, false],
+      ] as const) {
+        const candidate = documentWithScene(nodeChange({ [field]: "😀".repeat(count) }, index));
+        expect(PresentationContentSchema.safeParse(candidate).success).toBe(expected);
+        expect(await valid(candidate, 11, true)).toBe(expected);
+      }
+    }
+    const invalid = documentWithScene(nodeChange({ body: "" }));
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "INSERT INTO presentation_versions(id,workspace_id,presentation_id,version,content,content_schema_version,content_hash,source_draft_revision,published_at) VALUES($1,$2,$3,1,$4::jsonb,11,$5,0,$6)",
+          [
+            randomUUID(),
+            owner.workspaceId,
+            presentation.id,
+            JSON.stringify(invalid),
+            "a".repeat(64),
+            now,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const unsafe = documentWithScene(nodeChange({ scope: "session" }));
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "INSERT INTO presentation_draft_history(id,workspace_id,presentation_id,revision,draft,draft_schema_version,saved_by,created_at) VALUES($1,$2,$3,1,$4::jsonb,11,$5,$6)",
+          [
+            randomUUID(),
+            owner.workspaceId,
+            presentation.id,
+            JSON.stringify(unsafe),
+            owner.userId,
+            now,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    // Use a real parent/version and bypass the repository parser to exercise the snapshot trigger.
+    const published = await createPublishedPresentationFixture(owner, "Raw interaction snapshot");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    const session = await sessions.createSession({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      title: draft.title,
+      content: PresentationContentSchema.parse(draft),
+      code: String(randomInt(1000000, 10000000)),
+      status: "active",
+      phase: "content",
+      currentBlockIndex: 0,
+      revision: 0,
+      createdBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+      liveExpiresAt: new Date(now.getTime() + 3600000),
+      retentionExpiresAt: new Date(now.getTime() + 86400000),
+    });
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "UPDATE presentation_live_sessions SET content_snapshot=$1::jsonb WHERE id=$2",
+          [JSON.stringify(invalid), session.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    expect((await sessions.getSessionById(session.id))?.content).toEqual(draft);
+    expect(
+      await presentations.listPresentationHistory(owner.workspaceId, presentation.id),
+    ).toHaveLength(1);
+  });
+
   it("retains v8 groups, rotation and inline data with flat SQL media retention through retries and history", async () => {
     const owner = await creator("presentation-composition-scene");
     const other = await creator("presentation-composition-scene-other");
@@ -4545,7 +5294,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(await valid({ ...document, schemaVersion: 8 })).toBe(false);
     expect(await valid(document, 8)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 10)).toBe(true);
-    expect(await valid({ ...document, schemaVersion: 11 }, 11)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 11 }, 11)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 12 }, 12)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
     expect(await valid(document, 10)).toBe(false);
     const uppercase = {

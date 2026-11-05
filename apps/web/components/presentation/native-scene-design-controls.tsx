@@ -43,7 +43,7 @@ export function NativeSceneDesignControls({
   function update(next: PresentationSceneDesign) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...scene,
-      schemaVersion: scene.schemaVersion === 4 ? 4 : 3,
+      schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : 3,
       design: next,
     });
     if (!result.success) {
@@ -289,7 +289,7 @@ export function NativeSceneImageDesignControls({
   function update(next: typeof node, historyField?: string) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...updateNativeNode(scene, node.id, () => next),
-      schemaVersion: scene.schemaVersion === 4 ? 4 : 3,
+      schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : 3,
     });
     if (!result.success) {
       setFailure({

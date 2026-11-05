@@ -15,6 +15,8 @@ import {
 import { clientUuid } from "../../lib/uuid";
 import {
   boundNativeSceneFrame,
+  createNativeLinkNode,
+  createNativeRevealNode,
   nativeNodeLabel,
   reorderNativeNode,
   updateNativeNode,
@@ -25,6 +27,7 @@ import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneCompositionControls } from "./native-scene-composition-controls";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
 import { NativeSceneDataEditor } from "./native-scene-data-editor";
+import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import { createNativeChartNode, createNativeTableNode } from "../../lib/presentation-native-data";
 import {
   NativeSceneArrangementControls,
@@ -137,9 +140,15 @@ export function NativeSceneEditor({
   }
   function add(node: PresentationSceneNode) {
     if (!canAdd) return;
+    const minimumVersion =
+      node.type === "reveal" || node.type === "link"
+        ? 5
+        : node.type === "table" || node.type === "chart"
+          ? 4
+          : 1;
     const added = onChange({
       ...scene,
-      schemaVersion: node.type === "table" || node.type === "chart" ? 4 : scene.schemaVersion,
+      schemaVersion: scene.schemaVersion >= minimumVersion ? scene.schemaVersion : minimumVersion,
       nodes: [...scene.nodes, node],
       readingOrder: [...scene.readingOrder, node.id],
     });
@@ -174,6 +183,22 @@ export function NativeSceneEditor({
           onChange={onChange}
           onApplyDesignToDeck={onApplyDesignToDeck}
         />
+        <fieldset className={styles.designControls}>
+          <legend>Audience interactions</legend>
+          <div className={styles.actions}>
+            <button type="button" disabled={!canAdd} onClick={() => add(createNativeRevealNode())}>
+              Add reveal panel
+            </button>
+            <button type="button" disabled={!canAdd} onClick={() => add(createNativeLinkNode())}>
+              Add link
+            </button>
+          </div>
+          <p className={styles.help}>
+            Each viewer can show and hide a reveal panel for themselves. This does not broadcast
+            choices or record assessment answers. Revealed content is audience content; keep
+            confidential notes in speaker notes.
+          </p>
+        </fieldset>
         <fieldset className={styles.designControls}>
           <legend>Tables and charts</legend>
           <div className={styles.actions}>
@@ -390,6 +415,11 @@ export function NativeSceneEditor({
           }}
         >
           <legend>{multiple ? "Last selected object" : "Selected object"}</legend>
+          <NativeSceneInteractionEditor
+            scene={scene}
+            node={selected.type === "reveal" || selected.type === "link" ? selected : null}
+            onChange={onChange}
+          />
           {selected.type === "text" && selected.richText ? (
             <NativeRichTextEditor
               key={selected.id}

@@ -305,6 +305,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   ) : (
                     <PresentationDeliveryBlock
                       block={snapshot.currentBlock}
+                      interactionSourceKey={JSON.stringify([id, token, reconnecting])}
                       revealedAnswer={snapshot.revealedAnswer}
                       renderMedia={(mediaId, altText) => (
                         <StageMedia

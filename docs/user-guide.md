@@ -586,6 +586,25 @@ facilitation timeline. It does not assign quiz standings or learning outcomes to
 Ordinary content slides retain the existing text/image layout tools. Native slides add independently
 positioned text, images, labeled shapes and connectors in the same deck.
 
+### Add reveal panels and safe links
+
+On a native slide, choose **Add reveal panel** or **Add link**. Give each control a short,
+descriptive label. For a panel, enter **Revealed audience content**; for a link, enter a complete
+HTTP or HTTPS address without embedded credentials. An invalid address stays in the editor with
+a correction message until it can be saved safely. Complete labels, content and links before
+publishing. Position, duplicate, group and reorder these objects using the ordinary native tools.
+
+In Preview or live delivery, activate a panel to show or hide its content **on this screen**.
+Participants and the presenter operate their own panels independently; opening one does not
+broadcast a reveal, submit an answer, change scores or call an AI provider. Panel text is audience
+content, so put confidential facilitator cues in speaker notes. Use activity controls when you
+want the host to reveal an assessment answer to the room.
+
+Use **Show accessible outline** for a readable layout in the slide's semantic order; the same
+panels and links work there. Buttons support touch, Enter and Space, and links announce that they
+open a new tab. Editing previews do not navigate. Page reloads or a new slide/source begin with
+panels collapsed. Hotspots, pop-up dialogs and branching are not part of this basic release.
+
 ### Import a PDF or a set of slide images
 
 In the Builder, choose **Import visual slides**. Export PowerPoint, Google Slides or Canva slides

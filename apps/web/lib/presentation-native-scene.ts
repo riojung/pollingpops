@@ -67,7 +67,30 @@ export function nativeNodeLabel(node: PresentationSceneNode): string {
   if (node.type === "shape") return node.label.trim() || `${node.shape.replaceAll("_", " ")} shape`;
   if (node.type === "table") return node.caption.trim() || "Data table";
   if (node.type === "chart") return node.title.trim() || `${node.chartType} chart`;
+  if (node.type === "reveal") return node.label.trim() || "Reveal panel";
+  if (node.type === "link") return node.label.trim() || "External link";
   return node.label.trim() || "Connection";
+}
+
+export function createNativeRevealNode(): Extract<PresentationSceneNode, { type: "reveal" }> {
+  return {
+    id: clientUuid(),
+    type: "reveal",
+    scope: "local",
+    label: "",
+    body: "",
+    frame: { x: 8, y: 35, width: 50, height: 30 },
+  };
+}
+
+export function createNativeLinkNode(): Extract<PresentationSceneNode, { type: "link" }> {
+  return {
+    id: clientUuid(),
+    type: "link",
+    label: "",
+    href: "",
+    frame: { x: 62, y: 35, width: 28, height: 14 },
+  };
 }
 
 export function updateNativeNode(

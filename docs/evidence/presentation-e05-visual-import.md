@@ -2,8 +2,9 @@
 
 Implementation branch: `codex/presentation-e05-visual-import`, based on E04 commit
 `9482d7c0be357d521c715ed994412e751bb0f7b2` ([PR #196](https://github.com/riojung/pollingpops/pull/196)).
-E05's PDF/image import software scope is complete and prepared for pull request review. This
-increment remains undeployed; the executed checks and remaining acceptance boundaries follow.
+E05's PDF/image import software scope is complete and merged in
+[PR #197](https://github.com/riojung/pollingpops/pull/197). This increment remains undeployed;
+the executed checks and remaining acceptance boundaries follow.
 
 ## Behavior
 

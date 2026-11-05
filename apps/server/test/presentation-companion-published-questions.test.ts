@@ -29,6 +29,7 @@ import {
 import { PresentationReportWorker } from "../src/presentation-report-worker.js";
 import { PresentationSessionService } from "../src/presentation-session-service.js";
 import { StorageService } from "../src/storage.js";
+import { interactionSceneBlock } from "./support/presentation-native-scene.js";
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -112,7 +113,11 @@ function preparedContent(linkedPurpose?: "diagnostic" | "practice") {
   });
 }
 async function fixture(
-  options: { timeMode?: "timed" | "flex"; linkedPurpose?: "diagnostic" | "practice" } = {},
+  options: {
+    timeMode?: "timed" | "flex";
+    linkedPurpose?: "diagnostic" | "practice";
+    interactions?: boolean;
+  } = {},
 ) {
   const workspaceId = randomUUID(),
     userId = randomUUID();
@@ -139,8 +144,15 @@ async function fixture(
   const presentations = createPresentationRepository(repository),
     service = built.presentationService,
     sessions = built.presentationSessions;
-  const content = preparedContent(options.linkedPurpose),
-    draft = PresentationDraftSchema.parse(content),
+  const prepared = preparedContent(options.linkedPurpose);
+  const content = options.interactions
+    ? PresentationContentSchema.parse({
+        ...prepared,
+        schemaVersion: 11,
+        blocks: [interactionSceneBlock([], "Prepared slide"), ...prepared.blocks.slice(1)],
+      })
+    : prepared;
+  const draft = PresentationDraftSchema.parse(content),
     now = new Date();
   const presentation = await presentations.createPresentation({
     id: randomUUID(),
@@ -150,7 +162,7 @@ async function fixture(
     status: "draft",
     draft,
     draftRevision: 0,
-    draftSchemaVersion: 2,
+    draftSchemaVersion: draft.schemaVersion,
     currentVersionId: null,
     folderId: null,
     publishedDraftRevision: null,
@@ -315,163 +327,166 @@ function expectSafe(value: unknown) {
     expect(text).not.toContain(`"${field}"`);
 }
 describe("Companion standalone published Round questions", () => {
-  it("catalogs supported opinion formats and inserts them at v9/v10 with unchanged source and phase fences", async () => {
-    const f = await fixture();
-    expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).not.toHaveProperty(
-      "textModerationAvailable",
-    );
-    const question = sourceQuestion("Multiple opinion priorities");
-    const source = await f.publishRound([
-      {
-        ...question,
-        type: "poll",
-        purpose: "opinion",
-        basePoints: 0,
-        conceptKeys: [],
-        explanation: "",
-        maxSelections: 2,
-        choices: question.choices.map(({ id, label }) => ({ id, label, isCorrect: false })),
-      },
-      {
-        ...question,
-        id: randomUUID(),
-        type: "ranking",
-        prompt: "Ordered opinion priorities",
-        purpose: "opinion",
-        basePoints: 0,
-        conceptKeys: [],
-        explanation: "",
-        rankCount: 2,
-        choices: [
-          ...question.choices.map(({ label }) => ({
-            id: randomUUID(),
-            label,
-            isCorrect: false,
-          })),
-          { id: randomUUID(), label: "Option C", isCorrect: false },
-        ],
-      },
-      ...(["open_text", "word_cloud"] as const).map((type) => ({
-        id: randomUUID(),
-        type,
-        prompt: `Moderated ${type} opinion`,
-        purpose: "opinion" as const,
-        confidence: "off" as const,
-        delivery: "main" as const,
-        linkedRecheckQuestionId: null,
-        timeLimitSeconds: question.timeLimitSeconds,
-        basePoints: 0,
-        conceptKeys: [],
-        explanation: "",
-        mediaId: null,
-        mediaAlt: null,
-      })),
-    ]);
-    const response = await f.app.inject({
-      method: "GET",
-      url: `/v1/presentation-sessions/${f.sessionId}/companion-published-questions`,
-      headers: { authorization: `Bearer ${f.pass.companionToken}` },
-    });
-    expect(response.statusCode).toBe(200);
-    expectSafe(response.json());
-    expect(JSON.stringify(response.json())).not.toContain('"choices"');
-    const catalog = response
-      .json<{ questions: Array<PresentationPublishedQuestionSelection & { type: string }> }>()
-      .questions.filter((entry) => entry.sourceQuizVersionId === source.version.id);
-    expect(catalog).toHaveLength(4);
-    expect(catalog.map(({ type }) => type).sort()).toEqual([
-      "open_text",
-      "poll",
-      "ranking",
-      "word_cloud",
-    ]);
-    const selection = (index: number): PresentationPublishedQuestionSelection => ({
-      sourceQuizVersionId: source.version.id,
-      sourceQuestionId: source.version.content.questions[index]!.id,
-      contentHash: source.version.contentHash,
-    });
-    expect(catalog.map(({ sourceQuestionId }) => sourceQuestionId).sort()).toEqual(
-      [0, 1, 2, 3].map((index) => selection(index).sourceQuestionId).sort(),
-    );
-    const command = f.command(0, selection(0));
-    const opened = await f.service.companionCommand(command);
-    expectSafe(opened);
-    expect(opened).toMatchObject({
-      phase: "question_open",
-      revision: 1,
-      currentBlock: {
-        kind: "question",
-        question: { type: "poll", maxSelections: 2, confidence: "off", basePoints: 0 },
-      },
-    });
-    const accepted = await f.current(),
-      timeline = await f.sessions.listTimeline(f.sessionId);
-    expect(accepted.content.schemaVersion).toBe(9);
-    await expect(f.service.companionCommand(command)).resolves.toMatchObject({
-      revision: 1,
-      currentBlock: { id: opened.currentBlock!.id },
-    });
-    await expect(
-      f.service.companionCommand({ ...command, publishedQuestion: selection(1) }),
-    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    expect(await f.current()).toEqual(accepted);
-    expect(await f.sessions.listTimeline(f.sessionId)).toEqual(timeline);
-    await expectNoMutation(f, f.command(1, selection(1)), "PHASE_CLOSED");
-    await f.advance();
-    const ranked = await f.service.companionCommand(f.command(2, selection(1)));
-    expectSafe(ranked);
-    expect(ranked).toMatchObject({
-      phase: "question_open",
-      revision: 3,
-      currentBlock: {
-        kind: "question",
-        question: { type: "ranking", rankCount: 2, confidence: "off", basePoints: 0 },
-      },
-    });
-    expect((await f.current()).content).toMatchObject({ schemaVersion: 9 });
-    expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 2);
-    expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).not.toHaveProperty(
-      "textModerationAvailable",
-    );
-    for (const [index, type] of [
-      [2, "open_text"],
-      [3, "word_cloud"],
-    ] as const) {
-      await f.advance();
-      const revision = (await f.current()).revision;
-      const textCommand = f.command(revision, selection(index));
-      const text = await f.service.companionCommand(textCommand);
-      expectSafe(text);
-      expect(text).toMatchObject({
+  it.each([false, true])(
+    "catalogs and inserts opinion formats with stable version floors (interactions: %s)",
+    async (interactions) => {
+      const f = await fixture({ interactions });
+      expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).not.toHaveProperty(
+        "textModerationAvailable",
+      );
+      const question = sourceQuestion("Multiple opinion priorities");
+      const source = await f.publishRound([
+        {
+          ...question,
+          type: "poll",
+          purpose: "opinion",
+          basePoints: 0,
+          conceptKeys: [],
+          explanation: "",
+          maxSelections: 2,
+          choices: question.choices.map(({ id, label }) => ({ id, label, isCorrect: false })),
+        },
+        {
+          ...question,
+          id: randomUUID(),
+          type: "ranking",
+          prompt: "Ordered opinion priorities",
+          purpose: "opinion",
+          basePoints: 0,
+          conceptKeys: [],
+          explanation: "",
+          rankCount: 2,
+          choices: [
+            ...question.choices.map(({ label }) => ({
+              id: randomUUID(),
+              label,
+              isCorrect: false,
+            })),
+            { id: randomUUID(), label: "Option C", isCorrect: false },
+          ],
+        },
+        ...(["open_text", "word_cloud"] as const).map((type) => ({
+          id: randomUUID(),
+          type,
+          prompt: `Moderated ${type} opinion`,
+          purpose: "opinion" as const,
+          confidence: "off" as const,
+          delivery: "main" as const,
+          linkedRecheckQuestionId: null,
+          timeLimitSeconds: question.timeLimitSeconds,
+          basePoints: 0,
+          conceptKeys: [],
+          explanation: "",
+          mediaId: null,
+          mediaAlt: null,
+        })),
+      ]);
+      const response = await f.app.inject({
+        method: "GET",
+        url: `/v1/presentation-sessions/${f.sessionId}/companion-published-questions`,
+        headers: { authorization: `Bearer ${f.pass.companionToken}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expectSafe(response.json());
+      expect(JSON.stringify(response.json())).not.toContain('"choices"');
+      const catalog = response
+        .json<{ questions: Array<PresentationPublishedQuestionSelection & { type: string }> }>()
+        .questions.filter((entry) => entry.sourceQuizVersionId === source.version.id);
+      expect(catalog).toHaveLength(4);
+      expect(catalog.map(({ type }) => type).sort()).toEqual([
+        "open_text",
+        "poll",
+        "ranking",
+        "word_cloud",
+      ]);
+      const selection = (index: number): PresentationPublishedQuestionSelection => ({
+        sourceQuizVersionId: source.version.id,
+        sourceQuestionId: source.version.content.questions[index]!.id,
+        contentHash: source.version.contentHash,
+      });
+      expect(catalog.map(({ sourceQuestionId }) => sourceQuestionId).sort()).toEqual(
+        [0, 1, 2, 3].map((index) => selection(index).sourceQuestionId).sort(),
+      );
+      const command = f.command(0, selection(0));
+      const opened = await f.service.companionCommand(command);
+      expectSafe(opened);
+      expect(opened).toMatchObject({
         phase: "question_open",
-        revision: revision + 1,
-        currentBlock: { kind: "question", question: { type, confidence: "off", basePoints: 0 } },
+        revision: 1,
+        currentBlock: {
+          kind: "question",
+          question: { type: "poll", maxSelections: 2, confidence: "off", basePoints: 0 },
+        },
       });
-      expect((await f.current()).content.schemaVersion).toBe(10);
-      expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).toHaveProperty(
-        "textModerationAvailable",
-        true,
-      );
-      expect(await f.restartService().getHostSnapshot(f.workspaceId, f.sessionId)).toHaveProperty(
-        "textModerationAvailable",
-        true,
-      );
-      expect(text).not.toHaveProperty("textModerationAvailable");
-      await expect(f.service.companionCommand(textCommand)).resolves.toMatchObject({
-        revision: revision + 1,
-        currentBlock: { id: text.currentBlock!.id },
+      const accepted = await f.current(),
+        timeline = await f.sessions.listTimeline(f.sessionId);
+      expect(accepted.content.schemaVersion).toBe(interactions ? 11 : 9);
+      await expect(f.service.companionCommand(command)).resolves.toMatchObject({
+        revision: 1,
+        currentBlock: { id: opened.currentBlock!.id },
       });
-      await expectNoMutation(f, f.command(revision + 1, selection(index)), "PHASE_CLOSED");
-    }
-    expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 4);
-    expect((await f.repository.getQuizVersion(f.workspaceId, source.version.id))?.content).toEqual(
-      source.version.content,
-    );
-    expect(
-      (await f.presentations.getPresentationVersion(f.workspaceId, f.presentationVersion.id))
-        ?.content,
-    ).toEqual(f.content);
-  });
+      await expect(
+        f.service.companionCommand({ ...command, publishedQuestion: selection(1) }),
+      ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+      expect(await f.current()).toEqual(accepted);
+      expect(await f.sessions.listTimeline(f.sessionId)).toEqual(timeline);
+      await expectNoMutation(f, f.command(1, selection(1)), "PHASE_CLOSED");
+      await f.advance();
+      const ranked = await f.service.companionCommand(f.command(2, selection(1)));
+      expectSafe(ranked);
+      expect(ranked).toMatchObject({
+        phase: "question_open",
+        revision: 3,
+        currentBlock: {
+          kind: "question",
+          question: { type: "ranking", rankCount: 2, confidence: "off", basePoints: 0 },
+        },
+      });
+      expect((await f.current()).content).toMatchObject({ schemaVersion: interactions ? 11 : 9 });
+      expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 2);
+      expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).not.toHaveProperty(
+        "textModerationAvailable",
+      );
+      for (const [index, type] of [
+        [2, "open_text"],
+        [3, "word_cloud"],
+      ] as const) {
+        await f.advance();
+        const revision = (await f.current()).revision;
+        const textCommand = f.command(revision, selection(index));
+        const text = await f.service.companionCommand(textCommand);
+        expectSafe(text);
+        expect(text).toMatchObject({
+          phase: "question_open",
+          revision: revision + 1,
+          currentBlock: { kind: "question", question: { type, confidence: "off", basePoints: 0 } },
+        });
+        expect((await f.current()).content.schemaVersion).toBe(interactions ? 11 : 10);
+        expect(await f.service.getHostSnapshot(f.workspaceId, f.sessionId)).toHaveProperty(
+          "textModerationAvailable",
+          true,
+        );
+        expect(await f.restartService().getHostSnapshot(f.workspaceId, f.sessionId)).toHaveProperty(
+          "textModerationAvailable",
+          true,
+        );
+        expect(text).not.toHaveProperty("textModerationAvailable");
+        await expect(f.service.companionCommand(textCommand)).resolves.toMatchObject({
+          revision: revision + 1,
+          currentBlock: { id: text.currentBlock!.id },
+        });
+        await expectNoMutation(f, f.command(revision + 1, selection(index)), "PHASE_CLOSED");
+      }
+      expect((await f.current()).content.blocks).toHaveLength(f.content.blocks.length + 4);
+      expect(
+        (await f.repository.getQuizVersion(f.workspaceId, source.version.id))?.content,
+      ).toEqual(source.version.content);
+      expect(
+        (await f.presentations.getPresentationVersion(f.workspaceId, f.presentationVersion.id))
+          ?.content,
+      ).toEqual(f.content);
+    },
+  );
 
   it.each(["timed", "flex"] as const)(
     "freezes one standalone source with %s timing and ordinary scored report evidence",

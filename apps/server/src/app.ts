@@ -1,3 +1,4 @@
+import { registerPresentationInsightsRoutes } from "./presentation-insights-routes.js";
 import type { Plan } from "@openround/contracts";
 import type { Socket } from "node:net";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
@@ -635,6 +636,15 @@ export async function buildApp(
     config,
     consumeAdmission: cache.consumeRateLimit.bind(cache),
     featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationInsightsRoutes(app, {
+    repository,
+    presentations,
+    sessions: presentationSessions,
+    qna: scopedQna,
+    auth,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    metrics,
   });
   await registerPresentationSessionRoutes(app, {
     repository,

@@ -395,6 +395,26 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly presentationInsightsReads = new Counter({
+    name: "openround_presentation_insights_reads_total",
+    help: "Creator insights reads by bounded outcome; no principal labels",
+    labelNames: ["outcome"] as const,
+    registers: [this.registry],
+  });
+  private readonly presentationInsightsDuration = new Histogram({
+    name: "openround_presentation_insights_read_duration_seconds",
+    help: "Time to authorize, derive and fence creator insights",
+    labelNames: ["outcome"] as const,
+    buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+    registers: [this.registry],
+  });
+  private readonly presentationInsightsBytes = new Histogram({
+    name: "openround_presentation_insights_output_bytes",
+    help: "Successful insights response bytes",
+    buckets: [1024, 4096, 16384, 65536, 262144, 1048576],
+    registers: [this.registry],
+  });
+
   private readonly presentationAdmissions = new Counter({
     name: "openround_presentation_admission_attempts_total",
     help: "Presentation participant admission attempts by bounded transport and outcome",
@@ -633,6 +653,28 @@ export class MetricsService {
             : "none",
       });
     }
+  }
+
+  observePresentationInsights(
+    outcome: "ready" | "pending" | "failed" | "denied" | "rate_limited" | "unavailable" | "error",
+    seconds: number,
+    bytes: number,
+  ) {
+    const bounded = [
+      "ready",
+      "pending",
+      "failed",
+      "denied",
+      "rate_limited",
+      "unavailable",
+      "error",
+    ].includes(outcome)
+      ? outcome
+      : "error";
+    this.presentationInsightsReads.inc({ outcome: bounded });
+    this.presentationInsightsDuration.observe({ outcome: bounded }, Math.max(0, seconds));
+    if (["ready", "pending", "failed"].includes(bounded))
+      this.presentationInsightsBytes.observe(Math.max(0, Math.min(1048576, bytes)));
   }
 
   recordPresentationAdmission(

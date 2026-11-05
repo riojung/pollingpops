@@ -1,3 +1,7 @@
+import type {
+  ScopedQnaInsightsCounts,
+  ScopedQnaInsightsContext,
+} from "./presentation-insights-types.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient, QueryResultRow } from "pg";
 import {
@@ -59,6 +63,9 @@ type Context = { workspaceId: string; scopeId: string; tokenHash: string; now: D
 type PageOptions = { limit: number; cursor?: string };
 type Mutation = { receipt: ScopedQnaReceipt; duplicate: boolean };
 export interface ScopedQnaRepository {
+  /** Creator reporting read; returns public-state counts, never question content or principals. */
+  getInsightsCounts(input: ScopedQnaInsightsContext): Promise<ScopedQnaInsightsCounts | null>;
+  getInsightsSequence(input: ScopedQnaInsightsContext): Promise<number | null>;
   page(input: Context & PageOptions): Promise<ScopedQnaPage>;
   mutate(input: Context & { command: ScopedQnaCommand }): Promise<Mutation>;
 }
@@ -247,6 +254,45 @@ class MemoryScopedQnaRepository implements ScopedQnaRepository, MemoryRepository
       actor,
       settings: this.states.get(input.scopeId)?.settings ?? defaultSettings(segment),
     };
+  }
+  async getInsightsCounts(
+    input: ScopedQnaInsightsContext,
+  ): Promise<ScopedQnaInsightsCounts | null> {
+    const now = input.now ?? new Date();
+    if (await this.repository.workspaceDeletionStarted(input.workspaceId)) return null;
+    const session = this.sessions.getSessionForWorkspaceSync(input.workspaceId, input.scopeId);
+    if (!session || session.retentionExpiresAt <= now) return null;
+    const scope = this.scopes.getSync(input.workspaceId, input.scopeId);
+    const state = this.states.get(input.scopeId);
+    const status = !scope
+      ? "not_enabled"
+      : scope.expiresAt <= now
+        ? "unavailable"
+        : state?.settings.enabled === false
+          ? "not_enabled"
+          : "available";
+    const questions =
+      status === "available"
+        ? [...(state?.questions.values() ?? [])].filter((q) => qnaIsPublic(q.status))
+        : [];
+    return {
+      status,
+      audienceSeq: scope?.audienceSeq ?? null,
+      asOf: now,
+      publicQuestionCount: questions.length,
+      answeredQuestionCount: questions.filter((q) => q.status === "answered").length,
+      unansweredQuestionCount: questions.filter((q) => q.status === "published").length,
+      upvoteCount: questions.reduce((total, q) => total + (state?.votes.get(q.id)?.size ?? 0), 0),
+    };
+  }
+  async getInsightsSequence(input: ScopedQnaInsightsContext) {
+    if (await this.repository.workspaceDeletionStarted(input.workspaceId)) return null;
+    const now = input.now ?? new Date(),
+      session = this.sessions.getSessionForWorkspaceSync(input.workspaceId, input.scopeId),
+      scope = this.scopes.getSync(input.workspaceId, input.scopeId);
+    return session && session.retentionExpiresAt > now && scope && scope.expiresAt > now
+      ? scope.audienceSeq
+      : null;
   }
   async page(input: Context & PageOptions) {
     const after = validatePage(input);
@@ -510,6 +556,61 @@ class PostgresScopedQnaRepository implements ScopedQnaRepository {
     } finally {
       client.release();
     }
+  }
+  private async insightsRead(
+    input: ScopedQnaInsightsContext,
+    counts: boolean,
+  ): Promise<ScopedQnaInsightsCounts | null> {
+    const client = await this.repository.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [input.workspaceId]);
+      const result = await client.query(
+        `SELECT GREATEST($3::timestamptz,clock_timestamp()) AS as_of, scope.audience_seq, scope.expires_at AS scope_expires_at, COALESCE(settings.enabled,true) AS enabled,
+      ${
+        counts
+          ? `(SELECT count(*)::integer FROM scoped_qna_questions q WHERE q.workspace_id=session.workspace_id AND q.scope_id=session.id AND q.status IN ('published','answered')) AS questions,
+      (SELECT count(*)::integer FROM scoped_qna_questions q WHERE q.workspace_id=session.workspace_id AND q.scope_id=session.id AND q.status='answered') AS answered,
+      (SELECT count(*)::integer FROM scoped_qna_votes vote JOIN scoped_qna_questions q ON q.workspace_id=vote.workspace_id AND q.scope_id=vote.scope_id AND q.id=vote.question_id WHERE vote.workspace_id=session.workspace_id AND vote.scope_id=session.id AND q.status IN ('published','answered')) AS votes`
+          : "0 AS questions,0 AS answered,0 AS votes"
+      }
+      FROM presentation_live_sessions session JOIN workspaces workspace ON workspace.id=session.workspace_id LEFT JOIN audience_scopes scope ON scope.workspace_id=session.workspace_id AND scope.id=session.id LEFT JOIN scoped_qna_settings settings ON settings.workspace_id=session.workspace_id AND settings.scope_id=session.id
+      WHERE session.workspace_id=$1 AND session.id=$2 AND session.retention_expires_at>GREATEST($3::timestamptz,clock_timestamp()) AND workspace.deletion_started_at IS NULL`,
+        [input.workspaceId, input.scopeId, input.now ?? new Date()],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      if (!row) return null;
+      const asOf = new Date(row.as_of),
+        available =
+          row.audience_seq != null && new Date(row.scope_expires_at) > asOf && row.enabled;
+      return {
+        status:
+          row.audience_seq == null || !row.enabled
+            ? "not_enabled"
+            : available
+              ? "available"
+              : "unavailable",
+        audienceSeq: row.audience_seq == null ? null : Number(row.audience_seq),
+        asOf,
+        publicQuestionCount: available ? Number(row.questions) : 0,
+        answeredQuestionCount: available ? Number(row.answered) : 0,
+        unansweredQuestionCount: available ? Number(row.questions) - Number(row.answered) : 0,
+        upvoteCount: available ? Number(row.votes) : 0,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  async getInsightsCounts(input: ScopedQnaInsightsContext) {
+    return this.insightsRead(input, true);
+  }
+  async getInsightsSequence(input: ScopedQnaInsightsContext) {
+    const value = await this.insightsRead(input, false);
+    return value && value.status !== "unavailable" ? value.audienceSeq : null;
   }
   async page(input: Context & PageOptions) {
     const after = validatePage(input);

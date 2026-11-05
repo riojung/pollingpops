@@ -1,0 +1,85 @@
+.panel {
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid var(--ui-border);
+  border-radius: 24px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  overflow-wrap: anywhere;
+}
+.panel h2,
+.panel h3 {
+  margin: 0 0 16px;
+  line-height: 1.25;
+}
+.panel section,
+.panel h3 {
+  margin-top: 28px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.panel button {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  font: inherit;
+  cursor: pointer;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 16px;
+}
+.facts div {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ui-surface-soft);
+}
+.facts dt {
+  font-weight: 700;
+}
+.facts dd {
+  margin: 5px 0 0;
+}
+.table {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  min-width: 110px;
+  padding: 10px;
+  border-bottom: 1px solid var(--ui-border);
+  text-align: left;
+  vertical-align: top;
+}
+.table th:first-child {
+  min-width: 180px;
+}
+.notes {
+  margin-top: 24px;
+}
+.notes summary {
+  cursor: pointer;
+  padding-block: 10px;
+  font-weight: 700;
+}
+.notes li {
+  margin-block: 10px;
+}
+@media (max-width: 640px) {
+  .panel {
+    border-radius: 16px;
+  }
+}

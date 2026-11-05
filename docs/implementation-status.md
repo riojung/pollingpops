@@ -8,6 +8,24 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E09 live-session insights November 5, 2026
+
+The source on `codex/presentation-e09-reporting` adds a creator report panel for finished,
+retained Presentation sessions: frozen-version block/section delivery, response coverage,
+opinion distributions, paired recovery and current public Q&A counts. CSV and a self-contained
+readable HTML summary use the same aggregate projection. Response denominators use the original
+reveal roster, with missing legacy history distinguished from zero. Private participant data,
+submitted text, presenter notes and answer keys are excluded; positive activity samples below five stay
+hidden. Existing Report V1–V7 and public AggregateSummary V1 retain their meanings.
+
+This is the selected live-session software scope; private review links remain untracked and
+self-paced assignments/attempts remain planned. Counts-only reads reuse the existing database,
+with bounded inputs/output, read limits and operational metrics. No migration, paid provider,
+new service or model call is added. See the [E09 record](evidence/presentation-e09-session-insights.md)
+for verification: the full repository pipeline, five selected PostgreSQL cases and four production
+browser profiles pass. Deployment/qualification remain separate. The selected software scope is
+implemented and remains undeployed.
+
 ### Presentation E13 static export November 5, 2026
 
 The source on `codex/presentation-e13-static-export` implements the broad-creator static
@@ -21,7 +39,8 @@ there is no new service, dependency, entitlement, stored-content version or migr
 The full repository pipeline, four production-browser workflows and compiled-worker output smoke
 pass; see the [E13 record](evidence/presentation-e13-static-export.md). Browser checks also verified
 accessible landmarks, focus return and dynamic Builder drawer placement after commands wrap at
-320px. The selected static software scope is complete and remains undeployed. Editable PPTX,
+320px. The selected static software scope is complete, merged in
+[PR #200](https://github.com/riojung/pollingpops/pull/200), and remains undeployed. Editable PPTX,
 offline interactive packages and self-paced assignments remain outside this slice.
 
 ### Presentation E06 completion and E08 private sharing November 5, 2026

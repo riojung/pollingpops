@@ -18,6 +18,7 @@ import {
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { SessionSummaryButton } from "../../../../components/session-summary/summary-dialog";
+import { PresentationSessionInsightsPanel } from "../../../../components/presentation-insights/session-insights";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import {
   presentationReportCsv,
@@ -203,6 +204,15 @@ function PresentationReportContent() {
                 </p>
               ) : null}
             </section>
+            {summaryReady ? (
+              <PresentationSessionInsightsPanel
+                source={{
+                  sessionId: report.sessionId,
+                  presentationId: report.presentationId,
+                  presentationVersionId: report.presentationVersionId,
+                }}
+              />
+            ) : null}
             <section
               className={styles.reportGrid}
               aria-label={t("live.presentationReport.blockEvidence")}

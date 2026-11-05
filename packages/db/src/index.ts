@@ -41,3 +41,7 @@ export * from "./presentation-navigation.js";
 export * from "./presentation-shares.js";
 
 export * from "./presentation-interactions.js";
+
+export * from "./presentation-insights-types.js";
+
+export * from "./presentation-insights-opinions.js";

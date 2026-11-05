@@ -1,4 +1,5 @@
 import { expectPresentationTextConformance } from "./support/presentation-text-conformance.js";
+import { expectPresentationVisualImportConformance } from "./support/presentation-visual-import-conformance.js";
 import { expectPresentationSceneConformance } from "./support/presentation-scene-conformance.js";
 import { presentationMediaIds } from "../src/media-references.js";
 import { expectFolderConformance } from "./support/folder-conformance.js";
@@ -66,6 +67,7 @@ import {
   createRecoveryPackRepository,
   createAudienceScopeRepository,
   createScopedQnaRepository,
+  createPresentationVisualImportRepository,
   RecoveryPackMediaValidationError,
   type PresentationSessionCommandInput,
   type PresentationSessionCredentialRecord,
@@ -1414,6 +1416,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 90, name: "presentation_stage_credentials" },
       { version: 91, name: "presentation_opinion_formats" },
       { version: 92, name: "presentation_text_opinions" },
+      { version: 93, name: "presentation_visual_imports" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -1474,6 +1477,191 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(result).not.toBeNull();
     return result!;
   }
+  it("persists visual Presentation imports with fenced assets, erasure and exact retries", async () => {
+    const owner = await creator("visual-import-conformance");
+    await expectPresentationVisualImportConformance(repository, owner.workspaceId, owner.userId);
+  });
+  it("guards raw visual Presentation inputs, manifests, tenant boundaries and admission caps", async () => {
+    const owner = await creator("visual-import-guards");
+    const { presentation, input } = await expectPresentationVisualImportConformance(
+      repository,
+      owner.workspaceId,
+      owner.userId,
+    );
+    const jobs = createPresentationVisualImportRepository(repository),
+      now = new Date();
+    const fresh = { ...input, id: randomUUID(), requestId: randomUUID(), now };
+    await jobs.create(fresh);
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      const reject = async (sql: string, values: unknown[]) => {
+        await client.query("SAVEPOINT visual_guard");
+        await expect(client.query(sql, values)).rejects.toMatchObject({ code: "23514" });
+        await client.query("ROLLBACK TO SAVEPOINT visual_guard");
+      };
+      expect(
+        (
+          await client.query(
+            "SELECT visual_import_utf16_length('') AS empty,visual_import_utf16_length('😀') AS emoji",
+          )
+        ).rows[0],
+      ).toMatchObject({ empty: "0", emoji: "2" });
+      await reject("UPDATE presentation_visual_imports SET source_digest=$2 WHERE id=$1", [
+        fresh.id,
+        "b".repeat(64),
+      ]);
+      await reject("UPDATE presentation_visual_imports SET warnings=$2 WHERE id=$1", [
+        fresh.id,
+        JSON.stringify([""]),
+      ]);
+      await reject("UPDATE presentation_visual_imports SET input_files=$2 WHERE id=$1", [
+        fresh.id,
+        JSON.stringify([
+          {
+            name: "Changed",
+            mimeType: "image/png",
+            base64: Buffer.from("changed source").toString("base64"),
+          },
+        ]),
+      ]);
+      await reject(
+        "UPDATE presentation_visual_imports SET status='ready',input_files=NULL,pages='[]' WHERE id=$1",
+        [fresh.id],
+      );
+      await reject("UPDATE presentation_visual_imports SET status='processing' WHERE id=$1", [
+        fresh.id,
+      ]);
+      await reject("UPDATE presentation_visual_imports SET input_files=NULL WHERE id=$1", [
+        fresh.id,
+      ]);
+      for (const files of [
+        [{ name: "Bad", mimeType: "image/png", base64: "not base64!" }],
+        [{ name: "Bad", base64: "YWJj" }],
+        [{ name: "", mimeType: "image/png", base64: "YWJj" }],
+        [{ name: "Bad", mimeType: "image/png", base64: "YWJj", hiddenOriginal: "not allowed" }],
+        [
+          { name: "PDF", mimeType: "application/pdf", base64: "YWJj" },
+          { name: "Image", mimeType: "image/png", base64: "YWJj" },
+        ],
+      ]) {
+        await reject(
+          `INSERT INTO presentation_visual_imports(id,workspace_id,presentation_id,created_by,request_id,request_hash,source_digest,source_type,source_name,file_count,input_files,status,attempts,available_at,created_at,updated_at,expires_at)
+          VALUES($1,$2,$3,$4,$5,$6,$6,'image_set','Bad source',$7,$8,'pending',0,$9,$9,$9,$10)`,
+          [
+            randomUUID(),
+            owner.workspaceId,
+            presentation.id,
+            owner.userId,
+            randomUUID(),
+            "a".repeat(64),
+            files.length,
+            JSON.stringify(files),
+            now,
+            new Date(now.getTime() + 60_000),
+          ],
+        );
+      }
+      await client.query("COMMIT");
+      const claim = (await jobs.claim(now, new Date(now.getTime() + 60_000)))!;
+      expect(claim.id).toBe(fresh.id);
+      const asset = {
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        objectKey: "",
+        mimeType: "image/png" as const,
+        sizeBytes: 20,
+        scanStatus: "pending" as const,
+        altText: "Converted page",
+        createdAt: now,
+      };
+      asset.objectKey = `quarantine/${owner.workspaceId}/${asset.id}.png`;
+      const fence = { jobId: claim.id, attempt: claim.attempt, leaseToken: claim.leaseToken, now };
+      await jobs.reservePageAssets({ ...fence, assets: [asset] });
+      const finalizationToken = randomUUID();
+      await repository.claimMediaAssetFinalization(
+        owner.workspaceId,
+        asset.id,
+        finalizationToken,
+        now,
+      );
+      await repository.updateMediaAsset(owner.workspaceId, asset.id, {
+        scanStatus: "clean",
+        objectKey: `media/${owner.workspaceId}/${asset.id}/${finalizationToken}.png`,
+        finalizationToken,
+        finalizedAt: now,
+      });
+      const page = {
+        pageNumber: 1,
+        mediaId: asset.id,
+        width: 100,
+        height: 100,
+        extractedText: "Author review suggestion",
+        warnings: [],
+      };
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      for (const bad of [
+        { ...page, width: 1601 },
+        { ...page, width: 1600, height: 1600 },
+        { ...page, extractedText: "😀".repeat(3001) },
+        { ...page, warnings: [{}] },
+        { ...page, hiddenOriginal: "not allowed" },
+        { ...page, mediaId: randomUUID() },
+      ])
+        await reject(
+          "UPDATE presentation_visual_imports SET status='ready',input_files=NULL,lease_token=NULL,lease_until=NULL,pages=$2 WHERE id=$1",
+          [fresh.id, JSON.stringify([bad])],
+        );
+      await client.query("COMMIT");
+      expect(await jobs.complete({ ...fence, pages: [page], warnings: [] })).toBe(true);
+      for (let index = 0; index < 3; index++)
+        await jobs.create({ ...fresh, id: randomUUID(), requestId: randomUUID() });
+      await expect(
+        jobs.create({ ...fresh, id: randomUUID(), requestId: randomUUID() }),
+      ).rejects.toMatchObject({ code: "LIMIT_REACHED" });
+      const other = await creator("visual-import-other");
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [other.workspaceId]);
+      expect(
+        (await client.query("SELECT id FROM presentation_visual_imports WHERE id=$1", [fresh.id]))
+          .rows,
+      ).toEqual([]);
+      await client.query("COMMIT");
+      await jobs.cancel(owner.workspaceId, presentation.id, fresh.id);
+      const presentations = new PostgresPresentationRepository(repository);
+      const current = (await presentations.getPresentation(owner.workspaceId, presentation.id))!;
+      await expect(
+        presentations.updatePresentationDraft({
+          workspaceId: owner.workspaceId,
+          presentationId: presentation.id,
+          draft: current.draft,
+          expectedRevision: current.draftRevision,
+          mutationId: randomUUID(),
+          editorId: owner.userId,
+          draftHash: "f".repeat(64),
+          visualImportId: fresh.id,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      expect(
+        (
+          await client.query(
+            "SELECT status,input_files,lease_token FROM presentation_visual_imports WHERE id=$1",
+            [fresh.id],
+          )
+        ).rows[0],
+      ).toMatchObject({ status: "canceled", input_files: null, lease_token: null });
+      await client.query("COMMIT");
+      await repository.deleteAccount(owner.userId);
+      expect(await jobs.get(owner.workspaceId, presentation.id, fresh.id)).toBeNull();
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      client.release();
+    }
+  });
   it("persists Survey Library metadata and feedback under restricted PostgreSQL permissions", async () => {
     const actor = await creator("survey-library-feedback");
     await expectSurveyLibraryConformance(repository, actor);

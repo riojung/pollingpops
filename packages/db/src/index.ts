@@ -33,3 +33,5 @@ export * from "./canvas-boards.js";
 export * from "./canvas-artifact-links.js";
 
 export * from "./presentation-text-types.js";
+export * from "./presentation-visual-import-types.js";
+export * from "./presentation-visual-imports.js";

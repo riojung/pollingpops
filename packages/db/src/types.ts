@@ -1043,6 +1043,7 @@ export type MediaReferenceOwnerType =
   | "presentation_draft"
   | "presentation_version"
   | "presentation_history"
+  | "presentation_visual_import"
   | "recovery_pack_draft"
   | "recovery_pack_version"
   | "recovery_pack_history"

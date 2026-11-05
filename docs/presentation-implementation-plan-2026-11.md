@@ -289,7 +289,7 @@ report/CSV evidence. Together the two families complete E04's software scope. It
 [verification record](evidence/presentation-e04-moderated-text.md) records the repository check,
 sixteen real PostgreSQL cases and 48 unique browser cases across documented slices. Software
 completion does not establish manual/device, hosted-rollout, cost-target or competitive parity
-acceptance. The second-family changes are prepared for pull-request review; hosted rollout
+acceptance. The second-family changes are merged in [PR #196](https://github.com/riojung/pollingpops/pull/196); hosted rollout
 remains pending.
 
 Acceptance per format: author, publish, open, submit, acknowledge, reconnect, close, reveal,
@@ -321,6 +321,17 @@ Reuse the current quarantine, scan, jobs, private-media and publication lifecycl
 PDF facilities before adding dependencies. Keep original input only under an explicit retention
 policy. E05 plus the static part of E13 share the 3–5-week portability milestone. PPTX visual
 conversion and editable import are later, separately measured scopes.
+
+The software increment on `codex/presentation-e05-visual-import` implements separate PDF/image
+conversion jobs, owned private page assets, preview/loss disclosure, ordered page selection and
+author-reviewed visual/reading slide pairs. Existing native content fields preserve historical
+document semantics; migration 093 adds job/usage lifecycle records. Conversion requires the
+Node 26 runtime's network permission denial and the existing scanned-media facilities, without
+an AI provider. E05's PDF/image import software scope is complete: the repository check,
+restricted PostgreSQL, four production browser profiles and compiled renderer smoke pass in the
+[E05 evidence record](evidence/presentation-e05-visual-import.md). This increment is prepared for
+pull request review and remains undeployed; E13 export and the recorded manual/hosted/cost
+acceptance gates remain separate.
 
 ### E06 Add accessible interactions and branching
 

@@ -220,6 +220,32 @@ export class StorageService {
     return { scanStatus: "clean" as const, objectKey: promotedObjectKey };
   }
 
+  /** Only the trusted import worker writes generated PNGs, after reserving their durable rows. */
+  async writeVisualImportPage(asset: MediaAssetRecord, content: Uint8Array) {
+    if (!this.internalClient || !this.mediaUploadsEnabled)
+      throw new Error("Media uploads require object storage and malware scanning");
+    if (
+      asset.scanStatus !== "pending" ||
+      asset.mimeType !== "image/png" ||
+      asset.objectKey !== quarantineObjectKey(asset) ||
+      content.byteLength !== asset.sizeBytes ||
+      content.byteLength > MAX_IMAGE_BYTES ||
+      !validSignature(content, "image/png")
+    )
+      throw new Error("Invalid reserved visual page");
+    await this.internalClient.send(
+      new PutObjectCommand({
+        Bucket: this.config.S3_BUCKET,
+        Key: asset.objectKey,
+        Body: content,
+        ContentType: asset.mimeType,
+        ContentLength: content.byteLength,
+        Metadata: { mediaid: asset.id, scanstatus: "pending" },
+      }),
+      { abortSignal: AbortSignal.timeout(STORAGE_OPERATION_TIMEOUT_MS) },
+    );
+  }
+
   async deleteFinalizationCandidate(
     asset: MediaAssetRecord,
     finalizationToken: string,

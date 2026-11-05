@@ -17,7 +17,7 @@ RUN pnpm --filter @openround/server deploy --prod --legacy /prod/server
 ARG OPENROUND_BUILD_ID=unversioned
 RUN printf '%s\n' "$OPENROUND_BUILD_ID" > /app/BUILD_ID
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 # Runtime entry points use Node directly; package managers are build-only tools.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \

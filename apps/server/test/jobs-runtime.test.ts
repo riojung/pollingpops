@@ -3,6 +3,7 @@ import { AuthoringWorker } from "../src/authoring-worker.js";
 import { ConfigSchema } from "../src/config.js";
 import { createJobsRuntime } from "../src/jobs-runtime.js";
 import { PresentationReportWorker } from "../src/presentation-report-worker.js";
+import { PresentationVisualImportWorker } from "../src/presentation-visual-import-worker.js";
 import { ReportWorker } from "../src/report-worker.js";
 import { RetentionService } from "../src/retention.js";
 
@@ -26,6 +27,7 @@ describe("dedicated jobs runtime worker controls", () => {
     const reports = vi.spyOn(ReportWorker.prototype, "runUntilIdle");
     const presentationReports = vi.spyOn(PresentationReportWorker.prototype, "runUntilIdle");
     const authoring = vi.spyOn(AuthoringWorker.prototype, "runUntilIdle");
+    const visualImports = vi.spyOn(PresentationVisualImportWorker.prototype, "runUntilIdle");
     const retention = vi.spyOn(RetentionService.prototype, "run");
     const onError = vi.fn();
     const runtime = await createJobsRuntime(config, onError);
@@ -36,13 +38,13 @@ describe("dedicated jobs runtime worker controls", () => {
 
       runtime.runner.start();
       await vi.advanceTimersByTimeAsync(5 * 60_000);
-      for (const worker of [reports, presentationReports, authoring, retention]) {
+      for (const worker of [reports, presentationReports, authoring, visualImports, retention]) {
         expect(worker).not.toHaveBeenCalled();
       }
 
       for (const id of workerIds) await runtime.platform.setWorkerControl(id, false);
       await vi.advanceTimersByTimeAsync(5 * 60_000);
-      for (const worker of [reports, presentationReports, authoring, retention]) {
+      for (const worker of [reports, presentationReports, authoring, visualImports, retention]) {
         expect(worker).toHaveBeenCalled();
       }
       expect(onError).not.toHaveBeenCalled();

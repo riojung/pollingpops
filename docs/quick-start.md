@@ -508,6 +508,15 @@ this with synthetic data. Existing slide documents are read as the v2 structured
 database migration; permanent Library deletion uses migration
 `048_library_artifact_deletion.sql`, applied through the normal database migration workflow.
 
+## Optional: enable visual Presentation import
+
+Use the current server image (Node 26), apply migration 093 and configure the existing private
+object storage, malware scanning and media-upload feature. Keep the jobs and retention processes
+running. The Builder's **Import visual slides** accepts one PDF or an image set, presents a loss
+report and requires author-reviewed reading text. It does not require an AI provider. See the
+[user flow](user-guide.md#import-a-pdf-or-a-set-of-slide-images) and
+[conversion limits/rollout](runbooks/upgrade.md#presentation-visual-import-compatibility).
+
 ## Optional: enable source-grounded authoring
 
 The assistant is disabled by default. A community operator may connect an approved

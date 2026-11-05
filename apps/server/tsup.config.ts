@@ -9,6 +9,8 @@ export default defineConfig({
     "src/staging-capacity-provision.ts",
     "src/source-extraction.ts",
     "src/source-extraction-worker.ts",
+    "src/presentation-visual-converter.ts",
+    "src/presentation-visual-converter-worker.ts",
     "src/session-summary-renderer.ts",
     "src/session-summary-export-worker.ts",
   ],

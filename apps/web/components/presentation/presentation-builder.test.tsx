@@ -4,6 +4,7 @@ import type { PresentationDraft, QuestionDraft } from "@openround/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnglishLocale } from "../../test-utils/english-locale";
 import { createQuestionBlock } from "../../lib/presentation-builder";
+import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { LocaleProvider } from "../locale-provider";
 import {
   loadMessages,
@@ -112,6 +113,45 @@ describe("Presentation Builder UI", () => {
     expect(found, `Missing ${label} select`).not.toBeNull();
     return { attributes: found![1]!, options: found![2]! };
   }
+
+  it.each([true, false])(
+    "retains the imported %s visual/reading distinction after modal closure",
+    (visual) => {
+      const block = createNativeContentBlock();
+      block.sourceDisclosure = {
+        sourceName: "Exported slides.pdf",
+        sourceDigest: "a".repeat(64),
+        provider: "Polling Pops",
+        model: "visual-import-v1",
+      };
+      if (visual)
+        block.scene!.nodes.push({
+          id: "page-image",
+          type: "image",
+          mediaId: "page-media",
+          altText: "A reviewed chart",
+          frame: { x: 0, y: 20, width: 100, height: 80 },
+        });
+      editor.draft = {
+        schemaVersion: 7,
+        title: "Imported pages",
+        description: "",
+        experiencePreset: { id: "focus", version: 1 },
+        blocks: [block],
+      };
+      editor.nullCursor = 0;
+      const markup = renderToStaticMarkup(
+        withEnglishLocale(<PresentationBuilder presentationId="presentation-1" />),
+      );
+      expect(markup).toContain(visual ? "Imported visual slide" : "Imported reading slide");
+      expect(markup).toContain(
+        visual
+          ? "Source objects, animation and media are flattened"
+          : "Author-reviewed accessible text is editable",
+      );
+      expect(markup).not.toContain(visual ? "Imported reading slide" : "Imported visual slide");
+    },
+  );
 
   it.each(["open_text", "word_cloud"] as const)(
     "renders a disabled localized %s preview using only the actual builder route domains",

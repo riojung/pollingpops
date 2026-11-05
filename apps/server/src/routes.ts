@@ -770,6 +770,15 @@ export async function registerRoutes(
         request.id,
       );
     }
+    if ((error as { code?: string }).code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+      return apiError(
+        reply,
+        413,
+        "VALIDATION_ERROR",
+        "The request is too large. Use a smaller file or split files into smaller batches.",
+        request.id,
+      );
+    }
     request.log.error({ err: error }, "request failed");
     return apiError(reply, 500, "INTERNAL_ERROR", "The request could not be completed", request.id);
   });

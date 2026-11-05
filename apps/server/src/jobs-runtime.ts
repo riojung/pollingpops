@@ -9,6 +9,7 @@ import { JobRunner } from "./job-runner.js";
 import { ReportWorker } from "./report-worker.js";
 import { PresentationReportWorker } from "./presentation-report-worker.js";
 import { AuthoringWorker } from "./authoring-worker.js";
+import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
 import { OpenAiCompatibleAuthoringAssistant } from "./authoring-assistant.js";
 import { ClamAvScanner } from "./malware-scanner.js";
 import { StorageService } from "./storage.js";
@@ -40,6 +41,7 @@ export async function createJobsRuntime(
       ? new ClamAvScanner(config.CLAMAV_HOST!, config.CLAMAV_PORT, config.CLAMAV_TIMEOUT_MS)
       : null;
   const storage = new StorageService(config, scanner);
+  const visualImports = new PresentationVisualImportWorker(repository, storage);
   const assistant =
     config.AUTHORING_AI_MODE === "openai_compatible"
       ? new OpenAiCompatibleAuthoringAssistant(
@@ -88,6 +90,11 @@ export async function createJobsRuntime(
         run: () => authoring.runUntilIdle(),
       },
       {
+        name: "visual-imports",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => visualImports.runUntilIdle(1),
+      },
+      {
         name: "retention",
         intervalMs: config.RETENTION_INTERVAL_MINUTES * 60_000,
         run: () => retention.run(),
@@ -126,11 +133,13 @@ export async function createJobsRuntime(
     onError,
     async (name) => {
       const controlId =
-        name === "integrations"
-          ? "business-integrations"
-          : name === "billing"
-            ? "billing-reconciliation"
-            : name;
+        name === "visual-imports"
+          ? "authoring"
+          : name === "integrations"
+            ? "business-integrations"
+            : name === "billing"
+              ? "billing-reconciliation"
+              : name;
       return !(await platform.getWorkerControl(controlId))?.paused;
     },
   );

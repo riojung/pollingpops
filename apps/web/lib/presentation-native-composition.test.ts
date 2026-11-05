@@ -30,11 +30,72 @@ import {
 } from "./presentation-native-design";
 import {
   duplicateNativeScene,
+  createNativeContentBlock,
+  createNativeLinkNode,
+  createNativeRevealNode,
   removeNativeNode,
   reorderNativeNode,
 } from "./presentation-native-scene";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
+
+describe("audience interaction composition", () => {
+  it("groups, moves, resizes and rotates reveal/link objects while preserving scene 5 and content", () => {
+    const base = createNativeContentBlock().scene!;
+    const reveal = {
+      ...createNativeRevealNode(),
+      label: "Show detail",
+      body: "Audience detail",
+      frame: { x: 20, y: 40, width: 20, height: 20 },
+    };
+    const link = {
+      ...createNativeLinkNode(),
+      label: "Read more",
+      href: "https://example.com/detail",
+      frame: { x: 60, y: 40, width: 20, height: 15 },
+    };
+    const scene: PresentationScene = {
+      ...base,
+      schemaVersion: 5,
+      nodes: [...base.nodes, reveal, link],
+      readingOrder: [...base.readingOrder, reveal.id, link.id],
+    };
+    const grouped = groupNativeSceneNodes(scene, [reveal.id, link.id], "interactions");
+    expect(grouped.schemaVersion).toBe(5);
+    expect(expandNativeSceneSelection(grouped, [reveal.id])).toEqual([link.id, reveal.id]);
+    const moved = moveNativeSceneNodes(grouped, [reveal.id], 2, 3);
+    const resized = resizeNativeSceneNode(moved, link.id, 2, 2);
+    const rotated = rotateNativeSceneNodes(resized, [reveal.id], 10);
+    for (const next of [grouped, moved, resized, rotated]) {
+      expect(next.schemaVersion).toBe(5);
+      expect(PresentationSceneDraftSchema.parse(next)).toEqual(next);
+      expect(content(next)).toEqual(content(scene));
+      expect(next.readingOrder).toEqual(scene.readingOrder);
+    }
+    expect(node(moved, reveal.id).frame.x).toBe(22);
+    expect(node(moved, link.id).frame.x).toBe(62);
+    expect(node(resized, reveal.id).frame.width).toBeGreaterThan(reveal.frame.width);
+    expect(node(rotated, reveal.id).rotation).toBe(10);
+    expect(node(rotated, link.id).rotation).toBe(10);
+    const duplicate = duplicateNativeScene(rotated);
+    expect(duplicate.groups?.[0]?.nodeIds).toEqual(duplicate.readingOrder.slice(1));
+    expect(
+      duplicate.nodes.slice(1).map(({ id: _id, ...data }) => {
+        void _id;
+        return data;
+      }),
+    ).toEqual(
+      rotated.nodes.slice(1).map(({ id: _id, ...data }) => {
+        void _id;
+        return data;
+      }),
+    );
+    const removed = removeNativeSceneNodes(rotated, [link.id]);
+    expect(removed.nodes).toEqual([scene.nodes[0]]);
+    expect(removed.groups).toEqual([]);
+    expect(PresentationSceneDraftSchema.parse(removed)).toEqual(removed);
+  });
+});
 
 function fixture(): PresentationScene {
   return {

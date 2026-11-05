@@ -2,6 +2,7 @@
 
 import {
   useId,
+  useState,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
@@ -22,6 +23,10 @@ import styles from "./native-scene.module.css";
 import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
 import { NativeRichTextView } from "./native-rich-text-view";
 import { NativeSceneDataView } from "./native-scene-data-view";
+import {
+  NativeSceneInteractionView,
+  containNativeInteractionKey,
+} from "./native-scene-interaction-view";
 import { selectedNativeSceneBounds } from "../../lib/presentation-native-geometry";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
@@ -84,19 +89,12 @@ function Shape({ node }: { node: Extract<FramedNode, { type: "shape" }> }) {
   );
 }
 
-/** Closed geometry and structured text; image authority belongs to the calling surface. */
-export function NativeSceneView({
-  scene,
-  renderImage,
-  selectedNodeId,
-  selectedNodeIds,
-  onSelect,
-  onFrameChange,
-  onGeometryKey,
-  onNodePointerDown,
-}: {
+interface NativeSceneViewProps {
   scene: PresentationScene;
   renderImage?: SceneImageRenderer;
+  /** Session/credential/connection identity, excluding ordinary snapshot revisions. */
+  interactionSourceKey?: string;
+  interactionEditing?: boolean;
   selectedNodeId?: string;
   selectedNodeIds?: readonly string[];
   onSelect?: (id: string, additive?: boolean) => void;
@@ -108,8 +106,36 @@ export function NativeSceneView({
     resize: boolean,
     handle: boolean,
   ) => void;
-}) {
+}
+
+/** Replaced delivery sources start closed without a stale expanded render. */
+export function NativeSceneView(props: NativeSceneViewProps) {
+  return (
+    <NativeSceneSurface
+      key={props.onSelect ? "editor" : JSON.stringify([props.interactionSourceKey, props.scene])}
+      {...props}
+    />
+  );
+}
+
+/** Closed geometry and structured text; image authority belongs to the calling surface. */
+function NativeSceneSurface({
+  scene,
+  renderImage,
+  selectedNodeId,
+  selectedNodeIds,
+  onSelect,
+  onFrameChange,
+  onGeometryKey,
+  onNodePointerDown,
+  interactionEditing = false,
+}: NativeSceneViewProps) {
   const markerId = useId();
+  const [outline, setOutline] = useState(false);
+  const hasInteractions = scene.nodes.some(
+    (node) => node.type === "reveal" || node.type === "link",
+  );
+  const sceneId = useId();
   const design = scene.design;
   const palette = design ? NATIVE_DESIGN_THEMES[design.theme] : undefined;
   const designStyle =
@@ -153,198 +179,226 @@ export function NativeSceneView({
     );
   }
   return (
-    <article
-      className={styles.stage}
-      aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
-      data-native-scene="true"
-      data-native-theme={design?.theme}
-      data-native-font={design?.font}
-      data-native-spacing={design?.spacing}
-      style={designStyle}
-    >
-      <svg
-        className={styles.connections}
-        aria-hidden="true"
-        viewBox="0 0 1600 900"
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-            <path d="M0 0 L8 4 L0 8 Z" fill="context-stroke" />
-          </marker>
-        </defs>
-        {scene.nodes
-          .filter((node): node is Connector => node.type === "connector")
-          .map((node) => {
-            const from = endpoint(scene, node.from);
-            const to = endpoint(scene, node.to);
-            return from && to ? (
-              <path
-                key={node.id}
-                d={`M${from.x * 16} ${from.y * 9} L${to.x * 16} ${to.y * 9}`}
-                fill="none"
-                stroke={CANVAS_STROKE_COLORS[node.color]}
-                strokeWidth="3"
-                markerEnd={`url(#${markerId})`}
-              />
-            ) : null;
-          })}
-      </svg>
-      {scene.readingOrder.map((id) => {
-        const node = nodes.get(id);
-        if (!node) return null;
-        if (node.type === "connector")
-          return (
-            <p key={id} className={styles.connectorSummary} data-node-id={id}>
-              {node.label || "Connection"}: {nativeNodeLabel(nodes.get(node.from.nodeId)!)} →{" "}
-              {nativeNodeLabel(nodes.get(node.to.nodeId)!)}
-            </p>
-          );
-        const style: CSSProperties = {
-          left: `${node.frame.x}%`,
-          top: `${node.frame.y}%`,
-          width: `${node.frame.width}%`,
-          height: `${node.frame.height}%`,
-          zIndex: scene.nodes.indexOf(node) + 1,
-          transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined,
-        };
-        return (
-          <div
-            key={id}
-            className={`${styles.node} ${editing ? styles.editableNode : ""} ${(selectedNodeIds?.includes(id) ?? selectedNodeId === id) ? styles.selected : ""}`}
-            style={style}
-            data-node-id={id}
-            data-node-type={node.type}
-            data-frame={JSON.stringify(node.frame)}
-            data-rotation={node.rotation}
-            onClick={
-              editing && !onNodePointerDown ? (event) => onSelect?.(id, event.shiftKey) : undefined
-            }
-            onPointerDown={
-              onNodePointerDown ? (event) => onNodePointerDown(event, id, false, false) : undefined
-            }
+    <div className={styles.sceneDelivery} style={designStyle}>
+      {hasInteractions && !editing && !interactionEditing ? (
+        <div className={styles.interactionToolbar} onKeyDown={containNativeInteractionKey}>
+          <p>
+            Panels open only on this screen. They do not change other screens, responses or scores.
+          </p>
+          <button
+            type="button"
+            aria-pressed={outline}
+            aria-controls={sceneId}
+            onClick={() => setOutline((current) => !current)}
           >
-            {node.type === "text" ? (
-              node.richText ? (
-                <NativeRichTextView
-                  richText={node.richText}
-                  title={node.role === "title"}
-                  editing={editing}
+            {outline ? "Show slide layout" : "Show accessible outline"}
+          </button>
+        </div>
+      ) : null}
+      <article
+        id={sceneId}
+        className={`${styles.stage}${outline ? ` ${styles.outline}` : ""}`}
+        data-native-outline={
+          hasInteractions && !editing && !interactionEditing ? outline : undefined
+        }
+        aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
+        data-native-scene="true"
+        data-native-theme={design?.theme}
+        data-native-font={design?.font}
+        data-native-spacing={design?.spacing}
+        style={designStyle}
+      >
+        <svg
+          className={styles.connections}
+          aria-hidden="true"
+          viewBox="0 0 1600 900"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0 0 L8 4 L0 8 Z" fill="context-stroke" />
+            </marker>
+          </defs>
+          {scene.nodes
+            .filter((node): node is Connector => node.type === "connector")
+            .map((node) => {
+              const from = endpoint(scene, node.from);
+              const to = endpoint(scene, node.to);
+              return from && to ? (
+                <path
+                  key={node.id}
+                  d={`M${from.x * 16} ${from.y * 9} L${to.x * 16} ${to.y * 9}`}
+                  fill="none"
+                  stroke={CANVAS_STROKE_COLORS[node.color]}
+                  strokeWidth="3"
+                  markerEnd={`url(#${markerId})`}
                 />
-              ) : node.role === "title" ? (
-                <h1>{node.text || (editing ? "Slide title" : "")}</h1>
-              ) : (
-                <p>{node.text || (editing ? "Body text" : "")}</p>
-              )
-            ) : null}
-            {node.type === "shape" ? <Shape node={node} /> : null}
-            {node.type === "table" || node.type === "chart" ? (
-              <NativeSceneDataView node={node} />
-            ) : null}
-            {node.type === "image" ? (
-              <div
-                className={styles.image}
-                data-image-fit={node.fit ?? "contain"}
-                style={
-                  {
-                    "--native-image-fit": node.fit ?? "contain",
-                    "--native-image-position": `${node.focalPoint?.x ?? 50}% ${node.focalPoint?.y ?? 50}%`,
-                  } as CSSProperties
-                }
-              >
-                {renderImage ? (
-                  renderImage(node.mediaId, node.altText)
-                ) : (
-                  <span role="img" aria-label={node.altText || "Image description needed"}>
-                    Image unavailable
-                  </span>
-                )}
-              </div>
-            ) : null}
-            {editing ? (
-              <div className={styles.handles}>
-                <button
-                  type="button"
-                  aria-label={`Move ${nativeNodeLabel(node)}. Use arrow keys to nudge.`}
-                  onFocus={() => {
-                    if (!selectedNodeIds?.includes(id)) onSelect?.(id);
-                  }}
-                  onKeyDown={(event) => frameKey(event, node, false)}
-                  onPointerDown={
-                    onNodePointerDown
-                      ? (event) => {
-                          event.stopPropagation();
-                          onNodePointerDown(event, id, false, true);
-                        }
-                      : undefined
-                  }
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  ↔
-                </button>
-                <button
-                  type="button"
-                  hidden={scene.groups?.some((group) => group.nodeIds.includes(id))}
-                  aria-label={`Resize ${nativeNodeLabel(node)}. Use arrow keys to change size.`}
-                  onFocus={() => {
-                    if (!selectedNodeIds?.includes(id)) onSelect?.(id);
-                  }}
-                  onKeyDown={(event) => frameKey(event, node, true)}
-                  className={styles.resizeHandle}
-                  onPointerDown={
-                    onNodePointerDown
-                      ? (event) => {
-                          event.stopPropagation();
-                          onNodePointerDown(event, id, true, true);
-                        }
-                      : undefined
-                  }
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  ↗
-                </button>
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-      {editing
-        ? scene.groups?.map((group, index) => {
-            if (!group.nodeIds.every((id) => selectedNodeIds?.includes(id))) return null;
-            const bounds = selectedNativeSceneBounds(scene, group.nodeIds)!;
-            const member = nodes.get(group.nodeIds[0]!) as FramedNode;
+              ) : null;
+            })}
+        </svg>
+        {scene.readingOrder.map((id) => {
+          const node = nodes.get(id);
+          if (!node) return null;
+          if (node.type === "connector")
             return (
-              <div
-                key={group.id}
-                className={styles.groupOutline}
-                data-native-group={group.id}
-                style={{
-                  left: `${bounds.x}%`,
-                  top: `${bounds.y}%`,
-                  width: `${bounds.width}%`,
-                  height: `${bounds.height}%`,
-                  zIndex: scene.nodes.length + 1,
-                }}
-              >
-                <button
-                  type="button"
-                  aria-label={`Resize group ${index + 1}. Use arrow keys to change size.`}
-                  onKeyDown={(event) => frameKey(event, member, true)}
-                  onPointerDown={
-                    onNodePointerDown
-                      ? (event) => {
-                          event.stopPropagation();
-                          onNodePointerDown(event, member.id, true, true);
-                        }
-                      : undefined
+              <p key={id} className={styles.connectorSummary} data-node-id={id}>
+                {node.label || "Connection"}: {nativeNodeLabel(nodes.get(node.from.nodeId)!)} →{" "}
+                {nativeNodeLabel(nodes.get(node.to.nodeId)!)}
+              </p>
+            );
+          const style: CSSProperties = {
+            left: `${node.frame.x}%`,
+            top: `${node.frame.y}%`,
+            width: `${node.frame.width}%`,
+            height: `${node.frame.height}%`,
+            zIndex: scene.nodes.indexOf(node) + 1,
+            transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined,
+          };
+          return (
+            <div
+              key={id}
+              className={`${styles.node} ${editing ? styles.editableNode : ""} ${(selectedNodeIds?.includes(id) ?? selectedNodeId === id) ? styles.selected : ""}`}
+              style={style}
+              data-node-id={id}
+              data-node-type={node.type}
+              data-frame={JSON.stringify(node.frame)}
+              data-rotation={node.rotation}
+              onClick={
+                editing && !onNodePointerDown
+                  ? (event) => onSelect?.(id, event.shiftKey)
+                  : undefined
+              }
+              onPointerDown={
+                onNodePointerDown
+                  ? (event) => onNodePointerDown(event, id, false, false)
+                  : undefined
+              }
+            >
+              {node.type === "text" ? (
+                node.richText ? (
+                  <NativeRichTextView
+                    richText={node.richText}
+                    title={node.role === "title"}
+                    editing={editing}
+                  />
+                ) : node.role === "title" ? (
+                  <h1>{node.text || (editing ? "Slide title" : "")}</h1>
+                ) : (
+                  <p>{node.text || (editing ? "Body text" : "")}</p>
+                )
+              ) : null}
+              {node.type === "shape" ? <Shape node={node} /> : null}
+              {node.type === "reveal" || node.type === "link" ? (
+                <NativeSceneInteractionView node={node} editing={editing || interactionEditing} />
+              ) : null}
+              {node.type === "table" || node.type === "chart" ? (
+                <NativeSceneDataView node={node} />
+              ) : null}
+              {node.type === "image" ? (
+                <div
+                  className={styles.image}
+                  data-image-fit={node.fit ?? "contain"}
+                  style={
+                    {
+                      "--native-image-fit": node.fit ?? "contain",
+                      "--native-image-position": `${node.focalPoint?.x ?? 50}% ${node.focalPoint?.y ?? 50}%`,
+                    } as CSSProperties
                   }
                 >
-                  ↘
-                </button>
-              </div>
-            );
-          })
-        : null}
-    </article>
+                  {renderImage ? (
+                    renderImage(node.mediaId, node.altText)
+                  ) : (
+                    <span role="img" aria-label={node.altText || "Image description needed"}>
+                      Image unavailable
+                    </span>
+                  )}
+                </div>
+              ) : null}
+              {editing ? (
+                <div className={styles.handles}>
+                  <button
+                    type="button"
+                    aria-label={`Move ${nativeNodeLabel(node)}. Use arrow keys to nudge.`}
+                    onFocus={() => {
+                      if (!selectedNodeIds?.includes(id)) onSelect?.(id);
+                    }}
+                    onKeyDown={(event) => frameKey(event, node, false)}
+                    onPointerDown={
+                      onNodePointerDown
+                        ? (event) => {
+                            event.stopPropagation();
+                            onNodePointerDown(event, id, false, true);
+                          }
+                        : undefined
+                    }
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    ↔
+                  </button>
+                  <button
+                    type="button"
+                    hidden={scene.groups?.some((group) => group.nodeIds.includes(id))}
+                    aria-label={`Resize ${nativeNodeLabel(node)}. Use arrow keys to change size.`}
+                    onFocus={() => {
+                      if (!selectedNodeIds?.includes(id)) onSelect?.(id);
+                    }}
+                    onKeyDown={(event) => frameKey(event, node, true)}
+                    className={styles.resizeHandle}
+                    onPointerDown={
+                      onNodePointerDown
+                        ? (event) => {
+                            event.stopPropagation();
+                            onNodePointerDown(event, id, true, true);
+                          }
+                        : undefined
+                    }
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    ↗
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        {editing
+          ? scene.groups?.map((group, index) => {
+              if (!group.nodeIds.every((id) => selectedNodeIds?.includes(id))) return null;
+              const bounds = selectedNativeSceneBounds(scene, group.nodeIds)!;
+              const member = nodes.get(group.nodeIds[0]!) as FramedNode;
+              return (
+                <div
+                  key={group.id}
+                  className={styles.groupOutline}
+                  data-native-group={group.id}
+                  style={{
+                    left: `${bounds.x}%`,
+                    top: `${bounds.y}%`,
+                    width: `${bounds.width}%`,
+                    height: `${bounds.height}%`,
+                    zIndex: scene.nodes.length + 1,
+                  }}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Resize group ${index + 1}. Use arrow keys to change size.`}
+                    onKeyDown={(event) => frameKey(event, member, true)}
+                    onPointerDown={
+                      onNodePointerDown
+                        ? (event) => {
+                            event.stopPropagation();
+                            onNodePointerDown(event, member.id, true, true);
+                          }
+                        : undefined
+                    }
+                  >
+                    ↘
+                  </button>
+                </div>
+              );
+            })
+          : null}
+      </article>
+    </div>
   );
 }

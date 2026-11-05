@@ -19,6 +19,7 @@ import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import {
   compositionSceneBlock,
   designSceneBlock,
+  interactionSceneBlock,
   nativeSceneBlock,
   richTextSceneBlock,
 } from "./support/presentation-native-scene.js";
@@ -148,7 +149,7 @@ describe("native Presentation scenes API", () => {
     }
   });
 
-  it.each([4, 5, 6, 7, 8] as const)(
+  it.each([4, 5, 6, 7, 8, 11] as const)(
     "saves exact retries and delivers immutable v%s scenes through completion",
     async (schemaVersion) => {
       const built = await setup();
@@ -185,13 +186,15 @@ describe("native Presentation scenes API", () => {
       const hiddenImage = hidden.scene.nodes.find((node) => node.type === "image")!;
       if (hiddenImage.type === "image") hiddenImage.altText = "";
       const sceneBlock =
-        schemaVersion === 8
-          ? compositionSceneBlock
-          : schemaVersion === 7
-            ? designSceneBlock
-            : schemaVersion >= 5
-              ? richTextSceneBlock
-              : nativeSceneBlock;
+        schemaVersion === 11
+          ? interactionSceneBlock
+          : schemaVersion === 8
+            ? compositionSceneBlock
+            : schemaVersion === 7
+              ? designSceneBlock
+              : schemaVersion >= 5
+                ? richTextSceneBlock
+                : nativeSceneBlock;
       const draft = PresentationDraftSchema.parse({
         title: "Native content-only deck",
         schemaVersion,
@@ -413,6 +416,79 @@ describe("native Presentation scenes API", () => {
       ).toMatchObject({ content, contentHash: version.contentHash });
     },
   );
+
+  it("keeps incomplete interaction drafts but rejects unsafe actions and inaccessible publication atomically", async () => {
+    const built = await setup();
+    const visible = interactionSceneBlock();
+    visible.scene.nodes = visible.scene.nodes.map((node) =>
+      node.type === "reveal"
+        ? { ...node, label: "", body: "" }
+        : node.type === "link"
+          ? { ...node, href: "" }
+          : node,
+    );
+    const draft = PresentationDraftSchema.parse({
+      title: "Interactive validation",
+      schemaVersion: 11,
+      blocks: [visible],
+    });
+    const { id } = await saveDraft(built.app, built.cookie, draft);
+    for (const invalid of [
+      "unsafe-link",
+      "script-action",
+      "broadcast",
+      "old-scene",
+      "old-document",
+    ]) {
+      const malformed = structuredClone(draft);
+      const block = malformed.blocks[0]!;
+      if (block.kind !== "content" || !block.scene) throw new Error("Expected scene");
+      if (invalid === "old-scene") block.scene.schemaVersion = 4;
+      else if (invalid === "old-document") malformed.schemaVersion = 10;
+      else
+        block.scene.nodes = block.scene.nodes.map((node) =>
+          node.type === "link" && invalid === "unsafe-link"
+            ? { ...node, href: "javascript:alert(1)" }
+            : node.type === "reveal" && invalid === "script-action"
+              ? { ...node, onClick: "alert(1)" }
+              : node.type === "reveal" && invalid === "broadcast"
+                ? { ...node, scope: "broadcast" }
+                : node,
+        ) as typeof block.scene.nodes;
+      const rejected = await built.app.inject({
+        method: "PUT",
+        url: `/v1/presentations/${id}/draft`,
+        headers: { cookie: built.cookie },
+        payload: {
+          schemaVersion: 2,
+          draft: malformed,
+          expectedRevision: 1,
+          mutationId: randomUUID(),
+        },
+      });
+      expect(rejected.statusCode, invalid).toBe(400);
+      expect((await built.presentations.getPresentation(workspaceId, id))?.draftRevision).toBe(1);
+    }
+    const rejectedPublication = await built.app.inject({
+      method: "POST",
+      url: `/v1/presentations/${id}/publish`,
+      headers: { cookie: built.cookie },
+      payload: { expectedDraftRevision: 1 },
+    });
+    expect(rejectedPublication.statusCode, rejectedPublication.body).toBe(422);
+    expect(rejectedPublication.json().validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blockId: visible.id, field: "label" }),
+        expect.objectContaining({ blockId: visible.id, field: "body" }),
+        expect.objectContaining({ blockId: visible.id, field: "href" }),
+      ]),
+    );
+    expect(await built.presentations.getPresentation(workspaceId, id)).toMatchObject({
+      draft,
+      draftRevision: 1,
+      currentVersionId: null,
+    });
+  });
 
   it("retains incomplete v8 information drafts but rejects malformed data and inaccessible publication atomically", async () => {
     const built = await setup();

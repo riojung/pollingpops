@@ -5,6 +5,7 @@ import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import {
   NativeSceneDesignControls,
   NativeSceneLayoutControls,
@@ -164,7 +165,13 @@ describe("native upload capacity guard", () => {
       target: { value: "Evidence diagram" },
     });
     editor.render(state, pending);
-    for (const label of ["Add native text", "Add native shape", "Add native connector"]) {
+    for (const label of [
+      "Add native text",
+      "Add native shape",
+      "Add native connector",
+      "Add reveal panel",
+      "Add link",
+    ]) {
       const button = editor.find(
         (element) => element.type === "button" && element.props.children === label,
       );
@@ -204,7 +211,13 @@ describe("native upload capacity guard", () => {
     });
     expect(editor.onChange).toHaveBeenCalledTimes(2);
     editor.render("idle");
-    for (const label of ["Add native text", "Add native shape", "Add native connector"]) {
+    for (const label of [
+      "Add native text",
+      "Add native shape",
+      "Add native connector",
+      "Add reveal panel",
+      "Add link",
+    ]) {
       expect(
         editor.find((element) => element.type === "button" && element.props.children === label)
           .props.disabled,
@@ -333,6 +346,45 @@ describe("native design and rich text coexistence", () => {
 });
 
 describe("native edit validation", () => {
+  it.each([
+    ["Add reveal panel", "reveal"],
+    ["Add link", "link"],
+  ] as const)(
+    "adds and selects %s with scene 5, preserving its version when adding data",
+    (label, type) => {
+      const editor = editorHarness();
+      editor.render("idle");
+      const button = editor.find(
+        (element) => element.type === "button" && element.props.children === label,
+      );
+      (button.props.onClick as () => void)();
+      const next = editor.onChange.mock.calls[0]![0];
+      expect(next).toMatchObject({ schemaVersion: 5 });
+      expect(next.nodes.at(-1)).toMatchObject(
+        type === "reveal"
+          ? { type, label: "", body: "", scope: "local" }
+          : { type, label: "", href: "" },
+      );
+      expect(next.readingOrder.at(-1)).toBe(next.nodes.at(-1).id);
+      Object.assign(editor.scene, next);
+      editor.render("idle");
+      expect(
+        editor.find((element) => element.type === NativeSceneInteractionEditor).props.node,
+      ).toEqual(next.nodes.at(-1));
+      expect(
+        editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+      ).toEqual([next.nodes.at(-1).id]);
+      const table = editor.find(
+        (element) => element.type === "button" && element.props.children === "Add table",
+      );
+      (table.props.onClick as () => void)();
+      expect(editor.onChange.mock.calls[1]![0]).toMatchObject({
+        schemaVersion: 5,
+        nodes: expect.arrayContaining([next.nodes.at(-1)]),
+      });
+    },
+  );
+
   it("retains the slide and selection when the presentation rejects a new information object", () => {
     const editor = editorHarness();
     editor.onChange.mockReturnValue(false);

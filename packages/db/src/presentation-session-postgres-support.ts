@@ -62,7 +62,7 @@ export const PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL = `(
 export const PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL = `(
   CASE WHEN (
     session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
-    OR (session.content_snapshot ->> 'schemaVersion' = '10' AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
+    OR (session.content_snapshot ->> 'schemaVersion' IN ('10','11') AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
     OR (
       session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'poll'
       AND COALESCE(session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'maxSelections', '1')
@@ -100,7 +100,7 @@ export function mapSession(row: QueryResultRow): PresentationSessionRecord {
       ? PresentationRecoveryPackInterventionSchema.parse(row.recovery_pack_intervention)
       : null,
     eventSeq: Number(row.event_seq ?? 0),
-    ...(row.content_snapshot?.schemaVersion === 10
+    ...(row.content_snapshot?.schemaVersion >= 10
       ? { textModerationSeq: Number(row.text_moderation_seq ?? 0) }
       : {}),
     questionOpenedAt:

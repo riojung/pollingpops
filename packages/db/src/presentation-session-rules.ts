@@ -57,7 +57,7 @@ export function normalizeSession(input: PresentationSessionCreateInput): Present
     joinPasswordHash: input.joinPasswordHash ?? null,
     content,
     settings,
-    ...(content.schemaVersion === 10 ? { textModerationSeq: input.textModerationSeq ?? 0 } : {}),
+    ...(content.schemaVersion >= 10 ? { textModerationSeq: input.textModerationSeq ?? 0 } : {}),
     trustMode: input.trustMode ?? "learning",
     recoveryPackCardsEnabled,
     recoveryPackIntervention,
@@ -228,7 +228,7 @@ export function normalizePresentationResponse(
     input.responseSchemaVersion ?? presentationResponseSchemaVersion(input.response, question);
   if (question && isPresentationTextResultQuestion(question)) {
     if (
-      session?.content.schemaVersion !== 10 ||
+      (session?.content.schemaVersion ?? 0) < 10 ||
       responseSchemaVersion !== 3 ||
       input.correct !== null ||
       input.score !== 0 ||
@@ -266,7 +266,7 @@ export function normalizePresentationResponse(
           : 0;
     if (
       !opinion ||
-      (session?.content.schemaVersion !== 9 && session?.content.schemaVersion !== 10) ||
+      (session?.content.schemaVersion ?? 0) < 9 ||
       responseSchemaVersion !== 2 ||
       question?.id.toLowerCase() !== input.questionId.toLowerCase() ||
       input.correct !== null ||

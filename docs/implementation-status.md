@@ -8,17 +8,28 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E06 basic interactions November 4, 2026
+
+The planned first slice is implemented locally on `codex/presentation-e06-basic-interactions`:
+viewer-local reveal/hide panels, safe external links, native authoring/history tools and a shared
+accessible outline across delivery surfaces. Scene5/document11 and migration094 preserve existing
+activity, response, scoring and immutable-publication meanings. No AI provider or per-click job
+is added. The full repository check, restricted PostgreSQL, focused tests and four production
+browser profiles pass; see the [evidence record](evidence/presentation-e06-basic-interactions.md).
+This source increment is prepared for pull request review and remains undeployed. Richer hotspots/dialogs/branching and
+host-broadcast reveal state remain separate E06 increments; E07 navigation is also separate.
+
 ### Presentation E05 visual import November 4, 2026
 
-Software is complete on `codex/presentation-e05-visual-import`, based on the E04
-completion commit in PR #196. PDF/image-set conversion, private previews, ordered selection,
+Software is complete and merged in [PR #197](https://github.com/riojung/pollingpops/pull/197),
+following E04's completion in PR #196. PDF/image-set conversion, private previews, ordered selection,
 author-reviewed visual/reading slide pairs, safe retry identities and owned-media cleanup are
 implemented. Migration 093 and a Node 26 converter runtime are required; AI credits and provider
 configuration are not required. The full repository check, 93 migrations with restricted
 PostgreSQL cases, four production browser profiles and the compiled renderer smoke pass.
 See the [evidence record](evidence/presentation-e05-visual-import.md) and
 [rollout requirements](runbooks/upgrade.md#presentation-visual-import-compatibility). This source
-increment is prepared for pull request review and remains undeployed; E13 export and
+increment is merged and remains undeployed; E13 export and
 manual/hosted/cost acceptance are separate.
 
 ### Presentation E04 moderated text November 4, 2026

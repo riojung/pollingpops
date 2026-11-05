@@ -154,3 +154,8 @@
     padding: 1rem;
   }
 }
+
+.slideInteractions {
+  min-width: 0;
+  margin-block: 1rem;
+}

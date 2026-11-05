@@ -7,6 +7,7 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { PresentationDraftSchema, QuizContentSchema, QuizDraftSchema } from "@openround/contracts";
+import { interactionSceneBlock } from "./support/presentation-native-scene.js";
 
 let app: FastifyInstance | undefined;
 const BETA_WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
@@ -37,183 +38,216 @@ afterEach(async () => {
 });
 
 describe("presentation authoring API", () => {
-  it("imports published opinion formats with v9/v10 floors and stable copy receipts", async () => {
-    const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });
-    const built = await buildApp(
-      ConfigSchema.parse({
-        NODE_ENV: "test",
-        ALLOW_IN_MEMORY: "true",
-        COMMUNITY_MODE: "false",
-        WEB_ORIGIN: "http://localhost:3000",
-        PUBLIC_API_URL: "http://localhost:4000",
-        FEATURE_UX_BETA: "true",
-        UX_BETA_WORKSPACE_ALLOWLIST: BETA_WORKSPACE_ID,
-        FEATURE_PRESENTATIONS: "true",
-        LOG_LEVEL: "silent",
-      }),
-      { repository, cache: new MemorySessionCache() },
-    );
-    app = built.app;
-    const cookie = await signIn(app);
-    const common = {
-      purpose: "opinion",
-      confidence: "off",
-      delivery: "main",
-      conceptKeys: [],
-      linkedRecheckQuestionId: null,
-      timeLimitSeconds: 30,
-      basePoints: 0,
-      explanation: "",
-      mediaId: null,
-      mediaAlt: null,
-    };
-    const draft = QuizDraftSchema.parse({
-      title: "Published opinions",
-      questions: [
-        ...(["poll", "ranking"] as const).map((type) => ({
-          ...common,
-          id: randomUUID(),
-          type,
-          prompt: `Published ${type}`,
-          choices: Array.from({ length: 6 }, (_, index) => ({
-            id: randomUUID(),
-            label: `Option ${index + 1}`,
-            isCorrect: false,
-          })),
-          ...(type === "poll" ? { maxSelections: 2 } : { rankCount: 3 }),
-        })),
-        { ...common, id: randomUUID(), type: "open_text", prompt: "Moderated open text" },
-        { ...common, id: randomUUID(), type: "word_cloud", prompt: "Moderated word cloud" },
-      ],
-    });
-    const now = new Date();
-    const source = await repository.createQuiz({
-      id: randomUUID(),
-      workspaceId: BETA_WORKSPACE_ID,
-      title: draft.title,
-      description: draft.description,
-      status: "draft",
-      draft,
-      draftRevision: 0,
-      currentVersionId: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const content = QuizContentSchema.parse(draft);
-    const version = await repository.publishQuiz({
-      id: randomUUID(),
-      workspaceId: BETA_WORKSPACE_ID,
-      quizId: source.id,
-      version: 1,
-      content,
-      contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
-      sourceDraftRevision: 0,
-      publishedAt: now,
-    });
-    const sourceJson = JSON.stringify(version);
-    const created = await app.inject({
-      method: "POST",
-      url: "/v1/presentations",
-      headers: { cookie },
-      payload: { title: "Copied opinions" },
-    });
-    const presentation = created.json<{ presentation: { id: string } }>().presentation;
-    const payload = {
-      sourceQuizVersionId: version.id,
-      questionIds: content.questions.slice(0, 2).map(({ id }) => id),
-      afterBlockId: null,
-      expectedRevision: 0,
-      mutationId: randomUUID(),
-    };
-    const imported = await app.inject({
-      method: "POST",
-      url: `/v1/presentations/${presentation.id}/blocks/import`,
-      headers: { cookie },
-      payload,
-    });
-    expect(imported.statusCode, imported.body).toBe(200);
-    const result = imported.json<{
-      presentation: { draft: unknown; draftRevision: number };
-      insertedBlockIds: string[];
-    }>();
-    const copiedDraft = PresentationDraftSchema.parse(result.presentation.draft);
-    expect(copiedDraft.schemaVersion).toBe(9);
-    const copied = copiedDraft.blocks.filter((block) => block.kind === "question");
-    expect(copied).toHaveLength(2);
-    expect(copied.map((block) => block.question)).toMatchObject([
-      { type: "poll", maxSelections: 2, confidence: "off", basePoints: 0 },
-      { type: "ranking", rankCount: 3, confidence: "off", basePoints: 0 },
-    ]);
-    for (const [index, block] of copied.entries()) {
-      const original = content.questions[index]!;
-      expect(block.question.id).not.toBe(original.id);
-      if (!("choices" in block.question) || !("choices" in original))
-        throw new Error("Choice opinion required");
-      expect(block.question.choices.map(({ id }) => id)).not.toEqual(
-        original.choices.map(({ id }) => id),
+  it.each([false, true])(
+    "imports opinion formats with stable copy receipts and version floors (interactions: %s)",
+    async (interactions) => {
+      const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });
+      const built = await buildApp(
+        ConfigSchema.parse({
+          NODE_ENV: "test",
+          ALLOW_IN_MEMORY: "true",
+          COMMUNITY_MODE: "false",
+          WEB_ORIGIN: "http://localhost:3000",
+          PUBLIC_API_URL: "http://localhost:4000",
+          FEATURE_UX_BETA: "true",
+          UX_BETA_WORKSPACE_ALLOWLIST: BETA_WORKSPACE_ID,
+          FEATURE_PRESENTATIONS: "true",
+          LOG_LEVEL: "silent",
+        }),
+        { repository, cache: new MemorySessionCache() },
       );
-      expect(block.question.choices.every((choice) => !choice.isCorrect)).toBe(true);
-    }
-    const retry = await app.inject({
-      method: "POST",
-      url: `/v1/presentations/${presentation.id}/blocks/import`,
-      headers: { cookie },
-      payload,
-    });
-    expect(retry.statusCode).toBe(200);
-    expect(retry.json()).toMatchObject({
-      insertedBlockIds: result.insertedBlockIds,
-      presentation: { draftRevision: 1, draft: { schemaVersion: 9, blocks: copiedDraft.blocks } },
-    });
-    const textImport = await app.inject({
-      method: "POST",
-      url: `/v1/presentations/${presentation.id}/blocks/import`,
-      headers: { cookie },
-      payload: {
-        ...payload,
-        questionIds: content.questions.slice(2).map(({ id }) => id),
-        expectedRevision: 1,
+      app = built.app;
+      const cookie = await signIn(app);
+      const common = {
+        purpose: "opinion",
+        confidence: "off",
+        delivery: "main",
+        conceptKeys: [],
+        linkedRecheckQuestionId: null,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+      };
+      const draft = QuizDraftSchema.parse({
+        title: "Published opinions",
+        questions: [
+          ...(["poll", "ranking"] as const).map((type) => ({
+            ...common,
+            id: randomUUID(),
+            type,
+            prompt: `Published ${type}`,
+            choices: Array.from({ length: 6 }, (_, index) => ({
+              id: randomUUID(),
+              label: `Option ${index + 1}`,
+              isCorrect: false,
+            })),
+            ...(type === "poll" ? { maxSelections: 2 } : { rankCount: 3 }),
+          })),
+          { ...common, id: randomUUID(), type: "open_text", prompt: "Moderated open text" },
+          { ...common, id: randomUUID(), type: "word_cloud", prompt: "Moderated word cloud" },
+        ],
+      });
+      const now = new Date();
+      const source = await repository.createQuiz({
+        id: randomUUID(),
+        workspaceId: BETA_WORKSPACE_ID,
+        title: draft.title,
+        description: draft.description,
+        status: "draft",
+        draft,
+        draftRevision: 0,
+        currentVersionId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const content = QuizContentSchema.parse(draft);
+      const version = await repository.publishQuiz({
+        id: randomUUID(),
+        workspaceId: BETA_WORKSPACE_ID,
+        quizId: source.id,
+        version: 1,
+        content,
+        contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
+        sourceDraftRevision: 0,
+        publishedAt: now,
+      });
+      const sourceJson = JSON.stringify(version);
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/presentations",
+        headers: { cookie },
+        payload: { title: "Copied opinions" },
+      });
+      const presentation = created.json<{ presentation: { id: string } }>().presentation;
+      const initialRevision = interactions ? 1 : 0;
+      if (interactions) {
+        const saved = await app.inject({
+          method: "PUT",
+          url: `/v1/presentations/${presentation.id}/draft`,
+          headers: { cookie },
+          payload: {
+            schemaVersion: 2,
+            mutationId: randomUUID(),
+            expectedRevision: 0,
+            draft: {
+              title: "Interactive opinions",
+              schemaVersion: 11,
+              blocks: [interactionSceneBlock()],
+            },
+          },
+        });
+        expect(saved.statusCode, saved.body).toBe(200);
+      }
+      const payload = {
+        sourceQuizVersionId: version.id,
+        questionIds: content.questions.slice(0, 2).map(({ id }) => id),
+        afterBlockId: null,
+        expectedRevision: initialRevision,
         mutationId: randomUUID(),
-      },
-    });
-    expect(textImport.statusCode, textImport.body).toBe(200);
-    const textDraft = PresentationDraftSchema.parse(
-      textImport.json<{ presentation: { draft: unknown } }>().presentation.draft,
-    );
-    expect(textDraft.schemaVersion).toBe(10);
-    const textCopied = textDraft.blocks.filter((block) => block.kind === "question");
-    expect(textCopied.map((block) => block.question.type)).toEqual([
-      "poll",
-      "ranking",
-      "open_text",
-      "word_cloud",
-    ]);
-    for (const block of textCopied.slice(2))
-      expect(content.questions.map((question) => question.id)).not.toContain(block.question.id);
-    expect(JSON.stringify(await repository.getQuizVersion(BETA_WORKSPACE_ID, version.id))).toBe(
-      sourceJson,
-    );
-    const publishable = await app.inject({
-      method: "PUT",
-      url: `/v1/presentations/${presentation.id}/draft`,
-      headers: { cookie },
-      payload: {
-        draft: { ...textDraft, blocks: textCopied },
-        expectedRevision: 2,
-        mutationId: randomUUID(),
-        schemaVersion: 2,
-      },
-    });
-    expect(publishable.statusCode, publishable.body).toBe(200);
-    const published = await app.inject({
-      method: "POST",
-      url: `/v1/presentations/${presentation.id}/publish`,
-      headers: { cookie },
-      payload: { expectedDraftRevision: 3 },
-    });
-    expect(published.statusCode, published.body).toBe(200);
-    expect(published.json()).toMatchObject({ version: { content: { schemaVersion: 10 } } });
-  });
+      };
+      const imported = await app.inject({
+        method: "POST",
+        url: `/v1/presentations/${presentation.id}/blocks/import`,
+        headers: { cookie },
+        payload,
+      });
+      expect(imported.statusCode, imported.body).toBe(200);
+      const result = imported.json<{
+        presentation: { draft: unknown; draftRevision: number };
+        insertedBlockIds: string[];
+      }>();
+      const copiedDraft = PresentationDraftSchema.parse(result.presentation.draft);
+      expect(copiedDraft.schemaVersion).toBe(interactions ? 11 : 9);
+      const copied = copiedDraft.blocks.filter((block) => block.kind === "question");
+      expect(copied).toHaveLength(2);
+      expect(copied.map((block) => block.question)).toMatchObject([
+        { type: "poll", maxSelections: 2, confidence: "off", basePoints: 0 },
+        { type: "ranking", rankCount: 3, confidence: "off", basePoints: 0 },
+      ]);
+      for (const [index, block] of copied.entries()) {
+        const original = content.questions[index]!;
+        expect(block.question.id).not.toBe(original.id);
+        if (!("choices" in block.question) || !("choices" in original))
+          throw new Error("Choice opinion required");
+        expect(block.question.choices.map(({ id }) => id)).not.toEqual(
+          original.choices.map(({ id }) => id),
+        );
+        expect(block.question.choices.every((choice) => !choice.isCorrect)).toBe(true);
+      }
+      const retry = await app.inject({
+        method: "POST",
+        url: `/v1/presentations/${presentation.id}/blocks/import`,
+        headers: { cookie },
+        payload,
+      });
+      expect(retry.statusCode).toBe(200);
+      expect(retry.json()).toMatchObject({
+        insertedBlockIds: result.insertedBlockIds,
+        presentation: {
+          draftRevision: initialRevision + 1,
+          draft: { schemaVersion: interactions ? 11 : 9, blocks: copiedDraft.blocks },
+        },
+      });
+      const textImport = await app.inject({
+        method: "POST",
+        url: `/v1/presentations/${presentation.id}/blocks/import`,
+        headers: { cookie },
+        payload: {
+          ...payload,
+          questionIds: content.questions.slice(2).map(({ id }) => id),
+          expectedRevision: initialRevision + 1,
+          mutationId: randomUUID(),
+        },
+      });
+      expect(textImport.statusCode, textImport.body).toBe(200);
+      const textDraft = PresentationDraftSchema.parse(
+        textImport.json<{ presentation: { draft: unknown } }>().presentation.draft,
+      );
+      expect(textDraft.schemaVersion).toBe(interactions ? 11 : 10);
+      const textCopied = textDraft.blocks.filter((block) => block.kind === "question");
+      expect(textCopied.map((block) => block.question.type)).toEqual([
+        "poll",
+        "ranking",
+        "open_text",
+        "word_cloud",
+      ]);
+      for (const block of textCopied.slice(2))
+        expect(content.questions.map((question) => question.id)).not.toContain(block.question.id);
+      expect(JSON.stringify(await repository.getQuizVersion(BETA_WORKSPACE_ID, version.id))).toBe(
+        sourceJson,
+      );
+      const publishable = await app.inject({
+        method: "PUT",
+        url: `/v1/presentations/${presentation.id}/draft`,
+        headers: { cookie },
+        payload: {
+          draft: {
+            ...textDraft,
+            blocks: [
+              ...(interactions ? textDraft.blocks.filter((block) => block.kind === "content") : []),
+              ...textCopied,
+            ],
+          },
+          expectedRevision: initialRevision + 2,
+          mutationId: randomUUID(),
+          schemaVersion: 2,
+        },
+      });
+      expect(publishable.statusCode, publishable.body).toBe(200);
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/presentations/${presentation.id}/publish`,
+        headers: { cookie },
+        payload: { expectedDraftRevision: publishable.json().presentation.draftRevision },
+      });
+      expect(published.statusCode, published.body).toBe(200);
+      expect(published.json()).toMatchObject({
+        version: { content: { schemaVersion: interactions ? 11 : 10 } },
+      });
+    },
+  );
 
   it("creates, revision-saves, restores, and publishes a mixed live deck", async () => {
     const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });

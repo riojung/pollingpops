@@ -38,7 +38,7 @@ export function applyNativeSceneDesign(
 ): PresentationScene {
   return PresentationSceneDraftSchema.parse({
     ...scene,
-    schemaVersion: scene.schemaVersion === 4 ? 4 : 3,
+    schemaVersion: scene.schemaVersion >= 3 ? scene.schemaVersion : 3,
     design,
   });
 }

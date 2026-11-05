@@ -1,12 +1,16 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { expect } from "vitest";
 import { PresentationContentSchema } from "@openround/contracts";
+import { interactionDocument } from "./presentation-interaction-fixture.js";
 import type { PresentationSessionRepositoryConformanceInput } from "./presentation-session-conformance.js";
 import type { PresentationSessionResponseRecord } from "../../src/index.js";
 
 /** Exercises the same frozen payload, receipt and reveal fences on memory and PostgreSQL. */
 export async function expectPresentationOpinionResponseConformance(
-  input: PresentationSessionRepositoryConformanceInput,
+  input: Pick<
+    PresentationSessionRepositoryConformanceInput,
+    "repository" | "workspaceId" | "presentationId" | "presentationVersionId" | "createdBy"
+  > & { schemaVersion?: 9 | 11 },
 ) {
   for (const format of [
     "poll",
@@ -28,7 +32,7 @@ export async function expectPresentationOpinionResponseConformance(
     const questionId = id();
     const content = PresentationContentSchema.parse({
       title: "Frozen opinions",
-      schemaVersion: 9,
+      schemaVersion: input.schemaVersion ?? 9,
       blocks: [
         {
           id: blockId,
@@ -50,6 +54,7 @@ export async function expectPresentationOpinionResponseConformance(
             ...(poll ? { maxSelections: 2 } : format !== "full_ranking" ? { rankCount: 2 } : {}),
           },
         },
+        ...(input.schemaVersion === 11 ? interactionDocument().blocks : []),
       ],
     });
     const session = await input.repository.createSession({
@@ -229,7 +234,7 @@ export async function expectPresentationOpinionResponseConformance(
     await expect(
       input.repository.getResponseContext(session.id, tokenHash, record.idempotencyKey!),
     ).resolves.toMatchObject({
-      session: { phase: "question_reveal", content: { schemaVersion: 9 } },
+      session: { phase: "question_reveal", content: { schemaVersion: input.schemaVersion ?? 9 } },
       priorResponse: { response, responseSchemaVersion: 2 },
     });
     const stored = await input.repository.listResponses(session.id);

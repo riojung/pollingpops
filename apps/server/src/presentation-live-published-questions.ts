@@ -92,7 +92,7 @@ export function presentationPublishedQuestionInsertionTransition(
   });
   const content = PresentationContentSchema.parse({
     ...session.content,
-    ...(isPresentationTextResultQuestion(question)
+    ...(isPresentationTextResultQuestion(question) && session.content.schemaVersion < 10
       ? { schemaVersion: 10 }
       : isPresentationOpinionResultQuestion(question) && session.content.schemaVersion < 9
         ? { schemaVersion: 9 }

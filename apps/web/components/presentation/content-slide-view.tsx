@@ -63,6 +63,7 @@ interface ContentSlideViewProps {
   block: ContentSlideViewBlock;
   media?: ReactNode;
   renderSceneImage?: SceneImageRenderer;
+  interactionSourceKey?: string;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -263,7 +264,12 @@ function frameBlockSignature(block: ContentSlideViewBlock, hasMedia: boolean) {
 
 export function ContentSlideView(props: ContentSlideViewProps) {
   return props.block.scene ? (
-    <NativeSceneView scene={props.block.scene} renderImage={props.renderSceneImage} />
+    <NativeSceneView
+      scene={props.block.scene}
+      renderImage={props.renderSceneImage}
+      interactionEditing={props.variant === "editor"}
+      interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
+    />
   ) : (
     <LegacyContentSlideView {...props} />
   );

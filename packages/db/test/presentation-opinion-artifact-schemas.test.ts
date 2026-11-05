@@ -59,7 +59,7 @@ describe("Presentation v9 durable readers", () => {
       expect(JSON.stringify(parse(JSON.parse(bytes), 9))).toBe(bytes);
       for (const version of [1, 2, 3, 4, 5, 6, 7, 8])
         expect(() => parse(document, version)).toThrow("schema version 9");
-      expect(() => parse(document, 11)).toThrow(UnsupportedArtifactSchemaVersionError);
+      expect(() => parse(document, 12)).toThrow(UnsupportedArtifactSchemaVersionError);
     }
     const block = document.blocks[0]!;
     if (block.kind !== "question") throw new Error("Expected ranking");

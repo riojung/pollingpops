@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
 import { isTextQuestion } from "../../../../lib/text-response";
@@ -486,6 +487,16 @@ export default function PresentationCompanionPage() {
                 })}
               </p>
             </div>
+            {block?.kind === "content" &&
+            block.scene?.nodes.some((node) => node.type === "reveal" || node.type === "link") ? (
+              <section aria-label="Current slide interactions" className={styles.slideInteractions}>
+                <ContentSlideView
+                  block={block}
+                  variant="live"
+                  interactionSourceKey={JSON.stringify([id, pass, connection === "fallback"])}
+                />
+              </section>
+            ) : null}
             <dl className={styles.metrics}>
               {(
                 [

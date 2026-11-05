@@ -1,6 +1,37 @@
 import { randomUUID } from "node:crypto";
 import { type PresentationSceneNode } from "@openround/contracts";
 
+export function interactionSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
+  const block = compositionSceneBlock(mediaIds, title);
+  const nodes: PresentationSceneNode[] = [
+    ...block.scene.nodes,
+    {
+      id: "reveal",
+      type: "reveal",
+      scope: "local",
+      label: "Show the reasoning",
+      body: "Public audience detail, opened independently on each device.",
+      frame: { x: 5, y: 63, width: 43, height: 15 },
+    },
+    {
+      id: "link",
+      type: "link",
+      label: "Read the source",
+      href: "https://example.com/evidence?ref=presentation",
+      frame: { x: 52, y: 63, width: 43, height: 15 },
+    },
+  ];
+  return {
+    ...block,
+    scene: {
+      ...block.scene,
+      schemaVersion: 5 as const,
+      nodes,
+      readingOrder: nodes.map(({ id }) => id),
+    },
+  };
+}
+
 export function compositionSceneBlock(mediaIds: string[] = [], title = "Native evidence") {
   const block = designSceneBlock(mediaIds, title);
   const nodes: PresentationSceneNode[] = [

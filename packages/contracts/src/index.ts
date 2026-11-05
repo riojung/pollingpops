@@ -4778,7 +4778,7 @@ function applyPresentationTopology(
     }
     blockIds.add(block.id);
     if (block.kind !== "question") continue;
-    if (isTextOpinionQuestion(block.question) && presentation.schemaVersion !== 10) {
+    if (isTextOpinionQuestion(block.question) && presentation.schemaVersion < 10) {
       ctx.addIssue({
         code: "custom",
         message: "Text opinions require Presentation schema version 10",
@@ -4898,7 +4898,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4937,8 +4937,8 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
-    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 | 4 }; hidden?: true }>;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+    blocks: Array<{ kind: string; scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 }; hidden?: true }>;
   },
   ctx: z.RefinementCtx,
   published = false,
@@ -4987,6 +4987,17 @@ function applyPresentationSceneRules(
         code: "custom",
         path: ["blocks", index, "scene"],
         message: "Designed scenes require Presentation schema version 7",
+      });
+    }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === 5 &&
+      presentation.schemaVersion < 11
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Interactive scenes require Presentation schema version 11",
       });
     }
     if (
@@ -5040,6 +5051,7 @@ export const PresentationDraftSchema = z
         z.literal(8),
         z.literal(9),
         z.literal(10),
+        z.literal(11),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5078,6 +5090,7 @@ export const PresentationContentSchema = z
       z.literal(8),
       z.literal(9),
       z.literal(10),
+      z.literal(11),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
@@ -5196,7 +5209,8 @@ export function migratePresentationV1(value: unknown): unknown {
     presentation.schemaVersion === 7 ||
     presentation.schemaVersion === 8 ||
     presentation.schemaVersion === 9 ||
-    presentation.schemaVersion === 10
+    presentation.schemaVersion === 10 ||
+    presentation.schemaVersion === 11
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };

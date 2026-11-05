@@ -87,6 +87,12 @@ service, provider, model call or entitlement is added.
   and sparse starter replacement, nonempty-deck insertion, sections, publication, case-insensitive
   frame references and exact retry receipts. The authored starter case reproduced its original
   HTTP400 before the service fix.
+- PR review adds **31 focused database reader/live-insertion checks**. Initial document14
+  sessions use the published-content parser, rejecting hidden blocks, empty decks and blank
+  titles before in-memory storage or partial writes. Valid spatial content and Quick Check/
+  published-question metadata remain intact; invalid live markers reject and the legacy5
+  partial-snapshot path retains its original meaning. The regression reproduced hidden content
+  being stored before the dispatch fix. No contract, migration or SQL guard changes are needed.
 - **Eight selected real PostgreSQL cases pass:** three E10 cases, four existing E09 cases and
   the shared Presentation repository conformance baseline. They cover scene6 broadcast/branch
   behavior, original windows/revisits/receipts, raw spatial/reference/version guards, frozen
@@ -121,11 +127,11 @@ service, provider, model call or entitlement is added.
 
 - **The full `VITEST_MAX_WORKERS=1 pnpm check` passes:** formatting, Docker workspace context,
   lint/typecheck (17 tasks each), all package tests, smoke-support tests, production builds
-  (10 tasks) and admin CLI build. Principal totals are 910 contracts, 538 database, 1270 server,
+  (10 tasks) and admin CLI build. Principal totals are 910 contracts, 549 database, 1270 server,
   2639 web and 354 smoke-support tests passed. Normal opt-in integration skips remain; the eight
   real PostgreSQL cases above were qualified separately. Reader tests explicitly accept matching
   document14 and reject mismatched embedded/stored versions and unsupported document15.
-  Private log: `/tmp/pollingpops-e10-review-fixes-check.log`.
+  Private log: `/tmp/pollingpops-e10-pr202-reader-check.log`.
 - The final source scope contains 54 files, with no package manifest or lockfile changes and
   exactly one new migration, `098_presentation_spatial.sql`. All 97 historical migrations match
   the merged E09 baseline byte for byte. No generated browser/PG artifacts are stored in the repo.

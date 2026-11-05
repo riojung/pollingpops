@@ -353,7 +353,7 @@ export function upcastPresentationContent(
  * Legacy live snapshots used draft validation, including partially authored old snapshots.
  * Preserve that read path, but validate session-only metadata with the frozen content contract
  * so it cannot be stripped by the authoring parser or restore invalid live insertion metadata.
- * Versions 6 through 12 always use the publication parser: hidden editable content must never enter a
+ * Versions 6 through 14 always use the publication parser: hidden editable content must never enter a
  * session through the legacy partial-snapshot path.
  */
 export function upcastPresentationSessionContent(
@@ -369,6 +369,7 @@ export function upcastPresentationSessionContent(
     schemaVersion === PRESENTATION_INTERACTION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_NAVIGATION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_SPATIAL_SCHEMA_VERSION ||
     (value &&
       typeof value === "object" &&
       ("liveQuickCheck" in value || "livePublishedQuestions" in value))

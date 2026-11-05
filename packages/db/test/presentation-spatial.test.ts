@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   PresentationContentSchema,
+  PresentationDraftSchema,
   resolvePresentationSpatialFrames,
   type PresentationContent,
 } from "@openround/contracts";
@@ -37,6 +38,155 @@ export function spatialContent(source = advancedInteractionContent()): Presentat
   });
 }
 describe("durable bounded Presentation spatial layout", () => {
+  it.each([6, 7, 8, 9, 10, 11, 12, 13, 14] as const)(
+    "requires publication-valid initial session content in document%s",
+    (schemaVersion) => {
+      const content = PresentationContentSchema.parse({
+        schemaVersion,
+        title: "Published story",
+        blocks: [presentationNavigationSlide("Visible slide")],
+      });
+      expect(upcastPresentationSessionContent(content, schemaVersion)).toEqual(content);
+      const hidden = { ...content, blocks: [{ ...content.blocks[0]!, hidden: true as const }] };
+      for (const invalid of [hidden, { ...content, blocks: [] }, { ...content, title: " " }]) {
+        // These are valid editable drafts. Only the publication dispatch can reject them.
+        expect(PresentationDraftSchema.safeParse(invalid).success).toBe(true);
+        expect(() => upcastPresentationSessionContent(invalid, schemaVersion)).toThrow();
+      }
+    },
+  );
+  it("rejects unpublished14 content before an initial Memory session can be stored", async () => {
+    const repository = createPresentationSessionRepository(new MemoryRepository());
+    const content = PresentationContentSchema.parse({
+      schemaVersion: 14,
+      title: "Published story",
+      blocks: [presentationNavigationSlide("Visible slide")],
+    });
+    const visible = content.blocks[0]!;
+    if (visible.kind !== "content") throw new Error("Expected a visible content slide");
+    const now = new Date(),
+      workspaceId = randomUUID();
+    const base = {
+      workspaceId,
+      presentationId: randomUUID(),
+      presentationVersionId: randomUUID(),
+      title: content.title,
+      status: "active" as const,
+      phase: "lobby" as const,
+      currentBlockIndex: -1,
+      revision: 0,
+      createdBy: randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+      liveExpiresAt: new Date(now.getTime() + 3600000),
+      retentionExpiresAt: new Date(now.getTime() + 86400000),
+    };
+    const valid = await repository.createSession({
+      ...base,
+      id: randomUUID(),
+      code: "9893400",
+      content,
+    });
+    expect((await repository.getSessionById(valid.id))!.content).toEqual(content);
+    const invalidContents = [
+      { ...content, blocks: [{ ...visible, hidden: true as const }] },
+      { ...content, blocks: [] },
+      { ...content, title: " " },
+    ];
+    for (const [index, invalid] of invalidContents.entries()) {
+      const id = randomUUID();
+      await expect(
+        repository.createSession({ ...base, id, code: String(9893401 + index), content: invalid }),
+      ).rejects.toThrow();
+      await expect(repository.getSessionById(id)).resolves.toBeNull();
+    }
+  });
+  it("retains valid14 live insertion metadata through the content reader and keeps legacy partial reads unchanged", async () => {
+    const original = spatialContent(presentationNavigationContent());
+    const source = original.blocks.find((block) => block.kind === "question")!;
+    if (source.kind !== "question") throw new Error("Expected numeric question");
+    const quickCheck = {
+      id: randomUUID(),
+      kind: "question" as const,
+      question: {
+        id: randomUUID(),
+        type: "poll" as const,
+        prompt: "Session-only check",
+        purpose: "opinion" as const,
+        confidence: "off" as const,
+        delivery: "main" as const,
+        conceptKeys: [],
+        linkedRecheckQuestionId: null,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+        choices: ["First", "Second"].map((label) => ({
+          id: randomUUID(),
+          label,
+          isCorrect: false,
+        })),
+      },
+    };
+    const publishedMarker = {
+      commandId: randomUUID(),
+      blockId: randomUUID(),
+      sourceQuizId: randomUUID(),
+      sourceQuizVersionId: randomUUID(),
+      sourceQuizVersion: 1,
+      sourceQuestionId: randomUUID(),
+      contentHash: "a".repeat(64),
+    };
+    const publishedBlock = {
+      id: publishedMarker.blockId,
+      kind: "question" as const,
+      question: { ...source.question, id: randomUUID() },
+      provenance: {
+        sourceQuizVersionId: publishedMarker.sourceQuizVersionId,
+        sourceQuestionId: publishedMarker.sourceQuestionId,
+      },
+    };
+    const content = PresentationContentSchema.parse({
+      ...original,
+      blocks: [...original.blocks, quickCheck, publishedBlock],
+      liveQuickCheck: { commandId: randomUUID(), blockId: quickCheck.id },
+      livePublishedQuestions: [publishedMarker],
+    });
+    const bytes = JSON.stringify(content);
+    expect(JSON.stringify(upcastPresentationSessionContent(JSON.parse(bytes), 14))).toBe(bytes);
+    const repository = createPresentationSessionRepository(new MemoryRepository());
+    const { session } = await createPresentationNavigationSession({
+      repository,
+      workspaceId: randomUUID(),
+      presentationId: randomUUID(),
+      presentationVersionId: randomUUID(),
+      createdBy: randomUUID(),
+      content,
+    });
+    const restored = (await repository.getSessionById(session.id))!.content;
+    expect(restored.liveQuickCheck).toEqual(content.liveQuickCheck);
+    expect(restored.livePublishedQuestions).toEqual([publishedMarker]);
+    expect(restored.spatial).toEqual(original.spatial);
+    expect(() =>
+      upcastPresentationSessionContent(
+        { ...content, liveQuickCheck: { ...content.liveQuickCheck, blockId: randomUUID() } },
+        14,
+      ),
+    ).toThrow();
+    expect(() =>
+      upcastPresentationSessionContent(
+        {
+          ...content,
+          livePublishedQuestions: [{ ...publishedMarker, sourceQuestionId: randomUUID() }],
+        },
+        14,
+      ),
+    ).toThrow();
+    const legacy = { schemaVersion: 5, title: "", blocks: [] };
+    expect(upcastPresentationSessionContent(legacy, 5)).toMatchObject(legacy);
+  });
   it("adds exact14 readers without rewriting13 hashes/defaults or accepting15", () => {
     const original = advancedInteractionContent(),
       bytes = JSON.stringify(original);

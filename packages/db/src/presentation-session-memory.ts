@@ -1,3 +1,12 @@
+import {
+  validateInsightsOpinionSelectors,
+  memoryInsightsOpinionCounts,
+  type PresentationInsightsOpinionSelector,
+} from "./presentation-insights-opinions.js";
+import {
+  presentationRevealRosterSelectors,
+  type PresentationRevealRosterSelector,
+} from "./presentation-insights-types.js";
 import { transitionPresentationInteractionState } from "./presentation-interactions.js";
 import { transitionPresentationNavigationState } from "./presentation-navigation.js";
 import { requiresPresentationTextOpinions } from "@openround/contracts";
@@ -915,6 +924,64 @@ export class MemoryPresentationSessionRepository
       .filter((event) => event.sessionId === sessionId)
       .sort((left, right) => left.sequence - right.sequence)
       .map(clone);
+  }
+
+  async getRevealRosterCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationRevealRosterSelector[],
+    now = new Date(),
+  ) {
+    const selected = presentationRevealRosterSelectors.parse(selectors);
+    if (
+      this.liveRooms instanceof MemoryRepository &&
+      (await this.liveRooms.workspaceDeletionStarted(workspaceId))
+    )
+      throw new PresentationTextReadError("NOT_FOUND", "Presentation session not found");
+    const session = this.sessions.get(sessionId);
+    assertTextReadSession(session, workspaceId, now, true);
+    if (session.status !== "finished")
+      throw new PresentationTextReadError("NOT_FOUND", "Presentation session not found");
+    return selected.map((selector) => {
+      const event = [...this.timeline.values()].find(
+        (event) =>
+          event.workspaceId === workspaceId &&
+          event.sessionId === sessionId &&
+          event.sequence === selector.sequence &&
+          event.type === "question.revealed" &&
+          event.blockId?.toLowerCase() === selector.blockId,
+      );
+      return {
+        ...selector,
+        participantCount:
+          event?.revealedParticipantIds == null
+            ? null
+            : new Set(event.revealedParticipantIds.map((id) => id.toLowerCase())).size,
+      };
+    });
+  }
+
+  async getInsightsOpinionCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationInsightsOpinionSelector[],
+    now = new Date(),
+  ) {
+    validateInsightsOpinionSelectors(selectors);
+    if (
+      this.liveRooms instanceof MemoryRepository &&
+      (await this.liveRooms.workspaceDeletionStarted(workspaceId))
+    )
+      return [];
+    const session = this.sessions.get(sessionId);
+    if (
+      !session ||
+      session.workspaceId !== workspaceId ||
+      session.status !== "finished" ||
+      session.retentionExpiresAt <= now
+    )
+      return [];
+    return memoryInsightsOpinionCounts(session, selectors, this.responses.values());
   }
 
   async getReport(workspaceId: string, sessionId: string) {

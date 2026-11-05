@@ -17,6 +17,7 @@ interface ReportHooks {
 const fixtures = vi.hoisted(() => ({
   hooks: null as ReportHooks | null,
   apiFetch: vi.fn(),
+  insightsSource: vi.fn(),
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -68,10 +69,17 @@ vi.mock("../../../../lib/api", async (importOriginal) => ({
 vi.mock("../../../../components/session-summary/summary-dialog", () => ({
   SessionSummaryButton: () => <button>Share summary</button>,
 }));
+vi.mock("../../../../components/presentation-insights/session-insights", () => ({
+  PresentationSessionInsightsPanel: ({ source }: { source: unknown }) => {
+    fixtures.insightsSource(source);
+    return <section aria-label="Session insights">Session insights</section>;
+  },
+}));
 
 beforeEach(() => {
   fixtures.hooks = null;
   fixtures.apiFetch.mockReset();
+  fixtures.insightsSource.mockReset();
 });
 
 function reportFixture(schemaVersion: 1 | 2 | 3) {
@@ -218,9 +226,16 @@ describe("Presentation Quick Check report compatibility", () => {
       const harness = reportHarness();
       await settle();
       expect(renderToStaticMarkup(harness.render())).not.toContain("Share summary");
+      expect(renderToStaticMarkup(harness.render())).not.toContain("Session insights");
       fixtures.apiFetch.mockResolvedValue({ reportStatus: "ready", report: reportFixture(1) });
       await vi.advanceTimersByTimeAsync(1_000);
       expect(renderToStaticMarkup(harness.render())).toContain("Share summary");
+      expect(renderToStaticMarkup(harness.render())).toContain("Session insights");
+      expect(fixtures.insightsSource).toHaveBeenCalledWith({
+        sessionId: reportFixture(1).sessionId,
+        presentationId: reportFixture(1).presentationId,
+        presentationVersionId: reportFixture(1).presentationVersionId,
+      });
     } finally {
       vi.useRealTimers();
     }

@@ -1,3 +1,11 @@
+import type {
+  PresentationInsightsOpinionSelector,
+  PresentationInsightsOpinionCount,
+} from "./presentation-insights-opinions.js";
+import type {
+  PresentationRevealRosterSelector,
+  PresentationRevealRosterCount,
+} from "./presentation-insights-types.js";
 import type { PresentationTextRepository } from "./presentation-text-types.js";
 import type {
   PresentationContent,
@@ -374,6 +382,19 @@ export interface PresentationSessionRepository extends PresentationTextRepositor
   ): Promise<PresentationParticipantSnapshotProjection | null>;
   listResponses(sessionId: string): Promise<PresentationSessionResponseRecord[]>;
   listTimeline(sessionId: string): Promise<PresentationSessionTimelineRecord[]>;
+  /** Counts only: private frozen reveal roster IDs never cross this boundary. */
+  getRevealRosterCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationRevealRosterSelector[],
+    now?: Date,
+  ): Promise<PresentationRevealRosterCount[]>;
+  getInsightsOpinionCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationInsightsOpinionSelector[],
+    now?: Date,
+  ): Promise<PresentationInsightsOpinionCount[]>;
   getReport(
     workspaceId: string,
     sessionId: string,

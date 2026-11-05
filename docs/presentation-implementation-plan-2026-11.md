@@ -125,8 +125,9 @@ locally; release qualification remains open. E02's design foundation and remaini
 information and scenario-template software are implemented. E03 delivery, E04 opinion/text formats,
 E05 visual import and E06 basic reveal/link interactions are also implemented. E06 advanced
 interactions, E07 sections/live navigation and E08 private view-only sharing are merged in
-[PR #199](https://github.com/riojung/pollingpops/pull/199). E13 static export is implemented on
-`codex/presentation-e13-static-export` and locally verified. Self-paced attempts and
+[PR #199](https://github.com/riojung/pollingpops/pull/199). E13 static export is merged in
+[PR #200](https://github.com/riojung/pollingpops/pull/200). E09's selected live-session reporting
+scope is implemented on `codex/presentation-e09-reporting`. Self-paced attempts and
 the remaining later packages stay planned; deployment and release qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
@@ -428,6 +429,17 @@ sessions and viewers. Omitted/skipped activities are not wrong answers. Dwell ti
 understanding. Aggregation follows current privacy thresholds; deleted or moderated text does not
 return through reports or exports. Reports bind to the frozen version and retain historical readers.
 Instrument resource cost alongside use. Estimate: 2–4 additional weeks for the selected report scope.
+
+The selected live-session implementation adds a creator **Session insights** panel, formula-safe
+CSV and a self-contained readable HTML copy. It combines frozen-version block/section delivery,
+exact original-reveal response rosters, opinion distributions, paired recovery and separately
+timestamped current public Q&A counts. Missing historical coverage remains unknown; present/skipped
+states come from recorded navigation. Samples below five are suppressed, and submitted bodies,
+identities, notes and answer keys are excluded. Historical Report V1–V7 and public AggregateSummary
+V1 remain unchanged. Bounded counts-only database reads and low-cardinality resource metrics avoid
+a model or hosted-service dependency. See the [E09 record](evidence/presentation-e09-session-insights.md).
+Private-link view tracking is excluded under the E08 policy. Self-paced attempt/completion
+reporting depends on the separate assignment system; this slice does not claim either feature.
 
 ### E10 Add spatial storytelling
 

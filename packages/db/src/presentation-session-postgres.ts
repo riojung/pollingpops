@@ -1,3 +1,12 @@
+import {
+  validateInsightsOpinionSelectors,
+  postgresInsightsOpinionCounts,
+  type PresentationInsightsOpinionSelector,
+} from "./presentation-insights-opinions.js";
+import {
+  presentationRevealRosterSelectors,
+  type PresentationRevealRosterSelector,
+} from "./presentation-insights-types.js";
 import { transitionPresentationInteractionState } from "./presentation-interactions.js";
 import { transitionPresentationNavigationState } from "./presentation-navigation.js";
 import {
@@ -1117,6 +1126,49 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       );
       return result.rows.map(mapTimeline);
     });
+  }
+
+  async getRevealRosterCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationRevealRosterSelector[],
+    now = new Date(),
+  ) {
+    const selected = presentationRevealRosterSelectors.parse(selectors);
+    return this.transaction(workspaceId, async (client) => {
+      const parent = await client.query(
+        `SELECT session.id FROM presentation_live_sessions session JOIN workspaces workspace ON workspace.id=session.workspace_id WHERE session.workspace_id=$1 AND session.id=$2 AND session.status='finished' AND session.retention_expires_at > GREATEST($3::timestamptz,clock_timestamp()) AND workspace.deletion_started_at IS NULL`,
+        [workspaceId, sessionId, now],
+      );
+      if (!parent.rows.length)
+        throw new PresentationTextReadError("NOT_FOUND", "Presentation session not found");
+      if (!selected.length) return [];
+      const rows = await client.query(
+        `SELECT selector.block_id,selector.sequence, CASE WHEN timeline.revealed_participant_ids IS NULL THEN NULL ELSE (SELECT count(DISTINCT id)::integer FROM unnest(timeline.revealed_participant_ids) AS id) END AS participant_count FROM unnest($3::uuid[],$4::bigint[]) WITH ORDINALITY AS selector(block_id,sequence,position) LEFT JOIN presentation_session_timeline timeline ON timeline.workspace_id=$1 AND timeline.session_id=$2 AND timeline.sequence=selector.sequence AND timeline.block_id=selector.block_id AND timeline.event_type='question.revealed' ORDER BY selector.position`,
+        [
+          workspaceId,
+          sessionId,
+          selected.map((row) => row.blockId),
+          selected.map((row) => row.sequence),
+        ],
+      );
+      return rows.rows.map((row) => ({
+        blockId: String(row.block_id),
+        sequence: Number(row.sequence),
+        participantCount: row.participant_count === null ? null : Number(row.participant_count),
+      }));
+    });
+  }
+
+  async getInsightsOpinionCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationInsightsOpinionSelector[],
+    now = new Date(),
+  ) {
+    validateInsightsOpinionSelectors(selectors);
+    if (!selectors.length) return [];
+    return postgresInsightsOpinionCounts(this.repository, workspaceId, sessionId, selectors, now);
   }
 
   async getReport(workspaceId: string, sessionId: string) {

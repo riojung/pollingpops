@@ -1317,6 +1317,29 @@ shown. These counts do not identify unique people across runs. Survey widgets sh
 the Surveys they represent; open an individual report for response counts and question results.
 No-evidence states remain separate from a measured zero.
 
+Finished Presentation reports include **Session insights** for the session's frozen published
+version. Section and block delivery show what the facilitator presented, skipped, or did not
+record. Revisiting a block counts once. These measures describe delivery, not learner completion
+or understanding; elapsed time is wall-clock time.
+
+Response coverage compares accepted responses with participant identities joined by the original
+answer reveal. Someone who joined later is excluded from that activity's denominator. Joined
+identities are not verified people, devices or attendance, and response records across activities
+are not unique respondents. Older sessions without a reveal roster show **Not recorded**, rather
+than substituting the final participant count. Positive activity samples below five are hidden.
+Opinion distributions stay separate from assessed evidence, which remains in the detailed report.
+Recovery uses initially incorrect participants who also submitted the linked recheck.
+
+Q&A counts reflect currently published or answered questions, with their own snapshot time;
+pending, dismissed and removed questions are excluded. They may change after the session finishes,
+while the delivery and response evidence stays frozen. Question bodies, participant names and
+presenter notes are excluded from insights. Private review-link views are not tracked.
+
+Use **Export coverage CSV** or **Download readable summary** in Session insights for private
+aggregate copies. The HTML summary works offline without scripts or remote assets. These files
+are deliberate copies and cannot be revoked after download. The existing detailed-report CSV,
+versioned JSON and **Share summary** controls keep their existing behavior.
+
 Reports are generated asynchronously from durable answers and should be ready within 60 seconds.
 Report v3 includes initial accuracy, confidence-versus-correctness, misconception distribution,
 interventions, linked-recheck recovery, separately labelled revote improvement, unresolved

@@ -7676,3 +7676,4 @@ export * from "./idea-boards";
 export * from "./presentation-sharing";
 
 export * from "./presentation-static-export";
+export * from "./presentation-session-insights";

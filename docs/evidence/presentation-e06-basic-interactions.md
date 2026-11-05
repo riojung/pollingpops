@@ -111,14 +111,39 @@ and no OOM occurred. Private results: `/tmp/pollingpops-e06-pg/result-643752f0bb
 `migration-result-643752f0bb.json`.
 
 The focused contract file passed **71 tests**, both contracts/database typechecks and scoped
-ESLint passed, and formatting/diff checks passed. A final pre-PR
-**`VITEST_MAX_WORKERS=1 pnpm check` passed after this fix**, including formatting, Docker context,
+ESLint passed, and formatting/diff checks passed. Before the percent-host follow-up below, a final pre-PR
+**`VITEST_MAX_WORKERS=1 pnpm check` passed after this URL-spelling fix**, including formatting, Docker context,
 lint, all package typechecks/tests, smoke support, production builds and the admin CLI. Principal
 totals: contracts **716**, database **519**, server **1,162**, web **2,446**, and smoke support
 **354**. Ordinary DB execution skipped 375 PostgreSQL-dependent tests; the real-PG run above
 exercises the added cases. Server retained 15 existing skips and smoke support one. Private log:
 `/tmp/pollingpops-e06-pr-check.log`. The earlier browser runs were not repeated for this SQL/test
 follow-up; UI code is unchanged.
+
+## PR #198 percent-host review follow-up
+
+The GitHub review found that raw v11 writes could store malformed percent-encoded hosts such as
+`https://%` and `https://%zz.example`, although contract parsing rejects them. The SQL guard now
+validates host escape pairs, decodes their bytes exactly once as strict UTF-8, and rejects decoded
+controls, forbidden domain delimiters and empty mapped hosts. Compatibility-mapped delimiters
+are checked in a temporary normalized host; accepted stored href text and immutable hashes remain
+unchanged. The host-only decode follows the [URL Standard host parsing](https://url.spec.whatwg.org/#host-parsing);
+path/query escapes retain their existing policy, and valid encoded ASCII/IDN domains, embedded
+ignored characters, Unicode dots and earlier extra-slash/empty-user-info spellings remain valid.
+
+Before the fix, all ten new rejection category/context tests demonstrated raw writes committing
+invalid documents. Final restricted PostgreSQL 17 run **`1ceacbd229` passed 60/60 selected cases**:
+42 accepted-URL persistence/publication/history/live-snapshot lifecycles, ten rejection tests
+covering 148 malformed raw writes across new controls and rich-text upgrades, and eight E06/legacy
+baselines. Rejected writes preserve the entire parent row and history. All **94 migrations and
+exact checksum checks passed twice**, with restricted runtime/forced RLS and 65 additional legacy
+raw rejections verified. Owned PostgreSQL/SSH resources were removed, all fourteen pre-existing
+containers retained their state, and no OOM occurred. Private results:
+`/tmp/pollingpops-e06-pg/result-1ceacbd229.json` and `migration-result-1ceacbd229.json`.
+
+The focused contract file passed **243 tests**; contracts/database typechecks, scoped ESLint,
+formatting and diff checks passed. This SQL/test-only follow-up does not change UI code; the
+earlier full repository/browser runs were not repeated.
 
 ## Rollout and acceptance boundary
 

@@ -13,7 +13,7 @@ $$;
 -- Validate bracketed IPv6 and bounded ports separately so malformed authorities fail closed.
 CREATE FUNCTION openround_presentation_external_link_valid(value text)
 RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$
-DECLARE authority text; host text; port text;
+DECLARE authority text; host text; port text; host_part text; host_bytes bytea:=''::bytea;
 BEGIN
  IF value IS NULL OR length(value)>2048 OR value !~* '^https?://' OR value ~ '[[:space:][:cntrl:]\\]'
    OR value ~ U&'[\00A0\1680\2000-\200A\2028\2029\202F\205F\3000\FEFF]' THEN RETURN false; END IF;
@@ -33,10 +33,27 @@ BEGIN
    host:=split_part(authority,':',1);
    IF host='' THEN RETURN false; END IF;
    IF authority LIKE '%:%' THEN port:=split_part(authority,':',2); END IF;
+   -- Decode domain bytes once, not path/query escapes or already-decoded percent text.
+   -- https://url.spec.whatwg.org/#host-parsing
+   IF strpos(host,'%')>0 THEN
+     IF strpos(regexp_replace(host,'%[0-9A-Fa-f]{2}','','g'),'%')>0 THEN RETURN false; END IF;
+     FOR host_part IN SELECT parts[1] FROM regexp_matches(host,'(%[0-9A-Fa-f]{2}|[^%]+)','g')
+       WITH ORDINALITY AS pieces(parts,ord) ORDER BY pieces.ord LOOP
+       host_bytes:=host_bytes || CASE WHEN left(host_part,1)='%'
+         THEN decode(substr(host_part,2),'hex') ELSE convert_to(host_part,'UTF8') END;
+     END LOOP;
+     host:=convert_from(host_bytes,'UTF8');
+   END IF;
+   -- Validate compatibility-mapped delimiters and all-ignored hosts without changing stored URLs.
+   host:=translate(normalize(host,NFKC),U&'\00AD\200B\FEFF','');
+   IF host='' OR EXISTS(SELECT 1 FROM regexp_split_to_table(host,'') ch
+     WHERE ch<>'' AND (ascii(ch)<=32 OR ascii(ch) BETWEEN 127 AND 159
+       OR ch=ANY(ARRAY['#','%','/',':','<','>','?','@','[',chr(92),']','^','|']))) THEN RETURN false; END IF;
  END IF;
  IF port IS NOT NULL AND port<>'' AND (port !~ '^[0-9]+$' OR port::numeric>65535) THEN RETURN false; END IF;
  RETURN true;
-EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN RETURN false;
+EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range
+  OR character_not_in_repertoire OR untranslatable_character THEN RETURN false;
 END $$;
 
 -- Count compact JSON bytes, excluding jsonb's formatting spaces without touching text content.

@@ -103,6 +103,118 @@ const extraSlashUnsafeLinks = [
   "ftp:////example.com",
 ];
 
+const percentHostSafeLinks = [
+  "https://%65xample.com/source",
+  "https://%65xample%2Ecom/source",
+  "https://%C3%A9xample.com/source",
+  "https://%e4%be%8b%e3%81%88%2e%e3%83%86%e3%82%b9%e3%83%88/source",
+  "HTTPS:////:@%65xample%2Ecom:00000443/source",
+  "https://%EF%BB%BFexample.com/source",
+  "https://exa%C2%ADmple.com/source",
+  "https://%E2%80%8Bexample.com/source",
+  "https://%EF%BC%A5xample.com/source",
+  "https://example%E3%80%82com/source",
+  "https://example.com/source%zz?escaped=%#tail%0",
+  "https://example.com/%00/%FF/%2F?part=%C3%28",
+];
+const percentHostUnsafeLinks = [
+  {
+    category: "malformed escapes",
+    hrefs: [
+      "https://%",
+      "https://%0",
+      "https://%zz.example",
+      "https://%g0.example",
+      "https://%0g.example",
+      "https://example%.com",
+      "https:////:@%zz.example/source",
+    ],
+  },
+  {
+    category: "invalid UTF8",
+    hrefs: [
+      "https://%C3.example/source",
+      "https://%C3%28.example/source",
+      "https://%E2%82.example/source",
+      "https://%E2%28%A1.example/source",
+      "https://%ED%A0%80.example/source",
+      "https://%C0%AF.example/source",
+      "https://%F0%80%80%80.example/source",
+      "https://%80.example/source",
+      "https://%FF.example/source",
+    ],
+  },
+  {
+    category: "forbidden decoded host characters",
+    hrefs: [
+      "https://prefix%00.example/source",
+      "https://prefix%01.example/source",
+      "https://prefix%02.example/source",
+      "https://prefix%03.example/source",
+      "https://prefix%04.example/source",
+      "https://prefix%05.example/source",
+      "https://prefix%06.example/source",
+      "https://prefix%07.example/source",
+      "https://prefix%08.example/source",
+      "https://prefix%09.example/source",
+      "https://prefix%0A.example/source",
+      "https://prefix%0B.example/source",
+      "https://prefix%0C.example/source",
+      "https://prefix%0D.example/source",
+      "https://prefix%0E.example/source",
+      "https://prefix%0F.example/source",
+      "https://prefix%10.example/source",
+      "https://prefix%11.example/source",
+      "https://prefix%12.example/source",
+      "https://prefix%13.example/source",
+      "https://prefix%14.example/source",
+      "https://prefix%15.example/source",
+      "https://prefix%16.example/source",
+      "https://prefix%17.example/source",
+      "https://prefix%18.example/source",
+      "https://prefix%19.example/source",
+      "https://prefix%1A.example/source",
+      "https://prefix%1B.example/source",
+      "https://prefix%1C.example/source",
+      "https://prefix%1D.example/source",
+      "https://prefix%1E.example/source",
+      "https://prefix%1F.example/source",
+      "https://prefix%20.example/source",
+      "https://prefix%23.example/source",
+      "https://prefix%25.example/source",
+      "https://prefix%2F.example/source",
+      "https://prefix%3A.example/source",
+      "https://prefix%3C.example/source",
+      "https://prefix%3E.example/source",
+      "https://prefix%3F.example/source",
+      "https://prefix%40.example/source",
+      "https://prefix%5B.example/source",
+      "https://prefix%5C.example/source",
+      "https://prefix%5D.example/source",
+      "https://prefix%5E.example/source",
+      "https://prefix%7C.example/source",
+      "https://prefix%7F.example/source",
+      "https://%C2%80.example/source",
+      "https://%C2%85.example/source",
+      "https://%252F.example/source",
+      "https://%2565xample.com/source",
+    ],
+  },
+  {
+    category: "mapped forbidden Unicode",
+    hrefs: [
+      "https://%C2%A0example.com/source",
+      "https://%EF%BC%8Fexample.com/source",
+      "https://%EF%BC%85example.com/source",
+      "https://%EF%BC%A0example.com/source",
+    ],
+  },
+  {
+    category: "empty IDNA host",
+    hrefs: ["https://%EF%BB%BF/source", "https://%C2%AD/source", "https://%E2%80%8B/source"],
+  },
+].flatMap((group) => group.hrefs);
+
 function richTextScene(href: string): PresentationSceneDraft {
   return {
     schemaVersion: 4,
@@ -169,6 +281,7 @@ describe("Presentation local reveal and external link nodes", () => {
     "https://[::1]/",
     "https://例え.テスト/資料",
     ...extraSlashSafeLinks,
+    ...percentHostSafeLinks,
   ])("accepts existing safe link policy: %s", (href) => {
     expect(PresentationSceneSchema.safeParse(changedNode({ href }, 2)).success).toBe(true);
   });
@@ -187,11 +300,12 @@ describe("Presentation local reveal and external link nodes", () => {
     "https://",
     "https://example.com:99999",
     ...extraSlashUnsafeLinks,
+    ...percentHostUnsafeLinks,
   ])("rejects unsafe link %s even in drafts", (href) => {
     expect(PresentationSceneDraftSchema.safeParse(changedNode({ href }, 2)).success).toBe(false);
   });
 
-  it.each(extraSlashSafeLinks)(
+  it.each([...extraSlashSafeLinks, ...percentHostSafeLinks])(
     "retains a pre-existing rich-text URL through scene4 to scene5 upgrade: %s",
     (href) => {
       const legacy = PresentationSceneSchema.parse(richTextScene(href));
@@ -203,8 +317,8 @@ describe("Presentation local reveal and external link nodes", () => {
     },
   );
 
-  it.each(extraSlashUnsafeLinks)(
-    "rejects unsafe extra-slash rich-text URLs before and after scene upgrade: %s",
+  it.each([...extraSlashUnsafeLinks, ...percentHostUnsafeLinks])(
+    "rejects unsafe rich-text URLs before and after scene upgrade: %s",
     (href) => {
       for (const schemaVersion of [4, 5])
         expect(

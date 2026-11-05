@@ -3207,6 +3207,18 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       "https://@example.com/",
       "https://:@example.com/",
       "https:////:@example.com/",
+      "https://%65xample.com/source",
+      "https://%65xample%2Ecom/source",
+      "https://%C3%A9xample.com/source",
+      "https://%e4%be%8b%e3%81%88%2e%e3%83%86%e3%82%b9%e3%83%88/source",
+      "HTTPS:////:@%65xample%2Ecom:00000443/source",
+      "https://%EF%BB%BFexample.com/source",
+      "https://exa%C2%ADmple.com/source",
+      "https://%E2%80%8Bexample.com/source",
+      "https://%EF%BC%A5xample.com/source",
+      "https://example%E3%80%82com/source",
+      "https://example.com/source%zz?escaped=%#tail%0",
+      "https://example.com/%00/%FF/%2F?part=%C3%28",
     ].flatMap((href) => (["link", "richText"] as const).map((mode) => ({ href, mode }))),
   )(
     "preserves safe URL variants for $mode $href through draft upgrade and publication",
@@ -3465,6 +3477,210 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       }
     }
   });
+
+  it.each(
+    [
+      {
+        category: "malformed escapes",
+        hrefs: [
+          "https://%",
+          "https://%0",
+          "https://%zz.example",
+          "https://%g0.example",
+          "https://%0g.example",
+          "https://example%.com",
+          "https:////:@%zz.example/source",
+        ],
+      },
+      {
+        category: "invalid UTF8",
+        hrefs: [
+          "https://%C3.example/source",
+          "https://%C3%28.example/source",
+          "https://%E2%82.example/source",
+          "https://%E2%28%A1.example/source",
+          "https://%ED%A0%80.example/source",
+          "https://%C0%AF.example/source",
+          "https://%F0%80%80%80.example/source",
+          "https://%80.example/source",
+          "https://%FF.example/source",
+        ],
+      },
+      {
+        category: "forbidden decoded host characters",
+        hrefs: [
+          "https://prefix%00.example/source",
+          "https://prefix%01.example/source",
+          "https://prefix%02.example/source",
+          "https://prefix%03.example/source",
+          "https://prefix%04.example/source",
+          "https://prefix%05.example/source",
+          "https://prefix%06.example/source",
+          "https://prefix%07.example/source",
+          "https://prefix%08.example/source",
+          "https://prefix%09.example/source",
+          "https://prefix%0A.example/source",
+          "https://prefix%0B.example/source",
+          "https://prefix%0C.example/source",
+          "https://prefix%0D.example/source",
+          "https://prefix%0E.example/source",
+          "https://prefix%0F.example/source",
+          "https://prefix%10.example/source",
+          "https://prefix%11.example/source",
+          "https://prefix%12.example/source",
+          "https://prefix%13.example/source",
+          "https://prefix%14.example/source",
+          "https://prefix%15.example/source",
+          "https://prefix%16.example/source",
+          "https://prefix%17.example/source",
+          "https://prefix%18.example/source",
+          "https://prefix%19.example/source",
+          "https://prefix%1A.example/source",
+          "https://prefix%1B.example/source",
+          "https://prefix%1C.example/source",
+          "https://prefix%1D.example/source",
+          "https://prefix%1E.example/source",
+          "https://prefix%1F.example/source",
+          "https://prefix%20.example/source",
+          "https://prefix%23.example/source",
+          "https://prefix%25.example/source",
+          "https://prefix%2F.example/source",
+          "https://prefix%3A.example/source",
+          "https://prefix%3C.example/source",
+          "https://prefix%3E.example/source",
+          "https://prefix%3F.example/source",
+          "https://prefix%40.example/source",
+          "https://prefix%5B.example/source",
+          "https://prefix%5C.example/source",
+          "https://prefix%5D.example/source",
+          "https://prefix%5E.example/source",
+          "https://prefix%7C.example/source",
+          "https://prefix%7F.example/source",
+          "https://%C2%80.example/source",
+          "https://%C2%85.example/source",
+          "https://%252F.example/source",
+          "https://%2565xample.com/source",
+        ],
+      },
+      {
+        category: "mapped forbidden Unicode",
+        hrefs: [
+          "https://%C2%A0example.com/source",
+          "https://%EF%BC%8Fexample.com/source",
+          "https://%EF%BC%85example.com/source",
+          "https://%EF%BC%A0example.com/source",
+        ],
+      },
+      {
+        category: "empty IDNA host",
+        hrefs: ["https://%EF%BB%BF/source", "https://%C2%AD/source", "https://%E2%80%8B/source"],
+      },
+    ].flatMap((group) => (["link", "richText"] as const).map((mode) => ({ ...group, mode }))),
+  )(
+    "rejects percent-host $category for $mode without changing the parent",
+    async ({ hrefs, mode }) => {
+      const owner = await creator("presentation-percent-host-rejection");
+      const presentations = new PostgresPresentationRepository(repository);
+      const draft = interactionDocument();
+      if (mode === "richText") {
+        const legacy = draft.blocks[0]!;
+        if (legacy.kind !== "content" || !legacy.scene) throw new Error("Expected legacy scene");
+        draft.schemaVersion = 8;
+        draft.blocks = [legacy];
+        legacy.scene.schemaVersion = 4;
+        legacy.scene.nodes = legacy.scene.nodes.filter(
+          (node) => node.type !== "reveal" && node.type !== "link",
+        );
+        const ids = new Set(legacy.scene.nodes.map((node) => node.id));
+        legacy.scene.readingOrder = legacy.scene.readingOrder.filter((id) => ids.has(id));
+      }
+      const now = new Date();
+      const presentation = await presentations.createPresentation({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        title: draft.title,
+        description: draft.description,
+        status: "draft",
+        draft,
+        draftRevision: 0,
+        draftSchemaVersion: draft.schemaVersion,
+        currentVersionId: null,
+        folderId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const snapshot = async () =>
+        packPracticeScoped(
+          owner.workspaceId,
+          async (client) =>
+            (
+              await client.query(
+                "SELECT to_jsonb(parent) AS parent FROM presentations parent WHERE id=$1",
+                [presentation.id],
+              )
+            ).rows[0]!.parent,
+        );
+      const originalParent = await snapshot();
+      for (const href of hrefs) {
+        const document = structuredClone(draft);
+        const block = document.blocks[0]!;
+        if (block.kind !== "content" || !block.scene) throw new Error("Expected native scene");
+        document.schemaVersion = 11;
+        block.scene.schemaVersion = 5;
+        if (mode === "link") {
+          const link = block.scene.nodes.find((node) => node.type === "link")!;
+          if (link.type !== "link") throw new Error("Expected link");
+          link.href = href;
+        } else {
+          block.scene.nodes.push({
+            id: "new-reveal",
+            type: "reveal",
+            scope: "local",
+            label: "Show evidence",
+            body: "Public evidence",
+            frame: { x: 8, y: 65, width: 38, height: 20 },
+          });
+          block.scene.readingOrder.push("new-reveal");
+          const text = block.scene.nodes.find((node) => node.type === "text")!;
+          if (text.type !== "text") throw new Error("Expected title");
+          text.richText = {
+            paragraphs: [{ kind: "paragraph", runs: [{ text: text.text, href }] }],
+          };
+        }
+        expect(PresentationDraftSchema.safeParse(document).success, href).toBe(false);
+        expect(PresentationContentSchema.safeParse(document).success, href).toBe(false);
+        // Exercise the raw storage boundary before helper assertions: malformed URLs cannot
+        // commit an unreadable parent, a changed revision, or any other mutation fields.
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "UPDATE presentations SET draft=$1::jsonb,draft_schema_version=11,draft_revision=draft_revision+1,updated_at=$2 WHERE id=$3",
+              [JSON.stringify(document), new Date(now.getTime() + 1000), presentation.id],
+            ),
+          ),
+          href,
+        ).rejects.toMatchObject({ code: "23514" });
+        expect(await snapshot(), href).toEqual(originalParent);
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_interactions_valid($1::jsonb,11,false) AS valid",
+              [JSON.stringify(document)],
+            )
+          ).rows[0]!.valid,
+          href,
+        ).toBe(false);
+      }
+      expect(
+        (await presentations.getPresentation(owner.workspaceId, presentation.id))?.draft,
+      ).toEqual(draft);
+      expect(
+        await presentations.listPresentationHistory(owner.workspaceId, presentation.id),
+      ).toMatchObject([{ revision: 0, draft }]);
+    },
+  );
 
   it("guards raw local interaction scenes and document version11", async () => {
     const owner = await creator("presentation-interaction-raw");

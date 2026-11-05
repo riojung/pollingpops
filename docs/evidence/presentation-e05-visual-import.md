@@ -31,13 +31,14 @@ The current source-grounded PDF/DOCX/PPTX proposal flow retains its separate nam
 
 ## Executed verification
 
-- After the EXIF review follow-up below, **`VITEST_MAX_WORKERS=1 pnpm check` passed**, including
+- After the EXIF review follow-up and before the fixture XML follow-up below,
+  **`VITEST_MAX_WORKERS=1 pnpm check` passed**, including
   repository formatting, Docker context checks, lint, types, package tests, smoke-support tests,
   production builds and the admin CLI.
   Principal totals: contracts **645**, database **516**, server **1,158** and web **2,403**.
   Ordinary DB execution skipped 353 PostgreSQL-dependent tests; server retained 15 existing skips.
   Smoke support passed **354**, with one existing skip. Restricted PostgreSQL was checked below.
-  Protected final-source log: `/tmp/pollingpops-e05-pr-check.log`. The initial support run caught
+  Protected pre-PR log: `/tmp/pollingpops-e05-pr-check.log`. The initial support run caught
   the expected CI artifact list needing the new visual-import diagnostics; that expectation was
   updated before both successful repository checks.
 
@@ -102,6 +103,20 @@ child-cleanup smoke checks. Four additional compiled JPEG/WebP orientation-6/8 c
 portrait dimensions, corner pixels and zero remaining converter children. Private result:
 `/tmp/pollingpops-e05-exif-compiled-smoke.json`. This follow-up changes image normalization only;
 the earlier PostgreSQL/browser runs were not repeated.
+
+## PR #197 XML review follow-up
+
+CodeQL identified sequential XML entity decoding in the synthetic object-store batch-delete
+handler. A key containing literal `&lt;` or `&gt;` could delete a different key containing `<` or
+`>`. The handler now decodes the five named entities in a single replacement pass, preserving
+literal entity text and supporting quoted/apostrophe keys.
+
+An isolated loopback harness executing the fixture's actual storage handler reproduced five
+failures before the fix. Afterward, all ten cases passed: intended objects were deleted, decoy
+objects and their bodies were preserved, and response keys round-tripped exactly. Cases include
+nested entity text, all five named entities and combined characters. Scoped ESLint, Prettier and
+`git diff --check` passed. This change affects the synthetic fixture only; the full repository,
+PostgreSQL and browser suites were not repeated for this follow-up.
 
 ## Runtime and fidelity limits
 

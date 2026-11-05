@@ -138,7 +138,12 @@ async function main() {
     if (!key && request.method === "POST" && url.searchParams.has("delete")) {
       const body = (await boundedBody(request)).toString("utf8");
       const keys = [...body.matchAll(/<Key>([^<]*)<\/Key>/g)].map((match) =>
-        match[1]!.replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">"),
+        // Decode one layer so entity-like text remains part of the literal object key.
+        match[1]!.replace(
+          /&(amp|lt|gt|quot|apos);/g,
+          (entity) =>
+            ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" })[entity]!,
+        ),
       );
       for (const name of keys) {
         const value = objects.get(name);

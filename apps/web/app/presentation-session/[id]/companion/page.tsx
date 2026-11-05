@@ -56,6 +56,18 @@ import {
   selectedPublishedQuestion,
   type CompanionPublishedQuestionCatalog,
 } from "../../../../lib/presentation-companion-published-questions";
+import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
+import {
+  isPresentationNavigationCommand,
+  isPresentationRecoverableCommand,
+  persistPresentationNavigationCommand,
+  restorePresentationNavigationCommand,
+  presentationNavigationRetryLabel,
+} from "../../../../lib/presentation-navigation";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
+import { isNativeInteractionNode } from "../../../../components/presentation/native-scene-interaction-view";
+import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
+import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 
 function companionAdvanceMessageKey(snapshot: PresentationCompanionSnapshot) {
   if (snapshot.phase === "lobby") return "live.presentationSession.advance.start" as const;
@@ -102,7 +114,7 @@ export default function PresentationCompanionPage() {
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [overlay, setOverlay] = useState<
-    "join" | "results" | "packs" | "quickCheck" | "publishedQuestions" | null
+    "join" | "results" | "packs" | "quickCheck" | "publishedQuestions" | "navigation" | null
   >(null);
   const [quickCheckDraft, setQuickCheckDraft] = useState(createCompanionQuickCheckDraft);
   const [packCatalog, setPackCatalog] = useState<CompanionRecoveryPackCatalog | null>(null);
@@ -198,6 +210,9 @@ export default function PresentationCompanionPage() {
       PresentationCompanionSnapshot,
       PresentationCompanionCommand
     >({
+      pendingCommand: restorePresentationNavigationCommand(sessionStorage, id, {
+        companionToken: pass,
+      }),
       execute: (command) =>
         controller.command(command, async () => {
           const response = await apiFetch<{ snapshot: unknown }>(
@@ -207,10 +222,13 @@ export default function PresentationCompanionPage() {
           return PresentationCompanionSnapshotSchema.parse(response.snapshot);
         }),
       onState: (next) => {
-        if (!disposed) setCommandState(next);
+        if (disposed) return;
+        persistPresentationNavigationCommand(sessionStorage, id, "companion", next.pendingCommand);
+        setCommandState(next);
       },
     });
     commandsRef.current = commands;
+    setCommandState(commands.state());
     controller.start();
     const fallbackTimer = window.setInterval(() => {
       if (controller.needsFallbackPolling()) void controller.reconcile();
@@ -338,7 +356,8 @@ export default function PresentationCompanionPage() {
         if (
           activeCommand?.action === "insert_recovery_pack" ||
           activeCommand?.action === "insert_quick_check" ||
-          activeCommand?.action === "insert_published_question"
+          activeCommand?.action === "insert_published_question" ||
+          (activeCommand && isPresentationNavigationCommand(activeCommand))
         )
           closeOverlay();
       }
@@ -358,6 +377,87 @@ export default function PresentationCompanionPage() {
       commandId: clientUuid(),
       expectedRevision: snapshot.revision,
       action: "advance",
+    });
+  }
+
+  function retryLabel(command: PresentationCompanionCommand) {
+    return isPresentationRecoverableCommand(command)
+      ? presentationNavigationRetryLabel(command)
+      : t(companionCommandRetryMessageKey(command));
+  }
+
+  async function navigate(action: "jump_to_block" | "return_to_path", targetBlockId?: string) {
+    if (!pass || !snapshot?.navigation) return;
+    if (
+      action === "jump_to_block" &&
+      !snapshot.navigation.entries.some(
+        (entry) => entry.blockId === targetBlockId && entry.status !== "current" && entry.canJump,
+      )
+    )
+      return;
+    if (action === "return_to_path" && !snapshot.navigation.canReturn) return;
+    const credentials = {
+      sessionId: id,
+      companionToken: pass,
+      commandId: clientUuid(),
+      expectedRevision: snapshot.revision,
+    };
+    return executeCommand(
+      action === "jump_to_block"
+        ? { ...credentials, action, targetBlockId: targetBlockId! }
+        : { ...credentials, action },
+    );
+  }
+
+  async function sceneAction(nodeId: string, revealed?: boolean) {
+    const block = snapshot?.currentBlock;
+    if (!pass || !snapshot || block?.kind !== "content") return;
+    const node = block.scene?.nodes.find((entry) => entry.id === nodeId);
+    const credentials = {
+      sessionId: id,
+      companionToken: pass,
+      commandId: clientUuid(),
+      expectedRevision: snapshot.revision,
+    };
+    if (typeof revealed === "boolean") {
+      if (node?.type !== "reveal" || node.scope !== "broadcast") return;
+      return executeCommand({
+        ...credentials,
+        action: "set_reveal",
+        blockId: block.id,
+        nodeId,
+        revealed,
+      });
+    }
+    if (
+      node?.type !== "navigation" ||
+      !snapshot.navigation?.entries.some(
+        (entry) =>
+          entry.blockId.toLowerCase() === node.targetBlockId?.toLowerCase() &&
+          entry.canJump &&
+          entry.status !== "current",
+      )
+    )
+      return;
+    return executeCommand({ ...credentials, action: "navigate_scene", blockId: block.id, nodeId });
+  }
+
+  async function followBranch(branchId: string) {
+    if (
+      !pass ||
+      !snapshot ||
+      snapshot.currentBlock?.kind !== "question" ||
+      !snapshot.branches?.some((branch) => branch.id === branchId && branch.available)
+    )
+      return;
+    return executeCommand({
+      sessionId: id,
+      companionToken: pass,
+      commandId: clientUuid(),
+      expectedRevision: snapshot.revision,
+      action: "follow_branch",
+      blockId: snapshot.currentBlock.id,
+      branchId,
     });
   }
 
@@ -440,6 +540,16 @@ export default function PresentationCompanionPage() {
     ? `${typeof window === "undefined" ? "" : window.location.origin}/join?code=${encodeURIComponent(snapshot.code)}`
     : "";
   const block = snapshot?.currentBlock;
+  const interactionRuntime = presentationInteractionRuntime(snapshot, {
+    mode: "live_staff",
+    disabled:
+      commandState.busy ||
+      !!commandState.pendingCommand ||
+      !pass ||
+      !controllerRef.current?.canMutate(),
+    onNavigate: (nodeId) => void sceneAction(nodeId),
+    onSetReveal: (nodeId, revealed) => void sceneAction(nodeId, revealed),
+  });
   return (
     <main className={styles.page}>
       <section className={styles.sidecar} aria-label={t("live.companion.title")}>
@@ -487,11 +597,20 @@ export default function PresentationCompanionPage() {
                 })}
               </p>
             </div>
-            {block?.kind === "content" &&
-            block.scene?.nodes.some((node) => node.type === "reveal" || node.type === "link") ? (
+            {block?.kind === "content" && block.scene?.nodes.some(isNativeInteractionNode) ? (
               <section aria-label="Current slide interactions" className={styles.slideInteractions}>
                 <ContentSlideView
                   block={block}
+                  interactionRuntime={interactionRuntime}
+                  renderSceneImage={(mediaId, altText) => (
+                    <PresentationMedia
+                      key={mediaId}
+                      sessionId={id}
+                      mediaId={mediaId}
+                      altText={altText}
+                      companionToken={pass ?? undefined}
+                    />
+                  )}
                   variant="live"
                   interactionSourceKey={JSON.stringify([id, pass, connection === "fallback"])}
                 />
@@ -535,17 +654,29 @@ export default function PresentationCompanionPage() {
               ref={primaryButtonRef}
               type="button"
             >
-              {t(
-                commandState.busy
-                  ? "live.common.updating"
-                  : commandState.pendingCommand
-                    ? companionCommandRetryMessageKey(commandState.pendingCommand)
-                    : snapshot.primaryAction === "none"
-                      ? "live.companion.noAction"
-                      : companionAdvanceMessageKey(snapshot),
-              )}
+              {commandState.pendingCommand && !commandState.busy
+                ? retryLabel(commandState.pendingCommand)
+                : t(
+                    commandState.busy
+                      ? "live.common.updating"
+                      : snapshot.primaryAction === "none"
+                        ? "live.companion.noAction"
+                        : companionAdvanceMessageKey(snapshot),
+                  )}
             </button>
             <div className={styles.secondary}>
+              {snapshot.navigation ? (
+                <button
+                  className="button-quiet"
+                  lang="en-CA"
+                  type="button"
+                  onClick={() => setOverlay("navigation")}
+                  aria-haspopup="dialog"
+                  aria-expanded={overlay === "navigation"}
+                >
+                  Open navigation
+                </button>
+              ) : null}
               <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
                 {t("live.companion.showJoin")}
               </button>
@@ -626,9 +757,40 @@ export default function PresentationCompanionPage() {
             {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
               <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
             ) : null}
+            {snapshot.branches ? (
+              <PresentationBranches
+                branches={snapshot.branches}
+                disabled={
+                  commandState.busy ||
+                  !!commandState.pendingCommand ||
+                  !pass ||
+                  !controllerRef.current?.canMutate()
+                }
+                onFollow={(branchId) => void followBranch(branchId)}
+              />
+            ) : null}
           </>
         ) : null}
       </section>
+      {overlay === "navigation" && snapshot?.navigation ? (
+        <PresentationNavigationDialog
+          navigation={snapshot.navigation}
+          disabled={
+            commandState.busy ||
+            !!commandState.pendingCommand ||
+            !pass ||
+            !controllerRef.current?.canMutate()
+          }
+          onJump={(blockId) => void navigate("jump_to_block", blockId)}
+          onReturn={() => void navigate("return_to_path")}
+          onClose={closeOverlay}
+          returnFocusRef={primaryButtonRef}
+          pendingCommand={commandState.pendingCommand}
+          busy={commandState.busy}
+          onRetry={() => void executeCommand()}
+          retryDisabled={!pass || commandState.busy || !controllerRef.current?.canMutate()}
+        />
+      ) : null}
       {overlay === "join" && snapshot ? (
         <CompanionOverlay title={t("live.companion.joinTitle")} onClose={closeOverlay}>
           <p>{t("live.presentationSession.joinCode")}</p>

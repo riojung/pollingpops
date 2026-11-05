@@ -10,7 +10,9 @@ import {
   containNativeInteractionKey,
   NativeSceneInteractionView,
   type NativeInteractionNode,
+  type NativeSceneInteractionRuntime,
 } from "./native-scene-interaction-view";
+import { NativeSceneDetailDialog } from "./native-scene-detail-dialog";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -18,6 +20,13 @@ vi.mock("react", async (original) => {
   return {
     ...react,
     useId: () => (mocked.hooks ? "local-panel-id" : react.useId()),
+    useRef: <T,>(initial: T) => {
+      const hooks = mocked.hooks;
+      if (!hooks) return react.useRef(initial);
+      const index = hooks.cursor++;
+      hooks.slots[index] ??= { current: initial };
+      return hooks.slots[index];
+    },
     useState: <T,>(initial: T) => {
       const hooks = mocked.hooks;
       if (!hooks) return react.useState(initial);
@@ -65,20 +74,21 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
-function panel() {
+function panel(node: NativeInteractionNode = reveal, runtime?: NativeSceneInteractionRuntime) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
   let tree: ReactNode;
   function render() {
     hooks.cursor = 0;
     mocked.hooks = hooks;
     try {
-      tree = NativeSceneInteractionView({ node: reveal });
+      tree = NativeSceneInteractionView({ node, runtime });
     } finally {
       mocked.hooks = null;
     }
   }
   render();
   return {
+    refresh: render,
     get markup() {
       return renderToStaticMarkup(tree);
     },
@@ -87,10 +97,104 @@ function panel() {
       (button.props.onClick as () => void)();
       render();
     },
+    closeDetails() {
+      const dialog = elements(tree).find((element) => element.type === NativeSceneDetailDialog)!;
+      (dialog.props.onClose as () => void)();
+      render();
+    },
   };
 }
 
 describe("viewer-local native interactions", () => {
+  it.each(["hotspot", "dialog"] as const)(
+    "opens %s details locally as escaped text and removes closed content",
+    (type) => {
+      const base = {
+        id: "detail",
+        scope: "local" as const,
+        label: "Inspect evidence",
+        detailTitle: "Evidence detail",
+        body: "<script>Audience detail</script>",
+        frame: reveal.frame,
+      };
+      const node: NativeInteractionNode =
+        type === "hotspot" ? { ...base, type, imageNodeId: "image" } : { ...base, type };
+      const onNavigate = vi.fn();
+      const onSetReveal = vi.fn();
+      const view = panel(node, { mode: "live_staff", onNavigate, onSetReveal });
+      expect(view.markup).not.toContain("Audience detail");
+      view.toggle();
+      expect(view.markup).toContain("&lt;script&gt;Audience detail&lt;/script&gt;");
+      expect(view.markup).toContain('aria-modal="true"');
+      expect(view.markup).toContain("Close details");
+      view.closeDetails();
+      expect(view.markup).not.toContain("Audience detail");
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(onSetReveal).not.toHaveBeenCalled();
+    },
+  );
+  it("uses absolute staff broadcast intent and authoritative state while review stays local", () => {
+    const node = { ...reveal, scope: "broadcast" as const };
+    const onSetReveal = vi.fn();
+    const revealedNodeIds: string[] = [];
+    const staff = panel(node, { mode: "live_staff", revealedNodeIds, onSetReveal });
+    staff.toggle();
+    expect(onSetReveal).toHaveBeenCalledExactlyOnceWith(node.id, true);
+    expect(staff.markup).toContain('aria-expanded="false"');
+    revealedNodeIds.push(node.id);
+    staff.refresh();
+    expect(staff.markup).toContain('aria-expanded="true"');
+    staff.toggle();
+    expect(onSetReveal).toHaveBeenLastCalledWith(node.id, false);
+    const review = panel(node, { mode: "review", onSetReveal });
+    review.toggle();
+    expect(review.markup).toContain('aria-expanded="true"');
+    expect(onSetReveal).toHaveBeenCalledTimes(2);
+  });
+  it("keeps audience navigation inert even when a callback is supplied, and authorizes review targets", () => {
+    const targetBlockId = "11111111-1111-4111-8111-111111111111";
+    const node: NativeInteractionNode = {
+      id: "navigation",
+      type: "navigation",
+      label: "Read next",
+      targetBlockId,
+      frame: reveal.frame,
+    };
+    const onNavigate = vi.fn();
+    const runtime = {
+      onNavigate,
+      navigationTargets: [{ blockId: targetBlockId, available: true, blockedReason: null }],
+    };
+    const audience = panel(node, { ...runtime, mode: "live_audience" });
+    expect(audience.markup).toContain('disabled=""');
+    audience.toggle();
+    expect(onNavigate).not.toHaveBeenCalled();
+    const review = panel(node, { ...runtime, mode: "review" });
+    review.toggle();
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith(node.id, targetBlockId);
+  });
+  it("keeps local state identity stable only for redacted audience broadcast body changes", () => {
+    const scene = structuredClone(sceneFixture());
+    scene.schemaVersion = 6;
+    const node = scene.nodes.find((node) => node.type === "reveal")!;
+    if (node.type !== "reveal") throw new Error("Reveal required");
+    node.scope = "broadcast";
+    node.body = "";
+    const opened = structuredClone(scene);
+    const openNode = opened.nodes.find((node) => node.type === "reveal")!;
+    if (openNode.type !== "reveal") throw new Error("Reveal required");
+    openNode.body = "Authorized audience body";
+    const runtime = { mode: "live_audience" as const };
+    expect(
+      NativeSceneView({ scene, interactionSourceKey: "same", interactionRuntime: runtime }).key,
+    ).toBe(
+      NativeSceneView({ scene: opened, interactionSourceKey: "same", interactionRuntime: runtime })
+        .key,
+    );
+    expect(NativeSceneView({ scene, interactionSourceKey: "same" }).key).not.toBe(
+      NativeSceneView({ scene: opened, interactionSourceKey: "same" }).key,
+    );
+  });
   it("starts closed with no audience body in the DOM, expands plain text and removes it when hidden", () => {
     const view = panel();
     expect(view.markup).toContain('aria-expanded="false"');

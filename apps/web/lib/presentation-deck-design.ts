@@ -12,15 +12,17 @@ export function nativeSceneDocumentVersion(
   scene: Pick<PresentationScene, "schemaVersion">,
 ): PresentationDraft["schemaVersion"] {
   const minimum =
-    scene.schemaVersion === 5
-      ? 11
-      : scene.schemaVersion === 4
-        ? 8
-        : scene.schemaVersion === 3
-          ? 7
-          : scene.schemaVersion === 2
-            ? 5
-            : 4;
+    scene.schemaVersion >= 6
+      ? 13
+      : scene.schemaVersion === 5
+        ? 11
+        : scene.schemaVersion === 4
+          ? 8
+          : scene.schemaVersion === 3
+            ? 7
+            : scene.schemaVersion === 2
+              ? 5
+              : 4;
   return current >= minimum ? current : minimum;
 }
 
@@ -35,6 +37,7 @@ export function applyNativeSceneToDeck(
   const next = {
     ...draft,
     schemaVersion: nativeSceneDocumentVersion(draft.schemaVersion, scene),
+    ...(scene.schemaVersion >= 6 && draft.sections === undefined ? { sections: [] } : {}),
     blocks: draft.blocks.map((block) => (block.id === blockId ? { ...block, scene } : block)),
   };
   PresentationDraftSchema.parse(next);

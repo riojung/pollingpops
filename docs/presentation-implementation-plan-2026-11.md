@@ -122,7 +122,9 @@ the subscription floor without completing the customer workflow.
 E00 now has an isolated local implementation; see [ADR 003](decisions/003-presentation-scene.md)
 and the [prototype record](evidence/presentation-scene-prototype.md). E01 implementation is complete
 locally; release qualification remains open. E02's design foundation and remaining composition,
-information and scenario-template software are implemented locally; later packages remain planned.
+information and scenario-template software are implemented. E03 delivery, E04 opinion/text formats,
+E05 visual import and E06 basic reveal/link interactions are also implemented. E07 sections and
+live navigation are implemented locally; later packages remain planned.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -354,9 +356,15 @@ local reveal/hide panels and safe-link slice, using scene5/document11 and migrat
 authoring/history/design operations preserve actions, and shared delivery offers an equivalent
 readable outline without changing responses, scores or host state. The full repository check,
 restricted PostgreSQL, focused checks and four production browser profiles pass in the
-[E06 basic evidence record](evidence/presentation-e06-basic-interactions.md). This increment is
-prepared for pull request review and undeployed; richer hotspots/dialogs/internal navigation/answer branches and
-host-broadcast reveals remain later E06 work.
+[E06 basic evidence record](evidence/presentation-e06-basic-interactions.md). This increment merged
+in [PR #198](https://github.com/riojung/pollingpops/pull/198) and remains undeployed; richer
+hotspots/dialogs/answer branches and host-broadcast reveals are now implemented on
+`codex/presentation-interactions-sharing` using document13/scene6 and migration096. This completion
+increment adds explicit host-confirmed branches, bounded image anchors, server-withheld broadcast
+bodies and ReportV7. Verification and rollout boundaries appear in the
+[E06 completion record](evidence/presentation-e06-completion.md). Live section navigation is
+implemented separately in E07 below. General scripting, variables and game mechanics remain beyond
+the selected E06 scope.
 
 ### E07 Add sections and safe nonlinear navigation
 
@@ -369,6 +377,15 @@ transition. Skipping does not fabricate a completed response; revisiting does no
 attempts, points or reveals. Return restores a defined position. Recheck pairs and reports record
 what actually ran. Reconnect/cohost takeover sees the same cursor. Linear and reduced-motion
 paths remain equivalent. Estimate: 2–4 additional weeks.
+
+The source increment on `codex/presentation-e07-navigation` adds opt-in document12 named sections,
+a private host/Companion map, stable block-ID jump/return commands and durable visited progress.
+Numbered block order remains the default path. Detours retain one explicit original anchor;
+revisited activities restore their closed phase, original response window and frozen intervention
+without new attempts or points. Open activities must close/reveal first, and pending linked
+rechecks remain indivisible. Migration095 protects state, frozen targets and exact receipts;
+ReportV6 records presented/skipped blocks and navigation events. Validation and remaining release
+gates are recorded in the [E07 evidence record](evidence/presentation-e07-navigation.md).
 
 ### E08 Share presentations and add self-paced delivery
 
@@ -386,6 +403,15 @@ completion. A shared browser does not expose another learner's progress. Offline
 claims an unacknowledged answer was submitted. Content-view completion and demonstrated mastery
 are separate. Plan 1–2 weeks for bounded view-only sharing, explicitly included in the broad pilot,
 and 4–7 additional weeks for self-paced attempts.
+
+The private review slice is implemented on `codex/presentation-interactions-sharing`; the full
+repository pipeline, 70 PostgreSQL cases and eight production-browser workflows pass. Migration097
+adds expiring/revocable hash-only capabilities pinned to
+immutable versions. The recipient projection excludes private authoring and assessment data;
+page transitions and image reads recheck access. Link creation preserves exact uncertain intent
+across reload. The [E08 private-sharing record](evidence/presentation-e08-private-sharing.md)
+separates this source work from deployment, hosted/device acceptance and the still-planned
+self-paced assignment/attempt system.
 
 ### E09 Add useful creator and audience reports
 

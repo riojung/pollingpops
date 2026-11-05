@@ -26,6 +26,7 @@ import {
 } from "@openround/contracts";
 import styles from "./content-slide-view.module.css";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
+import type { NativeSceneInteractionRuntime } from "./native-scene-interaction-view";
 
 export const contentSlideRegions: ContentSlideRegion[] = [
   "top_left",
@@ -64,6 +65,7 @@ interface ContentSlideViewProps {
   media?: ReactNode;
   renderSceneImage?: SceneImageRenderer;
   interactionSourceKey?: string;
+  interactionRuntime?: NativeSceneInteractionRuntime;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -268,6 +270,7 @@ export function ContentSlideView(props: ContentSlideViewProps) {
       scene={props.block.scene}
       renderImage={props.renderSceneImage}
       interactionEditing={props.variant === "editor"}
+      interactionRuntime={props.interactionRuntime}
       interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
     />
   ) : (

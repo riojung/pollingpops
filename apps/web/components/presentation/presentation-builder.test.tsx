@@ -3,7 +3,7 @@ import type * as ReactModule from "react";
 import type { PresentationDraft, QuestionDraft } from "@openround/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnglishLocale } from "../../test-utils/english-locale";
-import { createQuestionBlock } from "../../lib/presentation-builder";
+import { createContentBlock, createQuestionBlock } from "../../lib/presentation-builder";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { LocaleProvider } from "../locale-provider";
 import {
@@ -113,6 +113,33 @@ describe("Presentation Builder UI", () => {
     expect(found, `Missing ${label} select`).not.toBeNull();
     return { attributes: found![1]!, options: found![2]! };
   }
+
+  it("keeps the map in numbered block order when section membership is listed differently", () => {
+    const first = createContentBlock();
+    first.textElements[0]!.text = "Sequence first";
+    const second = createContentBlock();
+    second.textElements[0]!.text = "Sequence second";
+    const sectionId = "10000000-0000-4000-8000-000000000001";
+    editor.draft = {
+      schemaVersion: 12,
+      title: "Sectioned presentation",
+      description: "",
+      experiencePreset: { id: "focus", version: 1 },
+      blocks: [first, second],
+      sections: [{ id: sectionId, title: "Evidence group", blockIds: [second.id, first.id] }],
+    };
+    const markup = renderToStaticMarkup(
+      withEnglishLocale(<PresentationBuilder presentationId="presentation-1" />),
+    );
+    const map = markup.slice(markup.indexOf("<ol"), markup.indexOf("</ol>") + 5);
+    expect(map.indexOf("Sequence first")).toBeLessThan(map.indexOf("Sequence second"));
+    expect(map.match(/Evidence group/g)).toHaveLength(2);
+    expect(markup).toContain("Selected block section");
+    expect(markup).toContain("Rename");
+    expect(markup).toContain("Move earlier");
+    expect(markup).toContain("Move later");
+    expect(editor.draft.blocks.map((block) => block.id)).toEqual([first.id, second.id]);
+  });
 
   it.each([true, false])(
     "retains the imported %s visual/reading distinction after modal closure",

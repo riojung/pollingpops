@@ -1,0 +1,60 @@
+.dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+}
+.dialog::backdrop {
+  background: var(--ui-overlay);
+}
+.dialog h2 {
+  margin-top: 0;
+}
+.entries {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0;
+  list-style: none;
+}
+.entry {
+  min-width: 0;
+}
+.entry button {
+  width: 100%;
+  min-height: 2.75rem;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.entry button[aria-current="step"] {
+  border: 2px solid var(--ui-text);
+}
+.section {
+  margin: 1rem 0 0.35rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.detail {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+.reason {
+  margin: 0.3rem 0 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.return {
+  border-top: 1px solid var(--ui-border);
+  padding-top: 1rem;
+  margin-block: 1rem;
+}
+.return button {
+  min-height: 2.75rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

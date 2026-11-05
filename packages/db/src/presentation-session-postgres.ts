@@ -1,3 +1,5 @@
+import { transitionPresentationInteractionState } from "./presentation-interactions.js";
+import { transitionPresentationNavigationState } from "./presentation-navigation.js";
 import {
   requiresPresentationTextOpinions,
   isPresentationTextResultQuestion,
@@ -251,9 +253,9 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
          join_code, status, phase, current_block_index, revision, settings, trust_mode,
          event_seq, question_opened_at, question_closes_at, created_by,
          created_at, updated_at, finished_at, live_expires_at, retention_expires_at,
-         recovery_pack_cards_enabled, recovery_pack_intervention, join_password_hash)
+         recovery_pack_cards_enabled, recovery_pack_intervention, join_password_hash, navigation_state, interaction_state)
        SELECT $1, eligible_workspace.id, $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-              $17,$18,$19,$20,$21,$22,$23,$24,$25
+              $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
        FROM eligible_workspace
        RETURNING *`,
       [
@@ -284,6 +286,8 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
           ? JSON.stringify(normalized.recoveryPackIntervention)
           : null,
         normalized.joinPasswordHash,
+        normalized.navigationState ? JSON.stringify(normalized.navigationState) : null,
+        normalized.interactionState ? JSON.stringify(normalized.interactionState) : null,
       ],
     );
     if (!result.rows[0]) {
@@ -507,6 +511,12 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
       throw new PresentationSessionConflictError(input.expectedRevision, session.revision);
     }
     assertCommandRequestHash(command?.requestHash);
+    if (
+      command &&
+      (input.event.type.startsWith("navigation.") || input.event.type === "scene.reveal_changed") &&
+      command.requestHash == null
+    )
+      throw new Error("Navigation commands require an intent fingerprint");
     if (command?.publishedQuestionSource) {
       const source = command.publishedQuestionSource;
       // Keep the source eligible until the state, timeline and receipt commit. FOR SHARE
@@ -540,6 +550,20 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         );
     }
     const window = transitionWindow({ ...session, content }, input, occurredAt);
+    const navigationState = transitionPresentationNavigationState(session, input, content, window);
+    const branchResponses =
+      input.event.type === "navigation.branched"
+        ? await client.query(
+            "SELECT * FROM presentation_live_responses WHERE session_id=$1 AND block_id=$2",
+            [session.id, session.content.blocks[session.currentBlockIndex]?.id ?? null],
+          )
+        : { rows: [] };
+    const interactionState = transitionPresentationInteractionState(
+      session,
+      input,
+      content,
+      branchResponses.rows.map(mapResponse),
+    );
     await client.query(
       `UPDATE presentation_live_sessions
        SET phase = $3, current_block_index = $4, status = $5, revision = revision + 1,
@@ -547,6 +571,8 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
            question_opened_at = $7, question_closes_at = $8,
            recovery_pack_intervention = $10,
            content_snapshot = COALESCE($11::jsonb, content_snapshot),
+           navigation_state = $12::jsonb,
+           interaction_state = $13::jsonb,
            finished_at = CASE
              WHEN status <> 'finished' AND $5 = 'finished' THEN $6
              ELSE finished_at
@@ -568,6 +594,8 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         input.retentionExpiresAt ?? null,
         intervention ? JSON.stringify(intervention) : null,
         input.content === undefined ? null : JSON.stringify(content),
+        navigationState === undefined ? null : JSON.stringify(navigationState),
+        interactionState === undefined ? null : JSON.stringify(interactionState),
       ],
     );
     const current = await client.query(
@@ -583,12 +611,12 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
     await client.query(
       `INSERT INTO presentation_session_timeline
         (id, workspace_id, session_id, sequence, event_type, block_index, block_id, occurred_at,
-         recovery_pack_intervention, revealed_participant_ids)
+         recovery_pack_intervention, revealed_participant_ids, navigation, interaction, branch)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
          CASE WHEN $5 = 'question.revealed' THEN
            ARRAY(SELECT id FROM presentation_live_participants
                  WHERE workspace_id = $2 AND session_id = $3 ORDER BY id)
-         ELSE NULL END)`,
+         ELSE NULL END, $10, $11, $12)`,
       [
         randomUUID(),
         input.workspaceId,
@@ -599,6 +627,9 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         input.event.blockId,
         occurredAt,
         timelineIntervention ? JSON.stringify(timelineIntervention) : null,
+        input.event.navigation ? JSON.stringify(input.event.navigation) : null,
+        input.event.interaction ? JSON.stringify(input.event.interaction) : null,
+        input.event.branch ? JSON.stringify(input.event.branch) : null,
       ],
     );
     if (command) {

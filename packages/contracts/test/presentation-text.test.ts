@@ -125,7 +125,11 @@ describe("Presentation document10 text contracts", () => {
     for (const schema of [PresentationDraftSchema, PresentationContentSchema]) {
       expect(schema.parse(value).schemaVersion).toBe(10);
       expect(schema.parse({ ...value, schemaVersion: 11 }).schemaVersion).toBe(11);
-      for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8, 9, 12])
+      expect(schema.parse({ ...value, schemaVersion: 12 }).blocks).toEqual(
+        schema.parse(value).blocks,
+      );
+      expect(schema.parse({ ...value, schemaVersion: 13 }).schemaVersion).toBe(13);
+      for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8, 9, 14])
         expect(schema.safeParse({ ...value, schemaVersion }).success).toBe(false);
       for (const bad of [
         { basePoints: 1 },

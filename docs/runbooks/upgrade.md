@@ -353,7 +353,91 @@ independent stage/participant/Companion reveals without shared revisions or resp
 Once v11 data exists, rollback requires compatible readers/writers or a forward repair. Retain
 migration 094 and its checksum; never strip actions, downgrade documents, rewrite immutable hashes
 or change accepted mutation receipts to make an old binary read the new format. Hotspots, dialogs,
-internal navigation and answer-based branches remain separate future increments.
+internal navigation and answer-based branches require the advanced interaction upgrade below.
+
+## Presentation sections and navigation compatibility
+
+Sections and live navigation opt into **Presentation document v12**; scene versions stay at v1–v5
+and ordinary creation defaults remain unchanged. Apply `095_presentation_navigation.sql` before
+accepting v12 drafts, publication or session creation. Deploy matching contracts, API/jobs,
+artifact/history/session/report readers and web host/Companion assets together. Refresh old browser
+assets before reopening authoring and restore operations. Do not rewrite retained JSON or hashes.
+
+Migration095 adds optional durable navigation state and timeline metadata, plus strict document,
+state, transition and receipt guards. Old sessions retain SQL NULL navigation state. New sessions
+track actually visited stable block IDs, saved phases, original question windows and frozen Pack
+interventions. Live insertion may add blocks while preserving existing block JSON/order and
+section membership. Receipt fingerprints include the canonical UUID target; accepted command and
+response receipts remain recoverable after the cursor advances. Existing response storage versions
+and legacy receipt fingerprints retain their meanings.
+
+The private host/Companion map supplies server-authorized targets. The first detour stores its
+current block as the return anchor, or the first published block when leaving the lobby; further
+jumps retain that anchor. Returning restores its saved phase, and an unvisited anchor opens
+normally. Open activities must close/reveal first. Pending diagnostic/recheck pairs prohibit
+navigation, direct recheck jumps and entry into an unstarted pair's middle. Returning to a saved,
+closed recheck is safe. Ordinary Next follows numbered order and restores closed activities
+without new windows, roster freezes, responses or points. Audience projections contain no map,
+section membership or progress state.
+
+Finished v12 sessions produce **ReportV6**, requiring `includeNavigation=true`. Existing text,
+opinion and Quick Check opt-ins still control their own report fields. New reports identify each
+block as presented/skipped and retain jump/return/revisit events. A skipped question has no
+responses or assessment result. Old ReportV1–V5 event enums are unchanged.
+
+Verify editor Undo/Redo, pending-save recovery, duplication/removal, hidden section pruning,
+publication/history, host/Companion reconnect and exact uncertain-command retry. Check concurrent
+cohost commands, closed-window/score preservation, intervention/recheck guards, audience privacy
+and skipped report/CSV semantics. See the [E07 evidence record](../evidence/presentation-e07-navigation.md).
+
+Once v12 data exists, retain migration095 and compatible readers/writers or use a forward repair.
+Never strip sections/progress, downgrade frozen content, change hashes or discard receipts to make
+an older binary accept it. No flag, paid service, model call or entitlement is added by this change.
+
+## Presentation advanced interactions and private sharing compatibility
+
+Deploy **document13/scene6/report7** readers and migration096 before enabling advanced interaction
+writes. Migration095/E07 remains a prerequisite and must retain its checksum. Migrations096 and097
+are additive source increments; do not edit or remove earlier migrations. Ordinary document
+creation defaults and old frozen hashes/receipts remain unchanged.
+
+Migration096 extends raw document gates to 13, validates hotspot/image and slide/branch targets,
+and adds separate nullable `interaction_state` plus typed timeline metadata. Old session state
+stays unchanged. Broadcast state and accepted branch aggregates commit atomically under the room
+lock with the command receipt, revision and timeline. Shared reveal commands are absolute; new-ID
+no-ops are rejected, while accepted exact retries recover their existing receipt. Navigation,
+deadlines, attempts, reveals and points preserve their established monotonic rules.
+
+Audience serializers must redact closed broadcast bodies and internal target graphs before JSON,
+not merely hide markup. Private staff projections retain authored controls and eligibility; only
+host/Companion credentials can change shared state. ReportV7 additionally requires
+`includeInteractions=true`, alongside existing navigation/result opt-ins. Keep strict old report
+readers rather than forwarding new events as ReportV6.
+
+Migration097 adds hash-only, version-bound private review capabilities with forced RLS, immutable
+intent metadata, tenant/version/actor foreign keys and controlled retention. Deploy its repository,
+account/source lifecycle hooks, routes and recipient web page together. The token travels through
+a scrubbed URL fragment and Bearer headers. Creation must retain its original token, request ID,
+version and absolute expiry before sending; never mint a new secret/expiry for a retry.
+
+Recipient pages use an explicit safe projection. Recheck current access/authority/feature policy
+before page transitions and media reads; recheck after bounded storage reads before sending bytes.
+Use the private media proxy rather than revocation-insensitive signed URLs. Preserve four-server/
+two-client image admission and 10 MiB bounds. Expired metadata is retained for seven days, then the
+existing system-access lifecycle transaction purges it. Export metadata without credential hashes.
+
+Verify save/recovery/Undo, image-anchor transformations, copying, target deletion/hiding, old
+scenes/activities, private body withholding across HTTP/socket/ACK paths, exact uncertain-command
+recovery, cohost takeover, closed-question branches, media role isolation and ReportV7/CSV. For
+sharing, verify lost-create ACK/reload, exact immutable version pinning, anonymous cookie-free
+reads, revocation on open-page navigation, expiry/authority/feature changes, media allowlists and
+deletion/account cleanup. See the [E06](../evidence/presentation-e06-completion.md) and
+[E08](../evidence/presentation-e08-private-sharing.md) evidence records.
+
+Rollback after these formats exist requires compatible readers/writers or a forward repair.
+Do not strip nodes, branch rules, state, capability records or receipts to fit an older binary.
+This change adds no commercial entitlement, required AI provider or new hosted service. Private
+review does not provide self-paced attempts.
 
 ## Native Presentation composition compatibility
 

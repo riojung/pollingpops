@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import {
   PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES,
   PresentationDraftSchema,
@@ -112,6 +113,11 @@ describe("native design across a Presentation", () => {
     [11, 3, 11],
     [11, 4, 11],
     [11, 5, 11],
+    [12, 1, 12],
+    [12, 2, 12],
+    [12, 3, 12],
+    [12, 4, 12],
+    [12, 5, 12],
   ] as const)(
     "preserves/promotes document %s for scene %s to %s",
     (current, sceneVersion, expected) => {
@@ -144,6 +150,24 @@ describe("native design across a Presentation", () => {
     expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(10);
     expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(10);
     expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+  });
+
+  it("retains opted-in navigation and section IDs across bulk design and native edits", () => {
+    const original = draft();
+    original.schemaVersion = 12;
+    original.sections = [
+      { id: randomUUID(), title: "Evidence", blockIds: [original.blocks[0]!.id] },
+    ];
+    const changed = applyNativeDesignToDeck(original, design);
+    expect(changed.schemaVersion).toBe(12);
+    expect(changed.sections).toBe(original.sections);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    const edited = applyNativeSceneToDeck(changed, first.id, first.scene);
+    expect(edited.schemaVersion).toBe(12);
+    expect(edited.sections).toBe(original.sections);
+    expect(setPresentationSlideHidden(edited, first.id, true).schemaVersion).toBe(12);
+    expect(PresentationDraftSchema.safeParse(edited).success).toBe(true);
   });
 
   it("promotes interaction edits and preserves actions across deck design, recovery and question edits", () => {

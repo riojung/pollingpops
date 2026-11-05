@@ -15,6 +15,7 @@ import { useLocale } from "../../../../components/locale-provider";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
@@ -300,6 +301,9 @@ export default function PresentationParticipantPage() {
                 <span className={styles.statusPill}>{t("live.presentationPlay.content")}</span>
                 <ContentSlideView
                   block={block}
+                  interactionRuntime={presentationInteractionRuntime(snapshot, {
+                    mode: "live_audience",
+                  })}
                   interactionSourceKey={JSON.stringify([
                     id,
                     audienceToken,

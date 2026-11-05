@@ -5,23 +5,27 @@ import type {
 } from "@openround/contracts";
 import { ContentSlideView } from "../presentation/content-slide-view";
 import styles from "./presentation-delivery.module.css";
+import type { NativeSceneInteractionRuntime } from "../presentation/native-scene-interaction-view";
 
 export function PresentationDeliveryBlock({
   block,
   renderMedia,
   revealedAnswer = null,
   interactionSourceKey,
+  interactionRuntime,
 }: {
   block: PresentationParticipantCurrentBlock;
   renderMedia: (mediaId: string | null, altText: string | null) => ReactNode;
   revealedAnswer?: PresentationRevealedAnswer | null;
   interactionSourceKey?: string;
+  interactionRuntime?: NativeSceneInteractionRuntime;
 }) {
   if (block.kind === "content") {
     return (
       <ContentSlideView
         block={block}
         interactionSourceKey={interactionSourceKey}
+        interactionRuntime={interactionRuntime}
         variant="live"
         media={renderMedia(block.mediaId, block.mediaAlt)}
         renderSceneImage={(id, alt) => renderMedia(id, alt)}

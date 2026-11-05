@@ -81,6 +81,19 @@ export function presentationCommandRequestHash(command: PresentationControlComma
       JSON.stringify({
         expectedRevision: command.expectedRevision,
         action: command.action,
+        ...(command.action === "jump_to_block"
+          ? { targetBlockId: command.targetBlockId.toLowerCase() }
+          : {}),
+        ...(command.action === "set_reveal" || command.action === "navigate_scene"
+          ? {
+              blockId: command.blockId.toLowerCase(),
+              nodeId: command.nodeId,
+              ...(command.action === "set_reveal" ? { revealed: command.revealed } : {}),
+            }
+          : {}),
+        ...(command.action === "follow_branch"
+          ? { blockId: command.blockId.toLowerCase(), branchId: command.branchId.toLowerCase() }
+          : {}),
         ...(command.action === "start_recovery_card"
           ? {
               insertionId: command.recoveryPackCard.insertionId,

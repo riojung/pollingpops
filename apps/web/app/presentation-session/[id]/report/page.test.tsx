@@ -236,7 +236,7 @@ describe("Presentation Quick Check report compatibility", () => {
       const harness = reportHarness();
       await settle();
       expect(fixtures.apiFetch.mock.calls[0]?.[0]).toBe(
-        "/v1/presentation-sessions/11111111-1111-4111-8111-111111111111/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true&includeTextResults=true",
+        "/v1/presentation-sessions/11111111-1111-4111-8111-111111111111/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true&includeTextResults=true&includeNavigation=true&includeInteractions=true",
       );
       const markup = renderToStaticMarkup(harness.render());
       expect(markup).toContain("Which approach should we discuss?");
@@ -331,5 +331,73 @@ describe("Presentation Quick Check report compatibility", () => {
     expect(markup).toContain("Which approach should we discuss?");
     expect(markup).toContain("Timed");
     expect(markup).not.toContain("Session-only Quick Check");
+  });
+
+  it("labels V6 skipped activities separately from presented evidence and names restored navigation", async () => {
+    const legacy = reportFixture(1);
+    const question = legacy.evidence[0]!;
+    if (question.kind !== "question") throw new Error("Question fixture required");
+    const skippedId = "66666666-6666-4666-8666-666666666666";
+    const report = PresentationReportSchema.parse({
+      ...legacy,
+      schemaVersion: 6,
+      evidence: [
+        question,
+        {
+          ...question,
+          blockId: skippedId,
+          blockIndex: 1,
+          prompt: "Never presented question",
+          respondents: 0,
+        },
+      ],
+      navigation: {
+        jumpCount: 1,
+        returnCount: 1,
+        blocks: [
+          {
+            blockId: question.blockId,
+            sectionId: "77777777-7777-4777-8777-777777777777",
+            sectionTitle: "Review section",
+            status: "presented",
+            phase: "question_reveal",
+          },
+          {
+            blockId: skippedId,
+            sectionId: null,
+            sectionTitle: null,
+            status: "skipped",
+            phase: null,
+          },
+        ],
+      },
+      timeline: [
+        {
+          sequence: 1,
+          type: "navigation.returned",
+          blockIndex: 0,
+          blockId: question.blockId,
+          occurredAt: "2026-10-08T12:01:00.000Z",
+          navigation: {
+            fromBlockId: skippedId,
+            toBlockId: question.blockId,
+            returnBlockId: null,
+            restored: true,
+          },
+        },
+      ],
+    });
+    fixtures.apiFetch.mockResolvedValue({ reportStatus: "ready", report });
+    const harness = reportHarness();
+    await settle();
+    const markup = renderToStaticMarkup(harness.render());
+    expect(markup).toContain("1 jumps · 1 returns to path");
+    expect(markup).toContain("Review section");
+    expect(markup).toContain("Skipped · not presented");
+    expect(markup).toContain("No response or assessment evidence was collected.");
+    expect(markup).toContain("Restored saved state");
+    const skipped = markup.split("Never presented question")[1]!.split("</article>")[0]!;
+    expect(skipped).not.toContain("Respondents");
+    expect(skipped).not.toContain("Accuracy");
   });
 });

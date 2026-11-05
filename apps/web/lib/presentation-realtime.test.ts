@@ -236,7 +236,13 @@ describe("Presentation companion realtime controls", () => {
     controller.stop();
   });
 
-  it.each(["advance", "insert_recovery_pack", "start_recovery_card"] as const)(
+  it.each([
+    "advance",
+    "insert_recovery_pack",
+    "start_recovery_card",
+    "jump_to_block",
+    "return_to_path",
+  ] as const)(
     "retries exactly the original %s after lost acknowledgement and newer state",
     async (action) => {
       vi.useFakeTimers();
@@ -290,7 +296,9 @@ describe("Presentation companion realtime controls", () => {
                   recoveryPackCard: { insertionId: randomUUID(), cardId: randomUUID() },
                   interventionType: "explain",
                 }
-              : { ...credentials, action };
+              : action === "jump_to_block"
+                ? { ...credentials, action, targetBlockId: randomUUID() }
+                : { ...credentials, action };
         const attempt = recovery.run(original);
         const rejection = expect(attempt).rejects.toMatchObject({
           code: "PRESENTATION_COMMAND_UNCONFIRMED",
@@ -433,6 +441,74 @@ describe("Presentation companion realtime controls", () => {
 });
 
 describe("Presentation card command acknowledgements", () => {
+  it.each(["jump_to_block", "return_to_path"] as const)(
+    "settles a host %s receipt without rewinding a newer cohost snapshot",
+    async (action) => {
+      vi.useFakeTimers();
+      const socket = new FakeSocket();
+      const initial = hostSnapshot({ phase: "content", acceptingResponses: false });
+      const accepted = hostSnapshot({
+        phase: "content",
+        acceptingResponses: false,
+        seq: 6,
+        revision: 4,
+      });
+      const cohost = hostSnapshot({
+        phase: "question_open",
+        acceptingResponses: true,
+        seq: 7,
+        revision: 5,
+      });
+      const received: PresentationHostSnapshot[] = [];
+      const controller = createPresentationRealtimeController({
+        sessionId: initial.sessionId,
+        credential: { projection: "host", controlToken: "h".repeat(32) },
+        fetchSnapshot: async () => initial,
+        onSnapshot: (snapshot) => received.push(snapshot),
+        onConnectionState: () => undefined,
+        socketFactory: () => socket as unknown as Socket,
+        acknowledgementTimeoutMs: 20,
+      });
+      const command: PresentationCommand = {
+        sessionId: initial.sessionId,
+        controlToken: "h".repeat(32),
+        commandId: randomUUID(),
+        expectedRevision: initial.revision,
+        ...(action === "jump_to_block" ? { action, targetBlockId: randomUUID() } : { action }),
+      };
+      const recovery = createPresentationCommandRecovery({
+        execute: (input: PresentationCommand) => controller.command(input, async () => accepted),
+        onState: () => undefined,
+      });
+      try {
+        controller.start();
+        sync(socket, initial);
+        await Promise.resolve();
+        const first = recovery.run(command);
+        const rejected = expect(first).rejects.toMatchObject({
+          code: "PRESENTATION_COMMAND_UNCONFIRMED",
+        });
+        const original = socket.last("presentation.command")!;
+        controller.applySnapshot(accepted);
+        controller.applySnapshot(cohost);
+        await vi.advanceTimersByTimeAsync(20);
+        await rejected;
+        sync(socket, cohost);
+        await Promise.resolve();
+        const retry = recovery.retry();
+        expect(socket.last("presentation.command")?.payload).toBe(original.payload);
+        socket.last("presentation.command")!.ack?.({ data: { snapshot: accepted } });
+        await expect(retry).resolves.toEqual(accepted);
+        expect(recovery.state().pendingCommand).toBeNull();
+        expect(controller.latest()).toEqual(cohost);
+        expect(received.at(-1)).toEqual(cohost);
+      } finally {
+        controller.stop();
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("replays the exact card command after an intervention update and lost acknowledgement", async () => {
     vi.useFakeTimers();
     const socket = new FakeSocket();

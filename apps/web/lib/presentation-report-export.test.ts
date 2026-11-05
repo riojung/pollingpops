@@ -104,6 +104,83 @@ function records(csv: string) {
   return rows;
 }
 describe("Presentation report evidence CSV", () => {
+  it("preserves V6 navigation fields and exports V7 broadcast/branch counts without assessment claims", () => {
+    const previous = report();
+    const contentId = id(22);
+    const sourceId = previous.evidence[0]!.blockId;
+    const value = PresentationReportSchema.parse({
+      ...previous,
+      schemaVersion: 7,
+      evidence: [
+        ...previous.evidence,
+        {
+          blockId: contentId,
+          blockIndex: 1,
+          kind: "content",
+          title: "Branch target",
+          assessmentStatus: "not_assessed",
+        },
+      ],
+      navigation: {
+        jumpCount: 0,
+        returnCount: 0,
+        blocks: [
+          {
+            blockId: sourceId,
+            sectionId: null,
+            sectionTitle: null,
+            status: "presented",
+            phase: "question_reveal",
+          },
+          {
+            blockId: contentId,
+            sectionId: null,
+            sectionTitle: null,
+            status: "presented",
+            phase: "content",
+          },
+        ],
+      },
+      interactionSummary: { revealChangeCount: 1, branchCount: 1 },
+      timeline: [
+        {
+          sequence: 1,
+          type: "navigation.branched",
+          blockIndex: 1,
+          blockId: contentId,
+          occurredAt: "2026-11-04T00:00:30.000Z",
+          navigation: {
+            fromBlockId: sourceId,
+            toBlockId: contentId,
+            returnBlockId: sourceId,
+            restored: false,
+          },
+          branch: {
+            branchId: id(23),
+            sourceBlockId: sourceId,
+            targetBlockId: contentId,
+            denominator: 2,
+            matchedResponses: 1,
+          },
+        },
+        {
+          sequence: 2,
+          type: "scene.reveal_changed",
+          blockIndex: 1,
+          blockId: contentId,
+          occurredAt: "2026-11-04T00:00:31.000Z",
+          interaction: { blockId: contentId, nodeId: "broadcast", revealed: true },
+        },
+      ],
+    });
+    const rows = records(presentationReportCsv(value));
+    const at = (column: string) => rows[0]!.indexOf(column);
+    expect(rows.every((row) => row.length === 39)).toBe(true);
+    expect(rows[1]![at("presentation_status")]).toBe("presented");
+    expect(rows[1]![at("broadcast_reveal_change_count")]).toBe("1");
+    expect(rows[1]![at("answer_branch_count")]).toBe("1");
+    expect(rows.at(-1)![at("participant_score_total")]).toBe("");
+  });
   it("exports all rank evidence with a stable rectangular shape and distinct result weights", () => {
     const value = report();
     const before = JSON.stringify(value);
@@ -218,5 +295,58 @@ describe("Presentation report evidence CSV", () => {
     expect(rows[9]![at("percent_of_approved_respondents")]).toBe("60");
     expect(rows.at(-1)!.slice(26)).toEqual(Array(5).fill(""));
     expect(JSON.stringify(value)).toBe(before);
+  });
+
+  it("exports V6 section and presentation history without treating a skipped activity as a zero-score answer", () => {
+    const previous = report();
+    const original = previous.evidence[0]!;
+    if (original.kind !== "question") throw new Error("Question fixture required");
+    const { opinionSummary: _removed, ...question } = original as typeof original & {
+      opinionSummary?: unknown;
+    };
+    expect(_removed).toEqual(summary);
+    const skipped = {
+      ...question,
+      blockId: id(22),
+      blockIndex: 1,
+      prompt: "Never asked",
+      respondents: 0,
+    };
+    const value = PresentationReportSchema.parse({
+      ...previous,
+      schemaVersion: 6,
+      evidence: [original, skipped],
+      navigation: {
+        jumpCount: 2,
+        returnCount: 1,
+        blocks: [
+          {
+            blockId: original.blockId,
+            sectionId: id(30),
+            sectionTitle: "=SUM(1)",
+            status: "presented",
+            phase: "question_reveal",
+          },
+          {
+            blockId: skipped.blockId,
+            sectionId: null,
+            sectionTitle: null,
+            status: "skipped",
+            phase: null,
+          },
+        ],
+      },
+    });
+    const rows = records(presentationReportCsv(value));
+    const at = (column: string) => rows[0]!.indexOf(column);
+    expect(rows.every((row) => row.length === 37)).toBe(true);
+    expect(rows[1]![at("presentation_status")]).toBe("presented");
+    expect(rows[1]![at("section_title")]).toBe("'=SUM(1)");
+    expect(rows[1]![at("navigation_jump_count")]).toBe("2");
+    const skippedRow = rows.at(-1)!;
+    expect(skippedRow[at("presentation_status")]).toBe("skipped");
+    expect(skippedRow[at("respondents")]).toBe("");
+    expect(skippedRow[at("participant_score_total")]).toBe("");
+    expect(skippedRow[at("saved_phase")]).toBe("");
   });
 });

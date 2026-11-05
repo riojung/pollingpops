@@ -9,6 +9,62 @@ import { clientUuid } from "./uuid";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
 
+/** Image edits preserve each attached hotspot's relative position and size. */
+export function synchronizeNativeHotspots(
+  before: PresentationScene,
+  next: PresentationScene,
+): PresentationScene {
+  return {
+    ...next,
+    nodes: next.nodes.map((node) => {
+      if (node.type !== "hotspot" || !node.imageNodeId) return node;
+      const original = before.nodes.find((item) => item.id === node.id);
+      const oldImage = before.nodes.find((item) => item.id === node.imageNodeId);
+      const image = next.nodes.find((item) => item.id === node.imageNodeId);
+      if (
+        original?.type !== "hotspot" ||
+        original.imageNodeId !== node.imageNodeId ||
+        oldImage?.type !== "image" ||
+        image?.type !== "image" ||
+        JSON.stringify(oldImage.frame) === JSON.stringify(image.frame)
+      )
+        return node;
+      const width = Math.min(
+        image.frame.width,
+        Math.max(1, (original.frame.width * image.frame.width) / oldImage.frame.width),
+      );
+      const height = Math.min(
+        image.frame.height,
+        Math.max(1, (original.frame.height * image.frame.height) / oldImage.frame.height),
+      );
+      return {
+        ...node,
+        frame: {
+          x: Math.max(
+            image.frame.x,
+            Math.min(
+              image.frame.x + image.frame.width - width,
+              image.frame.x +
+                ((original.frame.x - oldImage.frame.x) * image.frame.width) / oldImage.frame.width,
+            ),
+          ),
+          y: Math.max(
+            image.frame.y,
+            Math.min(
+              image.frame.y + image.frame.height - height,
+              image.frame.y +
+                ((original.frame.y - oldImage.frame.y) * image.frame.height) /
+                  oldImage.frame.height,
+            ),
+          ),
+          width,
+          height,
+        },
+      };
+    }),
+  };
+}
+
 /** A stored group always selects and transforms as one unit; reading order stays independent. */
 export function expandNativeSceneSelection(scene: PresentationScene, ids: readonly string[]) {
   const existing = new Set(scene.nodes.map((node) => node.id));
@@ -160,7 +216,7 @@ export function moveNativeSceneNodes(
     changed = true;
     return { ...node, frame: { ...node.frame, x, y } };
   });
-  return changed ? { ...scene, nodes } : scene;
+  return changed ? synchronizeNativeHotspots(scene, { ...scene, nodes }) : scene;
 }
 
 /** Resize from the bottom-right corner without moving the node's top-left anchor. */
@@ -193,7 +249,7 @@ export function resizeNativeSceneNode(
     changed = true;
     return { ...node, frame: { ...node.frame, width, height } };
   });
-  return changed ? { ...scene, nodes } : scene;
+  return changed ? synchronizeNativeHotspots(scene, { ...scene, nodes }) : scene;
 }
 
 /** Keep the required title, and remove all connectors whose actual endpoint is being removed. */
@@ -214,7 +270,13 @@ export function removeNativeSceneNodes(
   }
   return {
     ...scene,
-    nodes: scene.nodes.filter((node) => !removed.has(node.id)),
+    nodes: scene.nodes
+      .filter((node) => !removed.has(node.id))
+      .map((node) =>
+        node.type === "hotspot" && node.imageNodeId && removed.has(node.imageNodeId)
+          ? { ...node, imageNodeId: null }
+          : node,
+      ),
     readingOrder: scene.readingOrder.filter((id) => !removed.has(id)),
     ...(scene.groups
       ? {
@@ -249,7 +311,10 @@ function fits(node: FramedNode) {
 
 function withNodes(scene: PresentationScene, nodes: FramedNode[]) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  return { ...scene, nodes: scene.nodes.map((node) => byId.get(node.id) ?? node) };
+  return synchronizeNativeHotspots(scene, {
+    ...scene,
+    nodes: scene.nodes.map((node) => byId.get(node.id) ?? node),
+  });
 }
 
 /** Bound a continuous resize against the stage without evaluating/parsing slide text per move. */

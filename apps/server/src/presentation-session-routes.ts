@@ -58,6 +58,8 @@ const PresentationReportQuerySchema = z
     includeQuickChecks: z.literal("true").optional(),
     includeOpinionResults: z.literal("true").optional(),
     includeTextResults: z.literal("true").optional(),
+    includeNavigation: z.literal("true").optional(),
+    includeInteractions: z.literal("true").optional(),
   })
   .strict();
 
@@ -933,8 +935,14 @@ export async function registerPresentationSessionRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     const { id } = IdParamsSchema.parse(request.params);
-    const { includeSessionContext, includeQuickChecks, includeOpinionResults, includeTextResults } =
-      PresentationReportQuerySchema.parse(request.query);
+    const {
+      includeSessionContext,
+      includeQuickChecks,
+      includeOpinionResults,
+      includeTextResults,
+      includeNavigation,
+      includeInteractions,
+    } = PresentationReportQuerySchema.parse(request.query);
     try {
       const result = await service.getReport(
         creator.workspaceId,
@@ -943,6 +951,8 @@ export async function registerPresentationSessionRoutes(
         includeQuickChecks === "true",
         includeOpinionResults === "true",
         includeTextResults === "true",
+        includeNavigation === "true",
+        includeInteractions === "true",
       );
       return reply
         .code(result.reportStatus === "pending" && !result.report ? 202 : 200)

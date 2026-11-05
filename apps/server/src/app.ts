@@ -21,6 +21,7 @@ import {
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
+  createPresentationShareRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
   createPlatformRepository,
@@ -64,6 +65,7 @@ import { SessionService } from "./session-service.js";
 import { StorageService } from "./storage.js";
 import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
+import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
 import { PresentationSessionService } from "./presentation-session-service.js";
 import { registerGroupRoutes } from "./group-routes.js";
@@ -117,6 +119,9 @@ export async function buildApp(
           "*.controlToken",
           "*.companionToken",
           "*.token",
+          "req.body.token",
+          "request.body.token",
+          "body.token",
           "pin",
           "pinHash",
           "challengeId",
@@ -207,6 +212,7 @@ export async function buildApp(
     });
   }
   const presentations = createPresentationRepository(repository);
+  const presentationShares = createPresentationShareRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
     concurrentResponseWrites: config.PRESENTATION_CONCURRENT_RESPONSE_WRITES,
@@ -611,6 +617,15 @@ export async function buildApp(
     storage,
     workspaceEnabled: presentationsEnabled,
   });
+  await registerPresentationSharingRoutes(app, {
+    auth,
+    repository,
+    shares: presentationShares,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
   await registerPresentationSessionRoutes(app, {
     repository,
     presentations,
@@ -697,6 +712,7 @@ export async function buildApp(
     presentations,
     presentationSessions,
     presentationService,
+    presentationShares,
     groups,
     libraryMetadata,
     canvasBoards,

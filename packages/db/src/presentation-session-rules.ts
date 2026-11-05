@@ -1,3 +1,5 @@
+import { validatePresentationInteractionState } from "./presentation-interactions.js";
+import { validatePresentationNavigationState } from "./presentation-navigation.js";
 import { PresentationTextCapacityError } from "./presentation-text-types.js";
 import {
   PresentationContentSchema,
@@ -26,6 +28,12 @@ export function clone<T>(value: T): T {
 
 export function normalizeSession(input: PresentationSessionCreateInput): PresentationSessionRecord {
   const content = upcastPresentationSessionContent(input.content, input.content.schemaVersion);
+  if (content.schemaVersion < 12 && input.navigationState !== undefined)
+    throw new Error("Navigation requires Presentation schema version 12");
+  if (content.schemaVersion !== 13 && input.interactionState !== undefined)
+    throw new Error("Shared interactions require Presentation schema version 13");
+  if (content.schemaVersion === 13 && (input.interactionState?.reveals.length ?? 0) !== 0)
+    throw new Error("Initial interaction state cannot invent reveals");
   const settings = input.settings ?? { timeMode: "timed" as const };
   const recoveryPackCardsEnabled = input.recoveryPackCardsEnabled ?? false;
   const recoveryPackIntervention = input.recoveryPackIntervention
@@ -52,12 +60,52 @@ export function normalizeSession(input: PresentationSessionCreateInput): Present
       );
     }
   }
+  const currentQuestion = content.blocks[input.currentBlockIndex];
+  const progressOpenedAt =
+    content.schemaVersion >= 12 && currentQuestion?.kind === "question"
+      ? (questionOpenedAt ?? input.updatedAt)
+      : null;
+  const progressClosesAt =
+    progressOpenedAt && currentQuestion?.kind === "question" && settings.timeMode !== "flex"
+      ? (questionClosesAt ??
+        new Date(progressOpenedAt.getTime() + currentQuestion.question.timeLimitSeconds * 1000))
+      : null;
   return {
     ...input,
     joinPasswordHash: input.joinPasswordHash ?? null,
     content,
     settings,
     ...(content.schemaVersion >= 10 ? { textModerationSeq: input.textModerationSeq ?? 0 } : {}),
+    ...(content.schemaVersion >= 12
+      ? {
+          navigationState: validatePresentationNavigationState(
+            content,
+            input.navigationState ?? {
+              returnBlockId: null,
+              blocks:
+                input.phase === "lobby" || input.phase === "finished"
+                  ? []
+                  : [
+                      {
+                        blockId: content.blocks[input.currentBlockIndex]?.id,
+                        phase: input.phase,
+                        questionOpenedAt: progressOpenedAt?.toISOString() ?? null,
+                        questionClosesAt: progressClosesAt?.toISOString() ?? null,
+                        ...(input.phase === "intervention" ? { recoveryPackIntervention } : {}),
+                      },
+                    ],
+            },
+          ),
+        }
+      : {}),
+    ...(content.schemaVersion === 13
+      ? {
+          interactionState: validatePresentationInteractionState(
+            content,
+            input.interactionState ?? { reveals: [] },
+          ),
+        }
+      : {}),
     trustMode: input.trustMode ?? "learning",
     recoveryPackCardsEnabled,
     recoveryPackIntervention,
@@ -71,24 +119,56 @@ export function commandReceiptMatches(
   receipt: Pick<PresentationSessionCommandReceiptRecord, "expectedRevision" | "requestHash">,
   input: Pick<
     PresentationSessionCommandInput,
-    "expectedRevision" | "requestHash" | "recoveryPackIntervention" | "content"
+    | "expectedRevision"
+    | "requestHash"
+    | "recoveryPackIntervention"
+    | "content"
+    | "navigationState"
+    | "interactionState"
+    | "event"
   >,
 ) {
   return (
     receipt.expectedRevision === input.expectedRevision &&
     (receipt.requestHash == null
-      ? input.recoveryPackIntervention == null && input.content == null
+      ? input.recoveryPackIntervention == null &&
+        input.content == null &&
+        input.navigationState == null &&
+        input.interactionState == null &&
+        input.event.interaction == null &&
+        input.event.branch == null &&
+        input.event.type !== "scene.reveal_changed" &&
+        input.event.navigation == null &&
+        !input.event.type.startsWith("navigation.")
       : receipt.requestHash === input.requestHash)
   );
 }
 
 export function transitionContent(
   session: PresentationSessionRecord,
-  input: PresentationSessionTransitionInput,
+  input: Pick<PresentationSessionTransitionInput, "content">,
 ) {
-  return input.content === undefined
-    ? session.content
-    : PresentationContentSchema.parse(input.content);
+  if (input.content === undefined) return session.content;
+  const content = PresentationContentSchema.parse(input.content);
+  if (session.content.schemaVersion >= 12) {
+    if (
+      content.schemaVersion !== session.content.schemaVersion ||
+      JSON.stringify(content.sections) !== JSON.stringify(session.content.sections)
+    )
+      throw new Error("Live navigation content must preserve frozen sections");
+    let previousIndex = -1;
+    for (const block of session.content.blocks) {
+      const index = content.blocks.findIndex(
+        (candidate) => candidate.id.toLowerCase() === block.id.toLowerCase(),
+      );
+      if (index <= previousIndex || JSON.stringify(content.blocks[index]) !== JSON.stringify(block))
+        throw new Error(
+          "Live navigation insertions must preserve existing frozen blocks and their order",
+        );
+      previousIndex = index;
+    }
+  }
+  return content;
 }
 
 export function assertCommandRequestHash(
@@ -163,7 +243,8 @@ export function responseWindowOpen(
   const block = session.content.blocks[session.currentBlockIndex];
   if (
     block?.kind !== "question" ||
-    (isPresentationOpinionResultQuestion(block.question) ||
+    (session.content.schemaVersion >= 12 ||
+    isPresentationOpinionResultQuestion(block.question) ||
     isPresentationTextResultQuestion(block.question)
       ? block.id.toLowerCase() !== response.blockId.toLowerCase() ||
         block.question.id.toLowerCase() !== response.questionId.toLowerCase()
@@ -188,7 +269,8 @@ export function presentationResponseBlockId(
     session?.content.blocks.find(
       (block) =>
         block.kind === "question" &&
-        (isPresentationOpinionResultQuestion(block.question) ||
+        (session.content.schemaVersion >= 12 ||
+          isPresentationOpinionResultQuestion(block.question) ||
           isPresentationTextResultQuestion(block.question)) &&
         block.id.toLowerCase() === blockId.toLowerCase(),
     )?.id ?? blockId
@@ -219,7 +301,8 @@ export function normalizePresentationResponse(
     (candidate) =>
       candidate.id === input.blockId ||
       (candidate.kind === "question" &&
-        (isPresentationOpinionResultQuestion(candidate.question) ||
+        ((session?.content.schemaVersion ?? 0) >= 12 ||
+          isPresentationOpinionResultQuestion(candidate.question) ||
           isPresentationTextResultQuestion(candidate.question)) &&
         candidate.id.toLowerCase() === input.blockId.toLowerCase()),
   );
@@ -292,7 +375,9 @@ export function normalizePresentationResponse(
   }
   return {
     ...clone(input),
-    ...(opinion && block && question ? { blockId: block.id, questionId: question.id } : {}),
+    ...((opinion || (session?.content.schemaVersion ?? 0) >= 12) && block && question
+      ? { blockId: block.id, questionId: question.id }
+      : {}),
     responseSchemaVersion,
     response,
   };

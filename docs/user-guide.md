@@ -586,6 +586,26 @@ facilitation timeline. It does not assign quiz standings or learning outcomes to
 Ordinary content slides retain the existing text/image layout tools. Native slides add independently
 positioned text, images, labeled shapes and connectors in the same deck.
 
+### Organize sections and navigate live
+
+In the Builder, choose **Enable sections and navigation**, then **Add section**. Rename sections
+and assign each selected block with **Selected block section**. Section names are published, so
+use audience-appropriate labels. Sections group blocks; numbered slide order remains the default
+presentation path. Deleting a section keeps its blocks. Hidden slides are omitted when published.
+Wait for **Saved**, publish, and start a new session to use the new map.
+
+On the host or Companion, choose **Open navigation** to see current, visited and not-visited
+blocks. Choose an available slide or activity to jump there. The map explains unavailable targets.
+Close and reveal an open activity before navigating, and complete any linked recheck first.
+Revisiting an activity shows its saved closed phase/results without collecting another response
+or awarding points again.
+
+The first jump retains your original block as **Return target**. Further jumps keep that anchor;
+**Return to path** restores it. A jump from the lobby anchors the first published block. Ordinary
+**Next** continues in numbered order. If confirmation is lost, use the offered retry to confirm the
+same action; reload preserves that pending action in the same browser tab. Finished reports and
+CSV distinguish presented and skipped blocks without treating skipped activities as wrong answers.
+
 ### Add reveal panels and safe links
 
 On a native slide, choose **Add reveal panel** or **Add link**. Give each control a short,
@@ -604,6 +624,60 @@ Use **Show accessible outline** for a readable layout in the slide's semantic or
 panels and links work there. Buttons support touch, Enter and Space, and links announce that they
 open a new tab. Editing previews do not navigate. Page reloads or a new slide/source begin with
 panels collapsed. Hotspots, pop-up dialogs and branching are not part of this basic release.
+
+### Add hotspots, detail dialogs and shared reveals
+
+Use **Add native image** with a complete image description, then **Add image hotspot**. Choose its
+image, label, detail title and audience content. Keep the hotspot inside its unrotated image;
+moving or resizing the image carries its hotspots. **Add detail dialog** provides the same local
+detail without an image anchor. Viewers can open these details by touch or keyboard, close with
+Escape and return focus to the activating button. The accessible outline offers the same actions.
+Keep private facilitator cues in speaker notes.
+
+For a reveal panel, choose **This screen only** or **Facilitator reveals for everyone** under
+**Reveal audience**. During live delivery, a shared reveal waits for host/Companion confirmation.
+Its body is withheld from audience snapshots while closed, and its state survives reload and
+revisits. Shared review links make these reveals local to each reader. Reveals never submit an
+answer, change scores or call an AI provider.
+
+Use **Add slide link**, enter a label and choose **Target slide or activity**. The host/Companion
+uses this link to navigate the live room through the same safe jump rules as the map. A private
+review reader follows it only on their own screen. Hidden slides, rechecks and the current slide
+cannot be selected. Fix missing targets before publication.
+
+On an unlinked main activity, choose **Add answer branch**. Set its label, an accepted-choice or
+correct-response percentage, minimum response count and a forward target. After closing/revealing
+the activity, the server enables matching branch buttons for the facilitator. Choose one to
+follow it. **Next block** keeps the numbered path. Branches never create another response or reset
+points; linked diagnostic/recheck sequences stay indivisible.
+
+### Share a private review link
+
+Publish the deck, then choose **Share review link**. Select a one-, seven- or thirty-day expiry,
+choose **Create link**, and copy the private link. It grants access to anyone who has it, without
+requiring a recipient account. Use **Retry link creation** after uncertain confirmation to recover
+the original request and link, including after reload.
+
+If the server confirms that an unaccepted request has expired, the expiry selector and **Create
+link** become available again. Choose an expiry and create a fresh link. A connection failure
+continues to retain the original request for an exact retry.
+
+Save or copy the link before closing the dialog; the server keeps only its hash and cannot show
+the secret again later. Create another link if you need a replacement, and revoke unused links.
+
+Every link stays on its published version. Later draft edits or publications do not update it;
+create a new link to share a newer version. Reviewers can move through pages/sections and use local
+details or links, but questions are for reading and responses are not collected. Speaker notes,
+answer keys, explanations, private provenance, scores and live state are excluded.
+
+Open **Share review link** again and choose **Revoke link** to stop subsequent access. The reader
+checks authorization before moving to another page and before image access. A temporary network
+failure keeps the current page and offers retry. Expiry, removal of the publisher's editing
+authority or source deletion also ends access. Archiving blocks new links while existing links
+remain valid until revoked or expired. Already delivered content cannot be recalled.
+
+Each deck permits twenty active and one hundred retained links; expired metadata is removed after
+seven days. These review links do not create assignments, learner attempts or completion records.
 
 ### Import a PDF or a set of slide images
 

@@ -11,6 +11,8 @@ import {
   createNativeContentBlock,
   createNativeLinkNode,
   createNativeRevealNode,
+  createNativeDialogNode,
+  createNativeNavigationNode,
 } from "../../lib/presentation-native-scene";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 
@@ -41,13 +43,16 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 
-type InteractionNode = Extract<PresentationSceneNode, { type: "link" | "reveal" }>;
+type InteractionNode = Extract<
+  PresentationSceneNode,
+  { type: "link" | "reveal" | "hotspot" | "dialog" | "navigation" }
+>;
 
 function harness(initial: InteractionNode, accept = () => true) {
   const base = createNativeContentBlock().scene!;
   let scene: PresentationScene = {
     ...base,
-    schemaVersion: 5,
+    schemaVersion: ["hotspot", "dialog", "navigation"].includes(initial.type) ? 6 : 5,
     nodes: [...base.nodes, initial],
     readingOrder: [...base.readingOrder, initial.id],
   };
@@ -68,6 +73,9 @@ function harness(initial: InteractionNode, accept = () => true) {
         scene,
         node: (scene.nodes.find((item) => item.id === selected) as InteractionNode) ?? null,
         onChange,
+        navigationTargets: [
+          { id: "11111111-1111-4111-8111-111111111111", title: "Next checkpoint" },
+        ],
       });
     } finally {
       mocked.hooks = null;
@@ -115,6 +123,43 @@ function harness(initial: InteractionNode, accept = () => true) {
 }
 
 describe("native audience interaction editing", () => {
+  it("promotes an existing local reveal to broadcast without losing audience content", () => {
+    const reveal = { ...createNativeRevealNode(), label: "Evidence", body: "Audience evidence" };
+    const editor = harness(reveal);
+    editor.change("Reveal audience", "broadcast");
+    expect(editor.scene.schemaVersion).toBe(6);
+    expect(editor.scene.nodes.at(-1)).toMatchObject({
+      scope: "broadcast",
+      label: reveal.label,
+      body: reveal.body,
+    });
+    expect(editor.onChange.mock.calls[0]?.[1]).toBe(`native:${reveal.id}:scope`);
+  });
+  it("edits detail fields independently and stores a stable internal target ID", () => {
+    const dialog = createNativeDialogNode();
+    const editor = harness(dialog);
+    editor.change("Detail button label", "Inspect");
+    editor.change("Detail title", "Evidence detail");
+    editor.change("Detail audience content", "Plain audience body");
+    expect(editor.scene.nodes.at(-1)).toMatchObject({
+      type: "dialog",
+      label: "Inspect",
+      detailTitle: "Evidence detail",
+      body: "Plain audience body",
+    });
+    expect(editor.onChange.mock.calls.map((call) => call[1])).toEqual([
+      `native:${dialog.id}:label`,
+      `native:${dialog.id}:detailTitle`,
+      `native:${dialog.id}:body`,
+    ]);
+    const link = createNativeNavigationNode();
+    const navigation = harness(link);
+    navigation.change("Target slide or activity", "11111111-1111-4111-8111-111111111111");
+    expect(navigation.scene.nodes.at(-1)).toMatchObject({
+      type: "navigation",
+      targetBlockId: "11111111-1111-4111-8111-111111111111",
+    });
+  });
   it("retains an unsafe URL locally across selection and geometry changes, then saves a corrected URL into field history", () => {
     const link = { ...createNativeLinkNode(), href: "https://example.com/original" };
     const editor = harness(link);

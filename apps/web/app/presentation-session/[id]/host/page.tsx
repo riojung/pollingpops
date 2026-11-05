@@ -50,6 +50,15 @@ import { PresentationStageLauncher } from "../../../../components/presentation-l
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
 import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
 import delivery from "../../../../components/presentation-live/presentation-delivery.module.css";
+import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
+import {
+  isPresentationRecoverableCommand,
+  persistPresentationNavigationCommand,
+  restorePresentationNavigationCommand,
+  presentationNavigationRetryLabel,
+} from "../../../../lib/presentation-navigation";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
+import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
 
 function advanceMessageKey(
   snapshot: PresentationHostSnapshot,
@@ -103,6 +112,8 @@ function PresentationHostContent() {
   const passManagerRef = useRef<ReturnType<typeof createPresentationHostPassManager> | null>(null);
   const passManagerSessionId = useRef<string | null>(null);
   const [error, setError] = useState("");
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationButtonRef = useRef<HTMLButtonElement>(null);
   const [now, setNow] = useState(() => Date.now());
   const [connection, setConnection] = useState<PresentationConnectionState>("connecting");
   const connectionState = useRef({ hadSuccess: false, failedAfterSuccess: false, tracked: false });
@@ -193,14 +204,17 @@ function PresentationHostContent() {
           setHasControlPass(false);
           setAudienceToken(null);
           setControlPassError(
-            "This host control pass is no longer valid. Reacquire it to use live card controls.",
+            "This host control pass is no longer valid. Reacquire it to use live controls.",
           );
           setControlPassAttempt((attempt) => attempt + 1);
         },
       });
       controllerRef.current = controller;
-      if (!commandsRef.current || commandsSessionId.current !== id) {
+      if (controlToken && (!commandsRef.current || commandsSessionId.current !== id)) {
         commandsRef.current = createPresentationCommandRecovery<PresentationHostSnapshot>({
+          pendingCommand: restorePresentationNavigationCommand(sessionStorage, id, {
+            controlToken,
+          }),
           execute: (command) => {
             const activeController = controllerRef.current;
             if (!activeController)
@@ -218,6 +232,7 @@ function PresentationHostContent() {
             });
           },
           onState: (next) => {
+            persistPresentationNavigationCommand(sessionStorage, id, "host", next.pendingCommand);
             if (commandsSessionId.current === id) setCommandState(next);
           },
         });
@@ -260,7 +275,7 @@ function PresentationHostContent() {
       return;
     setError("");
     try {
-      await commands.run(command);
+      return await commands.run(command);
     } catch (caught) {
       setError(humanError(caught));
       await controller.reconcile();
@@ -274,6 +289,74 @@ function PresentationHostContent() {
       commandId: clientUuid(),
       expectedRevision: snapshot!.revision,
     };
+  }
+
+  async function navigate(action: "jump_to_block" | "return_to_path", targetBlockId?: string) {
+    const controlToken = passManagerRef.current?.token();
+    if (!snapshot?.navigation || !controlToken) return;
+    if (
+      action === "jump_to_block" &&
+      !snapshot.navigation.entries.some(
+        (entry) => entry.blockId === targetBlockId && entry.status !== "current" && entry.canJump,
+      )
+    )
+      return;
+    if (action === "return_to_path" && !snapshot.navigation.canReturn) return;
+    const command: PresentationCommand =
+      action === "jump_to_block"
+        ? { ...commandCredentials(controlToken), action, targetBlockId: targetBlockId! }
+        : { ...commandCredentials(controlToken), action };
+    if (await runCommand(command)) setNavigationOpen(false);
+  }
+
+  async function sceneAction(nodeId: string, revealed?: boolean) {
+    const controlToken = passManagerRef.current?.token();
+    const block = snapshot?.currentBlock;
+    if (!snapshot || block?.kind !== "content" || !controlToken) return;
+    const node = block.scene?.nodes.find((entry) => entry.id === nodeId);
+    if (typeof revealed === "boolean") {
+      if (node?.type !== "reveal" || node.scope !== "broadcast") return;
+      return runCommand({
+        ...commandCredentials(controlToken),
+        action: "set_reveal",
+        blockId: block.id,
+        nodeId,
+        revealed,
+      });
+    }
+    if (
+      node?.type !== "navigation" ||
+      !snapshot.navigation?.entries.some(
+        (entry) =>
+          entry.blockId.toLowerCase() === node.targetBlockId?.toLowerCase() &&
+          entry.canJump &&
+          entry.status !== "current",
+      )
+    )
+      return;
+    return runCommand({
+      ...commandCredentials(controlToken),
+      action: "navigate_scene",
+      blockId: block.id,
+      nodeId,
+    });
+  }
+
+  async function followBranch(branchId: string) {
+    const controlToken = passManagerRef.current?.token();
+    if (
+      !snapshot ||
+      snapshot.currentBlock?.kind !== "question" ||
+      !controlToken ||
+      !snapshot.branches?.some((branch) => branch.id === branchId && branch.available)
+    )
+      return;
+    return runCommand({
+      ...commandCredentials(controlToken),
+      action: "follow_branch",
+      blockId: snapshot.currentBlock.id,
+      branchId,
+    });
   }
 
   async function advance() {
@@ -342,7 +425,8 @@ function PresentationHostContent() {
       return;
     setError("");
     try {
-      await commands.retry();
+      const response = await commands.retry();
+      if (response) setNavigationOpen(false);
     } catch (caught) {
       setError(humanError(caught));
       await controller.reconcile();
@@ -381,6 +465,16 @@ function PresentationHostContent() {
   const opinionSummary = presentationOpinionSummaryFor(snapshot);
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
   const busy = commandState.busy || legacyAdvanceBusy || controlPassBusy;
+  const interactionRuntime = presentationInteractionRuntime(snapshot, {
+    mode: "live_staff",
+    disabled:
+      busy ||
+      !!commandState.pendingCommand ||
+      !hasControlPass ||
+      !controllerRef.current?.canMutate(),
+    onNavigate: (nodeId) => void sceneAction(nodeId),
+    onSetReveal: (nodeId, revealed) => void sceneAction(nodeId, revealed),
+  });
 
   const onPresenterKey = useEffectEvent((event: KeyboardEvent) => {
     if (
@@ -463,6 +557,7 @@ function PresentationHostContent() {
                         </span>
                         <ContentSlideView
                           block={block}
+                          interactionRuntime={interactionRuntime}
                           interactionSourceKey={JSON.stringify([
                             id,
                             audienceToken,
@@ -615,6 +710,7 @@ function PresentationHostContent() {
                       >
                         <PresentationDeliveryBlock
                           block={snapshot.presenter.nextBlock}
+                          interactionRuntime={{ mode: "live_audience" }}
                           interactionSourceKey={JSON.stringify([
                             id,
                             audienceToken,
@@ -673,6 +769,19 @@ function PresentationHostContent() {
                     total: formatNumber(locale, snapshot.blockCount),
                   })}
                 </p>
+                {snapshot.navigation ? (
+                  <button
+                    className="button-quiet full-width"
+                    type="button"
+                    lang="en-CA"
+                    ref={navigationButtonRef}
+                    aria-haspopup="dialog"
+                    aria-expanded={navigationOpen}
+                    onClick={() => setNavigationOpen(true)}
+                  >
+                    Open navigation
+                  </button>
+                ) : null}
                 {snapshot.phase !== "finished" ? (
                   <button
                     className="button full-width"
@@ -691,7 +800,7 @@ function PresentationHostContent() {
                     <p className="muted" role="status">
                       {commandState.pendingCommand
                         ? "Reacquire a host control pass to confirm the pending action."
-                        : "Recovery Pack card actions require a host control pass. You can still advance using compatibility mode."}
+                        : "Live navigation and Recovery Pack card actions require a host control pass. You can still advance using compatibility mode."}
                       {controlPassError ? ` ${controlPassError}` : ""}
                     </p>
                     <button
@@ -718,9 +827,11 @@ function PresentationHostContent() {
                         onClick={() => void retryCommand()}
                         type="button"
                       >
-                        {commandState.pendingCommand.action === "start_recovery_card"
-                          ? "Retry card action acknowledgement"
-                          : "Retry advance acknowledgement"}
+                        {isPresentationRecoverableCommand(commandState.pendingCommand)
+                          ? presentationNavigationRetryLabel(commandState.pendingCommand)
+                          : commandState.pendingCommand.action === "start_recovery_card"
+                            ? "Retry card action acknowledgement"
+                            : "Retry advance acknowledgement"}
                       </button>
                     ) : null}
                   </div>
@@ -736,6 +847,18 @@ function PresentationHostContent() {
                       !controllerRef.current?.canMutate()
                     }
                     onStart={(selection, type) => void startRecoveryCard(selection, type)}
+                  />
+                ) : null}
+                {snapshot.branches ? (
+                  <PresentationBranches
+                    branches={snapshot.branches}
+                    disabled={
+                      busy ||
+                      !!commandState.pendingCommand ||
+                      !hasControlPass ||
+                      !controllerRef.current?.canMutate()
+                    }
+                    onFollow={(branchId) => void followBranch(branchId)}
                   />
                 ) : null}
                 <p className="muted" lang="en-CA">
@@ -760,6 +883,25 @@ function PresentationHostContent() {
           </>
         )}
       </div>
+      {navigationOpen && snapshot?.navigation ? (
+        <PresentationNavigationDialog
+          navigation={snapshot.navigation}
+          disabled={
+            busy ||
+            !!commandState.pendingCommand ||
+            !hasControlPass ||
+            !controllerRef.current?.canMutate()
+          }
+          onJump={(blockId) => void navigate("jump_to_block", blockId)}
+          onReturn={() => void navigate("return_to_path")}
+          onClose={() => setNavigationOpen(false)}
+          returnFocusRef={navigationButtonRef}
+          pendingCommand={commandState.pendingCommand}
+          busy={commandState.busy}
+          onRetry={() => void retryCommand()}
+          retryDisabled={!hasControlPass || busy || !controllerRef.current?.canMutate()}
+        />
+      ) : null}
       {snapshot?.textModerationAvailable && audienceToken ? (
         <PresentationTextModerationPanel
           sessionId={id}

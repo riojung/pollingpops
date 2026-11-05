@@ -8,6 +8,29 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E06 completion and E08 private sharing November 5, 2026
+
+The source on `codex/presentation-interactions-sharing` includes reviewed E07 navigation and
+adds the selected remaining E06 interactions plus E08 private review links. Document13/scene6 and
+migration096 add image hotspots, accessible detail dialogs, stable internal controls, durable
+host-broadcast reveals and explicit response-eligible branches. ReportV7 preserves old readers.
+Migration097 adds version-pinned, expiring/revocable links with safe recipient projections,
+per-page access checks and bounded private media proxying. No learner attempts, paid provider or
+new hosted service is introduced. The full repository pipeline, 70 selected PostgreSQL cases and
+eight production-browser workflows pass;
+see the [E06](evidence/presentation-e06-completion.md) and
+[E08](evidence/presentation-e08-private-sharing.md) records. Changes are prepared for pull request review and remain undeployed.
+
+### Presentation E07 sections and navigation November 4, 2026
+
+The source increment on `codex/presentation-e07-navigation` adds named sections, a private live map,
+stable block-ID jump/return and durable visited phases through document12/migration095. Numbered
+order remains the default path. Closed activities retain their original windows, responses and
+scores; linked rechecks remain indivisible. ReportV6 identifies presented/skipped blocks without
+fabricating completion. The full repository pipeline, 64 selected PostgreSQL cases and four
+production browser profiles pass; see the
+[evidence record](evidence/presentation-e07-navigation.md). The source is included in the interactions/sharing branch and remains undeployed.
+
 ### Presentation E06 basic interactions November 4, 2026
 
 The planned first slice is implemented locally on `codex/presentation-e06-basic-interactions`:
@@ -16,8 +39,9 @@ accessible outline across delivery surfaces. Scene5/document11 and migration094 
 activity, response, scoring and immutable-publication meanings. No AI provider or per-click job
 is added. The full repository check, restricted PostgreSQL, focused tests and four production
 browser profiles pass; see the [evidence record](evidence/presentation-e06-basic-interactions.md).
-This source increment is prepared for pull request review and remains undeployed. Richer hotspots/dialogs/branching and
-host-broadcast reveal state remain separate E06 increments; E07 navigation is also separate.
+This source increment merged in [PR #198](https://github.com/riojung/pollingpops/pull/198) and remains
+undeployed. The richer interactions are tracked in the E06 completion increment above; live
+navigation is tracked in E07.
 
 ### Presentation E05 visual import November 4, 2026
 

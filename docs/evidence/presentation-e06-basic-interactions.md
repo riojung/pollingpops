@@ -3,7 +3,8 @@
 Implementation branch: `codex/presentation-e06-basic-interactions`, based on merged E05
 `e39ac10a366247026c32bb89e4549fa0059a973a` ([PR #197](https://github.com/riojung/pollingpops/pull/197)).
 This is E06's planned broad-pilot slice: local reveal/hide panels and safe external links.
-This basic software increment is complete and prepared for pull request review. It remains undeployed.
+This basic software increment merged in [PR #198](https://github.com/riojung/pollingpops/pull/198)
+at `0ba6175bd8c00ae78e23ed4ec0257376cf71cfba`. It remains undeployed.
 Richer E06 interactions remain separate.
 
 ## Behavior and compatibility
@@ -151,7 +152,7 @@ Deploy migration 094 and matching document-v11 readers/writers/web assets before
 interactions. See the [rollout and rollback instructions](../runbooks/upgrade.md#presentation-basic-interactions-compatibility).
 No running local or hosted feature policy is changed by this source increment.
 
-Labeled hotspots, detail dialogs/focus restoration, internal navigation, host-broadcast reveals,
-answer-based branching and branch-target validation are later E06 increments. E07 durable nonlinear
-navigation remains separate. This record does not claim hosted rollout, physical-device/manual
+Labeled hotspots, detail dialogs/focus restoration, host-broadcast reveals and answer-based branching
+are tracked in the later [E06 completion increment](presentation-e06-completion.md). Live section navigation is tracked in the
+separate [E07 record](presentation-e07-navigation.md). This record does not claim hosted rollout, physical-device/manual
 screen-reader/zoom acceptance, capacity qualification, subscription pricing or competitor parity.

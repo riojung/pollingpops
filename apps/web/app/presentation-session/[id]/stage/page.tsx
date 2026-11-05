@@ -16,6 +16,7 @@ import {
   shouldApplyPresentationSnapshot,
 } from "../../../../lib/presentation-realtime";
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
 import { isTextQuestion } from "../../../../lib/text-response";
@@ -305,6 +306,9 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   ) : (
                     <PresentationDeliveryBlock
                       block={snapshot.currentBlock}
+                      interactionRuntime={presentationInteractionRuntime(snapshot, {
+                        mode: "live_audience",
+                      })}
                       interactionSourceKey={JSON.stringify([id, token, reconnecting])}
                       revealedAnswer={snapshot.revealedAnswer}
                       renderMedia={(mediaId, altText) => (

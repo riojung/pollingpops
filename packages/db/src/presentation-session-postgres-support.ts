@@ -1,5 +1,12 @@
 import type { QueryResultRow } from "pg";
-import { PresentationRecoveryPackInterventionSchema } from "@openround/contracts";
+import {
+  PresentationRecoveryPackInterventionSchema,
+  PresentationNavigationStateSchema,
+  PresentationNavigationEventSchema,
+  PresentationInteractionStateSchema,
+  PresentationInteractionEventSchema,
+  PresentationBranchEventSchema,
+} from "@openround/contracts";
 import type {
   PresentationSessionCommandReceiptRecord,
   PresentationSessionCredentialRecord,
@@ -61,8 +68,9 @@ export const PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL = `(
 /** Match E04 frozen UUID spelling without changing literal legacy acknowledgement semantics. */
 export const PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL = `(
   CASE WHEN (
-    session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
-    OR (session.content_snapshot ->> 'schemaVersion' IN ('10','11') AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
+    session.content_snapshot ->> 'schemaVersion' IN ('12','13')
+    OR session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
+    OR (session.content_snapshot ->> 'schemaVersion' IN ('10','11','12','13') AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
     OR (
       session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'poll'
       AND COALESCE(session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'maxSelections', '1')
@@ -102,6 +110,12 @@ export function mapSession(row: QueryResultRow): PresentationSessionRecord {
     eventSeq: Number(row.event_seq ?? 0),
     ...(row.content_snapshot?.schemaVersion >= 10
       ? { textModerationSeq: Number(row.text_moderation_seq ?? 0) }
+      : {}),
+    ...(row.content_snapshot?.schemaVersion >= 12
+      ? { navigationState: PresentationNavigationStateSchema.parse(row.navigation_state) }
+      : {}),
+    ...(row.content_snapshot?.schemaVersion === 13
+      ? { interactionState: PresentationInteractionStateSchema.parse(row.interaction_state) }
       : {}),
     questionOpenedAt:
       row.question_opened_at == null
@@ -206,6 +220,13 @@ export function mapTimeline(row: QueryResultRow): PresentationSessionTimelineRec
     blockIndex: row.block_index == null ? null : Number(row.block_index),
     blockId: row.block_id == null ? null : String(row.block_id),
     revealedParticipantIds: row.revealed_participant_ids ?? null,
+    ...(row.interaction
+      ? { interaction: PresentationInteractionEventSchema.parse(row.interaction) }
+      : {}),
+    ...(row.branch ? { branch: PresentationBranchEventSchema.parse(row.branch) } : {}),
+    ...(row.navigation
+      ? { navigation: PresentationNavigationEventSchema.parse(row.navigation) }
+      : {}),
     recoveryPackIntervention: row.recovery_pack_intervention
       ? PresentationRecoveryPackInterventionSchema.parse(row.recovery_pack_intervention)
       : null,

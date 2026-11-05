@@ -1,3 +1,5 @@
+import { transitionPresentationInteractionState } from "./presentation-interactions.js";
+import { transitionPresentationNavigationState } from "./presentation-navigation.js";
 import { requiresPresentationTextOpinions } from "@openround/contracts";
 import {
   assertTextReadSession,
@@ -453,6 +455,12 @@ export class MemoryPresentationSessionRepository
       throw new PresentationSessionConflictError(input.expectedRevision, session.revision);
     }
     assertCommandRequestHash(command?.requestHash);
+    if (
+      command &&
+      (input.event.type.startsWith("navigation.") || input.event.type === "scene.reveal_changed") &&
+      command.requestHash == null
+    )
+      throw new Error("Navigation commands require an intent fingerprint");
     if (command?.publishedQuestionSource) {
       if (!this.liveRooms.assertPresentationPublishedQuestionSource)
         throw new PresentationPublishedQuestionSourceUnavailableError();
@@ -477,6 +485,13 @@ export class MemoryPresentationSessionRepository
         "Text opinion rooms support at most 250 participants",
       );
     const window = transitionWindow({ ...session, content }, input, now);
+    const navigationState = transitionPresentationNavigationState(session, input, content, window);
+    const interactionState = transitionPresentationInteractionState(
+      session,
+      input,
+      content,
+      [...this.responses.values()].filter((response) => response.sessionId === session.id),
+    );
     const becomingFinished = session.status !== "finished" && input.status === "finished";
     const updated: PresentationSessionRecord = {
       ...session,
@@ -485,6 +500,8 @@ export class MemoryPresentationSessionRepository
       currentBlockIndex: input.currentBlockIndex,
       status: input.status,
       recoveryPackIntervention: intervention,
+      ...(navigationState === undefined ? {} : { navigationState }),
+      ...(interactionState === undefined ? {} : { interactionState }),
       revision: session.revision + 1,
       eventSeq: session.eventSeq + 1,
       ...window,

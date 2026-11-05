@@ -22,11 +22,29 @@ export interface PresentationResponseTiming {
  * different order. Ranking order is meaningful. Keep the legacy object shape unchanged whenever
  * no ordered response was submitted, so accepted pre-E04 receipts retain their fingerprint.
  */
-export function presentationResponseRequestHash(input: {
-  blockId: string;
-  expectedRevision: number;
-  response: PresentationSessionResponse;
-}) {
+export function presentationResponseRequestHash(
+  input: {
+    blockId: string;
+    expectedRevision: number;
+    response: PresentationSessionResponse;
+  },
+  semanticIds = false,
+) {
+  if (semanticIds) {
+    input = {
+      ...input,
+      blockId: input.blockId.toLowerCase(),
+      response: {
+        ...input.response,
+        ...(input.response.choiceIds !== undefined
+          ? { choiceIds: input.response.choiceIds.map((id) => id.toLowerCase()) }
+          : {}),
+        ...(input.response.orderedChoiceIds !== undefined
+          ? { orderedChoiceIds: input.response.orderedChoiceIds.map((id) => id.toLowerCase()) }
+          : {}),
+      },
+    };
+  }
   // Text has a separate versioned fingerprint. Keep every existing response byte-for-byte.
   if (input.response.textValue !== undefined) {
     return createHash("sha256")

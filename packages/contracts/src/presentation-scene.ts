@@ -12,6 +12,7 @@ export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
 export const PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION = 3 as const;
 export const PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION = 4 as const;
 export const PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION = 5 as const;
+export const PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION = 6 as const;
 export const PRESENTATION_SCENE_GEOMETRY_EPSILON = 1e-8;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
@@ -280,7 +281,7 @@ export const PresentationSceneRevealNodeSchema = z
   .object({
     ...framedNode,
     type: z.literal("reveal"),
-    scope: z.literal("local"),
+    scope: z.enum(["local", "broadcast"]),
     label: plainText(120),
     body: plainText(4_000),
   })
@@ -303,6 +304,42 @@ export const PresentationSceneLinkNodeSchema = z
   .strict()
   .superRefine(applyPaintedBounds);
 export type PresentationSceneLinkNode = z.infer<typeof PresentationSceneLinkNodeSchema>;
+
+export const PresentationSceneHotspotNodeSchema = z
+  .object({
+    ...framedNode,
+    type: z.literal("hotspot"),
+    imageNodeId: identifier.nullable(),
+    scope: z.literal("local"),
+    label: plainText(120),
+    detailTitle: plainText(160),
+    body: plainText(4_000),
+  })
+  .strict()
+  .superRefine(applyPaintedBounds);
+export type PresentationSceneHotspotNode = z.infer<typeof PresentationSceneHotspotNodeSchema>;
+export const PresentationSceneDialogNodeSchema = z
+  .object({
+    ...framedNode,
+    type: z.literal("dialog"),
+    scope: z.literal("local"),
+    label: plainText(120),
+    detailTitle: plainText(160),
+    body: plainText(4_000),
+  })
+  .strict()
+  .superRefine(applyPaintedBounds);
+export type PresentationSceneDialogNode = z.infer<typeof PresentationSceneDialogNodeSchema>;
+export const PresentationSceneNavigationNodeSchema = z
+  .object({
+    ...framedNode,
+    type: z.literal("navigation"),
+    label: plainText(120),
+    targetBlockId: z.string().uuid().nullable(),
+  })
+  .strict()
+  .superRefine(applyPaintedBounds);
+export type PresentationSceneNavigationNode = z.infer<typeof PresentationSceneNavigationNodeSchema>;
 
 export const PresentationSceneGroupSchema = z
   .object({ id: identifier, nodeIds: z.array(identifier).min(2).max(PRESENTATION_SCENE_MAX_NODES) })
@@ -343,6 +380,9 @@ export const PresentationSceneNodeSchema = z.discriminatedUnion("type", [
   PresentationSceneChartNodeSchema,
   PresentationSceneRevealNodeSchema,
   PresentationSceneLinkNodeSchema,
+  PresentationSceneHotspotNodeSchema,
+  PresentationSceneDialogNodeSchema,
+  PresentationSceneNavigationNodeSchema,
 ]);
 export type PresentationSceneNode = z.infer<typeof PresentationSceneNodeSchema>;
 
@@ -355,6 +395,7 @@ export const PresentationSceneDraftSchema = z
       z.literal(PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION),
     ]),
     aspectRatio: z.literal("16:9"),
     design: PresentationSceneDesignSchema.optional(),
@@ -426,6 +467,18 @@ export const PresentationSceneDraftSchema = z
     }
     for (const [index, node] of scene.nodes.entries()) {
       if (
+        scene.schemaVersion < PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION &&
+        (node.type === "hotspot" ||
+          node.type === "dialog" ||
+          node.type === "navigation" ||
+          (node.type === "reveal" && node.scope === "broadcast"))
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["nodes", index],
+          message: "Advanced interactions require scene schema version 6",
+        });
+      if (
         scene.schemaVersion < PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION &&
         (node.type === "reveal" || node.type === "link")
       ) {
@@ -495,6 +548,9 @@ export const PresentationSceneDraftSchema = z
     }
   });
 export type PresentationSceneDraft = z.infer<typeof PresentationSceneDraftSchema>;
+/** Delivered content is separately projected; closed broadcast bodies are redacted to an empty string before serialization. */
+export const PresentationDeliveredSceneSchema = PresentationSceneDraftSchema;
+export type PresentationDeliveredScene = z.infer<typeof PresentationDeliveredSceneSchema>;
 
 export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
   (scene, context) => {
@@ -505,7 +561,12 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
           node.type === "image" ||
           (node.type === "table" && node.caption.trim()) ||
           (node.type === "chart" && node.title.trim()) ||
-          ((node.type === "shape" || node.type === "reveal" || node.type === "link") &&
+          ((node.type === "shape" ||
+            node.type === "reveal" ||
+            node.type === "link" ||
+            node.type === "hotspot" ||
+            node.type === "dialog" ||
+            node.type === "navigation") &&
             node.label.trim()),
       )
     ) {
@@ -524,6 +585,37 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
             message: "Add a readable label before publishing",
           });
       };
+      if (node.type === "hotspot" || node.type === "dialog" || node.type === "navigation") {
+        requireLabel(node.label, ["label"]);
+        if (node.type === "navigation") {
+          if (node.targetBlockId === null)
+            context.addIssue({
+              code: "custom",
+              path: ["nodes", index, "targetBlockId"],
+              message: "Choose a published navigation target",
+            });
+        } else {
+          requireLabel(node.detailTitle, ["detailTitle"]);
+          requireLabel(node.body, ["body"]);
+        }
+        if (node.type === "hotspot") {
+          const image = scene.nodes.find((candidate) => candidate.id === node.imageNodeId);
+          if (
+            image?.type !== "image" ||
+            (image.rotation ?? 0) !== 0 ||
+            (node.rotation ?? 0) !== 0 ||
+            node.frame.x < image.frame.x ||
+            node.frame.y < image.frame.y ||
+            node.frame.x + node.frame.width > image.frame.x + image.frame.width ||
+            node.frame.y + node.frame.height > image.frame.y + image.frame.height
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["nodes", index, "imageNodeId"],
+              message: "Place this hotspot inside an existing unrotated image",
+            });
+        }
+      }
       if (node.type === "reveal" || node.type === "link") {
         requireLabel(node.label, ["label"]);
         if (node.type === "reveal") requireLabel(node.body, ["body"]);

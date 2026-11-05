@@ -67,6 +67,9 @@ export const PRESENTATION_OPINION_SCHEMA_VERSION = 9;
 export const PRESENTATION_TEXT_OPINION_SCHEMA_VERSION = 10;
 /** Local reveals and safe external controls opt into embedded v11. */
 export const PRESENTATION_INTERACTION_SCHEMA_VERSION = 11;
+/** Named sections and durable nonlinear delivery opt into embedded v12. */
+export const PRESENTATION_NAVIGATION_SCHEMA_VERSION = 12;
+export const PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION = 13;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -201,6 +204,14 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_INTERACTION_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 11)),
   ],
+  [
+    PRESENTATION_NAVIGATION_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 12)),
+  ],
+  [
+    PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 13)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -251,10 +262,28 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
     PRESENTATION_INTERACTION_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 11)),
   ],
+  [
+    PRESENTATION_NAVIGATION_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 12)),
+  ],
+  [
+    PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 13)),
+  ],
 ]);
 
 function withPresentationSchemaVersion(value: unknown, version: number): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (
+    (version >= 12 ||
+      ("schemaVersion" in value &&
+        typeof value.schemaVersion === "number" &&
+        value.schemaVersion >= 12)) &&
+    (!("schemaVersion" in value) || value.schemaVersion !== version)
+  )
+    throw new Error(
+      "Presentation navigation content requires matching embedded schema version 12 or later",
+    );
   return { ...value, schemaVersion: version };
 }
 
@@ -315,7 +344,7 @@ export function upcastPresentationContent(
  * Legacy live snapshots used draft validation, including partially authored old snapshots.
  * Preserve that read path, but validate session-only metadata with the frozen content contract
  * so it cannot be stripped by the authoring parser or restore invalid live insertion metadata.
- * Versions 6 through 11 always use the publication parser: hidden editable content must never enter a
+ * Versions 6 through 12 always use the publication parser: hidden editable content must never enter a
  * session through the legacy partial-snapshot path.
  */
 export function upcastPresentationSessionContent(
@@ -329,6 +358,8 @@ export function upcastPresentationSessionContent(
     schemaVersion === PRESENTATION_OPINION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_TEXT_OPINION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_INTERACTION_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_NAVIGATION_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION ||
     (value &&
       typeof value === "object" &&
       ("liveQuickCheck" in value || "livePublishedQuestions" in value))

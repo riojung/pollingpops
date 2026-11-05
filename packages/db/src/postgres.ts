@@ -7868,6 +7868,10 @@ export class PostgresRepository implements Repository {
            FROM presentation_live_responses WHERE workspace_id = ANY($1::uuid[])
            ORDER BY submitted_at, id`,
         );
+        const presentationVisualImports = await queryWorkspaceData(
+          `SELECT id,workspace_id,presentation_id,created_by,request_id,source_digest,source_type,source_name,file_count,status,attempts,pages,warnings,error,created_at,updated_at,expires_at
+           FROM presentation_visual_imports WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
+        );
         const presentationTextModerationReceipts = await queryWorkspaceData(
           `SELECT id,workspace_id,session_id,command_id,response_id,block_id,host_credential_id,request_hash,previous_status,status,expected_revision,expected_moderation_version,resulting_moderation_version,accepted_at
            FROM presentation_text_moderation_receipts WHERE workspace_id=ANY($1::uuid[]) ORDER BY session_id,accepted_at,id`,
@@ -8189,6 +8193,7 @@ export class PostgresRepository implements Repository {
           scopedQnaAudit: scopedQnaAudit.rows,
           presentationSessionParticipants: presentationSessionParticipants.rows,
           presentationSessionResponses: presentationSessionResponses.rows,
+          presentationVisualImports: presentationVisualImports.rows,
           presentationTextModerationReceipts: presentationTextModerationReceipts.rows,
           presentationSessionTimeline: presentationSessionTimeline.rows,
           presentationSessionCommandReceipts: presentationSessionCommandReceipts.rows,

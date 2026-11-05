@@ -8,9 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E05 visual import November 4, 2026
+
+Software is complete on `codex/presentation-e05-visual-import`, based on the E04
+completion commit in PR #196. PDF/image-set conversion, private previews, ordered selection,
+author-reviewed visual/reading slide pairs, safe retry identities and owned-media cleanup are
+implemented. Migration 093 and a Node 26 converter runtime are required; AI credits and provider
+configuration are not required. The full repository check, 93 migrations with restricted
+PostgreSQL cases, four production browser profiles and the compiled renderer smoke pass.
+See the [evidence record](evidence/presentation-e05-visual-import.md) and
+[rollout requirements](runbooks/upgrade.md#presentation-visual-import-compatibility). This source
+increment is prepared for pull request review and remains undeployed; E13 export and
+manual/hosted/cost acceptance are separate.
+
 ### Presentation E04 moderated text November 4, 2026
 
-Software complete locally on `codex/presentation-e04-moderated-text` after PR #195 merged.
+Software complete and merged in [PR #196](https://github.com/riojung/pollingpops/pull/196),
+following the first family in PR #195.
 The second family adds open text and word clouds, host-only pending/approved/removed moderation,
 body erasure, minimum-five approved public results and V5 report/CSV evidence. Moderation
 advances event sequence without changing the response revision/window. Document v10,
@@ -18,7 +32,7 @@ response storage v3 and migration 092 require coordinated readers/writers; defau
 historical meanings stay unchanged. See the [verification record](evidence/presentation-e04-moderated-text.md)
 for the repository check, sixteen real PostgreSQL cases and 48 unique browser cases across
 documented slices, plus remaining manual/device, hosted-rollout, cost and parity gates. This
-increment is prepared for pull-request review and remains undeployed. See the
+increment is merged; hosted rollout remains pending. See the
 [rollout instructions](runbooks/upgrade.md#presentation-moderated-text-compatibility).
 
 ### Presentation E04 opinion polls and rankings November 4, 2026

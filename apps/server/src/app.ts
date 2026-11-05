@@ -40,6 +40,9 @@ import {
 } from "./authoring-assistant.js";
 import { AuthoringService } from "./authoring-service.js";
 import { AuthoringWorker } from "./authoring-worker.js";
+import { PresentationVisualImportService } from "./presentation-visual-import-service.js";
+import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
+import { registerPresentationVisualImportRoutes } from "./presentation-visual-import-routes.js";
 import { MemorySessionCache, RedisSessionCache, type SessionCache } from "./cache.js";
 import { isLocalProductAdminDevelopment, type AppConfig } from "./config.js";
 import { ConsoleMailer, SmtpMailer, type Mailer } from "./mailer.js";
@@ -381,6 +384,18 @@ export async function buildApp(
     metrics,
   );
   const storage = new StorageService(config, scanner);
+  const presentationVisualImports = new PresentationVisualImportService(
+    repository,
+    presentations,
+    storage,
+    scanner,
+  );
+  const presentationVisualImportWorker = new PresentationVisualImportWorker(
+    repository,
+    storage,
+    app.log,
+    metrics,
+  );
   const presentationService = new PresentationSessionService({
     workspaceEnabled: presentationRealtimeCreationEnabled,
     liveFlexModeEnabled: (workspaceId, planOverride) =>
@@ -588,6 +603,14 @@ export async function buildApp(
     productEvents,
     productEventsEnabled,
   });
+  await registerPresentationVisualImportRoutes(app, {
+    repository,
+    presentations,
+    auth,
+    service: presentationVisualImports,
+    storage,
+    workspaceEnabled: presentationsEnabled,
+  });
   await registerPresentationSessionRoutes(app, {
     repository,
     presentations,
@@ -662,6 +685,8 @@ export async function buildApp(
     oidc,
     lti,
     authoringWorker,
+    presentationVisualImportWorker,
+    presentationVisualImports,
     storage,
     retention,
     reportWorker,

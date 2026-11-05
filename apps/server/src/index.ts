@@ -22,6 +22,7 @@ const {
   reportWorker,
   presentationReportWorker,
   authoringWorker,
+  presentationVisualImportWorker,
   metrics,
   cache,
   presentationService,
@@ -90,6 +91,11 @@ const jobs =
             run: () => authoringWorker.runUntilIdle(),
           },
           {
+            name: "visual-imports",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => presentationVisualImportWorker.runUntilIdle(1),
+          },
+          {
             name: "billing",
             intervalMs: config.BUSINESS_BILLING_WORKER_INTERVAL_MS,
             run: () => platformBillingWorker.runUntilIdle(),
@@ -137,11 +143,13 @@ const jobs =
           ),
         async (name) => {
           const controlId =
-            name === "integrations"
-              ? "business-integrations"
-              : name === "billing"
-                ? "billing-reconciliation"
-                : name;
+            name === "visual-imports"
+              ? "authoring"
+              : name === "integrations"
+                ? "business-integrations"
+                : name === "billing"
+                  ? "billing-reconciliation"
+                  : name;
           return !(await platform.getWorkerControl(controlId))?.paused;
         },
       )

@@ -58,6 +58,8 @@ export interface PresentationDraftUpdate {
   draftHash: string;
   /** Retain the pre-update draft while this accepted Recovery Pack update is current. */
   recoveryPackUpdateSourceRevision?: number | null;
+  /** Serialize visual insertion with cancellation and preview expiry. */
+  visualImportId?: string;
 }
 
 export interface PresentationRepository {
@@ -68,6 +70,12 @@ export interface PresentationRepository {
   createPresentation(input: PresentationRecord): Promise<PresentationRecord>;
   getPresentation(workspaceId: string, presentationId: string): Promise<PresentationRecord | null>;
   updatePresentationDraft(input: PresentationDraftUpdate): Promise<PresentationRecord | null>;
+  recoverPresentationDraftMutation(
+    input: Pick<
+      PresentationDraftUpdate,
+      "workspaceId" | "presentationId" | "expectedRevision" | "mutationId" | "draftHash"
+    >,
+  ): Promise<PresentationRecord | null>;
   publishPresentation(
     input: PresentationVersionRecord,
     expectedDraftRevision: number,

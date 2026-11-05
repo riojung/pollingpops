@@ -3,7 +3,8 @@
 Implementation is complete on `codex/presentation-e04-moderated-text`, based on
 `de42ce24d7bd047929720fd1b79bb148a982685f` (merged [PR #195](https://github.com/riojung/pollingpops/pull/195)).
 Repository, restricted PostgreSQL and the selected browser coverage passed. This second-family
-source increment is prepared for pull-request review and has not been deployed.
+source increment is merged in [PR #196](https://github.com/riojung/pollingpops/pull/196);
+hosted rollout remains pending.
 
 The second E04 family delivers moderated open text and word clouds across authoring, published
 Round copying, live insertion/delivery, private host moderation, approved public results and

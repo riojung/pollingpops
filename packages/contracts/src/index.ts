@@ -9,6 +9,7 @@ export * from "./audience-scopes";
 export * from "./qna-policy";
 export * from "./text-opinions";
 export * from "./presentation-text";
+export * from "./presentation-visual-import";
 import { PresentationTextResponseMetadataSchema } from "./presentation-text";
 export * from "./session-summaries";
 export * from "./canvas-boards";

@@ -138,6 +138,50 @@ reviewed forward repair. Keep migration 092 and its private-column/receipt/erasu
 Do not downgrade stored reports, rewrite immutable content or regenerate accepted retry intents
 for an older binary. This source change does not change deployed flags or upgrade a running app.
 
+## Presentation visual import compatibility
+
+E05 adds `093_presentation_visual_imports.sql`, a private workspace/presentation-scoped conversion
+queue, usage limits and temporary media-reference ownership. Apply the complete migration
+sequence before deploying API/jobs/retention readers. Existing native slide fields express the
+visual and reviewed reading pair, so no new Presentation document version or default is required.
+The existing draft mutation receipt is reused, with a ready-job fence that serializes insertion
+against cancellation and expiry. Retain the new table/readers for pending receipts and cleanup;
+do not roll back by deleting referenced media or rewriting published content.
+
+The server runtime image uses Node 26 for the converter's `--permission` network denial. Node
+runtimes without network permission support fail closed for visual import; the rest of the app's
+engine range is unchanged. Keep malware scanning, object storage, media uploads and the authoring
+job/retention schedules operational. Both in-process and dedicated jobs run visual conversion
+without an AI assistant or AI credit reservation. Existing media-upload operational controls stop
+new conversion work while allowing authorized reads/cancellation and exact creation receipts.
+Visual conversion has its own scheduled slot, sharing the existing authoring pause control,
+so queued AI proposals do not block PDF/image conversion.
+
+The converter is a separate child with network, child process, worker and filesystem-write
+permissions denied, evaluation disabled, a 192 MiB V8 heap and a monitored 384 MiB RSS limit.
+Native canvas remains trusted code: Node permissions and RSS sampling are not an OS/native-code
+sandbox or a hard RSS cap. Deploy the worker in a container with an operator-set memory limit;
+reserve headroom for the parent, bounded IPC/input/output buffers and native allocations. The
+current container policy remains the hard process-family memory boundary.
+
+Budgets include 40 pages, 1,600-pixel longest edge, two million output pixels per page, sixty
+million per job and forty MiB encoded output. Standalone images are checked before decoding
+(sixteen million source pixels/16,000-pixel edge). PDF stream preflight conservatively rejects
+oversized embedded images and unsupported filter chains; single Flate expansion is capped at
+16 MiB and aggregate expansion at 64 MiB. Canvas allocations are bounded separately. Each child
+has a 45-second timeout and the conversion loop has a 120-second budget; claimed jobs have a
+ten-minute lease and at most three processing attempts. Some otherwise readable PDFs will need a
+simpler/fresh export. These limits do not promise pixel-identical rendering or preservation of
+fonts, interactive objects, animation or media.
+
+Original source files are not exported or retained as a permanent asset. They are cleared on
+success/terminal failure/cancellation; pending sources and previews expire after 24 hours and the
+retention sweep removes expired jobs/references. All generated page assets are registered before
+object writes and pass through existing quarantine/scan/promotion. Released assets keep normal
+deletion/retention handling, including history/publication protection and tombstones. Exercise
+lost acknowledgements, expired/reclaimed leases, cancel/insert races, partial storage failures,
+tenant/role isolation, account/presentation deletion and retained-publication media before rollout.
+
 ## Content-only Presentation compatibility
 
 Content-only publication expands validation for existing Presentation content versions 2 and 3;

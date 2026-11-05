@@ -101,6 +101,7 @@ import {
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { PresentationVisualImport } from "./presentation-visual-import";
 import {
   adaptContentSlideToScene,
   attachNativeImage,
@@ -347,7 +348,7 @@ export function PresentationBuilder({ presentationId }: { presentationId: string
   const { t } = useLocale();
   return creator ? (
     <PresentationEditor
-      key={`${creator.workspaceId}:${presentationId}`}
+      key={`${creator.userId}:${creator.workspaceId}:${presentationId}`}
       presentationId={presentationId}
     />
   ) : (
@@ -400,6 +401,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const [roundSources, setRoundSources] = useState<RoundSource[]>([]);
   const [roundImportOpen, setRoundImportOpen] = useState(false);
   const [sourceImportOpen, setSourceImportOpen] = useState(false);
+  const [visualImportOpen, setVisualImportOpen] = useState(false);
+  const [visualImportReceiptPending, setVisualImportReceiptPending] = useState(false);
+  const visualImportActive = useRef(false);
+  visualImportActive.current = visualImportOpen || visualImportReceiptPending;
   const [selectedRoundId, setSelectedRoundId] = useState("");
   const [publishedRound, setPublishedRound] = useState<PublishedRoundQuestionSource | null>(null);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
@@ -443,7 +448,12 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const previousBlockCount = useRef<number | null>(null);
   const canInsertPack =
     canEdit && Boolean(productFeatures?.presentations && productFeatures?.recoveryPacks);
-  const builderMutationBlocked = packImportOpen || packUpdateBusy || packUpdateReceiptPending;
+  const builderMutationBlocked =
+    packImportOpen ||
+    packUpdateBusy ||
+    packUpdateReceiptPending ||
+    visualImportOpen ||
+    visualImportReceiptPending;
 
   useEffect(() => {
     alive.current = true;
@@ -672,6 +682,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const commit = useCallback(
     (value: SetStateAction<PresentationDraft>, historyKey?: string) => {
       if (
+        visualImportActive.current ||
         packOperation.current ||
         packPending.current ||
         packUpdateOperation.current ||
@@ -844,7 +855,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       saveConflictPresent ||
       packImportOpen ||
       packUpdateBusy ||
-      packUpdateReceiptPending
+      packUpdateReceiptPending ||
+      visualImportOpen ||
+      visualImportReceiptPending
     )
       return;
     const serialized = JSON.stringify(draft);
@@ -860,6 +873,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     packImportOpen,
     packUpdateBusy,
     packUpdateReceiptPending,
+    visualImportOpen,
+    visualImportReceiptPending,
   ]);
 
   useEffect(() => {
@@ -873,7 +888,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         packUpdatePending.current !== null ||
         mediaState !== "idle" ||
         pendingNativeImage !== null ||
-        ordinarySavePending
+        ordinarySavePending ||
+        visualImportReceiptPending
       ) {
         event.preventDefault();
       }
@@ -887,6 +903,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     mediaState,
     pendingNativeImage,
     ordinarySavePending,
+    visualImportReceiptPending,
   ]);
 
   function guardBuilderExit(event: MouseEvent<HTMLAnchorElement>) {
@@ -1073,9 +1090,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   async function reloadLatestDraft(preferredBlockId?: string) {
     if (retainedSave.current.pending) {
       setError("Retry the outstanding save acknowledgement before loading another draft.");
-      return;
+      return false;
     }
     const local = draft;
+    const localWasSaved = local !== null && JSON.stringify(local) === lastSavedJson.current;
     const localRevision = draftBaseRevision.current;
     setSaveState("saving");
     setError("");
@@ -1102,7 +1120,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       saveConflict.current = false;
       setSaveConflictPresent(false);
       setSaveState("saved");
-      if (local && JSON.stringify(local) !== lastSavedJson.current) {
+      if (local && !localWasSaved && JSON.stringify(local) !== lastSavedJson.current) {
         const snapshot = {
           key: recoveryKey,
           revision: localRevision,
@@ -1115,9 +1133,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         setRecovery(null);
         await clearBuilderRecovery(recoveryKey);
       }
+      return true;
     } catch (caught) {
       setError(humanError(caught));
       setSaveState("error");
+      return false;
     }
   }
 
@@ -1265,6 +1285,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       importPreparation.current ||
       packOperation.current ||
       packImportOpen ||
+      visualImportActive.current ||
       sourceImportOpen ||
       packUpdateOperation.current ||
       packUpdatePending.current
@@ -1284,6 +1305,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       packUpdateOperation.current ||
       packUpdatePending.current ||
       importPreparation.current ||
+      visualImportActive.current ||
       sourceImportOpen ||
       roundImportOpen ||
       mediaState !== "idle"
@@ -1425,6 +1447,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       packPending.current ||
       importPreparation.current ||
       roundImportOpen ||
+      visualImportActive.current ||
       sourceImportOpen ||
       packImportOpen ||
       mediaState !== "idle" ||
@@ -1485,6 +1508,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       importPreparation.current ||
       packImportOpen ||
       roundImportOpen ||
+      visualImportActive.current ||
       sourceImportOpen ||
       mediaState !== "idle"
     ) {
@@ -1597,7 +1621,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       packUpdatePending.current ||
       packImportOpen ||
       roundImportOpen ||
-      sourceImportOpen
+      sourceImportOpen ||
+      visualImportActive.current
     )
       return;
     importPreparation.current = true;
@@ -1617,6 +1642,41 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       importPreparation.current = false;
       if (alive.current) setPreparingImport(false);
     }
+  }
+
+  async function prepareVisualInsertion() {
+    if (!draft || saveConflict.current || packPending.current || packUpdatePending.current) {
+      throw new Error("Resolve the outstanding draft save before inserting visual slides.");
+    }
+    await saveQueue.current.enqueue(async () => undefined);
+    await enqueueSave(draft);
+    await saveQueue.current.enqueue(async () => undefined);
+    if (
+      retainedSave.current.pending ||
+      saveConflict.current ||
+      lastSavedJson.current !== JSON.stringify(draft) ||
+      latestDraftJson.current !== lastSavedJson.current
+    ) {
+      throw new Error("Save the latest Presentation changes before inserting visual slides.");
+    }
+    return revisionRef.current;
+  }
+
+  function openVisualImport() {
+    if (
+      importPreparation.current ||
+      packOperation.current ||
+      packPending.current ||
+      packUpdateOperation.current ||
+      packUpdatePending.current ||
+      sourceImportOpen ||
+      roundImportOpen ||
+      packImportOpen ||
+      mediaState !== "idle" ||
+      pendingNativeImageRef.current
+    )
+      return;
+    setVisualImportOpen(true);
   }
 
   function toggleImportedQuestion(questionId: string) {
@@ -1986,7 +2046,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         <section
           className={styles.packReviews}
           aria-label="Presentation Recovery Pack updates"
-          inert={packImportOpen}
+          inert={packImportOpen || visualImportOpen || visualImportReceiptPending}
         >
           {packUpdateReceiptPending ? (
             <p className="notice" role="status" lang="en-CA">
@@ -2142,6 +2202,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               type="button"
             >
               + {t("delivery.presentationBuilder.fromTrustedSource")}
+            </button>
+            <button
+              disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
+              lang="en-CA"
+              onClick={openVisualImport}
+              type="button"
+            >
+              + Import visual slides
             </button>
             {canInsertPack ? (
               <button
@@ -2348,6 +2416,20 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               and published delivery.
             </p>
           ) : null}
+          {selectedBlock?.kind === "content" &&
+          selectedBlock.sourceDisclosure?.model === "visual-import-v1" ? (
+            <p className={styles.sourceBanner} role="note" lang="en-CA">
+              <strong>
+                {selectedBlock.scene?.nodes.some((node) => node.type === "image")
+                  ? "Imported visual slide"
+                  : "Imported reading slide"}
+              </strong>
+              {" · "}
+              {selectedBlock.scene?.nodes.some((node) => node.type === "image")
+                ? "Source objects, animation and media are flattened. Edit image placement or use its reading slide for editable text."
+                : "Author-reviewed accessible text is editable on this reading slide."}
+            </p>
+          ) : null}
           {!selectedBlock ? (
             <section className={styles.emptyCanvas}>
               <span className={styles.emptyGlyph}>✦</span>
@@ -2368,6 +2450,9 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 </button>
                 <button onClick={() => void openSourceImport()} type="button">
                   {t("delivery.presentationBuilder.insertTrustedSource")}
+                </button>
+                <button lang="en-CA" onClick={openVisualImport} type="button">
+                  Import visual slides
                 </button>
               </div>
             </section>
@@ -3270,6 +3355,28 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           </section>
         </div>
       ) : null}
+      <PresentationVisualImport
+        presentationId={presentationId}
+        open={visualImportOpen}
+        afterBlockId={selectedBlockId}
+        prepareInsert={prepareVisualInsertion}
+        onInserted={async (blockIds) => {
+          const loadedCurrent = await reloadLatestDraft(blockIds[0]);
+          if (!loadedCurrent || saveConflict.current || retainedSave.current.pending) {
+            throw new Error("Recover the draft acknowledgement before continuing.");
+          }
+        }}
+        onReloadDraft={async () => {
+          if (!(await reloadLatestDraft(selectedBlockId ?? undefined))) {
+            throw new Error(
+              "The current draft could not be loaded. Your import review is retained.",
+            );
+          }
+        }}
+        onClose={() => setVisualImportOpen(false)}
+        onResumeRequired={() => setVisualImportOpen(true)}
+        onPendingChange={setVisualImportReceiptPending}
+      />
       {packImportOpen ? (
         <RecoveryPackPresentationPicker
           afterSelectedBlock={Boolean(selectedBlockId)}

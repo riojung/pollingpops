@@ -710,6 +710,43 @@ unchanged. Images retain the existing private reference and scan/lifecycle rules
 data and links add no media-reference path or SQL migration. See the
 [v8 reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
 
+## Presentation visual import APIs
+
+Visual import converts one PDF or an ordered PNG/JPEG/WebP image set without an AI provider.
+It is separate from the source-grounded proposal APIs below. Creator authentication and workspace
+scope apply throughout; creation, cancellation and insertion require owner/editor access.
+
+- `GET /v1/presentations/{id}/visual-imports` — availability, limits and recent private jobs.
+- `POST /v1/presentations/{id}/visual-imports` — `{requestId, files: [{name, mimeType, base64}],
+retainOriginal: false}`; returns `202 {job}`. Keep the exact UUID and body for a lost-response retry.
+- `GET /v1/presentations/{id}/visual-imports/{jobId}` — pending/processing/ready/failed/canceled
+  status, safe error/recovery message, conversion warnings and bounded page metadata/text.
+- `GET /v1/presentations/{id}/visual-imports/{jobId}/pages/{pageNumber}` — an authorized private
+  download URL for a ready page. Raw source bytes and object keys are never returned.
+- `DELETE /v1/presentations/{id}/visual-imports/{jobId}` — cancel, invalidate the worker claim,
+  erase retained originals and release temporary page references. Already inserted slides remain.
+- `POST /v1/presentations/{id}/visual-imports/{jobId}/insert` — ordered, unique selected pages,
+  `expectedRevision`, `mutationId`, optional `afterBlockId`, and `fidelityAccepted: true`. Each page
+  supplies `pageNumber`, `title` (160 characters), `alternativeText` (300), `accessibleText` (3,000)
+  and `readingOrderReviewed: true`. Each selection adds two ordinary native slides: a fitted visual
+  image and an editable reading version. An otherwise empty initial placeholder is replaced.
+  Existing native content/activities can be interleaved afterward. Draft revision/mutation receipts
+  prevent duplicate insertion; readiness is checked atomically with cancellation and expiry.
+
+Sources are limited to one 6 MB PDF (40 pages) or 40 images (10 MiB each, 20 MB total), with three
+active conversions and ten new jobs per workspace per UTC day. No PPTX rendering, editable source
+object import or OCR is provided. The preview discloses flattening, fitted stage geometry, lost
+animation/links/audio/video and unverified extracted reading order. Encrypted, malformed,
+over-budget or unsupported PDFs fail with a fixed message suggesting a fresh PDF or smaller batch.
+
+Originals are retained only for pending/processing conversion, erased on ready/terminal failure/
+cancellation, and expire after 24 hours for the retention sweep. Preview access also expires after
+24 hours. Converted page assets use the existing quarantine, malware scan, private-media and
+reference/deletion lifecycle. Canceling a preview does not erase a page already referenced by a
+draft, history or publication. Successful imports use existing native Presentation content fields;
+defaults and historical document meanings are unchanged. See the
+[visual import rollout notes](runbooks/upgrade.md#presentation-visual-import-compatibility).
+
 ## Source-grounded authoring APIs
 
 - `GET /v1/authoring/status` — configured state and current monthly usage.

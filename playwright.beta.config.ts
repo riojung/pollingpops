@@ -5,6 +5,10 @@ const betaE2eApiPort = Number(process.env.BETA_E2E_API_PORT ?? 4200);
 const betaWorkspaceId = "00000000-0000-4000-8000-00000000b001";
 const productionWeb = process.env.PLAYWRIGHT_PRODUCTION === "true";
 // Opt-in source-authoring tests own a loopback provider; ordinary beta runs stay disabled.
+const visualImportFixture = process.env.BETA_E2E_VISUAL_IMPORTS === "true";
+const serverCommand = visualImportFixture
+  ? "BETA_E2E_VISUAL_IMPORTS=true pnpm exec tsx scripts/presentation-visual-import-fixture.ts"
+  : "pnpm --filter @openround/server dev";
 const authoringFixture = process.env.BETA_E2E_AUTHORING === "true";
 const authoringPort = Number(process.env.BETA_E2E_AUTHORING_PORT ?? betaE2eApiPort + 2);
 const authoringEnvironment = authoringFixture
@@ -66,7 +70,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `NODE_ENV=test PORT=${betaE2eApiPort} ALLOW_IN_MEMORY=true COMMUNITY_MODE=false WEB_ORIGIN=http://127.0.0.1:${betaE2eWebPort} PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} FEATURE_UX_BETA=true FEATURE_RECOVERY_REHEARSAL=true FEATURE_PRACTICE_ASSIGNMENTS=true FEATURE_WORKSPACE_SHELL=true FEATURE_BUILDER_V2=true FEATURE_PRESENTATIONS=true FEATURE_PRESENTATION_REALTIME=true FEATURE_PRESENTATION_COMPANION=true FEATURE_LIVE_FLEX_MODE=true FEATURE_GROUPS=true FEATURE_DISCOVER=true FEATURE_QUESTION_HEALTH=true FEATURE_RECOVERY_PACKS=true FEATURE_RECOVERY_PACK_LIVE_CARDS=true UX_BETA_WORKSPACE_ALLOWLIST=${betaWorkspaceId} EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST=${betaWorkspaceId} TEST_INITIAL_WORKSPACE_ID=${betaWorkspaceId} TEST_INITIAL_PLAN=pro LOG_LEVEL=silent ${audienceEnvironment} ${authoringEnvironment} pnpm --filter @openround/server dev`,
+      command: `NODE_ENV=test PORT=${betaE2eApiPort} ALLOW_IN_MEMORY=true COMMUNITY_MODE=false WEB_ORIGIN=http://127.0.0.1:${betaE2eWebPort} PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} FEATURE_UX_BETA=true FEATURE_RECOVERY_REHEARSAL=true FEATURE_PRACTICE_ASSIGNMENTS=true FEATURE_WORKSPACE_SHELL=true FEATURE_BUILDER_V2=true FEATURE_PRESENTATIONS=true FEATURE_PRESENTATION_REALTIME=true FEATURE_PRESENTATION_COMPANION=true FEATURE_LIVE_FLEX_MODE=true FEATURE_GROUPS=true FEATURE_DISCOVER=true FEATURE_QUESTION_HEALTH=true FEATURE_RECOVERY_PACKS=true FEATURE_RECOVERY_PACK_LIVE_CARDS=true UX_BETA_WORKSPACE_ALLOWLIST=${betaWorkspaceId} EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST=${betaWorkspaceId} TEST_INITIAL_WORKSPACE_ID=${betaWorkspaceId} TEST_INITIAL_PLAN=pro LOG_LEVEL=silent ${audienceEnvironment} ${authoringEnvironment} ${serverCommand}`,
       port: betaE2eApiPort,
       reuseExistingServer: false,
       timeout: 120_000,

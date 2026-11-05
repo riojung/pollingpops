@@ -586,6 +586,32 @@ facilitation timeline. It does not assign quiz standings or learning outcomes to
 Ordinary content slides retain the existing text/image layout tools. Native slides add independently
 positioned text, images, labeled shapes and connectors in the same deck.
 
+### Import a PDF or a set of slide images
+
+In the Builder, choose **Import visual slides**. Export PowerPoint, Google Slides or Canva slides
+as PDF first, or choose PNG/JPEG/WebP images. This conversion does not call an AI provider and is
+separate from source-grounded content proposals. Use one PDF up to 6 MB/40 pages, or at most forty
+images totaling 20 MB, each no larger than 10 MiB. If import is unavailable, an operator must
+configure the required conversion and scanned private-media services.
+
+Wait for the conversion preview, select the pages you want and use the page controls to reorder
+them. Review the fidelity report: pages become fitted images, while source objects, animations,
+active links, audio and video are not imported. Check each title and image description, then write
+or correct its accessible reading version. Extracted PDF text may omit diagrams, reorder content
+or contain mistakes; scanned pages/images have no OCR. Confirm reading order and meaning yourself.
+
+Each selected page inserts a visual slide followed by an editable reading slide after the chosen
+block. You can add, edit and reorder other native slides and activities between them. A new deck's
+empty starting placeholder is replaced; meaningful existing content is preserved. Preview and
+publish the resulting deck normally. A pending insert retry keeps its exact request until the
+receipt is known, including after a reload. If another editor changed the deck, reload the latest
+draft and review the insertion point again.
+
+You can cancel a queued conversion or discard its preview. Originals are erased after successful
+conversion, terminal failure or cancellation; unfinished work expires after 24 hours for cleanup.
+Previews expire after 24 hours, so keep the source yourself if you may need another conversion.
+Canceling a preview does not remove slides already inserted into the deck.
+
 ### Collect Presentation polls and rankings
 
 Add an interactive question and choose **Poll** or **Ranking** under **Question type**. For a poll,

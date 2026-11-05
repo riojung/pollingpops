@@ -207,7 +207,7 @@ describe("CI efficiency without coverage bypasses", () => {
       "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
     );
     expect(betaArtifacts?.with?.path).toBe(
-      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\n",
+      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n",
     );
     for (const artifacts of [coreArtifacts, betaArtifacts]) {
       // A passing retry must not discard the first attempt's failure evidence.

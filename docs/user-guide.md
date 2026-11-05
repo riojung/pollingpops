@@ -679,6 +679,23 @@ remain valid until revoked or expired. Already delivered content cannot be recal
 Each deck permits twenty active and one hundred retained links; expired metadata is removed after
 seven days. These review links do not create assignments, learner attempts or completion records.
 
+### Download a static presentation
+
+Publish the deck, then choose **Export**. Choose **PDF** for the published deck, **PNG** for one
+published page, or **HTML** for a self-contained visual and readable copy. For PNG, choose the
+**Published page**, then choose **Download export**. Draft edits are excluded until published;
+the dialog keeps the published version selected when it was opened.
+
+PDF and PNG preserve the slide layout and flatten interactive controls. Overflowing authored
+frames may clip text. HTML includes the complete readable text, data tables and public panel or
+dialog details. Live responses, results, speaker notes and answer keys are excluded. PDF is a
+visual document rather than a tagged accessible PDF; use HTML for the semantic reading version.
+
+A downloaded file is a separate copy that cannot be revoked. Protect and distribute it yourself.
+Large decks or images can exceed the export limits; split the deck or reduce image sizes if the
+dialog asks. You can cancel an export or retry after a temporary failure. These static downloads
+do not create learner attempts or completion records.
+
 ### Import a PDF or a set of slide images
 
 In the Builder, choose **Import visual slides**. Export PowerPoint, Google Slides or Canva slides

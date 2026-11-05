@@ -8,6 +8,22 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E13 static export November 5, 2026
+
+The source on `codex/presentation-e13-static-export` implements the broad-creator static
+portability slice: whole-deck PDF, one-page PNG and self-contained accessible HTML. It pins an
+immutable published version and uses the recipient-safe projection, current actor/source/media
+authorization and clean private images. The creator dialog lists published pages independently
+of draft edits, supports cancellation, and explains flattened controls, authored overflow and
+irrevocable downloaded copies. The bounded renderer reuses existing canvas/PDF/font facilities;
+there is no new service, dependency, entitlement, stored-content version or migration.
+
+The full repository pipeline, four production-browser workflows and compiled-worker output smoke
+pass; see the [E13 record](evidence/presentation-e13-static-export.md). Browser checks also verified
+accessible landmarks, focus return and dynamic Builder drawer placement after commands wrap at
+320px. The selected static software scope is complete and remains undeployed. Editable PPTX,
+offline interactive packages and self-paced assignments remain outside this slice.
+
 ### Presentation E06 completion and E08 private sharing November 5, 2026
 
 The source on `codex/presentation-interactions-sharing` includes reviewed E07 navigation and
@@ -19,7 +35,8 @@ per-page access checks and bounded private media proxying. No learner attempts, 
 new hosted service is introduced. The full repository pipeline, 70 selected PostgreSQL cases and
 eight production-browser workflows pass;
 see the [E06](evidence/presentation-e06-completion.md) and
-[E08](evidence/presentation-e08-private-sharing.md) records. Changes are prepared for pull request review and remain undeployed.
+[E08](evidence/presentation-e08-private-sharing.md) records. Changes are merged in
+[PR #199](https://github.com/riojung/pollingpops/pull/199) and remain undeployed.
 
 ### Presentation E07 sections and navigation November 4, 2026
 

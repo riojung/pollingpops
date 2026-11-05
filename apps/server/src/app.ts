@@ -66,6 +66,7 @@ import { StorageService } from "./storage.js";
 import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
 import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
+import { registerPresentationStaticExportRoutes } from "./presentation-static-export-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
 import { PresentationSessionService } from "./presentation-session-service.js";
 import { registerGroupRoutes } from "./group-routes.js";
@@ -621,6 +622,15 @@ export async function buildApp(
     auth,
     repository,
     shares: presentationShares,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationStaticExportRoutes(app, {
+    auth,
+    repository,
+    presentations,
     storage,
     config,
     consumeAdmission: cache.consumeRateLimit.bind(cache),

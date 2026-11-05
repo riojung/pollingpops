@@ -18,6 +18,26 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Presentation static export compatibility
+
+E13 static export adds creator-authorized source metadata and PDF/PNG/HTML download endpoints.
+It requires no migration, new stored-content version or paid provider. Deploy the matching web,
+server and `presentation-static-renderer` worker entry points together; keep the server image's
+existing `assets/summary-fonts` directory. Verify a compiled-worker PDF/PNG/HTML render in the
+release image, including Unicode, image crop, safe HTML and resource limits, before enabling it
+for production creators.
+
+Existing Presentation feature, workspace membership and editing authority apply. The server
+rechecks source, actor and media authority before returning completed output. Do not replace
+these downloads with public object URLs or serialize creator documents into recipient files.
+Exports are deliberate copies: revocation can prevent a new download but cannot erase a file
+already delivered. The accessible HTML companion remains necessary; the visual PDF is not tagged.
+
+The change does not rewrite immutable versions, hashes, history, receipts or live state. Rolling
+back the export routes/controls leaves these records intact. Hosted load, physical-device,
+manual accessibility and cost qualification are recorded separately from local checks in the
+[E13 evidence record](../evidence/presentation-e13-static-export.md).
+
 ## Presentation stage credential compatibility
 
 Apply `090_presentation_stage_credentials.sql` before enabling the E03 delivery server/web

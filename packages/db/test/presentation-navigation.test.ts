@@ -120,87 +120,90 @@ describe("durable Presentation navigation", () => {
     ).toThrow("frozen diagnostic");
   });
 
-  it("returns safely to a closed recheck anchor while denying direct jumps to it", async () => {
-    const pack = RecoveryPackContentSchema.parse(recoveryPackDraft());
-    const draft = presentationPackMediaDraft(pack);
-    const content = PresentationContentSchema.parse({
-      ...draft,
-      schemaVersion: 12,
-      blocks: [...draft.blocks, slide("Detour")],
-    });
-    const now = new Date("2026-11-04T12:00:00.000Z");
-    const repository = createPresentationSessionRepository(new MemoryRepository());
-    const session = await repository.createSession({
-      id: randomUUID(),
-      workspaceId: randomUUID(),
-      presentationId: randomUUID(),
-      presentationVersionId: randomUUID(),
-      title: content.title,
-      content,
-      code: "8152307",
-      status: "active",
-      phase: "content",
-      currentBlockIndex: 2,
-      revision: 4,
-      createdBy: randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-      finishedAt: null,
-      liveExpiresAt: new Date(now.getTime() + 3600000),
-      retentionExpiresAt: new Date(now.getTime() + 86400000),
-    });
-    session.navigationState = {
-      returnBlockId: content.blocks[1]!.id,
-      blocks: [
-        ...content.blocks.slice(0, 2).map((block) => ({
-          blockId: block.id,
-          phase: "question_reveal" as const,
-          questionOpenedAt: now.toISOString(),
-          questionClosesAt: new Date(now.getTime() + 30000).toISOString(),
-        })),
-        {
-          blockId: content.blocks[2]!.id,
-          phase: "content",
+  it.each([12, 14] as const)(
+    "returns safely to a closed recheck anchor while denying direct jumps to it in document%s",
+    async (schemaVersion) => {
+      const pack = RecoveryPackContentSchema.parse(recoveryPackDraft());
+      const draft = presentationPackMediaDraft(pack);
+      const content = PresentationContentSchema.parse({
+        ...draft,
+        schemaVersion,
+        blocks: [...draft.blocks, slide("Detour")],
+      });
+      const now = new Date("2026-11-04T12:00:00.000Z");
+      const repository = createPresentationSessionRepository(new MemoryRepository());
+      const session = await repository.createSession({
+        id: randomUUID(),
+        workspaceId: randomUUID(),
+        presentationId: randomUUID(),
+        presentationVersionId: randomUUID(),
+        title: content.title,
+        content,
+        code: "8152307",
+        status: "active",
+        phase: "content",
+        currentBlockIndex: 2,
+        revision: 4,
+        createdBy: randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      session.navigationState = {
+        returnBlockId: content.blocks[1]!.id,
+        blocks: [
+          ...content.blocks.slice(0, 2).map((block) => ({
+            blockId: block.id,
+            phase: "question_reveal" as const,
+            questionOpenedAt: now.toISOString(),
+            questionClosesAt: new Date(now.getTime() + 30000).toISOString(),
+          })),
+          {
+            blockId: content.blocks[2]!.id,
+            phase: "content",
+            questionOpenedAt: null,
+            questionClosesAt: null,
+          },
+        ],
+      };
+      const input = {
+        workspaceId: session.workspaceId,
+        sessionId: session.id,
+        expectedRevision: 4,
+        phase: "question_reveal" as const,
+        currentBlockIndex: 1,
+        status: "active" as const,
+        navigationState: { ...session.navigationState, returnBlockId: null },
+        event: {
+          type: "navigation.returned" as const,
+          blockIndex: 1,
+          blockId: content.blocks[1]!.id,
+          navigation: {
+            fromBlockId: content.blocks[2]!.id,
+            toBlockId: content.blocks[1]!.id,
+            returnBlockId: null,
+            restored: true,
+          },
+        },
+      };
+      expect(
+        transitionPresentationNavigationState(session, input, content, {
           questionOpenedAt: null,
           questionClosesAt: null,
-        },
-      ],
-    };
-    const input = {
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      expectedRevision: 4,
-      phase: "question_reveal" as const,
-      currentBlockIndex: 1,
-      status: "active" as const,
-      navigationState: { ...session.navigationState, returnBlockId: null },
-      event: {
-        type: "navigation.returned" as const,
-        blockIndex: 1,
-        blockId: content.blocks[1]!.id,
-        navigation: {
-          fromBlockId: content.blocks[2]!.id,
-          toBlockId: content.blocks[1]!.id,
-          returnBlockId: null,
-          restored: true,
-        },
-      },
-    };
-    expect(
-      transitionPresentationNavigationState(session, input, content, {
-        questionOpenedAt: null,
-        questionClosesAt: null,
-      })!.blocks,
-    ).toEqual(session.navigationState.blocks);
-    expect(() =>
-      transitionPresentationNavigationState(
-        session,
-        { ...input, event: { ...input.event, type: "navigation.jumped" } },
-        content,
-        { questionOpenedAt: null, questionClosesAt: null },
-      ),
-    ).toThrow("linked diagnostic");
-  });
+        })!.blocks,
+      ).toEqual(session.navigationState.blocks);
+      expect(() =>
+        transitionPresentationNavigationState(
+          session,
+          { ...input, event: { ...input.event, type: "navigation.jumped" } },
+          content,
+          { questionOpenedAt: null, questionClosesAt: null },
+        ),
+      ).toThrow("linked diagnostic");
+    },
+  );
 
   it("retains original attempts, reveal rosters, anchor and receipt through jumps and revisits", async () => {
     const repository = createPresentationSessionRepository(new MemoryRepository());

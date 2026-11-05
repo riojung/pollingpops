@@ -453,6 +453,18 @@ nested frames and animation duration. A phone reader gets meaningful content. Ca
 remains presentation state, not a Canvas board's temporary follow lease. Estimate: 5–9 additional
 weeks for a bounded first spatial mode; unrestricted Prezi parity is a larger ongoing investment.
 
+The first bounded story-map slice is implemented on `codex/presentation-e10-spatial`: explicit
+document14 layout opt-in, frame arrangement with existing save/history, publication-safe path
+preview and geometry-only live maps. The confirmed block cursor drives camera fitting; current
+content and response controls stay readable outside the diagram. View/overview controls are local
+to each viewer. The linear block order remains the path, linked rechecks retain their server
+guards and Report V7 keeps its existing meaning. Migration098 preserves earlier migration bytes
+and extends the existing readers/guards without changing scene6 or default documents.
+See the [E10 record](evidence/presentation-e10-spatial.md) for verification. Content-plane camera
+rendering, nested frames and facilitator-broadcast overview controls remain later E10 scope;
+private review and static exports keep their established linear readers. This slice remains
+pending review and deployment and does not establish unrestricted Prezi parity.
+
 ### E11 Add review and then concurrent authoring
 
 Dependencies: E01 publication/draft semantics. Start with free read-only reviewers, comments,

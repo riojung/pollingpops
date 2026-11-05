@@ -20,6 +20,7 @@ import {
   PresentationRecoveryPackUpdatePreviewSchema,
   PRESENTATION_SCENE_MAX_NODES,
   preparePresentationPublication,
+  resolvePresentationSpatialFrames,
   type PresentationDraftMutation,
   resolveContentSlideFrames,
   regionForContentSlideFrame,
@@ -75,6 +76,9 @@ import {
   updateContentTextElement,
   updatePresentationQuestion,
 } from "../../lib/presentation-builder";
+import { reconcilePresentationSpatialBlocks } from "../../lib/presentation-spatial-authoring";
+import { PresentationSpatialDelivery } from "../presentation-live/presentation-spatial-delivery";
+import { PresentationSpatialEditor } from "./presentation-spatial-editor";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import { PresentationShareButton } from "../presentation-sharing/share-dialog";
 import { PresentationExportButton } from "../presentation-export/export-dialog";
@@ -288,6 +292,24 @@ function PresentationPreview({
             Close preview
           </button>
         </div>
+        <PresentationSpatialDelivery
+          spatial={
+            publication.spatial
+              ? {
+                  schemaVersion: 1,
+                  frames: resolvePresentationSpatialFrames(publication).map(
+                    ({ blockId: removed, ...frame }, blockIndex) => {
+                      void removed;
+                      return { ...frame, blockIndex };
+                    },
+                  ),
+                }
+              : undefined
+          }
+          currentBlockIndex={index}
+          phase="content"
+          sourceKey={`builder-preview:${JSON.stringify(publication.spatial)}:${publication.blocks.map((block) => block.id).join(":")}`}
+        />
         <div className={styles.previewCanvas}>
           {!block ? (
             <p>Show a slide or add an activity to preview this presentation.</p>
@@ -434,6 +456,10 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [spatialOpen, setSpatialOpen] = useState(false);
+  useEffect(() => {
+    if (!canEdit) setSpatialOpen(false);
+  }, [canEdit]);
   const [recoveryPreviewOpen, setRecoveryPreviewOpen] = useState(false);
   const [ordinarySavePending, setOrdinarySavePending] = useState(false);
   const [saveConflictPresent, setSaveConflictPresent] = useState(false);
@@ -734,9 +760,12 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         return;
       setDraft((current) => {
         if (!current) return current;
-        const next = promotePresentationOpinionFormats(
-          typeof value === "function" ? value(current) : value,
-          current.schemaVersion,
+        const next = reconcilePresentationSpatialBlocks(
+          current,
+          promotePresentationOpinionFormats(
+            typeof value === "function" ? value(current) : value,
+            current.schemaVersion,
+          ),
         );
         if (next === current || JSON.stringify(next) === JSON.stringify(current)) return current;
         const now = Date.now();
@@ -1935,6 +1964,15 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           </button>
           <button onClick={() => setPreviewOpen(true)} type="button">
             {t("delivery.common.preview")}
+          </button>
+          <button
+            className={styles.spatialButton}
+            disabled={!canEdit}
+            lang="en-CA"
+            onClick={() => setSpatialOpen(true)}
+            type="button"
+          >
+            Arrange space
           </button>
           <button className={styles.publishButton} onClick={() => void publish()} type="button">
             {record.status === "published" && !record.hasUnpublishedChanges
@@ -3461,6 +3499,52 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
             </div>
           </section>
         </div>
+      ) : null}
+      {spatialOpen ? (
+        <PresentationSpatialEditor
+          draft={draft}
+          selectedBlockId={selectedBlockId}
+          onSelect={setSelectedBlockId}
+          onChange={commit}
+          onClose={() => setSpatialOpen(false)}
+          onPreviewPath={() => {
+            setSpatialOpen(false);
+            setPreviewOpen(true);
+          }}
+          renderPreview={(block) =>
+            block.kind === "content" ? (
+              <ContentSlideView
+                block={block}
+                renderSceneImage={(mediaId, altText) => (
+                  <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+                )}
+                media={
+                  block.mediaId ? (
+                    <AuthenticatedMedia mediaId={block.mediaId} altText={block.mediaAlt} />
+                  ) : undefined
+                }
+                variant="preview"
+              />
+            ) : (
+              <article>
+                <h3>{block.question.prompt || "Untitled activity"}</h3>
+                {"choices" in block.question ? (
+                  <ul>
+                    {block.question.choices.map((choice) => (
+                      <li key={choice.id}>{choice.label}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>
+                    {block.question.type === "rating"
+                      ? `${block.question.min} – ${block.question.max}`
+                      : "Participant response"}
+                  </p>
+                )}
+              </article>
+            )
+          }
+        />
       ) : null}
       <PresentationVisualImport
         presentationId={presentationId}

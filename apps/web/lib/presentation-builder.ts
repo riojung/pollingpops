@@ -1,4 +1,8 @@
 import {
+  copyPresentationSpatialFrame,
+  reconcilePresentationSpatialBlocks,
+} from "./presentation-spatial-authoring";
+import {
   PresentationContentSchema,
   PresentationDraftSchema,
   migratePresentationV1,
@@ -143,6 +147,7 @@ export function promotePresentationOpinionFormats(
     requiredVersion,
     advanced ? 13 : 2,
     draft.sections === undefined ? 2 : 12,
+    draft.spatial === undefined ? 2 : 14,
   ) as PresentationDraft["schemaVersion"];
   if (draft.schemaVersion === schemaVersion) return draft;
   return {
@@ -278,23 +283,28 @@ export function insertPresentationBlockDuplicate(
     return draft;
   const blocks = [...draft.blocks];
   blocks.splice(sourceIndex + 1, 0, copy);
-  return {
-    ...draft,
-    blocks,
-    ...(draft.sections
-      ? {
-          sections: draft.sections.map((section) => {
-            const sourceIndex = section.blockIds.findIndex(
-              (id) => id.toLowerCase() === sourceId.toLowerCase(),
-            );
-            if (sourceIndex < 0) return section;
-            const blockIds = [...section.blockIds];
-            blockIds.splice(sourceIndex + 1, 0, copy.id);
-            return { ...section, blockIds };
-          }),
-        }
-      : {}),
-  };
+  return copyPresentationSpatialFrame(
+    draft,
+    {
+      ...draft,
+      blocks,
+      ...(draft.sections
+        ? {
+            sections: draft.sections.map((section) => {
+              const sourceIndex = section.blockIds.findIndex(
+                (id) => id.toLowerCase() === sourceId.toLowerCase(),
+              );
+              if (sourceIndex < 0) return section;
+              const blockIds = [...section.blockIds];
+              blockIds.splice(sourceIndex + 1, 0, copy.id);
+              return { ...section, blockIds };
+            }),
+          }
+        : {}),
+    },
+    sourceId,
+    copy.id,
+  );
 }
 
 export function createContentBlock(layout: ContentSlideLayout = "title_body"): ContentSlideDraft {
@@ -839,7 +849,7 @@ export function removePresentationBlock(
         block.kind === "question" &&
         block.question.linkedRecheckQuestionId === orphanTarget,
     );
-  return {
+  return reconcilePresentationSpatialBlocks(draft, {
     ...draft,
     ...(draft.sections
       ? {
@@ -872,7 +882,7 @@ export function removePresentationBlock(
               }
             : block,
       ),
-  };
+  });
 }
 
 export function duplicatePresentationBlock(block: PresentationBlockDraft): PresentationBlockDraft {

@@ -30,9 +30,9 @@ export function normalizeSession(input: PresentationSessionCreateInput): Present
   const content = upcastPresentationSessionContent(input.content, input.content.schemaVersion);
   if (content.schemaVersion < 12 && input.navigationState !== undefined)
     throw new Error("Navigation requires Presentation schema version 12");
-  if (content.schemaVersion !== 13 && input.interactionState !== undefined)
+  if (content.schemaVersion < 13 && input.interactionState !== undefined)
     throw new Error("Shared interactions require Presentation schema version 13");
-  if (content.schemaVersion === 13 && (input.interactionState?.reveals.length ?? 0) !== 0)
+  if (content.schemaVersion >= 13 && (input.interactionState?.reveals.length ?? 0) !== 0)
     throw new Error("Initial interaction state cannot invent reveals");
   const settings = input.settings ?? { timeMode: "timed" as const };
   const recoveryPackCardsEnabled = input.recoveryPackCardsEnabled ?? false;
@@ -98,7 +98,7 @@ export function normalizeSession(input: PresentationSessionCreateInput): Present
           ),
         }
       : {}),
-    ...(content.schemaVersion === 13
+    ...(content.schemaVersion >= 13
       ? {
           interactionState: validatePresentationInteractionState(
             content,
@@ -153,9 +153,10 @@ export function transitionContent(
   if (session.content.schemaVersion >= 12) {
     if (
       content.schemaVersion !== session.content.schemaVersion ||
-      JSON.stringify(content.sections) !== JSON.stringify(session.content.sections)
+      JSON.stringify(content.sections) !== JSON.stringify(session.content.sections) ||
+      JSON.stringify(content.spatial) !== JSON.stringify(session.content.spatial)
     )
-      throw new Error("Live navigation content must preserve frozen sections");
+      throw new Error("Live navigation content must preserve frozen sections and spatial layout");
     let previousIndex = -1;
     for (const block of session.content.blocks) {
       const index = content.blocks.findIndex(

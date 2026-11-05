@@ -21,6 +21,7 @@ import {
 import { boundNativeSceneFrame, nativeNodeLabel } from "../../lib/presentation-native-scene";
 import styles from "./native-scene.module.css";
 import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
+import { useNativeTextOverflow } from "./use-native-text-overflow";
 import { NativeRichTextView } from "./native-rich-text-view";
 import { NativeSceneDataView } from "./native-scene-data-view";
 import {
@@ -89,6 +90,19 @@ function Shape({ node }: { node: Extract<FramedNode, { type: "shape" }> }) {
       </span>
     </div>
   );
+}
+
+function NativePlainText({
+  text,
+  title,
+  layoutKey,
+}: {
+  text: string;
+  title: boolean;
+  layoutKey: string;
+}) {
+  const scroll = useNativeTextOverflow(JSON.stringify([text, title, layoutKey]));
+  return title ? <h1 {...scroll}>{text}</h1> : <p {...scroll}>{text}</p>;
 }
 
 interface NativeSceneViewProps {
@@ -297,11 +311,17 @@ function NativeSceneSurface({
                     richText={node.richText}
                     title={node.role === "title"}
                     editing={editing}
+                    layoutKey={JSON.stringify([node.frame, design])}
                   />
-                ) : node.role === "title" ? (
-                  <h1>{node.text || (editing ? "Slide title" : "")}</h1>
                 ) : (
-                  <p>{node.text || (editing ? "Body text" : "")}</p>
+                  <NativePlainText
+                    text={
+                      node.text ||
+                      (editing ? (node.role === "title" ? "Slide title" : "Body text") : "")
+                    }
+                    title={node.role === "title"}
+                    layoutKey={JSON.stringify([node.frame, design])}
+                  />
                 )
               ) : null}
               {node.type === "shape" ? <Shape node={node} /> : null}

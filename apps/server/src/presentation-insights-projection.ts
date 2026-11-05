@@ -319,7 +319,7 @@ function project(input: PresentationInsightsProjectionInput): PresentationSessio
   const finishedAt = iso(session.finishedAt ?? session.updatedAt);
   if (finishedAt !== report.finishedAt) unavailable();
   if (
-    (session.content.schemaVersion === 13 && report.schemaVersion !== 7) ||
+    (session.content.schemaVersion >= 13 && report.schemaVersion !== 7) ||
     (session.content.schemaVersion === 12 && report.schemaVersion !== 6)
   )
     unavailable();

@@ -123,7 +123,8 @@ describe("multiple-selection opinion contracts", () => {
       expect(supported.blocks[0]).toMatchObject({ question: { type: "poll", maxSelections: 2 } });
       expect(schema.parse({ ...presentation, schemaVersion: 12 }).blocks).toEqual(supported.blocks);
       expect(schema.parse({ ...presentation, schemaVersion: 13 }).blocks).toEqual(supported.blocks);
-      expect(schema.safeParse({ ...presentation, schemaVersion: 14 }).success).toBe(false);
+      expect(schema.safeParse({ ...presentation, schemaVersion: 14 }).success).toBe(true);
+      expect(schema.safeParse({ ...presentation, schemaVersion: 15 }).success).toBe(false);
       for (const type of ["open_text", "word_cloud"]) {
         const { choices, maxSelections, ...fields } = poll();
         expect(choices).toHaveLength(3);

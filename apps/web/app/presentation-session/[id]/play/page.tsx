@@ -15,6 +15,7 @@ import { useLocale } from "../../../../components/locale-provider";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
 import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
@@ -285,6 +286,14 @@ export default function PresentationParticipantPage() {
           <p className="error" lang="en-CA" role="alert">
             {error}
           </p>
+        ) : null}
+        {snapshot ? (
+          <PresentationSpatialDelivery
+            spatial={snapshot.spatial}
+            currentBlockIndex={snapshot.currentBlockIndex}
+            phase={snapshot.phase}
+            sourceKey={`${id}:${snapshot.presentationVersionId}`}
+          />
         ) : null}
         <section className={styles.canvas} aria-live="polite">
           <div className={styles.canvasContent}>

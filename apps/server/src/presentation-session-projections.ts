@@ -37,6 +37,7 @@ import {
 } from "./presentation-competition.js";
 import { presentationOpinionSummary } from "./presentation-opinion-results.js";
 import { presentationNavigationSnapshot } from "./presentation-navigation.js";
+import { presentationSpatialSnapshotFields } from "./presentation-spatial.js";
 import {
   presentationDeliveredScene,
   presentationInteractionSnapshot,
@@ -368,6 +369,7 @@ export function buildPresentationHostSnapshot(
     ...(recoveryPackCards.length ? { recoveryPackCards } : {}),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "host",
+    ...presentationSpatialSnapshotFields(session.content),
     ...(session.content.schemaVersion >= 12
       ? { navigation: presentationNavigationSnapshot(session) }
       : {}),
@@ -461,6 +463,7 @@ export function buildPresentationStageSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "stage",
+    ...presentationSpatialSnapshotFields(session.content),
     ...(session.content.schemaVersion >= 13
       ? { interactionState: presentationInteractionSnapshot(session) }
       : {}),
@@ -529,6 +532,7 @@ export function buildPresentationParticipantSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "participant",
+    ...presentationSpatialSnapshotFields(session.content),
     ...(session.content.schemaVersion >= 13
       ? { interactionState: presentationInteractionSnapshot(session) }
       : {}),
@@ -624,6 +628,7 @@ export function buildTargetedPresentationParticipantSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "participant",
+    ...presentationSpatialSnapshotFields(session.content),
     participantId,
     ...(session.content.schemaVersion >= 13
       ? { interactionState: presentationInteractionSnapshot(session) }
@@ -697,6 +702,7 @@ export function buildPresentationCompanionSnapshot(
       ? { recoveryPackIntervention: host.recoveryPackIntervention }
       : {}),
     projection: "companion",
+    ...(host.spatial ? { spatial: host.spatial } : {}),
     ...(host.navigation ? { navigation: host.navigation } : {}),
     ...(host.interactionState
       ? { interactionState: host.interactionState, branches: host.branches }

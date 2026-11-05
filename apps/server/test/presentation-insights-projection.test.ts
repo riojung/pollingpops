@@ -16,7 +16,7 @@ import {
 const at = (seconds: number) => new Date(Date.UTC(2026, 10, 5, 12, 0, seconds));
 function fixture(
   respondents = 5,
-  schemaVersion: 2 | 12 | 13 = 12,
+  schemaVersion: 2 | 12 | 13 | 14 = 12,
 ): PresentationInsightsProjectionInput {
   const ids = [randomUUID().toUpperCase(), randomUUID().toUpperCase(), randomUUID().toUpperCase()];
   const questionId = randomUUID();
@@ -131,7 +131,7 @@ function fixture(
     },
   ];
   const report = PresentationReportSchema.parse({
-    schemaVersion: schemaVersion === 2 ? 1 : schemaVersion === 13 ? 7 : 6,
+    schemaVersion: schemaVersion === 2 ? 1 : schemaVersion >= 13 ? 7 : 6,
     sessionId: session.id,
     artifactType: "presentation",
     presentationId: session.presentationId,
@@ -193,7 +193,7 @@ function fixture(
           },
         }
       : {}),
-    ...(schemaVersion === 13
+    ...(schemaVersion >= 13
       ? { interactionSummary: { revealChangeCount: 0, branchCount: 0 } }
       : {}),
   });
@@ -331,6 +331,17 @@ describe("frozen Presentation session insights projection", () => {
     const encoded = JSON.stringify(value);
     expect(encoded).not.toMatch(
       /PRIVATE_|speakerNotes|correctValue|leaderboard|tokenHash|joinedAt|branchId|textResults/,
+    );
+  });
+  it("requires Report V7 for spatial documents without inventing a new report version", () => {
+    const input = fixture(5, 14);
+    expect(projectPresentationSessionInsights(input).sourceReportSchemaVersion).toBe(7);
+    const olderReport = structuredClone(input.report) as Record<string, unknown>;
+    delete olderReport.interactionSummary;
+    olderReport.schemaVersion = 6;
+    input.report = PresentationReportSchema.parse(olderReport);
+    expect(() => projectPresentationSessionInsights(input)).toThrow(
+      PresentationInsightsProjectionError,
     );
   });
   it("does not count revisits, return trips, branches or reveal changes as additional covered blocks", () => {

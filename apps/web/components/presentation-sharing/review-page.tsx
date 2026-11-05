@@ -176,7 +176,10 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
       controller?.abort();
       controller = new AbortController();
       const current = controller;
-      token.current = capturePresentationReviewToken({
+      const incomingUrl = new URL(window.location.href);
+      const hasIncomingCredential =
+        incomingUrl.hash !== "" || incomingUrl.searchParams.has("token");
+      const capturedToken = capturePresentationReviewToken({
         shareId,
         location: window.location,
         history: window.history,
@@ -186,6 +189,8 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
           removeItem: (key) => window.sessionStorage.removeItem(key),
         },
       });
+      // A focus reload must keep the scrubbed token when per-tab storage is unavailable.
+      token.current = capturedToken ?? (hasIncomingCredential ? null : token.current);
       setReview(null);
       setLoading(true);
       if (!token.current) {

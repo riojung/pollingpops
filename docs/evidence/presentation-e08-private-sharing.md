@@ -108,6 +108,21 @@ CLI. Principal passed counts: contracts 896, database 530, server 1,178, web 2,5
 Default integration skips remain; the 70 selected PostgreSQL cases ran separately. Private log:
 `/tmp/pollingpops-share-recovery-check.log`.
 
+## PR review follow-up: storage-unavailable focus recovery
+
+PR #199 identified that returning focus to a review tab could discard its valid in-memory token
+after the URL fragment had been scrubbed and per-tab storage was unavailable. Focus reloads now
+retain the current token when no replacement credential is present. A new valid fragment replaces
+it; malformed, duplicate or query credentials still reject access. Authoritative access failures,
+expiry and effect cleanup continue to clear the in-memory token.
+
+The 12 new lifecycle regressions pass using the real fragment-capture helper with all per-tab
+storage operations throwing. They cover focus reuse, four authoritative denial statuses,
+network/503 recovery, malformed/duplicate/query credentials, replacement tokens and share-change/
+unmount isolation. The existing 22 sharing tests, scoped lint and web typecheck also pass.
+`VITEST_MAX_WORKERS=1 pnpm check` passed after this fix, including all 2,533 web tests and
+production builds. Server contracts, migrations and stored credentials are unchanged.
+
 ## Rollout
 
 Apply migration097 and deploy the matching sharing repository, routes, recipient schemas and web

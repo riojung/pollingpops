@@ -77,6 +77,7 @@ import {
 } from "../../lib/presentation-builder";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import { PresentationShareButton } from "../presentation-sharing/share-dialog";
+import { PresentationExportButton } from "../presentation-export/export-dialog";
 import {
   applyNativeDesignToDeck,
   applyNativeSceneToDeck,
@@ -401,6 +402,25 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const { canEdit, productFeatures } = useWorkspace();
   const { locale, t } = useLocale();
   const router = useRouter();
+  const commandBarRef = useCallback((element: HTMLElement | null) => {
+    const builder = element?.parentElement;
+    if (!element || !builder) return;
+    const measure = () => {
+      builder.style.setProperty(
+        "--presentation-command-height",
+        `${Math.ceil(element.getBoundingClientRect().height)}px`,
+      );
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(element, { box: "border-box" });
+    if (!observer) window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      if (!observer) window.removeEventListener("resize", measure);
+      builder.style.removeProperty("--presentation-command-height");
+    };
+  }, []);
   const recoveryKey = `presentation:${presentationId}`;
   const pendingSaveKey = `${recoveryKey}:pending-save`;
   const [record, setRecord] = useState<PresentationRecord | null>(null);
@@ -1864,7 +1884,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       <a className={styles.skipLink} href="#presentation-canvas">
         {t("delivery.presentationBuilder.skipCanvas")}
       </a>
-      <header className={styles.commandBar} inert={builderMutationBlocked}>
+      <header ref={commandBarRef} className={styles.commandBar} inert={builderMutationBlocked}>
         <h1 className="sr-only">
           {builderTitleParts[0]}
           <span lang={draft.title ? "" : locale}>
@@ -1922,6 +1942,12 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               : t("delivery.common.publish")}
           </button>
           <PresentationShareButton
+            className={styles.shareButton}
+            presentationId={presentationId}
+            versionId={record.currentVersionId}
+            disabled={!canEdit}
+          />
+          <PresentationExportButton
             className={styles.shareButton}
             presentationId={presentationId}
             versionId={record.currentVersionId}

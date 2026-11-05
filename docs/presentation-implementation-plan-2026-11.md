@@ -123,8 +123,11 @@ E00 now has an isolated local implementation; see [ADR 003](decisions/003-presen
 and the [prototype record](evidence/presentation-scene-prototype.md). E01 implementation is complete
 locally; release qualification remains open. E02's design foundation and remaining composition,
 information and scenario-template software are implemented. E03 delivery, E04 opinion/text formats,
-E05 visual import and E06 basic reveal/link interactions are also implemented. E07 sections and
-live navigation are implemented locally; later packages remain planned.
+E05 visual import and E06 basic reveal/link interactions are also implemented. E06 advanced
+interactions, E07 sections/live navigation and E08 private view-only sharing are merged in
+[PR #199](https://github.com/riojung/pollingpops/pull/199). E13 static export is implemented on
+`codex/presentation-e13-static-export` and locally verified. Self-paced attempts and
+the remaining later packages stay planned; deployment and release qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -485,6 +488,18 @@ response behavior and no credentials; editable PPTX for a declared text/image/sh
 and PPTX import with a compatibility corpus and loss report. E05/static export share the 3–5-week
 milestone. Editable PPTX import/export is a separate 6–12-plus-week project after a conversion spike;
 perfect round-tripping is not promised. Offline packaging is separately scoped after sharing.
+
+The source on `codex/presentation-e13-static-export` adds whole-deck PDF, selected-page PNG and
+self-contained accessible HTML from the safe immutable published projection. The creator chooses
+a published version; a separate safe metadata read supplies its page IDs. Current actor/source/
+media authorization is rechecked before delivery. Rendering uses existing canvas/PDF/fonts in a
+bounded worker, with no new paid service, content version, entitlement or database migration.
+PDF/PNG flatten controls and preserve authored frames; HTML includes complete readable text,
+tables and public panel details. Limits cover 100 exported pages, 1280×720 visual pages, 40 images,
+media/decoded pixels/output bytes, per-actor admission, concurrent jobs and deadlines. The
+[E13 evidence record](evidence/presentation-e13-static-export.md) separates automated verification
+from manual, hosted, device, usability and cost qualification. Richer portability above remains
+separately planned.
 
 ### E14 Fund advanced media and ecosystem features
 

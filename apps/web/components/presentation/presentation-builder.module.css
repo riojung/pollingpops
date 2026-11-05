@@ -227,7 +227,7 @@
 .workspace {
   display: grid;
   grid-template-columns: 285px minmax(440px, 1fr) 330px;
-  height: calc(100vh - 70px);
+  height: calc(100vh - var(--presentation-command-height, 70px));
   transition: grid-template-columns 180ms ease;
 }
 
@@ -1163,14 +1163,14 @@
   .workspace.inspectorClosed,
   .workspace.mapClosed.inspectorClosed {
     grid-template-columns: 0 minmax(0, 1fr) 0;
-    height: calc(100vh - 122px);
+    height: calc(100vh - var(--presentation-command-height, 122px));
   }
 
   .map,
   .inspector {
     position: fixed;
     z-index: 30;
-    top: 122px;
+    top: var(--presentation-command-height, 122px);
     bottom: 0;
     width: min(340px, 90vw);
     box-shadow: var(--ui-shadow-lg);

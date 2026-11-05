@@ -1,0 +1,247 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(8 19 39 / 65%);
+  padding: 16px;
+  display: grid;
+  place-items: center;
+}
+.editor {
+  width: min(1440px, 100%);
+  height: min(950px, calc(100dvh - 32px));
+  overflow: auto;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #172b4d);
+  border-radius: 16px;
+  box-shadow: 0 20px 70px #0005;
+  display: flex;
+  flex-direction: column;
+}
+.header,
+.toolbar,
+.intro,
+.list {
+  flex-shrink: 0;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 20px;
+  border-bottom: 1px solid #c5cfdb;
+}
+.header h2 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+.header p {
+  margin: 0;
+  max-width: 70ch;
+}
+.header button {
+  flex-shrink: 0;
+}
+.intro {
+  padding: 24px;
+  max-width: 70ch;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 240px;
+  flex: 1 1 320px;
+}
+.stage {
+  position: relative;
+  overflow: hidden;
+  background-color: #eaf0f6;
+  background-image: radial-gradient(#b4c3d3 1px, transparent 1px);
+  background-size: 20px 20px;
+  min-height: 0;
+  border: 1px solid #b4c3d3;
+  margin: 0 0 0 16px;
+}
+.world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20000px;
+  height: 20000px;
+  transform-origin: 0 0;
+}
+.frame {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 30px;
+  background: #fff;
+  color: #172b4d;
+  border: 8px solid #6e839b;
+  border-radius: 16px;
+  padding: 40px;
+  overflow: hidden;
+  font-size: 60px;
+  touch-action: none;
+}
+.frame strong {
+  font-size: 80px;
+}
+.frame span {
+  overflow-wrap: anywhere;
+}
+.frame small {
+  font-size: 40px;
+  color: #76531c;
+}
+.selected {
+  border-color: #1469ac;
+  box-shadow: 0 0 0 16px #1469ac33;
+}
+.frame:focus-visible {
+  outline: 16px solid #d47a10;
+  outline-offset: 12px;
+}
+.section {
+  position: absolute;
+  border: 8px dashed #6a7e93;
+  border-radius: 24px;
+  pointer-events: none;
+  color: #41556c;
+}
+.section span {
+  position: absolute;
+  top: -60px;
+  left: 0;
+  font-size: 48px;
+  white-space: nowrap;
+}
+.path {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: #7c8d9f;
+  pointer-events: none;
+}
+.controls {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.controls > * {
+  flex-shrink: 0;
+}
+.controls label {
+  display: grid;
+  gap: 5px;
+  font-weight: 600;
+}
+.controls input,
+.controls select {
+  width: 100%;
+  min-height: 40px;
+}
+.controls p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.move {
+  touch-action: none;
+}
+.preview {
+  margin-top: 8px;
+  border-top: 1px solid #c5cfdb;
+  padding-top: 12px;
+}
+.preview article {
+  font-size: 0.9rem;
+}
+.list {
+  margin: 12px 16px;
+  padding: 12px 28px;
+  border-top: 1px solid #c5cfdb;
+  display: flex;
+  gap: 8px 24px;
+  flex-wrap: wrap;
+}
+.list li {
+  max-width: 300px;
+}
+.list button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.list [aria-current] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+@media (max-width: 700px) {
+  .backdrop {
+    padding: 0;
+  }
+  .editor {
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .header {
+    padding: 14px;
+    gap: 8px;
+  }
+  .header h2 {
+    font-size: 1.2rem;
+  }
+  .header p {
+    font-size: 0.85rem;
+  }
+  .header button {
+    max-width: 110px;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 0 0 auto;
+  }
+  .stage {
+    display: none;
+  }
+  .controls {
+    padding: 12px 16px;
+    max-height: none;
+    overflow: visible;
+  }
+  .toolbar {
+    padding: 10px 16px;
+  }
+  .list {
+    display: block;
+  }
+  .list li {
+    max-width: none;
+    margin: 8px 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .world {
+    transition: none;
+  }
+}

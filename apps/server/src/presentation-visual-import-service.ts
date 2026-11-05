@@ -294,6 +294,7 @@ export class PresentationVisualImportService {
     });
     const blocks = [...presentation.draft.blocks];
     let sections = presentation.draft.sections;
+    let spatial = presentation.draft.spatial;
     // The durable draft mutation receipt owns retry semantics, even after later edits.
     if (!inserted.some((block) => blocks.some((existing) => existing.id === block.id))) {
       const anchor =
@@ -325,6 +326,15 @@ export class PresentationVisualImportService {
         );
       if (replaceEmptyStarter) {
         blocks.splice(0, 1, ...inserted);
+        if (spatial)
+          spatial = {
+            ...spatial,
+            frames: spatial.frames.map((frame) =>
+              frame.blockId.toLowerCase() === starter.id.toLowerCase()
+                ? { ...frame, blockId: inserted[0]!.id }
+                : frame,
+            ),
+          };
         sections = sections?.map((section) => ({
           ...section,
           blockIds: section.blockIds.flatMap((id) =>
@@ -340,6 +350,7 @@ export class PresentationVisualImportService {
       schemaVersion: Math.max(4, presentation.draft.schemaVersion),
       blocks,
       ...(sections ? { sections } : {}),
+      ...(spatial ? { spatial } : {}),
     });
     const updated = await this.presentations.updatePresentationDraft({
       workspaceId: creator.workspaceId,

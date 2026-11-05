@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRepository } from "@openround/db";
-import { PresentationContentSchema, type PresentationVisualImportJob } from "@openround/contracts";
+import {
+  PresentationContentSchema,
+  resolvePresentationSpatialFrames,
+  type PresentationVisualImportJob,
+} from "@openround/contracts";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
 import { MemorySessionCache } from "../src/cache.js";
@@ -110,6 +114,125 @@ async function fixture() {
 }
 
 describe("Presentation visual import", () => {
+  it.each(["replace", "sparse-replace", "append"] as const)(
+    "preserves document14 spatial layout and exact retries when importing pages (%s)",
+    async (scenario) => {
+      const f = await fixture();
+      const initial = (await f.presentations.getPresentation(workspaceId, f.id))!;
+      const owner = [...f.repository.workspaceMembers.values()].find(
+        (member) => member.workspaceId === workspaceId,
+      )!;
+      const starterId = initial.draft.blocks[0]!.id;
+      const frame = {
+        blockId: starterId.toUpperCase(),
+        x: 6400,
+        y: 4800,
+        width: 640,
+        height: 360,
+      };
+      const spatial = {
+        schemaVersion: 1 as const,
+        frames: scenario === "sparse-replace" ? [] : [frame],
+      };
+      const sectionId = randomUUID();
+      await f.presentations.updatePresentationDraft({
+        workspaceId,
+        presentationId: f.id,
+        expectedRevision: 0,
+        mutationId: randomUUID(),
+        editorId: owner.userId,
+        draftHash: "a".repeat(64),
+        draft: {
+          ...initial.draft,
+          schemaVersion: 14,
+          blocks: initial.draft.blocks.map((block) =>
+            block.kind === "content" && scenario === "append"
+              ? {
+                  ...block,
+                  textElements: [
+                    {
+                      id: "existing-title",
+                      role: "title" as const,
+                      text: "Keep this existing slide",
+                      region: "top_center" as const,
+                      order: 0,
+                    },
+                  ],
+                }
+              : block,
+          ),
+          sections: [{ id: sectionId, title: "Imported chapter", blockIds: [starterId] }],
+          spatial,
+        },
+      });
+      const created = await f.create();
+      expect(created.statusCode, created.body).toBe(202);
+      const jobId = created.json<{ job: PresentationVisualImportJob }>().job.id;
+      expect(await f.worker.runOnce()).toBe("completed");
+      const input = {
+        expectedRevision: 1,
+        mutationId: randomUUID(),
+        afterBlockId: starterId,
+        fidelityAccepted: true,
+        pages: [
+          {
+            pageNumber: 1,
+            title: "Reviewed page",
+            alternativeText: "Diagram",
+            accessibleText: "Reading order",
+            readingOrderReviewed: true,
+          },
+        ],
+      };
+      const insert = () =>
+        f.app.inject({
+          method: "POST",
+          url: `${f.base}/${jobId}/insert`,
+          headers: { cookie: f.cookie },
+          payload: input,
+        });
+      const inserted = await insert();
+      expect(inserted.statusCode, inserted.body).toBe(200);
+      const result = inserted.json<{
+        presentation: { draftRevision: number; draft: unknown };
+        insertedBlockIds: string[];
+      }>();
+      const content = PresentationContentSchema.parse(result.presentation.draft);
+      expect(content.schemaVersion).toBe(14);
+      expect(result.presentation.draftRevision).toBe(2);
+      expect(content.blocks.map((block) => block.id)).toEqual([
+        ...(scenario === "append" ? [starterId] : []),
+        ...result.insertedBlockIds,
+      ]);
+      expect(content.spatial).toEqual(
+        scenario === "replace"
+          ? { ...spatial, frames: [{ ...frame, blockId: result.insertedBlockIds[0] }] }
+          : spatial,
+      );
+      expect(content.sections).toEqual([
+        {
+          id: sectionId,
+          title: "Imported chapter",
+          blockIds: scenario === "append" ? [starterId] : result.insertedBlockIds,
+        },
+      ]);
+      const resolved = resolvePresentationSpatialFrames(content);
+      expect(resolved.map((frame) => frame.blockId)).toEqual(
+        content.blocks.map((block) => block.id),
+      );
+      expect(resolved.at(-1)).toMatchObject({ width: 1280, height: 720 });
+      expect((await insert()).json()).toEqual(inserted.json());
+      expect((await f.presentations.getPresentation(workspaceId, f.id))?.draftRevision).toBe(2);
+      const published = await f.app.inject({
+        method: "POST",
+        url: `/v1/presentations/${f.id}/publish`,
+        headers: { cookie: f.cookie },
+        payload: { expectedDraftRevision: 2 },
+      });
+      expect(published.statusCode, published.body).toBe(200);
+    },
+  );
+
   it("preserves a v12 starter section when visual import replaces the empty slide", async () => {
     const f = await fixture();
     const initial = (await f.presentations.getPresentation(workspaceId, f.id))!;

@@ -59,6 +59,7 @@ import {
 } from "../../../../lib/presentation-navigation";
 import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
 
 function advanceMessageKey(
   snapshot: PresentationHostSnapshot,
@@ -539,6 +540,20 @@ function PresentationHostContent() {
             </p>
             <div className={styles.hostGrid}>
               <div className={delivery.presenterColumn}>
+                <PresentationSpatialDelivery
+                  spatial={snapshot.spatial}
+                  currentBlockIndex={snapshot.currentBlockIndex}
+                  phase={snapshot.phase}
+                  sourceKey={`${id}:${snapshot.presentationVersionId}`}
+                  navigation={snapshot.navigation}
+                  disabled={
+                    busy ||
+                    !!commandState.pendingCommand ||
+                    !hasControlPass ||
+                    !controllerRef.current?.canMutate()
+                  }
+                  onJump={(blockId) => void navigate("jump_to_block", blockId)}
+                />
                 <section className={styles.canvas} aria-live="polite" aria-label="Current slide">
                   <div className={styles.canvasContent}>
                     {snapshot.phase === "lobby" ? (

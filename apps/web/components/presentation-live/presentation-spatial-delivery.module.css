@@ -1,0 +1,126 @@
+.panel {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--ui-border, #cad6e0);
+  border-radius: 16px;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #183247);
+  margin-bottom: 16px;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.status {
+  margin: 0;
+  font-weight: 700;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.controls button,
+.staff button,
+.staff select {
+  min-height: 44px;
+  max-width: 100%;
+  border: 1px solid #9aafbf;
+  border-radius: 8px;
+  background: #fff;
+  color: #183247;
+  padding: 8px 12px;
+  font: inherit;
+}
+.controls button[aria-pressed="true"] {
+  background: #e3f2ff;
+  border-color: #1769aa;
+}
+.panel button:focus-visible,
+.panel select:focus-visible {
+  outline: 3px solid #1769aa;
+  outline-offset: 3px;
+}
+.panel button:disabled,
+.panel select:disabled {
+  opacity: 0.6;
+}
+.explanation {
+  margin: 10px 0;
+  font-size: 0.9rem;
+}
+.diagram {
+  height: 240px;
+  overflow: hidden;
+  border: 1px solid #cad6e0;
+  border-radius: 10px;
+  background: #f2f6fa;
+}
+.diagram[hidden] {
+  display: none;
+}
+.camera {
+  transform-origin: 0 0;
+  transition: transform 300ms ease-out;
+}
+.path {
+  fill: none;
+  stroke: #687e91;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.frame {
+  fill: #fff;
+  stroke: #687e91;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.ordinal {
+  fill: #27475e;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+}
+[data-current="true"] > .frame {
+  fill: #d9edff;
+  stroke: #1769aa;
+  stroke-width: 3;
+}
+.staff {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.staff p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .panel {
+    padding: 12px;
+  }
+  .diagram {
+    height: 150px;
+  }
+  .staff {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .controls {
+    width: 100%;
+  }
+  .controls button {
+    flex: 1 1 110px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel .camera {
+    transition-duration: 0ms !important;
+  }
+}
+:global(html[data-openround-motion="reduced"]) .panel .camera {
+  transition-duration: 0ms !important;
+}

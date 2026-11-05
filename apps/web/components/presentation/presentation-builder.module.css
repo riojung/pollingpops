@@ -60,7 +60,8 @@
   justify-content: flex-end;
 }
 
-.shareButton {
+.shareButton,
+.spatialButton {
   min-height: 44px;
 }
 
@@ -1208,7 +1209,8 @@
   }
 
   .commandStart .iconButton,
-  .commandActions > button:not(.publishButton):not(.iconButton):not(.shareButton) {
+  .commandActions
+    > button:not(.publishButton):not(.iconButton):not(.shareButton):not(.spatialButton) {
     display: none;
   }
 

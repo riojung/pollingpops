@@ -70,6 +70,7 @@ export const PRESENTATION_INTERACTION_SCHEMA_VERSION = 11;
 /** Named sections and durable nonlinear delivery opt into embedded v12. */
 export const PRESENTATION_NAVIGATION_SCHEMA_VERSION = 12;
 export const PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION = 13;
+export const PRESENTATION_SPATIAL_SCHEMA_VERSION = 14;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -212,6 +213,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 13)),
   ],
+  [
+    PRESENTATION_SPATIAL_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 14)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -269,6 +274,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 13)),
+  ],
+  [
+    PRESENTATION_SPATIAL_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 14)),
   ],
 ]);
 

@@ -8,6 +8,24 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E10 bounded spatial story map November 5, 2026
+
+The source on `codex/presentation-e10-spatial` adds an optional spatial story map. Authors arrange
+existing slides/activities as bounded frames, use the existing numbered sequence as the path,
+and preview the visible publication. The live host, stage, participant and Companion maps follow
+the confirmed current page while its readable content and response controls stay mounted.
+Audience maps contain numbered geometry only. Hidden planning frames, future content, notes,
+answers and private navigation details are excluded.
+
+Document14 and migration098 add the opt-in layout without changing scene6, existing draft/save
+receipts, navigation/assessment semantics or Report V1–V7. Local camera controls require no new
+service, provider or live command. The full repository check, eight selected real PostgreSQL
+cases and four production-browser profiles pass; see the
+[E10 record](evidence/presentation-e10-spatial.md) for verification and limits.
+This is the bounded story-map slice; content-plane camera rendering,
+nested frames and facilitator-broadcast overview controls remain later E10 work. Changes remain
+pending review and deployment.
+
 ### Presentation E09 live-session insights November 5, 2026
 
 The source on `codex/presentation-e09-reporting` adds a creator report panel for finished,
@@ -24,7 +42,7 @@ with bounded inputs/output, read limits and operational metrics. No migration, p
 new service or model call is added. See the [E09 record](evidence/presentation-e09-session-insights.md)
 for verification: the full repository pipeline, five selected PostgreSQL cases and four production
 browser profiles pass. Deployment/qualification remain separate. The selected software scope is
-implemented and remains undeployed.
+merged in [PR #201](https://github.com/riojung/pollingpops/pull/201) and remains undeployed.
 
 ### Presentation E13 static export November 5, 2026
 

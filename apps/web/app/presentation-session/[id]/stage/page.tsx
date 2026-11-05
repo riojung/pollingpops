@@ -16,6 +16,7 @@ import {
   shouldApplyPresentationSnapshot,
 } from "../../../../lib/presentation-realtime";
 import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
 import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
@@ -241,6 +242,12 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
             {reconnecting ? (
               <p role="status">Reconnecting — showing the last confirmed slide.</p>
             ) : null}
+            <PresentationSpatialDelivery
+              spatial={snapshot.spatial}
+              currentBlockIndex={snapshot.currentBlockIndex}
+              phase={snapshot.phase}
+              sourceKey={`${id}:${snapshot.presentationVersionId}`}
+            />
             <section
               aria-label="Audience slide"
               className={`${styles.stageCanvas}${opinionSummary || textResults ? ` ${styles.stageOpinionCanvas}` : ""}`}

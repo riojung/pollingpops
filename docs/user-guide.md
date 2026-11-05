@@ -606,6 +606,46 @@ The first jump retains your original block as **Return target**. Further jumps k
 same action; reload preserves that pending action in the same browser tab. Finished reports and
 CSV distinguish presented and skipped blocks without treating skipped activities as wrong answers.
 
+### Arrange a spatial presentation map
+
+In the Builder, choose **Arrange space**, then **Enable spatial layout**. This creates a bounded
+story map of the same slides and activities. It provides frame positions and an overview rather
+than an unrestricted drawing canvas. Sections outline their existing members; the numbered
+filmstrip still defines playback order. Reorder blocks in that filmstrip to change the path,
+keeping linked diagnostic and recheck activities in their permitted order.
+
+Choose a frame on the map or use **Selected frame**. On a wide screen, drag the frame or
+**Move selected frame**. On any screen, including a phone, edit **Frame X**, **Frame Y** and
+**Frame width**, or use the readable list of frames. With **Move selected frame** focused, arrow
+keys move by 16 units; hold Shift to move by 160. Frames keep a 16:9 aspect ratio. Widths range
+from 320 to 3,200 in steps of 16; positions stay nonnegative and keep the complete frame inside
+the 20,000-by-20,000 map. **Fit all**, **Fit selected** and the zoom buttons help locate frames.
+Press Enter or leave a numeric field to apply its value; Escape cancels that field edit.
+Each completed numeric edit has its own undo step.
+
+A drag previews locally until release, then becomes one undoable edit. Press Escape during a drag
+to cancel it. Position changes use the ordinary autosave and recovery flow; close the arrangement
+dialog to use the Builder's **Undo** or **Redo**. **Reset selected frame** restores one frame's
+default position and size; **Auto layout** resets all frames. **Disable spatial layout** returns
+the deck to linear delivery without removing its slides or activities.
+
+Hidden planning slides retain their positions in the draft. They are excluded from publication
+and **Preview path**, including their map frames and any section left empty. **Preview path**
+shows the visible path that will be published; use its **Next** and **Previous** controls to inspect
+the order.
+Wait for **Saved**, then publish and start a new session to use the layout. That session keeps its
+published content and positions even if the draft is edited or published again later.
+
+During live delivery, the spatial path shows numbered frame positions above the complete,
+readable current page. Choose **Show overview**, **Focus current page** or **Use linear view** on
+your own screen. These view controls do not broadcast a camera change or advance the room. The
+facilitator's existing activity and navigation controls still govern the shared current page,
+including closing open activities and completing linked rechecks before jumping. Participant
+content and response controls remain outside the scaled map.
+
+Private review links and static PDF, PNG and HTML exports retain their existing linear page
+order. Spatial arrangement does not turn them into an interactive spatial package.
+
 ### Add reveal panels and safe links
 
 On a native slide, choose **Add reveal panel** or **Add link**. Give each control a short,

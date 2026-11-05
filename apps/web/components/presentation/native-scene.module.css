@@ -36,6 +36,17 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.node h1[tabindex="0"],
+.node p[tabindex="0"],
+.richBody[tabindex="0"] {
+  overscroll-behavior: contain;
+}
+.node h1[tabindex="0"]:focus-visible,
+.node p[tabindex="0"]:focus-visible,
+.richBody[tabindex="0"]:focus-visible {
+  outline: 3px solid var(--native-link, var(--ui-focus, #1769aa));
+  outline-offset: -4px;
+}
 .node h1 {
   font-size: clamp(20px, 5cqw, 48px);
   line-height: var(--native-title-leading, 1.08);

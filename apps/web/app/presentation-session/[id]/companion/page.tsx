@@ -57,6 +57,7 @@ import {
   type CompanionPublishedQuestionCatalog,
 } from "../../../../lib/presentation-companion-published-questions";
 import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
 import {
   isPresentationNavigationCommand,
   isPresentationRecoverableCommand,
@@ -578,6 +579,20 @@ export default function PresentationCompanionPage() {
         {pass && !snapshot ? <p role="status">{t("live.companion.loading")}</p> : null}
         {snapshot ? (
           <>
+            <PresentationSpatialDelivery
+              spatial={snapshot.spatial}
+              currentBlockIndex={snapshot.currentBlockIndex}
+              phase={snapshot.phase}
+              sourceKey={`${id}:${snapshot.presentationVersionId}`}
+              navigation={snapshot.navigation}
+              disabled={
+                commandState.busy ||
+                !!commandState.pendingCommand ||
+                !pass ||
+                !controllerRef.current?.canMutate()
+              }
+              onJump={(blockId) => void navigate("jump_to_block", blockId)}
+            />
             <div className={styles.current}>
               <span className={styles.phase}>{t(`live.companion.phase.${snapshot.phase}`)}</span>
               <h2 lang="">

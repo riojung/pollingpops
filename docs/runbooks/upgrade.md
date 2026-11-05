@@ -18,6 +18,41 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Presentation spatial layout compatibility
+
+Apply `098_presentation_spatial.sql` before admitting E10 document14 writers. It adds opt-in bounded
+spatial geometry checks and extends the existing content, response and live-session guards to
+document14. Keep migrations 001–097 byte-for-byte and verify their checksums. There is no new scene,
+response or report format: scene6 and Report V1–V7 retain their meanings. Classic API creation
+remains document2, blank native creation remains document7 and the mutation envelope remains v2.
+
+Deploy matching contracts, database readers, API/workers and web before exposing the new writer.
+Use a coordinated reader-first cutover; existing room grants can outlive creation flags, so an
+old pool must not receive a document14 snapshot or attempt to decode its frozen session. Exercise
+a document14 draft/history/publish/reload, private linear review/static export and live linked
+diagnostic/recheck before rollout. Verify original question windows, accepted response retries,
+stage/participant/Companion projections, Report V7 and E09 insights with the restricted database
+role and forced RLS.
+
+Layout frames refer to existing block UUIDs and never replace the canonical block sequence.
+Publication removes hidden planning frames; audience snapshots carry only bounded geometry and
+ordinals, with no future titles, prompts, media, keys or notes. Existing navigation permissions
+remain authoritative. Local overview/focus/linear controls do not write live state or open/reveal
+activities. Current content stays mounted; reduced motion disables diagram transitions.
+
+Stored spatial JSON is frozen during live insertions. Sparse/missing frames resolve through the
+bounded deterministic fallback without writing defaults. Current layout, bounds and path are
+derived from the same accepted frozen content, including authorized session additions. Existing
+private review and static export allowlists keep their linear projections.
+
+Disabling spatial layout removes the layout field but retains document14. Once any document14
+draft, history, publication or session exists, rollback requires a document14-capable reader or
+forward repair. Keep migration098; do not rewrite old JSON/hashes, downgrade frozen content or
+rebuild accepted intents to make an older binary accept them. No paid SDK/service, model call,
+camera event queue or additional entitlement is introduced. Local verification and remaining
+hosted/device/manual/cost qualification are in the
+[E10 evidence record](../evidence/presentation-e10-spatial.md).
+
 ## Presentation session insights compatibility
 
 E09 adds the creator-authorized `GET /v1/presentation-sessions/:id/insights` reader and the

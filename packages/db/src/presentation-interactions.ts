@@ -17,7 +17,7 @@ export function validatePresentationInteractionState(
   content: PresentationContent,
   value: unknown,
 ): PresentationInteractionState {
-  if (content.schemaVersion !== 13)
+  if (content.schemaVersion < 13)
     throw new Error("Shared interactions require Presentation schema version 13");
   const state = PresentationInteractionStateSchema.parse(value);
   for (const entry of state.reveals) {
@@ -39,7 +39,7 @@ export function transitionPresentationInteractionState(
   content: PresentationContent,
   responses: readonly PresentationSessionResponseRecord[] = [],
 ): PresentationInteractionState | undefined {
-  if (content.schemaVersion !== 13) {
+  if (content.schemaVersion < 13) {
     if (
       input.interactionState !== undefined ||
       input.event.interaction != null ||

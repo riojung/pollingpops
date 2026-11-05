@@ -1,4 +1,9 @@
 import { ProductFeatureKeySchema } from "./feature-policy";
+import {
+  PresentationSpatialLayoutSchema,
+  PresentationSpatialSnapshotSchema,
+} from "./presentation-spatial";
+export * from "./presentation-spatial";
 import { z } from "zod";
 export * from "./feature-policy";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -4947,7 +4952,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4986,7 +4991,7 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
     blocks: Array<{
       kind: string;
       scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 };
@@ -5212,7 +5217,7 @@ function applyPresentationAdvancedInteractions(
   let broadcastCount = 0;
   presentation.blocks.forEach((block, index) => {
     const advanced = block.scene?.schemaVersion === 6 || block.branches !== undefined;
-    if (advanced && presentation.schemaVersion !== 13)
+    if (advanced && presentation.schemaVersion < 13)
       issue(["blocks", index], "Advanced interactions require Presentation schema version 13");
     block.scene?.nodes.forEach((node, nodeIndex) => {
       if (node.type === "reveal" && node.scope === "broadcast") broadcastCount++;
@@ -5252,6 +5257,32 @@ function applyPresentationAdvancedInteractions(
     issue(["blocks"], "A Presentation supports at most 200 broadcast reveal nodes");
 }
 
+function applyPresentationSpatialRules(
+  presentation: {
+    schemaVersion: number;
+    blocks: Array<{ id: string }>;
+    spatial?: z.infer<typeof PresentationSpatialLayoutSchema>;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (presentation.spatial === undefined) return;
+  if (presentation.schemaVersion !== 14)
+    ctx.addIssue({
+      code: "custom",
+      path: ["spatial"],
+      message: "Spatial layout requires Presentation schema version 14",
+    });
+  const ids = new Set(presentation.blocks.map((block) => block.id.toLowerCase()));
+  presentation.spatial.frames.forEach((frame, index) => {
+    if (!ids.has(frame.blockId.toLowerCase()))
+      ctx.addIssue({
+        code: "custom",
+        path: ["spatial", "frames", index, "blockId"],
+        message: "Spatial frames reference an existing presentation block",
+      });
+  });
+}
+
 export const PresentationDraftSchema = z
   .object({
     title: z.string().trim().max(160),
@@ -5271,16 +5302,19 @@ export const PresentationDraftSchema = z
         z.literal(11),
         z.literal(12),
         z.literal(13),
+        z.literal(14),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockDraftSchema).max(200),
     sections: z.array(PresentationSectionSchema).max(50).optional(),
+    spatial: PresentationSpatialLayoutSchema.optional(),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
   })
   .superRefine((presentation, ctx) => {
     applyPresentationTopology(presentation, ctx, false);
     applyPresentationSectionRules(presentation, ctx);
+    applyPresentationSpatialRules(presentation, ctx);
     applyPresentationAdvancedInteractions(presentation, ctx);
     applyPresentationRecoveryPackRules(presentation, ctx);
     applyPresentationSceneRules(presentation, ctx);
@@ -5301,10 +5335,25 @@ export function preparePresentationPublication(draft: PresentationDraft): Presen
       blockIds: section.blockIds.filter((id) => visibleIds.has(id.toLowerCase())),
     }))
     .filter((section) => section.blockIds.length);
+  const spatial =
+    draft.spatial === undefined
+      ? undefined
+      : {
+          ...draft.spatial,
+          frames: draft.spatial.frames.filter((frame) =>
+            visibleIds.has(frame.blockId.toLowerCase()),
+          ),
+        };
   return blocks.length === draft.blocks.length &&
-    JSON.stringify(sections) === JSON.stringify(draft.sections)
+    JSON.stringify(sections) === JSON.stringify(draft.sections) &&
+    JSON.stringify(spatial) === JSON.stringify(draft.spatial)
     ? draft
-    : { ...draft, blocks, ...(sections === undefined ? {} : { sections }) };
+    : {
+        ...draft,
+        blocks,
+        ...(sections === undefined ? {} : { sections }),
+        ...(spatial === undefined ? {} : { spatial }),
+      };
 }
 
 export const PresentationContentSchema = z
@@ -5325,10 +5374,12 @@ export const PresentationContentSchema = z
       z.literal(11),
       z.literal(12),
       z.literal(13),
+      z.literal(14),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
     sections: z.array(PresentationSectionSchema).max(50).optional(),
+    spatial: PresentationSpatialLayoutSchema.optional(),
     recoveryPackInsertions: z.array(RecoveryPackInsertionSchema).max(100).optional(),
     liveQuickCheck: PresentationLiveQuickCheckSchema.optional(),
     livePublishedQuestions: z
@@ -5340,6 +5391,7 @@ export const PresentationContentSchema = z
   .superRefine((presentation, ctx) => {
     applyPresentationTopology(presentation, ctx, true);
     applyPresentationSectionRules(presentation, ctx, true);
+    applyPresentationSpatialRules(presentation, ctx);
     applyPresentationAdvancedInteractions(presentation, ctx, true);
     applyPresentationRecoveryPackRules(presentation, ctx);
     applyPresentationSceneRules(presentation, ctx, true);
@@ -5449,7 +5501,9 @@ export function migratePresentationV1(value: unknown): unknown {
     presentation.schemaVersion === 10 ||
     presentation.schemaVersion === 11 ||
     presentation.schemaVersion === 12 ||
-    presentation.schemaVersion === 13
+    presentation.schemaVersion === 13 ||
+    presentation.schemaVersion === 14 ||
+    (typeof presentation.schemaVersion === "number" && presentation.schemaVersion > 14)
   )
     return presentation;
   if (!Array.isArray(presentation.blocks)) return { ...presentation, schemaVersion: 2 };
@@ -6062,10 +6116,26 @@ const PresentationSnapshotBaseFields = {
   questionClosesAt: z.string().datetime().nullable(),
   acceptingResponses: z.boolean(),
   interactionState: PresentationInteractionStateSchema.optional(),
+  spatial: PresentationSpatialSnapshotSchema.optional(),
   settings: PresentationSessionSettingsSchema,
   recoveryPackIntervention: PresentationRecoveryPackPlaybackSchema.optional(),
   opinionSummary: PresentationOpinionResultSummarySchema.optional(),
 };
+
+function validatePresentationSpatialSnapshot(
+  snapshot: {
+    blockCount: number;
+    spatial?: z.infer<typeof PresentationSpatialSnapshotSchema>;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (snapshot.spatial && snapshot.spatial.frames.length !== snapshot.blockCount)
+    ctx.addIssue({
+      code: "custom",
+      path: ["spatial", "frames"],
+      message: "Spatial geometry must describe every canonical block exactly once",
+    });
+}
 
 function validatePresentationRecoveryPackPlayback(
   snapshot: {
@@ -6128,6 +6198,7 @@ export const PresentationHostSnapshotSchema = z
     finishedAt: z.string().datetime().nullable(),
   })
   .strict()
+  .superRefine(validatePresentationSpatialSnapshot)
   .superRefine((snapshot, ctx) => {
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
     validatePresentationOpinionSummary(snapshot, ctx);
@@ -6157,6 +6228,7 @@ export const PresentationStageSnapshotSchema = z
     finishedAt: z.string().datetime().nullable(),
   })
   .strict()
+  .superRefine(validatePresentationSpatialSnapshot)
   .superRefine((snapshot, ctx) => {
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
     validatePresentationOpinionSummary(snapshot, ctx);
@@ -6230,6 +6302,7 @@ export const PresentationParticipantSnapshotSchema = z
     finishedAt: z.string().datetime().nullable(),
   })
   .strict()
+  .superRefine(validatePresentationSpatialSnapshot)
   .superRefine(validatePresentationRecoveryPackPlayback)
   .superRefine(validatePresentationOpinionSummary)
   .superRefine(validatePresentationOwnTextResponse);
@@ -6371,6 +6444,7 @@ export const PresentationRestV1HostSnapshotSchema = z
     updatedAt: z.string().datetime(),
   })
   .strict()
+  .superRefine(validatePresentationSpatialSnapshot)
   .superRefine((snapshot, ctx) => {
     validatePresentationRestV1SnapshotAliases(snapshot, ctx);
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
@@ -6416,6 +6490,7 @@ export const PresentationRestV1ParticipantSnapshotSchema = z
     currentBlock: PresentationRestV1ParticipantCurrentBlockSchema.nullable(),
   })
   .strict()
+  .superRefine(validatePresentationSpatialSnapshot)
   .superRefine((snapshot, ctx) => {
     validatePresentationRestV1SnapshotAliases(snapshot, ctx);
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
@@ -6637,6 +6712,7 @@ export const PresentationCompanionSnapshotSchema = z
     finishedAt: z.string().datetime().nullable(),
   })
   .strict()
+  .superRefine(validatePresentationSpatialSnapshot)
   .superRefine((snapshot, ctx) => {
     validatePresentationRecoveryPackPlayback(snapshot, ctx);
     validatePresentationOpinionSummary(snapshot, ctx);

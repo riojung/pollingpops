@@ -17,6 +17,9 @@ import {
   boundNativeSceneFrame,
   createNativeLinkNode,
   createNativeRevealNode,
+  createNativeDialogNode,
+  createNativeHotspotNode,
+  createNativeNavigationNode,
   nativeNodeLabel,
   reorderNativeNode,
   updateNativeNode,
@@ -39,8 +42,10 @@ import {
   moveNativeSceneNodes,
   removeNativeSceneNodes,
   expandNativeSceneSelection,
+  synchronizeNativeHotspots,
 } from "../../lib/presentation-native-geometry";
 import styles from "./native-scene.module.css";
+import { isNativeInteractionNode } from "./native-scene-interaction-view";
 
 const shapes = [
   ...CanvasShapeVariantSchema.options,
@@ -61,6 +66,7 @@ export function NativeSceneEditor({
   onUndo,
   onRedo,
   onApplyDesignToDeck,
+  navigationTargets,
 }: {
   scene: PresentationScene;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
@@ -72,6 +78,7 @@ export function NativeSceneEditor({
   onUndo?: () => void;
   onRedo?: () => void;
   onApplyDesignToDeck?: (design: PresentationSceneDesign) => void;
+  navigationTargets?: readonly { id: string; title: string }[];
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
@@ -106,6 +113,7 @@ export function NativeSceneEditor({
   }
   function onChange(next: PresentationScene, historyField?: string) {
     if (next === scene) return false;
+    next = synchronizeNativeHotspots(scene, next);
     const parsed = PresentationSceneDraftSchema.safeParse(next);
     if (!parsed.success) {
       setChangeFailure({
@@ -141,11 +149,16 @@ export function NativeSceneEditor({
   function add(node: PresentationSceneNode) {
     if (!canAdd) return;
     const minimumVersion =
-      node.type === "reveal" || node.type === "link"
-        ? 5
-        : node.type === "table" || node.type === "chart"
-          ? 4
-          : 1;
+      node.type === "hotspot" ||
+      node.type === "dialog" ||
+      node.type === "navigation" ||
+      (node.type === "reveal" && node.scope === "broadcast")
+        ? 6
+        : node.type === "reveal" || node.type === "link"
+          ? 5
+          : node.type === "table" || node.type === "chart"
+            ? 4
+            : 1;
     const added = onChange({
       ...scene,
       schemaVersion: scene.schemaVersion >= minimumVersion ? scene.schemaVersion : minimumVersion,
@@ -192,11 +205,34 @@ export function NativeSceneEditor({
             <button type="button" disabled={!canAdd} onClick={() => add(createNativeLinkNode())}>
               Add link
             </button>
+            <button type="button" disabled={!canAdd} onClick={() => add(createNativeDialogNode())}>
+              Add detail dialog
+            </button>
+            <button
+              type="button"
+              disabled={!canAdd}
+              onClick={() => {
+                const image =
+                  selected.type === "image"
+                    ? selected
+                    : scene.nodes.find((node) => node.type === "image" && !node.rotation);
+                add(createNativeHotspotNode(image?.type === "image" ? image : undefined));
+              }}
+            >
+              Add image hotspot
+            </button>
+            <button
+              type="button"
+              disabled={!canAdd}
+              onClick={() => add(createNativeNavigationNode())}
+            >
+              Add slide link
+            </button>
           </div>
           <p className={styles.help}>
-            Each viewer can show and hide a reveal panel for themselves. This does not broadcast
-            choices or record assessment answers. Revealed content is audience content; keep
-            confidential notes in speaker notes.
+            Local panels and detail dialogs open on each viewer’s screen. Broadcast reveals are
+            controlled by the facilitator during live delivery. Interactions do not submit answers.
+            Keep confidential notes in speaker notes.
           </p>
         </fieldset>
         <fieldset className={styles.designControls}>
@@ -417,8 +453,9 @@ export function NativeSceneEditor({
           <legend>{multiple ? "Last selected object" : "Selected object"}</legend>
           <NativeSceneInteractionEditor
             scene={scene}
-            node={selected.type === "reveal" || selected.type === "link" ? selected : null}
+            node={isNativeInteractionNode(selected) ? selected : null}
             onChange={onChange}
+            navigationTargets={navigationTargets}
           />
           {selected.type === "text" && selected.richText ? (
             <NativeRichTextEditor

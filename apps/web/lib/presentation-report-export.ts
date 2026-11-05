@@ -1,5 +1,24 @@
 import { PresentationReportSchema, type PresentationReport } from "@openround/contracts";
 
+export function presentationReportUrl(sessionId: string) {
+  return `/v1/presentation-sessions/${encodeURIComponent(sessionId)}/report?includeSessionContext=true&includeQuickChecks=true&includeOpinionResults=true&includeTextResults=true&includeNavigation=true&includeInteractions=true`;
+}
+
+export function presentationReportBlockNavigation(report: PresentationReport, blockId: string) {
+  return report.schemaVersion === 6 || report.schemaVersion === 7
+    ? (report.navigation.blocks.find(
+        (block) => block.blockId.toLowerCase() === blockId.toLowerCase(),
+      ) ?? null)
+    : null;
+}
+
+export function presentationReportBlockTitle(report: PresentationReport, blockId: string) {
+  const block = report.evidence.find(
+    (entry) => entry.blockId.toLowerCase() === blockId.toLowerCase(),
+  );
+  return block?.kind === "content" ? block.title : (block?.prompt ?? blockId);
+}
+
 /** Quote every cell and keep authored spreadsheet formulas literal, including hidden prefixes. */
 function csvCell(value: unknown): string {
   let text = value === null || value === undefined ? "" : String(value);
@@ -11,7 +30,7 @@ function csvCell(value: unknown): string {
 export function presentationReportCsv(input: PresentationReport): string {
   const report = PresentationReportSchema.parse(input);
   const textColumns =
-    report.schemaVersion === 5
+    report.schemaVersion === 5 || report.schemaVersion === 6 || report.schemaVersion === 7
       ? [
           "approved_text",
           "word_or_phrase",
@@ -47,6 +66,7 @@ export function presentationReportCsv(input: PresentationReport): string {
     ],
   ];
   for (const block of report.evidence) {
+    const navigation = presentationReportBlockNavigation(report, block.blockId);
     const base =
       block.kind === "content"
         ? [block.blockIndex + 1, block.blockId, block.kind, block.title, "", "", "", "", ""]
@@ -56,10 +76,10 @@ export function presentationReportCsv(input: PresentationReport): string {
             block.kind,
             block.prompt,
             block.questionType,
-            block.respondents,
-            block.correct,
-            block.accuracyPercent,
-            block.totalScore,
+            navigation?.status === "skipped" ? "" : block.respondents,
+            navigation?.status === "skipped" ? "" : block.correct,
+            navigation?.status === "skipped" ? "" : block.accuracyPercent,
+            navigation?.status === "skipped" ? "" : block.totalScore,
           ];
     const summary =
       block.kind === "question" && "opinionSummary" in block ? block.opinionSummary : undefined;
@@ -122,6 +142,32 @@ export function presentationReportCsv(input: PresentationReport): string {
           ...Array(textColumns.length).fill(""),
         ]);
     }
+  }
+  if (report.schemaVersion === 6 || report.schemaVersion === 7) {
+    rows[0]!.push(
+      "section_id",
+      "section_title",
+      "presentation_status",
+      "saved_phase",
+      "navigation_jump_count",
+      "navigation_return_count",
+    );
+    for (const row of rows.slice(1)) {
+      const navigation = presentationReportBlockNavigation(report, String(row[1]));
+      row.push(
+        navigation?.sectionId,
+        navigation?.sectionTitle,
+        navigation?.status,
+        navigation?.phase,
+        report.navigation.jumpCount,
+        report.navigation.returnCount,
+      );
+    }
+  }
+  if (report.schemaVersion === 7) {
+    rows[0]!.push("broadcast_reveal_change_count", "answer_branch_count");
+    for (const row of rows.slice(1))
+      row.push(report.interactionSummary.revealChangeCount, report.interactionSummary.branchCount);
   }
   return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }

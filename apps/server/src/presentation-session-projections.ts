@@ -36,6 +36,12 @@ import {
   presentationScoredResponses,
 } from "./presentation-competition.js";
 import { presentationOpinionSummary } from "./presentation-opinion-results.js";
+import { presentationNavigationSnapshot } from "./presentation-navigation.js";
+import {
+  presentationDeliveredScene,
+  presentationInteractionSnapshot,
+  presentationBranchSnapshot,
+} from "./presentation-advanced-interactions.js";
 import {
   presentationResponseMatchesBlock,
   presentationResponsesForContent,
@@ -109,7 +115,10 @@ function facilitatorVisibleResponses(
  * Participant projection is deliberately an allowlist. New authoring fields remain private until
  * explicitly reviewed for participant delivery.
  */
-export function presentationParticipantBlock(block: PresentationBlock | null) {
+export function presentationParticipantBlock(
+  block: PresentationBlock | null,
+  session?: PresentationSessionRecord,
+) {
   if (!block) return null;
   if (block.kind === "content") {
     return {
@@ -119,7 +128,7 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
-      ...(block.scene ? { scene: structuredClone(block.scene) } : {}),
+      ...(block.scene ? { scene: presentationDeliveredScene(block, session) } : {}),
     };
   }
   const question = block.question;
@@ -255,6 +264,8 @@ function presentationRealtimeBlock(
   block: PresentationBlock | null,
   facilitator: boolean,
   revealAnswer = false,
+  session?: PresentationSessionRecord,
+  staffScene = facilitator,
 ) {
   if (!block) return null;
   if (block.kind === "content") {
@@ -265,7 +276,7 @@ function presentationRealtimeBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
-      ...(block.scene ? { scene: structuredClone(block.scene) } : {}),
+      ...(block.scene ? { scene: presentationDeliveredScene(block, session, staffScene) } : {}),
     };
   }
   return {
@@ -357,6 +368,15 @@ export function buildPresentationHostSnapshot(
     ...(recoveryPackCards.length ? { recoveryPackCards } : {}),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "host",
+    ...(session.content.schemaVersion >= 12
+      ? { navigation: presentationNavigationSnapshot(session) }
+      : {}),
+    ...(session.content.schemaVersion >= 13
+      ? {
+          interactionState: presentationInteractionSnapshot(session, true),
+          branches: presentationBranchSnapshot(session, responses),
+        }
+      : {}),
     ...(requiresPresentationTextOpinions(session.content) ? { textModerationAvailable: true } : {}),
     presenter: {
       speakerNotes: block?.kind === "content" ? block.speakerNotes : "",
@@ -366,6 +386,9 @@ export function buildPresentationHostSnapshot(
           : presentationRealtimeBlock(
               session.content.blocks[session.currentBlockIndex + 1] ?? null,
               false,
+              false,
+              session,
+              true,
             ),
     },
     currentBlock: presentationRealtimeBlock(
@@ -374,6 +397,7 @@ export function buildPresentationHostSnapshot(
       session.phase === "question_reveal" ||
         session.phase === "intervention" ||
         session.phase === "finished",
+      session,
     ),
     participantCount: participants.length,
     ...(presentationHasQuestions(session)
@@ -437,7 +461,10 @@ export function buildPresentationStageSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "stage",
-    currentBlock: presentationRealtimeBlock(block, false),
+    ...(session.content.schemaVersion >= 13
+      ? { interactionState: presentationInteractionSnapshot(session) }
+      : {}),
+    currentBlock: presentationRealtimeBlock(block, false, false, session),
     revealedAnswer:
       answerVisible && block?.kind === "question"
         ? presentationRevealedAnswer(block.question)
@@ -502,8 +529,11 @@ export function buildPresentationParticipantSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "participant",
+    ...(session.content.schemaVersion >= 13
+      ? { interactionState: presentationInteractionSnapshot(session) }
+      : {}),
     participantId,
-    currentBlock: presentationRealtimeBlock(block, false),
+    currentBlock: presentationRealtimeBlock(block, false, false, session),
     participantCount: data.participants.length,
     responseSubmitted: Boolean(currentResponse),
     ...(ownTextResponse ? { ownTextResponse } : {}),
@@ -547,7 +577,11 @@ export function buildTargetedPresentationParticipantSnapshot(
     ? presentationResponsesForContent(session.content, [projection.currentResponse])[0]!
     : null;
   const block = presentationCurrentBlock(session);
-  const currentResponse = presentationResponseMatchesBlock(block, acknowledgedResponse.blockId)
+  const currentResponse = presentationResponseMatchesBlock(
+    block,
+    acknowledgedResponse.blockId,
+    session.content.schemaVersion >= 12,
+  )
     ? block?.kind === "question" &&
       isPresentationTextResultQuestion(block.question) &&
       projectedCurrentResponse?.id === acknowledgedResponse.id
@@ -591,7 +625,10 @@ export function buildTargetedPresentationParticipantSnapshot(
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "participant",
     participantId,
-    currentBlock: presentationRealtimeBlock(block, false),
+    ...(session.content.schemaVersion >= 13
+      ? { interactionState: presentationInteractionSnapshot(session) }
+      : {}),
+    currentBlock: presentationRealtimeBlock(block, false, false, session),
     participantCount: projection.participantCount,
     responseSubmitted: Boolean(currentResponse),
     ...(ownTextResponse ? { ownTextResponse } : {}),
@@ -660,7 +697,11 @@ export function buildPresentationCompanionSnapshot(
       ? { recoveryPackIntervention: host.recoveryPackIntervention }
       : {}),
     projection: "companion",
-    currentBlock: presentationRealtimeBlock(block, false),
+    ...(host.navigation ? { navigation: host.navigation } : {}),
+    ...(host.interactionState
+      ? { interactionState: host.interactionState, branches: host.branches }
+      : {}),
+    currentBlock: presentationRealtimeBlock(block, false, false, session, true),
     roomStatus: host.roomStatus,
     canInsertRecoveryPack,
     canInsertQuickCheck,

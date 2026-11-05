@@ -45,29 +45,38 @@ import {
 import { formatDateTime } from "../../lib/i18n/format";
 import {
   addContentTextElement,
+  addPresentationSection,
   applyContentSlideLayout,
+  assignPresentationBlockToSection,
   changePresentationQuestionType,
   contentSlideTitle,
   createContentBlock,
   createContentTextElement,
   createQuestionBlock,
   duplicatePresentationBlock,
+  enablePresentationSections,
+  insertPresentationBlockDuplicate,
   movePresentationBlock,
   canMovePresentationBlock,
   setPresentationSlideHidden,
   moveContentTextElement,
   normalizePresentationRecoveryDraft,
   presentationReadiness,
+  presentationInteractionTargets,
+  presentationSectionForBlock,
   promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
   setContentTextElementFrame,
   setContentSlideMedia,
   removePresentationBlock,
+  removePresentationSection,
+  renamePresentationSection,
   updateContentTextElement,
   updatePresentationQuestion,
 } from "../../lib/presentation-builder";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
+import { PresentationShareButton } from "../presentation-sharing/share-dialog";
 import {
   applyNativeDesignToDeck,
   applyNativeSceneToDeck,
@@ -102,6 +111,8 @@ import {
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { PresentationVisualImport } from "./presentation-visual-import";
+import { PresentationSections } from "./presentation-sections";
+import { PresentationBranchEditor } from "./presentation-branch-editor";
 import {
   adaptContentSlideToScene,
   attachNativeImage,
@@ -291,6 +302,18 @@ function PresentationPreview({
                 <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
               )}
               variant="preview"
+              interactionRuntime={{
+                mode: "review",
+                navigationTargets: presentationInteractionTargets(publication, block.id).map(
+                  (target) => ({ blockId: target.id, available: true, blockedReason: null }),
+                ),
+                onNavigate: (_nodeId, targetId) => {
+                  const target = publication.blocks.findIndex(
+                    (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
+                  );
+                  if (target >= 0) setIndex(target);
+                },
+              }}
             />
           ) : (
             <article className={styles.previewQuestion}>
@@ -1898,6 +1921,12 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               ? t("delivery.presentationBuilder.published")
               : t("delivery.common.publish")}
           </button>
+          <PresentationShareButton
+            className={styles.shareButton}
+            presentationId={presentationId}
+            versionId={record.currentVersionId}
+            disabled={!canEdit}
+          />
           <button
             aria-expanded={inspectorOpen}
             className={styles.iconButton}
@@ -2107,6 +2136,25 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               ‹
             </button>
           </div>
+          <PresentationSections
+            enabled={draft.schemaVersion >= 12}
+            sections={draft.sections ?? []}
+            selectedBlockId={selectedBlockId}
+            onEnable={() => commit(enablePresentationSections)}
+            onAdd={() => {
+              const sectionId = clientUuid();
+              commit((current) => addPresentationSection(current, sectionId));
+            }}
+            onRename={(sectionId, title) =>
+              commit((current) => renamePresentationSection(current, sectionId, title))
+            }
+            onDelete={(sectionId) =>
+              commit((current) => removePresentationSection(current, sectionId))
+            }
+            onAssign={(blockId, sectionId) =>
+              commit((current) => assignPresentationBlockToSection(current, blockId, sectionId))
+            }
+          />
           <ol className={styles.blockList}>
             {draft.blocks.map((block, index) => (
               <li key={block.id}>
@@ -2148,6 +2196,12 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                           { number: index + 1 },
                         )}
                     </strong>
+                    {presentationSectionForBlock(draft.sections, block.id) ? (
+                      <span className={styles.sectionBadge} lang="">
+                        {presentationSectionForBlock(draft.sections, block.id)?.title ||
+                          "Unnamed section"}
+                      </span>
+                    ) : null}
                   </span>
                   {block.kind === "content" && block.hidden ? (
                     <span className={styles.hiddenBadge} lang="en-CA">
@@ -2383,9 +2437,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 </p>
               )}
               <button
+                disabled={draft.blocks.length >= 200}
                 onClick={() => {
                   const copy = duplicatePresentationBlock(selectedBlock);
-                  addBlock(copy);
+                  commit((current) =>
+                    insertPresentationBlockDuplicate(current, selectedBlock.id, copy),
+                  );
+                  setSelectedBlockId(copy.id);
+                  setInspectorTab(copy.kind === "content" ? "content" : "build");
                 }}
                 type="button"
               >
@@ -2461,6 +2520,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               <NativeSceneEditor
                 key={selectedBlock.id}
                 scene={selectedBlock.scene}
+                navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
                 onUndo={undo}
                 onRedo={redo}
                 onApplyDesignToDeck={(design) => {
@@ -2583,6 +2643,27 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                   uxBeta
                 />
               </div>
+              <PresentationBranchEditor
+                block={selectedBlock}
+                targets={presentationInteractionTargets(draft, selectedBlock.id, true)}
+                onChange={(branches, historyField) =>
+                  commit(
+                    (current) => ({
+                      ...current,
+                      schemaVersion: 13,
+                      sections: current.sections ?? [],
+                      blocks: current.blocks.map((block) => {
+                        if (block.id !== selectedBlock.id || block.kind !== "question")
+                          return block;
+                        const copy = { ...block };
+                        delete copy.branches;
+                        return branches.length ? { ...copy, branches } : copy;
+                      }),
+                    }),
+                    historyField ? `${selectedBlock.id}:${historyField}` : undefined,
+                  )
+                }
+              />
             </section>
           )}
         </main>

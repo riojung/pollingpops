@@ -1023,6 +1023,94 @@ Presentation REST endpoints additionally include:
   when it also carries opinion summaries, `includeOpinionResults=true`. Quick Check attribution
   independently requires `includeQuickChecks=true` as described above.
 
+Presentation document **v12** opts into named `sections:[{id,title,blockIds}]` and durable live
+navigation. Titles are plain text up to 120 characters, with at most 50 sections and one membership
+per block. Drafts may retain unnamed/empty sections; publication requires names and removes hidden
+members and empty sections. UUID membership comparisons are semantic while authored JSON remains
+unchanged. Existing block order is the default path. Scene versions and ordinary defaults stay
+unchanged. Migration095 and compatible readers must precede these writes.
+
+Host and Companion command transports accept `jump_to_block` with `targetBlockId:UUID` and
+`return_to_path` without a target. The existing command envelope supplies session/role credential,
+`commandId` and `expectedRevision`. Navigation is authorized against the frozen session blocks,
+never a client array index. Exact retries keep their ID/revision/action/target and may bind a
+replacement credential of the same role. Target UUID spelling is canonicalized in the fingerprint.
+Changed intent with a reused key returns an idempotency conflict; competing commands keep the
+existing revision fence.
+
+V12 host/Companion snapshots optionally include `navigation` with ordered `entries`, explicit
+`returnTarget`, `canReturn` and `blockedReason`. Entries contain stable block ID, public title,
+kind, section label, current/visited/not_visited status, saved phase and server-derived `canJump`/
+reason. Participant and stage snapshots omit this entire map. Open questions must close/reveal
+before jump/return; pending linked rechecks remain indivisible. Direct recheck jumps are rejected.
+Saved closed phases, original windows and interventions are restored without another attempt or
+score. Ordinary Next emits `navigation.revisited` when restoring a visited block; explicit commands
+emit `navigation.jumped` or `navigation.returned` with from/to/anchor IDs and a restored flag.
+
+Finished v12 sessions produce **Presentation ReportV6**. Add `includeNavigation=true` to the private
+report GET; omit it and a ready v6 report returns 422. Existing text/opinion/Quick Check opt-ins
+still apply. The `navigation` report contains each block's section, presented/skipped status and
+saved phase, plus jump/return counts. Skipped questions have zero respondents/score, null
+correctness/accuracy and no result summary. Old reports and their event enums retain their shape.
+See the [v12 rollout](runbooks/upgrade.md#presentation-sections-and-navigation-compatibility).
+
+Document **v13 / scene v6** adds typed `hotspot`, `dialog` and `navigation` nodes and the
+`broadcast` reveal scope. Hotspots refer to a same-scene unrotated image and must remain inside
+its frame at publication. Detail content is plain audience text. Internal targets are stable
+published block UUIDs, with missing/hidden/self/recheck targets rejected. Drafts may retain
+incomplete fields for editing. Migration096 and matching readers must precede these writes.
+
+Both staff command transports additionally accept `set_reveal:{blockId,nodeId,revealed}`,
+`navigate_scene:{blockId,nodeId}` and `follow_branch:{blockId,branchId}`, inside the existing exact
+command envelope. The server resolves frozen controls and computes branch eligibility; a client
+cannot provide a replacement target or aggregate. Reveal state commits separately from scene,
+navigation, response and scoring state. Exact retries preserve every intent field while role
+credentials may rotate. New-ID reveal no-ops are rejected. Audience snapshots expose only current
+block reveal flags, redact closed broadcast bodies and omit internal target graphs/branch rules.
+
+Question `branches` contain at most ten named UUID rules with a forward target and a `condition`:
+`{kind:"choice_share",choiceId,minPercent,minResponses}` or
+`{kind:"correct_share",minPercent,minResponses}`.
+Minimum responses is 1–10000 and percentage 0–100. Only unlinked main questions support branches.
+Staff snapshots include server-derived `branches` availability after explicit reveal. Ordinary
+Next remains linear; `follow_branch` is an explicit facilitator action. The transaction rechecks
+the accepted response aggregate. No participant submission automatically moves the shared room.
+
+Finished v13 rooms produce **ReportV7**, requiring `includeInteractions=true` as well as existing
+navigation/result opt-ins. `interactionSummary` counts reveal changes and branches. Timeline
+events `scene.reveal_changed` and `navigation.branched` contain typed IDs/aggregate metadata,
+never reveal bodies. Old reports retain their event enums.
+
+Private Presentation review sharing uses separate **recipient contract v1** and migration097:
+
+- `POST /v1/presentations/{id}/shares` — owner/editor, published unarchived source, body
+  `{requestId,versionId,expiresAt,token}`. `expiresAt` is absolute and within thirty days; `token`
+  is a canonical base64url 32-byte random value. Retain this exact request before sending. The
+  response contains safe metadata, a fragment-token URL and `replayed`; only hashes are stored.
+  An expired request that was never accepted returns `410` with error code
+  `PRESENTATION_SHARE_REQUEST_EXPIRED`. A matching accepted receipt is replayed before expiry
+  validation, even if its link has since expired. Only the explicit expired-request response
+  releases a pending create intent; network errors and unrelated rejections retain exact retries.
+- `GET /v1/presentations/{id}/shares` and `DELETE /v1/presentations/{id}/shares/{shareId}` — private
+  owner/editor list and explicit revocation. Limits are twenty active and one hundred retained
+  records per deck; expired records are retained for seven days for reconciliation.
+- `GET /v1/shared-presentations/{id}` — Bearer capability only, no-store recipient-safe frozen
+  version. Notes, keys, explanations, provenance, branch configuration, moderation, scores and
+  live state are excluded. Questions are read-only; no learner attempt is created.
+- `GET /v1/shared-presentations/{id}/access` — small capability/authority/feature recheck returning
+  `{versionId,expiresAt}`, used before each local page transition without loading the full deck.
+- `GET /v1/shared-presentations/{id}/media/{mediaId}` — scanned frozen-reference image bytes,
+  authorized before and after bounded storage reads. No signed URL bypasses later revocation.
+- `GET /v1/presentation-sessions/{id}/companion-media/{mediaId}` — explicit Companion Bearer pass,
+  current-block image only, returning `{media,downloadUrl}` under the existing live-media policy.
+
+Review URLs put their token in the fragment, which the client scrubs into per-tab state. Requests
+omit cookies and use no-referrer. Expiry, revocation, publisher authority loss, feature disablement
+and source deletion invalidate access. A link stays on its immutable version after later edits or
+publications. Review interactions and navigation are local; these links do not implement self-paced
+assignments, responses or completion. See the
+[advanced/sharing rollout](runbooks/upgrade.md#presentation-advanced-interactions-and-private-sharing-compatibility).
+
 New Presentation rooms require their workspace and realtime creation eligibility. Creator control
 requires an owner/editor; guest routes use session-scoped credentials. Deleting a room disconnects
 its sockets through the shared adapter and removes credentials, pending broadcasts, and durable

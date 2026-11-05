@@ -1,0 +1,176 @@
+.review {
+  min-height: 100vh;
+  background: var(--ui-canvas);
+  color: var(--ui-text);
+}
+.reviewLayout {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.pageMap {
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  padding: 12px;
+  border-radius: 12px;
+}
+.pageMap ol {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.pageMap button {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.pageMap button[aria-current] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent);
+}
+.viewer {
+  min-width: 0;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0;
+}
+.controls h2 {
+  margin: 0;
+}
+.review button,
+.dialog button {
+  padding: 9px 12px;
+  min-height: 44px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  font: inherit;
+  cursor: pointer;
+}
+.review button:disabled,
+.dialog button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pageMap label,
+.dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.pageMap select,
+.dialog select,
+.dialog textarea {
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  font: inherit;
+}
+.dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: 85vh;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.shareList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.shareList li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.created {
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.created textarea {
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+.created a {
+  display: inline-block;
+  margin: 12px;
+}
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+.question {
+  padding: 24px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.question li {
+  padding: 8px;
+}
+.readable {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.readable p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  .reviewLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pageMap {
+    max-height: 180px;
+  }
+  .dialog {
+    padding: 14px;
+  }
+}
+.shareShortLabel {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .shareLongLabel {
+    display: none;
+  }
+
+  .shareShortLabel {
+    display: inline;
+  }
+}

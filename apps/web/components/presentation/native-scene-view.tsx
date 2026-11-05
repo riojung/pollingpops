@@ -26,6 +26,8 @@ import { NativeSceneDataView } from "./native-scene-data-view";
 import {
   NativeSceneInteractionView,
   containNativeInteractionKey,
+  isNativeInteractionNode,
+  type NativeSceneInteractionRuntime,
 } from "./native-scene-interaction-view";
 import { selectedNativeSceneBounds } from "../../lib/presentation-native-geometry";
 
@@ -95,6 +97,7 @@ interface NativeSceneViewProps {
   /** Session/credential/connection identity, excluding ordinary snapshot revisions. */
   interactionSourceKey?: string;
   interactionEditing?: boolean;
+  interactionRuntime?: NativeSceneInteractionRuntime;
   selectedNodeId?: string;
   selectedNodeIds?: readonly string[];
   onSelect?: (id: string, additive?: boolean) => void;
@@ -110,9 +113,18 @@ interface NativeSceneViewProps {
 
 /** Replaced delivery sources start closed without a stale expanded render. */
 export function NativeSceneView(props: NativeSceneViewProps) {
+  const identityScene =
+    props.interactionRuntime?.mode === "live_audience"
+      ? {
+          ...props.scene,
+          nodes: props.scene.nodes.map((node) =>
+            node.type === "reveal" && node.scope === "broadcast" ? { ...node, body: "" } : node,
+          ),
+        }
+      : props.scene;
   return (
     <NativeSceneSurface
-      key={props.onSelect ? "editor" : JSON.stringify([props.interactionSourceKey, props.scene])}
+      key={props.onSelect ? "editor" : JSON.stringify([props.interactionSourceKey, identityScene])}
       {...props}
     />
   );
@@ -129,12 +141,15 @@ function NativeSceneSurface({
   onGeometryKey,
   onNodePointerDown,
   interactionEditing = false,
+  interactionRuntime,
 }: NativeSceneViewProps) {
   const markerId = useId();
   const [outline, setOutline] = useState(false);
-  const hasInteractions = scene.nodes.some(
-    (node) => node.type === "reveal" || node.type === "link",
-  );
+  const hasInteractions = scene.nodes.some(isNativeInteractionNode);
+  const sharedReveals =
+    interactionRuntime &&
+    interactionRuntime.mode !== "review" &&
+    scene.nodes.some((node) => node.type === "reveal" && node.scope === "broadcast");
   const sceneId = useId();
   const design = scene.design;
   const palette = design ? NATIVE_DESIGN_THEMES[design.theme] : undefined;
@@ -183,7 +198,9 @@ function NativeSceneSurface({
       {hasInteractions && !editing && !interactionEditing ? (
         <div className={styles.interactionToolbar} onKeyDown={containNativeInteractionKey}>
           <p>
-            Panels open only on this screen. They do not change other screens, responses or scores.
+            {sharedReveals
+              ? "Local details open on this screen. Broadcast reveals follow the facilitator."
+              : "Panels open only on this screen. They do not change other screens, responses or scores."}
           </p>
           <button
             type="button"
@@ -288,8 +305,12 @@ function NativeSceneSurface({
                 )
               ) : null}
               {node.type === "shape" ? <Shape node={node} /> : null}
-              {node.type === "reveal" || node.type === "link" ? (
-                <NativeSceneInteractionView node={node} editing={editing || interactionEditing} />
+              {isNativeInteractionNode(node) ? (
+                <NativeSceneInteractionView
+                  node={node}
+                  editing={editing || interactionEditing}
+                  runtime={interactionRuntime}
+                />
               ) : null}
               {node.type === "table" || node.type === "chart" ? (
                 <NativeSceneDataView node={node} />

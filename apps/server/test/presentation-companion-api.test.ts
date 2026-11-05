@@ -677,6 +677,10 @@ describe("Presentation scoped stage API", () => {
     }));
     const { session, controlToken } = await seedSession(creator.workspaceId, "active", blocks);
     const base = `/v1/presentation-sessions/${session.id}`;
+    const companion = (
+      await app.inject({ method: "POST", url: `${base}/companion-pass`, headers: { cookie } })
+    ).json<{ companionToken: string; credentialId: string }>();
+    const companionHeaders = { authorization: `Bearer ${companion.companionToken}` };
     const pass = (
       await app.inject({ method: "POST", url: `${base}/stage-pass`, headers: { cookie } })
     ).json<PresentationStagePassResponse>();
@@ -707,6 +711,15 @@ describe("Presentation scoped stage API", () => {
       expect(JSON.stringify(snapshot)).not.toContain(secret);
     for (const [index, mediaId] of mediaIds.entries()) {
       expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `${base}/companion-media/${mediaId}`,
+            headers: companionHeaders,
+          })
+        ).statusCode,
+      ).toBe(index === 0 ? 200 : 404);
+      expect(
         (await app.inject({ method: "GET", url: `${base}/stage-media/${mediaId}`, headers }))
           .statusCode,
       ).toBe(index === 0 ? 200 : 404);
@@ -729,6 +742,16 @@ describe("Presentation scoped stage API", () => {
         })
       ).statusCode,
     ).toBe(401);
+    for (const unauthorized of [{ cookie }, headers, { authorization: `Bearer ${controlToken}` }])
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `${base}/companion-media/${mediaIds[0]}`,
+            headers: unauthorized,
+          })
+        ).statusCode,
+      ).toBe(401);
     await app.inject({
       method: "POST",
       url: `${base}/command`,
@@ -742,6 +765,38 @@ describe("Presentation scoped stage API", () => {
       (await app.inject({ method: "GET", url: `${base}/stage-media/${mediaIds[1]}`, headers }))
         .statusCode,
     ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/companion-media/${mediaIds[0]}`,
+          headers: companionHeaders,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/companion-media/${mediaIds[1]}`,
+          headers: companionHeaders,
+        })
+      ).statusCode,
+    ).toBe(200);
+    await app.inject({
+      method: "DELETE",
+      url: `${base}/companion-passes/${companion.credentialId}`,
+      headers: { cookie },
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `${base}/companion-media/${mediaIds[1]}`,
+          headers: companionHeaders,
+        })
+      ).statusCode,
+    ).toBe(401);
     expect(
       (await app.inject({ method: "GET", url: `${base}/stage`, headers })).json(),
     ).toMatchObject({ snapshot: { revision: 2, currentBlock: { id: blocks[1]!.id } } });

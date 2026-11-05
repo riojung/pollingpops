@@ -110,6 +110,72 @@ async function fixture() {
 }
 
 describe("Presentation visual import", () => {
+  it("preserves a v12 starter section when visual import replaces the empty slide", async () => {
+    const f = await fixture();
+    const initial = (await f.presentations.getPresentation(workspaceId, f.id))!;
+    const owner = [...f.repository.workspaceMembers.values()].find(
+      (member) => member.workspaceId === workspaceId,
+    )!;
+    const sectionId = randomUUID();
+    await f.presentations.updatePresentationDraft({
+      workspaceId,
+      presentationId: f.id,
+      expectedRevision: 0,
+      mutationId: randomUUID(),
+      editorId: owner.userId,
+      draftHash: "e".repeat(64),
+      draft: {
+        ...initial.draft,
+        schemaVersion: 12,
+        sections: [
+          {
+            id: sectionId,
+            title: "Imported chapter",
+            blockIds: [initial.draft.blocks[0]!.id],
+          },
+        ],
+      },
+    });
+    const created = await f.create();
+    const jobId = created.json<{ job: PresentationVisualImportJob }>().job.id;
+    expect(await f.worker.runOnce()).toBe("completed");
+    const input = {
+      expectedRevision: 1,
+      mutationId: randomUUID(),
+      afterBlockId: initial.draft.blocks[0]!.id,
+      fidelityAccepted: true,
+      pages: [
+        {
+          pageNumber: 1,
+          title: "Page",
+          alternativeText: "Diagram",
+          accessibleText: "Reading order",
+          readingOrderReviewed: true,
+        },
+      ],
+    };
+    const insert = () =>
+      f.app.inject({
+        method: "POST",
+        url: `${f.base}/${jobId}/insert`,
+        headers: { cookie: f.cookie },
+        payload: input,
+      });
+    const inserted = await insert();
+    expect(inserted.statusCode, inserted.body).toBe(200);
+    const result = inserted.json<{
+      presentation: { draft: unknown };
+      insertedBlockIds: string[];
+    }>();
+    const content = PresentationContentSchema.parse(result.presentation.draft);
+    expect(content.schemaVersion).toBe(12);
+    expect(content.sections).toEqual([
+      { id: sectionId, title: "Imported chapter", blockIds: result.insertedBlockIds },
+    ]);
+    expect(content.blocks.map((block) => block.id)).toEqual(result.insertedBlockIds);
+    expect((await insert()).json()).toEqual(inserted.json());
+  });
+
   it("converts privately, selects/reorders reviewed pairs, publishes and recovers exact insert retries", async () => {
     const f = await fixture();
     const created = await f.create();

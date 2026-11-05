@@ -35,3 +35,9 @@ export * from "./canvas-artifact-links.js";
 export * from "./presentation-text-types.js";
 export * from "./presentation-visual-import-types.js";
 export * from "./presentation-visual-imports.js";
+
+export * from "./presentation-navigation.js";
+
+export * from "./presentation-shares.js";
+
+export * from "./presentation-interactions.js";

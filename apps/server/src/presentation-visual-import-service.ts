@@ -293,6 +293,7 @@ export class PresentationVisualImportService {
       ];
     });
     const blocks = [...presentation.draft.blocks];
+    let sections = presentation.draft.sections;
     // The durable draft mutation receipt owns retry semantics, even after later edits.
     if (!inserted.some((block) => blocks.some((existing) => existing.id === block.id))) {
       const anchor =
@@ -322,13 +323,23 @@ export class PresentationVisualImportService {
           422,
           "Select fewer pages. Each page adds a visual and a reading slide, within the 200-block limit.",
         );
-      if (replaceEmptyStarter) blocks.splice(0, 1, ...inserted);
-      else blocks.splice(anchor + 1, 0, ...inserted);
+      if (replaceEmptyStarter) {
+        blocks.splice(0, 1, ...inserted);
+        sections = sections?.map((section) => ({
+          ...section,
+          blockIds: section.blockIds.flatMap((id) =>
+            id.toLowerCase() === starter.id.toLowerCase()
+              ? inserted.map((block) => block.id)
+              : [id],
+          ),
+        }));
+      } else blocks.splice(anchor + 1, 0, ...inserted);
     }
     const draft = PresentationDraftSchema.parse({
       ...presentation.draft,
       schemaVersion: Math.max(4, presentation.draft.schemaVersion),
       blocks,
+      ...(sections ? { sections } : {}),
     });
     const updated = await this.presentations.updatePresentationDraft({
       workspaceId: creator.workspaceId,

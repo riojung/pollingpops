@@ -26,6 +26,7 @@ import {
   type PresentationSessionRecord,
   type PresentationSessionRepository,
   type PresentationSessionResponseRecord,
+  type PresentationSessionTransitionInput,
   type Repository,
   type RecoveryPackRepository,
 } from "@openround/db";
@@ -62,8 +63,14 @@ import {
 } from "./presentation-session-response-policy.js";
 import {
   presentationResponseMatchesBlock,
+  presentationAuthoredResponse,
   presentationResponsesForContent,
 } from "./presentation-response-identifiers.js";
+import {
+  presentationNavigationTransition,
+  restorePresentationNavigationTarget,
+} from "./presentation-navigation.js";
+import { presentationAdvancedInteractionTransition } from "./presentation-advanced-interactions.js";
 
 export interface SubmitPresentationResponseInput {
   sessionId: string;
@@ -104,6 +111,7 @@ type PresentationMutationSessionRepository = Pick<
   | "transitionSessionCommand"
   | "findCommandReceipt"
   | "findParticipant"
+  | "listResponses"
   | "getResponseContext"
   | "acceptResponse"
   | "findResponseByIdempotencyKey"
@@ -158,7 +166,7 @@ interface PresentationLiveMutationDependencies {
   recordProductEvents(workspaceId: string, events: ProductEventInput[]): void;
 }
 
-function nextTransition(session: PresentationSessionRecord) {
+function linearNextTransition(session: PresentationSessionRecord) {
   const blocks = session.content.blocks;
   if (session.phase === "finished") return null;
   if (session.phase === "question_open") {
@@ -218,6 +226,11 @@ function nextTransition(session: PresentationSessionRecord) {
       blockId: next.id,
     },
   };
+}
+
+function nextTransition(session: PresentationSessionRecord) {
+  const next = linearNextTransition(session);
+  return next ? restorePresentationNavigationTarget(session, next) : null;
 }
 
 function recoveryCardTransition(
@@ -429,13 +442,25 @@ export class PresentationLiveMutationService {
       const transition =
         input.action === "advance"
           ? nextTransition(session)
-          : input.action === "start_recovery_card"
-            ? recoveryCardTransition(session, input)
-            : input.action === "insert_quick_check"
-              ? await this.quickCheckInsertionTransition(session, input)
-              : input.action === "insert_published_question"
-                ? await this.publishedQuestionInsertionTransition(session, input)
-                : await this.recoveryPackInsertionTransition(session, input);
+          : input.action === "jump_to_block" || input.action === "return_to_path"
+            ? presentationNavigationTransition(session, input)
+            : input.action === "set_reveal" ||
+                input.action === "navigate_scene" ||
+                input.action === "follow_branch"
+              ? presentationAdvancedInteractionTransition(
+                  session,
+                  input,
+                  input.action === "follow_branch"
+                    ? await this.dependencies.sessions.listResponses(session.id)
+                    : [],
+                )
+              : input.action === "start_recovery_card"
+                ? recoveryCardTransition(session, input)
+                : input.action === "insert_quick_check"
+                  ? await this.quickCheckInsertionTransition(session, input)
+                  : input.action === "insert_published_question"
+                    ? await this.publishedQuestionInsertionTransition(session, input)
+                    : await this.recoveryPackInsertionTransition(session, input);
       if (!transition) return snapshot(session);
       const transitionRetentionExpiresAt = await this.transitionRetentionExpiry(
         session.workspaceId,
@@ -672,7 +697,6 @@ export class PresentationLiveMutationService {
     // Capture receipt before reads/validation so network or database latency cannot improve a score
     // or admit an answer after the server-side close instant.
     const receivedAt = input.receivedAt ?? new Date();
-    const requestHash = presentationResponseRequestHash(input);
     const context = await this.dependencies.sessions.getResponseContext(
       input.sessionId,
       this.dependencies.participantTokenHash(input.participantToken),
@@ -686,6 +710,8 @@ export class PresentationLiveMutationService {
       );
     }
     const { session, participant, priorResponse } = context;
+    const semanticIds = session.content.schemaVersion >= 12;
+    const requestHash = presentationResponseRequestHash(input, semanticIds);
     const acknowledgePriorReceipt = async (
       knownReceipt?: PresentationSessionResponseRecord | null,
     ): Promise<PresentationResponseAck | null> => {
@@ -723,7 +749,7 @@ export class PresentationLiveMutationService {
     // matching idempotency receipt before its live phase/revision fence, allowing a lost ack to be
     // recovered after the host advances without ever applying the payload to the next question.
     const submittedBlock = session.content.blocks.find((block) =>
-      presentationResponseMatchesBlock(block, input.blockId),
+      presentationResponseMatchesBlock(block, input.blockId, semanticIds),
     );
     if (submittedBlock?.kind !== "question") {
       const replayed = await acknowledgePriorReceipt();
@@ -740,16 +766,19 @@ export class PresentationLiveMutationService {
         },
       );
     }
+    const submittedResponse = semanticIds
+      ? presentationAuthoredResponse(submittedBlock.question, input.response)
+      : input.response;
     const validationMessage = presentationResponseValidationMessage(
       submittedBlock.question,
-      input.response,
+      submittedResponse,
     );
     if (validationMessage) {
       const replayed = await acknowledgePriorReceipt();
       if (replayed) return replayed;
       throw new PresentationSessionServiceError(422, "VALIDATION_ERROR", validationMessage);
     }
-    const correct = presentationResponseCorrect(submittedBlock.question, input.response);
+    const correct = presentationResponseCorrect(submittedBlock.question, submittedResponse);
     const timing = presentationResponseTiming(session, receivedAt);
     const acceptance = await this.acceptResponse(
       {
@@ -766,7 +795,7 @@ export class PresentationLiveMutationService {
                 submittedBlock.question.type,
               ),
             }
-          : input.response,
+          : submittedResponse,
         responseSchemaVersion: isPresentationTextResultQuestion(submittedBlock.question)
           ? 3
           : isPresentationOpinionResultQuestion(submittedBlock.question)
@@ -787,7 +816,7 @@ export class PresentationLiveMutationService {
       const current = presentationCurrentBlock(currentSession);
       if (
         currentSession.revision !== input.expectedRevision ||
-        !presentationResponseMatchesBlock(current, input.blockId)
+        !presentationResponseMatchesBlock(current, input.blockId, semanticIds)
       ) {
         throw new PresentationSessionServiceError(
           409,
@@ -903,7 +932,7 @@ export class PresentationLiveMutationService {
 
   private recordAcceptedTransitionProductEvents(
     session: PresentationSessionRecord,
-    transition: NonNullable<ReturnType<typeof nextTransition>>,
+    transition: Pick<PresentationSessionTransitionInput, "event" | "status">,
   ) {
     const occurredAt = session.updatedAt.toISOString();
     if (transition.event.type === "intervention.presented") {
@@ -962,7 +991,11 @@ export class PresentationLiveMutationService {
       duplicate &&
       ["question_reveal", "intervention", "finished"].includes(session.phase) &&
       block?.kind === "question" &&
-      presentationResponseMatchesBlock(block, response.blockId) &&
+      presentationResponseMatchesBlock(
+        block,
+        response.blockId,
+        session.content.schemaVersion >= 12,
+      ) &&
       isPresentationOpinionResultQuestion(block.question)
     ) {
       try {

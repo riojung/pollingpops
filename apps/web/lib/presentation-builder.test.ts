@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { recoveryPackDraftFromPair } from "./recovery-packs";
 import {
   addContentTextElement,
+  addPresentationSection,
   applyContentSlideLayout,
+  assignPresentationBlockToSection,
   canMovePresentationBlock,
   changePresentationQuestionType,
   contentSlideTitle,
@@ -12,14 +14,19 @@ import {
   createPresentationQuestion,
   createQuestionBlock,
   duplicatePresentationBlock,
+  enablePresentationSections,
+  insertPresentationBlockDuplicate,
   movePresentationBlock,
   moveContentTextElement,
   normalizePresentationRecoveryDraft,
   presentationReadiness,
+  presentationSectionForBlock,
   promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
   removePresentationBlock,
+  removePresentationSection,
+  renamePresentationSection,
   setContentTextElementFrame,
   setContentSlideMedia,
   setPresentationSlideHidden,
@@ -30,6 +37,7 @@ import { removeQuestionChoice, type ChoiceQuestionDraft } from "../components/ed
 import {
   PresentationContentSchema,
   PresentationDraftSchema,
+  preparePresentationPublication,
   RecoveryPackContentSchema,
   recoveryPackContentHash,
   resolveContentSlideFrames,
@@ -419,7 +427,13 @@ describe("presentation builder model", () => {
     expect(
       normalizePresentationRecoveryDraft({ ...current, schemaVersion: 11 }).schemaVersion,
     ).toBe(11);
-    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 12 })).toThrow();
+    expect(
+      normalizePresentationRecoveryDraft({ ...current, schemaVersion: 12 }).schemaVersion,
+    ).toBe(12);
+    expect(
+      normalizePresentationRecoveryDraft({ ...current, schemaVersion: 13 }).schemaVersion,
+    ).toBe(13);
+    expect(() => normalizePresentationRecoveryDraft({ ...current, schemaVersion: 14 })).toThrow();
     expect(() =>
       normalizePresentationRecoveryDraft({ schemaVersion: 1, blocks: "invalid" }),
     ).toThrow();
@@ -555,6 +569,172 @@ describe("presentation builder model", () => {
     expect(moved.blocks[0]?.id).toBe(second.id);
     expect(source.blocks[0]?.id).not.toBe(second.id);
     expect(removePresentationBlock(moved, second.id).blocks).toHaveLength(1);
+  });
+
+  it("opts into sections explicitly and retains document v12 when restoring earlier history", () => {
+    const original = draft();
+    expect(promotePresentationOpinionFormats(original)).toBe(original);
+    const enabled = enablePresentationSections(original);
+    expect(enabled).toMatchObject({ schemaVersion: 12, sections: [] });
+    expect(enabled.blocks).toBe(original.blocks);
+    expect(original).not.toHaveProperty("sections");
+    expect(enablePresentationSections(enabled)).toBe(enabled);
+    const restored = promotePresentationOpinionFormats(original, enabled.schemaVersion);
+    expect(restored).toMatchObject({ schemaVersion: 12, sections: [] });
+    expect(restored.blocks).toBe(original.blocks);
+    expect(PresentationContentSchema.safeParse(restored).success).toBe(true);
+    expect(normalizePresentationRecoveryDraft(restored)).toEqual(restored);
+  });
+
+  it("adds, renames and removes sections without moving or deleting their blocks", () => {
+    const original = draft();
+    const id = randomUUID();
+    const added = addPresentationSection(original, id, "  Evidence  ");
+    expect(added.sections).toEqual([{ id, title: "Evidence", blockIds: [] }]);
+    expect(added.blocks).toBe(original.blocks);
+    const assigned = assignPresentationBlockToSection(added, original.blocks[0]!.id, id);
+    const renamed = renamePresentationSection(assigned, id, "  Discuss\n\t\u007f  ");
+    expect(renamed.sections?.[0]).toEqual({
+      id,
+      title: "Discuss",
+      blockIds: [original.blocks[0]!.id],
+    });
+    expect(renamePresentationSection(renamed, id, "Discuss")).toBe(renamed);
+    const longTitle = renamePresentationSection(renamed, id, "a".repeat(121));
+    expect(longTitle.sections?.[0]?.title).toHaveLength(120);
+    const removed = removePresentationSection(renamed, id);
+    expect(removed.sections).toEqual([]);
+    expect(removed.blocks).toBe(original.blocks);
+    expect(removed.schemaVersion).toBe(12);
+    expect(assigned.sections?.[0]?.title).toBe("Evidence");
+    expect(PresentationDraftSchema.safeParse(renamed).success).toBe(true);
+  });
+
+  it("moves section membership atomically while the numbered sequence remains authoritative", () => {
+    const first = randomUUID();
+    const second = randomUUID();
+    const source = addPresentationSection(addPresentationSection(draft(), first), second);
+    const block = source.blocks[0]!;
+    const assigned = assignPresentationBlockToSection(source, block.id, first);
+    expect(assignPresentationBlockToSection(assigned, block.id, first)).toBe(assigned);
+    const moved = assignPresentationBlockToSection(assigned, block.id, second);
+    expect(moved.sections?.map((section) => section.blockIds)).toEqual([[], [block.id]]);
+    expect(moved.blocks).toBe(source.blocks);
+    const reordered = movePresentationBlock(moved, block.id, 1);
+    expect(reordered.sections).toBe(moved.sections);
+    expect(reordered.blocks.map((block) => block.id)).toEqual([source.blocks[1]!.id, block.id]);
+    expect(normalizePresentationRecoveryDraft(reordered)).toEqual(reordered);
+    const unsectioned = assignPresentationBlockToSection(reordered, block.id, null);
+    expect(unsectioned.sections?.map((section) => section.blockIds)).toEqual([[], []]);
+    expect(PresentationDraftSchema.safeParse(unsectioned).success).toBe(true);
+  });
+
+  it("duplicates sectioned blocks with fresh identities and prunes membership on deletion", () => {
+    const sectionId = randomUUID();
+    const original = draft();
+    const block = original.blocks[0]!;
+    const source = assignPresentationBlockToSection(
+      addPresentationSection(original, sectionId),
+      block.id,
+      sectionId,
+    );
+    const copy = duplicatePresentationBlock(block);
+    const duplicated = insertPresentationBlockDuplicate(source, block.id, copy);
+    expect(duplicated.blocks.map((block) => block.id)).toEqual([
+      block.id,
+      copy.id,
+      original.blocks[1]!.id,
+    ]);
+    expect(duplicated.sections).toEqual([
+      { id: sectionId, title: "New section", blockIds: [block.id, copy.id] },
+    ]);
+    expect(insertPresentationBlockDuplicate(duplicated, block.id, copy)).toBe(duplicated);
+    const removed = removePresentationBlock(duplicated, block.id);
+    expect(removed.sections?.[0]?.blockIds).toEqual([copy.id]);
+    expect(PresentationDraftSchema.safeParse(removed).success).toBe(true);
+    expect(source.sections?.[0]?.blockIds).toEqual([block.id]);
+    const empty = removePresentationBlock(removed, copy.id);
+    expect(empty.sections?.[0]?.blockIds).toEqual([]);
+    expect(PresentationDraftSchema.safeParse(empty).success).toBe(true);
+    expect(preparePresentationPublication(empty).sections).toEqual([]);
+  });
+
+  it("preserves hidden memberships in history while readiness only validates published sections", () => {
+    const original = draft();
+    const sectionId = randomUUID();
+    const block = original.blocks[0]!;
+    const assigned = assignPresentationBlockToSection(
+      addPresentationSection(original, sectionId, ""),
+      block.id,
+      sectionId,
+    );
+    expect(presentationReadiness(assigned).some((issue) => issue.field === "sections")).toBe(true);
+    const hidden = setPresentationSlideHidden(assigned, block.id, true);
+    expect(hidden.schemaVersion).toBe(12);
+    expect(hidden.sections?.[0]?.blockIds).toEqual([block.id]);
+    expect(presentationReadiness(hidden)).toEqual([]);
+    expect(preparePresentationPublication(hidden).sections).toEqual([]);
+    expect(normalizePresentationRecoveryDraft(hidden)).toEqual(hidden);
+    const shown = setPresentationSlideHidden(hidden, block.id, false);
+    expect(shown.sections).toBe(hidden.sections);
+    expect(presentationReadiness(shown).some((issue) => issue.field === "sections")).toBe(true);
+  });
+
+  it("resolves valid UUID membership casing consistently when assigning, copying and deleting", () => {
+    const original = draft();
+    const block = original.blocks[0]!;
+    const sectionId = randomUUID();
+    const source: PresentationDraft = {
+      ...original,
+      schemaVersion: 12,
+      sections: [{ id: sectionId, title: "Evidence", blockIds: [block.id.toUpperCase()] }],
+    };
+    expect(presentationSectionForBlock(source.sections, block.id)?.id).toBe(sectionId);
+    expect(assignPresentationBlockToSection(source, block.id, sectionId.toUpperCase())).toBe(
+      source,
+    );
+    const copy = duplicatePresentationBlock(block);
+    const duplicated = insertPresentationBlockDuplicate(source, block.id, copy);
+    expect(duplicated.sections?.[0]?.blockIds).toEqual([block.id.toUpperCase(), copy.id]);
+    expect(removePresentationBlock(duplicated, block.id).sections?.[0]?.blockIds).toEqual([
+      copy.id,
+    ]);
+    expect(
+      assignPresentationBlockToSection(source, block.id, null).sections?.[0]?.blockIds,
+    ).toEqual([]);
+  });
+
+  it("keeps invalid section edits and capacity boundaries as stable no-ops", () => {
+    const source = enablePresentationSections(draft());
+    const missing = randomUUID();
+    expect(renamePresentationSection(source, missing, "Evidence")).toBe(source);
+    expect(removePresentationSection(source, missing)).toBe(source);
+    expect(assignPresentationBlockToSection(source, source.blocks[0]!.id, missing)).toBe(source);
+    expect(assignPresentationBlockToSection(source, missing, null)).toBe(source);
+    expect(assignPresentationBlockToSection(source, source.blocks[0]!.id, null)).toBe(source);
+    const full = {
+      ...source,
+      sections: Array.from({ length: 50 }, () => ({
+        id: randomUUID(),
+        title: "Section",
+        blockIds: [],
+      })),
+    };
+    expect(addPresentationSection(full, randomUUID())).toBe(full);
+    expect(addPresentationSection(full, full.sections[0]!.id)).toBe(full);
+    const one = addPresentationSection(source, missing);
+    expect(addPresentationSection(one, missing.toUpperCase())).toBe(one);
+    expect(
+      insertPresentationBlockDuplicate(
+        source,
+        missing,
+        duplicatePresentationBlock(source.blocks[0]!),
+      ),
+    ).toBe(source);
+    const fullDeck = { ...source, blocks: Array.from({ length: 200 }, () => createContentBlock()) };
+    expect(
+      insertPresentationBlockDuplicate(fullDeck, fullDeck.blocks[0]!.id, createContentBlock()),
+    ).toBe(fullDeck);
   });
 
   function linkedDraft(): PresentationDraft {

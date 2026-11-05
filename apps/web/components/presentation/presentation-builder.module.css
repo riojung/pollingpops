@@ -60,6 +60,10 @@
   justify-content: flex-end;
 }
 
+.shareButton {
+  min-height: 44px;
+}
+
 .commandStart {
   flex: 1 1 210px;
   min-width: 0;
@@ -78,6 +82,7 @@
 .canvasToolbar button,
 .compactCommands button,
 .addActions button,
+.sections button,
 .emptyCanvas button,
 .previewBar button,
 .previewControls button,
@@ -104,6 +109,7 @@
 
 .commandBar button:disabled,
 .canvasToolbar button:disabled,
+.sections button:disabled,
 .previewControls button:disabled {
   opacity: 0.42;
   cursor: not-allowed;
@@ -285,6 +291,76 @@
   padding: 14px;
   overflow: auto;
   list-style: none;
+}
+
+.sections {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow: auto;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.sections summary {
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sectionHelp {
+  margin: 8px 0;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.sectionList {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sectionEditor,
+.sectionAssignment {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.sectionEditor input,
+.sectionAssignment select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sectionActions small {
+  margin-right: auto;
+  color: var(--ui-text-muted);
+}
+
+.sectionAssignment {
+  margin-top: 12px;
+}
+
+.sectionBadge {
+  overflow: hidden;
+  color: var(--ui-accent-ink);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .blockList li {
@@ -1132,7 +1208,7 @@
   }
 
   .commandStart .iconButton,
-  .commandActions > button:not(.publishButton):not(.iconButton) {
+  .commandActions > button:not(.publishButton):not(.iconButton):not(.shareButton) {
     display: none;
   }
 

@@ -1023,6 +1023,11 @@ export class PresentationSessionService {
     return this.getCurrentMedia(session, mediaId);
   }
 
+  async getCompanionMedia(sessionId: string, mediaId: string, companionToken: string) {
+    const session = await this.authorizeCredential(sessionId, companionToken, "companion");
+    return this.getCurrentMedia(session, mediaId);
+  }
+
   private async getCurrentMedia(
     session: PresentationSessionRecord,
     mediaId: string,
@@ -1418,6 +1423,8 @@ export class PresentationSessionService {
     includeQuickChecks = false,
     includeOpinionResults = false,
     includeTextResults = false,
+    includeNavigation = false,
+    includeInteractions = false,
   ) {
     const session = await this.sessions.getSessionForWorkspace(workspaceId, sessionId);
     if (!session) {
@@ -1469,6 +1476,8 @@ export class PresentationSessionService {
             includeQuickChecks,
             includeOpinionResults,
             includeTextResults,
+            includeNavigation,
+            includeInteractions,
           )
         : null,
     });

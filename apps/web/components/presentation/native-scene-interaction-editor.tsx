@@ -6,10 +6,13 @@ import {
   type PresentationScene,
   type PresentationSceneNode,
 } from "@openround/contracts";
-import { updateNativeNode } from "../../lib/presentation-native-scene";
+import { updateNativeNode, createNativeHotspotNode } from "../../lib/presentation-native-scene";
 import styles from "./native-scene.module.css";
 
-type InteractionNode = Extract<PresentationSceneNode, { type: "reveal" | "link" }>;
+type InteractionNode = Extract<
+  PresentationSceneNode,
+  { type: "reveal" | "link" | "hotspot" | "dialog" | "navigation" }
+>;
 type LinkEntry = { source: string; value: string; error: string };
 
 /** Unsafe or rejected URL entries stay local and never enter draft history or autosave. */
@@ -17,10 +20,12 @@ export function NativeSceneInteractionEditor({
   scene,
   node,
   onChange,
+  navigationTargets = [],
 }: {
   scene: PresentationScene;
   node: InteractionNode | null;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
+  navigationTargets?: readonly { id: string; title: string }[];
 }) {
   const [entries, setEntries] = useState<Record<string, LinkEntry>>({});
   // Preserve incomplete entries while selecting other objects or moving them, but honor
@@ -38,15 +43,168 @@ export function NativeSceneInteractionEditor({
   if (!node) return null;
 
   function update(next: InteractionNode, field: string) {
+    const sceneVersion =
+      next.type === "hotspot" ||
+      next.type === "dialog" ||
+      next.type === "navigation" ||
+      (next.type === "reveal" && next.scope === "broadcast")
+        ? 6
+        : scene.schemaVersion;
     return onChange(
-      updateNativeNode(scene, next.id, () => next),
+      {
+        ...updateNativeNode(scene, next.id, () => next),
+        schemaVersion: Math.max(
+          scene.schemaVersion,
+          sceneVersion,
+        ) as PresentationScene["schemaVersion"],
+      },
       `native:${next.id}:${field}`,
     );
   }
 
+  if (node.type === "navigation")
+    return (
+      <div role="group" aria-label="Slide link editor">
+        <label>
+          Slide link label
+          <input
+            aria-label="Slide link label"
+            maxLength={120}
+            value={node.label}
+            onChange={(event) => update({ ...node, label: event.target.value }, "label")}
+          />
+        </label>
+        <label>
+          Target slide or activity
+          <select
+            aria-label="Target slide or activity"
+            value={
+              navigationTargets.find(
+                (target) => target.id.toLowerCase() === node.targetBlockId?.toLowerCase(),
+              )?.id ??
+              node.targetBlockId ??
+              ""
+            }
+            onChange={(event) =>
+              update({ ...node, targetBlockId: event.target.value || null }, "targetBlockId")
+            }
+          >
+            <option value="">Choose target</option>
+            {node.targetBlockId &&
+            !navigationTargets.some(
+              (target) => target.id.toLowerCase() === node.targetBlockId?.toLowerCase(),
+            ) ? (
+              <option value={node.targetBlockId}>Unavailable target — select another</option>
+            ) : null}
+            {navigationTargets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className={styles.help}>
+          The facilitator follows this link for everyone during a live session. Shared readers
+          navigate only their own copy. Hidden slides, rechecks and this slide cannot be targets.
+        </p>
+      </div>
+    );
+
+  if (node.type === "hotspot" || node.type === "dialog")
+    return (
+      <div
+        role="group"
+        aria-label={node.type === "hotspot" ? "Image hotspot editor" : "Detail dialog editor"}
+      >
+        <label>
+          Detail button label
+          <input
+            aria-label="Detail button label"
+            maxLength={120}
+            value={node.label}
+            onChange={(event) => update({ ...node, label: event.target.value }, "label")}
+          />
+        </label>
+        <label>
+          Detail title
+          <input
+            aria-label="Detail title"
+            maxLength={160}
+            value={node.detailTitle}
+            onChange={(event) =>
+              update({ ...node, detailTitle: event.target.value }, "detailTitle")
+            }
+          />
+        </label>
+        <label>
+          Detail audience content
+          <textarea
+            aria-label="Detail audience content"
+            data-native-text-input="true"
+            maxLength={4000}
+            rows={5}
+            value={node.body}
+            onChange={(event) => update({ ...node, body: event.target.value }, "body")}
+          />
+        </label>
+        {node.type === "hotspot" ? (
+          <label>
+            Hotspot image
+            <select
+              aria-label="Hotspot image"
+              value={node.imageNodeId ?? ""}
+              onChange={(event) => {
+                const image = scene.nodes.find(
+                  (candidate) => candidate.id === event.target.value && candidate.type === "image",
+                );
+                const positioned = createNativeHotspotNode(
+                  image?.type === "image" ? image : undefined,
+                );
+                update(
+                  { ...node, imageNodeId: image?.id ?? null, frame: positioned.frame, rotation: 0 },
+                  "imageNodeId",
+                );
+              }}
+            >
+              <option value="">Choose image</option>
+              {scene.nodes.flatMap((candidate) =>
+                candidate.type === "image"
+                  ? [
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.altText || "Image"}
+                        {candidate.rotation ? " · rotate to 0° before publishing" : ""}
+                      </option>,
+                    ]
+                  : [],
+              )}
+            </select>
+          </label>
+        ) : null}
+        <p className={styles.help}>
+          Details open only on the viewer’s screen. This is audience content.{" "}
+          {node.type === "hotspot"
+            ? "Keep the hotspot inside its unrotated image; moving or resizing the image carries its hotspots."
+            : "The dialog supports keyboard opening, Escape and focus return."}
+        </p>
+      </div>
+    );
+
   if (node.type === "reveal")
     return (
       <div role="group" aria-label="Reveal panel editor">
+        <label>
+          Reveal audience
+          <select
+            aria-label="Reveal audience"
+            value={node.scope}
+            onChange={(event) =>
+              update({ ...node, scope: event.target.value as "local" | "broadcast" }, "scope")
+            }
+          >
+            <option value="local">This screen only</option>
+            <option value="broadcast">Facilitator reveals for everyone</option>
+          </select>
+        </label>
         <label>
           Reveal panel label
           <input
@@ -69,7 +227,9 @@ export function NativeSceneInteractionEditor({
           />
         </label>
         <p className={styles.help} id={`native-reveal-${node.id}-help`}>
-          This content is available to every viewer. Each viewer opens and closes their own panel.
+          {node.scope === "broadcast"
+            ? "During live delivery, only the facilitator changes this reveal for everyone. Its content is withheld from audience snapshots while closed. Shared readers open it locally."
+            : "This content is available to every viewer. Each viewer opens and closes their own panel."}
           Add a label and audience content before publishing.
         </p>
       </div>

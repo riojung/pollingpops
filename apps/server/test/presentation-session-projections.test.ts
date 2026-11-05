@@ -1025,3 +1025,129 @@ it("keeps Presentation recognition on revealed checkpoints and breaks missed-que
     correctStreak: 0,
   });
 });
+
+it("keeps v12 standings on actual closed visit order across backward jumps and skipped questions", () => {
+  const { session, participants, currentResponse } = fixture();
+  const original = session.content.blocks[0]!;
+  if (original.kind !== "question" || !("choices" in original.question))
+    throw new Error("Expected scored question");
+  const originalQuestion = original.question;
+  const question = () => ({
+    ...original,
+    id: randomUUID().toUpperCase(),
+    question: {
+      ...originalQuestion,
+      id: randomUUID(),
+      choices: originalQuestion.choices.map((choice) => ({ ...choice, id: randomUUID() })),
+    },
+  });
+  const skipped = question();
+  const firstVisited = question();
+  const lastVisited = question();
+  const content = PresentationContentSchema.parse({
+    ...session.content,
+    schemaVersion: 12,
+    blocks: [skipped, lastVisited, firstVisited],
+  });
+  const progress = (blockId: string) => ({
+    blockId,
+    phase: "question_reveal" as const,
+    questionOpenedAt: session.questionOpenedAt!.toISOString(),
+    questionClosesAt: session.questionClosesAt!.toISOString(),
+  });
+  const closed = {
+    ...session,
+    content,
+    phase: "question_reveal" as const,
+    currentBlockIndex: 2,
+    eventSeq: 20,
+    navigationState: { returnBlockId: null, blocks: [progress(firstVisited.id)] },
+  };
+  const response = {
+    ...currentResponse,
+    blockId: firstVisited.id.toLowerCase(),
+    questionId: firstVisited.question.id,
+    score: 600,
+  };
+  const timeline: PresentationSessionTimelineRecord[] = [
+    {
+      id: randomUUID(),
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      sequence: 10,
+      type: "question.revealed",
+      blockIndex: 2,
+      blockId: firstVisited.id.toLowerCase(),
+      occurredAt: NOW,
+      revealedParticipantIds: participants.map((participant) => participant.id),
+    },
+  ];
+  const first = buildPresentationHostSnapshot(
+    closed,
+    buildPresentationProjectionData(closed, participants, [response], timeline),
+  );
+  expect(first.competitionStandings).toMatchObject({
+    completedScoredQuestions: 1,
+    totalScoredQuestions: 3,
+  });
+  expect(first.competitionStandings!.entries[0]).toMatchObject({
+    score: 600,
+    lastScoreDelta: 600,
+    correctStreak: 1,
+  });
+  // Jump backward to an unvisited question: the earlier closed answer stays published.
+  const open = {
+    ...closed,
+    phase: "question_open" as const,
+    currentBlockIndex: 1,
+    navigationState: {
+      ...closed.navigationState,
+      blocks: [
+        ...closed.navigationState.blocks,
+        { ...progress(lastVisited.id), phase: "question_open" as const },
+      ],
+    },
+  };
+  const hiddenResponse = {
+    ...currentResponse,
+    id: randomUUID(),
+    blockId: lastVisited.id.toLowerCase(),
+    questionId: lastVisited.question.id,
+    score: 1000,
+  };
+  const openSnapshot = buildPresentationHostSnapshot(
+    open,
+    buildPresentationProjectionData(open, participants, [response, hiddenResponse], timeline),
+  );
+  expect(openSnapshot.competitionStandings).toMatchObject({ completedScoredQuestions: 1 });
+  expect(openSnapshot.competitionStandings!.entries[0]).toMatchObject({
+    score: 600,
+    lastScoreDelta: 600,
+  });
+  expect(openSnapshot.participants[0]!.score).toBe(600);
+  const revealed = {
+    ...open,
+    phase: "question_reveal" as const,
+    navigationState: {
+      ...open.navigationState,
+      blocks: [progress(firstVisited.id), progress(lastVisited.id)],
+    },
+  };
+  const last = buildPresentationHostSnapshot(
+    revealed,
+    buildPresentationProjectionData(revealed, participants, [response, hiddenResponse], timeline),
+  );
+  expect(last.competitionStandings).toMatchObject({ completedScoredQuestions: 2 });
+  expect(last.competitionStandings!.entries[0]).toMatchObject({
+    score: 1600,
+    lastScoreDelta: 1000,
+    previousRank: 1,
+    correctStreak: 2,
+  });
+  const revisit = { ...revealed, currentBlockIndex: 2 };
+  const revisited = buildPresentationHostSnapshot(
+    revisit,
+    buildPresentationProjectionData(revisit, participants, [response, hiddenResponse], timeline),
+  );
+  expect(revisited.competitionStandings).toEqual(last.competitionStandings);
+});

@@ -21,6 +21,7 @@ import {
   type InteractiveQuestionBlockDraft,
   type PresentationBlockDraft,
   type PresentationDraft,
+  type PresentationSection,
   type QuestionDraft,
   type QuestionType,
 } from "@openround/contracts";
@@ -31,6 +32,47 @@ export interface PresentationIssue {
   blockId: string | null;
   field: string;
   message: string;
+}
+
+export function presentationInteractionTargets(
+  draft: PresentationDraft,
+  sourceId: string,
+  forwardOnly = false,
+) {
+  const sourceIndex = draft.blocks.findIndex(
+    (block) => block.id.toLowerCase() === sourceId.toLowerCase(),
+  );
+  const intervals = draft.blocks.flatMap((block, index) => {
+    if (block.kind !== "question" || !block.question.linkedRecheckQuestionId) return [];
+    const end = draft.blocks.findIndex(
+      (target) =>
+        target.kind === "question" &&
+        target.question.id.toLowerCase() === block.question.linkedRecheckQuestionId!.toLowerCase(),
+    );
+    return end > index ? [{ start: index, end }] : [];
+  });
+  return draft.blocks.flatMap((block, index) => {
+    if (
+      index === sourceIndex ||
+      (forwardOnly && index <= sourceIndex) ||
+      (block.kind === "content" && block.hidden) ||
+      (block.kind === "question" && block.question.delivery === "recheck") ||
+      intervals.some((pair) => index > pair.start && index < pair.end)
+    )
+      return [];
+    const title =
+      block.kind === "question"
+        ? block.question.prompt
+        : block.scene
+          ? presentationSceneTitle(block.scene)
+          : (block.textElements.find((element) => element.role === "title")?.text ?? "");
+    return [
+      {
+        id: block.id,
+        title: title.trim() || `${block.kind === "question" ? "Activity" : "Slide"} ${index + 1}`,
+      },
+    ];
+  });
 }
 
 export function normalizePresentationRecoveryDraft(value: unknown): PresentationDraft {
@@ -92,12 +134,167 @@ export function promotePresentationOpinionFormats(
     : requiresPresentationOpinionFormats(draft)
       ? 9
       : draft.schemaVersion;
+  const advanced = draft.blocks.some((block) =>
+    block.kind === "question" ? block.branches !== undefined : block.scene?.schemaVersion === 6,
+  );
   const schemaVersion = Math.max(
     draft.schemaVersion,
     currentVersion,
     requiredVersion,
+    advanced ? 13 : 2,
+    draft.sections === undefined ? 2 : 12,
   ) as PresentationDraft["schemaVersion"];
-  return draft.schemaVersion === schemaVersion ? draft : { ...draft, schemaVersion };
+  if (draft.schemaVersion === schemaVersion) return draft;
+  return {
+    ...draft,
+    schemaVersion,
+    ...(schemaVersion >= 12 && draft.sections === undefined ? { sections: [] } : {}),
+  };
+}
+
+/** Sections annotate the existing block sequence; enabling them never rewrites that sequence. */
+export function enablePresentationSections(draft: PresentationDraft): PresentationDraft {
+  if (draft.schemaVersion >= 12 && draft.sections !== undefined) return draft;
+  return {
+    ...draft,
+    schemaVersion: draft.schemaVersion >= 12 ? draft.schemaVersion : 12,
+    sections: draft.sections ?? [],
+  };
+}
+
+export function presentationSectionForBlock(
+  sections: PresentationSection[] | undefined,
+  blockId: string | null,
+) {
+  return blockId
+    ? sections?.find((section) =>
+        section.blockIds.some((id) => id.toLowerCase() === blockId.toLowerCase()),
+      )
+    : undefined;
+}
+
+function presentationSectionTitle(title: string) {
+  return [...title]
+    .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
+    .join("")
+    .trim()
+    .slice(0, 120);
+}
+
+export function addPresentationSection(
+  draft: PresentationDraft,
+  sectionId: string,
+  title = "New section",
+): PresentationDraft {
+  const sections = draft.sections ?? [];
+  if (
+    sections.length >= 50 ||
+    sections.some((section) => section.id.toLowerCase() === sectionId.toLowerCase())
+  )
+    return draft;
+  return {
+    ...enablePresentationSections(draft),
+    sections: [
+      ...sections,
+      { id: sectionId, title: presentationSectionTitle(title), blockIds: [] },
+    ],
+  };
+}
+
+export function renamePresentationSection(
+  draft: PresentationDraft,
+  sectionId: string,
+  title: string,
+): PresentationDraft {
+  const section = draft.sections?.find(
+    (section) => section.id.toLowerCase() === sectionId.toLowerCase(),
+  );
+  const nextTitle = presentationSectionTitle(title);
+  if (!section || section.title === nextTitle) return draft;
+  return {
+    ...draft,
+    sections: draft.sections?.map((section) =>
+      section.id.toLowerCase() === sectionId.toLowerCase()
+        ? { ...section, title: nextTitle }
+        : section,
+    ),
+  };
+}
+
+export function removePresentationSection(
+  draft: PresentationDraft,
+  sectionId: string,
+): PresentationDraft {
+  if (!draft.sections?.some((section) => section.id.toLowerCase() === sectionId.toLowerCase()))
+    return draft;
+  return {
+    ...draft,
+    sections: draft.sections.filter(
+      (section) => section.id.toLowerCase() !== sectionId.toLowerCase(),
+    ),
+  };
+}
+
+export function assignPresentationBlockToSection(
+  draft: PresentationDraft,
+  blockId: string,
+  sectionId: string | null,
+): PresentationDraft {
+  const block = draft.blocks.find((block) => block.id.toLowerCase() === blockId.toLowerCase());
+  const targetSection = draft.sections?.find(
+    (section) => section.id.toLowerCase() === sectionId?.toLowerCase(),
+  );
+  if (!block || !draft.sections || (sectionId !== null && !targetSection)) return draft;
+  const currentSection = presentationSectionForBlock(draft.sections, block.id);
+  if ((currentSection?.id ?? null) === (targetSection?.id ?? null)) return draft;
+  return {
+    ...draft,
+    sections: draft.sections.map((section) => {
+      if (section === targetSection)
+        return { ...section, blockIds: [...section.blockIds, block.id] };
+      if (section !== currentSection) return section;
+      return {
+        ...section,
+        blockIds: section.blockIds.filter((id) => id.toLowerCase() !== block.id.toLowerCase()),
+      };
+    }),
+  };
+}
+
+/** Insert a prepared copy once, preserving its source's section without reusing its identity. */
+export function insertPresentationBlockDuplicate(
+  draft: PresentationDraft,
+  sourceId: string,
+  copy: PresentationBlockDraft,
+): PresentationDraft {
+  const sourceIndex = draft.blocks.findIndex(
+    (block) => block.id.toLowerCase() === sourceId.toLowerCase(),
+  );
+  if (
+    sourceIndex < 0 ||
+    draft.blocks.length >= 200 ||
+    draft.blocks.some((block) => block.id.toLowerCase() === copy.id.toLowerCase())
+  )
+    return draft;
+  const blocks = [...draft.blocks];
+  blocks.splice(sourceIndex + 1, 0, copy);
+  return {
+    ...draft,
+    blocks,
+    ...(draft.sections
+      ? {
+          sections: draft.sections.map((section) => {
+            const sourceIndex = section.blockIds.findIndex(
+              (id) => id.toLowerCase() === sourceId.toLowerCase(),
+            );
+            if (sourceIndex < 0) return section;
+            const blockIds = [...section.blockIds];
+            blockIds.splice(sourceIndex + 1, 0, copy.id);
+            return { ...section, blockIds };
+          }),
+        }
+      : {}),
+  };
 }
 
 export function createContentBlock(layout: ContentSlideLayout = "title_body"): ContentSlideDraft {
@@ -644,6 +841,20 @@ export function removePresentationBlock(
     );
   return {
     ...draft,
+    ...(draft.sections
+      ? {
+          sections: draft.sections.map((section) =>
+            section.blockIds.some((id) => id.toLowerCase() === blockId.toLowerCase())
+              ? {
+                  ...section,
+                  blockIds: section.blockIds.filter(
+                    (id) => id.toLowerCase() !== blockId.toLowerCase(),
+                  ),
+                }
+              : section,
+          ),
+        }
+      : {}),
     blocks: draft.blocks
       .filter((block) => block.id !== blockId)
       .map((block) =>
@@ -681,11 +892,32 @@ export function duplicatePresentationBlock(block: PresentationBlockDraft): Prese
   if ("choices" in question) {
     question.choices = question.choices.map((choice) => {
       const id = clientUuid();
-      choiceIds.set(choice.id, id);
+      choiceIds.set(choice.id.toLowerCase(), id);
       return { ...choice, id };
     });
   }
-  return { id: clientUuid(), kind: "question", question };
+  return {
+    id: clientUuid(),
+    kind: "question",
+    question,
+    ...(block.branches
+      ? {
+          branches: block.branches.map((branch) => ({
+            ...structuredClone(branch),
+            id: clientUuid(),
+            condition:
+              branch.condition.kind === "choice_share"
+                ? {
+                    ...branch.condition,
+                    choiceId:
+                      choiceIds.get(branch.condition.choiceId.toLowerCase()) ??
+                      branch.condition.choiceId,
+                  }
+                : { ...branch.condition },
+          })),
+        }
+      : {}),
+  };
 }
 
 export function presentationReadiness(draft: PresentationDraft): PresentationIssue[] {

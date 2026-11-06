@@ -1434,6 +1434,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 98, name: "presentation_spatial" },
       { version: 99, name: "presentation_review_feedback" },
       { version: 100, name: "presentation_assistance" },
+      { version: 101, name: "presentation_creation_receipts" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.

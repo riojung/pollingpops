@@ -581,6 +581,23 @@ rollback, and pause new assistance and legacy AI admission before returning to o
 published content or source-output hashes to fit an older reader. See the
 [E12 evidence record](../evidence/presentation-e12-outline-assistance.md).
 
+### Outline-first Presentation creation
+
+Apply `101_presentation_creation_receipts.sql` before upgrading the HTTP creation endpoints,
+then deploy the matching web launcher. The new `POST /v1/presentations/outline-drafts` requires
+an account/workspace-bound stable creation identity and native starter mode. Older HTTP servers
+return an unavailable route rather than silently treating a retry as an ordinary new deck.
+Do not route this request through the unkeyed creation path as a fallback.
+
+Exact retries return the existing current draft, including later edits; changed intents conflict.
+Compact forced-RLS receipts retain consumed identities after deck or account erasure so a retry
+cannot recreate deleted content. Receipts contain no outline, title, generated text or actor ID;
+whole-workspace erasure removes them. Retain migration101 and receipts during code rollback;
+use a rollback release that includes the applied migration file, since migration verification
+rejects bundles missing an applied version. Do not drop the receipt table to fit an older bundle.
+Creating the saved draft consumes no AI allowance; explicit proposal admission retains all E12
+limits, rollout requirements and shared authoring usage above. No document or scene version changes.
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

@@ -434,4 +434,121 @@ for (const suffix of ["", " @mobile"]) {
     expect((await readE01Record(page, record.id)).draft.title).toBe(remoteDraft.title);
     await noOverflow(page);
   });
+
+  test(`outline-first creation recovers one saved draft before reviewed generation${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(240_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page);
+    const title = `Outline first ${randomUUID().slice(0, 8)}`;
+    const presentationsPath = `${e01ApiUrl}/v1/presentations`;
+    const createPath = `${presentationsPath}/outline-drafts`;
+    const requests: string[] = [];
+    let presentationId = "";
+    let dropped = false;
+    let jobsCreated = 0;
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        request.url() === `${e01ApiUrl}/v1/presentation-assistance/jobs`
+      )
+        jobsCreated += 1;
+    });
+    await page.route(createPath, async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      requests.push(route.request().postData()!);
+      if (!dropped) {
+        dropped = true;
+        const response = await route.fetch();
+        expect(response.status()).toBe(201);
+        presentationId = (await response.json()).presentation.id as string;
+        await route.abort("failed");
+      } else await route.continue();
+    });
+
+    await page.goto("/create/presentation");
+    await page.locator('a[href="/create/presentation?start=outline"]').click();
+    const input = page.getByRole("textbox", { name: "Presentation title", exact: true });
+    await input.fill(title);
+    await page.setViewportSize({ width: 320, height: 760 });
+    await noOverflow(page);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: info.outputPath("e12-outline-start-320.png"), fullPage: true });
+    await page.getByRole("button", { name: "Create draft and continue", exact: true }).click();
+    const retry = page.getByRole("button", { name: "Retry draft creation", exact: true });
+    await expect(retry).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(presentationId).not.toBe("");
+    expect(jobsCreated).toBe(0);
+    await page.reload();
+    await expect(retry).toBeVisible();
+    await expect(input).toHaveValue(title);
+    await expect(input).toHaveJSProperty("readOnly", true);
+    const recovered = page.waitForResponse(
+      (response) => response.request().method() === "POST" && response.url() === createPath,
+    );
+    await retry.click();
+    expect((await recovered).status()).toBe(200);
+    const dialog = page.getByRole("dialog", { name: "Outline to slides", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/presentation/${presentationId}$`));
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toBe(requests[0]);
+    expect(jobsCreated).toBe(0);
+    await page.unroute(createPath);
+    const list = await page.request.get(presentationsPath);
+    expect(list.status()).toBe(200);
+    expect(
+      ((await list.json()).presentations as Array<{ id: string; title: string }>).filter(
+        (entry) => entry.title === title,
+      ),
+    ).toEqual([expect.objectContaining({ id: presentationId })]);
+    const before = await readE01Record(page, presentationId);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await page.reload();
+    await expect(
+      page.getByRole("textbox", { name: "Presentation title", exact: true }),
+    ).toBeVisible();
+    await expect(dialog).toBeHidden();
+    expect((await readE01Record(page, presentationId)).draft).toEqual(before.draft);
+
+    // Acknowledged handoff remains recoverable when the creator returns to the launcher.
+    await page.goto("/create/presentation?start=outline");
+    await page.getByRole("button", { name: "Open saved draft", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/presentation/${presentationId}$`));
+    expect(jobsCreated).toBe(0);
+    const statusPath = `${e01ApiUrl}/v1/presentation-assistance/status?presentationId=${presentationId}`;
+    const usage = (await (await page.request.get(statusPath)).json()).status.used as number;
+    const queued = await queueProposal(page, title);
+    await expect(
+      queued.dialog.getByRole("region", { name: "Review proposed slides", exact: true }),
+    ).toBeVisible({ timeout: 60_000 });
+    expect(jobsCreated).toBe(1);
+    expect((await (await page.request.get(statusPath)).json()).status.used).toBe(usage + 1);
+    expect((await readE01Record(page, presentationId)).draft).toEqual(before.draft);
+    await queued.dialog
+      .getByRole("checkbox", {
+        name: "I reviewed the selected slide text and exact excerpts, including any unsupported claims.",
+        exact: true,
+      })
+      .check();
+    await queued.dialog
+      .getByRole("button", { name: "Insert 3 reviewed slides", exact: true })
+      .click();
+    await expect(dialog).toBeHidden();
+    const applied = await readE01Record(page, presentationId);
+    expect(applied.draft.title).toBe(title);
+    expect(applied.draft.blocks).toHaveLength(3);
+    expect(applied.draft.blocks.every((block) => block.kind === "content" && !!block.scene)).toBe(
+      true,
+    );
+    const current = await page.request.get(`${presentationsPath}/${presentationId}`);
+    expect((await current.json()).presentation.currentVersionId).toBeNull();
+    await noOverflow(page);
+  });
 }

@@ -45,6 +45,7 @@ async function fixture(
     .fn()
     .mockResolvedValue(rawOutput),
   modelName = "bounded-test",
+  initialSlide: "classic" | "native" = "classic",
 ) {
   const repository = new MemoryRepository({ initialWorkspaceId: workspaceId });
   const built = await buildApp(
@@ -81,7 +82,7 @@ async function fixture(
     method: "POST",
     url: "/v1/presentations",
     headers: { cookie },
-    payload: { title: "Existing project", description: "Preserve this description" },
+    payload: { title: "Existing project", description: "Preserve this description", initialSlide },
   });
   expect(created.statusCode).toBe(201);
   const presentation = created.json<{
@@ -279,10 +280,162 @@ describe("Presentation outline assistance API", () => {
     ).toBe(2);
   });
 
-  it.each(["append", "replace"] as const)(
-    "preserves case-equivalent saved block identities and document14 topology on assistance insertion (%s)",
-    async (scenario) => {
-      const f = await fixture();
+  it("replaces the exact default native starter with three reviewed slides and recovers its receipt", async () => {
+    const f = await fixture(undefined, undefined, "native");
+    expect((await f.post()).statusCode).toBe(202);
+    expect(await f.presentationAssistanceWorker.runOnce()).toBe("completed");
+    const job = PresentationAssistanceJobSchema.parse((await f.get()).json().job);
+    const input = {
+      schemaVersion: 1,
+      jobId: job.id,
+      proposalHash: job.proposalHash,
+      selectedSlideIds: job.proposal!.slides.map(({ id }) => id),
+      reviewed: true,
+      expectedRevision: 0,
+      mutationId: randomUUID(),
+      afterBlockId: f.presentation.draft.blocks[0]!.id,
+    };
+    const insert = () =>
+      app!.inject({
+        method: "POST",
+        url: `/v1/presentations/${f.presentation.id}/blocks/assistance-proposals`,
+        headers: { cookie: f.cookie },
+        payload: input,
+      });
+    const applied = await insert();
+    expect(applied.statusCode, applied.body).toBe(200);
+    const result = applied.json();
+    const draft = PresentationDraftSchema.parse(result.presentation.draft);
+    expect(draft.blocks).toHaveLength(3);
+    expect(draft.blocks.map(({ id }) => id)).toEqual(result.insertedBlockIds);
+    expect(draft.blocks.some(({ id }) => id === input.afterBlockId)).toBe(false);
+    expect(result.presentation).toMatchObject({
+      draftRevision: 1,
+      currentVersionId: null,
+      status: "draft",
+    });
+    expect((await insert()).json()).toEqual(result);
+    expect(
+      (await f.presentations.getPresentation(workspaceId, f.presentation.id))?.draftRevision,
+    ).toBe(1);
+  });
+
+  it.each([
+    "design",
+    "geometry",
+    "richText",
+    "groups",
+    "shape",
+    "layout",
+    "notes",
+    "citations",
+    "disclosure",
+    "hidden",
+    "text",
+  ] as const)(
+    "preserves authored native starters during reviewed insertion (%s)",
+    async (customization) => {
+      const f = await fixture(undefined, undefined, "native");
+      const current = (await f.presentations.getPresentation(workspaceId, f.presentation.id))!;
+      const draft = structuredClone(current.draft),
+        starter = draft.blocks[0]!;
+      if (starter.kind !== "content" || !starter.scene) throw new Error("Expected native starter");
+      const scene = starter.scene,
+        title = scene.nodes[0]!,
+        body = scene.nodes[1]!;
+      if (title.type !== "text" || body.type !== "text") throw new Error("Expected native text");
+      switch (customization) {
+        case "design":
+          scene.design!.theme = "midnight";
+          break;
+        case "geometry":
+          title.frame.x = 8;
+          title.frame.width = 85;
+          break;
+        case "richText":
+          body.richText = { paragraphs: [{ kind: "paragraph", runs: [{ text: "", bold: true }] }] };
+          break;
+        case "groups":
+          draft.schemaVersion = 8;
+          scene.schemaVersion = 4;
+          scene.groups = [{ id: "custom-group", nodeIds: [title.id, body.id] }];
+          break;
+        case "shape":
+          scene.nodes.push({
+            id: "custom-shape",
+            type: "shape",
+            shape: "rectangle",
+            color: "blue",
+            label: "",
+            frame: { x: 5, y: 5, width: 5, height: 5 },
+          });
+          scene.readingOrder.push("custom-shape");
+          break;
+        case "layout":
+          starter.layout = "callout";
+          break;
+        case "notes":
+          starter.speakerNotes = "Private authored notes";
+          break;
+        case "citations":
+          starter.citations = [{ locator: "Original", excerpt: "Original evidence" }];
+          break;
+        case "disclosure":
+          starter.sourceDisclosure = {
+            sourceName: "Original",
+            sourceDigest: "a".repeat(64),
+            provider: "original",
+            model: "original",
+          };
+          break;
+        case "hidden":
+          draft.schemaVersion = 13;
+          starter.hidden = true;
+          break;
+        case "text":
+          body.text = "Authored content";
+          break;
+      }
+      const saved = await app!.inject({
+        method: "PUT",
+        url: `/v1/presentations/${f.presentation.id}/draft`,
+        headers: { cookie: f.cookie },
+        payload: { schemaVersion: 2, draft, expectedRevision: 0, mutationId: randomUUID() },
+      });
+      expect(saved.statusCode, saved.body).toBe(200);
+      expect((await f.post()).statusCode).toBe(202);
+      expect(await f.presentationAssistanceWorker.runOnce()).toBe("completed");
+      const job = PresentationAssistanceJobSchema.parse((await f.get()).json().job);
+      const applied = await app!.inject({
+        method: "POST",
+        url: `/v1/presentations/${f.presentation.id}/blocks/assistance-proposals`,
+        headers: { cookie: f.cookie },
+        payload: {
+          schemaVersion: 1,
+          jobId: job.id,
+          proposalHash: job.proposalHash,
+          selectedSlideIds: job.proposal!.slides.map(({ id }) => id),
+          reviewed: true,
+          expectedRevision: 1,
+          mutationId: randomUUID(),
+          afterBlockId: starter.id,
+        },
+      });
+      expect(applied.statusCode, applied.body).toBe(200);
+      const inserted = PresentationDraftSchema.parse(applied.json().presentation.draft);
+      expect(inserted.blocks).toHaveLength(4);
+      expect(inserted.blocks[0]).toEqual(starter);
+    },
+  );
+
+  it.each([
+    ["classic", "append"],
+    ["classic", "replace"],
+    ["native", "replace"],
+  ] as const)(
+    "preserves case-equivalent saved block identities and document14 topology on assistance insertion (%s, %s)",
+    async (initialSlide, scenario) => {
+      const f = await fixture(undefined, undefined, initialSlide);
       const initial = (await f.presentations.getPresentation(workspaceId, f.presentation.id))!;
       const anchorId = "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF";
       const tailId = "bcdefabc-defa-4bcd-8efa-bcdefabcdefa";

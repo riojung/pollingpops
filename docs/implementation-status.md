@@ -8,6 +8,21 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E12 outline-first creation November 6, 2026
+
+The source on `codex/presentation-e12-outline-create` adds **From outline** to Presentation
+creation. An explicit action saves a titled native draft, then opens the existing reviewed
+outline workflow. Opening the editor or panel never admits an AI job; cancellation/failure leaves
+the draft editable. Exact actor/workspace-bound creation recovery avoids duplicate drafts after
+lost acknowledgements. Migration101 adds compact append-only, forced-RLS creation receipts;
+draft creation uses no AI allowance and introduces no provider or content version.
+
+The full repository check, focused checks, 33 selected PostgreSQL cases and eight production
+browser workflows across four profiles pass. See the
+[creation record](evidence/presentation-e12-outline-create.md). This is a bounded E12 extension;
+rewrite/shorten, translation and other later scopes remain planned. Source is ready for review
+and remains undeployed.
+
 ### Presentation E12 outline assistance November 5, 2026
 
 The source on `codex/presentation-e12-outline` adds optional **Outline to slides** in the saved
@@ -23,7 +38,8 @@ the workflow. The full repository check, focused checks, twenty-seven selected P
 and four production browser profiles pass. See the
 [E12 record](evidence/presentation-e12-outline-assistance.md). This is the first E12 software slice;
 rewrite/shorten, translation, suggested layouts and conversational editing remain later work.
-Source is ready for review and remains undeployed.
+The selected outline slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
+and remains undeployed.
 
 ### Presentation E11 private review feedback November 5, 2026
 

@@ -130,7 +130,8 @@ interactions, E07 sections/live navigation and E08 private view-only sharing are
 scope is merged in [PR #201](https://github.com/riojung/pollingpops/pull/201). The bounded E10
 story map and first E11 review slice are merged in [PR #202](https://github.com/riojung/pollingpops/pull/202)
 and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected outline assistance
-slice is implemented on `codex/presentation-e12-outline`. Self-paced attempts and the remaining later packages stay planned; deployment
+slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204). Its outline-first
+new-deck entry point is implemented on `codex/presentation-e12-outline-create`. Self-paced attempts and the remaining later packages stay planned; deployment
 and release qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
@@ -520,7 +521,16 @@ controls. Exact intent recovery and atomic draft/source fences protect insertion
 document/scene version, new provider or entitlement is added. See the
 [E12 record](evidence/presentation-e12-outline-assistance.md) for verification and limits.
 Rewrite/shorten, translation, layout/question suggestions and conversational editing remain later
-E12 work. This slice is ready for review and remains undeployed.
+E12 work. This slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
+and remains undeployed.
+
+The outline-first creation increment on `codex/presentation-e12-outline-create` adds **From
+outline** to the Presentation launcher. Explicit creation saves a titled native draft before
+opening the existing review panel; query navigation never generates content. Migration101's
+compact, account/workspace-bound creation receipts recover uncertain creation acknowledgements
+without duplicating or recreating deleted drafts. Draft creation is allowance-free; later
+proposal admission uses existing E12 limits. No document/scene version or provider is added.
+See the [outline-first creation record](evidence/presentation-e12-outline-create.md).
 
 ### E13 Deliver static export and later richer portability
 

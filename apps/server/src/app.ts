@@ -43,6 +43,14 @@ import {
 } from "./authoring-assistant.js";
 import { AuthoringService } from "./authoring-service.js";
 import { AuthoringWorker } from "./authoring-worker.js";
+import {
+  OpenAiCompatiblePresentationAssistanceProvider,
+  presentationAssistanceProviderAvailable,
+  type PresentationAssistanceProvider,
+} from "./presentation-assistance-provider.js";
+import { PresentationAssistanceService } from "./presentation-assistance-service.js";
+import { PresentationAssistanceWorker } from "./presentation-assistance-worker.js";
+import { registerPresentationAssistanceRoutes } from "./presentation-assistance-routes.js";
 import { PresentationVisualImportService } from "./presentation-visual-import-service.js";
 import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
 import { registerPresentationVisualImportRoutes } from "./presentation-visual-import-routes.js";
@@ -101,6 +109,7 @@ export async function buildApp(
     stripe?: Stripe | null;
     readiness?: () => Promise<void>;
     authoringAssistant?: AuthoringAssistant | null;
+    presentationAssistanceProvider?: PresentationAssistanceProvider | null;
     oidcProvider?: OidcProvider | null;
     ltiJwtAdapter?: LtiJwtAdapter | null;
     summaryExports?: ReturnType<typeof createSessionSummaryExportService>;
@@ -394,6 +403,34 @@ export async function buildApp(
     config.AUTHORING_EXTRACTION_TIMEOUT_MS,
     metrics,
   );
+  const configuredPresentationAssistanceProvider =
+    overrides.presentationAssistanceProvider !== undefined
+      ? overrides.presentationAssistanceProvider
+      : config.AUTHORING_AI_MODE === "openai_compatible"
+        ? new OpenAiCompatiblePresentationAssistanceProvider(
+            config.AUTHORING_AI_ENDPOINT!,
+            config.AUTHORING_AI_API_KEY,
+            config.AUTHORING_AI_MODEL,
+            config.AUTHORING_AI_PROVIDER_NAME,
+          )
+        : null;
+  const presentationAssistanceProvider = presentationAssistanceProviderAvailable(
+    configuredPresentationAssistanceProvider,
+  )
+    ? configuredPresentationAssistanceProvider
+    : null;
+  const presentationAssistance = new PresentationAssistanceService(
+    repository,
+    presentations,
+    Boolean(presentationAssistanceProvider),
+    presentationsEnabled,
+  );
+  const presentationAssistanceWorker = new PresentationAssistanceWorker(
+    repository,
+    presentationAssistanceProvider,
+    presentationAssistance,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
   const storage = new StorageService(config, scanner);
   const presentationVisualImports = new PresentationVisualImportService(
     repository,
@@ -614,6 +651,12 @@ export async function buildApp(
     productEvents,
     productEventsEnabled,
   });
+  await registerPresentationAssistanceRoutes(app, {
+    repository,
+    auth,
+    config,
+    service: presentationAssistance,
+  });
   await registerPresentationVisualImportRoutes(app, {
     repository,
     presentations,
@@ -731,6 +774,8 @@ export async function buildApp(
     oidc,
     lti,
     authoringWorker,
+    presentationAssistance,
+    presentationAssistanceWorker,
     presentationVisualImportWorker,
     presentationVisualImports,
     storage,

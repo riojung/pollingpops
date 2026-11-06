@@ -15,6 +15,7 @@ export * from "./qna-policy";
 export * from "./text-opinions";
 export * from "./presentation-text";
 export * from "./presentation-visual-import";
+export * from "./presentation-assistance";
 import { PresentationTextResponseMetadataSchema } from "./presentation-text";
 export * from "./session-summaries";
 export * from "./canvas-boards";

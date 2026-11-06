@@ -116,6 +116,7 @@ import {
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { PresentationVisualImport } from "./presentation-visual-import";
+import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationSections } from "./presentation-sections";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import {
@@ -421,7 +422,7 @@ export function PresentationBuilder({ presentationId }: { presentationId: string
 }
 
 function PresentationEditor({ presentationId }: { presentationId: string }) {
-  const { canEdit, productFeatures } = useWorkspace();
+  const { creator, canEdit, productFeatures } = useWorkspace();
   const { locale, t } = useLocale();
   const router = useRouter();
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -470,6 +471,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const [roundSources, setRoundSources] = useState<RoundSource[]>([]);
   const [roundImportOpen, setRoundImportOpen] = useState(false);
   const [sourceImportOpen, setSourceImportOpen] = useState(false);
+  const [assistanceOpen, setAssistanceOpen] = useState(false);
+  const [assistancePending, setAssistancePending] = useState(false);
+  const [assistanceTarget, setAssistanceTarget] = useState({
+    revision: 0,
+    anchor: null as string | null,
+  });
+  const assistanceActive = useRef(false);
+  assistanceActive.current = assistanceOpen || assistancePending;
   const [visualImportOpen, setVisualImportOpen] = useState(false);
   const [visualImportReceiptPending, setVisualImportReceiptPending] = useState(false);
   const visualImportActive = useRef(false);
@@ -518,6 +527,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const canInsertPack =
     canEdit && Boolean(productFeatures?.presentations && productFeatures?.recoveryPacks);
   const builderMutationBlocked =
+    assistanceOpen ||
+    assistancePending ||
     packImportOpen ||
     packUpdateBusy ||
     packUpdateReceiptPending ||
@@ -751,6 +762,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   const commit = useCallback(
     (value: SetStateAction<PresentationDraft>, historyKey?: string) => {
       if (
+        assistanceActive.current ||
         visualImportActive.current ||
         packOperation.current ||
         packPending.current ||
@@ -925,6 +937,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       !loaded ||
       !draft ||
       saveConflictPresent ||
+      assistanceOpen ||
+      assistancePending ||
       packImportOpen ||
       packUpdateBusy ||
       packUpdateReceiptPending ||
@@ -942,6 +956,8 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     enqueueSave,
     loaded,
     saveConflictPresent,
+    assistanceOpen,
+    assistancePending,
     packImportOpen,
     packUpdateBusy,
     packUpdateReceiptPending,
@@ -961,6 +977,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         mediaState !== "idle" ||
         pendingNativeImage !== null ||
         ordinarySavePending ||
+        assistancePending ||
         visualImportReceiptPending
       ) {
         event.preventDefault();
@@ -975,6 +992,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     mediaState,
     pendingNativeImage,
     ordinarySavePending,
+    assistancePending,
     visualImportReceiptPending,
   ]);
 
@@ -1116,6 +1134,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
 
   function undo() {
     if (
+      assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
       packUpdateOperation.current ||
@@ -1141,6 +1160,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
 
   function redo() {
     if (
+      assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
       packUpdateOperation.current ||
@@ -1173,14 +1193,17 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       const response = await apiFetch<{ presentation: PresentationRecord }>(
         `/v1/presentations/${presentationId}`,
       );
+      const target = {
+        revision: response.presentation.draftRevision,
+        anchor:
+          preferredBlockId &&
+          response.presentation.draft.blocks.some((block) => block.id === preferredBlockId)
+            ? preferredBlockId
+            : (response.presentation.draft.blocks[0]?.id ?? null),
+      };
       setRecord(response.presentation);
       setDraft(response.presentation.draft);
-      setSelectedBlockId(
-        preferredBlockId &&
-          response.presentation.draft.blocks.some((block) => block.id === preferredBlockId)
-          ? preferredBlockId
-          : (response.presentation.draft.blocks[0]?.id ?? null),
-      );
+      setSelectedBlockId(target.anchor);
       setUndoStack([]);
       setRedoStack([]);
       lastHistoryCommit.current = null;
@@ -1205,7 +1228,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         setRecovery(null);
         await clearBuilderRecovery(recoveryKey);
       }
-      return true;
+      return target;
     } catch (caught) {
       setError(humanError(caught));
       setSaveState("error");
@@ -1734,6 +1757,40 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     return revisionRef.current;
   }
 
+  async function openAssistance() {
+    if (
+      !draft ||
+      !canEdit ||
+      importPreparation.current ||
+      assistanceActive.current ||
+      packOperation.current ||
+      packPending.current ||
+      packUpdateOperation.current ||
+      packUpdatePending.current ||
+      packImportOpen ||
+      roundImportOpen ||
+      sourceImportOpen ||
+      visualImportActive.current ||
+      mediaState !== "idle" ||
+      pendingNativeImageRef.current
+    )
+      return;
+    importPreparation.current = true;
+    setPreparingImport(true);
+    setError("");
+    try {
+      const revision = await prepareVisualInsertion();
+      if (!alive.current) return;
+      setAssistanceTarget({ revision, anchor: selectedBlockId });
+      setAssistanceOpen(true);
+    } catch (caught) {
+      if (alive.current) setError(humanError(caught));
+    } finally {
+      importPreparation.current = false;
+      if (alive.current) setPreparingImport(false);
+    }
+  }
+
   function openVisualImport() {
     if (
       importPreparation.current ||
@@ -2004,6 +2061,15 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         </div>
       </header>
 
+      {assistancePending && !assistanceOpen ? (
+        <div className={styles.errorBanner} role="status" lang="en-CA">
+          <p>Recover the outline insertion acknowledgement before continuing to edit.</p>
+          <button type="button" onClick={() => setAssistanceOpen(true)}>
+            Resume outline assistance
+          </button>
+        </div>
+      ) : null}
+
       {recovery ? (
         <div
           className={styles.recoveryBanner}
@@ -2139,7 +2205,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         <section
           className={styles.packReviews}
           aria-label="Presentation Recovery Pack updates"
-          inert={packImportOpen || visualImportOpen || visualImportReceiptPending}
+          inert={builderMutationBlocked}
         >
           {packUpdateReceiptPending ? (
             <p className="notice" role="status" lang="en-CA">
@@ -2320,6 +2386,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
               type="button"
             >
               + {t("delivery.presentationBuilder.fromTrustedSource")}
+            </button>
+            <button
+              disabled={!canEdit || preparingImport}
+              lang="en-CA"
+              onClick={() => void openAssistance()}
+              type="button"
+            >
+              Outline to slides
             </button>
             <button
               disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
@@ -2573,6 +2647,14 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
                 </button>
                 <button onClick={() => void openSourceImport()} type="button">
                   {t("delivery.presentationBuilder.insertTrustedSource")}
+                </button>
+                <button
+                  disabled={!canEdit || preparingImport}
+                  lang="en-CA"
+                  onClick={() => void openAssistance()}
+                  type="button"
+                >
+                  Outline to slides
                 </button>
                 <button lang="en-CA" onClick={openVisualImport} type="button">
                   Import visual slides
@@ -3567,6 +3649,34 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
         onClose={() => setVisualImportOpen(false)}
         onResumeRequired={() => setVisualImportOpen(true)}
         onPendingChange={setVisualImportReceiptPending}
+      />
+      <PresentationAssistance
+        presentationId={presentationId}
+        actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+        canEdit={canEdit}
+        open={assistanceOpen}
+        expectedRevision={assistanceTarget.revision}
+        afterBlockId={assistanceTarget.anchor}
+        onInserted={async (blockIds) => {
+          if (
+            !(await reloadLatestDraft(blockIds[0])) ||
+            saveConflict.current ||
+            retainedSave.current.pending
+          ) {
+            throw new Error(
+              "Recover the saved draft acknowledgement before continuing. Your outline review is retained.",
+            );
+          }
+        }}
+        onReloadDraft={async () => {
+          const target = await reloadLatestDraft(selectedBlockId ?? undefined);
+          if (!target)
+            throw new Error("The saved deck could not be loaded. Your outline review is retained.");
+          setAssistanceTarget(target);
+        }}
+        onClose={() => setAssistanceOpen(false)}
+        onResumeRequired={() => setAssistanceOpen(true)}
+        onPendingChange={setAssistancePending}
       />
       {packImportOpen ? (
         <RecoveryPackPresentationPicker

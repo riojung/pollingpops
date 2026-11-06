@@ -387,6 +387,31 @@ export class MemoryRepository implements Repository {
   readonly followupAttempts = new Map<string, FollowupAttemptRecord>();
   readonly followupAnswers = new Map<string, FollowupAnswerRecord>();
   readonly authoringJobs = new Map<string, AuthoringJobRecord>();
+  /** Compact admission receipts survive private source/job/deck retention. Kind prevents UUID collisions across queues. */
+  readonly authoringAdmissions = new Map<string, { workspaceId: string; createdAt: Date }>();
+  recordAuthoringAdmission(
+    kind: "legacy" | "presentation",
+    workspaceId: string,
+    jobId: string,
+    createdAt: Date,
+  ) {
+    this.authoringAdmissions.set(`${workspaceId}:${kind}:${jobId}`, {
+      workspaceId,
+      createdAt: new Date(createdAt),
+    });
+  }
+  authoringUsageSince(workspaceId: string, since: Date) {
+    // Include legacy rows seeded directly by fixtures and restored snapshots, without double counting receipts.
+    const receipts = new Map(this.authoringAdmissions);
+    for (const job of this.authoringJobs.values())
+      receipts.set(`${job.workspaceId}:legacy:${job.id}`, {
+        workspaceId: job.workspaceId,
+        createdAt: job.createdAt,
+      });
+    return [...receipts.values()].filter(
+      (receipt) => receipt.workspaceId === workspaceId && receipt.createdAt >= since,
+    ).length;
+  }
   readonly reportJobs = new Map<
     string,
     { workspaceId: string; attempts: number; availableAt: Date; lastError: string | null }
@@ -4975,6 +5000,7 @@ export class MemoryRepository implements Repository {
   async createAuthoringJob(input: AuthoringJobRecord) {
     if (this.authoringJobs.has(input.id)) throw new Error("Authoring job already exists");
     this.authoringJobs.set(input.id, structuredClone(input));
+    this.recordAuthoringAdmission("legacy", input.workspaceId, input.id, input.createdAt);
     return structuredClone(input);
   }
 
@@ -4983,17 +5009,13 @@ export class MemoryRepository implements Repository {
     since: Date,
     monthlyLimit: number | null,
   ) {
-    const used = [...this.authoringJobs.values()].filter(
-      (job) => job.workspaceId === input.workspaceId && job.createdAt >= since,
-    ).length;
+    const used = this.authoringUsageSince(input.workspaceId, since);
     if (monthlyLimit !== null && used >= monthlyLimit) return null;
     return this.createAuthoringJob(input);
   }
 
   async countAuthoringJobsSince(workspaceId: string, since: Date) {
-    return [...this.authoringJobs.values()].filter(
-      (job) => job.workspaceId === workspaceId && job.createdAt >= since,
-    ).length;
+    return this.authoringUsageSince(workspaceId, since);
   }
 
   async getAuthoringJob(workspaceId: string, jobId: string) {
@@ -5589,6 +5611,8 @@ export class MemoryRepository implements Repository {
     for (const [id, job] of this.authoringJobs) {
       if (ownedWorkspaceIds.has(job.workspaceId)) this.authoringJobs.delete(id);
     }
+    for (const [key, receipt] of this.authoringAdmissions)
+      if (ownedWorkspaceIds.has(receipt.workspaceId)) this.authoringAdmissions.delete(key);
     for (let index = this.productEvents.length - 1; index >= 0; index -= 1) {
       if (ownedWorkspaceIds.has(this.productEvents[index]!.workspaceId)) {
         this.productEvents.splice(index, 1);

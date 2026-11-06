@@ -586,6 +586,23 @@ facilitation timeline. It does not assign quiz standings or learning outcomes to
 Ordinary content slides retain the existing text/image layout tools. Native slides add independently
 positioned text, images, labeled shapes and connectors in the same deck.
 
+### Turn an outline into editable slides
+
+In the Presentation map, choose **Outline to slides**. The editor saves pending changes before
+opening the panel. Enter an **Outline name** and **Outline text**, choose 3–8 slides and review
+the available AI allowance before **Create slide proposal**. This optional action shares the
+existing authoring allowance; normal editing remains available when AI is unavailable.
+
+Review every proposed slide and its **Exact outline excerpts**. Generated claims are unverified;
+citations identify source wording rather than prove the generated statements. Choose the slides
+to include, confirm that you reviewed their wording and excerpts, then select **Insert N reviewed
+slides**. Edit the inserted native text and layout on the canvas. Publish explicitly when ready.
+
+If a response is interrupted, use **Recover proposal** or **Retry exact insertion** to recover
+the same action. Per-tab recovery keeps identities and review choices without storing the pasted
+outline. When another editor changes the saved deck, use **Reload saved deck**, check the
+insertion point and confirm the proposal review again. Private proposals expire after 24 hours.
+
 ### Organize sections and navigate live
 
 In the Builder, choose **Enable sections and navigation**, then **Add section**. Rename sections

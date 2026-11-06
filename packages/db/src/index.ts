@@ -47,3 +47,9 @@ export * from "./presentation-interactions.js";
 export * from "./presentation-insights-types.js";
 
 export * from "./presentation-insights-opinions.js";
+
+export * from "./presentation-assistance-types.js";
+export {
+  createPresentationAssistanceRepository,
+  assertMemoryPresentationAssistanceReady,
+} from "./presentation-assistance.js";

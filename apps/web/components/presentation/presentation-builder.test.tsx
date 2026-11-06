@@ -73,6 +73,7 @@ describe("Presentation Builder UI", () => {
     editor.previewUsed = false;
     workspace.creator = { workspaceId: "workspace-1" };
     workspace.error = "";
+    workspace.canEdit = true;
   });
 
   function opinionMarkup(
@@ -261,6 +262,19 @@ describe("Presentation Builder UI", () => {
     expect(markup).toContain("Opening presentation builder…");
     expect(markup).toContain('aria-hidden="true"');
   });
+
+  it.each([true, false])(
+    "offers outline assistance using the actual editor permission (%s)",
+    (canEdit) => {
+      workspace.canEdit = canEdit;
+      const markup = opinionMarkup(createQuestionBlock("poll").question);
+      const button = markup.match(/<button[^>]*>Outline to slides<\/button>/)?.[0];
+      expect(button).toBeDefined();
+      expect(button?.includes('disabled=""')).toBe(!canEdit);
+      expect(markup).toContain("Add native slide");
+      expect(markup).not.toContain('aria-labelledby="presentation-assistance-title"');
+    },
+  );
 
   it("shows a workspace error and retry instead of an endless opening state", () => {
     workspace.creator = null;

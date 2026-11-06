@@ -598,6 +598,34 @@ rejects bundles missing an applied version. Do not drop the receipt table to fit
 Creating the saved draft consumes no AI allowance; explicit proposal admission retains all E12
 limits, rollout requirements and shared authoring usage above. No document or scene version changes.
 
+### Selected-text assistance and document15
+
+Set `AUTHORING_AI_MODE=disabled` across HTTP instances before a mixed-version upgrade. Apply
+`102_presentation_text_assistance.sql`, upgrade HTTP and dedicated jobs runtimes plus the web
+editor, then re-enable the approved provider. Fence document15 writes at ingress until every
+reader is upgraded, and reload active editor assets. Disabling AI admission does not block
+applying an already-ready proposal; pausing workers alone does not stop admission.
+Both Presentation queues must count the combined two-active-job limit and shared monthly ledger.
+Existing legacy authoring and outline contracts/hashes remain unchanged.
+
+Document15 retains the latest accepted AI text-edit metadata separately from original citations
+and source disclosure. Scene6 and response/report formats retain their meanings. All authoring,
+publication, live-content, history and recovery readers must understand document15; do not
+strip metadata or rewrite immutable publications for rollback. Use a document15-capable rollback
+release containing the applied migration102 file and retain compact admission receipts.
+
+The separate text queue uses the current `AUTHORING_AI_*` configuration. Bounds are one plain
+native object, title160/body4000 UTF-16 characters, 2,048 output tokens, 64KiB response bytes,
+a 45-second provider deadline, three claims and 24-hour private review retention. Only selected
+plain text, role and operation enter its prompt. Original input columns clear on completion;
+the private proposal retains original/proposed wording for review until expiry or source erasure.
+The persisted latest-edit record contains digests and provider identity, not the original text.
+Participant, review and static-export projections omit this creator metadata.
+
+Verify combined capacity/quota races, unchanged-source/revision fencing, accepted retry recovery
+after expiry, erasure and all existing document15 response/scoring semantics before rollout.
+No new paid provider, service or commercial allowance is introduced.
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

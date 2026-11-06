@@ -16,7 +16,7 @@ export interface PresentationAssistanceProvider {
 
 /** Keep the exact approved identity within both proposal and persisted disclosure contracts. */
 export function presentationAssistanceProviderAvailable(
-  provider: PresentationAssistanceProvider | null,
+  provider: Pick<PresentationAssistanceProvider, "providerName" | "modelName"> | null,
 ) {
   return (
     !!provider &&

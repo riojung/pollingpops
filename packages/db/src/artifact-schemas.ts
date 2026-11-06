@@ -71,6 +71,7 @@ export const PRESENTATION_INTERACTION_SCHEMA_VERSION = 11;
 export const PRESENTATION_NAVIGATION_SCHEMA_VERSION = 12;
 export const PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION = 13;
 export const PRESENTATION_SPATIAL_SCHEMA_VERSION = 14;
+export const PRESENTATION_TEXT_ASSISTANCE_SCHEMA_VERSION = 15;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -217,6 +218,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_SPATIAL_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 14)),
   ],
+  [
+    PRESENTATION_TEXT_ASSISTANCE_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 15)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -278,6 +283,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_SPATIAL_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 14)),
+  ],
+  [
+    PRESENTATION_TEXT_ASSISTANCE_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 15)),
   ],
 ]);
 
@@ -353,7 +362,7 @@ export function upcastPresentationContent(
  * Legacy live snapshots used draft validation, including partially authored old snapshots.
  * Preserve that read path, but validate session-only metadata with the frozen content contract
  * so it cannot be stripped by the authoring parser or restore invalid live insertion metadata.
- * Versions 6 through 14 always use the publication parser: hidden editable content must never enter a
+ * Versions 6 through 15 always use the publication parser: hidden editable content must never enter a
  * session through the legacy partial-snapshot path.
  */
 export function upcastPresentationSessionContent(
@@ -370,6 +379,7 @@ export function upcastPresentationSessionContent(
     schemaVersion === PRESENTATION_NAVIGATION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_ADVANCED_INTERACTION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_SPATIAL_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_TEXT_ASSISTANCE_SCHEMA_VERSION ||
     (value &&
       typeof value === "object" &&
       ("liveQuickCheck" in value || "livePublishedQuestions" in value))

@@ -38,9 +38,9 @@ describe("bounded Presentation spatial metadata", () => {
       const parsed = schema.parse(source);
       expect(parsed.schemaVersion).toBe(14);
       expect(parsed).not.toHaveProperty("spatial");
-      expect(schema.safeParse({ ...source, schemaVersion: 15 }).success).toBe(false);
+      expect(schema.safeParse({ ...source, schemaVersion: 16 }).success).toBe(false);
       expect(
-        schema.safeParse(migratePresentationV1({ ...source, schemaVersion: 15 })).success,
+        schema.safeParse(migratePresentationV1({ ...source, schemaVersion: 16 })).success,
       ).toBe(false);
       const enabled = {
         ...source,

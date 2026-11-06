@@ -27,6 +27,28 @@ afterEach(async () => {
 });
 
 describe("database migration discovery", () => {
+  it("adds isolated text proposals with durable shared admissions and explicit version15 creator metadata", async () => {
+    const migration = (
+      await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))
+    ).find(({ version }) => version === 102)!;
+    expect(migration.name).toBe("presentation_text_assistance");
+    for (const fragment of [
+      "CREATE TABLE presentation_text_assistance_jobs",
+      "FORCE ROW LEVEL SECURITY",
+      "'presentation',NEW.id",
+      "CREATE OR REPLACE FUNCTION guard_presentation_assistance_job",
+      "openround_presentation_text_assistance_valid",
+      "source_revision",
+      "original_text=NULL,proposal=NULL",
+      "proposal_hash=encode(sha256",
+      "'14'::jsonb,'15'::jsonb",
+    ])
+      expect(migration.sql).toContain(fragment);
+    expect(migration.sql).not.toMatch(
+      /ALTER TABLE authoring_jobs|DISABLE ROW LEVEL SECURITY|UPDATE presentation_versions|UPDATE presentations SET/i,
+    );
+  });
+
   it("adds a distinct stage credential role without changing credentials, content or isolation", async () => {
     const migration = (
       await discoverMigrations(join(dirname(fileURLToPath(import.meta.url)), "../migrations"))

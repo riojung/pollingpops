@@ -17,6 +17,12 @@ import {
 } from "./presentation-assistance-provider.js";
 import { PresentationAssistanceService } from "./presentation-assistance-service.js";
 import { PresentationAssistanceWorker } from "./presentation-assistance-worker.js";
+import {
+  OpenAiCompatiblePresentationTextAssistanceProvider,
+  presentationTextAssistanceProviderAvailable,
+} from "./presentation-text-assistance-provider.js";
+import { PresentationTextAssistanceService } from "./presentation-text-assistance-service.js";
+import { PresentationTextAssistanceWorker } from "./presentation-text-assistance-worker.js";
 import { createPresentationRepository } from "@openround/db";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { ClamAvScanner } from "./malware-scanner.js";
@@ -95,6 +101,32 @@ export async function createJobsRuntime(
     assistanceService,
     config.AUTHORING_WORKER_LEASE_MS,
   );
+  const configuredTextAssistanceProvider =
+    config.AUTHORING_AI_MODE === "openai_compatible"
+      ? new OpenAiCompatiblePresentationTextAssistanceProvider(
+          config.AUTHORING_AI_ENDPOINT!,
+          config.AUTHORING_AI_API_KEY,
+          config.AUTHORING_AI_MODEL,
+          config.AUTHORING_AI_PROVIDER_NAME,
+        )
+      : null;
+  const textAssistanceProvider = presentationTextAssistanceProviderAvailable(
+    configuredTextAssistanceProvider,
+  )
+    ? configuredTextAssistanceProvider
+    : null;
+  const textAssistanceService = new PresentationTextAssistanceService(
+    repository,
+    createPresentationRepository(repository),
+    Boolean(textAssistanceProvider),
+    (workspaceId) => workspaceFeatureEnabled(repository, config, workspaceId, "presentations"),
+  );
+  const presentationTextAssistance = new PresentationTextAssistanceWorker(
+    repository,
+    textAssistanceProvider,
+    textAssistanceService,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
   const retention = new RetentionService(
     repository,
     storage,
@@ -130,6 +162,11 @@ export async function createJobsRuntime(
         name: "presentation-assistance",
         intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
         run: () => presentationAssistance.runUntilIdle(1),
+      },
+      {
+        name: "presentation-text-assistance",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => presentationTextAssistance.runUntilIdle(1),
       },
       {
         name: "retention",
@@ -170,7 +207,9 @@ export async function createJobsRuntime(
     onError,
     async (name) => {
       const controlId =
-        name === "visual-imports" || name === "presentation-assistance"
+        name === "visual-imports" ||
+        name === "presentation-assistance" ||
+        name === "presentation-text-assistance"
           ? "authoring"
           : name === "integrations"
             ? "business-integrations"

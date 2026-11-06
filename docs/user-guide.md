@@ -610,6 +610,39 @@ the same action. Per-tab recovery keeps identities and review choices without st
 outline. When another editor changes the saved deck, use **Reload saved deck**, check the
 insertion point and confirm the proposal review again. Private proposals expire after 24 hours.
 
+### Rewrite or shorten selected native text
+
+Select a plain text object in a saved native slide, then choose **Rewrite text** or **Shorten
+text**. Rich text with formatting or links remains available for manual editing; this assistance
+does not flatten it. The editor saves pending changes before opening the review panel.
+
+Check the shared AI allowance, then explicitly request a proposal. Only the selected text, its
+title/body role and the requested operation are sent to the configured provider. Notes, other
+objects and citation excerpts are excluded. Compare the complete original and proposed text,
+review the unsupported-claims warning, confirm the review and choose **Apply reviewed text**.
+Existing citations and original source disclosure stay intact; they do not verify the new
+wording. The slide records its **latest AI text edit** separately. Generation never publishes
+or changes the deck by itself.
+
+Use **Resume text assistance** to reopen an interrupted workflow. **Recover or retry saved
+request** recovers the original proposal job; **Retry exact text application** recovers an
+uncertain Apply without repeating the edit. Per-tab assistance recovery stores identities and
+digests, not original or proposed text. **Reload exact target and review** refreshes the saved
+revision only while the same object, role and original text remain unchanged. If that text has
+changed or disappeared, discard the proposal and reload before creating one from the current
+text; the proposal never switches to another object.
+
+A fresh Apply supports **Undo** and **Redo** in the current tab. Page reload resets local undo
+history. A recovered old Apply preserves later edits rather than undoing another author's work.
+Private proposals expire after 24 hours. Accepted wording remains in the saved deck. Ordinary
+editing remains available without AI.
+
+If a saved text request cannot be read, choose **Resume text assistance**, review the warning
+and acknowledge that an edit may already have been applied. Choose **Reload saved deck and clear
+invalid recovery** to load the current saved deck and remove this tab's unreadable text request.
+Valid requests and other recovery copies are kept. If loading the saved deck or clearing tab
+storage fails, the editor keeps its protection and offers the same action to retry.
+
 ### Organize sections and navigate live
 
 In the Builder, choose **Enable sections and navigation**, then **Add section**. Rename sections

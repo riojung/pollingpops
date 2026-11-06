@@ -5,6 +5,7 @@ import { createJobsRuntime } from "../src/jobs-runtime.js";
 import { PresentationReportWorker } from "../src/presentation-report-worker.js";
 import { PresentationVisualImportWorker } from "../src/presentation-visual-import-worker.js";
 import { PresentationAssistanceWorker } from "../src/presentation-assistance-worker.js";
+import { PresentationTextAssistanceWorker } from "../src/presentation-text-assistance-worker.js";
 import { ReportWorker } from "../src/report-worker.js";
 import { RetentionService } from "../src/retention.js";
 
@@ -30,6 +31,7 @@ describe("dedicated jobs runtime worker controls", () => {
     const authoring = vi.spyOn(AuthoringWorker.prototype, "runUntilIdle");
     const visualImports = vi.spyOn(PresentationVisualImportWorker.prototype, "runUntilIdle");
     const assistance = vi.spyOn(PresentationAssistanceWorker.prototype, "runUntilIdle");
+    const textAssistance = vi.spyOn(PresentationTextAssistanceWorker.prototype, "runUntilIdle");
     const retention = vi.spyOn(RetentionService.prototype, "run");
     const onError = vi.fn();
     const runtime = await createJobsRuntime(config, onError);
@@ -46,6 +48,7 @@ describe("dedicated jobs runtime worker controls", () => {
         authoring,
         visualImports,
         assistance,
+        textAssistance,
         retention,
       ]) {
         expect(worker).not.toHaveBeenCalled();
@@ -59,6 +62,7 @@ describe("dedicated jobs runtime worker controls", () => {
         authoring,
         visualImports,
         assistance,
+        textAssistance,
         retention,
       ]) {
         expect(worker).toHaveBeenCalled();

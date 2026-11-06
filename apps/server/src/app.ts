@@ -51,6 +51,14 @@ import {
 import { PresentationAssistanceService } from "./presentation-assistance-service.js";
 import { PresentationAssistanceWorker } from "./presentation-assistance-worker.js";
 import { registerPresentationAssistanceRoutes } from "./presentation-assistance-routes.js";
+import {
+  OpenAiCompatiblePresentationTextAssistanceProvider,
+  presentationTextAssistanceProviderAvailable,
+  type PresentationTextAssistanceProvider,
+} from "./presentation-text-assistance-provider.js";
+import { PresentationTextAssistanceService } from "./presentation-text-assistance-service.js";
+import { PresentationTextAssistanceWorker } from "./presentation-text-assistance-worker.js";
+import { registerPresentationTextAssistanceRoutes } from "./presentation-text-assistance-routes.js";
 import { PresentationVisualImportService } from "./presentation-visual-import-service.js";
 import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
 import { registerPresentationVisualImportRoutes } from "./presentation-visual-import-routes.js";
@@ -110,6 +118,7 @@ export async function buildApp(
     readiness?: () => Promise<void>;
     authoringAssistant?: AuthoringAssistant | null;
     presentationAssistanceProvider?: PresentationAssistanceProvider | null;
+    presentationTextAssistanceProvider?: PresentationTextAssistanceProvider | null;
     oidcProvider?: OidcProvider | null;
     ltiJwtAdapter?: LtiJwtAdapter | null;
     summaryExports?: ReturnType<typeof createSessionSummaryExportService>;
@@ -431,6 +440,34 @@ export async function buildApp(
     presentationAssistance,
     config.AUTHORING_WORKER_LEASE_MS,
   );
+  const configuredPresentationTextAssistanceProvider =
+    overrides.presentationTextAssistanceProvider !== undefined
+      ? overrides.presentationTextAssistanceProvider
+      : config.AUTHORING_AI_MODE === "openai_compatible"
+        ? new OpenAiCompatiblePresentationTextAssistanceProvider(
+            config.AUTHORING_AI_ENDPOINT!,
+            config.AUTHORING_AI_API_KEY,
+            config.AUTHORING_AI_MODEL,
+            config.AUTHORING_AI_PROVIDER_NAME,
+          )
+        : null;
+  const presentationTextAssistanceProvider = presentationTextAssistanceProviderAvailable(
+    configuredPresentationTextAssistanceProvider,
+  )
+    ? configuredPresentationTextAssistanceProvider
+    : null;
+  const presentationTextAssistance = new PresentationTextAssistanceService(
+    repository,
+    presentations,
+    Boolean(presentationTextAssistanceProvider),
+    presentationsEnabled,
+  );
+  const presentationTextAssistanceWorker = new PresentationTextAssistanceWorker(
+    repository,
+    presentationTextAssistanceProvider,
+    presentationTextAssistance,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
   const storage = new StorageService(config, scanner);
   const presentationVisualImports = new PresentationVisualImportService(
     repository,
@@ -657,6 +694,13 @@ export async function buildApp(
     config,
     service: presentationAssistance,
   });
+  await registerPresentationTextAssistanceRoutes(app, {
+    repository,
+    auth,
+    config,
+    service: presentationTextAssistance,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
   await registerPresentationVisualImportRoutes(app, {
     repository,
     presentations,
@@ -776,6 +820,8 @@ export async function buildApp(
     authoringWorker,
     presentationAssistance,
     presentationAssistanceWorker,
+    presentationTextAssistance,
+    presentationTextAssistanceWorker,
     presentationVisualImportWorker,
     presentationVisualImports,
     storage,

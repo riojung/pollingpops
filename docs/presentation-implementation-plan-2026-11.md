@@ -131,8 +131,10 @@ scope is merged in [PR #201](https://github.com/riojung/pollingpops/pull/201). T
 story map and first E11 review slice are merged in [PR #202](https://github.com/riojung/pollingpops/pull/202)
 and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected outline assistance
 slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204). Its outline-first
-new-deck entry point is implemented on `codex/presentation-e12-outline-create`. Self-paced attempts and the remaining later packages stay planned; deployment
-and release qualification remain open.
+new-deck entry point is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
+Selected plain-text rewrite/shorten is implemented on `codex/presentation-e12-text-assistance`.
+Self-paced attempts and the remaining later packages stay planned; deployment and release
+qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -520,8 +522,8 @@ shared admission ledger reuse the existing authoring allowance, provider configu
 controls. Exact intent recovery and atomic draft/source fences protect insertion; no Presentation
 document/scene version, new provider or entitlement is added. See the
 [E12 record](evidence/presentation-e12-outline-assistance.md) for verification and limits.
-Rewrite/shorten, translation, layout/question suggestions and conversational editing remain later
-E12 work. This slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
+Translation, layout/question suggestions and conversational editing remain later E12 work.
+This slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
 and remains undeployed.
 
 The outline-first creation increment on `codex/presentation-e12-outline-create` adds **From
@@ -531,6 +533,19 @@ compact, account/workspace-bound creation receipts recover uncertain creation ac
 without duplicating or recreating deleted drafts. Draft creation is allowance-free; later
 proposal admission uses existing E12 limits. No document/scene version or provider is added.
 See the [outline-first creation record](evidence/presentation-e12-outline-create.md).
+This increment is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
+
+The selected-text increment on `codex/presentation-e12-text-assistance` adds **Rewrite text** and
+**Shorten text** for one selected plain native title/body object. Only that text, role and
+operation enter the approved provider; formatted rich text remains manually editable. Complete
+original/proposed review and an explicit confirmation precede an atomic unchanged-target edit.
+Existing citations and original source disclosure remain intact, with a separate latest-edit
+record and an unverified-wording warning. Document15 and migration102 support this private
+metadata and expiring queue; scene6 and existing live/report formats retain their meanings.
+Exact request/application recovery, current authority/source checks, combined outline/text
+concurrency, shared monthly allowance and bounded provider work reuse existing facilities.
+No paid service or new commercial entitlement is introduced. See the
+[selected-text record](evidence/presentation-e12-text-assistance.md) for verification and limits.
 
 ### E13 Deliver static export and later richer portability
 

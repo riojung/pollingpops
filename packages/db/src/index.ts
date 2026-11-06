@@ -53,3 +53,6 @@ export {
   createPresentationAssistanceRepository,
   assertMemoryPresentationAssistanceReady,
 } from "./presentation-assistance.js";
+
+export * from "./presentation-text-assistance-types.js";
+export { createPresentationTextAssistanceRepository } from "./presentation-text-assistance.js";

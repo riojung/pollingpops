@@ -18,8 +18,10 @@ import {
   InsertRecoveryPackIntoPresentationSchema,
   ApplyPresentationRecoveryPackUpdateSchema,
   PresentationRecoveryPackUpdatePreviewSchema,
+  PresentationDraftSchema,
   PRESENTATION_SCENE_MAX_NODES,
   preparePresentationPublication,
+  presentationTextAssistanceSourceDigest,
   resolvePresentationSpatialFrames,
   type PresentationDraftMutation,
   resolveContentSlideFrames,
@@ -117,6 +119,12 @@ import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationAssistance } from "./presentation-assistance";
+import { PresentationTextAssistance } from "./presentation-text-assistance";
+import {
+  sameTextAssistanceBlockId,
+  type TextAssistanceTarget,
+  type TextAssistanceRecovery,
+} from "../../lib/presentation-text-assistance-client";
 import { PresentationSections } from "./presentation-sections";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import {
@@ -477,6 +485,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [roundSources, setRoundSources] = useState<RoundSource[]>([]);
   const [roundImportOpen, setRoundImportOpen] = useState(false);
   const [sourceImportOpen, setSourceImportOpen] = useState(false);
+  const [textAssistanceOpen, setTextAssistanceOpen] = useState(false);
+  const [textAssistancePending, setTextAssistancePending] = useState(false);
+  const [textAssistanceRecovery, setTextAssistanceRecovery] = useState(false);
+  const [textAssistanceTarget, setTextAssistanceTarget] = useState<TextAssistanceTarget | null>(
+    null,
+  );
+  const textAssistanceActive = useRef(false);
+  textAssistanceActive.current = textAssistanceOpen || textAssistancePending;
   const [assistanceOpen, setAssistanceOpen] = useState(false);
   const [assistancePending, setAssistancePending] = useState(false);
   const [assistanceTarget, setAssistanceTarget] = useState({
@@ -490,6 +506,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const outlineStartReady = useRef(false);
   const assistancePermission = useRef(canEdit);
   assistancePermission.current = canEdit;
+  const textRecoveryContext = `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}:${presentationId}`;
+  const currentTextRecoveryContext = useRef(textRecoveryContext);
+  currentTextRecoveryContext.current = textRecoveryContext;
   const [visualImportOpen, setVisualImportOpen] = useState(false);
   const [visualImportReceiptPending, setVisualImportReceiptPending] = useState(false);
   const visualImportActive = useRef(false);
@@ -538,6 +557,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const canInsertPack =
     canEdit && Boolean(productFeatures?.presentations && productFeatures?.recoveryPacks);
   const builderMutationBlocked =
+    textAssistanceOpen ||
+    textAssistancePending ||
     assistanceOpen ||
     assistancePending ||
     packImportOpen ||
@@ -803,6 +824,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const commit = useCallback(
     (value: SetStateAction<PresentationDraft>, historyKey?: string) => {
       if (
+        textAssistanceActive.current ||
+        importPreparation.current ||
         assistanceActive.current ||
         visualImportActive.current ||
         packOperation.current ||
@@ -978,6 +1001,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       !loaded ||
       !draft ||
       saveConflictPresent ||
+      textAssistanceOpen ||
+      textAssistancePending ||
+      preparingImport ||
       assistanceOpen ||
       assistancePending ||
       packImportOpen ||
@@ -997,6 +1023,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     enqueueSave,
     loaded,
     saveConflictPresent,
+    textAssistanceOpen,
+    textAssistancePending,
+    preparingImport,
     assistanceOpen,
     assistancePending,
     packImportOpen,
@@ -1018,6 +1047,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         mediaState !== "idle" ||
         pendingNativeImage !== null ||
         ordinarySavePending ||
+        textAssistancePending ||
         assistancePending ||
         visualImportReceiptPending
       ) {
@@ -1033,6 +1063,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     mediaState,
     pendingNativeImage,
     ordinarySavePending,
+    textAssistancePending,
     assistancePending,
     visualImportReceiptPending,
   ]);
@@ -1175,6 +1206,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   function undo() {
     if (
+      importPreparation.current ||
+      textAssistanceActive.current ||
       assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
@@ -1201,6 +1234,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   function redo() {
     if (
+      importPreparation.current ||
+      textAssistanceActive.current ||
       assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
@@ -1220,8 +1255,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     void saveBuilderRecovery(recoveryKey, draftBaseRevision.current, next).catch(() => undefined);
   }
 
-  async function reloadLatestDraft(preferredBlockId?: string) {
-    if (retainedSave.current.pending) {
+  async function reloadLatestDraft(
+    preferredBlockId?: string,
+    exactTextTarget?: Pick<TextAssistanceRecovery, "blockId" | "nodeId" | "role" | "sourceDigest">,
+    textPermissionFence = false,
+    recoveryReset?: { canAdopt: () => boolean; preserveWorkingDraft: () => boolean },
+  ) {
+    if (retainedSave.current.pending && !recoveryReset) {
       setError("Retry the outstanding save acknowledgement before loading another draft.");
       return false;
     }
@@ -1233,14 +1273,88 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     try {
       const response = await apiFetch<{ presentation: PresentationRecord }>(
         `/v1/presentations/${presentationId}`,
+        { cache: "no-store" },
       );
+      if (recoveryReset) {
+        if (!recoveryReset.canAdopt()) return false;
+        if (
+          !sameTextAssistanceBlockId(response.presentation.id, presentationId) ||
+          !Number.isInteger(response.presentation.draftRevision) ||
+          response.presentation.draftRevision < 0
+        )
+          throw new Error(
+            "The current saved deck could not be verified. The invalid recovery record is retained.",
+          );
+        const serverJson = JSON.stringify(response.presentation.draft);
+        response.presentation.draft = PresentationDraftSchema.parse(response.presentation.draft);
+        if (recoveryReset.preserveWorkingDraft()) {
+          if (response.presentation.draftRevision < revisionRef.current)
+            throw new Error(
+              "The saved deck read was older than the current editor state. Retry loading before clearing recovery.",
+            );
+          // Other exact receipts still own the working copy. Observe the current server revision
+          // without replacing their local work, so historical acknowledgements cannot save over it.
+          revisionRef.current = response.presentation.draftRevision;
+          lastSavedServerJson.current = serverJson;
+          setRecord(response.presentation);
+          setSaveState("error");
+          setError(
+            "The current saved deck was checked. Recover the other outstanding receipt to continue; your local work is retained.",
+          );
+          return {
+            draft: response.presentation.draft,
+            revision: response.presentation.draftRevision,
+            anchor: selectedBlockId,
+          };
+        }
+        if (
+          local &&
+          !localWasSaved &&
+          recovery &&
+          JSON.stringify(recovery.draft) !== JSON.stringify(local)
+        )
+          throw new Error(
+            "Preserve the current local changes before clearing text recovery. The existing local recovery copy is retained.",
+          );
+        if (
+          local &&
+          !localWasSaved &&
+          JSON.stringify(local) !== JSON.stringify(response.presentation.draft)
+        )
+          await saveBuilderRecovery(recoveryKey, localRevision, local);
+        if (!recoveryReset.canAdopt()) return false;
+      }
+      if (textPermissionFence && (!alive.current || !assistancePermission.current)) return false;
+      if (exactTextTarget) {
+        const block = response.presentation.draft.blocks.find((block) =>
+          sameTextAssistanceBlockId(block.id, exactTextTarget.blockId),
+        );
+        const node =
+          block?.kind === "content"
+            ? block.scene?.nodes.find((node) => node.id === exactTextTarget.nodeId)
+            : null;
+        if (
+          node?.type !== "text" ||
+          node.richText ||
+          node.role !== exactTextTarget.role ||
+          presentationTextAssistanceSourceDigest(node.text) !== exactTextTarget.sourceDigest
+        ) {
+          throw new Error(
+            "The exact text object was changed or deleted. Discard this proposal and select text for a new request.",
+          );
+        }
+      }
       const target = {
+        draft: response.presentation.draft,
         revision: response.presentation.draftRevision,
         anchor:
-          preferredBlockId &&
-          response.presentation.draft.blocks.some((block) => block.id === preferredBlockId)
-            ? preferredBlockId
-            : (response.presentation.draft.blocks[0]?.id ?? null),
+          (preferredBlockId
+            ? response.presentation.draft.blocks.find((block) =>
+                sameTextAssistanceBlockId(block.id, preferredBlockId),
+              )?.id
+            : null) ??
+          response.presentation.draft.blocks[0]?.id ??
+          null,
       };
       setRecord(response.presentation);
       setDraft(response.presentation.draft);
@@ -1264,8 +1378,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           savedAt: new Date().toISOString(),
         };
         setRecovery(snapshot);
-        await saveBuilderRecovery(recoveryKey, localRevision, local);
-      } else {
+        if (!recoveryReset) await saveBuilderRecovery(recoveryKey, localRevision, local);
+      } else if (!recoveryReset) {
         setRecovery(null);
         await clearBuilderRecovery(recoveryKey);
       }
@@ -1273,6 +1387,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     } catch (caught) {
       setError(humanError(caught));
       setSaveState("error");
+      if (exactTextTarget) throw caught;
       return false;
     }
   }
@@ -1421,6 +1536,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       importPreparation.current ||
       packOperation.current ||
       packImportOpen ||
+      textAssistanceActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       packUpdateOperation.current ||
@@ -1441,6 +1557,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packUpdateOperation.current ||
       packUpdatePending.current ||
       importPreparation.current ||
+      textAssistanceActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       roundImportOpen ||
@@ -1583,6 +1700,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packPending.current ||
       importPreparation.current ||
       roundImportOpen ||
+      textAssistanceActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       packImportOpen ||
@@ -1644,6 +1762,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       importPreparation.current ||
       packImportOpen ||
       roundImportOpen ||
+      textAssistanceActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       mediaState !== "idle"
@@ -1758,6 +1877,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packImportOpen ||
       roundImportOpen ||
       sourceImportOpen ||
+      textAssistanceActive.current ||
       visualImportActive.current
     )
       return;
@@ -1804,6 +1924,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         !draft ||
         !canEdit ||
         importPreparation.current ||
+        textAssistanceActive.current ||
         assistanceActive.current ||
         packOperation.current ||
         packPending.current ||
@@ -1868,6 +1989,77 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     void openAssistance(true);
   }, [startOutline, outlineStartBlocked, preparingImport, openAssistance]);
 
+  async function openTextAssistance(nodeId: string, operation: "rewrite" | "shorten") {
+    if (textAssistanceRecovery) {
+      setTextAssistanceOpen(true);
+      return;
+    }
+    if (
+      !draft ||
+      !canEdit ||
+      !selectedBlockId ||
+      builderMutationBlocked ||
+      importPreparation.current ||
+      assistanceActive.current ||
+      visualImportActive.current ||
+      packOperation.current ||
+      packPending.current ||
+      packUpdateOperation.current ||
+      packUpdatePending.current ||
+      roundImportOpen ||
+      sourceImportOpen ||
+      mediaState !== "idle" ||
+      pendingNativeImageRef.current
+    )
+      return;
+    const blockId = selectedBlockId.toLowerCase();
+    const sourceBlock = draft.blocks.find((block) => sameTextAssistanceBlockId(block.id, blockId));
+    const sourceNode =
+      sourceBlock?.kind === "content"
+        ? sourceBlock.scene?.nodes.find((node) => node.id === nodeId)
+        : null;
+    if (sourceNode?.type !== "text" || sourceNode.richText || !sourceNode.text.trim()) return;
+    importPreparation.current = true;
+    setPreparingImport(true);
+    setError("");
+    try {
+      const expectedRevision = await prepareVisualInsertion();
+      if (!alive.current || !assistancePermission.current) return;
+      const savedDraft = JSON.parse(lastSavedJson.current) as PresentationDraft;
+      const savedBlock = savedDraft.blocks.find((block) =>
+        sameTextAssistanceBlockId(block.id, blockId),
+      );
+      const savedNode =
+        savedBlock?.kind === "content"
+          ? savedBlock.scene?.nodes.find((node) => node.id === nodeId)
+          : null;
+      if (
+        savedNode?.type !== "text" ||
+        savedNode.richText ||
+        savedNode.role !== sourceNode.role ||
+        savedNode.text !== sourceNode.text
+      )
+        throw new Error(
+          "The exact selected text could not be saved. Retry after saving your changes.",
+        );
+      setTextAssistanceTarget({
+        blockId,
+        nodeId,
+        role: savedNode.role,
+        text: savedNode.text,
+        operation,
+        expectedRevision,
+      });
+      textAssistanceActive.current = true;
+      setTextAssistanceOpen(true);
+    } catch (caught) {
+      if (alive.current) setError(humanError(caught));
+    } finally {
+      importPreparation.current = false;
+      if (alive.current) setPreparingImport(false);
+    }
+  }
+
   function openVisualImport() {
     if (
       importPreparation.current ||
@@ -1877,6 +2069,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packUpdatePending.current ||
       sourceImportOpen ||
       roundImportOpen ||
+      textAssistanceActive.current ||
+      assistanceActive.current ||
       packImportOpen ||
       mediaState !== "idle" ||
       pendingNativeImageRef.current
@@ -2047,7 +2241,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       <a className={styles.skipLink} href="#presentation-canvas">
         {t("delivery.presentationBuilder.skipCanvas")}
       </a>
-      <header ref={commandBarRef} className={styles.commandBar} inert={builderMutationBlocked}>
+      <header
+        ref={commandBarRef}
+        className={styles.commandBar}
+        inert={builderMutationBlocked || preparingImport}
+      >
         <h1 className="sr-only">
           {builderTitleParts[0]}
           <span lang={draft.title ? "" : locale}>
@@ -2138,6 +2336,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </div>
       </header>
 
+      {textAssistanceRecovery && !textAssistanceOpen ? (
+        <div className={styles.errorBanner} role="status">
+          <p>
+            {textAssistancePending
+              ? "A text assistance receipt is outstanding. Recover it before editing this deck."
+              : "A text assistance proposal is available for review."}
+          </p>
+          <button
+            type="button"
+            data-text-assistance-resume
+            onClick={() => setTextAssistanceOpen(true)}
+          >
+            Resume text assistance
+          </button>
+        </div>
+      ) : null}
       {assistancePending && !assistanceOpen ? (
         <div className={styles.errorBanner} role="status" lang="en-CA">
           <p>Recover the outline insertion acknowledgement before continuing to edit.</p>
@@ -2150,7 +2364,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       {recovery ? (
         <div
           className={styles.recoveryBanner}
-          inert={builderMutationBlocked}
+          inert={builderMutationBlocked || preparingImport}
           lang="en-CA"
           role="status"
           aria-label="Local draft recovery"
@@ -2255,7 +2469,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </div>
       ) : null}
       {error ? (
-        <div className={styles.errorBanner} inert={builderMutationBlocked} role="alert">
+        <div
+          className={styles.errorBanner}
+          inert={builderMutationBlocked || preparingImport}
+          role="alert"
+        >
           <span lang="en-CA">{error}</span>
           {(saveState === "error" || ordinarySavePending) && saveState !== "saving" ? (
             <button onClick={() => void enqueueSave(draft)} type="button">
@@ -2282,7 +2500,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         <section
           className={styles.packReviews}
           aria-label="Presentation Recovery Pack updates"
-          inert={builderMutationBlocked}
+          inert={builderMutationBlocked || preparingImport}
         >
           {packUpdateReceiptPending ? (
             <p className="notice" role="status" lang="en-CA">
@@ -2315,7 +2533,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
       <div
         className={`${styles.workspace} ${mapOpen ? "" : styles.mapClosed} ${inspectorOpen ? "" : styles.inspectorClosed}`}
-        inert={builderMutationBlocked}
+        inert={builderMutationBlocked || preparingImport}
       >
         <aside
           className={styles.map}
@@ -2494,7 +2712,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </aside>
 
         <main className={styles.canvasArea} id="presentation-canvas">
-          <div className={styles.compactCommands} inert={builderMutationBlocked}>
+          <div className={styles.compactCommands} inert={builderMutationBlocked || preparingImport}>
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
               {saveLabel}
             </span>
@@ -2740,9 +2958,29 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             </section>
           ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
             <section className={styles.slideCanvas} lang="en-CA">
+              {selectedBlock.textAssistance ? (
+                <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
+                  <strong>Latest AI text edit — unverified wording</strong>
+                  <p>
+                    {selectedBlock.textAssistance.operation === "shorten"
+                      ? "Shortened"
+                      : "Rewritten"}{" "}
+                    {selectedBlock.textAssistance.role} object {selectedBlock.textAssistance.nodeId}{" "}
+                    by {selectedBlock.textAssistance.provider} /{" "}
+                    {selectedBlock.textAssistance.model} at{" "}
+                    {selectedBlock.textAssistance.generatedAt}.
+                  </p>
+                  <p>
+                    {selectedBlock.textAssistance.reviewWarning} This records the latest edit on
+                    this slide, not a complete edit history or fact check.
+                  </p>
+                </aside>
+              ) : null}
               <NativeSceneEditor
                 key={selectedBlock.id}
                 scene={selectedBlock.scene}
+                onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
+                textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
                 navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
                 onUndo={undo}
                 onRedo={redo}
@@ -2873,7 +3111,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   commit(
                     (current) => ({
                       ...current,
-                      schemaVersion: 13,
+                      schemaVersion: current.schemaVersion >= 13 ? current.schemaVersion : 13,
                       sections: current.sections ?? [],
                       blocks: current.blocks.map((block) => {
                         if (block.id !== selectedBlock.id || block.kind !== "question")
@@ -3708,6 +3946,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       <PresentationVisualImport
         presentationId={presentationId}
         open={visualImportOpen}
+        preparationBlocked={
+          preparingImport ||
+          textAssistanceOpen ||
+          textAssistancePending ||
+          assistanceOpen ||
+          assistancePending
+        }
         afterBlockId={selectedBlockId}
         prepareInsert={prepareVisualInsertion}
         onInserted={async (blockIds) => {
@@ -3726,6 +3971,117 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         onClose={() => setVisualImportOpen(false)}
         onResumeRequired={() => setVisualImportOpen(true)}
         onPendingChange={setVisualImportReceiptPending}
+      />
+      <PresentationTextAssistance
+        presentationId={presentationId}
+        actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+        canEdit={canEdit}
+        open={textAssistanceOpen}
+        target={textAssistanceTarget}
+        citations={(() => {
+          const block = textAssistanceTarget
+            ? draft.blocks.find((block) =>
+                sameTextAssistanceBlockId(block.id, textAssistanceTarget.blockId),
+              )
+            : null;
+          return block?.kind === "content" ? (block.citations ?? []) : [];
+        })()}
+        onApplied={async (receipt) => {
+          const beforeJson = latestDraftJson.current;
+          const before = JSON.parse(beforeJson) as PresentationDraft;
+          const beforeRevision = draftBaseRevision.current;
+          const clean =
+            beforeJson === lastSavedJson.current && beforeRevision === revisionRef.current;
+          const history = undoStack;
+          const block = before.blocks.find((block) =>
+            sameTextAssistanceBlockId(block.id, receipt.blockId),
+          );
+          const node =
+            block?.kind === "content"
+              ? block.scene?.nodes.find((node) => node.id === receipt.nodeId)
+              : null;
+          const sourceMatches =
+            node?.type === "text" &&
+            !node.richText &&
+            node.role === receipt.role &&
+            node.text.trim().length > 0 &&
+            presentationTextAssistanceSourceDigest(node.text) === receipt.sourceDigest;
+          const loaded = await reloadLatestDraft(receipt.blockId, undefined, true);
+          if (!loaded || saveConflict.current || retainedSave.current.pending)
+            throw new Error("Recover the text application acknowledgement before continuing.");
+          // Only a fresh, exact acknowledgement can become a normal local text undo step.
+          // Historical receipt recovery and newer remote drafts must not fabricate old snapshots.
+          if (
+            clean &&
+            sourceMatches &&
+            beforeRevision === receipt.acceptedRevision - 1 &&
+            loaded.revision === receipt.acceptedRevision &&
+            JSON.stringify(PresentationDraftSchema.parse(loaded.draft)) ===
+              JSON.stringify(receipt.acceptedDraft)
+          ) {
+            setUndoStack([...history, before].slice(-HISTORY_LIMIT));
+            setRedoStack([]);
+          }
+        }}
+        onReloadTarget={async (binding) => {
+          const loadedTarget = await reloadLatestDraft(binding.blockId, binding, true);
+          if (!loadedTarget)
+            throw new Error("The exact saved target could not be loaded. Your review is retained.");
+          const block = loadedTarget.draft.blocks.find((block) =>
+            sameTextAssistanceBlockId(block.id, binding.blockId),
+          );
+          const node =
+            block?.kind === "content"
+              ? block.scene?.nodes.find((node) => node.id === binding.nodeId)
+              : null;
+          if (node?.type !== "text" || node.richText || node.role !== binding.role)
+            throw new Error("The exact target is unavailable.");
+          const target = {
+            blockId: binding.blockId,
+            nodeId: binding.nodeId,
+            role: node.role,
+            operation: binding.operation,
+            text: node.text,
+            expectedRevision: loadedTarget.revision,
+          };
+          setTextAssistanceTarget(target);
+          return target;
+        }}
+        onReloadForInvalidRecovery={async (canContinue) => {
+          const context = textRecoveryContext;
+          const current = () =>
+            canContinue() &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          const otherReceiptPending = () =>
+            Boolean(
+              retainedSave.current.pending ||
+              packPending.current ||
+              packUpdatePending.current ||
+              packOperation.current ||
+              packUpdateOperation.current ||
+              assistanceActive.current ||
+              visualImportActive.current ||
+              importPreparation.current,
+            );
+          if (!current())
+            throw new Error(
+              "Editor permission changed. Reload the editor before clearing recovery.",
+            );
+          const loaded = await reloadLatestDraft(selectedBlockId ?? undefined, undefined, true, {
+            canAdopt: current,
+            preserveWorkingDraft: otherReceiptPending,
+          });
+          if (!loaded || !current())
+            throw new Error(
+              "The current saved deck could not be loaded. The invalid recovery record is retained.",
+            );
+          setTextAssistanceTarget(null);
+        }}
+        onClose={() => setTextAssistanceOpen(false)}
+        onPendingChange={setTextAssistancePending}
+        onRecoveryChange={setTextAssistanceRecovery}
       />
       <PresentationAssistance
         presentationId={presentationId}

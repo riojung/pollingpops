@@ -38,7 +38,7 @@ export function spatialContent(source = advancedInteractionContent()): Presentat
   });
 }
 describe("durable bounded Presentation spatial layout", () => {
-  it.each([6, 7, 8, 9, 10, 11, 12, 13, 14] as const)(
+  it.each([6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const)(
     "requires publication-valid initial session content in document%s",
     (schemaVersion) => {
       const content = PresentationContentSchema.parse({
@@ -187,7 +187,7 @@ describe("durable bounded Presentation spatial layout", () => {
     const legacy = { schemaVersion: 5, title: "", blocks: [] };
     expect(upcastPresentationSessionContent(legacy, 5)).toMatchObject(legacy);
   });
-  it("adds exact14 readers without rewriting13 hashes/defaults or accepting15", () => {
+  it("adds exact14 and15 readers without rewriting13 hashes/defaults or accepting16", () => {
     const original = advancedInteractionContent(),
       bytes = JSON.stringify(original);
     const hash = createHash("sha256").update(bytes).digest("hex"),
@@ -205,7 +205,12 @@ describe("durable bounded Presentation spatial layout", () => {
       expect(parse(content, 14)).toEqual(content);
       expect(() => parse(content, 13)).toThrow();
       expect(() => parse(original, 14)).toThrow();
-      expect(() => parse({ ...content, schemaVersion: 15 }, 15)).toThrow("Unsupported");
+      expect(parse({ ...content, schemaVersion: 15 }, 15)).toEqual({
+        ...content,
+        schemaVersion: 15,
+      });
+      expect(() => parse({ ...content, schemaVersion: 15 }, 14)).toThrow();
+      expect(() => parse({ ...content, schemaVersion: 16 }, 16)).toThrow("Unsupported");
     }
     expect(JSON.stringify(original)).toBe(bytes);
     expect(upcastPresentationContent({ ...content, spatial: undefined }, 14)).not.toHaveProperty(

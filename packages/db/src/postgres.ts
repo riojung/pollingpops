@@ -7720,6 +7720,22 @@ export class PostgresRepository implements Repository {
            FROM presentation_shares WHERE workspace_id = ANY($1::uuid[])
            ORDER BY created_at, id`,
         );
+        // Feedback can belong to a reviewer's account even when the publication is in another workspace.
+        await client.query("SELECT set_config('app.presentation_review_lifecycle','on',true)");
+        const presentationReviewCycles = await queryWorkspaceData(
+          `SELECT workspace_id AS "workspaceId",presentation_id AS "presentationId",share_id AS "shareId",
+                  review_seq AS "reviewSeq",approved_at AS "approvedAt"
+           FROM presentation_review_cycles WHERE workspace_id=ANY($1::uuid[]) ORDER BY share_id`,
+        );
+        const presentationReviewMessages = await client.query(
+          `SELECT workspace_id AS "workspaceId",share_id AS "shareId",id,thread_id AS "threadId",
+                  actor_id AS "actorId",author_role AS role,reviewer_ordinal AS ordinal,body AS text,
+                  version,deleted,created_at AS "createdAt",updated_at AS "updatedAt",created_seq AS "createdSeq"
+           FROM presentation_review_messages WHERE workspace_id=ANY($1::uuid[]) OR actor_id=$2
+           ORDER BY share_id,created_seq,id`,
+          [workspaceIds, userId],
+        );
+        await client.query("SELECT set_config('app.presentation_review_lifecycle','',true)");
         const quizDraftHistory = await queryWorkspaceData(
           `SELECT id, workspace_id, quiz_id, revision, draft, draft_schema_version,
                   saved_by, mutation_id, created_at
@@ -8110,6 +8126,8 @@ export class PostgresRepository implements Repository {
           sessionSummarySnapshots: sessionSummarySnapshots.rows,
           sessionSummaryShares: sessionSummaryShares.rows,
           presentationShares: presentationShares.rows,
+          presentationReviewCycles: presentationReviewCycles.rows,
+          presentationReviewMessages: presentationReviewMessages.rows,
           quizzes: quizzes.rows.map((row) => ({
             ...row,
             draft: upcastRoundDraft(

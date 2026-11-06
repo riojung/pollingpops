@@ -23,6 +23,7 @@ import {
   createLibraryMetadataRepository,
   createPresentationRepository,
   createPresentationShareRepository,
+  createPresentationReviewFeedbackRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
   createPlatformRepository,
@@ -67,6 +68,7 @@ import { StorageService } from "./storage.js";
 import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
 import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
+import { registerPresentationReviewFeedbackRoutes } from "./presentation-review-feedback-routes.js";
 import { registerPresentationStaticExportRoutes } from "./presentation-static-export-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
 import { PresentationSessionService } from "./presentation-session-service.js";
@@ -215,6 +217,7 @@ export async function buildApp(
   }
   const presentations = createPresentationRepository(repository);
   const presentationShares = createPresentationShareRepository(repository);
+  const presentationReviewFeedback = createPresentationReviewFeedbackRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
     concurrentResponseWrites: config.PRESENTATION_CONCURRENT_RESPONSE_WRITES,
@@ -628,6 +631,14 @@ export async function buildApp(
     consumeAdmission: cache.consumeRateLimit.bind(cache),
     featureEnabled: presentationsEnabled,
   });
+  await registerPresentationReviewFeedbackRoutes(app, {
+    auth,
+    repository,
+    feedback: presentationReviewFeedback,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
   await registerPresentationStaticExportRoutes(app, {
     auth,
     repository,
@@ -733,6 +744,7 @@ export async function buildApp(
     presentationSessions,
     presentationService,
     presentationShares,
+    presentationReviewFeedback,
     groups,
     libraryMetadata,
     canvasBoards,

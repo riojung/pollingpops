@@ -13,6 +13,7 @@ import {
 } from "../../lib/presentation-sharing-client";
 import styles from "./sharing.module.css";
 import { ApiClientError } from "../../lib/api";
+import { PresentationFeedbackPanel, clearPresentationFeedbackRecovery } from "./feedback-panel";
 export function PresentationReviewImageFallback({
   failed,
   retryable,
@@ -130,6 +131,15 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
   const navigationAbort = useRef<AbortController | null>(null),
     activeVersion = useRef<string | null>(null),
     retryTarget = useRef<number | null>(null);
+  function clearAccess() {
+    navigationAbort.current?.abort();
+    setReview(null);
+    token.current = null;
+    activeVersion.current = null;
+    retryTarget.current = null;
+    clearPresentationReviewToken(shareId);
+    clearPresentationFeedbackRecovery("reviewer", shareId);
+  }
   async function changePage(target: number) {
     if (!review || !token.current || navigationBusy || target < 0 || target >= review.blocks.length)
       return;
@@ -156,11 +166,7 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
     } catch (error) {
       if (controller.signal.aborted) return;
       if (error instanceof ApiClientError && [401, 403, 404, 410].includes(error.status)) {
-        setReview(null);
-        token.current = null;
-        activeVersion.current = null;
-        clearPresentationReviewToken(shareId);
-        retryTarget.current = null;
+        clearAccess();
       } else setNavigationError("Could not verify access. Retry the page change.");
     } finally {
       if (!controller.signal.aborted) setNavigationBusy(false);
@@ -170,7 +176,6 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
     let controller: AbortController;
     const load = () => {
       navigationAbort.current?.abort();
-      activeVersion.current = null;
       setNavigationBusy(false);
       setNavigationError("");
       controller?.abort();
@@ -189,17 +194,38 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
           removeItem: (key) => window.sessionStorage.removeItem(key),
         },
       });
-      // A focus reload must keep the scrubbed token when per-tab storage is unavailable.
+      const previousToken = token.current;
+      // Focus revalidation keeps the current source and discussion drafts mounted.
+      // A new incoming credential clears them before any replacement is fetched.
       token.current = capturedToken ?? (hasIncomingCredential ? null : token.current);
-      setReview(null);
+      const retainSource =
+        !hasIncomingCredential &&
+        token.current !== null &&
+        previousToken === token.current &&
+        activeVersion.current !== null;
+      if (!retainSource) {
+        activeVersion.current = null;
+        setReview(null);
+        if (previousToken !== null) clearPresentationFeedbackRecovery("reviewer", shareId);
+      }
       setLoading(true);
       if (!token.current) {
+        clearPresentationFeedbackRecovery("reviewer", shareId);
         setLoading(false);
         return;
       }
+      const expectedVersion = activeVersion.current;
       void fetchPresentationReview(shareId, token.current, current.signal)
         .then((value) => {
           if (!current.signal.aborted) {
+            if (
+              Date.parse(value.expiresAt) <= Date.now() ||
+              (expectedVersion !== null &&
+                expectedVersion.toLowerCase() !== value.versionId.toLowerCase())
+            ) {
+              clearAccess();
+              return;
+            }
             setReview(value);
             activeVersion.current = value.versionId;
             setIndex((previous) => Math.min(previous, value.blocks.length - 1));
@@ -211,8 +237,7 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
             error instanceof ApiClientError &&
             [401, 403, 404, 410].includes(error.status)
           ) {
-            token.current = null;
-            clearPresentationReviewToken(shareId);
+            clearAccess();
           }
         })
         .finally(() => {
@@ -239,6 +264,7 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
         setReview(null);
         token.current = null;
         clearPresentationReviewToken(shareId);
+        clearPresentationFeedbackRecovery("reviewer", shareId);
       } else timer = window.setTimeout(expire, Math.min(remaining, 2_147_483_647));
     };
     expire();
@@ -406,6 +432,15 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
                 ) : null}
               </section>
             </div>
+            <PresentationFeedbackPanel
+              mode="reviewer"
+              shareId={shareId}
+              versionId={review.versionId}
+              token={token.current}
+              blockId={block.id}
+              blockIndex={index}
+              onAccessLost={clearAccess}
+            />
           </>
         ) : (
           <>

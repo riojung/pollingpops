@@ -719,6 +719,38 @@ remain valid until revoked or expired. Already delivered content cannot be recal
 Each deck permits twenty active and one hundred retained links; expired metadata is removed after
 seven days. These review links do not create assignments, learner attempts or completion records.
 
+### Collect comments and approve a review
+
+Open **Share review link**, choose **Review feedback** for a link, then **Enable comments**.
+That link stays on its published version. Anyone with the link can still read anonymously;
+signed-in people with the link can read its feedback and comment. Reviewing requires no paid
+creator seat and does not add the reviewer to the author's workspace.
+
+Recipients choose **Sign in to comment** and return to the same review. Keep the original review
+tab or reopen the original private link if a different browser tab cannot recover access. Link
+credentials are not included in the sign-in address. Reviewers appear as **Reviewer 1**,
+**Reviewer 2**, and so on; other reviewers do not see their account email addresses.
+
+Use **Comment on this page** and **Post comment** to start a thread. The composer keeps the page
+where the comment began, even if you navigate before posting. Threads show their published page
+number. Reply to an open thread, or edit/delete your own messages. An author must reopen a
+resolved thread before it accepts replies. These actions affect feedback, while slide content
+and questions remain for reading.
+
+Authors use **Resolve** or **Reopen** in the link's feedback panel. **Approve this review** becomes
+available when no threads are open. Approval records sign-off for that link's review of that
+published version. Publishing continues to use the existing author controls. A later comment,
+edit or reopen makes the prior approval stale until the author reviews and approves again.
+Another link or later publication has its own review state.
+
+Use **Refresh feedback** to fetch newer discussion. A conflict retains unsent text so you can
+refresh before trying again. Returning to the tab also preserves unsubmitted reply/edit text
+while the same link revalidates. Changing accounts or losing link access clears these drafts.
+After an uncertain acknowledgement, **Retry pending action** recovers the same submitted action,
+including after reload. Switching accounts cannot replay the previous account's pending action.
+Revocation or expiry ends recipient access and future writes; authors can read retained closed
+feedback. Deleted messages have their text erased.
+
 ### Download a static presentation
 
 Publish the deck, then choose **Export**. Choose **PDF** for the published deck, **PNG** for one

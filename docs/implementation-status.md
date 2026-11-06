@@ -8,6 +8,22 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E11 private review feedback November 5, 2026
+
+The source on `codex/presentation-e11-review` adds opt-in comments for existing private review
+links. Signed-in free reviewers can discuss published pages without joining the creator's
+workspace or allocating a paid creator seat. Current owners/editors resolve/reopen threads and
+approve that link's review of its pinned version. Later feedback makes approval stale; drafts,
+other links and later publications retain their own state.
+
+Migration099 adds bounded sidecar storage, forced RLS, version/source guards, exact operation
+receipts and account erasure/export handling. Existing E08 responses, document14, scene6, live
+assessments and Report V1–V7 retain their meanings. The full repository check, four
+production-browser profiles and fifteen selected real PostgreSQL cases pass; see the
+[E11 record](evidence/presentation-e11-review-feedback.md)
+for verification. No new provider, service or dependency is added. Concurrent authoring remains
+separate. This slice is ready for review and remains undeployed.
+
 ### Presentation E10 bounded spatial story map November 5, 2026
 
 The source on `codex/presentation-e10-spatial` adds an optional spatial story map. Authors arrange
@@ -23,8 +39,8 @@ service, provider or live command. The full repository check, eight selected rea
 cases and four production-browser profiles pass; see the
 [E10 record](evidence/presentation-e10-spatial.md) for verification and limits.
 This is the bounded story-map slice; content-plane camera rendering,
-nested frames and facilitator-broadcast overview controls remain later E10 work. Changes remain
-pending review and deployment.
+nested frames and facilitator-broadcast overview controls remain later E10 work. The selected
+slice is merged in [PR #202](https://github.com/riojung/pollingpops/pull/202) and remains undeployed.
 
 ### Presentation E09 live-session insights November 5, 2026
 

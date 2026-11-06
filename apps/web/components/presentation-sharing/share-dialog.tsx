@@ -13,6 +13,7 @@ import {
 } from "../../lib/presentation-sharing-client";
 import { humanError } from "../../lib/api";
 import styles from "./sharing.module.css";
+import { PresentationFeedbackPanel } from "./feedback-panel";
 export function PresentationShareButton({
   presentationId,
   versionId,
@@ -63,7 +64,8 @@ export function PresentationShareDialog({
     [busy, setBusy] = useState(false),
     [pending, setPending] = useState(false),
     [error, setError] = useState(""),
-    [url, setUrl] = useState("");
+    [url, setUrl] = useState(""),
+    [feedbackShare, setFeedbackShare] = useState<string | null>(null);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.showModal();
@@ -134,12 +136,12 @@ export function PresentationShareDialog({
       }}
       lang="en-CA"
     >
-      <header className={styles.controls}>
+      <div className={styles.controls}>
         <h2 id="presentation-share-title">Share a private review link</h2>
         <button type="button" onClick={onClose}>
           Close
         </button>
-      </header>
+      </div>
       <p>
         Shares the published version. Draft changes and speaker notes stay private. Anyone with the
         link can review it until it expires or you revoke it.
@@ -221,6 +223,21 @@ export function PresentationShareDialog({
                 >
                   Revoke link
                 </button>
+                <button
+                  type="button"
+                  aria-expanded={feedbackShare === share.id}
+                  onClick={() => setFeedbackShare(feedbackShare === share.id ? null : share.id)}
+                >
+                  Review feedback
+                </button>
+                {feedbackShare === share.id ? (
+                  <PresentationFeedbackPanel
+                    mode="author"
+                    presentationId={presentationId}
+                    shareId={share.id}
+                    versionId={share.versionId}
+                  />
+                ) : null}
               </li>
             );
           })}

@@ -111,6 +111,7 @@ import {
 import { experiencePresets } from "@openround/experience";
 import type { AppConfig } from "./config.js";
 import { AuthEmailDeliveryError, type AuthService } from "./auth.js";
+import { identityOnlyAuthReturnPath } from "./auth-return-path.js";
 import type { EmailAuthBudget, RateLimitBudget } from "./cache.js";
 import { cleanPlainText, hashToken } from "./security.js";
 import type { SessionService } from "./session-service.js";
@@ -956,7 +957,7 @@ export async function registerRoutes(
       "returnTo",
       verified.creator
         ? (returnTo ?? (verified.newlyVerified ? "/home?welcome=1" : "/home"))
-        : "/organization",
+        : identityOnlyAuthReturnPath(returnTo),
     );
     return reply.redirect(signIn.href);
   });
@@ -1047,7 +1048,9 @@ export async function registerRoutes(
     return {
       redirectTo: auth.localeAwareWebRedirect(
         verified.user,
-        verified.creator ? (verified.returnTo ?? "/home") : "/organization",
+        verified.creator
+          ? (verified.returnTo ?? "/home")
+          : identityOnlyAuthReturnPath(verified.returnTo),
       ),
     };
   });

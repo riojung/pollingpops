@@ -2,7 +2,8 @@
 
 Implementation branch: `codex/presentation-e10-spatial`, from merged E09 baseline
 `45d6118d09646978b507be583194b13d04297bc8` (PR #201). This is the first bounded story-map slice
-of E10. Review and deployment remain pending.
+of E10. The selected slice is merged in [PR #202](https://github.com/riojung/pollingpops/pull/202)
+and remains undeployed.
 
 ## Scope
 

@@ -95,6 +95,73 @@ function wrongPin(pin: string) {
 }
 
 describe("verified email followed by a separate sign-in PIN", () => {
+  it.each([false, true])(
+    "returns an identity-only reviewer through verification and PIN without provisioning membership (locale set=%s)",
+    async (explicitLocale) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const f = await fixture();
+      const reviewPath = `/presentation-review/${randomUUID()}`;
+      await f.register("reviewer@example.com", reviewPath);
+      vi.setSystemTime(Date.now() + 61_000);
+      await f.register("reviewer@example.com", reviewPath);
+      expect(f.mailer.verifications).toHaveLength(2);
+      await f.verify(0);
+      const identity = (await f.repository.getVerifiedEmailIdentity("reviewer@example.com"))!;
+      f.repository.workspaceMembers.delete(
+        `${identity.creator!.workspaceId}:${identity.user.userId}`,
+      );
+      if (explicitLocale) await f.repository.updateUserLocale(identity.user.userId, "ja-JP");
+      expect(
+        (await f.repository.getVerifiedEmailIdentity("reviewer@example.com"))?.creator,
+      ).toBeNull();
+      const verified = await f.verify(1);
+      expect(verified.statusCode).toBe(302);
+      expect(verified.headers["set-cookie"]).toBeUndefined();
+      const signIn = new URL(verified.headers.location!);
+      expect(signIn.pathname).toBe("/signin");
+      expect(signIn.searchParams.get("returnTo")).toBe(reviewPath);
+      const pin = await f.requestPin("reviewer@example.com", reviewPath);
+      expect(pin.statusCode).toBe(202);
+      const completed = await f.complete(pin.json().challengeId);
+      expect(completed.statusCode).toBe(200);
+      const redirect = new URL(completed.json().redirectTo);
+      expect(redirect.origin).toBe(f.config.WEB_ORIGIN);
+      if (explicitLocale) {
+        expect(redirect.pathname).toBe("/auth/locale");
+        expect(redirect.searchParams.get("locale")).toBe("ja-JP");
+        expect(redirect.searchParams.get("returnTo")).toBe(reviewPath);
+      } else expect(redirect.href).toBe(`${f.config.WEB_ORIGIN}${reviewPath}`);
+      const headers = { cookie: cookie(completed) };
+      expect((await f.app.inject({ url: "/v1/auth/user", headers })).statusCode).toBe(200);
+      expect((await f.app.inject({ url: "/v1/auth/me", headers })).statusCode).toBe(401);
+      expect(f.repository.users.size).toBe(1);
+      expect(f.repository.workspaces.size).toBe(1);
+      expect(f.repository.workspaceMembers.size).toBe(0);
+    },
+  );
+
+  it.each([
+    undefined,
+    "/library",
+    "/presentation-review/a2f6c043-71ca-4e58-8b9b-607f86098a91?tab=comments",
+    "/presentation-review/a2f6c043-71ca-4e58-8b9b-607f86098a91#token=synthetic-review-credential",
+  ])("keeps noncanonical identity-only PIN returns at organization: %s", async (returnTo) => {
+    const f = await fixture();
+    await f.register();
+    await f.verify();
+    const identity = (await f.repository.getVerifiedEmailIdentity("creator@example.com"))!;
+    f.repository.workspaceMembers.delete(
+      `${identity.creator!.workspaceId}:${identity.user.userId}`,
+    );
+    const pin = await f.requestPin("creator@example.com", returnTo);
+    expect(pin.statusCode).toBe(202);
+    const completed = await f.complete(pin.json().challengeId);
+    expect(completed.statusCode).toBe(200);
+    expect(completed.json().redirectTo).toBe(`${f.config.WEB_ORIGIN}/organization`);
+    expect(completed.body).not.toContain("synthetic-review-credential");
+    expect(f.repository.workspaceMembers.size).toBe(0);
+  });
+
   it("treats repeated signup of a verified mailbox as a generic no-op and leaves its requested PIN usable", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const f = await fixture({ production: true });

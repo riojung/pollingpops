@@ -80,6 +80,11 @@ export class MemoryPresentationShareRepository
   constructor(private parent: MemoryRepository) {
     this.presentations = createPresentationRepository(parent);
   }
+  /** Internal synchronous authority read for atomic Memory review mutations; never a public DTO. */
+  reviewShareRecord(shareId: string): PresentationShareRecord | null {
+    const share = this.shares.get(shareId);
+    return share ? structuredClone(share) : null;
+  }
   private member(workspaceId: string, actorId: string) {
     const actor = this.parent.users.get(actorId),
       member = this.parent.workspaceMembers.get(`${workspaceId}:${actorId}`);

@@ -462,8 +462,9 @@ guards and Report V7 keeps its existing meaning. Migration098 preserves earlier 
 and extends the existing readers/guards without changing scene6 or default documents.
 See the [E10 record](evidence/presentation-e10-spatial.md) for verification. Content-plane camera
 rendering, nested frames and facilitator-broadcast overview controls remain later E10 scope;
-private review and static exports keep their established linear readers. This slice remains
-pending review and deployment and does not establish unrestricted Prezi parity.
+private review and static exports keep their established linear readers. This slice is merged
+in [PR #202](https://github.com/riojung/pollingpops/pull/202) and remains undeployed; unrestricted
+Prezi parity remains outside this slice.
 
 ### E11 Add review and then concurrent authoring
 
@@ -480,6 +481,17 @@ running sessions remain fixed until an explicit new publication/session choice.
 Estimate: 2–3 weeks for review; 6–10 or more for robust concurrent editing. Choose CRDT/operation
 technology only after an adapter spike and license review; do not add a paid collaboration
 service before cost and merge semantics are understood.
+
+The first review slice is implemented on `codex/presentation-e11-review`: an author explicitly
+enables comments on an existing version-pinned private link. Signed-in free reviewers can create
+page threads, reply and edit/delete their own messages without joining the source workspace or
+receiving a paid seat. Current owner/editor authority governs resolve/reopen and explicit approval
+of that link's review; later feedback makes the prior approval stale. Account-bound exact intents,
+revision fences, bounded plain text, forced RLS and lifecycle erasure/export protect the sidecar
+records in migration099. Existing E08/content/live/report contracts retain their meanings.
+See the [E11 record](evidence/presentation-e11-review-feedback.md) for verification. Concurrent
+authoring, attachments, mentions and notifications remain later scope. The selected review
+slice is implemented on its branch and remains undeployed.
 
 ### E12 Extend optional AI assistance
 

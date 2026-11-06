@@ -18,6 +18,36 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Presentation review feedback compatibility
+
+Apply `099_presentation_review_feedback.sql` before deploying E11 feedback readers/writers. It
+adds per-share review cycles, threads, messages and compact operation receipts with forced RLS,
+source/version guards and account-body erasure. Preserve migrations001–098 and their checksums.
+Document14, scene6, immutable publications, live responses and Report V1–V7 retain their meanings.
+
+Deploy the matching API, database adapter and web. Existing E08 share/access/ReviewV1 endpoints
+stay unchanged, and existing links remain view-only until an owner/editor explicitly enables
+comments. Reviewers use an active share bearer plus the existing free UserPrincipal sign-in;
+never create a membership or paid creator seat in the source workspace to permit comments.
+Identity-only users can return from sign-in to a canonical review path. Keep link credentials in
+the per-tab review store, outside sign-in return paths, verification email URLs and logs.
+
+Verify enablement, signed-in external review, page/version anchors, exact retries, conflict
+preservation, resolve/reopen and approval staleness under the restricted runtime role. Revocation,
+expiry, publisher-role removal, account deletion and source deletion must fence future operations
+and receipt recovery. Account exports and erasure include the reviewer's own comments in other
+workspaces. Existing share cleanup removes sidecars after its seven-day expiry retention window.
+
+Approval belongs to one link's review of one immutable publication and feedback sequence.
+Publishing continues to use the existing creator permissions. A later comment or reopen makes
+the prior sign-off stale; it does not change a draft, existing live session or another review.
+
+During rollback, hide/disable the new feedback entry points and retain migration099 and review
+sidecars. Earlier readers can continue using E08 without decoding feedback. Keep the E10
+document14 reader floor; do not drop review history or rewrite publication bytes to fit a rollback.
+No new provider, hosted service, license or model call is required. See the
+[E11 evidence record](../evidence/presentation-e11-review-feedback.md).
+
 ## Presentation spatial layout compatibility
 
 Apply `098_presentation_spatial.sql` before admitting E10 document14 writers. It adds opt-in bounded

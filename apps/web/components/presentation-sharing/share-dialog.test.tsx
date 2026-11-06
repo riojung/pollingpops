@@ -9,6 +9,7 @@ import {
 import type * as ShareClient from "../../lib/presentation-sharing-client";
 import { ApiClientError } from "../../lib/api";
 import { PresentationShareDialog } from "./share-dialog";
+import { PresentationFeedbackPanel } from "./feedback-panel";
 
 interface Hooks {
   cursor: number;
@@ -119,6 +120,41 @@ afterEach(() => {
 });
 
 describe("private share creation recovery", () => {
+  it("opens feedback for the link's pinned version even when a newer publication exists", async () => {
+    setup();
+    const shareId = "00000000-0000-4000-8000-000000000004";
+    mocked.list.mockResolvedValueOnce([
+      {
+        id: shareId,
+        versionId: oldVersion,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        revokedAt: null,
+      },
+    ]);
+    const dialog = mount();
+    await vi.waitFor(() =>
+      expect(
+        dialog
+          .render()
+          .some(
+            (element) =>
+              element.type === "button" &&
+              text(element.props.children as ReactNode) === "Review feedback",
+          ),
+      ).toBe(true),
+    );
+    dialog.click("Review feedback");
+    const feedback = dialog.render().find((element) => element.type === PresentationFeedbackPanel);
+    expect(feedback?.props).toMatchObject({
+      mode: "author",
+      presentationId,
+      shareId,
+      versionId: oldVersion,
+    });
+    expect(mocked.create).not.toHaveBeenCalled();
+    dialog.close();
+  });
   it("restores an editable form after the server rejects an expired unaccepted intent", async () => {
     setup();
     const expired = {

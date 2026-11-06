@@ -335,6 +335,7 @@ export class PostgresPresentationReviewFeedbackRepository implements Presentatio
           },
         };
       }
+      if (cycle) return reviewError("VALIDATION_ERROR");
       if (!cycle) {
         cycle = emptyReview(source.share.id);
         await client.query(

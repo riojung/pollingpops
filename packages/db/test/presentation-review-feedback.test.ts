@@ -3,12 +3,76 @@ import { describe, expect, it } from "vitest";
 import { MemoryRepository } from "../src/index.js";
 import {
   expectReviewFeedbackConformance,
+  expectReviewEnableOnceConformance,
   expectReviewFeedbackErasure,
   expectReviewFeedbackRevokedExport,
   reviewFeedbackFixture,
 } from "./support/presentation-review-feedback-conformance.js";
 
 describe("Presentation review feedback", () => {
+  it("enables each cycle once and reserves no receipts for later enable intents", async () => {
+    await expectReviewEnableOnceConformance(new MemoryRepository());
+  });
+  it("preserves exact enable and comment retries when legitimate mutations reach the receipt cap", async () => {
+    const f = await reviewFeedbackFixture(new MemoryRepository()),
+      enabled = await f.enable();
+    let snapshot = (await f.feedback.getReviewerReview(f.reviewer())).feedback;
+    const threadId = randomUUID(),
+      messageId = randomUUID(),
+      create = f.mutation(snapshot, {
+        type: "thread.create",
+        threadId,
+        messageId,
+        blockId: f.content.blocks[0]!.id,
+        text: "First",
+      });
+    snapshot = (await f.feedback.mutateReviewerReview({ ...f.reviewer(), mutation: create })).result
+      .feedback;
+    for (let count = 2; count < 5000; count++)
+      snapshot = (
+        await f.feedback.mutateReviewerReview({
+          ...f.reviewer(),
+          mutation: f.mutation(snapshot, {
+            type: "message.edit",
+            threadId,
+            messageId,
+            expectedThreadVersion: count - 1,
+            text: `Edit ${count}`,
+          }),
+        })
+      ).result.feedback;
+    const operationId = randomUUID();
+    await expect(
+      f.feedback.enableReview({ ...f.author, request: { operationId, versionId: f.version.id } }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      f.feedback.mutateReviewerReview({
+        ...f.reviewer(),
+        mutation: f.mutation(
+          snapshot,
+          {
+            type: "message.edit",
+            threadId,
+            messageId,
+            expectedThreadVersion: 4999,
+            text: "Over capacity",
+          },
+          operationId,
+        ),
+      }),
+    ).rejects.toMatchObject({ code: "REVIEW_LIMIT" });
+    expect((await f.feedback.getReviewerReview(f.reviewer())).feedback).toEqual(snapshot);
+    expect(
+      (await f.feedback.mutateReviewerReview({ ...f.reviewer(), mutation: create })).result,
+    ).toMatchObject({ replayed: true, feedback: snapshot, receipt: { reviewSeq: 2 } });
+    const replay = await f.feedback.enableReview({
+      ...f.author,
+      request: { operationId: enabled.result.receipt.operationId, versionId: f.version.id },
+    });
+    expect(replay.result.replayed).toBe(true);
+    expect(replay.result.receipt).toEqual(enabled.result.receipt);
+    expect(replay.result.feedback.reviewSeq).toBe(5000);
+  });
   it("fences new comments while account deletion waits for another lifecycle extension", async () => {
     const repository = new MemoryRepository(),
       f = await reviewFeedbackFixture(repository);

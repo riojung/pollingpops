@@ -9,6 +9,7 @@ import {
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 import {
   expectReviewFeedbackConformance,
+  expectReviewEnableOnceConformance,
   expectReviewFeedbackErasure,
   expectReviewFeedbackRevokedExport,
   reviewFeedbackFixture,
@@ -86,6 +87,17 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation review feedback Postgre
         await cluster.close();
       }
     }
+  });
+  it("enables each cycle once and reserves no receipts for later enable intents", async () => {
+    const f = await expectReviewEnableOnceConformance(repository);
+    expect(
+      (
+        await administrator.pool.query(
+          "SELECT count(*)::integer AS count FROM presentation_review_receipts WHERE share_id=$1",
+          [f.share.id],
+        )
+      ).rows[0].count,
+    ).toBe(5);
   });
   it("persists pinned-version free-account feedback, concurrent CAS and exact receipts under revocation", async () => {
     const f = await expectReviewFeedbackConformance(repository),

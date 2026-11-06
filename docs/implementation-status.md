@@ -19,7 +19,7 @@ other links and later publications retain their own state.
 Migration099 adds bounded sidecar storage, forced RLS, version/source guards, exact operation
 receipts and account erasure/export handling. Existing E08 responses, document14, scene6, live
 assessments and Report V1–V7 retain their meanings. The full repository check, four
-production-browser profiles and fifteen selected real PostgreSQL cases pass; see the
+production-browser profiles and sixteen selected real PostgreSQL cases pass; see the
 [E11 record](evidence/presentation-e11-review-feedback.md)
 for verification. No new provider, service or dependency is added. Concurrent authoring remains
 separate. This slice is ready for review and remains undeployed.

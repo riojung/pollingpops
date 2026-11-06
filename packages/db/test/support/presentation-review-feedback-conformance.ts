@@ -61,6 +61,103 @@ export async function reviewFeedbackFixture(repository: Repository) {
   return { ...f, input, share, feedback, first, second, author, reviewer, mutation, enable };
 }
 
+export async function expectReviewEnableOnceConformance(repository: Repository) {
+  const f = await reviewFeedbackFixture(repository);
+  const request = { operationId: randomUUID(), versionId: f.version.id };
+  const original = (await f.feedback.enableReview({ ...f.author, request })).result.receipt;
+  const rejectFreshEnable = async () => {
+    const before = (await f.feedback.getAuthorReview(f.author)).feedback;
+    const operationId = randomUUID();
+    await expect(
+      f.feedback.enableReview({ ...f.author, request: { ...request, operationId } }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect((await f.feedback.getAuthorReview(f.author)).feedback).toEqual(before);
+    const replay = (await f.feedback.enableReview({ ...f.author, request })).result;
+    expect(replay).toEqual({ feedback: before, receipt: original, replayed: true });
+    return { operationId, before };
+  };
+  const threadId = randomUUID();
+  const initial = await rejectFreshEnable();
+  const create = f.mutation(
+    initial.before,
+    {
+      type: "thread.create",
+      threadId,
+      messageId: randomUUID(),
+      blockId: f.content.blocks[0]!.id,
+      text: "Real author feedback",
+    },
+    initial.operationId,
+  );
+  // Reusing each rejected enable ID for a real command proves no receipt was allocated.
+  await f.feedback.mutateAuthorReview({ ...f.author, mutation: create });
+  const commented = await rejectFreshEnable();
+  await f.feedback.mutateAuthorReview({
+    ...f.author,
+    mutation: f.mutation(
+      commented.before,
+      { type: "thread.resolve", threadId, expectedThreadVersion: 1, resolved: true },
+      commented.operationId,
+    ),
+  });
+  const resolved = await rejectFreshEnable();
+  await f.feedback.mutateAuthorReview({
+    ...f.author,
+    mutation: f.mutation(
+      resolved.before,
+      { type: "approval.set", expectedReviewSeq: resolved.before.reviewSeq, approved: true },
+      resolved.operationId,
+    ),
+  });
+  const approved = await rejectFreshEnable();
+  expect(approved.before.approval.state).toBe("approved");
+  const late = f.mutation(
+    approved.before,
+    {
+      type: "thread.create",
+      threadId: randomUUID(),
+      messageId: randomUUID(),
+      blockId: f.content.blocks[1]!.id,
+      text: "Later real author feedback",
+    },
+    approved.operationId,
+  );
+  const final = (await f.feedback.mutateAuthorReview({ ...f.author, mutation: late })).result
+    .feedback;
+  expect(final.approval.state).toBe("stale");
+  await expect(
+    f.feedback.enableReview({
+      ...f.author,
+      request: { ...request, operationId: create.operationId },
+    }),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  await expect(
+    f.feedback.mutateAuthorReview({
+      ...f.author,
+      mutation: { ...late, operationId: request.operationId },
+    }),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  expect((await f.feedback.getAuthorReview(f.author)).feedback).toEqual(final);
+  await expect(
+    f.feedback.enableReview({ ...f.author, actorId: f.first.userId, request }),
+  ).rejects.toMatchObject({ code: "UNAVAILABLE" });
+  await expect(
+    f.feedback.enableReview({ ...f.author, now: new Date(f.share.expiresAt), request }),
+  ).rejects.toMatchObject({ code: "UNAVAILABLE" });
+  await f.shares.revokeShare(
+    f.actor.workspaceId,
+    f.presentation.id,
+    f.share.id,
+    f.actor.userId,
+    f.now,
+  );
+  for (const operationId of [request.operationId, randomUUID()])
+    await expect(
+      f.feedback.enableReview({ ...f.author, request: { ...request, operationId } }),
+    ).rejects.toMatchObject({ code: "UNAVAILABLE" });
+  return f;
+}
+
 /** Same source, identity, receipt and CAS contract for memory and restricted PostgreSQL. */
 export async function expectReviewFeedbackConformance(repository: Repository) {
   const f = await reviewFeedbackFixture(repository);

@@ -288,6 +288,59 @@ describe("private Presentation review feedback APIs", () => {
     expect((await f.author("GET", undefined, false, f.first.cookie)).statusCode).toBe(401);
   });
 
+  it("rejects a second enable operation while preserving the original replay and current discussion or approval", async () => {
+    const f = await fixture();
+    const request = { operationId: randomUUID(), versionId: f.version.id };
+    const enabled = await f.enable(request);
+    expect(enabled.statusCode, enabled.body).toBe(201);
+    const original = PresentationReviewFeedbackMutationResponseSchema.parse(enabled.json());
+    async function rejectNewEnable() {
+      const before = await f.authorView();
+      const rejected = await f.enable();
+      expect(rejected.statusCode, rejected.body).toBe(422);
+      expect(rejected.json().error.code).toBe("PRESENTATION_REVIEW_INVALID");
+      expect(await f.authorView()).toEqual({ ...before, serverTime: expect.any(String) });
+      const replayed = await f.enable(request);
+      expect(replayed.statusCode, replayed.body).toBe(200);
+      expect(PresentationReviewFeedbackMutationResponseSchema.parse(replayed.json())).toEqual({
+        replayed: true,
+        receipt: original.receipt,
+        feedback: { ...before, serverTime: expect.any(String) },
+      });
+    }
+    await rejectNewEnable();
+    const { result } = await f.createThread();
+    await rejectNewEnable();
+    const author = await f.authorView();
+    const thread = result.feedback.threads[0]!;
+    const resolved = await f.author(
+      "POST",
+      f.mutation(author, {
+        type: "thread.resolve",
+        threadId: thread.id,
+        expectedThreadVersion: thread.version,
+        resolved: true,
+      }),
+      true,
+    );
+    expect(resolved.statusCode, resolved.body).toBe(200);
+    const reviewed = PresentationReviewFeedbackMutationResponseSchema.parse(
+      resolved.json(),
+    ).feedback;
+    const approved = await f.author(
+      "POST",
+      f.mutation(reviewed, {
+        type: "approval.set",
+        expectedReviewSeq: reviewed.reviewSeq,
+        approved: true,
+      }),
+      true,
+    );
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect(approved.json().feedback.approval.state).toBe("approved");
+    await rejectNewEnable();
+  });
+
   it("preserves exact operation retries and rejects changed payloads, changed cookies and stale thread versions", async () => {
     const f = await fixture();
     await f.enable();

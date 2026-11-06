@@ -24,6 +24,9 @@ approval sequences fence conflicts. Accepted retries recover the same compact re
 freshly authorized state rather than old message bodies. A per-link opaque `viewerKey` binds
 submitted intents to the authenticated account, preventing replay under a different sign-in.
 Uncertain acknowledgements retain the original operation and page/version anchor for retry.
+Enabling is a one-time transition per link. Once a cycle exists, new enable operations are
+rejected without consuming receipts or changing feedback; exact retries of the original enable
+receipt still return the current authorized review, including at the receipt limit.
 Returning to the tab preserves unsubmitted replies and edits while the same source revalidates,
 including delayed or transient reads. Changed credentials, source versions, revoked/expired
 access and account changes clear discussion drafts. Resolved threads explain that an author
@@ -58,12 +61,14 @@ handling erases the account's comment bodies and includes authorized feedback in
 
 ## Verification
 
-- **Four contract checks, six Memory feedback cases and four E08 repository compatibility
+- **Four contract checks, eight Memory feedback cases and four E08 repository compatibility
   cases pass.** They cover strict DTOs, bounded text, identity fences, exact receipts/CAS,
   approval staleness, own-message export after revocation and account erasure without body
   resurrection during a yielding deletion lifecycle. Contracts/DB typing, scoped lint and
-  formatting pass.
-- **Fourteen feedback API checks and 47 focused authentication checks pass.** Real AuthService
+  formatting pass. Fresh enable attempts leave enabled, commented, resolved and approved reviews
+  unchanged. Reusing rejected operation IDs for real commands proves no receipt allocation;
+  exact original enable/comment receipts remain replayable at the 5,000-receipt cap.
+- **Fifteen feedback API checks and 47 focused authentication checks pass.** Real AuthService
   cookies plus the Memory repositories exercise membership-free reviewer permissions, typed
   view-only state, pseudonyms, cross-version/page rejection, account-bound replay, fresh policy/
   cookie/share expiry checks and separate admission buckets. Unexpected database errors produce
@@ -82,19 +87,21 @@ handling erases the account's comment bodies and includes authorized feedback in
   retains reply/edit state without adding stored drafts, and resolved threads hide the reply
   form until reopening. Identity changes also remount discussion instances by opaque viewer key,
   including a changed account cookie without an explicit auth event.
-- **Fifteen selected real PostgreSQL cases pass:** seven E11 cases, four E09 cases, three E10
+- **Sixteen selected real PostgreSQL cases pass:** eight E11 cases, four E09 cases, three E10
   cases and the shared Presentation repository conformance baseline. E11 covers free-account
   feedback, concurrent CAS/receipts, per-message external-account export, body erasure, forced
   RLS/raw guards, expiry while reads/replays wait, source cleanup and deletion lock ordering.
-  Run `577948d093` applies all 99 migrations twice, verifies the exact checksum ledger and
+  The enable-once regression verifies unchanged state and exactly five legitimate receipts
+  after rejected enable attempts across the review lifecycle.
+  Run `9f5073f669` applies all 99 migrations twice, verifies the exact checksum ledger and
   preserves migrations001–098 against the merged baseline. All 65 legacy raw-mutation rejection
   probes pass. Runtime access uses a non-owner restricted role; immutable publication rows stay
   SELECT-only. Source reads lock the mutable parent, with canonical user locks before workspace
   locks. The owned container, SSH forward and lock are removed; OOM is false and all 14 original
   containers remain unchanged. There were 194 unselected integration skips. Private result:
-  `/tmp/pollingpops-e11-review-pg/result-577948d093.json`.
+  `/tmp/pollingpops-e11-review-pg/result-9f5073f669.json`.
 
-- **Four production-browser workflows pass:** Chromium/Firefox desktop and Chromium/WebKit
+- **Four production-browser workflows pass (UI baseline `c059a8e`):** Chromium/Firefox desktop and Chromium/WebKit
   mobile. The final matrix tests the existing UUID fallback with `randomUUID` unavailable on
   both author and reviewer pages. It verifies explicit enablement, clean sign-in return paths,
   view-only compatibility, empty-draft reanchoring, nonempty draft pinning across page changes,
@@ -115,11 +122,11 @@ handling erases the account's comment bodies and includes authorized feedback in
 
 - **The final `VITEST_MAX_WORKERS=1 pnpm check` passes:** formatting, Docker workspace context,
   lint/typecheck (17 tasks each), package tests, smoke support, production builds (10 tasks) and
-  admin CLI build. Principal totals are 914 contracts, 555 database, 1,309 server, 2,685 web and
-  354 smoke-support tests passed. Normal opt-in database skips remain; the fifteen real
+  admin CLI build. Principal totals are 914 contracts, 557 database, 1,310 server, 2,685 web and
+  354 smoke-support tests passed. Normal opt-in database skips remain; the sixteen real
   PostgreSQL cases above were run separately. The browser spec also passes scoped strict
   TypeScript checking. Private full-check log:
-  `/tmp/pollingpops-e11-review-check-review-fixes-final.log`.
+  `/tmp/pollingpops-e11-review-check-pr203.log`.
 - The final source scope is 39 files, with no package manifest or lockfile changes and only
   migration099 added. Historical migrations001–098 match the merged baseline byte for byte.
   Source on the implementation branch is ready for review and remains undeployed.

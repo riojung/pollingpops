@@ -195,9 +195,8 @@ export class MemoryPresentationReviewFeedbackRepository
     const receiptKey = `${source.share.id}:${actorId}:${request.operationId}`,
       hash = reviewHash(source.share.id, "author", { type: "review.enable", ...request });
     const previous = reviewReplay(this.receipts.get(receiptKey) ?? null, hash);
-    const cycle = structuredClone(
-      this.cycles.get(source.share.id)?.cycle ?? emptyReview(source.share.id),
-    );
+    const existing = this.cycles.get(source.share.id);
+    const cycle = structuredClone(existing?.cycle ?? emptyReview(source.share.id));
     if (previous)
       return {
         workspaceId: source.share.workspaceId,
@@ -207,6 +206,7 @@ export class MemoryPresentationReviewFeedbackRepository
           replayed: true,
         },
       };
+    if (existing) return reviewError("VALIDATION_ERROR");
     reviewCapacity(cycle);
     const receipt = {
       operationId: request.operationId,

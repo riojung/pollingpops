@@ -16,6 +16,8 @@ export * from "./text-opinions";
 export * from "./presentation-text";
 export * from "./presentation-visual-import";
 export * from "./presentation-assistance";
+export * from "./presentation-text-assistance";
+import { PresentationTextAssistanceProvenanceSchema } from "./presentation-text-assistance";
 import { PresentationTextResponseMetadataSchema } from "./presentation-text";
 export * from "./session-summaries";
 export * from "./canvas-boards";
@@ -4507,6 +4509,7 @@ const ContentSlideDraftFields = {
   speakerNotes: z.string().trim().max(2_000),
   citations: z.array(PresentationCitationSchema).max(20).optional(),
   sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
+  textAssistance: PresentationTextAssistanceProvenanceSchema.optional(),
   scene: PresentationSceneDraftSchema.optional(),
   hidden: z.literal(true).optional(),
 };
@@ -4953,7 +4956,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4992,7 +4995,7 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
     blocks: Array<{
       kind: string;
       scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 };
@@ -5267,7 +5270,7 @@ function applyPresentationSpatialRules(
   ctx: z.RefinementCtx,
 ) {
   if (presentation.spatial === undefined) return;
-  if (presentation.schemaVersion !== 14)
+  if (presentation.schemaVersion < 14)
     ctx.addIssue({
       code: "custom",
       path: ["spatial"],
@@ -5282,6 +5285,22 @@ function applyPresentationSpatialRules(
         message: "Spatial frames reference an existing presentation block",
       });
   });
+}
+
+function applyPresentationTextAssistanceRules(
+  presentation: {
+    schemaVersion: number;
+    blocks: Array<{ kind: string; textAssistance?: unknown }>;
+  },
+  context: z.RefinementCtx,
+) {
+  for (const [index, block] of presentation.blocks.entries())
+    if (block.textAssistance !== undefined && presentation.schemaVersion < 15)
+      context.addIssue({
+        code: "custom",
+        path: ["blocks", index, "textAssistance"],
+        message: "AI text edit provenance requires Presentation schema version 15",
+      });
 }
 
 export const PresentationDraftSchema = z
@@ -5304,6 +5323,7 @@ export const PresentationDraftSchema = z
         z.literal(12),
         z.literal(13),
         z.literal(14),
+        z.literal(15),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5319,6 +5339,7 @@ export const PresentationDraftSchema = z
     applyPresentationAdvancedInteractions(presentation, ctx);
     applyPresentationRecoveryPackRules(presentation, ctx);
     applyPresentationSceneRules(presentation, ctx);
+    applyPresentationTextAssistanceRules(presentation, ctx);
   });
 export type PresentationDraft = z.infer<typeof PresentationDraftSchema>;
 
@@ -5376,6 +5397,7 @@ export const PresentationContentSchema = z
       z.literal(12),
       z.literal(13),
       z.literal(14),
+      z.literal(15),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
@@ -5396,6 +5418,7 @@ export const PresentationContentSchema = z
     applyPresentationAdvancedInteractions(presentation, ctx, true);
     applyPresentationRecoveryPackRules(presentation, ctx);
     applyPresentationSceneRules(presentation, ctx, true);
+    applyPresentationTextAssistanceRules(presentation, ctx);
     const liveCommandIds = new Set<string>();
     const liveBlockIds = new Set<string>();
     for (const [index, insertion] of (presentation.livePublishedQuestions ?? []).entries()) {

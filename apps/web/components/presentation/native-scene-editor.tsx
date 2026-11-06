@@ -67,6 +67,8 @@ export function NativeSceneEditor({
   onRedo,
   onApplyDesignToDeck,
   navigationTargets,
+  onTextAssistance,
+  textAssistanceDisabled = false,
 }: {
   scene: PresentationScene;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
@@ -79,6 +81,8 @@ export function NativeSceneEditor({
   onRedo?: () => void;
   onApplyDesignToDeck?: (design: PresentationSceneDesign) => void;
   navigationTargets?: readonly { id: string; title: string }[];
+  onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten") => void;
+  textAssistanceDisabled?: boolean;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
@@ -166,6 +170,17 @@ export function NativeSceneEditor({
       readingOrder: [...scene.readingOrder, node.id],
     });
     if (added) setSelection([node.id]);
+  }
+  function requestTextAssistance(operation: "rewrite" | "shorten") {
+    if (
+      textAssistanceDisabled ||
+      multiple ||
+      selected.type !== "text" ||
+      selected.richText ||
+      !selected.text.trim()
+    )
+      return;
+    onTextAssistance?.(selected.id, operation);
   }
   function restoreHistory(action: () => void) {
     const active = document.activeElement;
@@ -457,6 +472,46 @@ export function NativeSceneEditor({
             onChange={onChange}
             navigationTargets={navigationTargets}
           />
+          {selected.type === "text" && onTextAssistance ? (
+            <>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  disabled={
+                    textAssistanceDisabled ||
+                    multiple ||
+                    Boolean(selected.richText) ||
+                    !selected.text.trim()
+                  }
+                  onClick={() => requestTextAssistance("rewrite")}
+                >
+                  Rewrite text
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    textAssistanceDisabled ||
+                    multiple ||
+                    Boolean(selected.richText) ||
+                    !selected.text.trim()
+                  }
+                  onClick={() => requestTextAssistance("shorten")}
+                >
+                  Shorten text
+                </button>
+              </div>
+              {selected.richText ? (
+                <p>
+                  Text assistance supports plain text only. Formatted text cannot be rewritten or
+                  shortened.
+                </p>
+              ) : multiple ? (
+                <p>Select one plain text object to use text assistance.</p>
+              ) : !selected.text.trim() ? (
+                <p>Enter some text before using text assistance.</p>
+              ) : null}
+            </>
+          ) : null}
           {selected.type === "text" && selected.richText ? (
             <NativeRichTextEditor
               key={selected.id}

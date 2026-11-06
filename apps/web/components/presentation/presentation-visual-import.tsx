@@ -26,6 +26,7 @@ import styles from "./presentation-visual-import.module.css";
 interface Props {
   presentationId: string;
   open: boolean;
+  preparationBlocked?: boolean;
   afterBlockId: string | null;
   prepareInsert: () => Promise<number>;
   onInserted: (blockIds: string[]) => Promise<void> | void;
@@ -189,6 +190,7 @@ export function PresentationVisualImport({
   onClose,
   onResumeRequired,
   onPendingChange,
+  preparationBlocked = false,
 }: Props) {
   const { creator } = useWorkspace();
   const base = `/v1/presentations/${presentationId}/visual-imports`;
@@ -212,6 +214,9 @@ export function PresentationVisualImport({
   const insertRequest = useRef(new RetainedVisualImportRequest());
   const writes = useRef(Promise.resolve());
   const dialogRef = useRef<HTMLDivElement>(null);
+  const deferredResume = useRef(false);
+  const preparationBlockedRef = useRef(preparationBlocked);
+  preparationBlockedRef.current = preparationBlocked;
   const callbacks = useRef({ onResumeRequired, onPendingChange });
   callbacks.current = { onResumeRequired, onPendingChange };
 
@@ -247,7 +252,8 @@ export function PresentationVisualImport({
           if (value.createBody || value.insertBody) {
             setReceiptPending(true);
             callbacks.current.onPendingChange(true);
-            callbacks.current.onResumeRequired();
+            if (preparationBlockedRef.current) deferredResume.current = true;
+            else callbacks.current.onResumeRequired();
           }
         }
         callbacks.current.onPendingChange(
@@ -257,7 +263,8 @@ export function PresentationVisualImport({
       })
       .catch(() => {
         if (active) {
-          callbacks.current.onResumeRequired();
+          if (preparationBlockedRef.current) deferredResume.current = true;
+          else callbacks.current.onResumeRequired();
           setError(
             "The local import receipt could not be recovered. Keep this tab open and reload before starting another import.",
           );
@@ -268,6 +275,13 @@ export function PresentationVisualImport({
       mounted.current = false;
     };
   }, [recoveryKey]);
+
+  useEffect(() => {
+    if (!preparationBlocked && deferredResume.current) {
+      deferredResume.current = false;
+      callbacks.current.onResumeRequired();
+    }
+  }, [preparationBlocked, loaded]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -439,6 +453,7 @@ export function PresentationVisualImport({
   async function insert() {
     if (
       flight.current ||
+      preparationBlocked ||
       !loaded ||
       (!insertRequest.current.body && (!selectedReady || !state.fidelity || !job))
     )

@@ -38,7 +38,14 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 
-function editorHarness(history: { onUndo?: () => void; onRedo?: () => void } = {}) {
+function editorHarness(
+  history: {
+    onUndo?: () => void;
+    onRedo?: () => void;
+    onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten") => void;
+    textAssistanceDisabled?: boolean;
+  } = {},
+) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
   const scene = createNativeContentBlock().scene!;
   scene.nodes.push({
@@ -466,4 +473,53 @@ describe("native design discoverability", () => {
       expect(editor.scene).toEqual(original);
     },
   );
+});
+
+describe("selected native text assistance", () => {
+  it("targets the exact selected case-sensitive native node from its own fieldset", () => {
+    const assistance = vi.fn();
+    const editor = editorHarness({ onTextAssistance: assistance });
+    const title = editor.scene.nodes[0]!;
+    title.id = "Imported Title / CASE";
+    if (title.type === "text") title.text = "Selected imported title";
+    editor.scene.readingOrder[0] = title.id;
+    editor.render("idle");
+    const fieldset = editor.find((node) => node.props["data-native-text-fields"] === "true");
+    const rewrite = elements(fieldset).find(
+      (node) => node.type === "button" && node.props.children === "Rewrite text",
+    )!;
+    expect(rewrite.props.disabled).toBe(false);
+    (rewrite.props.onClick as () => void)();
+    expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "rewrite");
+    const shorten = elements(fieldset).find(
+      (node) => node.type === "button" && node.props.children === "Shorten text",
+    )!;
+    (shorten.props.onClick as () => void)();
+    expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "shorten");
+  });
+  it("explicitly disables rich-text and pending-intent assistance, including stale handlers", () => {
+    const assistance = vi.fn();
+    const editor = editorHarness({ onTextAssistance: assistance });
+    const title = editor.scene.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.richText = {
+      paragraphs: [{ kind: "paragraph", runs: [{ text: title.text }] }],
+    };
+    editor.render("idle");
+    const rewrite = editor.find(
+      (node) => node.type === "button" && node.props.children === "Rewrite text",
+    );
+    expect(rewrite.props.disabled).toBe(true);
+    (rewrite.props.onClick as () => void)();
+    expect(assistance).not.toHaveBeenCalled();
+    const fieldset = editor.find((node) => node.props["data-native-text-fields"] === "true");
+    expect(JSON.stringify(fieldset)).toContain("Formatted text cannot be rewritten or shortened");
+    const pending = editorHarness({ onTextAssistance: assistance, textAssistanceDisabled: true });
+    pending.render("idle");
+    (
+      pending.find((node) => node.type === "button" && node.props.children === "Shorten text").props
+        .onClick as () => void
+    )();
+    expect(assistance).not.toHaveBeenCalled();
+  });
 });

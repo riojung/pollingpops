@@ -23,7 +23,7 @@ export function enablePresentationSpatial(draft: PresentationDraft): Presentatio
   if (draft.spatial) return draft;
   return {
     ...draft,
-    schemaVersion: 14,
+    schemaVersion: draft.schemaVersion >= 14 ? draft.schemaVersion : 14,
     sections: draft.sections ?? [],
     spatial: {
       schemaVersion: 1,

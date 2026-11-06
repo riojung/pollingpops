@@ -42,6 +42,12 @@ function draft(): PresentationDraft {
   };
 }
 describe("Presentation spatial authoring", () => {
+  it("preserves version 15 when spatial layout is enabled after a text edit", () => {
+    const source: PresentationDraft = { ...draft(), schemaVersion: 15, sections: [] };
+    const enabled = enablePresentationSpatial(source);
+    expect(enabled.schemaVersion).toBe(15);
+    expect(PresentationDraftSchema.safeParse(enabled).success).toBe(true);
+  });
   it("requires explicit enabling and retains the version floor after disabling or restoring history", () => {
     const source = draft();
     expect(

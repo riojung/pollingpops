@@ -63,6 +63,12 @@ export interface PresentationDraftUpdate {
   /** Serialize reviewed AI insertion with source erasure, role changes and expiry. */
   assistanceJobId?: string;
   assistanceProposalHash?: string;
+  /** Bind a reviewed single-node text replacement inside the locked draft transaction. */
+  textAssistanceJobId?: string;
+  textAssistanceProposalHash?: string;
+  textAssistanceSourceDigest?: string;
+  textAssistanceBlockId?: string;
+  textAssistanceNodeId?: string;
 }
 
 export interface PresentationRepository {

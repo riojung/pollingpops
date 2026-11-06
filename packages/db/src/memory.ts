@@ -241,6 +241,7 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  activePresentationAssistanceJobs?(workspaceId: string, now: Date): number;
   deleteCollaborationGroupMetadata?(groupId: string): void;
   deleteCanvasBoardMetadata?(boardId: string): void;
   syncCanvasArtifactLinks?(boardId: string, versionIds: ReadonlySet<string>): void;
@@ -411,6 +412,13 @@ export class MemoryRepository implements Repository {
     return [...receipts.values()].filter(
       (receipt) => receipt.workspaceId === workspaceId && receipt.createdAt >= since,
     ).length;
+  }
+  activePresentationAssistanceJobs(workspaceId: string, now: Date): number {
+    return [...this.lifecycleExtensions.values()].reduce(
+      (total, { lifecycle }) =>
+        total + (lifecycle.activePresentationAssistanceJobs?.(workspaceId, now) ?? 0),
+      0,
+    );
   }
   readonly reportJobs = new Map<
     string,

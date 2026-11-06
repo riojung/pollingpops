@@ -8,6 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E12 selected-text assistance November 6, 2026
+
+The source on `codex/presentation-e12-text-assistance` adds optional **Rewrite text** and
+**Shorten text** for one selected plain native text object. Creators explicitly request a
+proposal, compare the complete original and proposed wording, then confirm **Apply reviewed
+text**. Generation leaves the deck unchanged. Only the selected text, role and operation enter
+the approved provider; notes, citations and other objects are excluded.
+
+Migration102 adds a private, expiring text-assistance queue sharing the existing authoring
+allowance and the combined two-active-job limit with outline assistance. Document15 records the
+latest accepted text edit separately from original citations/source disclosure; scene6 and live
+response/report semantics retain their meanings. Exact recovery, unchanged-target/revision
+fences and current-tab Undo/Redo protect application. The initial full repository check and 43
+selected PostgreSQL cases passed. The review correction also passes all 2,796 web tests and 20
+production-browser journeys across four profiles, including editing after generation refusal;
+see the
+[selected-text record](evidence/presentation-e12-text-assistance.md). Translation, suggested
+layouts/questions, rich-text rewriting, conversational editing and generated media remain later
+E12 work. Source is ready for review and remains undeployed.
+
 ### Presentation E12 outline-first creation November 6, 2026
 
 The source on `codex/presentation-e12-outline-create` adds **From outline** to Presentation
@@ -20,8 +40,8 @@ draft creation uses no AI allowance and introduces no provider or content versio
 The full repository check, focused checks, 33 selected PostgreSQL cases and eight production
 browser workflows across four profiles pass. See the
 [creation record](evidence/presentation-e12-outline-create.md). This is a bounded E12 extension;
-rewrite/shorten, translation and other later scopes remain planned. Source is ready for review
-and remains undeployed.
+translation and other later scopes remain planned. This slice is merged in
+[PR #205](https://github.com/riojung/pollingpops/pull/205) and remains undeployed.
 
 ### Presentation E12 outline assistance November 5, 2026
 

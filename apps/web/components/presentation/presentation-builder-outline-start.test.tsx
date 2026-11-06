@@ -1,6 +1,12 @@
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
-import type { PresentationDraft } from "@openround/contracts";
+import {
+  presentationTextAssistanceSourceDigest,
+  PresentationDraftSchema,
+  PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING,
+  type PresentationDraft,
+} from "@openround/contracts";
+import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import type * as ApiModule from "../../lib/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecoverableOperationQueue } from "../../lib/recoverable-operation-queue";
@@ -116,6 +122,8 @@ import { ApiClientError } from "../../lib/api";
 import { PresentationBuilder } from "./presentation-builder";
 import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationVisualImport } from "./presentation-visual-import";
+import { PresentationTextAssistance } from "./presentation-text-assistance";
+import { NativeSceneEditor } from "./native-scene-editor";
 
 const presentationId = "10000000-0000-4000-8000-000000000001";
 const jobId = "20000000-0000-4000-8000-000000000001";
@@ -188,6 +196,14 @@ function editor(startOutline = true) {
     },
     get assistance() {
       return assistance!;
+    },
+    get textAssistance() {
+      return elements(tree).find((element) => element.type === PresentationTextAssistance)!
+        .props as unknown as ComponentProps<typeof PresentationTextAssistance>;
+    },
+    get nativeEditor() {
+      return elements(tree).find((element) => element.type === NativeSceneEditor)!
+        .props as unknown as ComponentProps<typeof NativeSceneEditor>;
     },
     get nodes() {
       return elements(tree);
@@ -516,4 +532,227 @@ describe("Saved-deck outline handoff", () => {
     expect(waiting.type).toBe("main");
     expect(fixture.router.replace).not.toHaveBeenCalled();
   });
+});
+
+describe("Saved native text assistance", () => {
+  function deckFixture() {
+    const block = createNativeContentBlock();
+    block.id = "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF";
+    block.citations = [{ locator: "earlier source", excerpt: "Previous exact evidence" }];
+    const node = block.scene!.nodes[0]!;
+    node.id = "Body:ExactCase";
+    if (node.type === "text") node.text = "Saved selected title";
+    block.scene!.readingOrder[0] = node.id;
+    let remoteDraft: PresentationDraft = { ...savedDraft, blocks: [block] };
+    let remoteRevision = 4;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === `/v1/presentations/${presentationId}`)
+        return {
+          presentation: {
+            id: presentationId,
+            draft: remoteDraft,
+            draftRevision: remoteRevision,
+            status: "draft",
+          },
+        };
+      return previous(path, init);
+    });
+    return {
+      block,
+      node,
+      setRemote(draft: PresentationDraft, revision = 4) {
+        remoteDraft = draft;
+        remoteRevision = revision;
+      },
+      get draft() {
+        return remoteDraft;
+      },
+    };
+  }
+  it("drains saved work before capturing the exact selected object and blocks competing native edits", async () => {
+    const deck = deckFixture();
+    const view = editor(false);
+    await view.settle();
+    let release!: () => void;
+    const drain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(RecoverableOperationQueue.prototype, "enqueue").mockImplementationOnce(() => drain);
+    view.nativeEditor.onTextAssistance!(deck.node.id, "rewrite");
+    await view.settle();
+    expect(view.textAssistance.open).toBe(false);
+    release();
+    await view.settle();
+    expect(view.textAssistance.open).toBe(true);
+    expect(view.textAssistance.target).toEqual({
+      blockId: deck.block.id.toLowerCase(),
+      nodeId: "Body:ExactCase",
+      role: "title",
+      operation: "rewrite",
+      text: "Saved selected title",
+      expectedRevision: 4,
+    });
+    expect(
+      fixture.request.mock.calls.some(([path]) =>
+        path.includes("/presentation-text-assistance/jobs"),
+      ),
+    ).toBe(false);
+    expect(view.nativeEditor.onChange({ ...deck.block.scene!, readingOrder: [] })).toBe(false);
+    expect(view.nodes.some((node) => node.props.inert === true)).toBe(true);
+  });
+  it("preserves unsaved text when saving the selected source fails", async () => {
+    const deck = deckFixture();
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/draft") && init?.method === "PUT")
+        throw new ApiClientError("Cannot save selected text", "INVALID_INPUT", 400);
+      return previous(path, init);
+    });
+    const view = editor(false);
+    await view.settle();
+    const edited = {
+      ...deck.block.scene!,
+      nodes: deck.block.scene!.nodes.map((node) =>
+        node.type === "text" ? { ...node, text: "Unsaved selected title" } : node,
+      ),
+    };
+    expect(view.nativeEditor.onChange(edited)).toBe(true);
+    await view.settle();
+    view.nativeEditor.onTextAssistance!(deck.node.id, "shorten");
+    await view.settle();
+    expect(view.textAssistance.open).toBe(false);
+    expect(view.nativeEditor.scene.nodes.find((node) => node.id === deck.node.id)).toMatchObject({
+      text: "Unsaved selected title",
+    });
+    expect(
+      fixture.request.mock.calls.some(([path]) =>
+        path.includes("/presentation-text-assistance/jobs"),
+      ),
+    ).toBe(false);
+  });
+  it("reloads only the bound node and rejects a changed or deleted object without the anchor fallback", async () => {
+    const deck = deckFixture();
+    const view = editor(false);
+    await view.settle();
+    view.nativeEditor.onTextAssistance!(deck.node.id, "rewrite");
+    await view.settle();
+    const binding = {
+      blockId: deck.block.id.toLowerCase(),
+      nodeId: deck.node.id,
+      role: "title" as const,
+      operation: "rewrite" as const,
+      sourceDigest: presentationTextAssistanceSourceDigest("Saved selected title"),
+    };
+    const current = await view.textAssistance.onReloadTarget(binding);
+    expect(current.nodeId).toBe(deck.node.id);
+    expect(current.blockId).toBe(deck.block.id.toLowerCase());
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(deck.block.scene);
+    expect(view.textAssistance.citations).toEqual(deck.block.citations);
+    await expect(
+      view.textAssistance.onReloadTarget({ ...binding, nodeId: binding.nodeId.toLowerCase() }),
+    ).rejects.toThrow("changed or deleted");
+    const other = createNativeContentBlock();
+    deck.setRemote({ ...deck.draft, blocks: [other] });
+    await expect(view.textAssistance.onReloadTarget(binding)).rejects.toThrow("changed or deleted");
+    await view.settle();
+    expect(view.nativeEditor.scene.nodes[0]!.id).toBe(deck.node.id);
+    expect(view.textAssistance.target?.nodeId).toBe(deck.node.id);
+  });
+  function appliedReceipt(source: PresentationDraft) {
+    const block = source.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected native source");
+    const node = block.scene.nodes[0]!;
+    if (node.type !== "text") throw new Error("Expected title");
+    const sourceDigest = presentationTextAssistanceSourceDigest(node.text);
+    const acceptedDraft = PresentationDraftSchema.parse({
+      ...source,
+      schemaVersion: 15,
+      sections: [],
+      blocks: [
+        {
+          ...block,
+          scene: {
+            ...block.scene,
+            nodes: block.scene.nodes.map((candidate) =>
+              candidate.id === node.id && candidate.type === "text"
+                ? { ...candidate, text: "Reviewed title" }
+                : candidate,
+            ),
+          },
+          textAssistance: {
+            schemaVersion: 1,
+            nodeId: node.id,
+            role: "title",
+            operation: "rewrite",
+            sourceDigest,
+            outputDigest: presentationTextAssistanceSourceDigest("Reviewed title"),
+            provider: "fixture",
+            model: "fixture-model",
+            generatedAt: "2026-11-06T12:00:00.000Z",
+            reviewWarning: PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING,
+          },
+        },
+      ],
+    });
+    return {
+      blockId: block.id.toLowerCase(),
+      nodeId: node.id,
+      role: "title" as const,
+      sourceDigest,
+      acceptedRevision: 5,
+      acceptedDraft,
+    };
+  }
+  it("makes a fresh exact text application one normal Undo/Redo step with its metadata", async () => {
+    const deck = deckFixture();
+    const view = editor(false);
+    await view.settle();
+    const receipt = appliedReceipt(deck.draft);
+    deck.setRemote(receipt.acceptedDraft, 5);
+    await view.textAssistance.onApplied(receipt);
+    await view.settle();
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+      )?.props.disabled,
+    ).toBe(false);
+    view.nativeEditor.onUndo!();
+    await view.settle();
+    expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Saved selected title" });
+    expect(view.nodes.some((node) => node.props["aria-label"] === "Latest AI text edit")).toBe(
+      false,
+    );
+    view.nativeEditor.onRedo!();
+    await view.settle();
+    expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Reviewed title" });
+    expect(view.nodes.some((node) => node.props["aria-label"] === "Latest AI text edit")).toBe(
+      true,
+    );
+  });
+  it.each(["historical", "later-remote"] as const)(
+    "does not fabricate an Undo checkpoint for a %s receipt",
+    async (mode) => {
+      const deck = deckFixture();
+      const receipt = appliedReceipt(deck.draft);
+      if (mode === "historical") deck.setRemote(receipt.acceptedDraft, 5);
+      const view = editor(false);
+      await view.settle();
+      if (mode === "later-remote")
+        deck.setRemote({ ...receipt.acceptedDraft, title: "Later remote edit" }, 6);
+      await view.textAssistance.onApplied(receipt);
+      await view.settle();
+      expect(
+        view.nodes.find(
+          (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+        )?.props.disabled,
+      ).toBe(true);
+      view.nativeEditor.onUndo!();
+      await view.settle();
+      expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Reviewed title" });
+      if (mode === "later-remote")
+        expect(view.nodes.some((node) => node.props.value === "Later remote edit")).toBe(true);
+    },
+  );
 });

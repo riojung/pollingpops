@@ -82,7 +82,27 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation review feedback Postgre
     if (created) {
       const cluster = new PostgresRepository(adminUrl!);
       try {
-        await cluster.pool.query(`DROP DATABASE "${database}" WITH(FORCE)`);
+        // Pool shutdown can finish before the server has removed its backend rows.
+        // Drain those owned connections before dropping; FORCE can race socket shutdown
+        // and emit an unhandled 57P01 instead of revealing a leaked test connection.
+        let remaining = 0;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          remaining = Number(
+            (
+              await cluster.pool.query(
+                "SELECT count(*) AS count FROM pg_stat_activity WHERE datname=$1",
+                [database],
+              )
+            ).rows[0].count,
+          );
+          if (remaining === 0) break;
+          await delay(10);
+        }
+        expect(
+          remaining,
+          "review-feedback test connections must drain before database cleanup",
+        ).toBe(0);
+        await cluster.pool.query(`DROP DATABASE "${database}"`);
       } finally {
         await cluster.close();
       }

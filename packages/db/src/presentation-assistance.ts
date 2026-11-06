@@ -290,6 +290,11 @@ export class MemoryPresentationAssistanceRepository
       })
     );
   }
+  activePresentationAssistanceJobs(workspaceId: string, now: Date): number {
+    return [...this.rows.values()].filter(
+      (row) => row.workspaceId === workspaceId && active(row, now),
+    ).length;
+  }
   async create(input: PresentationAssistanceCreateInput) {
     input = contextIds(input);
     const row = checked(input),
@@ -310,9 +315,8 @@ export class MemoryPresentationAssistanceRepository
     if (input.monthlyLimit !== null && used >= input.monthlyLimit)
       throw new PresentationAssistanceError("LIMIT_REACHED");
     if (
-      [...this.rows.values()].filter(
-        (item) => item.workspaceId === input.workspaceId && active(item, now),
-      ).length >= PRESENTATION_ASSISTANCE_MAX_ACTIVE_JOBS
+      this.parent.activePresentationAssistanceJobs(input.workspaceId, now) >=
+      PRESENTATION_ASSISTANCE_MAX_ACTIVE_JOBS
     )
       throw new PresentationAssistanceError("ACTIVE_LIMIT_REACHED");
     // No await between allowance check and both mutations: legacy and new memory admissions are atomic.
@@ -358,9 +362,10 @@ export class MemoryPresentationAssistanceRepository
     if (!this.eligible(input)) throw new PresentationAssistanceError("NOT_FOUND");
     return {
       used: this.parent.authoringUsageSince(input.workspaceId, input.since),
-      active: [...this.rows.values()].filter(
-        (row) => row.workspaceId === input.workspaceId && active(row, input.now ?? new Date()),
-      ).length,
+      active: this.parent.activePresentationAssistanceJobs(
+        input.workspaceId,
+        input.now ?? new Date(),
+      ),
     };
   }
   async claim(now: Date, leaseUntil: Date) {
@@ -597,7 +602,7 @@ export class PostgresPresentationAssistanceRepository implements PresentationAss
       const count = Number(
         (
           await client.query(
-            "SELECT count(*)::integer AS count FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2",
+            "SELECT ((SELECT count(*) FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2)+(SELECT count(*) FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2))::integer AS count",
             [input.workspaceId, now],
           )
         ).rows[0].count,
@@ -696,7 +701,7 @@ export class PostgresPresentationAssistanceRepository implements PresentationAss
     return this.tx(input.workspaceId, async (client) => {
       if (!(await this.eligible(client, input))) throw new PresentationAssistanceError("NOT_FOUND");
       const result = await client.query(
-        "SELECT (SELECT count(*)::integer FROM authoring_admission_receipts WHERE workspace_id=$1 AND created_at >= $2) AS used,(SELECT count(*)::integer FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3) AS active",
+        "SELECT (SELECT count(*)::integer FROM authoring_admission_receipts WHERE workspace_id=$1 AND created_at >= $2) AS used,((SELECT count(*) FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3)+(SELECT count(*) FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3))::integer AS active",
         [input.workspaceId, input.since, input.now ?? new Date()],
       );
       return { used: Number(result.rows[0].used), active: Number(result.rows[0].active) };

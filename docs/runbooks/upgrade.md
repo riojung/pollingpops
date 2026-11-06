@@ -557,6 +557,30 @@ Do not strip nodes, branch rules, state, capability records or receipts to fit a
 This change adds no commercial entitlement, required AI provider or new hosted service. Private
 review does not provide self-paced attempts.
 
+## Presentation outline assistance compatibility
+
+Apply migration `100_presentation_assistance.sql` before deploying E12 assistance admission,
+worker and insertion readers/writers. It adds separate private jobs and shared authoring admission
+receipts; existing `AuthoringDraft` v1 output/hash and queue contracts retain their meanings.
+For a mixed-version upgrade, set `AUTHORING_AI_MODE=disabled` on all HTTP instances first.
+Worker pause controls alone do not stop HTTP admission. Upgrade HTTP and dedicated jobs runtimes
+together, then re-enable the approved provider once all admission paths use the shared ledger.
+Both legacy and outline admission count the same monthly receipts under the workspace lock. Retain compact
+usage receipts through the billing month even after job/deck deletion or private-data erasure.
+
+The new worker reuses the approved `AUTHORING_AI_*` configuration and authoring pause controls.
+Bounds are 3–8 text slides, 12,000 input characters, 4,096 output tokens, 128KiB response, a
+45-second provider deadline, two active workspace jobs and three claims per job. The configured
+provider/model identity must fit the existing provenance limits. No new service, dependency or
+subscription allowance is introduced. Only explicit outlines enter the model request.
+
+Verify quota races across old/new admission, exact request/apply retries, source/actor loss,
+expiry/lease fences, stale draft preservation and native insertion. Raw outlines clear on terminal
+processing; private proposals expire after 24 hours. Keep migration100 and compact receipts during
+rollback, and pause new assistance and legacy AI admission before returning to older runtimes. Never rewrite existing
+published content or source-output hashes to fit an older reader. See the
+[E12 evidence record](../evidence/presentation-e12-outline-assistance.md).
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

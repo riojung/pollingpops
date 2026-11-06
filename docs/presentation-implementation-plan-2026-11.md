@@ -127,8 +127,11 @@ E05 visual import and E06 basic reveal/link interactions are also implemented. E
 interactions, E07 sections/live navigation and E08 private view-only sharing are merged in
 [PR #199](https://github.com/riojung/pollingpops/pull/199). E13 static export is merged in
 [PR #200](https://github.com/riojung/pollingpops/pull/200). E09's selected live-session reporting
-scope is implemented on `codex/presentation-e09-reporting`. Self-paced attempts and
-the remaining later packages stay planned; deployment and release qualification remain open.
+scope is merged in [PR #201](https://github.com/riojung/pollingpops/pull/201). The bounded E10
+story map and first E11 review slice are merged in [PR #202](https://github.com/riojung/pollingpops/pull/202)
+and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected outline assistance
+slice is implemented on `codex/presentation-e12-outline`. Self-paced attempts and the remaining later packages stay planned; deployment
+and release qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -491,7 +494,7 @@ revision fences, bounded plain text, forced RLS and lifecycle erasure/export pro
 records in migration099. Existing E08/content/live/report contracts retain their meanings.
 See the [E11 record](evidence/presentation-e11-review-feedback.md) for verification. Concurrent
 authoring, attachments, mentions and notifications remain later scope. The selected review
-slice is implemented on its branch and remains undeployed.
+slice is merged in [PR #203](https://github.com/riojung/pollingpops/pull/203) and remains undeployed.
 
 ### E12 Extend optional AI assistance
 
@@ -507,6 +510,17 @@ a model call. Images/audio/video generation are separately priced optional jobs.
 
 Estimate: 2–4 additional weeks for a bounded incremental authoring workflow; unrestricted generated
 media and conversational editing of an entire deck require separate evaluation.
+
+The first selected slice is implemented on `codex/presentation-e12-outline`: **Outline to slides**
+generates 3–8 reviewable text slides from an explicit outline and inserts selected native slides
+into an existing saved deck after creator confirmation. Exact excerpts remain available during
+review and generated claims are labeled unverified. Separate jobs and migration100's compact
+shared admission ledger reuse the existing authoring allowance, provider configuration and worker
+controls. Exact intent recovery and atomic draft/source fences protect insertion; no Presentation
+document/scene version, new provider or entitlement is added. See the
+[E12 record](evidence/presentation-e12-outline-assistance.md) for verification and limits.
+Rewrite/shorten, translation, layout/question suggestions and conversational editing remain later
+E12 work. This slice is ready for review and remains undeployed.
 
 ### E13 Deliver static export and later richer portability
 

@@ -8,6 +8,9 @@ import {
 import { PostgresRepository } from "./postgres.js";
 import { assertMemoryPresentationVisualImportReady } from "./presentation-visual-imports.js";
 import { PresentationVisualImportError } from "./presentation-visual-import-types.js";
+import { assertMemoryPresentationAssistanceReady } from "./presentation-assistance.js";
+import { PresentationAssistanceError } from "./presentation-assistance-types.js";
+import { lockPresentationAssistanceActors } from "./presentation-assistance-identity.js";
 import { FolderError, type LibraryArtifactDeletionResult, type Repository } from "./types.js";
 import { presentationMediaIds } from "./media-references.js";
 import {
@@ -380,6 +383,18 @@ export class MemoryPresentationRepository
       return null;
     }
     assertRecoveryPackUpdateSource(input);
+    if (input.assistanceJobId && this.repository instanceof MemoryRepository) {
+      const editor = this.repository.users.get(input.editorId),
+        member = this.repository.workspaceMembers.get(`${input.workspaceId}:${input.editorId}`);
+      if (
+        !editor ||
+        editor.deletedAt ||
+        !member ||
+        !["owner", "editor"].includes(member.role) ||
+        this.repository.workspaceMediaDeletionClaims.has(input.workspaceId)
+      )
+        throw new PresentationAssistanceError("CONFLICT");
+    }
     const key = mutationKey(input.workspaceId, input.mutationId);
     const retry = this.mutations.get(key);
     if (retry) {
@@ -393,6 +408,15 @@ export class MemoryPresentationRepository
         input.workspaceId,
         input.presentationId,
         input.visualImportId,
+      );
+    }
+    if (input.assistanceJobId && this.repository instanceof MemoryRepository) {
+      assertMemoryPresentationAssistanceReady(
+        this.repository,
+        input.workspaceId,
+        input.presentationId,
+        input.assistanceJobId,
+        input.assistanceProposalHash ?? "",
       );
     }
     if (presentation.draftRevision !== input.expectedRevision) {
@@ -844,6 +868,34 @@ export class PostgresPresentationRepository implements PresentationRepository {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
         mutationKey(input.workspaceId, input.mutationId),
       ]);
+      let assistanceActorsReady = false;
+      let assistanceEditorReady = false;
+      if (input.assistanceJobId) {
+        const source = await client.query<{ created_by: string | null }>(
+          "SELECT created_by FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3",
+          [input.workspaceId, input.presentationId, input.assistanceJobId],
+        );
+        const creator = source.rows[0]?.created_by;
+        const actors = [...new Set([input.editorId, ...(creator ? [creator] : [])])].sort();
+        const activeActors = await lockPresentationAssistanceActors(client, actors);
+        const workspace = await client.query(
+          "SELECT id FROM workspaces WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM workspace_media_deletion_jobs deletion WHERE deletion.workspace_id=workspaces.id) FOR SHARE",
+          [input.workspaceId],
+        );
+        const members = await client.query(
+          "SELECT user_id FROM workspace_members WHERE workspace_id=$1 AND user_id=ANY($2::uuid[]) AND role IN('owner','editor') ORDER BY user_id FOR SHARE",
+          [input.workspaceId, actors],
+        );
+        assistanceActorsReady =
+          !!creator &&
+          activeActors.rowCount === actors.length &&
+          workspace.rowCount === 1 &&
+          members.rowCount === actors.length;
+        assistanceEditorReady =
+          workspace.rowCount === 1 &&
+          activeActors.rows.some((actor) => actor.id === input.editorId) &&
+          members.rows.some((member) => member.user_id === input.editorId);
+      }
       if (input.visualImportId) {
         await client.query("SELECT id FROM workspaces WHERE id=$1 FOR SHARE", [input.workspaceId]);
       }
@@ -853,6 +905,8 @@ export class PostgresPresentationRepository implements PresentationRepository {
       );
       if (!locked.rows[0]) return null;
       assertRecoveryPackUpdateSource(input);
+      if (input.assistanceJobId && !assistanceEditorReady)
+        throw new PresentationAssistanceError("CONFLICT");
       const retried = await client.query(
         `SELECT * FROM presentation_draft_mutations
          WHERE workspace_id = $1 AND mutation_id = $2`,
@@ -864,6 +918,26 @@ export class PostgresPresentationRepository implements PresentationRepository {
         return this.replayPresentationDraftMutation(client, input, receipt, locked.rows[0]);
       }
       if (locked.rows[0].status === "archived") return null;
+      if (input.assistanceJobId) {
+        const source = await client.query(
+          "SELECT id FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 FOR SHARE",
+          [input.workspaceId, input.presentationId, input.assistanceJobId],
+        );
+        const ready = await client.query(
+          "SELECT id FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 AND status='ready' AND proposal_hash=$4 AND expires_at>clock_timestamp()",
+          [
+            input.workspaceId,
+            input.presentationId,
+            input.assistanceJobId,
+            input.assistanceProposalHash ?? "",
+          ],
+        );
+        if (!assistanceActorsReady || source.rowCount !== 1 || ready.rowCount !== 1)
+          throw new PresentationAssistanceError(
+            "CONFLICT",
+            "This reviewed proposal is no longer available to insert",
+          );
+      }
       if (input.visualImportId) {
         await client.query(
           "SELECT id FROM presentation_visual_imports WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 FOR SHARE",

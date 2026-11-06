@@ -60,6 +60,9 @@ export interface PresentationDraftUpdate {
   recoveryPackUpdateSourceRevision?: number | null;
   /** Serialize visual insertion with cancellation and preview expiry. */
   visualImportId?: string;
+  /** Serialize reviewed AI insertion with source erasure, role changes and expiry. */
+  assistanceJobId?: string;
+  assistanceProposalHash?: string;
 }
 
 export interface PresentationRepository {

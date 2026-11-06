@@ -2,8 +2,8 @@
 
 Implementation branch: `codex/presentation-e11-review`, from merged E10 baseline
 `e7afd6f33da82bf6c672f970345563d004d72f8d` (PR #202). This is the first E11 review slice;
-concurrent authoring remains separate. The selected software slice is implemented and verified
-on this branch and remains undeployed.
+concurrent authoring remains separate. The selected software slice is merged in
+[PR #203](https://github.com/riojung/pollingpops/pull/203) and remains undeployed.
 
 ## Scope and authority
 
@@ -129,7 +129,7 @@ handling erases the account's comment bodies and includes authorized feedback in
   `/tmp/pollingpops-e11-review-check-pr203.log`.
 - The final source scope is 39 files, with no package manifest or lockfile changes and only
   migration099 added. Historical migrations001–098 match the merged baseline byte for byte.
-  Source on the implementation branch is ready for review and remains undeployed.
+  The selected source is merged in PR #203 and remains undeployed.
 
 ## Rollout
 

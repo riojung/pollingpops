@@ -8,6 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E12 outline assistance November 5, 2026
+
+The source on `codex/presentation-e12-outline` adds optional **Outline to slides** in the saved
+Presentation editor. Creators request 3–8 text slides from an explicit outline, review generated
+wording and complete exact source excerpts, then insert selected editable native slides. Every
+proposal labels generated claims as unverified; generation leaves the deck unchanged until
+explicit insertion. Existing manual creation and publication retain their controls.
+
+Migration100 separates private assistance jobs from legacy source jobs and adds a compact shared
+monthly authoring ledger. Existing allowance/entitlement values remain unchanged. Exact create/
+apply recovery, actor/source/expiry fences, bounded provider work and private-data erasure protect
+the workflow. The full repository check, focused checks, twenty-five selected PostgreSQL cases
+and four production browser profiles pass. See the
+[E12 record](evidence/presentation-e12-outline-assistance.md). This is the first E12 software slice;
+rewrite/shorten, translation, suggested layouts and conversational editing remain later work.
+Source is ready for review and remains undeployed.
+
 ### Presentation E11 private review feedback November 5, 2026
 
 The source on `codex/presentation-e11-review` adds opt-in comments for existing private review
@@ -22,7 +39,8 @@ assessments and Report V1–V7 retain their meanings. The full repository check,
 production-browser profiles and sixteen selected real PostgreSQL cases pass; see the
 [E11 record](evidence/presentation-e11-review-feedback.md)
 for verification. No new provider, service or dependency is added. Concurrent authoring remains
-separate. This slice is ready for review and remains undeployed.
+separate. This slice is merged in [PR #203](https://github.com/riojung/pollingpops/pull/203)
+and remains undeployed.
 
 ### Presentation E10 bounded spatial story map November 5, 2026
 

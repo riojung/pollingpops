@@ -11,6 +11,14 @@ import { PresentationReportWorker } from "./presentation-report-worker.js";
 import { AuthoringWorker } from "./authoring-worker.js";
 import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
 import { OpenAiCompatibleAuthoringAssistant } from "./authoring-assistant.js";
+import {
+  OpenAiCompatiblePresentationAssistanceProvider,
+  presentationAssistanceProviderAvailable,
+} from "./presentation-assistance-provider.js";
+import { PresentationAssistanceService } from "./presentation-assistance-service.js";
+import { PresentationAssistanceWorker } from "./presentation-assistance-worker.js";
+import { createPresentationRepository } from "@openround/db";
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { ClamAvScanner } from "./malware-scanner.js";
 import { StorageService } from "./storage.js";
 import { RetentionService } from "./retention.js";
@@ -63,6 +71,30 @@ export async function createJobsRuntime(
     config.AUTHORING_WORKER_LEASE_MS,
     config.AUTHORING_EXTRACTION_TIMEOUT_MS,
   );
+  const configuredAssistanceProvider =
+    config.AUTHORING_AI_MODE === "openai_compatible"
+      ? new OpenAiCompatiblePresentationAssistanceProvider(
+          config.AUTHORING_AI_ENDPOINT!,
+          config.AUTHORING_AI_API_KEY,
+          config.AUTHORING_AI_MODEL,
+          config.AUTHORING_AI_PROVIDER_NAME,
+        )
+      : null;
+  const assistanceProvider = presentationAssistanceProviderAvailable(configuredAssistanceProvider)
+    ? configuredAssistanceProvider
+    : null;
+  const assistanceService = new PresentationAssistanceService(
+    repository,
+    createPresentationRepository(repository),
+    Boolean(assistanceProvider),
+    (workspaceId) => workspaceFeatureEnabled(repository, config, workspaceId, "presentations"),
+  );
+  const presentationAssistance = new PresentationAssistanceWorker(
+    repository,
+    assistanceProvider,
+    assistanceService,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
   const retention = new RetentionService(
     repository,
     storage,
@@ -93,6 +125,11 @@ export async function createJobsRuntime(
         name: "visual-imports",
         intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
         run: () => visualImports.runUntilIdle(1),
+      },
+      {
+        name: "presentation-assistance",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => presentationAssistance.runUntilIdle(1),
       },
       {
         name: "retention",
@@ -133,7 +170,7 @@ export async function createJobsRuntime(
     onError,
     async (name) => {
       const controlId =
-        name === "visual-imports"
+        name === "visual-imports" || name === "presentation-assistance"
           ? "authoring"
           : name === "integrations"
             ? "business-integrations"

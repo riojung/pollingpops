@@ -7112,7 +7112,7 @@ export class PostgresRepository implements Repository {
         ]);
         if (monthlyLimit !== null) {
           const usage = await client.query(
-            `SELECT count(*)::integer AS count FROM authoring_jobs
+            `SELECT count(*)::integer AS count FROM authoring_admission_receipts
              WHERE workspace_id = $1 AND created_at >= $2`,
             [input.workspaceId, since],
           );
@@ -7154,7 +7154,7 @@ export class PostgresRepository implements Repository {
   async countAuthoringJobsSince(workspaceId: string, since: Date) {
     const result = await this.workspaceQuery(
       workspaceId,
-      `SELECT count(*)::integer AS count FROM authoring_jobs
+      `SELECT count(*)::integer AS count FROM authoring_admission_receipts
        WHERE workspace_id = $1 AND created_at >= $2`,
       [workspaceId, since],
     );
@@ -8025,6 +8025,13 @@ export class PostgresRepository implements Repository {
            FROM authoring_jobs WHERE workspace_id = ANY($1::uuid[])
            ORDER BY created_at, id`,
         );
+        const presentationAssistanceJobs = await client.query(
+          `SELECT id,workspace_id,presentation_id,created_by,source_name,source_digest,slide_count,
+                  status,attempts,proposal,proposal_hash,error_code,created_at,updated_at,expires_at
+           FROM presentation_assistance_jobs
+           WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,
+          [workspaceIds, userId],
+        );
         const institutionPolicies = await queryWorkspaceData(
           `SELECT * FROM workspace_institution_policies
            WHERE workspace_id = ANY($1::uuid[]) ORDER BY workspace_id`,
@@ -8246,6 +8253,7 @@ export class PostgresRepository implements Repository {
           followupAttempts: followupAttempts.rows,
           followupAnswers: followupAnswers.rows,
           authoringJobs: authoringJobs.rows,
+          presentationAssistanceJobs: presentationAssistanceJobs.rows,
           institutionPolicies: institutionPolicies.rows,
           externalIdentities: externalIdentities.rows,
           ltiRegistrations: ltiRegistrations.rows,
@@ -8461,6 +8469,7 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM auth_email_pin_challenges WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM creator_sessions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM authoring_jobs WHERE expires_at <= $1", [now]);
+        await client.query("SELECT erase_expired_presentation_assistance($1)", [now]);
         await client.query("DELETE FROM federated_auth_transactions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM lti_login_transactions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM lti_launches WHERE expires_at <= $1", [now]);

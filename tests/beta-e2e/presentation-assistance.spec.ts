@@ -163,6 +163,7 @@ for (const suffix of ["", " @mobile"]) {
     await signInBeta(page);
     const run = randomUUID().slice(0, 8);
     const original = e01Slide(`Existing slide ${run}`);
+    original.id = original.id.toUpperCase();
     original.speakerNotes = privateMarker;
     const record = await createE01Deck(page, [original], 14);
     const published = await page.request.post(
@@ -358,7 +359,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(
       (staleResponse.request().postDataJSON() as InsertPresentationAssistanceProposals)
         .afterBlockId,
-    ).toBe(original.id);
+    ).toBe(original.id.toLowerCase());
     await expect(stale.dialog.getByRole("alert")).toBeVisible();
     expect((await readE01Record(page, record.id)).draft).toEqual(changed.draft);
     expect((await readE01Record(page, record.id)).draftRevision).toBe(changed.draftRevision);

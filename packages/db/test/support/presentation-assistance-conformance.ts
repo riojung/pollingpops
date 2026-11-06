@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { expect } from "vitest";
 import {
   PresentationDraftSchema,
@@ -303,4 +303,90 @@ export async function expectPresentationAssistanceErasure(repository: Repository
   });
   await repository.deleteAccount(f.actor.userId);
   return { ...f, member, created: created.job, next: next.job };
+}
+
+/** Each path is the first read after revocation, so get cannot conceal a leaking list or vice versa. */
+export async function expectPresentationAssistanceCreatorRevocation(repository: Repository) {
+  const scenarios: Array<{
+    change: "remove" | "downgrade";
+    firstRead: "get" | "list";
+    workspaceId: string;
+    jobId: string;
+  }> = [];
+  for (const change of ["remove", "downgrade"] as const)
+    for (const firstRead of ["get", "list"] as const) {
+      const f = await presentationAssistanceFixture(repository),
+        creator = await assistanceIdentity(repository);
+      await summaryMember(repository, f.actor, creator, "editor");
+      const created = await f.jobs.create({ ...f.create(), actorId: creator.userId }),
+        claim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 60_000)))!;
+      expect(claim.id).toBe(created.job.id);
+      expect(
+        await f.jobs.complete({
+          ...assistanceFence(claim, f.now),
+          proposal: assistanceProposal(claim),
+        }),
+      ).toBe(true);
+      const ready = (await f.jobs.get({ ...f.context, jobId: created.job.id }))!;
+      expect(ready.status).toBe("ready");
+      const draft = { ...f.presentation.draft, title: "Accepted reviewed outline" },
+        insertion = {
+          workspaceId: f.actor.workspaceId,
+          presentationId: f.presentation.id,
+          draft,
+          expectedRevision: 0,
+          mutationId: randomUUID(),
+          editorId: f.actor.userId,
+          draftHash: createHash("sha256").update(JSON.stringify(draft)).digest("hex"),
+          assistanceJobId: ready.id,
+          assistanceProposalHash: ready.proposalHash!,
+        },
+        accepted = await f.presentations.updatePresentationDraft(insertion);
+      expect(accepted?.draftRevision).toBe(1);
+      if (change === "remove")
+        expect(await repository.removeWorkspaceMember(f.actor.workspaceId, creator.userId)).toBe(
+          true,
+        );
+      else
+        expect(
+          await repository.updateWorkspaceMemberRole(f.actor.workspaceId, creator.userId, "viewer"),
+        ).toMatchObject({ role: "viewer" });
+      const result =
+        firstRead === "get"
+          ? await f.jobs.get({ ...f.context, jobId: created.job.id })
+          : (await f.jobs.list(f.context)).find((job) => job.id === created.job.id);
+      expect(result, `${change} followed by ${firstRead}`).toMatchObject({
+        status: "failed",
+        sourceName: "Erased outline",
+        proposal: null,
+        proposalHash: null,
+        error: { code: "SOURCE_UNAVAILABLE" },
+      });
+      // Both APIs must remain scrubbed, and no extra allowance is created or released.
+      expect(await f.jobs.get({ ...f.context, jobId: created.job.id })).toMatchObject({
+        status: "failed",
+        proposal: null,
+        error: { code: "SOURCE_UNAVAILABLE" },
+      });
+      expect(await f.jobs.list(f.context)).toEqual([
+        expect.objectContaining({
+          id: created.job.id,
+          status: "failed",
+          sourceName: "Erased outline",
+          proposal: null,
+          proposalHash: null,
+          error: expect.objectContaining({ code: "SOURCE_UNAVAILABLE" }),
+        }),
+      ]);
+      expect(await repository.countAuthoringJobsSince(f.actor.workspaceId, f.since)).toBe(1);
+      // Erasing private job data cannot invalidate an already accepted exact insertion receipt.
+      expect(await f.presentations.updatePresentationDraft(insertion)).toEqual(accepted);
+      scenarios.push({
+        change,
+        firstRead,
+        workspaceId: f.actor.workspaceId,
+        jobId: created.job.id,
+      });
+    }
+  return scenarios;
 }

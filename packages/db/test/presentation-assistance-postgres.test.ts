@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   PostgresRepository,
@@ -8,6 +9,7 @@ import {
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 import {
   expectPresentationAssistanceConformance,
+  expectPresentationAssistanceCreatorRevocation,
   expectPresentationAssistanceQuota,
   expectPresentationAssistanceErasure,
   presentationAssistanceFixture,
@@ -331,6 +333,105 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation outline assistance Post
       await client.query("ROLLBACK");
     } finally {
       client.release();
+    }
+  });
+  it("erases ready source/proposal bodies before get or list when their creator is removed or downgraded", async () => {
+    const scenarios = await expectPresentationAssistanceCreatorRevocation(repository);
+    expect(scenarios).toHaveLength(4);
+    for (const scenario of scenarios) {
+      expect(
+        (
+          await administrator.pool.query(
+            "SELECT created_by,outline,proposal,proposal_hash,source_name,status,error_code FROM presentation_assistance_jobs WHERE id=$1",
+            [scenario.jobId],
+          )
+        ).rows[0],
+      ).toEqual({
+        created_by: null,
+        outline: null,
+        proposal: null,
+        proposal_hash: null,
+        source_name: "Erased outline",
+        status: "failed",
+        error_code: "SOURCE_UNAVAILABLE",
+      });
+    }
+  });
+  it("locks the creator before its workspace and rechecks a concurrent role change for get and list", async () => {
+    for (const read of ["get", "list"] as const) {
+      const f = await presentationAssistanceFixture(repository),
+        creator = await assistanceIdentity(repository);
+      await summaryMember(repository, f.actor, creator, "editor");
+      const created = await f.jobs.create({ ...f.create(), actorId: creator.userId }),
+        claim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 60_000)))!;
+      expect(claim.id).toBe(created.job.id);
+      expect(
+        await f.jobs.complete({
+          ...assistanceFence(claim, f.now),
+          proposal: assistanceProposal(claim),
+        }),
+      ).toBe(true);
+      const blocker = await administrator.pool.connect();
+      let pending: Promise<{ jobs: unknown[]; error: unknown }> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        // Account deletion acquires this identity lock before workspace/source cleanup.
+        await blocker.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [creator.userId]);
+        pending = (
+          read === "get"
+            ? f.jobs.get({ ...f.context, jobId: created.job.id }).then((job) => [job])
+            : f.jobs.list(f.context)
+        ).then(
+          (jobs) => ({ jobs, error: null }),
+          (error) => ({ jobs: [], error }),
+        );
+        let blocked = false;
+        for (let index = 0; index < 100; index++) {
+          blocked = !!(
+            await administrator.pool.query(
+              "SELECT 1 FROM pg_stat_activity WHERE datname=$1 AND state='active' AND wait_event_type='Lock' AND query LIKE '%users%'",
+              [database],
+            )
+          ).rowCount;
+          if (blocked) break;
+          await delay(5);
+        }
+        expect(blocked, `${read} must lock the creator identity`).toBe(true);
+        // A workspace-first reader would fail this NOWAIT while waiting for our creator lock.
+        await blocker.query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE NOWAIT", [
+          f.actor.workspaceId,
+        ]);
+        await blocker.query(
+          "UPDATE workspace_members SET role='viewer' WHERE workspace_id=$1 AND user_id=$2",
+          [f.actor.workspaceId, creator.userId],
+        );
+        await blocker.query("COMMIT");
+        expect(await pending).toEqual({
+          error: null,
+          jobs: [
+            expect.objectContaining({
+              id: created.job.id,
+              status: "failed",
+              sourceName: "Erased outline",
+              proposal: null,
+              proposalHash: null,
+              error: expect.objectContaining({ code: "SOURCE_UNAVAILABLE" }),
+            }),
+          ],
+        });
+        expect(
+          (
+            await administrator.pool.query(
+              "SELECT created_by,outline,proposal,proposal_hash FROM presentation_assistance_jobs WHERE id=$1",
+              [created.job.id],
+            )
+          ).rows[0],
+        ).toEqual({ created_by: null, outline: null, proposal: null, proposal_hash: null });
+      } finally {
+        await blocker.query("ROLLBACK");
+        blocker.release();
+        await pending;
+      }
     }
   });
   it("uses the generic retention hook even without a model worker and preserves quota receipts", async () => {

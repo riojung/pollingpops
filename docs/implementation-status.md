@@ -19,7 +19,7 @@ explicit insertion. Existing manual creation and publication retain their contro
 Migration100 separates private assistance jobs from legacy source jobs and adds a compact shared
 monthly authoring ledger. Existing allowance/entitlement values remain unchanged. Exact create/
 apply recovery, actor/source/expiry fences, bounded provider work and private-data erasure protect
-the workflow. The full repository check, focused checks, twenty-five selected PostgreSQL cases
+the workflow. The full repository check, focused checks, twenty-seven selected PostgreSQL cases
 and four production browser profiles pass. See the
 [E12 record](evidence/presentation-e12-outline-assistance.md). This is the first E12 software slice;
 rewrite/shorten, translation, suggested layouts and conversational editing remain later work.

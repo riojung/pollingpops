@@ -279,6 +279,144 @@ describe("Presentation outline assistance API", () => {
     ).toBe(2);
   });
 
+  it.each(["append", "replace"] as const)(
+    "preserves case-equivalent saved block identities and document14 topology on assistance insertion (%s)",
+    async (scenario) => {
+      const f = await fixture();
+      const initial = (await f.presentations.getPresentation(workspaceId, f.presentation.id))!;
+      const anchorId = "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF";
+      const tailId = "bcdefabc-defa-4bcd-8efa-bcdefabcdefa";
+      const sectionId = "cdefabcd-efab-4cde-8fab-cdefabcdefab";
+      const starter = initial.draft.blocks[0]!;
+      expect(starter.kind).toBe("content");
+      const draft = PresentationDraftSchema.parse({
+        ...initial.draft,
+        schemaVersion: 14,
+        blocks:
+          scenario === "append"
+            ? [
+                {
+                  ...starter,
+                  id: anchorId,
+                  textElements: [
+                    {
+                      id: "existing-title",
+                      role: "title",
+                      text: "Keep this existing slide",
+                      region: "top_center",
+                      order: 0,
+                    },
+                  ],
+                  citations: [{ locator: "Original source", excerpt: "Original evidence" }],
+                  sourceDisclosure: {
+                    sourceName: "Existing source",
+                    sourceDigest: "b".repeat(64),
+                    provider: "original-provider",
+                    model: "original-model",
+                  },
+                },
+                { ...starter, id: tailId, speakerNotes: "Keep the following slide" },
+              ]
+            : [{ ...starter, id: anchorId }],
+        sections: [
+          {
+            id: sectionId,
+            title: "Existing chapter",
+            blockIds: [anchorId.toLowerCase(), ...(scenario === "append" ? [tailId] : [])],
+          },
+        ],
+        spatial: {
+          schemaVersion: 1,
+          frames: [{ blockId: anchorId.toLowerCase(), x: 6400, y: 4800, width: 640, height: 360 }],
+        },
+      });
+      const saved = await app!.inject({
+        method: "PUT",
+        url: `/v1/presentations/${f.presentation.id}/draft`,
+        headers: { cookie: f.cookie },
+        payload: { schemaVersion: 2, draft, expectedRevision: 0, mutationId: randomUUID() },
+      });
+      expect(saved.statusCode, saved.body).toBe(200);
+      expect(saved.json().presentation.draft).toEqual(draft);
+      expect((await f.post()).statusCode).toBe(202);
+      expect(await f.presentationAssistanceWorker.runOnce()).toBe("completed");
+      const job = PresentationAssistanceJobSchema.parse((await f.get()).json().job);
+      const input = {
+        schemaVersion: 1,
+        jobId: job.id,
+        proposalHash: job.proposalHash,
+        selectedSlideIds: job.proposal!.slides.slice(0, 2).map(({ id }) => id),
+        reviewed: true,
+        expectedRevision: 1,
+        mutationId: randomUUID(),
+        afterBlockId: scenario === "append" ? anchorId.toLowerCase() : null,
+      };
+      const insert = (payload: unknown = input) =>
+        app!.inject({
+          method: "POST",
+          url: `/v1/presentations/${f.presentation.id}/blocks/assistance-proposals`,
+          headers: { cookie: f.cookie },
+          payload: payload as object,
+        });
+      const applied = await insert();
+      expect(applied.statusCode, applied.body).toBe(200);
+      const result = applied.json<{
+        presentation: { draftRevision: number; draft: unknown };
+        insertedBlockIds: string[];
+      }>();
+      const insertedDraft = PresentationDraftSchema.parse(result.presentation.draft);
+      expect(result.presentation.draftRevision).toBe(2);
+      expect(result.insertedBlockIds).toHaveLength(2);
+      expect(insertedDraft).toEqual({
+        ...draft,
+        blocks:
+          scenario === "append"
+            ? [draft.blocks[0], ...insertedDraft.blocks.slice(1, 3), draft.blocks[1]]
+            : insertedDraft.blocks,
+        sections:
+          scenario === "append"
+            ? draft.sections
+            : [{ ...draft.sections![0], blockIds: result.insertedBlockIds }],
+        spatial:
+          scenario === "append"
+            ? draft.spatial
+            : {
+                ...draft.spatial,
+                frames: [{ ...draft.spatial!.frames[0], blockId: result.insertedBlockIds[0] }],
+              },
+      });
+      expect(insertedDraft.blocks.map((block) => block.id)).toEqual([
+        ...(scenario === "append" ? [anchorId] : []),
+        ...result.insertedBlockIds,
+        ...(scenario === "append" ? [tailId] : []),
+      ]);
+      for (const block of insertedDraft.blocks.filter(({ id }) =>
+        result.insertedBlockIds.includes(id),
+      ))
+        expect(block.sourceDisclosure).toMatchObject({
+          sourceName: job.proposal!.sourceName,
+          sourceDigest: job.proposal!.sourceDigest,
+          provider: job.proposal!.provider,
+          model: job.proposal!.model,
+        });
+      expect((await insert()).json()).toEqual(result);
+      expect(
+        (
+          await insert({
+            ...input,
+            afterBlockId: input.afterBlockId?.toUpperCase() ?? null,
+          })
+        ).json(),
+      ).toEqual(result);
+      expect(
+        (await insert({ ...input, selectedSlideIds: [job.proposal!.slides[2]!.id] })).statusCode,
+      ).toBe(409);
+      expect(
+        (await f.presentations.getPresentation(workspaceId, f.presentation.id))?.draftRevision,
+      ).toBe(2);
+    },
+  );
+
   it("preserves the draft on invalid evidence and reports only a static error", async () => {
     const generate = vi.fn().mockResolvedValue({
       slides: rawOutput.slides.map((slide) => ({

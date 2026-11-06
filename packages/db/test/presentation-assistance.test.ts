@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { MemoryRepository, createPresentationAssistanceRepository } from "../src/index.js";
 import {
   expectPresentationAssistanceConformance,
+  expectPresentationAssistanceCreatorRevocation,
   expectPresentationAssistanceQuota,
   expectPresentationAssistanceErasure,
   presentationAssistanceFixture,
@@ -54,6 +55,9 @@ describe("Presentation outline assistance persistence", () => {
     expect(
       await f.jobs.claim(new Date(f.now.getTime() + 1000), new Date(f.now.getTime() + 2000)),
     ).toBeNull();
+  });
+  it("erases ready proposals before get or list when their creator is removed or downgraded", async () => {
+    await expectPresentationAssistanceCreatorRevocation(new MemoryRepository());
   });
   it("blocks admissions while another lifecycle extension delays account erasure", async () => {
     const repository = new MemoryRepository(),

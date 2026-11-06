@@ -57,8 +57,8 @@ opening, blocks competing local mutations, and restores focus after closing.
 
 ## Verification
 
-- **Focused checks pass:** 59 contract/legacy source-hash tests, 58 Memory/migration/legacy DB
-  tests, 37 server/provider/worker-runtime/legacy authoring tests and 34 UI/controller/Builder
+- **Focused checks pass:** 59 contract/legacy source-hash tests, 59 Memory/migration/legacy DB
+  tests, 39 server/provider/worker-runtime/legacy authoring tests and 34 UI/controller/Builder
   tests. Package typing, focused lint and formatting pass. Contracts normalize new UUIDs without
   changing legacy hashes; API regressions cover case-equivalent requests, complete intent,
   current authority, unverified source evidence, malformed output, provider failure, stale
@@ -66,37 +66,44 @@ opening, blocks competing local mutations, and restores focus after closing.
   Four Builder reload integration regressions cover retained/deleted anchors, empty refreshed
   decks and failed reads. Deleted-anchor and empty-deck cases reproduce the review finding
   before the fix and pass with the refreshed revision/anchor pair.
-- **Twenty-five selected real PostgreSQL cases pass:** seven E12, eight E11, four E09, three
+- **Review regressions pass:** ready proposals are scrubbed before either PostgreSQL get or list
+  returns after creator removal or downgrade. Separate first-read scenarios verify erased private
+  bodies, unchanged quota usage and recovery of accepted insertion receipts. A concurrent role
+  change verifies both readers lock creator identities before workspace rows. Uppercase saved
+  slide IDs work as insertion anchors and empty-starter replacements, including lowercase section
+  and spatial references; exact retries preserve stored IDs, evidence and publication. The privacy
+  read and both uppercase API regressions reproduced their failures before the respective fixes.
+- **Twenty-seven selected real PostgreSQL cases pass:** nine E12, eight E11, four E09, three
   E10, the shared Presentation repository conformance case and two legacy authoring claim/quota
-  cases. Run `93862d6d32` applies all 100 migrations twice, verifies the checksum ledger and
+  cases. Run `032bae149d` applies all 100 migrations twice, verifies the checksum ledger and
   preserves migrations001–099 byte for byte. All 65 legacy raw SQL rejection probes pass.
   Runtime access is restricted, with forced RLS on both new tables. Identity checks temporarily
   scope access to explicitly named actors and restore it on success or SQL failure; the active-
   author integrity helper rejects other workspace scopes. Existing identity policies and immutable
   publication privileges remain intact. The owned container, SSH forward and lock are removed,
   OOM is false and all fourteen original containers retain their states. There were 192 unselected
-  integration skips. Private result: `/tmp/pollingpops-e12-outline-pg/result-93862d6d32.json`.
+  integration skips. Private result: `/tmp/pollingpops-e12-outline-pg/result-032bae149d.json`.
 - **Four production browser profiles pass:** Chromium/Firefox desktop and Chromium/WebKit mobile.
   They verify lost-create acknowledgement/reload without another job, reviewed subset selection,
   exact lost-insert acknowledgement recovery without duplicate slides, unchanged publication,
   private-note exclusion from prompts, bounded provider tokens, terminal invalid-evidence failure,
   stale-draft protection, successful insertion after exactly one saved-deck reload following
-  remote anchor deletion, and normal native text editing/save/reload. Axe and strict 320px overflow
-  checks pass; captures were inspected. Each profile uses a fresh API fixture so the existing
-  endpoint job-rate limit remains active. Retries reuse the unchanged current production UI
+  remote anchor deletion, uppercase saved anchors, and normal native text editing/save/reload.
+  Axe and strict 320px overflow checks pass; captures were inspected. Each profile uses a fresh API
+  fixture so the existing endpoint job-rate limit remains active. Retries reuse the current production UI
   bundle with the final API source. Private matrix result:
-  `/tmp/pollingpops-e12-outline-browser/anchor-fix-final-matrix-result.json`; per-profile logs and captures
+  `/tmp/pollingpops-e12-outline-browser/pr204-matrix-result.json`; per-profile logs and captures
   share that private directory.
 - The browser spec passes scoped strict TypeScript and ESLint checks. Owned web/API/provider
   listeners are stopped, Firefox temporary directories are removed, and authentication caches
   are private and removed by existing teardown.
 - **The full `VITEST_MAX_WORKERS=1 pnpm check` passes:** formatting, Docker workspace context,
   lint/typecheck (17 tasks each), package tests, smoke support, ten production build tasks and
-  the admin CLI build. Principal passing totals are 917 contracts, 562 database, 1,333 server,
-  2,704 web and 354 smoke-support tests. Normal opt-in database skips remain; the twenty-five
+  the admin CLI build. Principal passing totals are 917 contracts, 563 database, 1,335 server,
+  2,704 web and 354 smoke-support tests. Normal opt-in database skips remain; the twenty-seven
   real PostgreSQL cases above were qualified separately. Private log:
-  `/tmp/pollingpops-e12-outline-anchor-fix-check.log`.
-- The seven-case assistance PostgreSQL suite is included in the existing PostgreSQL CI job.
+  `/tmp/pollingpops-pr204-check.log`.
+- The nine-case assistance PostgreSQL suite is included in the existing PostgreSQL CI job.
   Final source scope is 42 files, with no dependency, package manifest or lockfile change and
   only migration100 added. Historical migrations001–099 retain their exact bytes. Source
   is ready for review and remains undeployed.

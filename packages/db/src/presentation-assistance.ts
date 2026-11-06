@@ -496,9 +496,15 @@ export class PostgresPresentationAssistanceRepository implements PresentationAss
     client: PoolClient,
     input: PresentationAssistanceContext,
     exclusive = false,
-  ) {
-    // Match account deletion's actor -> workspace -> source lock order.
-    if (!(await lockPresentationAssistanceActors(client, [input.actorId])).rowCount) return false;
+    creatorIds: string[] = [],
+  ): Promise<Set<string> | null> {
+    // Match account deletion's actor -> workspace/member -> source -> job lock order.
+    // Read paths lock every pre-read creator with the requester before touching workspace rows.
+    const actors = [...new Set([input.actorId, ...creatorIds])].sort(),
+      activeActors = new Set(
+        (await lockPresentationAssistanceActors(client, actors)).rows.map((row) => row.id),
+      );
+    if (!activeActors.has(input.actorId)) return null;
     if (
       !(
         await client.query(
@@ -507,22 +513,25 @@ export class PostgresPresentationAssistanceRepository implements PresentationAss
         )
       ).rowCount
     )
-      return false;
+      return null;
+    const members = await client.query<{ user_id: string }>(
+      "SELECT user_id FROM workspace_members WHERE workspace_id=$1 AND user_id=ANY($2::uuid[]) AND role IN('owner','editor') ORDER BY user_id FOR SHARE",
+      [input.workspaceId, actors],
+    );
+    const permitted = new Set(
+      members.rows.filter((row) => activeActors.has(row.user_id)).map((row) => row.user_id),
+    );
+    if (!permitted.has(input.actorId)) return null;
     if (
       !(
         await client.query(
-          "SELECT user_id FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 AND role IN('owner','editor') FOR SHARE",
-          [input.workspaceId, input.actorId],
+          "SELECT id FROM presentations WHERE workspace_id=$1 AND id=$2 AND status<>'archived' FOR SHARE",
+          [input.workspaceId, input.presentationId],
         )
       ).rowCount
     )
-      return false;
-    return !!(
-      await client.query(
-        "SELECT id FROM presentations WHERE workspace_id=$1 AND id=$2 AND status<>'archived' FOR SHARE",
-        [input.workspaceId, input.presentationId],
-      )
-    ).rowCount;
+      return null;
+    return permitted;
   }
   private async save(client: PoolClient, row: Row) {
     await client.query(
@@ -614,37 +623,71 @@ export class PostgresPresentationAssistanceRepository implements PresentationAss
       return { status: "created" as const, job: mapped(result.rows[0]!).job };
     });
   }
+  private async scrubRead(
+    client: PoolClient,
+    found: QueryResultRow,
+    permitted: ReadonlySet<string>,
+    now: Date,
+  ) {
+    const row = mapped(found);
+    let changed = expire(row, now);
+    // Recheck the locked job's current creator; erasure may have nulled it after metadata lookup.
+    if (row.job.status !== "expired" && (!row.createdBy || !permitted.has(row.createdBy))) {
+      error(row, "SOURCE_UNAVAILABLE", now, true);
+      changed = true;
+    }
+    if (changed) await this.save(client, row);
+    return row.job;
+  }
   async get(input: PresentationAssistanceContext & { jobId: string }) {
     input = contextIds(input);
     return this.tx(input.workspaceId, async (client) => {
-      if (!(await this.eligible(client, input))) return null;
+      // No private source/proposal bodies are read until relevant identities and authority are locked.
+      const metadata = (
+        await client.query<{ created_by: string | null }>(
+          "SELECT created_by FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3",
+          [input.workspaceId, input.presentationId, input.jobId],
+        )
+      ).rows[0];
+      const permitted = await this.eligible(
+        client,
+        input,
+        false,
+        metadata?.created_by ? [metadata.created_by] : [],
+      );
+      if (!permitted) return null;
       const found = (
         await client.query(
           "SELECT * FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 FOR UPDATE",
           [input.workspaceId, input.presentationId, input.jobId],
         )
       ).rows[0];
-      if (!found) return null;
-      const row = mapped(found);
-      const changed = expire(row, input.now ?? new Date());
-      if (changed) await this.save(client, row);
-      return row.job;
+      return found ? this.scrubRead(client, found, permitted, input.now ?? new Date()) : null;
     });
   }
   async list(input: PresentationAssistanceContext & { limit?: number }) {
     input = contextIds(input);
     return this.tx(input.workspaceId, async (client) => {
-      if (!(await this.eligible(client, input))) return [];
-      const result = await client.query(
-        "SELECT * FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 ORDER BY created_at DESC,id LIMIT $3 FOR UPDATE",
+      const metadata = await client.query<{ id: string; created_by: string | null }>(
+        "SELECT id,created_by FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 ORDER BY created_at DESC,id LIMIT $3",
         [input.workspaceId, input.presentationId, Math.max(1, Math.min(input.limit ?? 20, 100))],
       );
-      const jobs: PresentationAssistanceJob[] = [];
-      for (const found of result.rows) {
-        const row = mapped(found);
-        if (expire(row, input.now ?? new Date())) await this.save(client, row);
-        jobs.push(row.job);
-      }
+      const permitted = await this.eligible(
+        client,
+        input,
+        false,
+        metadata.rows.flatMap((row) => (row.created_by ? [row.created_by] : [])),
+      );
+      if (!permitted) return [];
+      // Keep the selected IDs fixed: a newly admitted creator has not participated in our locks.
+      const result = await client.query(
+        "SELECT * FROM presentation_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=ANY($3::uuid[]) ORDER BY created_at DESC,id FOR UPDATE",
+        [input.workspaceId, input.presentationId, metadata.rows.map((row) => row.id)],
+      );
+      const jobs: PresentationAssistanceJob[] = [],
+        now = input.now ?? new Date();
+      for (const found of result.rows)
+        jobs.push(await this.scrubRead(client, found, permitted, now));
       return jobs;
     });
   }

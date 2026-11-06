@@ -277,7 +277,7 @@ export class PresentationAssistanceService {
     const anchor =
       input.afterBlockId === null
         ? blocks.length - 1
-        : blocks.findIndex((block) => block.id === input.afterBlockId);
+        : blocks.findIndex((block) => block.id.toLowerCase() === input.afterBlockId?.toLowerCase());
     if (input.afterBlockId !== null && anchor < 0)
       throw new PresentationAssistanceServiceError(
         "VALIDATION_ERROR",
@@ -308,14 +308,16 @@ export class PresentationAssistanceService {
       sections = sections?.map((section) => ({
         ...section,
         blockIds: section.blockIds.flatMap((id) =>
-          id === starter.id ? inserted.map((block) => block.id) : [id],
+          id.toLowerCase() === starter.id.toLowerCase() ? inserted.map((block) => block.id) : [id],
         ),
       }));
       if (spatial)
         spatial = {
           ...spatial,
           frames: spatial.frames.map((frame) =>
-            frame.blockId === starter.id ? { ...frame, blockId: inserted[0]!.id } : frame,
+            frame.blockId.toLowerCase() === starter.id.toLowerCase()
+              ? { ...frame, blockId: inserted[0]!.id }
+              : frame,
           ),
         };
     } else blocks.splice(anchor + 1, 0, ...inserted);

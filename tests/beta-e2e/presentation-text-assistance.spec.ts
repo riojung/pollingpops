@@ -490,4 +490,110 @@ for (const suffix of ["", " @mobile"]) {
       if (mode === "preflight") await page.unroute(statusPath);
     }
   });
+
+  test(`invalid text recovery can be cleared after a verified saved-deck reload${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(240_000);
+    await signInBeta(page);
+    const me = await page.request.get(`${e01ApiUrl}/v1/auth/me`);
+    expect(me.status()).toBe(200);
+    const { creator } = (await me.json()) as {
+      creator: { userId: string; workspaceId: string };
+    };
+    for (const invalid of ["{", JSON.stringify({ schemaVersion: 0, applyBody: "old receipt" })]) {
+      const record = await fixture(page);
+      await enterE01Editor(page, record.id, (info.project.use.viewport?.width ?? 1280) <= 700);
+      const key = `presentation-text-assistance:v1:${creator.userId}:${creator.workspaceId}:${record.id}`;
+      const otherKey = `${key}:unrelated`;
+      await page.evaluate(
+        ({ key, otherKey, invalid }) => {
+          sessionStorage.setItem(key, invalid);
+          sessionStorage.setItem(otherKey, "Preserve unrelated recovery");
+        },
+        { key, otherKey, invalid },
+      );
+      await page.reload();
+      let dialog = await openText(page, "rewrite", true);
+      const resetName = "Reload saved deck and clear invalid recovery";
+      const consentName =
+        "I understand the saved request cannot be recovered and a text edit may already have been applied.";
+      await expect(dialog.getByRole("button", { name: resetName, exact: true })).toBeDisabled();
+      const current = await readE01Record(page, record.id);
+      const remoteDraft = structuredClone(current.draft);
+      const remoteText = "Committed wording must survive clearing invalid recovery.";
+      body({ ...current, draft: remoteDraft }).node.text = remoteText;
+      const deckPath = `${e01ApiUrl}/v1/presentations/${record.id}`;
+      const committed = await page.request.put(`${deckPath}/draft`, {
+        data: {
+          schemaVersion: 2,
+          draft: remoteDraft,
+          expectedRevision: current.draftRevision,
+          mutationId: randomUUID(),
+        },
+      });
+      expect(committed.status()).toBe(200);
+      const committedRecord = (await committed.json()).presentation as E01Record;
+      let refuseReload = true;
+      await page.route(deckPath, async (route) => {
+        if (route.request().method() === "GET" && refuseReload) {
+          refuseReload = false;
+          await route.fulfill({
+            status: 503,
+            json: {
+              error: {
+                code: "DEPENDENCY_UNAVAILABLE",
+                message: "Saved deck is temporarily unavailable",
+              },
+            },
+          });
+        } else await route.continue();
+      });
+      await dialog.getByRole("checkbox", { name: consentName, exact: true }).check();
+      const failedRead = page.waitForResponse(
+        (response) => response.url() === deckPath && response.status() === 503,
+      );
+      await dialog.getByRole("button", { name: resetName, exact: true }).click();
+      await failedRead;
+      await expect(dialog.getByRole("button", { name: resetName, exact: true })).toBeEnabled();
+      expect(await page.evaluate((key) => sessionStorage.getItem(key), key)).toBe(invalid);
+      await dialog.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(
+        page.getByText(
+          "A text assistance receipt is outstanding. Recover it before editing this deck.",
+          {
+            exact: true,
+          },
+        ),
+      ).toBeVisible();
+      dialog = await openText(page, "rewrite", true);
+      await dialog.getByRole("checkbox", { name: consentName, exact: true }).check();
+      await dialog.getByRole("button", { name: resetName, exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await page.unroute(deckPath);
+      expect(await page.evaluate((key) => sessionStorage.getItem(key), key)).toBeNull();
+      expect(await page.evaluate((key) => sessionStorage.getItem(key), otherKey)).toBe(
+        "Preserve unrelated recovery",
+      );
+      expect((await readE01Record(page, record.id)).draftRevision).toBe(
+        committedRecord.draftRevision,
+      );
+      await closeDrawers(page);
+      await selectE01Body(page);
+      const input = page.getByRole("textbox", { name: "Node text", exact: true });
+      await expect(input).toHaveValue(remoteText);
+      const manualText = `${remoteText} Manual editing is available.`;
+      await input.fill(manualText);
+      await expect
+        .poll(async () => body(await readE01Record(page, record.id)).node.text)
+        .toBe(manualText);
+      await page.reload();
+      await expect(page.getByRole("button", { name: "Arrange space", exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Resume text assistance", exact: true }),
+      ).toBeHidden();
+      expect(body(await readE01Record(page, record.id)).node.text).toBe(manualText);
+    }
+  });
 }

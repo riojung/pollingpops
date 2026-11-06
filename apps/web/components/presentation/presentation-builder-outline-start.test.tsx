@@ -118,7 +118,7 @@ vi.mock("../locale-provider", () => ({
 }));
 vi.mock("../workspace/workspace-provider", () => ({ useWorkspace: () => fixture.workspace }));
 
-import { ApiClientError } from "../../lib/api";
+import { ApiClientError, AUTH_CHANGE_EVENT } from "../../lib/api";
 import { PresentationBuilder } from "./presentation-builder";
 import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationVisualImport } from "./presentation-visual-import";
@@ -154,12 +154,15 @@ function render<T>(hooks: Hooks, component: () => T): T {
 function effects(hooks: Hooks) {
   for (const effect of hooks.effects.splice(0)) effect();
 }
-function editor(startOutline = true) {
+function editor(startOutline = true, mountText = false) {
   const wrapper = render(host(), () => PresentationBuilder({ presentationId, startOutline }));
   const Editor = wrapper.type as (props: ComponentProps<typeof PresentationBuilder>) => ReactNode;
   const parent = host();
   const child = host();
   const visual = host();
+  const text = host();
+  let textModal: ReactNode;
+  let visualModal: ReactNode;
   let tree: ReactNode;
   let modal: ReactNode;
   let assistance: ComponentProps<typeof PresentationAssistance> | undefined;
@@ -167,7 +170,7 @@ function editor(startOutline = true) {
     tree = render(parent, () => Editor({ presentationId, startOutline }));
     const visualNode = elements(tree).find((element) => element.type === PresentationVisualImport);
     if (visualNode) {
-      render(visual, () =>
+      visualModal = render(visual, () =>
         PresentationVisualImport(
           visualNode.props as unknown as ComponentProps<typeof PresentationVisualImport>,
         ),
@@ -180,6 +183,19 @@ function editor(startOutline = true) {
       modal = render(child, () => PresentationAssistance(assistance!));
       effects(child);
     }
+    if (mountText) {
+      const textNode = elements(tree).find(
+        (element) => element.type === PresentationTextAssistance,
+      );
+      if (textNode) {
+        textModal = render(text, () =>
+          PresentationTextAssistance(
+            textNode.props as unknown as ComponentProps<typeof PresentationTextAssistance>,
+          ),
+        );
+        effects(text);
+      }
+    }
     effects(parent);
   };
   return {
@@ -190,7 +206,7 @@ function editor(startOutline = true) {
     },
     async settle() {
       for (let turn = 0; turn < 40; turn++) {
-        if (parent.dirty || child.dirty || visual.dirty) update();
+        if (parent.dirty || child.dirty || visual.dirty || (mountText && text.dirty)) update();
         await Promise.resolve();
       }
     },
@@ -211,6 +227,12 @@ function editor(startOutline = true) {
     get modalNodes() {
       return elements(modal);
     },
+    get textModalNodes() {
+      return elements(textModal);
+    },
+    get visualModalNodes() {
+      return elements(visualModal);
+    },
   };
 }
 
@@ -229,7 +251,10 @@ beforeEach(() => {
       };
     if (path === "/v1/quizzes") return { quizzes: [] };
     if (path === "/v1/features") return { mediaUploads: false };
-    if (path.includes("/presentation-assistance/status"))
+    if (
+      path.includes("/presentation-assistance/status") ||
+      path.includes("/presentation-text-assistance/status")
+    )
       return {
         status: {
           enabled: true,
@@ -261,7 +286,7 @@ beforeEach(() => {
     },
   });
   vi.stubGlobal("HTMLElement", class {});
-  vi.stubGlobal("document", { activeElement: null });
+  vi.stubGlobal("document", { activeElement: null, querySelector: vi.fn().mockReturnValue(null) });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -755,4 +780,388 @@ describe("Saved native text assistance", () => {
         expect(view.nodes.some((node) => node.props.value === "Later remote edit")).toBe(true);
     },
   );
+  const invalidKey = `presentation-text-assistance:v1:actor:workspace:${presentationId}`;
+  const resetLabel = "Reload saved deck and clear invalid recovery";
+  async function openInvalidRecovery(view: ReturnType<typeof editor>) {
+    await view.settle();
+    const resume = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "Resume text assistance",
+    )!;
+    (resume.props.onClick as () => void)();
+    await view.settle();
+    expect(
+      view.textModalNodes.some((node) => node.props["aria-label"] === "Unverifiable text recovery"),
+    ).toBe(true);
+    const checkbox = view.textModalNodes.find(
+      (node) => node.type === "input" && node.props.type === "checkbox",
+    )!;
+    (checkbox.props.onChange as (event: unknown) => void)({ target: { checked: true } });
+    await view.settle();
+  }
+  function resetInvalid(view: ReturnType<typeof editor>) {
+    const button = view.textModalNodes.find(
+      (node) => node.type === "button" && node.props.children === resetLabel,
+    )!;
+    expect(button.props.disabled).toBe(false);
+    (button.props.onClick as () => void)();
+  }
+  it.each(["{invalid request", JSON.stringify({ schemaVersion: 0 }), ""])(
+    "clears only invalid text recovery %j after an explicit fresh reload, retaining failed resets and other local copies",
+    async (invalid) => {
+      const deck = deckFixture();
+      const otherKey = `presentation-text-assistance:v1:other-actor:workspace:${presentationId}`;
+      storage.set(invalidKey, invalid);
+      storage.set(otherKey, "keep other actor recovery");
+      const local = { ...deck.draft, title: "Earlier local recovery copy" };
+      fixture.load.mockImplementation(async (key: string) =>
+        key === `presentation:${presentationId}`
+          ? { key, revision: 2, savedAt: "2026-11-06T12:00:00Z", draft: local }
+          : null,
+      );
+      const view = editor(false, true);
+      await openInvalidRecovery(view);
+      expect(view.nativeEditor.onChange({ ...deck.block.scene!, readingOrder: [] })).toBe(false);
+      const accepted = appliedReceipt(deck.draft);
+      deck.setRemote(accepted.acceptedDraft, 5);
+      fixture.request.mockRejectedValueOnce(new Error("Fresh reload unavailable"));
+      resetInvalid(view);
+      await view.settle();
+      expect(storage.get(invalidKey)).toBe(invalid);
+      expect(view.textAssistance.open).toBe(true);
+      expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Saved selected title" });
+      expect(view.nativeEditor.onChange({ ...deck.block.scene!, readingOrder: [] })).toBe(false);
+      resetInvalid(view);
+      await view.settle();
+      expect(storage.has(invalidKey)).toBe(false);
+      expect(storage.get(otherKey)).toBe("keep other actor recovery");
+      expect(view.textAssistance.open).toBe(false);
+      expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Reviewed title" });
+      expect(view.nodes.some((node) => node.props["aria-label"] === "Local draft recovery")).toBe(
+        true,
+      );
+      expect(
+        fixture.clear.mock.calls.some(([key]) => key === `presentation:${presentationId}`),
+      ).toBe(false);
+      expect(
+        fixture.request.mock.calls
+          .filter(([path]) => path === `/v1/presentations/${presentationId}`)
+          .at(-1)?.[1]?.cache,
+      ).toBe("no-store");
+      const current = view.nativeEditor.scene;
+      expect(
+        view.nativeEditor.onChange({
+          ...current,
+          nodes: current.nodes.map((node) =>
+            node.type === "text" ? { ...node, text: "Manual edit after recovery" } : node,
+          ),
+        }),
+      ).toBe(true);
+    },
+  );
+  it.each(["read", "remove"] as const)(
+    "keeps invalid recovery locked on a storage %s failure and supports explicit retry",
+    async (failure) => {
+      const deck = deckFixture();
+      storage.set(invalidKey, "{invalid request");
+      const storageFailure = vi.spyOn(
+        window.sessionStorage,
+        failure === "read" ? "getItem" : "removeItem",
+      );
+      storageFailure.mockImplementation(() => {
+        throw new Error("Tab storage is blocked");
+      });
+      const view = editor(false, true);
+      await openInvalidRecovery(view);
+      resetInvalid(view);
+      await view.settle();
+      expect(storage.has(invalidKey)).toBe(true);
+      expect(view.textAssistance.open).toBe(true);
+      expect(view.nativeEditor.onChange({ ...deck.block.scene!, readingOrder: [] })).toBe(false);
+      storageFailure.mockRestore();
+      resetInvalid(view);
+      await view.settle();
+      expect(storage.has(invalidKey)).toBe(false);
+      expect(view.textAssistance.open).toBe(false);
+    },
+  );
+  it.each(["create", "apply"] as const)(
+    "restores a valid pending %s request during explicit invalid-record reset instead of deleting it",
+    async (mode) => {
+      const deck = deckFixture();
+      storage.set(invalidKey, "{invalid request");
+      const view = editor(false, true);
+      await openInvalidRecovery(view);
+      const sourceDigest = presentationTextAssistanceSourceDigest("Saved selected title");
+      const request = {
+        schemaVersion: 1,
+        requestId: jobId,
+        presentationId,
+        blockId: deck.block.id.toLowerCase(),
+        nodeId: deck.node.id,
+        operation: "rewrite",
+        expectedRevision: 4,
+        sourceDigest,
+      };
+      const valid = JSON.stringify({
+        schemaVersion: 1,
+        actorKey: "actor:workspace",
+        presentationId,
+        blockId: request.blockId,
+        nodeId: request.nodeId,
+        role: "title",
+        operation: "rewrite",
+        sourceDigest,
+        sourceRevision: 4,
+        expectedRevision: 4,
+        jobId,
+        createBody: JSON.stringify(request),
+        createUncertain: mode === "create",
+        applyBody:
+          mode === "apply"
+            ? JSON.stringify({
+                schemaVersion: 1,
+                jobId,
+                proposalHash: "a".repeat(64),
+                blockId: request.blockId,
+                nodeId: request.nodeId,
+                sourceDigest,
+                reviewed: true,
+                expectedRevision: 4,
+                mutationId: slideId,
+              })
+            : null,
+        outputDigest: mode === "apply" ? "b".repeat(64) : null,
+        provenanceDigest: mode === "apply" ? "c".repeat(64) : null,
+      });
+      let finish!: (value: unknown) => void;
+      fixture.request.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      if (mode === "create") storage.set(invalidKey, valid);
+      resetInvalid(view);
+      await view.settle();
+      if (mode === "apply") storage.set(invalidKey, valid);
+      finish({
+        presentation: { id: presentationId, draft: deck.draft, draftRevision: 4, status: "draft" },
+      });
+      await view.settle();
+      expect(storage.get(invalidKey)).toBe(valid);
+      expect(view.textAssistance.open).toBe(true);
+      expect(
+        view.textModalNodes.some(
+          (node) =>
+            node.type === "button" &&
+            node.props.children ===
+              (mode === "apply"
+                ? "Retry exact text application"
+                : "Recover or retry saved request"),
+        ),
+      ).toBe(true);
+      expect(
+        view.textModalNodes.some(
+          (node) => node.props["aria-label"] === "Unverifiable text recovery",
+        ),
+      ).toBe(false);
+      expect(view.nativeEditor.onChange({ ...deck.block.scene!, readingOrder: [] })).toBe(false);
+    },
+  );
+  it.each(["permission", "actor"] as const)(
+    "fences an invalid-record reload when the current %s changes",
+    async (change) => {
+      const deck = deckFixture();
+      storage.set(invalidKey, "{invalid request");
+      const view = editor(false, true);
+      await openInvalidRecovery(view);
+      let finish!: (value: unknown) => void;
+      fixture.request.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      resetInvalid(view);
+      await view.settle();
+      if (change === "permission") fixture.workspace.canEdit = false;
+      else fixture.workspace.creator = { userId: "other-actor", workspaceId: "workspace" };
+      view.update();
+      await view.settle();
+      const accepted = appliedReceipt(deck.draft);
+      finish({
+        presentation: {
+          id: presentationId,
+          draft: accepted.acceptedDraft,
+          draftRevision: 5,
+          status: "draft",
+        },
+      });
+      await view.settle();
+      expect(storage.has(invalidKey)).toBe(true);
+      expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Saved selected title" });
+    },
+  );
+  it("fences reset adoption immediately when sign-in changes before any parent rerender", async () => {
+    const deck = deckFixture();
+    storage.set(invalidKey, "{invalid request");
+    const view = editor(false, true);
+    await openInvalidRecovery(view);
+    let finish!: (value: unknown) => void;
+    fixture.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    resetInvalid(view);
+    await view.settle();
+    const authChanged = (window.addEventListener as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([name]) => name === AUTH_CHANGE_EVENT)
+      .at(-1)![1] as () => void;
+    authChanged();
+    const accepted = appliedReceipt(deck.draft);
+    finish({
+      presentation: {
+        id: presentationId,
+        draft: accepted.acceptedDraft,
+        draftRevision: 5,
+        status: "draft",
+      },
+    });
+    await view.settle();
+    expect(storage.has(invalidKey)).toBe(true);
+    expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Saved selected title" });
+  });
+  it("clears invalid text recovery alongside a valid pending save without overwriting its work or the newer server draft", async () => {
+    const deck = deckFixture();
+    storage.set(invalidKey, "{invalid request");
+    const working = { ...deck.draft, title: "Pending local work" };
+    const pending = { schemaVersion: 2, expectedRevision: 4, mutationId: slideId, draft: working };
+    fixture.load.mockImplementation(async (key: string) =>
+      key === `presentation:${presentationId}`
+        ? { key, revision: 4, savedAt: "2026-11-06T12:00:00Z", draft: working }
+        : key === `presentation:${presentationId}:pending-save`
+          ? { key, revision: 4, savedAt: "2026-11-06T12:00:00Z", draft: pending }
+          : null,
+    );
+    const view = editor(false, true);
+    await openInvalidRecovery(view);
+    const accepted = appliedReceipt(deck.draft);
+    deck.setRemote(accepted.acceptedDraft, 6);
+    resetInvalid(view);
+    await view.settle();
+    expect(storage.has(invalidKey)).toBe(false);
+    expect(view.textAssistance.open).toBe(false);
+    expect(view.nodes.some((node) => node.props.value === "Pending local work")).toBe(true);
+    expect(
+      fixture.clear.mock.calls.some(
+        ([key]) =>
+          key === `presentation:${presentationId}:pending-save` ||
+          key === `presentation:${presentationId}`,
+      ),
+    ).toBe(false);
+    expect(
+      view.nodes.some((node) => node.props.role === "alert" && node.props.inert === false),
+    ).toBe(true);
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/draft") && init?.method === "PUT")
+        return {
+          presentation: { id: presentationId, draft: working, draftRevision: 5, status: "draft" },
+        };
+      return previous(path, init);
+    });
+    const retry = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "delivery.builder.retrySave",
+    )!;
+    (retry.props.onClick as () => void)();
+    await view.settle();
+    const saves = fixture.request.mock.calls.filter(
+      ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+    );
+    expect(saves).toHaveLength(1);
+    expect(JSON.parse(saves[0]![1].body)).toEqual(pending);
+    expect(
+      view.nodes.some((node) => node.type === "button" && node.props.children === "Reload current"),
+    ).toBe(true);
+    expect(deck.draft).toEqual(accepted.acceptedDraft);
+    expect(view.nodes.some((node) => node.props.value === "Pending local work")).toBe(true);
+  });
+  it("lets invalid text recovery clear before resuming a coexisting exact visual insertion", async () => {
+    const deck = deckFixture();
+    storage.set(invalidKey, "{invalid request");
+    const body = JSON.stringify({
+      expectedRevision: 4,
+      mutationId: slideId,
+      afterBlockId: deck.block.id,
+      fidelityAccepted: true,
+      pages: [
+        {
+          pageNumber: 1,
+          title: "Reviewed visual",
+          alternativeText: "Earlier image",
+          accessibleText: "Earlier image reading text",
+          readingOrderReviewed: true,
+        },
+      ],
+    });
+    const visual = {
+      createBody: null,
+      insertBody: body,
+      insertJobId: jobId,
+      jobId,
+      order: [1],
+      reviews: {
+        1: {
+          title: "Reviewed visual",
+          alternativeText: "Earlier image",
+          accessibleText: "Earlier image reading text",
+          readingOrderReviewed: true,
+        },
+      },
+      fidelity: true,
+    };
+    fixture.load.mockImplementation(async (key: string) =>
+      key.startsWith("visual-import:")
+        ? { key, revision: 0, savedAt: "2026-11-06T12:00:00Z", draft: visual }
+        : null,
+    );
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes("/visual-imports"))
+        return init?.method === "POST"
+          ? { insertedBlockIds: [deck.block.id] }
+          : { available: true, jobs: [], limits: {} };
+      return previous(path, init);
+    });
+    const view = editor(false, true);
+    await view.settle();
+    expect(view.nodes.find((node) => node.type === PresentationVisualImport)?.props.open).toBe(
+      false,
+    );
+    await openInvalidRecovery(view);
+    const accepted = appliedReceipt(deck.draft);
+    deck.setRemote(accepted.acceptedDraft, 6);
+    resetInvalid(view);
+    await view.settle();
+    expect(storage.has(invalidKey)).toBe(false);
+    expect(view.textAssistance.open).toBe(false);
+    expect(view.nodes.find((node) => node.type === PresentationVisualImport)?.props.open).toBe(
+      true,
+    );
+    const retry = view.visualModalNodes.find(
+      (node) => node.type === "button" && String(node.props.children).includes("Retry same"),
+    )!;
+    expect(retry.props.disabled).toBe(false);
+    (retry.props.onClick as () => void)();
+    await view.settle();
+    expect(
+      fixture.request.mock.calls.find(
+        ([path, init]) =>
+          path.endsWith(`/visual-imports/${jobId}/insert`) && init?.method === "POST",
+      )?.[1]?.body,
+    ).toBe(body);
+    expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Reviewed title" });
+  });
 });

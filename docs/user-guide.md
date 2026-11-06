@@ -637,6 +637,12 @@ history. A recovered old Apply preserves later edits rather than undoing another
 Private proposals expire after 24 hours. Accepted wording remains in the saved deck. Ordinary
 editing remains available without AI.
 
+If a saved text request cannot be read, choose **Resume text assistance**, review the warning
+and acknowledge that an edit may already have been applied. Choose **Reload saved deck and clear
+invalid recovery** to load the current saved deck and remove this tab's unreadable text request.
+Valid requests and other recovery copies are kept. If loading the saved deck or clearing tab
+storage fails, the editor keeps its protection and offers the same action to retry.
+
 ### Organize sections and navigate live
 
 In the Builder, choose **Enable sections and navigation**, then **Add section**. Rename sections

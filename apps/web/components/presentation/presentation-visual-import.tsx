@@ -215,8 +215,6 @@ export function PresentationVisualImport({
   const writes = useRef(Promise.resolve());
   const dialogRef = useRef<HTMLDivElement>(null);
   const deferredResume = useRef(false);
-  const preparationBlockedRef = useRef(preparationBlocked);
-  preparationBlockedRef.current = preparationBlocked;
   const callbacks = useRef({ onResumeRequired, onPendingChange });
   callbacks.current = { onResumeRequired, onPendingChange };
 
@@ -252,8 +250,7 @@ export function PresentationVisualImport({
           if (value.createBody || value.insertBody) {
             setReceiptPending(true);
             callbacks.current.onPendingChange(true);
-            if (preparationBlockedRef.current) deferredResume.current = true;
-            else callbacks.current.onResumeRequired();
+            deferredResume.current = true;
           }
         }
         callbacks.current.onPendingChange(
@@ -263,8 +260,7 @@ export function PresentationVisualImport({
       })
       .catch(() => {
         if (active) {
-          if (preparationBlockedRef.current) deferredResume.current = true;
-          else callbacks.current.onResumeRequired();
+          deferredResume.current = true;
           setError(
             "The local import receipt could not be recovered. Keep this tab open and reload before starting another import.",
           );
@@ -281,7 +277,7 @@ export function PresentationVisualImport({
       deferredResume.current = false;
       callbacks.current.onResumeRequired();
     }
-  }, [preparationBlocked, loaded]);
+  }, [preparationBlocked, loaded, error]);
 
   useEffect(() => {
     if (!loaded) return;

@@ -21,8 +21,9 @@ allowance and the combined two-active-job limit with outline assistance. Documen
 latest accepted text edit separately from original citations/source disclosure; scene6 and live
 response/report semantics retain their meanings. Exact recovery, unchanged-target/revision
 fences and current-tab Undo/Redo protect application. The initial full repository check and 43
-selected PostgreSQL cases passed. The review correction also passes all 2,796 web tests and 20
-production-browser journeys across four profiles, including editing after generation refusal;
+selected PostgreSQL cases passed. The review corrections also pass all 2,808 web tests and 24
+production-browser journeys across four profiles, including editing after generation refusal
+and safe removal of unreadable recovery records;
 see the
 [selected-text record](evidence/presentation-e12-text-assistance.md). Translation, suggested
 layouts/questions, rich-text rewriting, conversational editing and generated media remain later

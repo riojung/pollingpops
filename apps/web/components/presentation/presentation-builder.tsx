@@ -506,6 +506,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const outlineStartReady = useRef(false);
   const assistancePermission = useRef(canEdit);
   assistancePermission.current = canEdit;
+  const textRecoveryContext = `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}:${presentationId}`;
+  const currentTextRecoveryContext = useRef(textRecoveryContext);
+  currentTextRecoveryContext.current = textRecoveryContext;
   const [visualImportOpen, setVisualImportOpen] = useState(false);
   const [visualImportReceiptPending, setVisualImportReceiptPending] = useState(false);
   const visualImportActive = useRef(false);
@@ -1256,8 +1259,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     preferredBlockId?: string,
     exactTextTarget?: Pick<TextAssistanceRecovery, "blockId" | "nodeId" | "role" | "sourceDigest">,
     textPermissionFence = false,
+    recoveryReset?: { canAdopt: () => boolean; preserveWorkingDraft: () => boolean },
   ) {
-    if (retainedSave.current.pending) {
+    if (retainedSave.current.pending && !recoveryReset) {
       setError("Retry the outstanding save acknowledgement before loading another draft.");
       return false;
     }
@@ -1269,7 +1273,57 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     try {
       const response = await apiFetch<{ presentation: PresentationRecord }>(
         `/v1/presentations/${presentationId}`,
+        { cache: "no-store" },
       );
+      if (recoveryReset) {
+        if (!recoveryReset.canAdopt()) return false;
+        if (
+          !sameTextAssistanceBlockId(response.presentation.id, presentationId) ||
+          !Number.isInteger(response.presentation.draftRevision) ||
+          response.presentation.draftRevision < 0
+        )
+          throw new Error(
+            "The current saved deck could not be verified. The invalid recovery record is retained.",
+          );
+        const serverJson = JSON.stringify(response.presentation.draft);
+        response.presentation.draft = PresentationDraftSchema.parse(response.presentation.draft);
+        if (recoveryReset.preserveWorkingDraft()) {
+          if (response.presentation.draftRevision < revisionRef.current)
+            throw new Error(
+              "The saved deck read was older than the current editor state. Retry loading before clearing recovery.",
+            );
+          // Other exact receipts still own the working copy. Observe the current server revision
+          // without replacing their local work, so historical acknowledgements cannot save over it.
+          revisionRef.current = response.presentation.draftRevision;
+          lastSavedServerJson.current = serverJson;
+          setRecord(response.presentation);
+          setSaveState("error");
+          setError(
+            "The current saved deck was checked. Recover the other outstanding receipt to continue; your local work is retained.",
+          );
+          return {
+            draft: response.presentation.draft,
+            revision: response.presentation.draftRevision,
+            anchor: selectedBlockId,
+          };
+        }
+        if (
+          local &&
+          !localWasSaved &&
+          recovery &&
+          JSON.stringify(recovery.draft) !== JSON.stringify(local)
+        )
+          throw new Error(
+            "Preserve the current local changes before clearing text recovery. The existing local recovery copy is retained.",
+          );
+        if (
+          local &&
+          !localWasSaved &&
+          JSON.stringify(local) !== JSON.stringify(response.presentation.draft)
+        )
+          await saveBuilderRecovery(recoveryKey, localRevision, local);
+        if (!recoveryReset.canAdopt()) return false;
+      }
       if (textPermissionFence && (!alive.current || !assistancePermission.current)) return false;
       if (exactTextTarget) {
         const block = response.presentation.draft.blocks.find((block) =>
@@ -1324,8 +1378,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           savedAt: new Date().toISOString(),
         };
         setRecovery(snapshot);
-        await saveBuilderRecovery(recoveryKey, localRevision, local);
-      } else {
+        if (!recoveryReset) await saveBuilderRecovery(recoveryKey, localRevision, local);
+      } else if (!recoveryReset) {
         setRecovery(null);
         await clearBuilderRecovery(recoveryKey);
       }
@@ -3992,6 +4046,38 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           };
           setTextAssistanceTarget(target);
           return target;
+        }}
+        onReloadForInvalidRecovery={async (canContinue) => {
+          const context = textRecoveryContext;
+          const current = () =>
+            canContinue() &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          const otherReceiptPending = () =>
+            Boolean(
+              retainedSave.current.pending ||
+              packPending.current ||
+              packUpdatePending.current ||
+              packOperation.current ||
+              packUpdateOperation.current ||
+              assistanceActive.current ||
+              visualImportActive.current ||
+              importPreparation.current,
+            );
+          if (!current())
+            throw new Error(
+              "Editor permission changed. Reload the editor before clearing recovery.",
+            );
+          const loaded = await reloadLatestDraft(selectedBlockId ?? undefined, undefined, true, {
+            canAdopt: current,
+            preserveWorkingDraft: otherReceiptPending,
+          });
+          if (!loaded || !current())
+            throw new Error(
+              "The current saved deck could not be loaded. The invalid recovery record is retained.",
+            );
+          setTextAssistanceTarget(null);
         }}
         onClose={() => setTextAssistanceOpen(false)}
         onPendingChange={setTextAssistancePending}

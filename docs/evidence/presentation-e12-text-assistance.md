@@ -72,7 +72,7 @@ or commercial allowance is added. AI remains optional for ordinary editing and d
   `/tmp/pollingpops-e12-text-pg/result-dd442e4a04.json`. The owned container, SSH forward and lock
   are removed, no OOM occurred and all fourteen existing containers retain their states. The
   new suite is included in the existing restricted PostgreSQL CI step.
-- All **20 production-browser journeys pass across four profiles**: Chromium/Firefox desktop
+- All **24 production-browser journeys pass across four profiles**: Chromium/Firefox desktop
   and Chromium/WebKit mobile. The existing outline review and outline-first creation journeys
   remain green. New journeys exercise exact lost-create/lost-Apply acknowledgement recovery
   across reloads, one admitted job per generation, byte-identical application retries, complete
@@ -83,8 +83,10 @@ or commercial allowance is added. AI remains optional for ordinary editing and d
   non-watching in-memory API fixture with existing rate limits enabled; the same freshly built
   final production web bundle is reused. Representative desktop/mobile captures were inspected.
   Refusal coverage also proves ordinary manual editing, save, reload and Discard remain available
-  after exhausted preflight or explicit admission429. Private matrix:
-  `/tmp/pollingpops-e12-text-browser/review-fix-combined-matrix-result.json`. Owned
+  after exhausted preflight or explicit admission429. Invalid-record coverage additionally checks
+  safe saved-deck reloading, retained protection after a failed read and preservation of newer
+  committed text. Private matrix:
+  `/tmp/pollingpops-e12-text-browser/invalid-recovery-final-matrix-result.json`. Owned
   API/web/provider listeners are stopped and Firefox fixture directories are removed.
 - The browser spec passes scoped strict TypeScript, ESLint and formatting. The initial full
   **`VITEST_MAX_WORKERS=1 pnpm check` passed** before the review correction below: formatting,
@@ -114,15 +116,40 @@ recoverable even when a subsequent job read returns 404, capacity is unavailable
 an HTTP 429 response. Uncertain Apply receipts retain their existing protection. The recovery
 format and server, database, quota and publication behavior are unchanged.
 
-All **28 focused controller/review tests** and the full **2,796-test web suite** pass, plus web
+All **28 focused controller/review tests** and the full **2,808-test web suite** pass, plus web
 typecheck, scoped ESLint, strict browser-spec TypeScript and formatting. The fresh production web
-build and all **20 browser journeys** above pass with the corrected controller. New browser
+build and all **24 browser journeys** above pass with the corrected controller. New browser
 coverage checks both exhausted preflight and an admission response with HTTP 429, then closes
 the modal, saves ordinary manual text, reloads and explicitly discards the refused request. Both
 mobile engines exercise the normal drawer controls after the saved recovery UI loads. Private
-web-suite log: `/tmp/pollingpops-e12-text-review-web-tests.log`. Server, contracts, SQL and storage
-were unchanged by this correction; the initial whole-repository and PostgreSQL evidence above
+web-suite log: `/tmp/pollingpops-pr206-invalid-final-web-tests.log`. Server, contracts and database
+code were unchanged by these client corrections; the initial whole-repository and PostgreSQL evidence above
 remains the baseline for those packages.
+
+## GitHub review correction: invalid recovery records
+
+An unreadable or stale saved text request now offers **Reload saved deck and clear invalid
+recovery** after an explicit warning and acknowledgement that its edit may already have been
+applied. The action performs an uncached, validated read of the current saved deck before
+clearing only the affected actor/deck/tab storage key. Failed reads, storage failures and account
+or permission changes keep the protection and permit retry. A valid request found during this
+process is restored instead of removed.
+
+The normal reset adopts the current saved draft and preserves local recovery copies. When other
+valid receipts are pending, it preserves their working draft and exact operation identity while
+recording the observed server revision as a save fence. Those recovery controls become reachable
+after the invalid text record is cleared; an older save acknowledgement cannot authorize a stale
+follow-up write. Visual-import modal resumption waits for current preparation barriers so its
+recovery cannot trap focus ahead of invalid-text recovery.
+
+All **68 focused recovery/editor tests**, all **2,808 web tests**, web typing and changed-file lint
+pass. A fresh production build and all **24 browser journeys** pass across the four desktop/mobile
+profiles above. The browser regression covers malformed and stale formats, a failed saved-deck
+read, retention of a newer committed text edit, ordinary manual save after clearing, reload
+without the invalid record and preservation of unrelated storage. Strict browser-spec typing,
+ESLint, formatting and diff checks pass. Owned browser/API/provider listeners are stopped and
+Firefox fixture directories are removed.
+This correction changes no server, database, quota, document or scene contract.
 
 ## Rollout and remaining scope
 

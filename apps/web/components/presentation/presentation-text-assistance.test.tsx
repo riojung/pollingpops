@@ -42,6 +42,7 @@ const props = {
   citations: [],
   onApplied: vi.fn(),
   onReloadTarget: vi.fn(),
+  onReloadForInvalidRecovery: vi.fn(),
   onClose: vi.fn(),
   onPendingChange: vi.fn(),
   onRecoveryChange: vi.fn(),

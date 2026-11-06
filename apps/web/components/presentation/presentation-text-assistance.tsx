@@ -7,6 +7,7 @@ import {
   createPresentationTextAssistance,
   fetchTextAssistanceStatus,
   initialTextAssistanceState,
+  parseTextAssistanceRecovery,
   type TextAssistanceAppliedReceipt,
   type TextAssistanceRecovery,
   type TextAssistanceState,
@@ -32,6 +33,7 @@ interface Props {
       "blockId" | "nodeId" | "role" | "operation" | "sourceDigest"
     >,
   ) => Promise<TextAssistanceTarget>;
+  onReloadForInvalidRecovery: (canContinue: () => boolean) => Promise<void>;
   onClose: () => void;
   onPendingChange: (pending: boolean) => void;
   onRecoveryChange: (present: boolean) => void;
@@ -106,6 +108,17 @@ export function PresentationTextAssistance(props: Props) {
   const [formError, setFormError] = useState("");
   const [authInvalid, setAuthInvalid] = useState(false);
   const [targetInvalid, setTargetInvalid] = useState(false);
+  const [invalidRecovery, setInvalidRecovery] = useState(false);
+  const [invalidRecoveryReviewed, setInvalidRecoveryReviewed] = useState(false);
+  const [invalidResetBusy, setInvalidResetBusy] = useState(false);
+  const invalidRecoveryRef = useRef(false);
+  const resetFlight = useRef<object | null>(null);
+  const activeSession = useRef<{
+    session: Controller;
+    actorKey: string;
+    presentationId: string;
+    storageKey: string;
+  } | null>(null);
   const [reloadedTarget, setReloadedTarget] = useState<TextAssistanceTarget | null>(null);
   const controller = useRef<Controller | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -134,15 +147,25 @@ export function PresentationTextAssistance(props: Props) {
       },
     });
     controller.current = session;
+    const scope = { session, actorKey, presentationId, storageKey };
+    activeSession.current = scope;
+    invalidRecoveryRef.current = false;
+    resetFlight.current = null;
+    setInvalidRecovery(false);
+    setInvalidRecoveryReviewed(false);
+    setInvalidResetBusy(false);
+    setFormError("");
     setState(initialTextAssistanceState());
     latest.current.onPendingChange(false);
     latest.current.onRecoveryChange(false);
     try {
       const raw = window.sessionStorage.getItem(storageKey);
-      if (raw) session.restore(JSON.parse(raw));
+      if (raw !== null) session.restore(JSON.parse(raw));
     } catch (error) {
       setFormError(humanError(error));
-      // Unverifiable retained mutations must not silently unlock competing writes.
+      // An unknown receipt may describe an accepted Apply. Clearing it requires a fresh deck read.
+      invalidRecoveryRef.current = true;
+      setInvalidRecovery(true);
       latest.current.onPendingChange(true);
       latest.current.onRecoveryChange(true);
     }
@@ -158,6 +181,7 @@ export function PresentationTextAssistance(props: Props) {
     };
     window.addEventListener(AUTH_CHANGE_EVENT, authChanged);
     return () => {
+      if (activeSession.current === scope) activeSession.current = null;
       session.cancel();
       window.removeEventListener(AUTH_CHANGE_EVENT, authChanged);
     };
@@ -223,6 +247,78 @@ export function PresentationTextAssistance(props: Props) {
       first.focus();
     }
   }
+  async function resetInvalidRecovery() {
+    const scope = activeSession.current;
+    if (!scope || !invalidRecoveryRef.current || !invalidRecoveryReviewed || resetFlight.current)
+      return;
+    const current = () =>
+      activeSession.current === scope &&
+      allowed.current &&
+      latest.current.actorKey === scope.actorKey &&
+      latest.current.presentationId === scope.presentationId;
+    if (!current()) return;
+    const flight = {};
+    resetFlight.current = flight;
+    setInvalidResetBusy(true);
+    setFormError("");
+    function restoreValid(raw: string | null) {
+      if (raw === null) return false;
+      let recovery: TextAssistanceRecovery;
+      try {
+        recovery = parseTextAssistanceRecovery(
+          JSON.parse(raw),
+          scope!.actorKey,
+          scope!.presentationId,
+        );
+      } catch {
+        return false;
+      }
+      scope!.session.restore(recovery);
+      invalidRecoveryRef.current = false;
+      setInvalidRecovery(false);
+      setInvalidRecoveryReviewed(false);
+      setFormError("A valid saved request was found. Recover that request instead of clearing it.");
+      return true;
+    }
+    try {
+      const raw = window.sessionStorage.getItem(scope.storageKey);
+      await latest.current.onReloadForInvalidRecovery(current);
+      if (!current()) return;
+      const refreshed = window.sessionStorage.getItem(scope.storageKey);
+      if (restoreValid(refreshed)) return;
+      if (refreshed !== raw) {
+        setInvalidRecoveryReviewed(false);
+        throw new Error(
+          "The saved recovery record changed while loading. Review the warning and try again.",
+        );
+      }
+      window.sessionStorage.removeItem(scope.storageKey);
+      const remaining = window.sessionStorage.getItem(scope.storageKey);
+      if (remaining !== null) {
+        if (restoreValid(remaining)) return;
+        throw new Error(
+          "The invalid recovery record could not be cleared. Allow tab storage and retry.",
+        );
+      }
+      if (!current()) return;
+      invalidRecoveryRef.current = false;
+      setInvalidRecovery(false);
+      setInvalidRecoveryReviewed(false);
+      setReloadedTarget(null);
+      setTargetInvalid(false);
+      setState(initialTextAssistanceState());
+      latest.current.onPendingChange(false);
+      latest.current.onRecoveryChange(false);
+      latest.current.onClose();
+    } catch (error) {
+      if (current()) setFormError(humanError(error));
+    } finally {
+      if (resetFlight.current === flight) {
+        resetFlight.current = null;
+        if (current()) setInvalidResetBusy(false);
+      }
+    }
+  }
   async function run(action: () => Promise<unknown> | unknown) {
     try {
       setFormError("");
@@ -234,7 +330,7 @@ export function PresentationTextAssistance(props: Props) {
   const target = reloadedTarget ?? props.target;
   const recovery = state.recovery;
   const proposal = canEdit && !authInvalid ? state.job?.proposal : null;
-  const disabled = Boolean(state.busy) || !canEdit || authInvalid;
+  const disabled = Boolean(state.busy) || invalidResetBusy || !canEdit || authInvalid;
   const unavailable =
     !status?.enabled || status.remaining === 0 || status.active >= status.maxActiveJobs;
   if (!open) return null;
@@ -310,7 +406,38 @@ export function PresentationTextAssistance(props: Props) {
             {state.message}
           </p>
         ) : null}
-        {!recovery && target && canEdit && !authInvalid ? (
+        {invalidRecovery ? (
+          <section aria-label="Unverifiable text recovery" className={styles.warning}>
+            <h3>Saved text recovery could not be verified</h3>
+            <p>
+              A previous text request may already have changed the saved deck. Reload its current
+              saved contents before clearing this invalid tab record. Other saved requests and local
+              recovery copies are retained.
+            </p>
+            <label className={styles.check}>
+              <input
+                type="checkbox"
+                checked={invalidRecoveryReviewed}
+                disabled={disabled}
+                onChange={(event) => setInvalidRecoveryReviewed(event.target.checked)}
+              />
+              <span>
+                I understand the saved request cannot be recovered and a text edit may already have
+                been applied.
+              </span>
+            </label>
+            <button
+              type="button"
+              disabled={disabled || !invalidRecoveryReviewed}
+              onClick={() => void resetInvalidRecovery()}
+            >
+              {invalidResetBusy
+                ? "Reloading saved deck…"
+                : "Reload saved deck and clear invalid recovery"}
+            </button>
+          </section>
+        ) : null}
+        {!invalidRecovery && !recovery && target && canEdit && !authInvalid ? (
           <>
             <h3>Selected original text</h3>
             <p className={styles.slideBody}>{target.text}</p>

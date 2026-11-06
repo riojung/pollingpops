@@ -10,6 +10,7 @@ import { WorkspaceProvider, useWorkspace } from "../../../components/workspace/w
 import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { recordCreationEvent } from "../../../components/workspace/product-events";
 import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
+import { PresentationOutlineStart } from "../../../components/workspace/presentation-outline-start";
 import styles from "../../../components/workspace/workspace-hub.module.css";
 
 function PresentationLauncher() {
@@ -41,7 +42,11 @@ function PresentationLauncher() {
     }
   }
 
-  const selectedStart = searchParams.get("start");
+  const requestedStarts = searchParams.getAll("start");
+  const selectedStart =
+    requestedStarts.length === 1 && ["source", "template", "outline"].includes(requestedStarts[0]!)
+      ? requestedStarts[0]
+      : null;
 
   return (
     <WorkspaceShell
@@ -76,15 +81,31 @@ function PresentationLauncher() {
               <Link className="button-quiet small-button" href="/create/presentation">
                 {t("create.common.allStartingPoints")}
               </Link>
-              <span>
+              <span lang={selectedStart === "outline" ? "en-CA" : undefined}>
                 {selectedStart === "source"
                   ? t("create.common.sourceGrounded")
-                  : t("create.common.presentationTemplate")}
+                  : selectedStart === "outline"
+                    ? "From outline"
+                    : t("create.common.presentationTemplate")}
               </span>
             </div>
           ) : null}
           {!selectedStart ? (
             <div className={styles.methodGrid}>
+              <Link
+                className={styles.methodCard}
+                href="/create/presentation?start=outline"
+                lang="en-CA"
+                aria-label="From outline"
+              >
+                <span className={styles.cardIcon} data-tone="violet" aria-hidden="true">
+                  O
+                </span>
+                <small>Optional AI assistance</small>
+                <h2>From outline</h2>
+                <p>Create a saved draft, then turn your outline into editable slides for review.</p>
+                <span className={styles.cardLink}>Start from an outline →</span>
+              </Link>
               <Link className={styles.methodCard} href="/create/presentation?start=source">
                 <span className={styles.cardIcon} data-tone="violet">
                   S
@@ -150,6 +171,8 @@ function PresentationLauncher() {
               <PresentationTemplateGallery />
             </section>
           ) : null}
+
+          {selectedStart === "outline" ? <PresentationOutlineStart /> : null}
 
           {error ? (
             <p className="error" lang="en-CA" role="alert">

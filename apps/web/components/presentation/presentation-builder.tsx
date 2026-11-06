@@ -389,7 +389,12 @@ function PresentationPreview({
   );
 }
 
-export function PresentationBuilder({ presentationId }: { presentationId: string }) {
+interface PresentationBuilderProps {
+  presentationId: string;
+  startOutline?: boolean;
+}
+
+export function PresentationBuilder({ presentationId, startOutline }: PresentationBuilderProps) {
   const { creator, error, refreshAccount } = useWorkspace();
   const [retryingAccount, setRetryingAccount] = useState(false);
   const { t } = useLocale();
@@ -397,6 +402,7 @@ export function PresentationBuilder({ presentationId }: { presentationId: string
     <PresentationEditor
       key={`${creator.userId}:${creator.workspaceId}:${presentationId}`}
       presentationId={presentationId}
+      startOutline={startOutline}
     />
   ) : (
     <main className={styles.loading}>
@@ -421,7 +427,7 @@ export function PresentationBuilder({ presentationId }: { presentationId: string
   );
 }
 
-function PresentationEditor({ presentationId }: { presentationId: string }) {
+function PresentationEditor({ presentationId, startOutline }: PresentationBuilderProps) {
   const { creator, canEdit, productFeatures } = useWorkspace();
   const { locale, t } = useLocale();
   const router = useRouter();
@@ -479,6 +485,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
   });
   const assistanceActive = useRef(false);
   assistanceActive.current = assistanceOpen || assistancePending;
+  const outlineStartFailed = useRef(false);
+  const outlineStartConsumed = useRef(false);
+  const outlineStartReady = useRef(false);
+  const assistancePermission = useRef(canEdit);
+  assistancePermission.current = canEdit;
   const [visualImportOpen, setVisualImportOpen] = useState(false);
   const [visualImportReceiptPending, setVisualImportReceiptPending] = useState(false);
   const visualImportActive = useRef(false);
@@ -534,6 +545,36 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     packUpdateReceiptPending ||
     visualImportOpen ||
     visualImportReceiptPending;
+  const outlineStartBlocked =
+    !loaded ||
+    !record ||
+    !draft ||
+    !canEdit ||
+    !productFeatures?.presentations ||
+    recovery !== null ||
+    !["idle", "saved"].includes(saveState) ||
+    ordinarySavePending ||
+    saveConflictPresent ||
+    saveConflict.current ||
+    retainedSave.current.pending !== null ||
+    JSON.stringify(draft) !== lastSavedJson.current ||
+    latestDraftJson.current !== lastSavedJson.current ||
+    previewOpen ||
+    spatialOpen ||
+    recoveryPreviewOpen ||
+    roundImportOpen ||
+    sourceImportOpen ||
+    builderMutationBlocked ||
+    packBusy ||
+    importingQuestions ||
+    mediaState !== "idle" ||
+    pendingNativeImage !== null;
+  outlineStartReady.current = !outlineStartBlocked;
+  const consumeOutlineStart = useCallback(() => {
+    if (!startOutline || outlineStartConsumed.current) return;
+    outlineStartConsumed.current = true;
+    router.replace(`/presentation/${presentationId}`);
+  }, [presentationId, router, startOutline]);
 
   useEffect(() => {
     alive.current = true;
@@ -1739,7 +1780,7 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
     }
   }
 
-  async function prepareVisualInsertion() {
+  const prepareVisualInsertion = useCallback(async () => {
     if (!draft || saveConflict.current || packPending.current || packUpdatePending.current) {
       throw new Error("Resolve the outstanding draft save before inserting visual slides.");
     }
@@ -1755,41 +1796,77 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
       throw new Error("Save the latest Presentation changes before inserting visual slides.");
     }
     return revisionRef.current;
-  }
+  }, [draft, enqueueSave]);
 
-  async function openAssistance() {
+  const openAssistance = useCallback(
+    async (automatic = false) => {
+      if (
+        !draft ||
+        !canEdit ||
+        importPreparation.current ||
+        assistanceActive.current ||
+        packOperation.current ||
+        packPending.current ||
+        packUpdateOperation.current ||
+        packUpdatePending.current ||
+        packImportOpen ||
+        roundImportOpen ||
+        sourceImportOpen ||
+        visualImportActive.current ||
+        mediaState !== "idle" ||
+        pendingNativeImageRef.current
+      )
+        return;
+      importPreparation.current = true;
+      setPreparingImport(true);
+      setError("");
+      try {
+        const revision = await prepareVisualInsertion();
+        if (
+          !alive.current ||
+          !assistancePermission.current ||
+          (automatic && !outlineStartReady.current)
+        )
+          return;
+        setAssistanceTarget({ revision, anchor: selectedBlockId });
+        assistanceActive.current = true;
+        setAssistanceOpen(true);
+        consumeOutlineStart();
+      } catch (caught) {
+        // A real preparation failure requires the author's manual retry. Temporary readiness
+        // changes above leave the handoff pending until the editor is ready again.
+        if (automatic) outlineStartFailed.current = true;
+        if (alive.current) setError(humanError(caught));
+      } finally {
+        importPreparation.current = false;
+        if (alive.current) setPreparingImport(false);
+      }
+    },
+    [
+      draft,
+      canEdit,
+      packImportOpen,
+      roundImportOpen,
+      sourceImportOpen,
+      mediaState,
+      prepareVisualInsertion,
+      selectedBlockId,
+      consumeOutlineStart,
+    ],
+  );
+
+  useEffect(() => {
     if (
-      !draft ||
-      !canEdit ||
-      importPreparation.current ||
-      assistanceActive.current ||
-      packOperation.current ||
-      packPending.current ||
-      packUpdateOperation.current ||
-      packUpdatePending.current ||
-      packImportOpen ||
-      roundImportOpen ||
-      sourceImportOpen ||
-      visualImportActive.current ||
-      mediaState !== "idle" ||
-      pendingNativeImageRef.current
+      !startOutline ||
+      outlineStartConsumed.current ||
+      outlineStartFailed.current ||
+      outlineStartBlocked ||
+      preparingImport ||
+      importPreparation.current
     )
       return;
-    importPreparation.current = true;
-    setPreparingImport(true);
-    setError("");
-    try {
-      const revision = await prepareVisualInsertion();
-      if (!alive.current) return;
-      setAssistanceTarget({ revision, anchor: selectedBlockId });
-      setAssistanceOpen(true);
-    } catch (caught) {
-      if (alive.current) setError(humanError(caught));
-    } finally {
-      importPreparation.current = false;
-      if (alive.current) setPreparingImport(false);
-    }
-  }
+    void openAssistance(true);
+  }, [startOutline, outlineStartBlocked, preparingImport, openAssistance]);
 
   function openVisualImport() {
     if (
@@ -3675,7 +3752,11 @@ function PresentationEditor({ presentationId }: { presentationId: string }) {
           setAssistanceTarget(target);
         }}
         onClose={() => setAssistanceOpen(false)}
-        onResumeRequired={() => setAssistanceOpen(true)}
+        onResumeRequired={() => {
+          assistanceActive.current = true;
+          setAssistanceOpen(true);
+          consumeOutlineStart();
+        }}
         onPendingChange={setAssistancePending}
       />
       {packImportOpen ? (

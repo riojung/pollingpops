@@ -71,6 +71,10 @@ export interface PresentationRepository {
     includeArchived?: boolean,
   ): Promise<PresentationSummaryRecord[]>;
   createPresentation(input: PresentationRecord): Promise<PresentationRecord>;
+  createPresentationIdempotently(
+    input: PresentationRecord,
+    intent: PresentationCreationIntent,
+  ): Promise<{ status: "created" | "duplicate"; presentation: PresentationRecord }>;
   getPresentation(workspaceId: string, presentationId: string): Promise<PresentationRecord | null>;
   updatePresentationDraft(input: PresentationDraftUpdate): Promise<PresentationRecord | null>;
   recoverPresentationDraftMutation(
@@ -114,6 +118,19 @@ export interface PresentationRepository {
     presentationId: string,
     archived: boolean,
   ): Promise<PresentationRecord | null>;
+}
+
+export class PresentationCreationError extends Error {
+  constructor(readonly code: "CONFLICT" | "DELETED" | "UNAUTHORIZED") {
+    super("This presentation creation request is unavailable");
+    this.name = "PresentationCreationError";
+  }
+}
+
+export interface PresentationCreationIntent {
+  creationRequestId: string;
+  creationContext: { actorId: string; workspaceId: string };
+  initialSlide?: "native" | "classic";
 }
 
 export class PresentationDraftConflictError extends Error {

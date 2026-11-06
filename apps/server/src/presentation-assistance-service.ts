@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
+  createPresentationDesignScene,
   CreatePresentationAssistanceJobSchema,
   InsertPresentationAssistanceProposalsSchema,
   PRESENTATION_ASSISTANCE_MAX_ACTIVE_JOBS,
@@ -35,6 +37,24 @@ function uuid(seed: string) {
   hex[16] = (8 + (Number.parseInt(hex[16]!, 16) & 3)).toString(16);
   const value = hex.join("");
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+function untouchedNativeStarter(block: PresentationBlockDraft) {
+  if (
+    block.kind !== "content" ||
+    block.layout !== "title_body" ||
+    !block.scene ||
+    block.scene.nodes.length !== 2
+  )
+    return false;
+  const [title, body] = block.scene.nodes;
+  return (
+    title?.type === "text" &&
+    title.role === "title" &&
+    body?.type === "text" &&
+    body.role === "body" &&
+    isDeepStrictEqual(block.scene, createPresentationDesignScene(title.id, body.id))
+  );
 }
 
 export class PresentationAssistanceService {
@@ -288,7 +308,7 @@ export class PresentationAssistanceService {
     const replaceEmpty =
       blocks.length === 1 &&
       starter?.kind === "content" &&
-      !starter.scene &&
+      (!starter.scene || untouchedNativeStarter(starter)) &&
       !starter.hidden &&
       !starter.mediaId &&
       !starter.speakerNotes &&

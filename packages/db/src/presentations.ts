@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { CreatePresentationSchema } from "@openround/contracts";
 import type { PoolClient, QueryResultRow } from "pg";
 import {
   MemoryRepository,
@@ -23,6 +24,8 @@ import {
   PresentationArchivedError,
   PresentationDraftConflictError,
   PresentationMutationConflictError,
+  PresentationCreationError,
+  type PresentationCreationIntent,
   type PresentationDraftUpdate,
   type PresentationHistoryRecord,
   type PresentationRecord,
@@ -39,6 +42,52 @@ interface PresentationMutationReceipt {
   draftHash: string;
   recoveryPackUpdateSourceRevision: number | null;
   createdAt: Date;
+}
+
+interface PresentationCreationReceipt {
+  workspaceId: string;
+  presentationId: string;
+  intentHash: string;
+}
+
+function creationIdentity(input: PresentationRecord, intent: PresentationCreationIntent) {
+  const request = CreatePresentationSchema.parse({
+    title: input.title,
+    description: input.description,
+    ...intent,
+  });
+  if (
+    request.creationContext?.actorId !== input.lastEditedBy?.toLowerCase() ||
+    request.creationContext?.workspaceId !== input.workspaceId.toLowerCase()
+  )
+    throw new PresentationCreationError("CONFLICT");
+  if (
+    !input.lastEditedBy ||
+    input.status !== "draft" ||
+    input.draftRevision !== 0 ||
+    input.currentVersionId !== null ||
+    input.publishedDraftRevision !== null ||
+    input.folderId !== null ||
+    !Number.isFinite(input.createdAt.getTime()) ||
+    presentationMediaIds(input.draft).length
+  )
+    throw new PresentationCreationError("CONFLICT");
+  return {
+    requestId: request.creationRequestId!,
+    intentHash: createHash("sha256")
+      .update(
+        JSON.stringify({
+          kind: "presentation-creation-v1",
+          actorId: input.lastEditedBy.toLowerCase(),
+          workspaceId: input.workspaceId.toLowerCase(),
+          creationContext: request.creationContext,
+          title: request.title,
+          description: request.description,
+          initialSlide: request.initialSlide ?? "classic",
+        }),
+      )
+      .digest("hex"),
+  };
 }
 
 function clone<T>(value: T): T {
@@ -231,6 +280,8 @@ export class MemoryPresentationRepository
   readonly versions = new Map<string, PresentationVersionRecord>();
   readonly history = new Map<string, PresentationHistoryRecord>();
   private readonly mutations = new Map<string, PresentationMutationReceipt>();
+  private readonly creations = new Map<string, PresentationCreationReceipt>();
+  private readonly creationLocks = new Map<string, Promise<void>>();
 
   constructor(
     private readonly repository?: Pick<
@@ -243,6 +294,10 @@ export class MemoryPresentationRepository
       | "markLibraryArtifactDeleted"
       | "deleteLibraryArtifactMetadata"
       | "removeMediaReferencesForOwners"
+      | "users"
+      | "workspaceMembers"
+      | "workspaces"
+      | "workspaceMediaDeletionClaims"
     >,
   ) {}
 
@@ -272,6 +327,8 @@ export class MemoryPresentationRepository
   }
 
   deleteAccount({ ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
+    for (const [requestId, receipt] of this.creations)
+      if (ownedWorkspaceIds.has(receipt.workspaceId)) this.creations.delete(requestId);
     for (const [id, presentation] of this.presentations) {
       if (ownedWorkspaceIds.has(presentation.workspaceId)) this.presentations.delete(id);
     }
@@ -362,6 +419,58 @@ export class MemoryPresentationRepository
       input.createdAt,
     );
     return clone(created);
+  }
+
+  async createPresentationIdempotently(
+    input: PresentationRecord,
+    intent: PresentationCreationIntent,
+  ) {
+    const identity = creationIdentity(input, intent);
+    const previous = this.creationLocks.get(identity.requestId) ?? Promise.resolve();
+    let release!: () => void;
+    const lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.creationLocks.set(identity.requestId, lock);
+    await previous;
+    try {
+      const actor = this.repository?.users.get(input.lastEditedBy!);
+      const member = this.repository?.workspaceMembers.get(
+        `${input.workspaceId}:${input.lastEditedBy}`,
+      );
+      if (
+        !actor ||
+        actor.deletedAt ||
+        !member ||
+        !["owner", "editor"].includes(member.role) ||
+        !this.repository?.workspaces.has(input.workspaceId) ||
+        this.repository.workspaceMediaDeletionClaims.has(input.workspaceId)
+      )
+        throw new PresentationCreationError("UNAUTHORIZED");
+      const prior = this.creations.get(identity.requestId);
+      if (prior) {
+        if (prior.workspaceId !== input.workspaceId || prior.intentHash !== identity.intentHash)
+          throw new PresentationCreationError("CONFLICT");
+        const presentation = this.presentations.get(prior.presentationId);
+        if (!presentation) throw new PresentationCreationError("DELETED");
+        return {
+          status: "duplicate" as const,
+          presentation: clone(normalizePresentationRecord(presentation)),
+        };
+      }
+      if (this.presentations.has(input.id)) throw new PresentationCreationError("CONFLICT");
+      const presentation = await this.createPresentation(input);
+      this.creations.set(identity.requestId, {
+        workspaceId: input.workspaceId,
+        presentationId: presentation.id,
+        intentHash: identity.intentHash,
+      });
+      return { status: "created" as const, presentation };
+    } finally {
+      release();
+      if (this.creationLocks.get(identity.requestId) === lock)
+        this.creationLocks.delete(identity.requestId);
+    }
   }
 
   async getPresentation(workspaceId: string, presentationId: string) {
@@ -807,49 +916,112 @@ export class PostgresPresentationRepository implements PresentationRepository {
     });
   }
 
-  async createPresentation(input: PresentationRecord) {
-    const normalized = normalizePresentationRecord(input);
-    return this.transaction(normalized.workspaceId, async (client) => {
-      const result = await client.query(
-        `INSERT INTO presentations
+  private async insertPresentation(client: PoolClient, normalized: PresentationRecord) {
+    const result = await client.query(
+      `INSERT INTO presentations
            (id, workspace_id, title, description, status, draft, draft_revision,
             draft_schema_version, current_version_id, folder_id, published_draft_revision,
             last_edited_by, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-        [
-          normalized.id,
-          normalized.workspaceId,
-          normalized.title,
-          normalized.description,
-          normalized.status,
-          JSON.stringify(normalized.draft),
-          normalized.draftRevision,
-          normalized.draftSchemaVersion,
-          normalized.currentVersionId,
-          normalized.folderId,
-          normalized.publishedDraftRevision,
-          normalized.lastEditedBy,
-          normalized.createdAt,
-          normalized.updatedAt,
-        ],
-      );
-      await client.query(
-        `INSERT INTO presentation_draft_history
+      [
+        normalized.id,
+        normalized.workspaceId,
+        normalized.title,
+        normalized.description,
+        normalized.status,
+        JSON.stringify(normalized.draft),
+        normalized.draftRevision,
+        normalized.draftSchemaVersion,
+        normalized.currentVersionId,
+        normalized.folderId,
+        normalized.publishedDraftRevision,
+        normalized.lastEditedBy,
+        normalized.createdAt,
+        normalized.updatedAt,
+      ],
+    );
+    await client.query(
+      `INSERT INTO presentation_draft_history
            (id, workspace_id, presentation_id, revision, draft, draft_schema_version,
             saved_by, mutation_id, created_at)
          VALUES ($1,$2,$3,0,$4,$5,$6,NULL,$7)`,
-        [
-          randomUUID(),
-          normalized.workspaceId,
-          normalized.id,
-          JSON.stringify(normalized.draft),
-          normalized.draftSchemaVersion,
-          normalized.lastEditedBy,
-          normalized.createdAt,
-        ],
-      );
-      return mapPresentation(result.rows[0]!);
-    });
+      [
+        randomUUID(),
+        normalized.workspaceId,
+        normalized.id,
+        JSON.stringify(normalized.draft),
+        normalized.draftSchemaVersion,
+        normalized.lastEditedBy,
+        normalized.createdAt,
+      ],
+    );
+    return mapPresentation(result.rows[0]!);
+  }
+
+  async createPresentation(input: PresentationRecord) {
+    const normalized = normalizePresentationRecord(input);
+    return this.transaction(normalized.workspaceId, (client) =>
+      this.insertPresentation(client, normalized),
+    );
+  }
+
+  async createPresentationIdempotently(
+    input: PresentationRecord,
+    intent: PresentationCreationIntent,
+  ) {
+    const identity = creationIdentity(input, intent);
+    try {
+      return await this.transaction(input.workspaceId, async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `presentation-creation:${identity.requestId}`,
+        ]);
+        const active = await lockPresentationAssistanceActors(client, [input.lastEditedBy!]);
+        const workspace = await client.query(
+          "SELECT id FROM workspaces WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM workspace_media_deletion_jobs deletion WHERE deletion.workspace_id=workspaces.id) FOR SHARE",
+          [input.workspaceId],
+        );
+        const member = await client.query(
+          "SELECT user_id FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 AND role IN('owner','editor') FOR SHARE",
+          [input.workspaceId, input.lastEditedBy],
+        );
+        if (active.rowCount !== 1 || workspace.rowCount !== 1 || member.rowCount !== 1)
+          throw new PresentationCreationError("UNAUTHORIZED");
+        const prior = await client.query(
+          "SELECT presentation_id,intent_hash FROM presentation_creation_receipts WHERE workspace_id=$1 AND request_id=$2",
+          [input.workspaceId, identity.requestId],
+        );
+        if (prior.rows[0]) {
+          if (prior.rows[0].intent_hash !== identity.intentHash)
+            throw new PresentationCreationError("CONFLICT");
+          const current = await client.query(
+            "SELECT * FROM presentations WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+            [input.workspaceId, prior.rows[0].presentation_id],
+          );
+          if (!current.rows[0]) throw new PresentationCreationError("DELETED");
+          return { status: "duplicate" as const, presentation: mapPresentation(current.rows[0]) };
+        }
+        const presentation = await this.insertPresentation(
+          client,
+          normalizePresentationRecord(input),
+        );
+        const receipt = await client.query(
+          "INSERT INTO presentation_creation_receipts(request_id,workspace_id,presentation_id,intent_hash,created_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(request_id) DO NOTHING RETURNING request_id",
+          [
+            identity.requestId,
+            input.workspaceId,
+            presentation.id,
+            identity.intentHash,
+            input.createdAt,
+          ],
+        );
+        if (receipt.rowCount !== 1) throw new PresentationCreationError("CONFLICT");
+        return { status: "created" as const, presentation };
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505")
+        throw new PresentationCreationError("CONFLICT");
+      throw error;
+    }
   }
 
   async getPresentation(workspaceId: string, presentationId: string) {

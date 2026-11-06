@@ -5559,11 +5559,39 @@ export function migratePresentationV1(value: unknown): unknown {
   };
 }
 
-export const CreatePresentationSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(1_000).default(""),
-  initialSlide: z.enum(["native", "classic"]).optional(),
-});
+export const CreatePresentationSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(1_000).default(""),
+    initialSlide: z.enum(["native", "classic"]).optional(),
+    creationRequestId: z.string().uuid().toLowerCase().optional(),
+    creationContext: z
+      .object({
+        actorId: z.string().uuid().toLowerCase(),
+        workspaceId: z.string().uuid().toLowerCase(),
+      })
+      .strict()
+      .optional(),
+  })
+  .superRefine((request, context) => {
+    if ((request.creationRequestId !== undefined) !== (request.creationContext !== undefined))
+      context.addIssue({
+        code: "custom",
+        path: ["creationContext"],
+        message: "A stable creation request requires its account and workspace context",
+      });
+  });
+
+/** Dedicated route contract: older HTTP runtimes cannot silently ignore stable creation fields. */
+export const CreateOutlinePresentationSchema = z
+  .object({
+    title: CreatePresentationSchema.shape.title,
+    description: CreatePresentationSchema.shape.description,
+    initialSlide: z.literal("native"),
+    creationRequestId: CreatePresentationSchema.shape.creationRequestId.unwrap(),
+    creationContext: CreatePresentationSchema.shape.creationContext.unwrap(),
+  })
+  .strict();
 
 export const PresentationDraftMutationSchema = z.object({
   draft: PresentationDraftSchema,

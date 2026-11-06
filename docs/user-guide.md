@@ -588,6 +588,13 @@ positioned text, images, labeled shapes and connectors in the same deck.
 
 ### Turn an outline into editable slides
 
+To start a new deck, choose **Create → Presentation → From outline**. Enter a **Presentation
+title** and choose **Create draft and continue**. This saves a draft before opening the outline
+panel; creating the draft uses no AI job. Closing the panel or a failed generation leaves the
+draft available for normal editing. If draft creation is interrupted, **Retry draft creation**
+recovers the same draft. Returning to this starting point offers **Open saved draft** or an
+explicit **Start another**; it does not silently create another deck.
+
 In the Presentation map, choose **Outline to slides**. The editor saves pending changes before
 opening the panel. Enter an **Outline name** and **Outline text**, choose 3–8 slides and review
 the available AI allowance before **Create slide proposal**. This optional action shares the

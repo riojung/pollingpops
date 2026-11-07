@@ -730,7 +730,7 @@ export class PostgresPresentationTextAssistanceRepository implements Presentatio
       const count = Number(
         (
           await client.query(
-            "SELECT ((SELECT count(*) FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2)+(SELECT count(*) FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2))::integer AS count",
+            "SELECT ((SELECT count(*) FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2)+(SELECT count(*) FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2)+(SELECT count(*) FROM presentation_question_suggestions_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$2))::integer AS count",
             [input.workspaceId, now],
           )
         ).rows[0].count,
@@ -835,7 +835,7 @@ export class PostgresPresentationTextAssistanceRepository implements Presentatio
       if (!(await this.eligible(client, input)))
         throw new PresentationTextAssistanceError("NOT_FOUND");
       const result = await client.query(
-        "SELECT (SELECT count(*)::integer FROM authoring_admission_receipts WHERE workspace_id=$1 AND created_at >= $2) AS used,((SELECT count(*) FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3)+(SELECT count(*) FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3))::integer AS active",
+        "SELECT (SELECT count(*)::integer FROM authoring_admission_receipts WHERE workspace_id=$1 AND created_at >= $2) AS used,((SELECT count(*) FROM presentation_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3)+(SELECT count(*) FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3)+(SELECT count(*) FROM presentation_question_suggestions_jobs WHERE workspace_id=$1 AND status IN('pending','processing') AND expires_at>$3))::integer AS active",
         [input.workspaceId, input.since, input.now ?? new Date()],
       );
       return { used: Number(result.rows[0].used), active: Number(result.rows[0].active) };

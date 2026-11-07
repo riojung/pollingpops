@@ -5,6 +5,8 @@ import {
   PresentationContentSchema,
   PresentationDraftSchema,
   plainTextToPresentationRichText,
+  presentationQuestionSuggestionSource,
+  presentationQuestionSuggestionsSourceFingerprint,
   type ContentSlideDraft,
   type PresentationDraft,
 } from "@openround/contracts";
@@ -101,6 +103,35 @@ function inserted(
 }
 
 describe("local reviewed presentation question starters", () => {
+  it("retains exact PR209 source fingerprint bytes when delegating to the shared authoritative getter", () => {
+    for (const body of [" First point\r\nSecond point 😀 ", "x".repeat(4_000)]) {
+      const original = slide(body),
+        candidate = starter(original),
+        shared = presentationQuestionSuggestionSource(original);
+      if (!shared.supported) throw new Error(shared.reason);
+      const legacyProjection = {
+        blockId: original.id.toLowerCase(),
+        title: { nodeId: "Title:Exact", text: "Research priorities", lang: null },
+        body: [
+          {
+            nodeId: "Body:Exact",
+            text: body,
+            lang: null,
+            paragraphs: body.split(/\r\n?|\n/u).map((text) => ({ kind: "paragraph", text })),
+          },
+        ],
+        readingOrder: ["Title:Exact", "Body:Exact"],
+      };
+      expect(candidate.source.fingerprint).toBe(JSON.stringify(legacyProjection));
+      expect(presentationQuestionSuggestionsSourceFingerprint(shared.source)).toBe(
+        candidate.source.fingerprint,
+      );
+      expect(candidate.source.sourceDigest).toBe(
+        createHash("sha256").update(JSON.stringify(legacyProjection)).digest("hex"),
+      );
+    }
+  });
+
   it("offers deterministic discussion, subjective clarity and all-point priority starters without mutating source", () => {
     const source = freeze(slide()),
       before = JSON.stringify(source);

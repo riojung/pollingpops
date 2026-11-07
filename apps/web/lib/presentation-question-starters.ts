@@ -4,6 +4,7 @@ import {
   PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES,
   PresentationDraftSchema,
   presentationSourceFingerprintDigest,
+  presentationQuestionSuggestionSource,
   type InteractiveQuestionBlockDraft,
   type PresentationBlockDraft,
   type PresentationDraft,
@@ -48,8 +49,6 @@ export type PresentationQuestionStarterInsertion =
   { ok: true; draft: PresentationDraft; blockId: string } | { ok: false; reason: string };
 
 const unsupported = "Choose a visible native slide with a nonblank title and body text.";
-const tooMuchText =
-  "Use at most eight body text objects and 4,000 body characters for question starters.";
 const stale =
   "The source or starter changed. Open question starters again to review the current wording.";
 
@@ -67,38 +66,13 @@ function sourceFor(
       reason: "Resolve the slide's invalid content before using question starters.",
     };
   }
-  const scene = block.scene;
-  const nodes = scene.readingOrder.flatMap((id) => {
-    const node = scene.nodes.find((candidate) => candidate.id === id);
-    return node?.type === "text" ? [node] : [];
-  });
-  const title = nodes.find((node) => node.role === "title");
-  const bodies = nodes.filter((node) => node.role === "body");
-  if (!title?.text.trim() || !bodies.length || bodies.some((node) => !node.text.trim())) {
-    return { supported: false, reason: unsupported };
-  }
-  if (bodies.length > 8 || bodies.reduce((total, node) => total + node.text.length, 0) > 4_000) {
-    return { supported: false, reason: tooMuchText };
-  }
-  const sourceText = (node: (typeof nodes)[number]): PresentationQuestionStarterSourceText => ({
-    nodeId: node.id,
-    text: node.text,
-    lang: node.lang ?? null,
-  });
-  const projection = {
-    blockId: block.id.toLowerCase(),
-    title: sourceText(title),
-    body: bodies.map((node) => ({
-      ...sourceText(node),
-      paragraphs: node.richText
-        ? node.richText.paragraphs.map((paragraph) => ({
-            kind: paragraph.kind,
-            text: paragraph.runs.map((run) => run.text).join(""),
-          }))
-        : node.text.split(/\r\n?|\n/u).map((text) => ({ kind: "paragraph" as const, text })),
-    })),
-    readingOrder: [...scene.readingOrder],
-  };
+  const shared = presentationQuestionSuggestionSource(block);
+  if (!shared.supported)
+    return {
+      supported: false,
+      reason: shared.reason.replaceAll("question suggestions", "question starters"),
+    };
+  const projection = shared.source;
   const fingerprint = JSON.stringify(projection);
   return {
     supported: true,

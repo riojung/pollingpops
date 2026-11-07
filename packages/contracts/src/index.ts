@@ -87,6 +87,7 @@ import {
 export * from "./round-protocol";
 export * from "./management-navigation";
 export * from "./presentation-source-digest";
+export * from "./presentation-question-suggestions";
 
 function isHttpOrHttpsUrl(value: string) {
   try {

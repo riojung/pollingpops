@@ -75,6 +75,12 @@ export interface PresentationDraftUpdate {
   textAssistanceNodeId?: string;
   textAssistanceTargetLanguage?: PresentationTextLanguage;
   textAssistanceSourceLanguage?: PresentationTextLanguage | null;
+  /** Serialize reviewed question insertion with exact saved source and private proposal authority. */
+  questionSuggestionsJobId?: string;
+  questionSuggestionsProposalHash?: string;
+  questionSuggestionsSourceDigest?: string;
+  questionSuggestionsBlockId?: string;
+  questionSuggestionsSuggestionId?: string;
 }
 
 export interface PresentationRepository {

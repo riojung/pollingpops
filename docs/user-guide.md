@@ -632,6 +632,32 @@ publish separately when ready. Use the existing **Add question** control for oth
 when a source is hidden, classic or incomplete. Starters currently support up to eight body text
 objects with at most 4,000 total body characters.
 
+### Suggest discussion questions with AI
+
+On an eligible native slide, choose **Suggest discussion questions**. The editor saves your
+selected slide first. Review the complete source and shared AI allowance, then choose
+**Generate discussion suggestions**. Opening the panel does not start a job. One generation
+uses one AI job; reviewing and inserting the result use no further allowance.
+
+Review both complete English questions and their exact source excerpts, choose **Discussion
+question** or **Reflection question**, and confirm the review checkbox. **Insert reviewed
+question** adds one independently editable open-text opinion immediately after the source, in
+the same section. It has zero points, confidence off and no correct answer or linked recheck.
+One fresh insertion is one Undo step. Your source stays intact, and publishing remains separate.
+
+AI wording and framing are unverified. Only visible title/body text is used, including rich
+text and declared language. Images, table/chart data, notes and closed details are not
+interpreted. The current limit is one title, up to eight nonblank body objects and 4,000 total
+body characters. **Question starters** and **Add question** remain available without AI.
+
+If a response is lost, reopen **Resume discussion suggestions** after reload, then use
+**Recover saved request** or **Retry exact insertion**; do not start a replacement job. Recovery is tied to this account, deck and exact source. **Reload exact
+source** can refresh a revision while its text/language/list/order is unchanged. If that source
+changed, discard the old proposal and generate from the current slide. A pending insertion must
+be recovered before other edits. If recovery cannot be verified, review the warning and reload
+the saved deck before clearing that invalid record. Private proposals expire after 24 hours;
+accepted insertion receipts remain recoverable.
+
 ### Translate selected native text
 
 Select one plain native title/body object and choose **Translate text**. Pick a **Target

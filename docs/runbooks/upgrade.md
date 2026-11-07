@@ -651,6 +651,28 @@ rewrite immutable versions to fit an older binary. See the
 [translation record](../evidence/presentation-e12-translation.md) for the bounded language scope
 and software qualification.
 
+### Reviewed AI discussion suggestions
+
+Apply `104_presentation_question_suggestions.sql` after103 with AI admission disabled and
+assistance workers drained/stopped. Deploy matching HTTP/jobs, queue readers, shared admission
+and cleanup/erasure handlers before enabling new discussion-suggestion generation. Refresh web
+clients so exact source bindings and insertion recovery use the matching contracts. Keep the
+approved `AUTHORING_AI_*` configuration and existing commercial allowance unchanged.
+
+The new private queue shares monthly admissions and the combined two-active-job cap with
+outline and selected-text assistance. All three repositories, worker image sets and SQL guards
+must use matching accounting. Validate source language/list/order changes, concurrent final-slot
+admission, canonical JSONB proposals, raw SQL guards, permission loss, private retention/erasure
+and exact creation/insertion retries, including recovery after job expiry.
+
+No Presentation document or scene version changes. Inserted questions use the existing
+open-text opinion contract and private citations/disclosure. After jobs exist, rollback images
+must retain migration104, its queue readers, accounting and erasure behavior; disable new
+admission and drain or preserve the queue before rollback. Do not drop private jobs or compact
+admission/mutation receipts to make an older binary appear compatible. Free local starters and
+manual editing remain available without the AI provider. See the
+[discussion-suggestion record](../evidence/presentation-question-suggestions.md).
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

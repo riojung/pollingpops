@@ -2,6 +2,8 @@ import { isValidElement, type ComponentProps, type ReactElement, type ReactNode 
 import type * as ReactModule from "react";
 import {
   presentationTextAssistanceSourceDigest,
+  presentationQuestionSuggestionSource,
+  presentationQuestionSuggestionsSourceDigest,
   PresentationDraftSchema,
   PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING,
   type PresentationDraft,
@@ -125,6 +127,8 @@ import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationTextAssistance } from "./presentation-text-assistance";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { PresentationQuestionStarters } from "./presentation-question-starters";
+import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
+import { createQuestionBlock } from "../../lib/presentation-builder";
 import { createPresentationQuestionStarters } from "../../lib/presentation-question-starters";
 
 const presentationId = "10000000-0000-4000-8000-000000000001";
@@ -295,7 +299,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Local question starter insertion", () => {
+describe("Question insertion workflows", () => {
   function sourceFixture(full = false) {
     const block = createNativeContentBlock();
     const title = block.scene!.nodes[0]!;
@@ -336,6 +340,33 @@ describe("Local question starter insertion", () => {
   }
   function lastDraft() {
     return deckRecoveryWrites().at(-1)![2] as PresentationDraft;
+  }
+  function suggestions(view: ReturnType<typeof editor>) {
+    return view.nodes.find((node) => node.type === PresentationQuestionSuggestions)!
+      .props as unknown as ComponentProps<typeof PresentationQuestionSuggestions>;
+  }
+  function openSuggestions(view: ReturnType<typeof editor>) {
+    const trigger = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "Suggest discussion questions",
+    )!;
+    (trigger.props.onClick as () => void)();
+  }
+  function acceptedDiscussion(source: ReturnType<typeof sourceFixture>) {
+    const block = createQuestionBlock("open_text");
+    block.question.prompt = "Which action would help the team most, and why?";
+    const accepted = PresentationDraftSchema.parse({
+      ...source.draft,
+      blocks: [source.block, block],
+      sections: [{ ...source.draft.sections![0]!, blockIds: [source.block.id, block.id] }],
+      spatial: {
+        schemaVersion: 1,
+        frames: [
+          ...source.draft.spatial!.frames,
+          { blockId: block.id, x: 1600, y: 0, width: 1280, height: 720 },
+        ],
+      },
+    });
+    return { block, accepted };
   }
   it("uses one ordinary Undo step, preserving source, section and spatial data", async () => {
     const source = sourceFixture();
@@ -449,6 +480,412 @@ describe("Local question starter insertion", () => {
     expect(deckRecoveryWrites()).toHaveLength(before);
     expect(lastDraft().blocks).toHaveLength(1);
     expect(view.nativeEditor.scene).toEqual(changed);
+  });
+  it("opens AI discussion review from the exact saved source without admitting a job", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    expect(suggestions(view).open).toBe(false);
+    openSuggestions(view);
+    await view.settle();
+    const projected = presentationQuestionSuggestionSource(source.block);
+    if (!projected.supported) throw new Error(projected.reason);
+    expect(suggestions(view)).toMatchObject({
+      open: true,
+      target: {
+        blockId: source.block.id.toLowerCase(),
+        expectedRevision: 4,
+        source: projected.source,
+        sourceDigest: presentationQuestionSuggestionsSourceDigest(projected.source),
+      },
+    });
+    expect(fixture.request.mock.calls.some(([path]) => path.includes("/jobs"))).toBe(false);
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("saves edited source wording before capturing the discussion review", async () => {
+    const source = sourceFixture();
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/draft") && init?.method === "PUT") {
+        const input = JSON.parse(init.body as string);
+        return {
+          presentation: {
+            id: presentationId,
+            draft: input.draft,
+            draftRevision: input.expectedRevision + 1,
+            status: "draft",
+          },
+        };
+      }
+      return previous(path, init);
+    });
+    const view = editor(false);
+    await view.settle();
+    const edited = structuredClone(source.block.scene!);
+    const title = edited.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "Choose the next action";
+    view.nativeEditor.onChange(edited);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    expect(suggestions(view).target).toMatchObject({
+      expectedRevision: 5,
+      source: { title: { text: title.text } },
+    });
+    expect(
+      fixture.request.mock.calls.filter(
+        ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+      ),
+    ).toHaveLength(1);
+  });
+  it("saves manual edits made while a discussion proposal was closed before resuming it", async () => {
+    const source = sourceFixture();
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/draft") && init?.method === "PUT") {
+        const input = JSON.parse(init.body as string);
+        return {
+          presentation: {
+            id: presentationId,
+            draft: input.draft,
+            draftRevision: input.expectedRevision + 1,
+            status: "draft",
+          },
+        };
+      }
+      return previous(path, init);
+    });
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const originalDigest = suggestions(view).target!.sourceDigest;
+    suggestions(view).onRecoveryChange(true);
+    suggestions(view).onClose();
+    await view.settle();
+    const edited = structuredClone(source.block.scene!);
+    const title = edited.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "Manual wording after closing review";
+    view.nativeEditor.onChange(edited);
+    await view.settle();
+    const resume = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+    )!;
+    (resume.props.onClick as () => void)();
+    await view.settle();
+    expect(
+      fixture.request.mock.calls.filter(
+        ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+      ),
+    ).toHaveLength(1);
+    expect(suggestions(view).target).toMatchObject({
+      expectedRevision: 5,
+      source: { title: { text: title.text } },
+    });
+    expect(suggestions(view).target?.sourceDigest).not.toBe(originalDigest);
+  });
+  it("does not open discussion suggestions after permission changes during save preparation", async () => {
+    sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    let release!: () => void;
+    const drain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(RecoverableOperationQueue.prototype, "enqueue").mockImplementationOnce(() => drain);
+    openSuggestions(view);
+    fixture.workspace.canEdit = false;
+    view.update();
+    release();
+    await view.settle();
+    expect(suggestions(view).open).toBe(false);
+    expect(suggestions(view).target).toBeNull();
+  });
+  it("makes a freshly accepted discussion insertion one normal Undo step", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    const focus = vi.fn();
+    vi.mocked(document.querySelector).mockReturnValue({ focus } as unknown as Element);
+    suggestions(view).onPendingChange(true);
+    suggestions(view).onClose();
+    await view.settle();
+    const { block, accepted } = acceptedDiscussion(source);
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? {
+            presentation: {
+              id: presentationId,
+              draft: accepted,
+              draftRevision: 5,
+              status: "draft",
+            },
+          }
+        : previous(path, init),
+    );
+    await suggestions(view).onInserted({
+      jobId,
+      proposalHash: "a".repeat(64),
+      suggestionId: slideId,
+      sourceBlockId: target.blockId,
+      sourceDigest: target.sourceDigest,
+      insertedBlockId: block.id,
+      insertedQuestionId: block.question.id,
+      acceptedRevision: 5,
+      acceptedDraft: accepted,
+    });
+    await view.settle();
+    expect(focus).not.toHaveBeenCalled();
+    suggestions(view).onPendingChange(false);
+    await view.settle();
+    expect(focus).toHaveBeenCalledOnce();
+    const undo = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+    )!;
+    expect(undo.props.disabled).toBe(false);
+    (undo.props.onClick as () => void)();
+    await view.settle();
+    expect(lastDraft()).toEqual(source.draft);
+  });
+  it("allows source-preserving revision reloads and refuses a language-only source change", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    let remote = structuredClone(source.draft);
+    remote.spatial!.frames[0]!.x = 300;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft: remote, draftRevision: 5, status: "draft" } }
+        : previous(path, init),
+    );
+    expect(await suggestions(view).onReloadTarget(target)).toMatchObject({
+      expectedRevision: 5,
+      sourceDigest: target.sourceDigest,
+    });
+    await view.settle();
+    remote = structuredClone(remote);
+    const block = remote.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    block.scene!.schemaVersion = 7;
+    const title = block.scene!.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.lang = "fr";
+    await expect(suggestions(view).onReloadTarget(target)).rejects.toThrow("language changed");
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+  });
+  it("does not invent an Undo checkpoint when a recovered insertion precedes newer saved work", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    const { block, accepted } = acceptedDiscussion(source);
+    const newer = structuredClone(accepted);
+    newer.description = "Later saved work from another editor";
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft: newer, draftRevision: 6, status: "draft" } }
+        : previous(path, init),
+    );
+    await suggestions(view).onInserted({
+      jobId,
+      proposalHash: "a".repeat(64),
+      suggestionId: slideId,
+      sourceBlockId: target.blockId,
+      sourceDigest: target.sourceDigest,
+      insertedBlockId: block.id,
+      insertedQuestionId: block.question.id,
+      acceptedRevision: 5,
+      acceptedDraft: accepted,
+    });
+    suggestions(view).onClose();
+    await view.settle();
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+      )?.props.disabled,
+    ).toBe(true);
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("fences source reload immediately when sign-in changes before the parent rerenders", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    let finish!: (value: unknown) => void;
+    fixture.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const reload = suggestions(view).onReloadTarget(target);
+    const rejected = expect(reload).rejects.toThrow("could not be loaded");
+    const handlers = (window.addEventListener as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([name]) => name === AUTH_CHANGE_EVENT)
+      .map(([, handler]) => handler as () => void);
+    for (const handler of handlers) handler();
+    const later = structuredClone(source.draft);
+    const block = later.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    const heading = block.scene!.nodes[0]!;
+    if (heading.type !== "text") throw new Error("Expected title");
+    heading.frame.x += 10;
+    finish({
+      presentation: { id: presentationId, draft: later, draftRevision: 5, status: "draft" },
+    });
+    await rejected;
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+    expect(suggestions(view).target?.expectedRevision).toBe(4);
+  });
+  it.each(["older", "wrong-deck", "invalid-draft", "different-accepted-content"])(
+    "preserves the editor and receipt when insertion reload returns %s data",
+    async (scenario) => {
+      const source = sourceFixture();
+      const view = editor(false);
+      await view.settle();
+      openSuggestions(view);
+      await view.settle();
+      const target = suggestions(view).target!;
+      const { block, accepted } = acceptedDiscussion(source);
+      const response = {
+        id: scenario === "wrong-deck" ? slideId : presentationId,
+        draft:
+          scenario === "invalid-draft"
+            ? { ...accepted, schemaVersion: 17 }
+            : scenario === "different-accepted-content"
+              ? source.draft
+              : accepted,
+        draftRevision: scenario === "older" ? 4 : 5,
+        status: "draft",
+      };
+      const previous = fixture.request.getMockImplementation()!;
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+        path === `/v1/presentations/${presentationId}`
+          ? { presentation: response }
+          : previous(path, init),
+      );
+      await expect(
+        suggestions(view).onInserted({
+          jobId,
+          proposalHash: "a".repeat(64),
+          suggestionId: slideId,
+          sourceBlockId: target.blockId,
+          sourceDigest: target.sourceDigest,
+          insertedBlockId: block.id,
+          insertedQuestionId: block.question.id,
+          acceptedRevision: 5,
+          acceptedDraft: accepted,
+        }),
+      ).rejects.toThrow("Recover the discussion question insertion acknowledgement");
+      await view.settle();
+      expect(view.nativeEditor.scene).toEqual(source.block.scene);
+      expect(deckRecoveryWrites()).toEqual([]);
+    },
+  );
+  it("does not rebase the source onto a revision older than its reviewed floor", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? {
+            presentation: {
+              id: presentationId,
+              draft: source.draft,
+              draftRevision: 4,
+              status: "draft",
+            },
+          }
+        : previous(path, init),
+    );
+    await expect(
+      suggestions(view).onReloadTarget({ ...target, expectedRevision: 5 }),
+    ).rejects.toThrow("older than the reviewed request");
+    await view.settle();
+    expect(suggestions(view).target?.expectedRevision).toBe(4);
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("retains invalid discussion recovery when its checked read is older than the saved editor", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    suggestions(view).onRecoveryChange(true);
+    await view.settle();
+    const older = structuredClone(source.draft);
+    const block = older.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    const heading = block.scene!.nodes[0]!;
+    if (heading.type !== "text") throw new Error("Expected title");
+    heading.frame.x += 12;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft: older, draftRevision: 3, status: "draft" } }
+        : previous(path, init),
+    );
+    await expect(suggestions(view).onReloadForInvalidRecovery(() => true)).rejects.toThrow(
+      "could not be checked",
+    );
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+    expect(
+      view.nodes.some(
+        (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+      ),
+    ).toBe(true);
+  });
+  it("keeps pending discussion insertion resumable while blocking other mutations", async () => {
+    sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    suggestions(view).onRecoveryChange(true);
+    suggestions(view).onPendingChange(true);
+    await view.settle();
+    expect(view.nodes.find((node) => node.type === "header")?.props.inert).toBe(true);
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+      )?.props.disabled,
+    ).not.toBe(true);
+    const resume = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+    )!;
+    (resume.props.onClick as () => void)();
+    await view.settle();
+    expect(suggestions(view).open).toBe(true);
+    expect(
+      fixture.request.mock.calls.some(
+        ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+      ),
+    ).toBe(false);
+    const changed = structuredClone(view.nativeEditor.scene);
+    const title = changed.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "A competing edit";
+    view.nativeEditor.onChange(changed);
+    await view.settle();
+    expect(deckRecoveryWrites()).toEqual([]);
   });
 });
 

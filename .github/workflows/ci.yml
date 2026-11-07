@@ -112,7 +112,7 @@ jobs:
           TEST_DATABASE_ADMIN_URL: postgresql://openround:test-only@localhost:5432/openround
           TEST_DATABASE_URL: postgresql://openround_test_app:test-only-runtime@localhost:5432/openround
       - name: Verify Presentation assistance under restricted PostgreSQL
-        run: pnpm --filter @openround/db exec vitest run test/presentation-assistance-postgres.test.ts test/presentation-creation-postgres.test.ts test/presentation-text-assistance-postgres.test.ts --maxWorkers=1
+        run: pnpm --filter @openround/db exec vitest run test/presentation-assistance-postgres.test.ts test/presentation-creation-postgres.test.ts test/presentation-text-assistance-postgres.test.ts test/presentation-question-suggestions-postgres.test.ts --maxWorkers=1
         env:
           TEST_DATABASE_ADMIN_URL: postgresql://openround:test-only@localhost:5432/openround
           TEST_DATABASE_URL: postgresql://openround_test_app:test-only-runtime@localhost:5432/openround
@@ -200,7 +200,7 @@ jobs:
           node scripts/ci/browser-diagnostics.mjs
           --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" --
           pnpm test:e2e:beta --project="${{ matrix.project }}"
-          --grep-invert='presentation-translation\.spec\.ts' --reporter=github,line,html
+          --grep-invert='presentation-(translation|question-suggestions)\.spec\.ts' --reporter=github,line,html
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-beta
           PLAYWRIGHT_HTML_OPEN: never
@@ -218,6 +218,22 @@ jobs:
           --reporter=github,line,html
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-translation
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run discussion-suggestion browser journeys with a fresh API
+        if: ${{ !cancelled() }}
+        # Keep the existing authoring rate budget independent from other AI workflows.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/presentation-question-suggestions-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-question-suggestions.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-question-suggestions
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-question-suggestions
           PLAYWRIGHT_HTML_OPEN: never
           BETA_E2E_AUTHORING: "true"
           BETA_E2E_ROUND_PROTOCOL: "true"
@@ -247,6 +263,9 @@ jobs:
             test-results-translation/
             playwright-report-translation/
             ${{ runner.temp }}/presentation-translation-diagnostics/
+            test-results-question-suggestions/
+            playwright-report-question-suggestions/
+            ${{ runner.temp }}/presentation-question-suggestions-diagnostics/
             test-results-visual-import/
             playwright-report-visual-import/
             ${{ runner.temp }}/visual-import-diagnostics/

@@ -135,7 +135,9 @@ new-deck entry point is merged in [PR #205](https://github.com/riojung/pollingpo
 Selected plain-text rewrite/shorten is merged in
 [PR #206](https://github.com/riojung/pollingpops/pull/206). Reviewed layout alternatives are
 separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207).
-Reviewed selected-text translation is implemented on `codex/presentation-e12-translation`.
+Reviewed selected-text translation is merged in
+[PR #208](https://github.com/riojung/pollingpops/pull/208). Local reviewed question starters are
+implemented on `codex/presentation-question-starters`.
 Self-paced attempts and the remaining later packages stay planned; deployment and release
 qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
@@ -562,6 +564,17 @@ Generation does not change the deck; creators review complete wording before one
 application. No new provider, service, dependency or entitlement is added. See the
 [translation record](evidence/presentation-e12-translation.md). Whole-deck/rich-text translation,
 RTL, question suggestions, model-generated design and conversational editing remain later scope.
+
+The local question-starter increment on `codex/presentation-question-starters` offers reviewed
+discussion, subjective clarity and eligible priority-poll templates from a visible native
+slide's authored title/body. It quotes complete wording, infers no facts or correct answers,
+and labels its English template scaffolding. Priority polls require all 2–6 complete valid
+authored points; they never silently shorten or select from an oversized list. Insertion uses
+one normal Undo/autosave step, inherits the source section and preserves spatial/source data.
+Private source attribution stays out of recipient/review/export content. No AI service, job,
+allowance, schema, migration, version or entitlement is added. See the
+[starter record](evidence/presentation-question-starters.md). This is a low-cost question-starter
+slice; source-grounded AI question generation remains separately planned.
 
 ### E13 Deliver static export and later richer portability
 

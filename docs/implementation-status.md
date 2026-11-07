@@ -8,6 +8,27 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Reviewed local question starters November 6, 2026
+
+The source on `codex/presentation-question-starters` adds **Question starters** for a visible
+native slide's authored title/body text. Creators review a discussion prompt, subjective clarity
+rating or eligible priority poll before inserting one independent editable opinion question.
+Priority options copy all 2–6 complete authored points; unsuitable longer lists are never
+silently shortened. English template scaffolding and source-only interpretation are explicit.
+
+Insertion uses one ordinary Undo/autosave step, preserves the source and its private metadata,
+inherits its section and retains existing spatial frames. Exact text/language/order and current
+actor/target barriers fence stale review. Copied source attribution remains private in participant,
+review and export projections. No AI call, job, allowance use, dependency, service, schema,
+migration, persisted version or entitlement is introduced.
+
+Focused checks and 18 production-browser workflows across four desktop/mobile profiles pass.
+The full repository check passes, including 938 contracts, 578 database, 1,393 server, 2,878 web
+and 354 repository-support tests, strict checks and production builds. See the
+[starter record](evidence/presentation-question-starters.md). Source remains undeployed.
+AI-generated questions, classic-slide starters and broader conversational generation remain
+separate work.
+
 ### Presentation E12 reviewed translation November 6, 2026
 
 The source on `codex/presentation-e12-translation` adds **Translate text** for one selected plain
@@ -25,7 +46,8 @@ adds guarded language columns and matching readers without altering migrations00
 
 The full repository check, 48 selected real PostgreSQL cases and 32 production-browser workflows
 across four desktop/mobile profiles pass. See the
-[translation record](evidence/presentation-e12-translation.md). This increment remains undeployed.
+[translation record](evidence/presentation-e12-translation.md). This increment is merged in
+[PR #208](https://github.com/riojung/pollingpops/pull/208) and remains undeployed.
 Rich-text/whole-deck translation, RTL, question suggestions and other E12 scopes remain planned.
 The reviewed layout increment remains separately proposed in
 [PR #207](https://github.com/riojung/pollingpops/pull/207).

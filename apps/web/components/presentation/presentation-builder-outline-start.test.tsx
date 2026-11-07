@@ -124,6 +124,8 @@ import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationTextAssistance } from "./presentation-text-assistance";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { PresentationQuestionStarters } from "./presentation-question-starters";
+import { createPresentationQuestionStarters } from "../../lib/presentation-question-starters";
 
 const presentationId = "10000000-0000-4000-8000-000000000001";
 const jobId = "20000000-0000-4000-8000-000000000001";
@@ -291,6 +293,163 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("Local question starter insertion", () => {
+  function sourceFixture(full = false) {
+    const block = createNativeContentBlock();
+    const title = block.scene!.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "Plan the next step";
+    block.scene!.nodes.push({
+      id: "Body:Starter",
+      type: "text",
+      role: "body",
+      text: "Review the scope\nAssign an owner\nSet a date",
+      frame: { x: 8, y: 35, width: 84, height: 55 },
+    });
+    block.scene!.readingOrder.push("Body:Starter");
+    const draft = PresentationDraftSchema.parse({
+      ...savedDraft,
+      schemaVersion: 16,
+      blocks: [
+        block,
+        ...(full ? Array.from({ length: 199 }, () => createNativeContentBlock()) : []),
+      ],
+      sections: [{ id: slideId, title: "Decision", blockIds: [block.id] }],
+      spatial: {
+        schemaVersion: 1,
+        frames: [{ blockId: block.id, x: 0, y: 0, width: 1280, height: 720 }],
+      },
+    });
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft, draftRevision: 4, status: "draft" } }
+        : previous(path, init),
+    );
+    return { block, draft };
+  }
+  function controls(view: ReturnType<typeof editor>) {
+    return view.nodes.find((node) => node.type === PresentationQuestionStarters)!
+      .props as unknown as ComponentProps<typeof PresentationQuestionStarters>;
+  }
+  function lastDraft() {
+    return deckRecoveryWrites().at(-1)![2] as PresentationDraft;
+  }
+  it("uses one ordinary Undo step, preserving source, section and spatial data", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    // These siblings must have distinct identities so replacing the slide canvas
+    // unmounts the starter panel and closes its native dialog.
+    const starterPanel = view.nodes.find((node) => node.type === PresentationQuestionStarters)!;
+    const nativeEditor = view.nodes.find((node) => node.type === NativeSceneEditor)!;
+    expect(starterPanel.key).not.toBe(nativeEditor.key);
+    const starter = createPresentationQuestionStarters(source.block).find(
+      (item) => item.type === "poll",
+    )!;
+    expect(controls(view).onInsert(starter)).toBe(true);
+    await view.settle();
+    expect(deckRecoveryWrites()).toHaveLength(1);
+    const inserted = lastDraft();
+    expect(inserted.blocks[0]).toEqual(source.block);
+    expect(inserted.blocks[1]).toMatchObject({
+      kind: "question",
+      question: { type: "poll", purpose: "opinion", confidence: "off", basePoints: 0 },
+    });
+    expect(inserted.sections![0]!.blockIds).toEqual([source.block.id, inserted.blocks[1]!.id]);
+    expect(inserted.spatial!.frames[0]).toEqual(source.draft.spatial!.frames[0]);
+    expect(inserted.spatial!.frames).toHaveLength(2);
+    const undo = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+    )!;
+    expect(undo.props.disabled).toBe(false);
+    (undo.props.onClick as () => void)();
+    await view.settle();
+    expect(lastDraft()).toEqual(source.draft);
+    const redo = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "delivery.builder.redo",
+    )!;
+    (redo.props.onClick as () => void)();
+    await view.settle();
+    expect(lastDraft()).toEqual(inserted);
+    expect(fixture.request.mock.calls.some(([path]) => path.includes("/jobs"))).toBe(false);
+  });
+  it("rejects an over-capacity insertion before touching history or local recovery", async () => {
+    const source = sourceFixture(true);
+    const view = editor(false);
+    await view.settle();
+    expect(controls(view).onInsert(createPresentationQuestionStarters(source.block)[0]!)).toBe(
+      false,
+    );
+    await view.settle();
+    expect(deckRecoveryWrites()).toEqual([]);
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+      )?.props.disabled,
+    ).toBe(true);
+  });
+  it("rejects queued old callbacks after edit permission is lost", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const originalControls = controls(view);
+    fixture.workspace.canEdit = false;
+    view.update();
+    await view.settle();
+    expect(originalControls.onInsert(createPresentationQuestionStarters(source.block)[0]!)).toBe(
+      false,
+    );
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("keeps the last committed callback usable after an unchanged parent render", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const committed = controls(view);
+    view.update();
+    await view.settle();
+    expect(committed.onInsert(createPresentationQuestionStarters(source.block)[0]!)).toBe(true);
+    await view.settle();
+    expect(lastDraft().blocks).toHaveLength(2);
+  });
+  it("allows frame-only edits without replacing the current geometry", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const starter = createPresentationQuestionStarters(source.block)[0]!;
+    const moved = structuredClone(source.block.scene!);
+    const title = moved.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.frame.x += 1;
+    view.nativeEditor.onChange(moved);
+    await view.settle();
+    expect(controls(view).onInsert(starter)).toBe(true);
+    await view.settle();
+    const inserted = lastDraft();
+    expect(inserted.blocks[0]).toMatchObject({ scene: moved });
+  });
+  it("refuses changed source text without adding another history or recovery entry", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const starter = createPresentationQuestionStarters(source.block)[0]!;
+    const changed = structuredClone(source.block.scene!);
+    const title = changed.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "A revised decision";
+    view.nativeEditor.onChange(changed);
+    await view.settle();
+    const before = deckRecoveryWrites().length;
+    expect(controls(view).onInsert(starter)).toBe(false);
+    await view.settle();
+    expect(deckRecoveryWrites()).toHaveLength(before);
+    expect(lastDraft().blocks).toHaveLength(1);
+    expect(view.nativeEditor.scene).toEqual(changed);
+  });
 });
 
 function deckRecoveryWrites() {

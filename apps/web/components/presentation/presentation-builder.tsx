@@ -118,6 +118,8 @@ import {
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { PresentationQuestionStarters } from "./presentation-question-starters";
+import { insertPresentationQuestionStarter } from "../../lib/presentation-question-starters";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationTextAssistance } from "./presentation-text-assistance";
@@ -612,6 +614,37 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, []);
 
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  const questionStarterContext = {
+    actorKey: textRecoveryContext,
+    presentationId,
+    selectedBlockId,
+    blocked:
+      !loaded ||
+      !canEdit ||
+      builderMutationBlocked ||
+      preparingImport ||
+      importingQuestions ||
+      roundImportOpen ||
+      sourceImportOpen ||
+      packBusy ||
+      previewOpen ||
+      spatialOpen ||
+      recoveryPreviewOpen ||
+      saveConflictPresent ||
+      recovery !== null ||
+      mediaState !== "idle" ||
+      pendingNativeImage !== null,
+  };
+  const latestQuestionStarterContext = useRef(questionStarterContext);
+  latestQuestionStarterContext.current = questionStarterContext;
+  const questionStarterFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!questionStarterFocus.current) return;
+    const target = questionStarterFocus.current;
+    questionStarterFocus.current = null;
+    if (target !== selectedBlockId || selectedBlock?.kind !== "question") return;
+    document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Question prompt"]')?.focus();
+  }, [selectedBlockId, selectedBlock?.kind]);
   const selectedOpinionOnly =
     selectedBlock?.kind === "question" &&
     (isTextQuestion(selectedBlock.question.type) ||
@@ -2974,6 +3007,69 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             </section>
           ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
             <section className={styles.slideCanvas} lang="en-CA">
+              <PresentationQuestionStarters
+                key={`question-starters:${selectedBlock.id}`}
+                block={selectedBlock}
+                sourceKey={selectedBlock.id}
+                disabled={questionStarterContext.blocked}
+                onInsert={(starter) => {
+                  if (
+                    latestQuestionStarterContext.current.actorKey !==
+                      questionStarterContext.actorKey ||
+                    latestQuestionStarterContext.current.presentationId !==
+                      questionStarterContext.presentationId ||
+                    latestQuestionStarterContext.current.selectedBlockId !==
+                      questionStarterContext.selectedBlockId ||
+                    latestQuestionStarterContext.current.blocked ||
+                    questionStarterContext.blocked ||
+                    !alive.current ||
+                    !assistancePermission.current ||
+                    importPreparation.current ||
+                    textAssistanceActive.current ||
+                    assistanceActive.current ||
+                    visualImportActive.current ||
+                    packOperation.current ||
+                    packPending.current ||
+                    packUpdateOperation.current ||
+                    packUpdatePending.current ||
+                    mediaUploadInFlight.current ||
+                    pendingNativeImageRef.current ||
+                    starter.source.blockId.toLowerCase() !== selectedBlock.id.toLowerCase()
+                  )
+                    return false;
+                  const ids = {
+                    blockId: clientUuid(),
+                    questionId: clientUuid(),
+                    ...(starter.type === "poll"
+                      ? { choiceIds: (starter.choices ?? []).map(() => clientUuid()) }
+                      : {}),
+                  };
+                  const checked = insertPresentationQuestionStarter(
+                    JSON.parse(latestDraftJson.current) as PresentationDraft,
+                    starter,
+                    ids,
+                  );
+                  if (!checked.ok) {
+                    setError(checked.reason);
+                    return false;
+                  }
+                  // Recheck the current draft in the ordinary commit; identities stay stable
+                  // if React replays the updater. One insertion is one independent Undo step.
+                  commit((current) => {
+                    const result = insertPresentationQuestionStarter(current, starter, ids);
+                    if (!result.ok) {
+                      setError(result.reason);
+                      return current;
+                    }
+                    questionStarterFocus.current = result.blockId;
+                    setSelectedBlockId(result.blockId);
+                    setInspectorTab("build");
+                    setError("");
+                    return result.draft;
+                  });
+                  return true;
+                }}
+              />
               {selectedBlock.textAssistance ? (
                 <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
                   <strong>Latest AI text edit — unverified wording</strong>

@@ -11,6 +11,7 @@ export {
   PresentationStaticExportError,
   PRESENTATION_STATIC_RENDER_LIMITS,
   PRESENTATION_STATIC_DISCLOSURE,
+  PRESENTATION_OFFLINE_DISCLOSURE,
 } from "./presentation-static-renderer-types.js";
 export type {
   PresentationStaticRenderInput,
@@ -26,7 +27,7 @@ export async function renderPresentationStatic(
   const checked = PresentationReviewSchema.safeParse(input.review);
   if (
     !checked.success ||
-    !["pdf", "png", "html"].includes(input.format) ||
+    !["pdf", "png", "html", "offline_html"].includes(input.format) ||
     !(input.images instanceof Map)
   )
     throw new PresentationStaticExportError("EXPORT_INVALID");
@@ -52,6 +53,7 @@ export async function renderPresentationStatic(
   }
   if (
     (input.format === "png" && !input.blockId) ||
+    (input.format === "offline_html" && input.blockId !== undefined) ||
     (input.blockId &&
       !checked.data.blocks.some((block) => block.id.toLowerCase() === input.blockId!.toLowerCase()))
   )

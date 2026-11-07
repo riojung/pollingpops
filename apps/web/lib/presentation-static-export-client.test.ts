@@ -11,7 +11,12 @@ import {
 const presentationId = "00000000-0000-4000-8000-000000000001";
 const versionId = "00000000-0000-4000-8000-000000000002";
 const blockId = "00000000-0000-4000-8000-000000000003";
-const mime = { pdf: "application/pdf", png: "image/png", html: "text/html" };
+const mime = {
+  pdf: "application/pdf",
+  png: "image/png",
+  html: "text/html",
+  offline_html: "text/html",
+};
 function source() {
   return { versionId, version: 2, title: "Published deck", pages: [{ blockId, title: "Opening" }] };
 }
@@ -22,7 +27,7 @@ afterEach(() => {
 });
 
 describe("Presentation static export downloads", () => {
-  it.each(["pdf", "png", "html"] as const)(
+  it.each(["pdf", "png", "html", "offline_html"] as const)(
     "requests a pinned %s using creator credentials and accepts its matching file type",
     async (format) => {
       const fetch = vi.fn<typeof globalThis.fetch>(
@@ -83,6 +88,7 @@ describe("Presentation static export downloads", () => {
     { versionId, format: "png" },
     { versionId, format: "pdf", blockId },
     { versionId, format: "html", blockId },
+    { versionId, format: "offline_html", blockId },
     { versionId, format: "pdf", token: "unaccepted-extra-field" },
     { versionId: "not-published", format: "pdf" },
   ])("rejects invalid format/page combinations before sending", async (request) => {
@@ -128,6 +134,47 @@ describe("Presentation static export downloads", () => {
     );
   });
 
+  it.each([401, 403])(
+    "preserves offline export authority failure %s instead of returning a file",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json(
+            { error: { code: "FORBIDDEN", message: "Export access denied." } },
+            { status },
+          ),
+        ),
+      );
+      await expect(
+        fetchPresentationStaticExport(
+          presentationId,
+          { versionId, format: "offline_html" },
+          new AbortController().signal,
+        ),
+      ).rejects.toEqual(new ApiClientError("Export access denied.", "FORBIDDEN", status));
+    },
+  );
+
+  it("accepts UTF-8 offline HTML while retaining the HTML MIME type", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("<!doctype html><title>Offline</title>", {
+            headers: { "content-type": "text/html; charset=utf-8" },
+          }),
+      ),
+    );
+    const result = await fetchPresentationStaticExport(
+      presentationId,
+      { versionId, format: "offline_html" },
+      new AbortController().signal,
+    );
+    expect(result.blob.type).toBe("text/html");
+    expect(await result.blob.text()).toContain("<!doctype html>");
+  });
+
   it("refuses an unexpected content type and cancels its body", async () => {
     const response = new Response("not a PDF", { headers: { "content-type": "text/html" } });
     const cancel = vi.spyOn(response.body!, "cancel");
@@ -145,13 +192,8 @@ describe("Presentation static export downloads", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it("rejects an oversized declared download before consuming bytes", async () => {
-    const response = new Response("too big", {
-      headers: {
-        "content-type": "application/pdf",
-        "content-length": String(PRESENTATION_STATIC_EXPORT_MAX_BYTES + 1),
-      },
-    });
+  it("rejects a PDF response to an offline HTML request and cancels its body", async () => {
+    const response = new Response("not HTML", { headers: { "content-type": "application/pdf" } });
     const cancel = vi.spyOn(response.body!, "cancel");
     vi.stubGlobal(
       "fetch",
@@ -160,12 +202,37 @@ describe("Presentation static export downloads", () => {
     await expect(
       fetchPresentationStaticExport(
         presentationId,
-        { versionId, format: "pdf" },
+        { versionId, format: "offline_html" },
         new AbortController().signal,
       ),
-    ).rejects.toThrow("40 MiB");
+    ).rejects.toThrow("unexpected file type");
     expect(cancel).toHaveBeenCalledOnce();
   });
+
+  it.each(["pdf", "offline_html"] as const)(
+    "rejects an oversized declared %s download before consuming bytes",
+    async (format) => {
+      const response = new Response("too big", {
+        headers: {
+          "content-type": mime[format],
+          "content-length": String(PRESENTATION_STATIC_EXPORT_MAX_BYTES + 1),
+        },
+      });
+      const cancel = vi.spyOn(response.body!, "cancel");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response),
+      );
+      await expect(
+        fetchPresentationStaticExport(
+          presentationId,
+          { versionId, format },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow("40 MiB");
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
 
   it("enforces the byte limit while streaming even when the declared length is false", async () => {
     const cancel = vi.fn();
@@ -228,25 +295,33 @@ describe("Presentation static export downloads", () => {
     ).rejects.toThrow("export was empty");
   });
 
-  it("uses a fixed safe filename and releases the temporary URL after the click or cleanup", async () => {
-    vi.useFakeTimers();
-    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:owned-export");
-    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-    const anchor = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
-    const append = vi.fn();
-    vi.stubGlobal("document", { createElement: vi.fn(() => anchor), body: { append } });
-    const release = downloadPresentationStaticExport({ blob: new Blob(["safe"]), format: "html" });
-    expect(create).toHaveBeenCalledOnce();
-    expect(anchor.download).toBe("polling-pops-presentation.html");
-    expect(anchor.href).toBe("blob:owned-export");
-    expect(append).toHaveBeenCalledWith(anchor);
-    expect(anchor.click).toHaveBeenCalledOnce();
-    expect(anchor.remove).toHaveBeenCalledOnce();
-    expect(revoke).not.toHaveBeenCalled();
-    await vi.runAllTimersAsync();
-    release();
-    expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:owned-export");
-  });
+  it.each([
+    ["pdf", "polling-pops-presentation.pdf"],
+    ["png", "polling-pops-presentation.png"],
+    ["html", "polling-pops-presentation.html"],
+    ["offline_html", "polling-pops-presentation-offline.html"],
+  ] as const)(
+    "uses fixed safe %s filename and releases the temporary URL after the click or cleanup",
+    async (format, filename) => {
+      vi.useFakeTimers();
+      const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:owned-export");
+      const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+      const anchor = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+      const append = vi.fn();
+      vi.stubGlobal("document", { createElement: vi.fn(() => anchor), body: { append } });
+      const release = downloadPresentationStaticExport({ blob: new Blob(["safe"]), format });
+      expect(create).toHaveBeenCalledOnce();
+      expect(anchor.download).toBe(filename);
+      expect(anchor.href).toBe("blob:owned-export");
+      expect(append).toHaveBeenCalledWith(anchor);
+      expect(anchor.click).toHaveBeenCalledOnce();
+      expect(anchor.remove).toHaveBeenCalledOnce();
+      expect(revoke).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+      release();
+      expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:owned-export");
+    },
+  );
 
   it("releases its URL immediately if the browser cannot start the download", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:failed-export");

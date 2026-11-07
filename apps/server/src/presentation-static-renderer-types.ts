@@ -19,7 +19,7 @@ export class PresentationStaticExportError extends Error {
 export interface PresentationStaticRenderInput {
   review: PresentationReview;
   images: Map<string, { bytes: Buffer; contentType: string }>;
-  format: "pdf" | "png" | "html";
+  format: "pdf" | "png" | "html" | "offline_html";
   blockId?: string;
   signal?: AbortSignal;
 }
@@ -42,3 +42,5 @@ export const PRESENTATION_STATIC_RENDER_LIMITS = Object.freeze({
 });
 export const PRESENTATION_STATIC_DISCLOSURE =
   "Static export: activities, motion, results and controls are flattened. Authored frames may clip text. Choose accessible HTML for complete text and details.";
+export const PRESENTATION_OFFLINE_DISCLOSURE =
+  "Offline interactive HTML: this portable file contains complete published public content, embedded images and all public disclosure bodies. Anyone with the file can open every included detail. Deleting the presentation or revoking access cannot revoke downloaded copies.";

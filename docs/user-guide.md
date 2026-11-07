@@ -896,6 +896,25 @@ Large decks or images can exceed the export limits; split the deck or reduce ima
 dialog asks. You can cancel an export or retry after a temporary failure. These static downloads
 do not create learner attempts or completion records.
 
+### Download an offline interactive presentation
+
+Publish the deck, choose **Export**, then select **Offline interactive HTML — whole
+presentation** and **Download export**. Open the downloaded
+`polling-pops-presentation-offline.html` in a browser. Its published visual snapshots, readable
+text and images are embedded in one file. Draft changes are excluded.
+
+Use the page index, section links, previous/next links and authored page links to move within
+the file. Below each visual snapshot, labeled reveal, detail and hotspot controls open native
+disclosure panels in the readable content. They work without JavaScript or an internet
+connection. The visual snapshots stay flat. Public content originally authored for broadcast
+reveal becomes a local disclosure in the file; it does not broadcast to other viewers.
+
+Activities are readable previews. This file never submits answers, awards points, records
+completion or saves learner progress. External links are labeled as leaving the file and may
+require an internet connection. The file contains every included public detail body, even when
+its panel is closed. Downloaded copies cannot be revoked; protect and distribute them yourself.
+Use the existing accessible HTML format when you want all details expanded for reading.
+
 ### Import a PDF or a set of slide images
 
 In the Builder, choose **Import visual slides**. Export PowerPoint, Google Slides or Canva slides

@@ -193,8 +193,27 @@ export function PresentationExportDialog({
           <option value="pdf">PDF — whole presentation</option>
           <option value="png">PNG — one published page</option>
           <option value="html">Accessible HTML — whole presentation</option>
+          <option value="offline_html">Offline interactive HTML — whole presentation</option>
         </select>
       </label>
+      {format === "offline_html" ? (
+        <section aria-label="Offline interactive HTML details">
+          <h3>Offline interactive HTML</h3>
+          <p>
+            One downloadable .html file contains the published slides, readable content and images.
+            Open it offline in a browser. All public details are included, even when a panel is
+            closed.
+          </p>
+          <p>
+            Open and close detail panels and use page, section, previous and next links inside the
+            file. External links leave the offline file and may require internet.
+          </p>
+          <p>
+            Questions are for reading only. No submissions, scoring, completion tracking or live
+            results are available. Viewing progress is not saved.
+          </p>
+        </section>
+      ) : null}
       {loading ? <p role="status">Loading published pages…</p> : null}
       {loadError ? (
         <div role="alert">

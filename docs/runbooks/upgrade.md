@@ -136,6 +136,30 @@ back the export routes/controls leaves these records intact. Hosted load, physic
 manual accessibility and cost qualification are recorded separately from local checks in the
 [E13 evidence record](../evidence/presentation-e13-static-export.md).
 
+## Presentation offline interactive HTML compatibility
+
+The bounded E13 extension adds `offline_html` to the existing published-version export
+request. Its physical extension is `.html`, MIME type is `text/html`, and fixed download name
+is `polling-pops-presentation-offline.html`. Deploy matching contracts, HTTP routes, renderer
+worker entry points and web controls together before exposing this option. An older server
+rejects the new format; existing PDF, PNG and readable HTML requests keep their meanings.
+No migration, persisted-content version, job queue, entitlement or provider change is required.
+
+The existing recipient-safe projection, media reauthorization, worker cancellation and resource
+limits apply. Verify a compiled-worker offline render and open the result with networking and
+JavaScript disabled. Public reveal/detail bodies become local native disclosures; page and
+section navigation uses internal anchors. The file includes all public bodies, stores no
+progress, creates no learner attempts and cannot submit responses or claim scoring/completion.
+Do not add share credentials, source documents, remote media URLs or arbitrary authored HTML.
+
+The output blocks scripts, forms, embedding and network resources through its content policy
+and contains no application JavaScript. Explicit safe external hyperlinks leave the file.
+This is a portable readable companion, not an operating-system or browser isolation guarantee.
+Downloaded copies cannot be recalled. Rollback may remove the option and API format support
+without rewriting stored content; already downloaded files remain usable. Verification and
+remaining release qualification are in the
+[offline export record](../evidence/presentation-offline-export.md).
+
 ## Presentation stage credential compatibility
 
 Apply `090_presentation_stage_credentials.sql` before enabling the E03 delivery server/web

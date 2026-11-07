@@ -126,87 +126,126 @@ describe("isolated static Presentation renderer", () => {
       /<script\b|<form\b|src=["']https?:|<link\b|correctValue|isCorrect|speakerNotes|idempotencyKey|controlToken/i,
     );
   }, 20_000);
-  it("cancels only after its owned render worker terminates and leaves later renders usable", async () => {
-    const base = review(),
-      controller = new AbortController();
-    const deck = {
-      ...base,
-      blocks: Array.from({ length: 100 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
-    };
-    let heartbeat = false;
-    const active = renderPresentationStatic({
+  it("exports a whole-deck offline interactive readable companion through the same worker", async () => {
+    const deck = review();
+    const result = await renderPresentationStatic({
       review: deck,
       images: new Map(),
-      format: "pdf",
-      signal: controller.signal,
+      format: "offline_html",
     });
-    const timer = setTimeout(() => {
-      heartbeat = true;
-      controller.abort();
-    }, 25);
-    try {
-      await expect(active).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
-      expect(heartbeat).toBe(true);
-    } finally {
-      clearTimeout(timer);
-      controller.abort();
-    }
-    const next = await renderPresentationStatic({
-      review: base,
-      images: new Map(),
-      format: "png",
-      blockId: base.blocks[1]!.id,
-    });
-    expect(next.bytes.byteLength).toBeGreaterThan(100);
+    const html = result.bytes.toString("utf8");
+    expect(result).toMatchObject({ contentType: "text/html", extension: "html" });
+    expect(html.match(/class="snapshot"/g)).toHaveLength(3);
+    expect(html).toContain("<details><summary>Read detail</summary>");
+    expect(html).toContain("Public &lt;dialog&gt; &amp; complete detail");
+    expect(html).toContain("Français 한국어 🧠");
+    expect(html).toContain(
+      "No responses, submissions, answer keys, scoring, live results or completion tracking",
+    );
+    expect(html).not.toMatch(
+      /<details[^>]+\bopen\b|<(?:script|form|input|iframe|object)\b|src=["']https?:|versionId|expiresAt|2020-01-01|correctValue|isCorrect|speakerNotes|idempotencyKey|controlToken/i,
+    );
+    for (const block of deck.blocks) expect(html).toContain(`id="page-${block.id.toLowerCase()}"`);
   }, 20_000);
-  it("rejects malformed selection, private input fields, page and byte limits before rendering", async () => {
-    const base = review();
-    await expect(
-      renderPresentationStatic({ review: base, images: new Map(), format: "png" }),
-    ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
-    await expect(
-      renderPresentationStatic({
+  it.each(["pdf", "offline_html"] as const)(
+    "cancels %s only after its owned render worker terminates and leaves later renders usable",
+    async (format) => {
+      const base = review(),
+        controller = new AbortController();
+      const deck = {
+        ...base,
+        blocks: Array.from({ length: 100 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
+      };
+      let heartbeat = false;
+      const active = renderPresentationStatic({
+        review: deck,
+        images: new Map(),
+        format,
+        signal: controller.signal,
+      });
+      const timer = setTimeout(() => {
+        heartbeat = true;
+        controller.abort();
+      }, 25);
+      try {
+        await expect(active).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
+        expect(heartbeat).toBe(true);
+      } finally {
+        clearTimeout(timer);
+        controller.abort();
+      }
+      const next = await renderPresentationStatic({
         review: base,
         images: new Map(),
         format: "png",
-        blockId: randomUUID(),
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
-    await expect(
-      renderPresentationStatic({
-        review: { ...base, privateNotes: "NEVER EXPORT" } as typeof base,
-        images: new Map(),
-        format: "html",
-      }),
-    ).rejects.toBeInstanceOf(PresentationStaticExportError);
-    await expect(
-      renderPresentationStatic({
-        review: {
-          ...base,
-          blocks: Array.from({ length: 101 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
-        },
-        images: new Map(),
-        format: "pdf",
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
-    await expect(
-      renderPresentationStatic({
-        review: base,
-        images: new Map([
-          [randomUUID(), { bytes: Buffer.alloc(limits.imageBytes + 1), contentType: "image/png" }],
-        ]),
-        format: "pdf",
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
-    const controller = new AbortController();
-    controller.abort();
-    await expect(
-      renderPresentationStatic({
-        review: base,
-        images: new Map(),
-        format: "pdf",
-        signal: controller.signal,
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
-  });
+        blockId: base.blocks[1]!.id,
+      });
+      expect(next.bytes.byteLength).toBeGreaterThan(100);
+    },
+    20_000,
+  );
+  it.each(["pdf", "offline_html"] as const)(
+    "rejects malformed selection, private input fields, page and byte limits before rendering %s",
+    async (format) => {
+      const base = review();
+      await expect(
+        renderPresentationStatic({ review: base, images: new Map(), format: "png" }),
+      ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map(),
+          format: "offline_html",
+          blockId: base.blocks[0]!.id,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map(),
+          format: "png",
+          blockId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      await expect(
+        renderPresentationStatic({
+          review: { ...base, privateNotes: "NEVER EXPORT" } as typeof base,
+          images: new Map(),
+          format,
+        }),
+      ).rejects.toBeInstanceOf(PresentationStaticExportError);
+      await expect(
+        renderPresentationStatic({
+          review: {
+            ...base,
+            blocks: Array.from({ length: 101 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
+          },
+          images: new Map(),
+          format,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map([
+            [
+              randomUUID(),
+              { bytes: Buffer.alloc(limits.imageBytes + 1), contentType: "image/png" },
+            ],
+          ]),
+          format,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map(),
+          format,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
+    },
+  );
 });

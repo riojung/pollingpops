@@ -239,12 +239,14 @@ jobs:
           BETA_E2E_ROUND_PROTOCOL: "true"
           BETA_E2E_SESSION_SUMMARIES: "true"
           BETA_E2E_IDEA_BOARDS: "true"
-      - name: Verify visual import with isolated synthetic media
+      - name: Verify visual import and presentation downloads with isolated synthetic media
+        if: ${{ !cancelled() }}
         timeout-minutes: 5
         run: >-
           node scripts/ci/browser-diagnostics.mjs
           --output "$RUNNER_TEMP/visual-import-diagnostics/resources.jsonl" --
           pnpm test:e2e:beta tests/beta-e2e/presentation-visual-import.spec.ts
+          tests/beta-e2e/presentation-static-export.spec.ts
           --project="${{ matrix.project }}" --output=test-results-visual-import
           --reporter=github,line,html
         env:

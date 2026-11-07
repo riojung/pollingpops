@@ -221,6 +221,16 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(beta.steps.indexOf(suggestionsRun!)).toBeGreaterThan(
       beta.steps.indexOf(translationRun!),
     );
+    const mediaRun = beta.steps.find(
+      (step) =>
+        step.name ===
+        "Verify visual import and presentation downloads with isolated synthetic media",
+    );
+    expect(mediaRun?.run).toContain("tests/beta-e2e/presentation-visual-import.spec.ts");
+    expect(mediaRun?.run).toContain("tests/beta-e2e/presentation-static-export.spec.ts");
+    expect(mediaRun?.env?.BETA_E2E_VISUAL_IMPORTS).toBe("true");
+    expect(mediaRun?.if).toBe("${{ !cancelled() }}");
+    expect(mediaRun?.["timeout-minutes"]).toBe(5);
     const webServers = Array.isArray(config.webServer) ? config.webServer : [config.webServer];
     expect(webServers[0]?.reuseExistingServer).toBe(false);
     const coreArtifacts = core.steps.find((step) =>

@@ -138,7 +138,10 @@ separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207
 Reviewed selected-text translation is merged in
 [PR #208](https://github.com/riojung/pollingpops/pull/208). Local reviewed question starters are
 merged in [PR #209](https://github.com/riojung/pollingpops/pull/209). Optional reviewed AI
-discussion suggestions are implemented on `codex/presentation-question-suggestions`.
+discussion suggestions are merged in [PR #210](https://github.com/riojung/pollingpops/pull/210).
+The bounded E13 offline interactive HTML companion is implemented on
+`codex/presentation-offline-export`; its full repository check, compiled-worker smoke and eight
+production-browser workflows across four profiles pass.
 Self-paced attempts and the remaining later packages stay planned; deployment and release
 qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
@@ -616,8 +619,19 @@ PDF/PNG flatten controls and preserve authored frames; HTML includes complete re
 tables and public panel details. Limits cover 100 exported pages, 1280×720 visual pages, 40 images,
 media/decoded pixels/output bytes, per-actor admission, concurrent jobs and deadlines. The
 [E13 evidence record](evidence/presentation-e13-static-export.md) separates automated verification
-from manual, hosted, device, usability and cost qualification. Richer portability above remains
-separately planned.
+from manual, hosted, device, usability and cost qualification.
+
+The next bounded portability increment on `codex/presentation-offline-export` adds a single
+offline interactive HTML companion from the same authorized immutable publication. Embedded
+images and complete semantic content accompany flat slide snapshots. Native disclosure panels
+and page/section/previous-next anchors work without JavaScript or network access. Public
+broadcast bodies become local disclosures; questions remain readable previews without responses,
+scoring, learner attempts, saved progress or completion records. External links explicitly leave
+the file. The existing worker, limits and recipient projection require no provider, dependency,
+migration, content version or entitlement change. Existing PDF/PNG/readable HTML retain their
+meanings. See the [offline record](evidence/presentation-offline-export.md). Editable PPTX,
+full visual-stage interaction and richer portability remain separately scoped; local software
+verification does not close deployment, device, usability or operating-cost gates.
 
 ### E14 Fund advanced media and ecosystem features
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import {
@@ -18,7 +19,7 @@ test.skip(
 test.use({ actionTimeout: 30_000 });
 
 for (const suffix of ["", " @mobile"]) {
-  test(`static downloads pin publication, flatten slides and provide complete readable HTML${suffix}`, async ({
+  test(`downloads pin publication and provide readable static and offline interactive HTML${suffix}`, async ({
     page,
     context,
   }, info) => {
@@ -46,6 +47,7 @@ for (const suffix of ["", " @mobile"]) {
               },
             ],
           },
+          lang: "en",
           frame: { x: 8, y: 30, width: 45, height: 30 },
         },
         {
@@ -95,6 +97,40 @@ for (const suffix of ["", " @mobile"]) {
       readingOrder: [],
     };
     information.scene.readingOrder = information.scene.nodes.map((node) => node.id);
+    opening.scene.schemaVersion = 7;
+    opening.scene.nodes.push(
+      {
+        id: randomUUID(),
+        type: "reveal",
+        scope: "local",
+        label: "Reveal local note",
+        body: "Offline local note stays closed until requested.",
+        frame: { x: 55, y: 30, width: 35, height: 15 },
+      },
+      {
+        id: randomUUID(),
+        type: "reveal",
+        scope: "broadcast",
+        label: "Reveal presentation note",
+        body: "The downloaded presentation note is viewer-local.",
+        frame: { x: 55, y: 47, width: 35, height: 15 },
+      },
+      {
+        id: randomUUID(),
+        type: "link",
+        label: "Visit supporting source",
+        href: "https://example.com/offline-source",
+        frame: { x: 55, y: 64, width: 35, height: 15 },
+      },
+      {
+        id: randomUUID(),
+        type: "navigation",
+        label: "Jump to published data",
+        targetBlockId: information.id,
+        frame: { x: 55, y: 81, width: 35, height: 15 },
+      },
+    );
+    opening.scene.readingOrder = opening.scene.nodes.map((node) => node.id);
     const question = {
       id: randomUUID(),
       kind: "question" as const,
@@ -117,8 +153,21 @@ for (const suffix of ["", " @mobile"]) {
         mediaAlt: null,
       },
     };
-    const hidden = { ...e01Slide("HIDDEN export planning"), hidden: true };
-    const record = await createE01Deck(page, [opening, information, question, hidden], 13);
+    const hidden = { ...e01Slide("HIDDEN export planning"), hidden: true as const };
+    const record = await createE01Deck(page, [opening, information, question, hidden], 16);
+    const sectionId = randomUUID();
+    const withSection = await page.request.put(`${e01ApiUrl}/v1/presentations/${record.id}/draft`, {
+      data: {
+        draft: {
+          ...record.draft,
+          sections: [{ id: sectionId, title: "Published evidence", blockIds: [information.id] }],
+        },
+        expectedRevision: record.draftRevision,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(withSection.status(), await withSection.text()).toBe(200);
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
     const exportButton = page.getByRole("button", { name: "Export presentation", exact: true });
@@ -193,7 +242,7 @@ for (const suffix of ["", " @mobile"]) {
     const violations = await new AxeBuilder({ page }).include("dialog[open]").analyze();
     expect(violations.violations).toEqual([]);
     const files = new Map<string, Buffer>();
-    for (const format of ["pdf", "png", "html"]) {
+    for (const format of ["pdf", "png", "html", "offline_html"]) {
       await dialog.getByRole("combobox", { name: "Format", exact: true }).selectOption(format);
       if (format === "png") {
         const pages = dialog.getByRole("combobox", { name: "Published page", exact: true });
@@ -214,14 +263,26 @@ for (const suffix of ["", " @mobile"]) {
         ...(format === "png" ? { blockId: opening.id } : {}),
       });
       const file = await download;
-      expect(file.suggestedFilename()).toMatch(new RegExp(`\\.${format}$`));
-      const output = info.outputPath(`presentation.${format}`);
+      expect(file.suggestedFilename()).toBe(
+        format === "offline_html"
+          ? "polling-pops-presentation-offline.html"
+          : `polling-pops-presentation.${format}`,
+      );
+      const output = info.outputPath(
+        format === "offline_html" ? "presentation-offline.html" : `presentation.${format}`,
+      );
       await file.saveAs(output);
       files.set(format, await readFile(output));
       await expect(
         dialog.getByRole("button", { name: "Download export", exact: true }),
       ).toBeEnabled();
     }
+    expect((await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations).toEqual(
+      [],
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+      true,
+    );
     expect(files.get("pdf")!.subarray(0, 5).toString()).toBe("%PDF-");
     expect(
       files
@@ -269,6 +330,97 @@ for (const suffix of ["", " @mobile"]) {
     await readable.screenshot({ path: info.outputPath("readable-export.png"), fullPage: true });
     await page.screenshot({ path: info.outputPath("export-dialog.png"), fullPage: true });
     await readable.close();
+
+    const offline = files.get("offline_html")!.toString("utf8");
+    expect(offline).not.toMatch(
+      /PRIVATE(?: export| E01)|HIDDEN export planning|UNPUBLISHED export change|isCorrect|speakerNotes|<script\b|<form\b|<iframe\b/i,
+    );
+    const offlinePath = info.outputPath("presentation-offline.html");
+    const browser = context.browser();
+    if (!browser) throw new Error("An independent offline browser context is required");
+    const offlineContext = await browser.newContext({
+      javaScriptEnabled: false,
+      offline: true,
+      viewport: { width: 320, height: 780 },
+      isMobile: info.project.use.isMobile ?? false,
+      hasTouch: info.project.use.hasTouch ?? false,
+      reducedMotion: "reduce",
+    });
+    try {
+      const file = await offlineContext.newPage();
+      const requests: string[] = [];
+      file.on("request", (request) => {
+        if (/^https?:/.test(request.url())) requests.push(request.url());
+      });
+      await file.goto(pathToFileURL(offlinePath).href);
+      await expect(file.locator("article")).toHaveCount(3);
+      await expect(file.locator("details")).toHaveCount(3);
+      await expect(file.locator("details[open]")).toHaveCount(0);
+      await expect(
+        file.getByText("Offline local note stays closed until requested.", { exact: true }),
+      ).toBeHidden();
+      const summary = file.locator("summary").filter({ hasText: "Reveal local note" });
+      await summary.focus();
+      await file.keyboard.press("Enter");
+      await expect(
+        file.getByText("Offline local note stays closed until requested.", { exact: true }),
+      ).toBeVisible();
+      await file.keyboard.press("Space");
+      await expect(file.locator("details[open]")).toHaveCount(0);
+      const detailSummary = file.locator("summary").filter({ hasText: "Supporting detail" });
+      if (info.project.use.hasTouch) await detailSummary.tap();
+      else await detailSummary.click();
+      await expect(
+        file.getByText("Public detail body stays readable in HTML.", { exact: true }),
+      ).toBeVisible();
+      await file.locator("summary").filter({ hasText: "Reveal presentation note" }).click();
+      await expect(
+        file.getByText("The downloaded presentation note is viewer-local.", { exact: true }),
+      ).toBeVisible();
+      const navigation = file.getByRole("link", { name: "Jump to published data", exact: true });
+      await navigation.click();
+      await expect(file).toHaveURL(new RegExp(`#page-${information.id}$`));
+      const page2 = file.locator(`article#page-${information.id}`);
+      await page2.locator(`a[href="#page-${opening.id}"]`).first().click();
+      await expect(file).toHaveURL(new RegExp(`#page-${opening.id}$`));
+      await expect(file.locator('a[href="https://example.com/offline-source"]')).toContainText(
+        /Visit supporting source/,
+      );
+      expect(
+        await file.locator("script,iframe,form,input,textarea,select,object,embed").count(),
+      ).toBe(0);
+      await expect
+        .poll(() =>
+          file
+            .locator("img")
+            .evaluateAll((images) =>
+              images.every(
+                (image) =>
+                  (image as HTMLImageElement).complete &&
+                  (image as HTMLImageElement).naturalWidth > 0,
+              ),
+            ),
+        )
+        .toBe(true);
+      expect(
+        await file.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      ).toBe(true);
+      expect(requests).toEqual([]);
+      await file.screenshot({ path: info.outputPath("offline-320.png"), fullPage: true });
+      await file.reload();
+      await expect(file.locator("details[open]")).toHaveCount(0);
+    } finally {
+      await offlineContext.close();
+    }
+
+    // Axe uses injected audit code; the actual native controls were exercised above without JS.
+    const audit = await context.newPage();
+    await audit.goto(pathToFileURL(offlinePath).href);
+    expect((await new AxeBuilder({ page: audit }).analyze()).violations).toEqual([]);
+    await audit.locator("summary").filter({ hasText: "Supporting detail" }).click();
+    expect((await new AxeBuilder({ page: audit }).analyze()).violations).toEqual([]);
+    await audit.screenshot({ path: info.outputPath("offline-readable.png"), fullPage: true });
+    await audit.close();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(exportButton).toBeFocused();

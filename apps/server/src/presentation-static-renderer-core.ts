@@ -30,6 +30,7 @@ import {
   PresentationStaticExportError,
   PRESENTATION_STATIC_RENDER_LIMITS as limits,
   PRESENTATION_STATIC_DISCLOSURE as disclosure,
+  PRESENTATION_OFFLINE_DISCLOSURE as offlineDisclosure,
   type PresentationStaticRenderInput,
   type PresentationStaticRenderResult,
 } from "./presentation-static-renderer-types.js";
@@ -781,19 +782,20 @@ const escape = (value: string) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-function richRunsHtml(runs: readonly PresentationRichTextRun[]) {
+const externalNotice = " (leaves this file; may require internet access)";
+function richRunsHtml(runs: readonly PresentationRichTextRun[], offline = false) {
   return runs
     .map((run) => {
       let value = escape(run.text);
       if (run.bold) value = `<strong>${value}</strong>`;
       if (run.italic) value = `<em>${value}</em>`;
       if (run.href && isSafePresentationLink(run.href))
-        value = `<a href="${escape(run.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${value}</a>`;
+        value = `<a href="${escape(run.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${value}${offline ? `<span class="external-notice" lang="en">${externalNotice}</span>` : ""}</a>`;
       return value;
     })
     .join("");
 }
-function richHtml(items: readonly PresentationRichTextParagraph[]) {
+function richHtml(items: readonly PresentationRichTextParagraph[], offline = false) {
   let html = "",
     list: "bullet" | "numbered" | undefined;
   for (const item of items) {
@@ -805,7 +807,7 @@ function richHtml(items: readonly PresentationRichTextParagraph[]) {
       list = item.kind;
       html += list === "bullet" ? "<ul>" : "<ol>";
     }
-    const content = richRunsHtml(item.runs);
+    const content = richRunsHtml(item.runs, offline);
     html += item.kind === "paragraph" ? `<p>${content}</p>` : `<li>${content}</li>`;
   }
   return html + (list ? (list === "bullet" ? "</ul>" : "</ol>") : "");
@@ -825,11 +827,14 @@ function semanticBlock(
   block: PresentationReviewBlock,
   images: RenderImages,
   selected: Set<string>,
+  offline = false,
 ) {
   const image = (id: string, alt: string | null) => {
     const value = images.get(id.toLowerCase())!;
     return `<figure><img src="data:${value.contentType};base64,${value.bytes.toString("base64")}" alt="${escape(alt ?? "")}" loading="lazy"></figure>`;
   };
+  if (block.kind === "question" && offline)
+    return `<h3>Question preview: readable only</h3><p>${escape(block.question.prompt)}</p>${block.question.choices ? `<ol>${block.question.choices.map((choice) => `<li>${escape(choice.label)}</li>`).join("")}</ol>` : ""}${block.question.rating ? `<p>${escape(block.question.rating.minLabel ?? "")} ${block.question.rating.min} - ${block.question.rating.max} ${escape(block.question.rating.maxLabel ?? "")}</p>` : ""}${block.question.unit ? `<p>Unit: ${escape(block.question.unit)}</p>` : ""}${block.question.mediaId ? image(block.question.mediaId, block.question.mediaAlt) : ""}<p>No responses, submissions, answer keys, scoring, live results or completion tracking are included.</p>`;
   if (block.kind === "question")
     return `<h3>Activity preview</h3><p>${escape(block.question.prompt)}</p>${block.question.choices ? `<ol>${block.question.choices.map((choice) => `<li>${escape(choice.label)}</li>`).join("")}</ol>` : ""}${block.question.rating ? `<p>${escape(block.question.rating.minLabel ?? "")} ${block.question.rating.min} - ${block.question.rating.max} ${escape(block.question.rating.maxLabel ?? "")}</p>` : ""}${block.question.unit ? `<p>Unit: ${escape(block.question.unit)}</p>` : ""}${block.question.mediaId ? image(block.question.mediaId, block.question.mediaAlt) : ""}<p>No answer key, submissions or live results are included.</p>`;
   if (!block.scene)
@@ -852,10 +857,10 @@ function semanticBlock(
           const language = node.lang ? ` lang="${escape(node.lang)}"` : "";
           return node.richText
             ? node.role === "title"
-              ? `<h3${language}>${node.richText.paragraphs.map((item) => richRunsHtml(item.runs)).join("<br>")}</h3>`
+              ? `<h3${language}>${node.richText.paragraphs.map((item) => richRunsHtml(item.runs, offline)).join("<br>")}</h3>`
               : language
-                ? `<div${language}>${richHtml(node.richText.paragraphs)}</div>`
-                : richHtml(node.richText.paragraphs)
+                ? `<div${language}>${richHtml(node.richText.paragraphs, offline)}</div>`
+                : richHtml(node.richText.paragraphs, offline)
             : node.role === "title"
               ? `<h3${language}>${escape(node.text)}</h3>`
               : `<p${language}>${escape(node.text)}</p>`;
@@ -878,21 +883,91 @@ function semanticBlock(
             ]),
           )}`;
         case "reveal":
-          return `<section><h3>${escape(node.label)}</h3><p>${escape(node.body)}</p></section>`;
+          return offline
+            ? `<details><summary>${escape(node.label)}</summary><p class="local-disclosure">${node.scope === "broadcast" ? "Published broadcast reveal content is a local disclosure in this file; it does not broadcast or synchronize." : "Local disclosure in this file; it does not synchronize or save state."}</p><p>${escape(node.body)}</p></details>`
+            : `<section><h3>${escape(node.label)}</h3><p>${escape(node.body)}</p></section>`;
         case "hotspot":
         case "dialog":
-          return `<section><h3>${escape(node.label)}</h3><h4>${escape(node.detailTitle)}</h4><p>${escape(node.body)}</p></section>`;
+          return offline
+            ? `<details><summary>${escape(node.label)}</summary><p class="local-disclosure">Local disclosure in this file; it does not synchronize or save state.</p><h3>${escape(node.detailTitle)}</h3><p>${escape(node.body)}</p></details>`
+            : `<section><h3>${escape(node.label)}</h3><h4>${escape(node.detailTitle)}</h4><p>${escape(node.body)}</p></section>`;
         case "link":
           return isSafePresentationLink(node.href)
-            ? `<p><a href="${escape(node.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${escape(node.label)}</a></p>`
+            ? `<p><a href="${escape(node.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${escape(node.label)}${offline ? `<span class="external-notice" lang="en">${externalNotice}</span>` : ""}</a></p>`
             : `<p>${escape(node.label)}</p>`;
         case "navigation":
           return node.targetBlockId && selected.has(node.targetBlockId.toLowerCase())
             ? `<p><a href="#page-${escape(node.targetBlockId.toLowerCase())}">${escape(node.label)}</a></p>`
-            : `<p>${escape(node.label)} (navigation control flattened)</p>`;
+            : `<p>${escape(node.label)} (${offline ? "target unavailable in this file" : "navigation control flattened"})</p>`;
       }
     })
     .join("");
+}
+function readablePageTitle(block: PresentationReviewBlock, index: number) {
+  if (block.kind === "question")
+    return { text: block.question.prompt.trim() || `Page ${index + 1}` };
+  const title = block.scene?.nodes.find((node) => node.type === "text" && node.role === "title");
+  if (title?.type === "text" && title.text.trim())
+    return { text: title.text.trim(), lang: title.lang };
+  return {
+    text:
+      block.textElements.find((element) => element.role === "title")?.text.trim() ||
+      `Page ${index + 1}`,
+  };
+}
+async function offlineHtml(
+  review: PresentationStaticRenderInput["review"],
+  blocks: PresentationReviewBlock[],
+  images: RenderImages,
+): Promise<PresentationStaticRenderResult> {
+  const selected = new Set(blocks.map((block) => block.id.toLowerCase()));
+  const pages = new Map(
+    blocks.map((block, index) => [
+      block.id.toLowerCase(),
+      { block, index, title: readablePageTitle(block, index) },
+    ]),
+  );
+  const pageLink = (id: string, label?: string) => {
+    const page = pages.get(id.toLowerCase());
+    if (!page) return "";
+    const title = page.title.lang
+      ? `<span lang="${escape(page.title.lang)}">${escape(page.title.text)}</span>`
+      : escape(page.title.text);
+    return `<a href="#page-${escape(page.block.id.toLowerCase())}">${label === undefined ? `Page ${page.index + 1}: ${title}` : escape(label)}</a>`;
+  };
+  const sections = review.sections
+    .map((section, index) => ({
+      ...section,
+      anchor: `section-${index + 1}`,
+      blockIds: section.blockIds.filter((id) => selected.has(id.toLowerCase())),
+    }))
+    .filter((section) => section.blockIds.length);
+  const parts = [
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"><title>${escape(review.title)}</title><style>body{font:18px/1.6 system-ui,sans-serif;color:#172b4d;background:#fffdf7;margin:0 auto;max-width:1100px;padding:24px}h1,h2,h3,h4{line-height:1.25;overflow-wrap:anywhere}p,li,td,th,summary,caption{overflow-wrap:anywhere;white-space:pre-wrap}a{color:#174d8c}a:focus-visible,summary:focus-visible{outline:3px solid #174d8c;outline-offset:4px}img{max-width:100%;height:auto}.snapshot{width:100%;border:1px solid #a6b0ba}article{border-top:2px solid #a6b0ba;margin-top:32px;padding-top:16px}table{border-collapse:collapse;width:100%;margin:16px 0}caption{text-align:left;font-weight:bold}th,td{text-align:left;vertical-align:top;border:1px solid #a6b0ba;padding:8px}figure{margin:16px 0}details{border:1px solid #a6b0ba;padding:12px;margin:16px 0}summary{cursor:pointer;font-weight:bold}.local-disclosure,.external-notice{font-size:.9em}nav li{margin:8px 0}@media print{article{break-before:page}.page-navigation{display:none}}</style></head><body><header><h1>${escape(review.title)}</h1><p>${escape(offlineDisclosure)}</p><p>This interactive readable companion works offline: open a labeled disclosure to read its details, or follow page, section and index links within the file. Disclosures are local to this file, including public content originally authored for broadcast reveal. They do not broadcast, synchronize or save state.</p><p>Questions are readable previews only: no responses, submissions, answer keys, scoring, live results or completion tracking. Visual snapshots preserve authored frames and may clip text; complete readable content follows each snapshot. External links leave this file and may require internet access.</p></header><nav id="presentation-index" aria-label="Presentation index"><h2>Presentation index</h2>${sections.length ? `<h3>Sections</h3><ul>${sections.map((section) => `<li><a href="#${section.anchor}">${escape(section.title)}</a></li>`).join("")}</ul>` : ""}<h3>Pages</h3><ol>${blocks.map((block) => `<li>${pageLink(block.id)}</li>`).join("")}</ol></nav>${sections.length ? `<section aria-label="Presentation sections">${sections.map((section) => `<section id="${section.anchor}"><h2>${escape(section.title)}</h2><ul>${section.blockIds.map((id) => `<li>${pageLink(id)}</li>`).join("")}</ul></section>`).join("")}</section>` : ""}<main>`,
+  ];
+  let length = Buffer.byteLength(parts[0]!);
+  if (length > limits.outputBytes) throw new PresentationStaticExportError("EXPORT_LIMIT");
+  for (const [index, block] of blocks.entries()) {
+    const png = await drawPage(block, images);
+    const navigation = `<nav class="page-navigation" aria-label="Navigation for page ${index + 1}"><ul>${index ? `<li>${pageLink(blocks[index - 1]!.id, "Previous page")}</li>` : ""}${index + 1 < blocks.length ? `<li>${pageLink(blocks[index + 1]!.id, "Next page")}</li>` : ""}<li><a href="#presentation-index">Presentation index</a></li>${sections
+      .filter((section) =>
+        section.blockIds.some((id) => id.toLowerCase() === block.id.toLowerCase()),
+      )
+      .map(
+        (section) => `<li><a href="#${section.anchor}">Section: ${escape(section.title)}</a></li>`,
+      )
+      .join("")}</ul></nav>`;
+    const part = `<article id="page-${escape(block.id.toLowerCase())}"><h2>Page ${index + 1}</h2>${navigation}<img class="snapshot" src="data:image/png;base64,${png.toString("base64")}" alt="" aria-hidden="true"><section aria-label="Readable content for page ${index + 1}">${semanticBlock(block, images, selected, true)}</section></article>`;
+    length += Buffer.byteLength(part);
+    if (length > limits.outputBytes) throw new PresentationStaticExportError("EXPORT_LIMIT");
+    parts.push(part);
+  }
+  parts.push("</main></body></html>");
+  return {
+    bytes: checkSize(Buffer.from(parts.join(""))),
+    contentType: "text/html",
+    extension: "html",
+  };
 }
 async function prepare(input: PresentationStaticRenderInput) {
   const parsed = PresentationReviewSchema.safeParse(input.review);
@@ -902,11 +977,15 @@ async function prepare(input: PresentationStaticRenderInput) {
       ? review.blocks.filter((block) => block.id.toLowerCase() === input.blockId!.toLowerCase())
       : review.blocks;
   if (
-    !["pdf", "png", "html"].includes(input.format) ||
+    !["pdf", "png", "html", "offline_html"].includes(input.format) ||
     new Set(review.blocks.map((block) => block.id.toLowerCase())).size !== review.blocks.length
   )
     throw new PresentationStaticExportError("EXPORT_INVALID");
-  if ((input.format === "png" && !input.blockId) || !blocks.length)
+  if (
+    (input.format === "png" && !input.blockId) ||
+    (input.format === "offline_html" && input.blockId !== undefined) ||
+    !blocks.length
+  )
     throw new PresentationStaticExportError("EXPORT_INVALID");
   if (
     blocks.length > limits.pages ||
@@ -965,6 +1044,7 @@ export async function renderPresentationStaticCore(
       contentType: "image/png",
       extension: "png",
     };
+  if (input.format === "offline_html") return offlineHtml(review, blocks, images);
   if (input.format === "html") {
     const selected = new Set(blocks.map((block) => block.id.toLowerCase()));
     const parts = [

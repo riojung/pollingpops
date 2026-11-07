@@ -8,6 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation offline interactive HTML November 7, 2026
+
+The source on `codex/presentation-offline-export` adds **Offline interactive HTML** to the
+published-version export dialog. One file embeds public readable content, images and visual
+snapshots. Native local disclosure panels and page/section/previous-next links work without
+JavaScript or an internet connection. Public broadcast bodies become local disclosures;
+activities remain readable previews without answer submission, scoring, progress or completion tracking.
+
+The increment reuses the existing recipient-safe projection, source/media authorization,
+renderer worker and resource limits. No provider call, service, dependency, migration,
+document/scene version or entitlement is introduced. Existing PDF/PNG/readable HTML retain
+their meanings. The full repository check, focused contracts/server/web checks, compiled-worker
+smoke and eight production-browser workflows across four profiles pass; see the
+[offline export record](evidence/presentation-offline-export.md). Actual downloaded-file controls
+work with networking and JavaScript disabled. Source remains undeployed.
+Self-paced attempts, editable PPTX and live visual-stage interaction remain separate work.
+
 ### Reviewed AI discussion suggestions November 7, 2026
 
 The source on `codex/presentation-question-suggestions` adds optional **Suggest discussion
@@ -27,8 +44,9 @@ Focused contracts, controller/modal, editor and privacy checks, 56 selected real
 cases and 66 production-browser workflows across four profiles pass. The full repository check
 also passes: 958 contracts, 584 database, 1,419 server, 2,946 web and 354 support tests, plus
 strict checks and production builds. See the
-[discussion-suggestion record](evidence/presentation-question-suggestions.md). Source remains
-undeployed; scored AI assessment generation and broader E12 scopes remain separate work.
+[discussion-suggestion record](evidence/presentation-question-suggestions.md). This increment is
+merged in [PR #210](https://github.com/riojung/pollingpops/pull/210) and remains undeployed;
+scored AI assessment generation and broader E12 scopes remain separate work.
 
 ### Reviewed local question starters November 6, 2026
 

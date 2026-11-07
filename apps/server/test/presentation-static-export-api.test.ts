@@ -12,6 +12,7 @@ import {
 import { presentationSharingFixture } from "../../../packages/db/test/support/presentation-sharing-conformance.js";
 import { registerPresentationStaticExportRoutes } from "../src/presentation-static-export-routes.js";
 import type { PresentationStaticRenderer } from "../src/presentation-static-export-service.js";
+import { renderPresentationStatic } from "../src/presentation-static-renderer.js";
 import { ConfigSchema } from "../src/config.js";
 import type { StorageService } from "../src/storage.js";
 const apps: FastifyInstance[] = [];
@@ -19,13 +20,20 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
-const types = { pdf: "application/pdf", png: "image/png", html: "text/html" } as const;
+const types = {
+  pdf: "application/pdf",
+  png: "image/png",
+  html: "text/html",
+  offline_html: "text/html",
+} as const;
 const renderResult: PresentationStaticRenderer = async (input) => ({
   bytes: Buffer.from("SYNTHETIC_STATIC_BYTES"),
   contentType: types[input.format],
-  extension: input.format,
+  extension: input.format === "offline_html" ? "html" : input.format,
 });
-async function fixture(options: { media?: boolean; deadlineMs?: number } = {}) {
+async function fixture(
+  options: { media?: boolean; deadlineMs?: number; format?: "pdf" | "offline_html" } = {},
+) {
   const repository = new MemoryRepository(),
     mediaId = options.media === false ? null : randomUUID(),
     f = await presentationSharingFixture(repository, "static-export", mediaId);
@@ -64,7 +72,10 @@ async function fixture(options: { media?: boolean; deadlineMs?: number } = {}) {
     deadlineMs: options.deadlineMs,
   });
   const request = (
-    payload: InjectOptions["payload"] = { versionId: f.version.id, format: "pdf" },
+    payload: InjectOptions["payload"] = {
+      versionId: f.version.id,
+      format: options.format ?? "pdf",
+    },
     id = f.presentation.id,
   ) => app.inject({ method: "POST", url: `/v1/presentations/${id}/exports`, payload });
   const metadata = (versionId = f.version.id, id = f.presentation.id) =>
@@ -134,45 +145,153 @@ function slide(title: string, mediaId: string | null = null) {
   };
 }
 describe("published Presentation static export API", () => {
-  it("downloads the explicitly pinned publication through a safe projection without draft, share or report mutations", async () => {
-    const f = await fixture(),
-      old = f.version;
-    await publish(f, { ...f.content, title: "Later publication", blocks: [slide("Later page")] });
-    const before = await f.presentations.getPresentation(f.actor.workspaceId, f.presentation.id),
-      history = await f.presentations.listPresentationHistory(
-        f.actor.workspaceId,
-        f.presentation.id,
-      );
-    const response = await f.request(
-      { versionId: old.id.toUpperCase(), format: "pdf" },
-      f.presentation.id.toUpperCase(),
-    );
+  it("downloads real offline HTML containing only projected public content and local disclosures", async () => {
+    const f = await fixture({ media: false });
+    const block = {
+      ...slide("Public offline title"),
+      textElements: [],
+      scene: {
+        schemaVersion: 6 as const,
+        aspectRatio: "16:9" as const,
+        nodes: [
+          {
+            id: "title",
+            type: "text" as const,
+            role: "title" as const,
+            text: "Public offline title",
+            frame: { x: 5, y: 5, width: 90, height: 15 },
+          },
+          {
+            id: "reveal",
+            type: "reveal" as const,
+            scope: "broadcast" as const,
+            label: "Public broadcast detail",
+            body: "PUBLIC_BODY <script>alert(1)</script> <SCRIPT>alert(2)</SCRIPT> <ScRiPt>alert(3)</sCrIpT>",
+            frame: { x: 5, y: 30, width: 40, height: 10 },
+          },
+        ],
+        readingOrder: ["title", "reveal"],
+      },
+    };
+    const published = await publish(f, {
+      ...f.content,
+      schemaVersion: 13,
+      blocks: [block, f.content.blocks[1]!],
+    });
+    f.render.mockImplementation(renderPresentationStatic);
+    const response = await f.request({ versionId: published.id, format: "offline_html" });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect(response.headers["content-type"]).toBe("text/html");
     expect(response.headers["content-disposition"]).toBe(
-      'attachment; filename="polling-pops-presentation.pdf"',
+      'attachment; filename="polling-pops-presentation-offline.html"',
     );
-    expect(response.headers["cache-control"]).toContain("no-store");
-    expect(response.headers["x-content-type-options"]).toBe("nosniff");
-    expect(response.headers["referrer-policy"]).toBe("no-referrer");
-    const input = f.render.mock.calls[0]![0];
-    expect(input.review.versionId).toBe(old.id);
-    expect(input.review.title).toBe(old.content.title);
-    expect(JSON.stringify(input.review)).not.toMatch(
-      /PRIVATE_|speakerNotes|correctValue|explanation|recoveryPack|branches|workspaceId|actorId/,
+    expect(response.body).toContain("<details><summary>Public broadcast detail</summary>");
+    expect(response.body).toContain("PUBLIC_BODY &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(response.body).toContain("&lt;SCRIPT&gt;alert(2)&lt;/SCRIPT&gt;");
+    expect(response.body).toContain("&lt;ScRiPt&gt;alert(3)&lt;/sCrIpT&gt;");
+    expect(response.body).toContain("Published broadcast reveal content is a local disclosure");
+    expect(response.body).toContain("Public prompt");
+    expect(response.body).toContain(
+      "No responses, submissions, answer keys, scoring, live results or completion tracking",
     );
-    expect([...input.images.keys()]).toEqual([f.mediaId]);
-    expect(input.signal).toBeInstanceOf(AbortSignal);
-    expect(await f.presentations.getPresentation(f.actor.workspaceId, f.presentation.id)).toEqual(
-      before,
+    expect(response.body.match(/class="snapshot"/g)).toHaveLength(2);
+    expect(response.body).not.toMatch(
+      /<script\b|<form\b|<input\b|PRIVATE_|speakerNotes|correctValue|explanation|expiresAt|versionId|workspaceId|controlToken|idempotencyKey|>917</i,
     );
-    expect(
-      await f.presentations.listPresentationHistory(f.actor.workspaceId, f.presentation.id),
-    ).toEqual(history);
-    expect(
-      await f.shares.listShares(f.actor.workspaceId, f.presentation.id, f.actor.userId),
-    ).toEqual([]);
+    for (const privateId of [published.id, f.actor.workspaceId, f.actor.userId])
+      expect(response.body).not.toContain(privateId);
+  }, 20_000);
+
+  it("withholds offline bytes when the renderer returns an incompatible type or extension", async () => {
+    const f = await fixture({ media: false, format: "offline_html" });
+    f.render.mockResolvedValueOnce({
+      bytes: Buffer.from("WRONG_RENDER_BYTES"),
+      contentType: "text/html",
+      extension: "pdf",
+    });
+    const wrongExtension = await f.request();
+    expect(wrongExtension.statusCode).toBe(422);
+    expect(wrongExtension.body).not.toContain("WRONG_RENDER_BYTES");
+    f.render.mockResolvedValueOnce({
+      bytes: Buffer.from("WRONG_RENDER_BYTES"),
+      contentType: "application/pdf",
+      extension: "html",
+    });
+    const wrongType = await f.request();
+    expect(wrongType.statusCode).toBe(422);
+    expect(wrongType.body).not.toContain("WRONG_RENDER_BYTES");
   });
+
+  it.each(["contentHash", "version"] as const)(
+    "withholds offline bytes if the pinned publication's %s changes during rendering",
+    async (field) => {
+      const f = await fixture({ media: false, format: "offline_html" });
+      let rendered = false;
+      f.render.mockImplementationOnce(async (input) => {
+        rendered = true;
+        return renderResult(input);
+      });
+      const getVersion = f.presentations.getPresentationVersion.bind(f.presentations);
+      vi.spyOn(f.presentations, "getPresentationVersion").mockImplementation(async (...args) => {
+        const version = await getVersion(...args);
+        return rendered && version
+          ? {
+              ...version,
+              ...(field === "contentHash"
+                ? { contentHash: "changed" }
+                : { version: version.version + 1 }),
+            }
+          : version;
+      });
+      const response = await f.request();
+      expect(response.statusCode).toBe(404);
+      expect(response.body).not.toContain("SYNTHETIC_STATIC_BYTES");
+    },
+  );
+
+  it.each(["pdf", "offline_html"] as const)(
+    "downloads %s from the explicitly pinned publication through a safe projection without draft, share or report mutations",
+    async (format) => {
+      const f = await fixture(),
+        old = f.version;
+      await publish(f, { ...f.content, title: "Later publication", blocks: [slide("Later page")] });
+      const before = await f.presentations.getPresentation(f.actor.workspaceId, f.presentation.id),
+        history = await f.presentations.listPresentationHistory(
+          f.actor.workspaceId,
+          f.presentation.id,
+        );
+      const response = await f.request(
+        { versionId: old.id.toUpperCase(), format },
+        f.presentation.id.toUpperCase(),
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.headers["content-type"]).toBe(types[format]);
+      expect(response.headers["content-disposition"]).toBe(
+        `attachment; filename="polling-pops-presentation${format === "offline_html" ? "-offline.html" : ".pdf"}"`,
+      );
+      expect(response.headers["cache-control"]).toContain("no-store");
+      expect(response.headers["x-content-type-options"]).toBe("nosniff");
+      expect(response.headers["referrer-policy"]).toBe("no-referrer");
+      const input = f.render.mock.calls[0]![0];
+      expect(input.format).toBe(format);
+      expect(input.review.versionId).toBe(old.id);
+      expect(input.review.title).toBe(old.content.title);
+      expect(JSON.stringify(input.review)).not.toMatch(
+        /PRIVATE_|speakerNotes|correctValue|explanation|recoveryPack|branches|workspaceId|actorId/,
+      );
+      expect([...input.images.keys()]).toEqual([f.mediaId]);
+      expect(input.signal).toBeInstanceOf(AbortSignal);
+      expect(await f.presentations.getPresentation(f.actor.workspaceId, f.presentation.id)).toEqual(
+        before,
+      );
+      expect(
+        await f.presentations.listPresentationHistory(f.actor.workspaceId, f.presentation.id),
+      ).toEqual(history);
+      expect(
+        await f.shares.listShares(f.actor.workspaceId, f.presentation.id, f.actor.userId),
+      ).toEqual([]);
+    },
+  );
   it("returns safe published page metadata and reads only the selected PNG page's frozen media", async () => {
     const f = await fixture(),
       secondMedia = randomUUID();
@@ -221,6 +340,7 @@ describe("published Presentation static export API", () => {
     for (const body of [
       { versionId: f.version.id, format: "png" },
       { versionId: f.version.id, format: "html", blockId: f.content.blocks[0]!.id },
+      { versionId: f.version.id, format: "offline_html", blockId: f.content.blocks[0]!.id },
       { versionId: f.version.id, format: "pptx" },
       { versionId: f.version.id, format: "pdf", speakerNotes: true },
     ])
@@ -239,10 +359,14 @@ describe("published Presentation static export API", () => {
     expect((await f.metadata()).statusCode).toBe(403);
     expect(f.render).not.toHaveBeenCalled();
   });
-  it.each(["cookie", "membership", "account", "source", "workspace", "feature"] as const)(
-    "withholds generated bytes when %s access is revoked during rendering",
-    async (kind) => {
-      const f = await fixture({ media: false });
+  it.each(
+    (["cookie", "membership", "account", "source", "workspace", "feature"] as const).flatMap(
+      (kind) => (["pdf", "offline_html"] as const).map((format) => ({ kind, format })),
+    ),
+  )(
+    "withholds generated $format bytes when $kind access is revoked during rendering",
+    async ({ kind, format }) => {
+      const f = await fixture({ media: false, format });
       f.render.mockImplementationOnce(async (input) => {
         if (kind === "cookie") f.current.actor = null;
         if (kind === "membership")
@@ -262,93 +386,103 @@ describe("published Presentation static export API", () => {
       expect(response.body).not.toContain("SYNTHETIC_STATIC_BYTES");
     },
   );
-  it.each(["read", "render"] as const)(
-    "withholds changed image bytes after async %s",
-    async (phase) => {
-      const f = await fixture();
-      if (phase === "read")
-        f.readImage.mockImplementationOnce(async () => {
-          f.repository.mediaAssets.get(f.mediaId!)!.scanStatus = "rejected";
-          return Buffer.alloc(8);
-        });
-      else
-        f.render.mockImplementationOnce(async (input) => {
-          f.repository.mediaAssets.get(f.mediaId!)!.objectKey = "media/replaced.png";
-          return renderResult(input);
-        });
-      const response = await f.request();
-      expect(response.statusCode, response.body).toBe(409);
-      expect(response.json().error.code).toBe("EXPORT_MEDIA_UNAVAILABLE");
-      expect(response.body).not.toContain("SYNTHETIC_STATIC_BYTES");
-      if (phase === "read") expect(f.render).not.toHaveBeenCalled();
-    },
-  );
-  it("rechecks images after the final async source authorization", async () => {
-    const f = await fixture();
-    let rendered = false;
-    f.render.mockImplementationOnce(async (input) => {
-      rendered = true;
-      return renderResult(input);
-    });
-    const getVersion = f.presentations.getPresentationVersion.bind(f.presentations);
-    vi.spyOn(f.presentations, "getPresentationVersion").mockImplementation(async (...args) => {
-      const version = await getVersion(...args);
-      if (rendered) f.repository.mediaAssets.get(f.mediaId!)!.scanStatus = "rejected";
-      return version;
-    });
+  it.each(
+    (["read", "render"] as const).flatMap((phase) =>
+      (["pdf", "offline_html"] as const).map((format) => ({ phase, format })),
+    ),
+  )("withholds changed image bytes after async $phase for $format", async ({ phase, format }) => {
+    const f = await fixture({ format });
+    if (phase === "read")
+      f.readImage.mockImplementationOnce(async () => {
+        f.repository.mediaAssets.get(f.mediaId!)!.scanStatus = "rejected";
+        return Buffer.alloc(8);
+      });
+    else
+      f.render.mockImplementationOnce(async (input) => {
+        f.repository.mediaAssets.get(f.mediaId!)!.objectKey = "media/replaced.png";
+        return renderResult(input);
+      });
     const response = await f.request();
     expect(response.statusCode, response.body).toBe(409);
     expect(response.json().error.code).toBe("EXPORT_MEDIA_UNAVAILABLE");
     expect(response.body).not.toContain("SYNTHETIC_STATIC_BYTES");
+    if (phase === "read") expect(f.render).not.toHaveBeenCalled();
   });
-  it("enforces page and output budgets while allowing one PNG from a larger published deck", async () => {
-    const f = await fixture({ media: false }),
-      large = await publish(f, {
+  it.each(["pdf", "offline_html"] as const)(
+    "rechecks images after the final async source authorization for %s",
+    async (format) => {
+      const f = await fixture({ format });
+      let rendered = false;
+      f.render.mockImplementationOnce(async (input) => {
+        rendered = true;
+        return renderResult(input);
+      });
+      const getVersion = f.presentations.getPresentationVersion.bind(f.presentations);
+      vi.spyOn(f.presentations, "getPresentationVersion").mockImplementation(async (...args) => {
+        const version = await getVersion(...args);
+        if (rendered) f.repository.mediaAssets.get(f.mediaId!)!.scanStatus = "rejected";
+        return version;
+      });
+      const response = await f.request();
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json().error.code).toBe("EXPORT_MEDIA_UNAVAILABLE");
+      expect(response.body).not.toContain("SYNTHETIC_STATIC_BYTES");
+    },
+  );
+  it.each(["html", "offline_html"] as const)(
+    "enforces %s page and output budgets while allowing one PNG from a larger published deck",
+    async (format) => {
+      const f = await fixture({ media: false }),
+        large = await publish(f, {
+          ...f.content,
+          blocks: Array.from({ length: 101 }, (_, i) => slide(`Page ${i + 1}`)),
+        });
+      const over = await f.request({ versionId: large.id, format });
+      expect(over.statusCode).toBe(413);
+      expect(over.json().error.code).toBe("EXPORT_LIMIT");
+      expect(f.render).not.toHaveBeenCalled();
+      expect(
+        (
+          await f.request({
+            versionId: large.id,
+            format: "png",
+            blockId: large.content.blocks[100]!.id,
+          })
+        ).statusCode,
+      ).toBe(200);
+      f.render.mockImplementationOnce(async (input) => ({
+        ...(await renderResult(input)),
+        bytes: Buffer.alloc(limits.maxOutputBytes + 1),
+      }));
+      expect((await f.request({ versionId: f.version.id, format })).statusCode).toBe(413);
+    },
+  );
+  it.each(["pdf", "offline_html"] as const)(
+    "checks image aggregate budgets for %s before downloading any bytes",
+    async (format) => {
+      const f = await fixture({ media: false }),
+        ids = Array.from({ length: 5 }, () => randomUUID());
+      for (const id of ids)
+        await f.repository.createMediaAsset({
+          id,
+          workspaceId: f.actor.workspaceId,
+          objectKey: `media/${f.actor.workspaceId}/${id}.png`,
+          mimeType: "image/png",
+          sizeBytes: limits.maxImageBytes,
+          scanStatus: "clean",
+          altText: "Public",
+          createdAt: new Date(),
+        });
+      const version = await publish(f, {
         ...f.content,
-        blocks: Array.from({ length: 101 }, (_, i) => slide(`Page ${i + 1}`)),
+        blocks: ids.map((id, i) => slide(`Image ${i}`, id)),
       });
-    const over = await f.request({ versionId: large.id, format: "html" });
-    expect(over.statusCode).toBe(413);
-    expect(over.json().error.code).toBe("EXPORT_LIMIT");
-    expect(f.render).not.toHaveBeenCalled();
-    expect(
-      (
-        await f.request({
-          versionId: large.id,
-          format: "png",
-          blockId: large.content.blocks[100]!.id,
-        })
-      ).statusCode,
-    ).toBe(200);
-    f.render.mockImplementationOnce(async (input) => ({
-      ...(await renderResult(input)),
-      bytes: Buffer.alloc(limits.maxOutputBytes + 1),
-    }));
-    expect((await f.request()).statusCode).toBe(413);
-  });
-  it("checks image aggregate budgets before downloading any bytes", async () => {
-    const f = await fixture({ media: false }),
-      ids = Array.from({ length: 5 }, () => randomUUID());
-    for (const id of ids)
-      await f.repository.createMediaAsset({
-        id,
-        workspaceId: f.actor.workspaceId,
-        objectKey: `media/${f.actor.workspaceId}/${id}.png`,
-        mimeType: "image/png",
-        sizeBytes: limits.maxImageBytes,
-        scanStatus: "clean",
-        altText: "Public",
-        createdAt: new Date(),
-      });
-    const version = await publish(f, {
-      ...f.content,
-      blocks: ids.map((id, i) => slide(`Image ${i}`, id)),
-    });
-    const response = await f.request({ versionId: version.id, format: "pdf" });
-    expect(response.statusCode).toBe(413);
-    expect(f.readImage).not.toHaveBeenCalled();
-    expect(f.render).not.toHaveBeenCalled();
-  });
+      const response = await f.request({ versionId: version.id, format });
+      expect(response.statusCode).toBe(413);
+      expect(f.readImage).not.toHaveBeenCalled();
+      expect(f.render).not.toHaveBeenCalled();
+    },
+  );
   it("returns a typed per-actor rate limit before starting export work", async () => {
     const f = await fixture();
     f.current.admitted = false;
@@ -359,38 +493,41 @@ describe("published Presentation static export API", () => {
     expect(f.render).not.toHaveBeenCalled();
     expect(f.readImage).not.toHaveBeenCalled();
   });
-  it("retains both render slots after deadline abort until the actual renderer settles", async () => {
-    const f = await fixture({ media: false, deadlineMs: 20 });
-    const release: Array<() => void> = [],
-      signals: AbortSignal[] = [];
-    f.render.mockImplementation(
-      (input) =>
-        new Promise((resolve) => {
-          signals.push(input.signal!);
-          release.push(() => {
-            void renderResult(input).then(resolve);
-          });
-        }),
-    );
-    const pending = [f.request(), f.request()];
-    try {
-      await vi.waitFor(() => expect(f.render).toHaveBeenCalledTimes(2));
-      await vi.waitFor(() => expect(signals.every((signal) => signal.aborted)).toBe(true));
-      const busy = await f.request();
-      expect(busy.statusCode, busy.body).toBe(503);
-      expect(busy.json().error.code).toBe("EXPORT_BUSY");
-      expect(busy.headers["retry-after"]).toBe("1");
-      expect(f.render).toHaveBeenCalledTimes(2);
-    } finally {
-      for (const done of release) done();
-    }
-    for (const response of await Promise.all(pending)) {
-      expect(response.statusCode, response.body).toBe(504);
-      expect(response.json().error.code).toBe("EXPORT_CANCELLED");
-    }
-    f.render.mockImplementation(renderResult);
-    expect((await f.request()).statusCode).toBe(200);
-  });
+  it.each(["pdf", "offline_html"] as const)(
+    "retains both %s render slots after deadline abort until the actual renderer settles",
+    async (format) => {
+      const f = await fixture({ media: false, deadlineMs: 20, format });
+      const release: Array<() => void> = [],
+        signals: AbortSignal[] = [];
+      f.render.mockImplementation(
+        (input) =>
+          new Promise((resolve) => {
+            signals.push(input.signal!);
+            release.push(() => {
+              void renderResult(input).then(resolve);
+            });
+          }),
+      );
+      const pending = [f.request(), f.request()];
+      try {
+        await vi.waitFor(() => expect(f.render).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(signals.every((signal) => signal.aborted)).toBe(true));
+        const busy = await f.request();
+        expect(busy.statusCode, busy.body).toBe(503);
+        expect(busy.json().error.code).toBe("EXPORT_BUSY");
+        expect(busy.headers["retry-after"]).toBe("1");
+        expect(f.render).toHaveBeenCalledTimes(2);
+      } finally {
+        for (const done of release) done();
+      }
+      for (const response of await Promise.all(pending)) {
+        expect(response.statusCode, response.body).toBe(504);
+        expect(response.json().error.code).toBe("EXPORT_CANCELLED");
+      }
+      f.render.mockImplementation(renderResult);
+      expect((await f.request()).statusCode).toBe(200);
+    },
+  );
   it("does not release admission while an aborted uncancellable media read remains outstanding", async () => {
     const f = await fixture(),
       release: Array<() => void> = [];

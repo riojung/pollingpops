@@ -343,217 +343,351 @@ describe("Presentation static renderer visual output", () => {
 });
 
 describe("Presentation static HTML readable companion", () => {
-  it("retains separate language annotations on plain and formatted text in the readable export", async () => {
+  it.each([
+    ["fr", "Choisir ensemble"],
+    ["ja", "一緒に決めましょう"],
+  ] as const)(
+    "annotates the generated English link notice separately from authored %s rich text",
+    async (lang, label) => {
+      const block = native([
+        {
+          id: "translated-link",
+          type: "text",
+          role: "body",
+          text: label,
+          lang,
+          richText: {
+            paragraphs: [
+              {
+                kind: "paragraph",
+                runs: [{ text: label, bold: true, href: "https://example.test/evidence" }],
+              },
+            ],
+          },
+          frame: { x: 5, y: 25, width: 90, height: 20 },
+        },
+      ]);
+      block.scene!.schemaVersion = 7;
+      const title = block.scene!.nodes.find(
+        (node) => node.type === "text" && node.role === "title",
+      );
+      if (title?.type !== "text") throw new Error("Expected a native title");
+      title.text = label;
+      title.lang = lang;
+      const result = await renderPresentationStaticCore({
+        review: review([block]),
+        images: new Map(),
+        format: "offline_html",
+      });
+      expect(result.bytes.toString()).toContain(`Page 1: <span lang="${lang}">${label}</span></a>`);
+      const html = result.bytes.toString("utf8");
+      expect(html).toContain(`<div lang="${lang}"><p><a href="https://example.test/evidence"`);
+      expect(html).toContain(
+        `<strong>${label}</strong><span class="external-notice" lang="en"> (leaves this file; may require internet access)</span></a>`,
+      );
+    },
+  );
+
+  it.each(["html", "offline_html"] as const)(
+    "retains separate language annotations on plain and formatted text in %s",
+    async (format) => {
+      const block = native([
+        {
+          id: "translated-body",
+          type: "text",
+          role: "body",
+          text: "Choisir ensemble",
+          lang: "fr",
+          frame: { x: 8, y: 25, width: 84, height: 20 },
+        },
+        {
+          id: "formatted-body",
+          type: "text",
+          role: "body",
+          text: "一緒に決めましょう",
+          lang: "ja",
+          richText: {
+            paragraphs: [{ kind: "paragraph", runs: [{ text: "一緒に決めましょう", bold: true }] }],
+          },
+          frame: { x: 8, y: 55, width: 84, height: 20 },
+        },
+      ]);
+      block.scene!.schemaVersion = 7;
+      const result = await renderPresentationStaticCore({
+        review: review([block]),
+        images: new Map(),
+        format,
+      });
+      const html = result.bytes.toString("utf8");
+      expect(html).toContain('<p lang="fr">Choisir ensemble</p>');
+      expect(html).toContain('<div lang="ja"><p><strong>一緒に決めましょう</strong></p></div>');
+      expect(html).toContain("<h3>Published visual</h3>");
+    },
+  );
+  it.each(["html", "offline_html"] as const)(
+    "preserves semantic order, tables, full panel text and safe links in %s without scripts or remote resources",
+    async (format) => {
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      const panelBody = `Full public detail <script>alert("unsafe")</script> & final detail.`;
+      const first: PresentationSceneNode = {
+        id: "first",
+        type: "text",
+        role: "body",
+        text: "READING_FIRST\nSafe bold\nSecond item",
+        richText: {
+          paragraphs: [
+            { kind: "paragraph", runs: [{ text: "READING_FIRST" }] },
+            {
+              kind: "bullet",
+              runs: [
+                { text: "Safe ", italic: true },
+                { text: "bold", bold: true, href: "https://example.test/evidence?a=1&b=2" },
+              ],
+            },
+            { kind: "bullet", runs: [{ text: "Second item" }] },
+          ],
+        },
+        frame: { x: 5, y: 16, width: 40, height: 12 },
+      };
+      const nodes: PresentationSceneNode[] = [
+        {
+          id: "last",
+          type: "text",
+          role: "body",
+          text: "READING_LAST",
+          frame: { x: 5, y: 80, width: 40, height: 10 },
+        },
+        first,
+        imageNode(),
+        {
+          id: "table",
+          type: "table",
+          caption: "Decision <table>",
+          headers: ["Option", "Count"],
+          rows: [
+            ["A & B", "7"],
+            ["C", "2"],
+          ],
+          frame: { x: 5, y: 40, width: 40, height: 25 },
+        },
+        {
+          id: "reveal",
+          type: "reveal",
+          scope: "broadcast",
+          label: "Public reveal",
+          body: panelBody,
+          frame: { x: 55, y: 16, width: 40, height: 10 },
+        },
+        {
+          id: "detail",
+          type: "dialog",
+          scope: "local",
+          label: "Local details",
+          detailTitle: "All detail text",
+          body: "DIALOG_END " + "Readable detail. ".repeat(100),
+          frame: { x: 55, y: 75, width: 40, height: 10 },
+        },
+        {
+          id: "hotspot",
+          type: "hotspot",
+          scope: "local",
+          imageNodeId: "image",
+          label: "Image detail",
+          detailTitle: "Workflow detail",
+          body: "HOTSPOT_COMPLETE",
+          frame: { x: 35, y: 35, width: 5, height: 5 },
+        },
+        {
+          id: "link",
+          type: "link",
+          label: "Source & evidence",
+          href: "https://example.test/source?a=1&b=2",
+          frame: { x: 55, y: 88, width: 40, height: 8 },
+        },
+        {
+          id: "navigation",
+          type: "navigation",
+          label: "Read next",
+          targetBlockId: id(2),
+          frame: { x: 5, y: 90, width: 40, height: 8 },
+        },
+        {
+          id: "start",
+          type: "shape",
+          shape: "diamond",
+          color: "green",
+          label: "Decision start",
+          frame: { x: 60, y: 40, width: 10, height: 12 },
+        },
+        {
+          id: "finish",
+          type: "shape",
+          shape: "ellipse",
+          color: "blue",
+          label: "Decision finish",
+          frame: { x: 80, y: 40, width: 10, height: 12 },
+        },
+        {
+          id: "route",
+          type: "connector",
+          from: { nodeId: "start", anchor: "right" },
+          to: { nodeId: "finish", anchor: "left" },
+          label: "Approves",
+          color: "blue",
+        },
+      ];
+      const nativeBlock = native(nodes, {
+        readingOrder: [
+          "title",
+          "first",
+          "table",
+          "image",
+          "reveal",
+          "detail",
+          "hotspot",
+          "link",
+          "navigation",
+          "start",
+          "route",
+          "finish",
+          "last",
+        ],
+      });
+      const legacy: Content = {
+        id: id(2),
+        kind: "content",
+        layout: "title_body",
+        mediaId: null,
+        mediaAlt: null,
+        textElements: [
+          { id: "late", role: "body", text: "LEGACY_LAST", region: "middle_left", order: 2 },
+          { id: "heading", role: "title", text: "Legacy heading", region: "top_center", order: 0 },
+          { id: "early", role: "body", text: "LEGACY_FIRST", region: "middle_right", order: 1 },
+        ],
+      };
+      const value = review([nativeBlock, legacy]);
+      value.title = 'Deck <script> & "quoted"';
+      value.sections = [
+        { id: id(5), title: "Public section", blockIds: [nativeBlock.id, legacy.id] },
+      ];
+      const result = await renderPresentationStaticCore({
+        review: value,
+        images: images(),
+        format,
+      });
+      const html = result.bytes.toString("utf8");
+      expect(result.contentType).toBe(format === "html" ? "text/html; charset=utf-8" : "text/html");
+      expect(html).toContain("Deck &lt;script&gt; &amp; &quot;quoted&quot;");
+      expect(html.indexOf("READING_FIRST")).toBeLessThan(html.indexOf("READING_LAST"));
+      expect(html.indexOf("LEGACY_FIRST")).toBeLessThan(html.indexOf("LEGACY_LAST"));
+      expect(html).toContain("<ul><li><em>Safe </em>");
+      expect(html).toContain("<strong>bold</strong>");
+      expect(html).toContain("<caption>Decision &lt;table&gt;</caption>");
+      expect(html).toContain("<tr><td>A &amp; B</td><td>7</td></tr>");
+      expect(html).toContain(
+        format === "html" ? "<h3>Public reveal</h3>" : "<summary>Public reveal</summary>",
+      );
+      expect(html).toContain(
+        "&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt; &amp; final detail.",
+      );
+      expect(html).toContain("Readable detail. ".repeat(100));
+      expect(html).toContain("HOTSPOT_COMPLETE");
+      expect(html).toContain("Approves: Decision start → Decision finish");
+      expect(html).toContain(`href="#page-${legacy.id}"`);
+      expect(html).toContain(
+        format === "html"
+          ? `href="#page-${nativeBlock.id}">Public section`
+          : 'href="#section-1">Public section',
+      );
+      expect(html).toContain('alt="Red, green and blue workflow bands"');
+      expect(html).toContain('href="https://example.test/source?a=1&amp;b=2"');
+      expect(html).toContain("default-src 'none'; img-src data:");
+      expect(html).not.toMatch(
+        /<(?:script|form|input|button|iframe|object|embed|link|video|audio)\b|\son(?:load|error)=|\bsrc=["']https?:/i,
+      );
+      const imageSources = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((match) => match[1]);
+      expect(imageSources).toHaveLength(3);
+      expect(imageSources.every((src) => src!.startsWith("data:image/png;base64,"))).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
+      if (format === "offline_html") {
+        expect(html.match(/<details>/g)).toHaveLength(3);
+        expect(html).not.toMatch(/<details[^>]+\bopen\b/i);
+        expect(html).toContain(
+          "Published broadcast reveal content is a local disclosure in this file",
+        );
+        expect(html).toContain("revoking access cannot revoke downloaded copies");
+        expect(html).toContain(
+          "no responses, submissions, answer keys, scoring, live results or completion tracking",
+        );
+        expect(html).toContain("Next page</a>");
+        expect(html).toContain("Previous page</a>");
+        expect(html).toContain('id="presentation-index"');
+        expect(html.match(/leaves this file; may require internet access/g)).toHaveLength(2);
+        expect(html.match(/class="external-notice" lang="en"/g)).toHaveLength(2);
+        for (const directive of [
+          "script-src",
+          "connect-src",
+          "frame-src",
+          "object-src",
+          "base-uri",
+          "form-action",
+        ])
+          expect(html).toContain(`${directive} 'none'`);
+        const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const match of html.matchAll(/href="#([^"]+)"/g)) expect(ids).toContain(match[1]);
+        expect(html).not.toMatch(/url\s*\(|@import|\b(?:srcset|action|ping|poster)=/i);
+      } else expect(html).not.toContain("<details");
+    },
+  );
+
+  it("renders unavailable local navigation and empty external links as readable labels without inventing destinations", async () => {
     const block = native([
       {
-        id: "translated-body",
-        type: "text",
-        role: "body",
-        text: "Choisir ensemble",
-        lang: "fr",
-        frame: { x: 8, y: 25, width: 84, height: 20 },
+        id: "unavailable-navigation",
+        type: "navigation",
+        label: "Unavailable page",
+        targetBlockId: id(90),
+        frame: { x: 5, y: 30, width: 40, height: 10 },
       },
       {
-        id: "formatted-body",
-        type: "text",
-        role: "body",
-        text: "一緒に決めましょう",
-        lang: "ja",
-        richText: {
-          paragraphs: [{ kind: "paragraph", runs: [{ text: "一緒に決めましょう", bold: true }] }],
-        },
-        frame: { x: 8, y: 55, width: 84, height: 20 },
+        id: "empty-link",
+        type: "link",
+        label: "Source not provided",
+        href: "",
+        frame: { x: 5, y: 50, width: 40, height: 10 },
+      },
+      {
+        id: "early-dialog",
+        type: "dialog",
+        scope: "local",
+        label: "Read a detail",
+        detailTitle: "Detail before the page title",
+        body: "Public body",
+        frame: { x: 5, y: 70, width: 40, height: 10 },
       },
     ]);
-    block.scene!.schemaVersion = 7;
+    block.scene!.readingOrder = [
+      ...block.scene!.readingOrder.filter((id) => id !== "title"),
+      "title",
+    ];
     const result = await renderPresentationStaticCore({
       review: review([block]),
       images: new Map(),
-      format: "html",
+      format: "offline_html",
     });
     const html = result.bytes.toString("utf8");
-    expect(html).toContain('<p lang="fr">Choisir ensemble</p>');
-    expect(html).toContain('<div lang="ja"><p><strong>一緒に決めましょう</strong></p></div>');
-    expect(html).toContain("<h3>Published visual</h3>");
-  });
-  it("preserves semantic order, tables, full panel text and safe links without scripts or remote resources", async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
-    const panelBody = `Full public detail <script>alert("unsafe")</script> & final detail.`;
-    const first: PresentationSceneNode = {
-      id: "first",
-      type: "text",
-      role: "body",
-      text: "READING_FIRST\nSafe bold\nSecond item",
-      richText: {
-        paragraphs: [
-          { kind: "paragraph", runs: [{ text: "READING_FIRST" }] },
-          {
-            kind: "bullet",
-            runs: [
-              { text: "Safe ", italic: true },
-              { text: "bold", bold: true, href: "https://example.test/evidence?a=1&b=2" },
-            ],
-          },
-          { kind: "bullet", runs: [{ text: "Second item" }] },
-        ],
-      },
-      frame: { x: 5, y: 16, width: 40, height: 12 },
-    };
-    const nodes: PresentationSceneNode[] = [
-      {
-        id: "last",
-        type: "text",
-        role: "body",
-        text: "READING_LAST",
-        frame: { x: 5, y: 80, width: 40, height: 10 },
-      },
-      first,
-      imageNode(),
-      {
-        id: "table",
-        type: "table",
-        caption: "Decision <table>",
-        headers: ["Option", "Count"],
-        rows: [
-          ["A & B", "7"],
-          ["C", "2"],
-        ],
-        frame: { x: 5, y: 40, width: 40, height: 25 },
-      },
-      {
-        id: "reveal",
-        type: "reveal",
-        scope: "broadcast",
-        label: "Public reveal",
-        body: panelBody,
-        frame: { x: 55, y: 16, width: 40, height: 10 },
-      },
-      {
-        id: "detail",
-        type: "dialog",
-        scope: "local",
-        label: "Local details",
-        detailTitle: "All detail text",
-        body: "DIALOG_END " + "Readable detail. ".repeat(100),
-        frame: { x: 55, y: 75, width: 40, height: 10 },
-      },
-      {
-        id: "hotspot",
-        type: "hotspot",
-        scope: "local",
-        imageNodeId: "image",
-        label: "Image detail",
-        detailTitle: "Workflow detail",
-        body: "HOTSPOT_COMPLETE",
-        frame: { x: 35, y: 35, width: 5, height: 5 },
-      },
-      {
-        id: "link",
-        type: "link",
-        label: "Source & evidence",
-        href: "https://example.test/source?a=1&b=2",
-        frame: { x: 55, y: 88, width: 40, height: 8 },
-      },
-      {
-        id: "navigation",
-        type: "navigation",
-        label: "Read next",
-        targetBlockId: id(2),
-        frame: { x: 5, y: 90, width: 40, height: 8 },
-      },
-      {
-        id: "start",
-        type: "shape",
-        shape: "diamond",
-        color: "green",
-        label: "Decision start",
-        frame: { x: 60, y: 40, width: 10, height: 12 },
-      },
-      {
-        id: "finish",
-        type: "shape",
-        shape: "ellipse",
-        color: "blue",
-        label: "Decision finish",
-        frame: { x: 80, y: 40, width: 10, height: 12 },
-      },
-      {
-        id: "route",
-        type: "connector",
-        from: { nodeId: "start", anchor: "right" },
-        to: { nodeId: "finish", anchor: "left" },
-        label: "Approves",
-        color: "blue",
-      },
-    ];
-    const nativeBlock = native(nodes, {
-      readingOrder: [
-        "title",
-        "first",
-        "table",
-        "image",
-        "reveal",
-        "detail",
-        "hotspot",
-        "link",
-        "navigation",
-        "start",
-        "route",
-        "finish",
-        "last",
-      ],
-    });
-    const legacy: Content = {
-      id: id(2),
-      kind: "content",
-      layout: "title_body",
-      mediaId: null,
-      mediaAlt: null,
-      textElements: [
-        { id: "late", role: "body", text: "LEGACY_LAST", region: "middle_left", order: 2 },
-        { id: "heading", role: "title", text: "Legacy heading", region: "top_center", order: 0 },
-        { id: "early", role: "body", text: "LEGACY_FIRST", region: "middle_right", order: 1 },
-      ],
-    };
-    const value = review([nativeBlock, legacy]);
-    value.title = 'Deck <script> & "quoted"';
-    value.sections = [
-      { id: id(5), title: "Public section", blockIds: [nativeBlock.id, legacy.id] },
-    ];
-    const result = await renderPresentationStaticCore({
-      review: value,
-      images: images(),
-      format: "html",
-    });
-    const html = result.bytes.toString("utf8");
-    expect(result.contentType).toBe("text/html; charset=utf-8");
-    expect(html).toContain("Deck &lt;script&gt; &amp; &quot;quoted&quot;");
-    expect(html.indexOf("READING_FIRST")).toBeLessThan(html.indexOf("READING_LAST"));
-    expect(html.indexOf("LEGACY_FIRST")).toBeLessThan(html.indexOf("LEGACY_LAST"));
-    expect(html).toContain("<ul><li><em>Safe </em>");
-    expect(html).toContain("<strong>bold</strong>");
-    expect(html).toContain("<caption>Decision &lt;table&gt;</caption>");
-    expect(html).toContain("<tr><td>A &amp; B</td><td>7</td></tr>");
-    expect(html).toContain("<h3>Public reveal</h3>");
-    expect(html).toContain(
-      "&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt; &amp; final detail.",
+    expect(html).toContain("Unavailable page (target unavailable in this file)");
+    expect(html).toContain("<p>Source not provided</p>");
+    expect(html).not.toContain(`href="#page-${id(90)}"`);
+    expect(html).not.toContain('href=""');
+    expect(html).toContain("<h3>Detail before the page title</h3>");
+    expect(html.indexOf("<h3>Detail before the page title</h3>")).toBeLessThan(
+      html.indexOf("<h3>Published visual</h3>"),
     );
-    expect(html).toContain("Readable detail. ".repeat(100));
-    expect(html).toContain("HOTSPOT_COMPLETE");
-    expect(html).toContain("Approves: Decision start → Decision finish");
-    expect(html).toContain(`href="#page-${legacy.id}"`);
-    expect(html).toContain(`href="#page-${nativeBlock.id}">Public section`);
-    expect(html).toContain('alt="Red, green and blue workflow bands"');
-    expect(html).toContain('href="https://example.test/source?a=1&amp;b=2"');
-    expect(html).toContain("default-src 'none'; img-src data:");
-    expect(html).not.toMatch(
-      /<(?:script|iframe|object|link)\b|\son(?:load|error)=|\bsrc=["']https?:/i,
-    );
-    const imageSources = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((match) => match[1]);
-    expect(imageSources).toHaveLength(3);
-    expect(imageSources.every((src) => src!.startsWith("data:image/png;base64,"))).toBe(true);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(html).not.toContain("<h4>");
+    expect(html).not.toMatch(/versionId|expiresAt|2099-01-01|schemaVersion/);
   });
 
   it("renders CJK and emoji text with the bundled glyph coverage and retains its exact readable text", async () => {
@@ -573,7 +707,7 @@ describe("Presentation static HTML readable companion", () => {
     expect(countColor(ctx, "#ffffff", [25, 14, 600, 70])).toBeLessThan(600 * 70 - 100);
   });
 
-  it.each(["png", "html"] as const)(
+  it.each(["png", "html", "offline_html"] as const)(
     "fails clearly for an unsupported visible glyph in %s",
     async (format) => {
       const block = native([]),

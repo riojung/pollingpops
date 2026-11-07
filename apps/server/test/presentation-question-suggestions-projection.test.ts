@@ -199,8 +199,8 @@ describe("reviewed AI question suggestion projection privacy", () => {
 
         const render = vi.fn<PresentationStaticRenderer>(async (input) => ({
           bytes: Buffer.from("SYNTHETIC_STATIC_RESULT"),
-          contentType: contentTypes[input.format],
-          extension: input.format,
+          contentType: contentTypes[input.format === "offline_html" ? "html" : input.format],
+          extension: input.format === "offline_html" ? "html" : input.format,
         }));
         const readImage = vi.fn();
         const exports = new PresentationStaticExportService({
@@ -210,7 +210,7 @@ describe("reviewed AI question suggestion projection privacy", () => {
           featureEnabled: async () => true,
           render,
         });
-        for (const format of ["pdf", "png", "html"] as const) {
+        for (const format of ["pdf", "png", "html", "offline_html"] as const) {
           await exports.export(
             f.actor,
             f.presentation.id,

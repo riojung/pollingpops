@@ -92,6 +92,11 @@ function elements(tree: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (!isValidElement<Record<string, unknown>>(tree)) return [];
   return [tree, ...elements(tree.props.children as ReactNode)];
 }
+function textContent(tree: ReactNode): string {
+  if (Array.isArray(tree)) return tree.map(textContent).join("");
+  if (isValidElement<{ children?: ReactNode }>(tree)) return textContent(tree.props.children);
+  return typeof tree === "string" || typeof tree === "number" ? String(tree) : "";
+}
 function sourceBlock(): ContentSlideDraft {
   const block = createNativeContentBlock();
   const title = block.scene!.nodes[0]!;
@@ -419,8 +424,9 @@ describe("reviewed local question starters", () => {
   it("shows full poll choices and rating bounds as unscored opinions without correctness controls", () => {
     const starters = createPresentationQuestionStarters(sourceBlock());
     const poll = starters.find((starter) => starter.id === "priority")!;
-    const pollMarkup = renderToStaticMarkup(<QuestionStarterPreview starter={poll} />);
-    expect(pollMarkup.replace(/<[^>]*>/g, "")).toContain(poll.prompt);
+    const pollPreview = QuestionStarterPreview({ starter: poll });
+    const pollMarkup = renderToStaticMarkup(pollPreview);
+    expect(textContent(pollPreview)).toContain(poll.prompt);
     for (const choice of poll.choices!) expect(pollMarkup).toContain(choice);
     expect(pollMarkup).toContain("0 points");
     expect(pollMarkup).toContain("no correct answer");

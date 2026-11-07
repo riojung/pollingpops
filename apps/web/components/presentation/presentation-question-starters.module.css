@@ -1,0 +1,196 @@
+.entry {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 10px;
+}
+.entry button,
+.dialog button {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--ui-border-strong, #8294a5);
+  border-radius: 8px;
+  color: var(--ui-text, #303640);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.entry button:disabled,
+.dialog button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.entry button:focus-visible,
+.dialog :is(button, input, [tabindex]):focus-visible {
+  outline: 3px solid var(--ui-focus, #146552);
+  outline-offset: 3px;
+}
+.help {
+  color: var(--ui-text-muted, #616b78);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.dialog {
+  --question-review-padding: clamp(14px, 3vw, 26px);
+  box-sizing: border-box;
+  width: min(860px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: var(--question-review-padding);
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 14px;
+  color: var(--ui-text, #303640);
+  background: var(--ui-surface-raised, #fff);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+}
+.dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+.dialog .heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dialog .heading h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(20px, 3vw, 26px);
+}
+.dialog .heading > button {
+  flex: 0 0 auto;
+  min-width: 70px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.dialog .choices {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 18px 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 8px;
+}
+.dialog .choices legend {
+  margin: 0;
+  padding-inline: 4px;
+  font-weight: 700;
+}
+.dialog .choices label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.dialog .choices input {
+  box-sizing: border-box;
+  appearance: auto;
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 20px;
+  max-width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: initial;
+  border-radius: initial;
+  background: initial;
+}
+.dialog .choices label > span {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+.preview,
+.source {
+  min-width: 0;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 9px;
+  line-height: 1.5;
+}
+.preview h3,
+.source h3 {
+  margin: 0 0 12px;
+}
+.kind,
+.settings {
+  color: var(--ui-text-muted, #616b78);
+}
+.prompt {
+  white-space: pre-wrap;
+  font-size: 20px;
+  font-weight: 600;
+}
+.options {
+  display: grid;
+  gap: 10px;
+  padding-inline-start: 24px;
+  white-space: pre-wrap;
+}
+.rating {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.rating dt {
+  font-weight: 600;
+}
+.rating dd {
+  margin: 4px 0 0;
+}
+.source article {
+  min-width: 0;
+  margin-top: 16px;
+}
+.source h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.sourceText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.error {
+  padding: 12px;
+  border: 1px solid var(--ui-danger-border, #fecaca);
+  border-radius: 8px;
+  color: var(--ui-danger-text, #991b1b);
+}
+.dialog .actions {
+  position: sticky;
+  bottom: calc(-1 * var(--question-review-padding));
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  margin-inline: calc(-1 * var(--question-review-padding));
+  margin-bottom: calc(-1 * var(--question-review-padding));
+  padding: 12px var(--question-review-padding) var(--question-review-padding);
+  background: var(--ui-surface-raised, #fff);
+}
+@media (max-width: 700px) {
+  .dialog {
+    width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+  .rating {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

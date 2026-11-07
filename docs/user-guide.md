@@ -610,6 +610,28 @@ the same action. Per-tab recovery keeps identities and review choices without st
 outline. When another editor changes the saved deck, use **Reload saved deck**, check the
 insertion point and confirm the proposal review again. Private proposals expire after 24 hours.
 
+### Create a question starter from a slide
+
+On a visible native slide, choose **Question starters**. Review a **Discussion** prompt, a
+**Clarity rating** or an eligible **Priority poll**, then choose **Insert reviewed question**.
+**Cancel** leaves the deck unchanged. These are optional local English templates quoting your
+slide text; no AI service or allowance is used. They do not analyze images, tables/charts or
+closed interaction details, and do not invent facts or correct answers.
+
+Priority polls use every complete authored body point when there are 2–6 distinct points of up
+to 180 characters each. Longer, duplicate or unsuitable lists keep discussion/clarity starters
+available; points are never silently cut or selected. The review shows the complete question,
+options/settings and private source context. All starters are opinions with zero points,
+confidence off and no correct answer.
+
+Insertion creates one independently undoable, editable question immediately after the source,
+in the same section. The question prompt receives focus for editing. The source stays intact;
+later source changes do not rewrite an inserted question. Source attribution is private creator
+context and does not independently verify the slide. Wait for **Saved** before leaving, and
+publish separately when ready. Use the existing **Add question** control for other formats or
+when a source is hidden, classic or incomplete. Starters currently support up to eight body text
+objects with at most 4,000 total body characters.
+
 ### Translate selected native text
 
 Select one plain native title/body object and choose **Translate text**. Pick a **Target

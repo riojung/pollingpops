@@ -549,6 +549,8 @@ export class MemoryPresentationRepository
         input.textAssistanceBlockId ?? "",
         input.textAssistanceNodeId ?? "",
         normalizePresentationRecord(presentation).draft,
+        input.textAssistanceTargetLanguage,
+        input.textAssistanceSourceLanguage,
       );
     }
     if (presentation.draftRevision !== input.expectedRevision) {
@@ -1148,7 +1150,7 @@ export class PostgresPresentationRepository implements PresentationRepository {
         )
           throw new PresentationTextAssistanceError("CONFLICT");
         const ready = await client.query(
-          "SELECT role FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 AND status='ready' AND proposal_hash=$4 AND source_digest=$5 AND block_id=$6 AND node_id=$7 AND expires_at>clock_timestamp() FOR SHARE",
+          "SELECT role,operation,target_language,source_language FROM presentation_text_assistance_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 AND status='ready' AND proposal_hash=$4 AND source_digest=$5 AND block_id=$6 AND node_id=$7 AND expires_at>clock_timestamp() FOR SHARE",
           [
             input.workspaceId,
             input.presentationId,
@@ -1159,7 +1161,15 @@ export class PostgresPresentationRepository implements PresentationRepository {
             input.textAssistanceNodeId ?? "",
           ],
         );
-        if (!assistanceActorsReady || ready.rowCount !== 1)
+        if (
+          !assistanceActorsReady ||
+          ready.rowCount !== 1 ||
+          (ready.rows[0].operation === "translate"
+            ? ready.rows[0].target_language !== input.textAssistanceTargetLanguage ||
+              ready.rows[0].source_language !== input.textAssistanceSourceLanguage
+            : input.textAssistanceTargetLanguage !== undefined ||
+              input.textAssistanceSourceLanguage !== undefined)
+        )
           throw new PresentationTextAssistanceError(
             "CONFLICT",
             "This reviewed text proposal is no longer available to apply",
@@ -1171,6 +1181,8 @@ export class PostgresPresentationRepository implements PresentationRepository {
           input.textAssistanceNodeId ?? "",
           input.textAssistanceSourceDigest ?? "",
           ready.rows[0].role,
+          undefined,
+          ready.rows[0].operation === "translate" ? ready.rows[0].source_language : undefined,
         );
       }
       if (input.visualImportId) {

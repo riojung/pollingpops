@@ -8,6 +8,28 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation E12 reviewed translation November 6, 2026
+
+The source on `codex/presentation-e12-translation` adds **Translate text** for one selected plain
+native title/body object. Creators explicitly choose one of 12 canonical target languages,
+request a proposal, inspect complete original/translated wording and confirm **Apply reviewed
+translation**. Generation never edits or publishes the deck. The existing provider, monthly
+allowance and combined active-job limit are reused.
+
+Scene7 stores an optional language on each text object; document16 permits these annotations and
+private translation provenance. A manual **Text language** control permits correction/clearing.
+Source/target language identity joins the existing exact request, review, Apply and recovery
+fences. Translation changes only the selected wording/annotation and latest-edit record, with
+required version floors; old rewrite/shorten payloads and hashes retain their bytes. Migration103
+adds guarded language columns and matching readers without altering migrations001–102.
+
+The full repository check, 48 selected real PostgreSQL cases and 32 production-browser workflows
+across four desktop/mobile profiles pass. See the
+[translation record](evidence/presentation-e12-translation.md). This increment remains undeployed.
+Rich-text/whole-deck translation, RTL, question suggestions and other E12 scopes remain planned.
+The reviewed layout increment remains separately proposed in
+[PR #207](https://github.com/riojung/pollingpops/pull/207).
+
 ### Presentation E12 selected-text assistance November 6, 2026
 
 The source on `codex/presentation-e12-text-assistance` adds optional **Rewrite text** and

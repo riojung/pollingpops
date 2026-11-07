@@ -848,14 +848,18 @@ function semanticBlock(
     .map((id) => {
       const node = nodes.get(id)!;
       switch (node.type) {
-        case "text":
+        case "text": {
+          const language = node.lang ? ` lang="${escape(node.lang)}"` : "";
           return node.richText
             ? node.role === "title"
-              ? `<h3>${node.richText.paragraphs.map((item) => richRunsHtml(item.runs)).join("<br>")}</h3>`
-              : richHtml(node.richText.paragraphs)
+              ? `<h3${language}>${node.richText.paragraphs.map((item) => richRunsHtml(item.runs)).join("<br>")}</h3>`
+              : language
+                ? `<div${language}>${richHtml(node.richText.paragraphs)}</div>`
+                : richHtml(node.richText.paragraphs)
             : node.role === "title"
-              ? `<h3>${escape(node.text)}</h3>`
-              : `<p>${escape(node.text)}</p>`;
+              ? `<h3${language}>${escape(node.text)}</h3>`
+              : `<p${language}>${escape(node.text)}</p>`;
+        }
         case "image":
           return image(node.mediaId, node.altText);
         case "shape":

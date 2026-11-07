@@ -6,7 +6,7 @@ import {
 } from "@openround/contracts";
 import type { PresentationShareRecord, PresentationVersionRecord } from "@openround/db";
 const nodeFields: Record<PresentationSceneNode["type"], readonly string[]> = {
-  text: ["role", "text", "richText"],
+  text: ["role", "text", "richText", "lang"],
   image: ["mediaId", "altText", "fit", "focalPoint"],
   shape: ["shape", "color", "label"],
   connector: ["from", "to", "label", "color"],

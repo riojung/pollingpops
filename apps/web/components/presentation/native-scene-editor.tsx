@@ -5,6 +5,8 @@ import {
   CanvasColorSchema,
   CanvasShapeVariantSchema,
   PRESENTATION_SCENE_MAX_NODES,
+  PRESENTATION_TEXT_LANGUAGES,
+  PresentationTextLanguageSchema,
   PresentationSceneDraftSchema,
   plainTextToPresentationRichText,
   presentationRichTextToPlainText,
@@ -13,6 +15,7 @@ import {
   type PresentationSceneNode,
 } from "@openround/contracts";
 import { clientUuid } from "../../lib/uuid";
+import { setNativeTextLanguage } from "../../lib/presentation-native-text-language";
 import {
   boundNativeSceneFrame,
   createNativeLinkNode,
@@ -81,7 +84,7 @@ export function NativeSceneEditor({
   onRedo?: () => void;
   onApplyDesignToDeck?: (design: PresentationSceneDesign) => void;
   navigationTargets?: readonly { id: string; title: string }[];
-  onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten") => void;
+  onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten" | "translate") => void;
   textAssistanceDisabled?: boolean;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
@@ -171,7 +174,7 @@ export function NativeSceneEditor({
     });
     if (added) setSelection([node.id]);
   }
-  function requestTextAssistance(operation: "rewrite" | "shorten") {
+  function requestTextAssistance(operation: "rewrite" | "shorten" | "translate") {
     if (
       textAssistanceDisabled ||
       multiple ||
@@ -499,11 +502,23 @@ export function NativeSceneEditor({
                 >
                   Shorten text
                 </button>
+                <button
+                  type="button"
+                  disabled={
+                    textAssistanceDisabled ||
+                    multiple ||
+                    Boolean(selected.richText) ||
+                    !selected.text.trim()
+                  }
+                  onClick={() => requestTextAssistance("translate")}
+                >
+                  Translate text
+                </button>
               </div>
               {selected.richText ? (
                 <p>
                   Text assistance supports plain text only. Formatted text cannot be rewritten or
-                  shortened.
+                  shortened. Translation also requires plain text.
                 </p>
               ) : multiple ? (
                 <p>Select one plain text object to use text assistance.</p>
@@ -511,6 +526,43 @@ export function NativeSceneEditor({
                 <p>Enter some text before using text assistance.</p>
               ) : null}
             </>
+          ) : null}
+          {selected.type === "text" ? (
+            <label>
+              Text language
+              <select
+                aria-label="Text language"
+                value={selected.lang ?? ""}
+                disabled={multiple}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const parsed = PresentationTextLanguageSchema.safeParse(value);
+                  if (value && !parsed.success) return;
+                  try {
+                    onChange(
+                      setNativeTextLanguage(
+                        scene,
+                        selected.id,
+                        parsed.success ? parsed.data : null,
+                      ),
+                    );
+                  } catch {
+                    setChangeFailure({
+                      scene,
+                      message:
+                        "The language change cannot fit within the slide’s limits. Reduce content and try again; the current slide is retained.",
+                    });
+                  }
+                }}
+              >
+                <option value="">Unspecified</option>
+                {PRESENTATION_TEXT_LANGUAGES.map(({ code, label }) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
           ) : null}
           {selected.type === "text" && selected.richText ? (
             <NativeRichTextEditor
@@ -533,6 +585,7 @@ export function NativeSceneEditor({
                 <textarea
                   data-native-text-input="true"
                   aria-label={selected.role === "title" ? "Native slide title" : "Node text"}
+                  lang={selected.lang}
                   maxLength={selected.role === "title" ? 160 : 4000}
                   value={selected.text}
                   onChange={(event) =>

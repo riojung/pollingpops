@@ -184,7 +184,7 @@ describe("CI efficiency without coverage bypasses", () => {
     }
     const betaRun = beta.steps.find((step) => step.name === "Run isolated UX beta browser project");
     expect(betaRun?.run).toBe(
-      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --reporter=github,line,html',
+      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --grep-invert=\'presentation-translation\\.spec\\.ts\' --reporter=github,line,html',
     );
     expect(betaRun?.if).toBeUndefined();
     expect(betaRun?.env).toEqual({
@@ -195,6 +195,20 @@ describe("CI efficiency without coverage bypasses", () => {
       BETA_E2E_SESSION_SUMMARIES: "true",
       BETA_E2E_IDEA_BOARDS: "true",
     });
+    const translationRun = beta.steps.find(
+      (step) => step.name === "Run translation browser journeys with a fresh API",
+    );
+    expect(translationRun?.run).toBe(
+      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/presentation-translation-diagnostics/resources.jsonl" -- pnpm test:e2e:beta tests/beta-e2e/presentation-translation.spec.ts --project="${{ matrix.project }}" --output=test-results-translation --reporter=github,line,html',
+    );
+    expect(translationRun?.if).toBeUndefined();
+    expect(translationRun?.env).toEqual({
+      ...betaRun?.env,
+      PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-translation",
+    });
+    expect(beta.steps.indexOf(translationRun!)).toBeGreaterThan(beta.steps.indexOf(betaRun!));
+    const webServers = Array.isArray(config.webServer) ? config.webServer : [config.webServer];
+    expect(webServers[0]?.reuseExistingServer).toBe(false);
     const coreArtifacts = core.steps.find((step) =>
       step.uses?.startsWith("actions/upload-artifact@"),
     );
@@ -207,7 +221,7 @@ describe("CI efficiency without coverage bypasses", () => {
       "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
     );
     expect(betaArtifacts?.with?.path).toBe(
-      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n",
+      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-translation/\nplaywright-report-translation/\n${{ runner.temp }}/presentation-translation-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n",
     );
     for (const artifacts of [coreArtifacts, betaArtifacts]) {
       // A passing retry must not discard the first attempt's failure evidence.

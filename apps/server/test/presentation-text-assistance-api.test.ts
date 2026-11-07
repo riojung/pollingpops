@@ -146,6 +146,9 @@ async function fixture(
         reviewed: true,
         expectedRevision: 1,
         mutationId: randomUUID(),
+        ...(job.operation === "translate"
+          ? { targetLanguage: job.targetLanguage, sourceLanguage: job.sourceLanguage }
+          : {}),
         ...overrides,
       },
     });
@@ -187,6 +190,138 @@ async function ready(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("Reviewed native text assistance API", () => {
+  it("translates only the selected text and requested target, preserves evidence, and recovers accepted language edits after expiry", async () => {
+    const translated = "Convenez d’un objectif commun.";
+    const generate = vi.fn().mockResolvedValue({ text: translated }),
+      f = await fixture(generate);
+    const request = {
+      ...f.request,
+      operation: "translate",
+      targetLanguage: "fr",
+      sourceLanguage: null,
+    };
+    expect((await f.post(request)).statusCode).toBe(202);
+    expect(await f.presentationTextAssistanceWorker.runOnce()).toBe("completed");
+    expect(generate).toHaveBeenCalledExactlyOnceWith({
+      text: originalText,
+      role: "title",
+      operation: "translate",
+      targetLanguage: "fr",
+    });
+    expect(JSON.stringify(generate.mock.calls)).not.toContain("sourceLanguage");
+    const job = PresentationTextAssistanceJobSchema.parse((await f.get()).json().job);
+    expect(job.proposal).toMatchObject({
+      originalText,
+      text: translated,
+      targetLanguage: "fr",
+      sourceLanguage: null,
+    });
+    expect((await f.apply(job, { targetLanguage: "de" })).statusCode).toBe(409);
+    expect((await f.apply(job, { sourceLanguage: undefined })).statusCode).toBe(400);
+    const mutationId = randomUUID();
+    const response = await f.apply(job, { mutationId });
+    expect(response.statusCode, response.body).toBe(200);
+    const result = response.json();
+    expect(result).toMatchObject({
+      targetLanguage: "fr",
+      sourceLanguage: null,
+      presentation: {
+        draft: {
+          schemaVersion: 16,
+          blocks: [
+            {
+              scene: { schemaVersion: 7 },
+              textAssistance: {
+                operation: "translate",
+                targetLanguage: "fr",
+                sourceLanguage: null,
+              },
+            },
+          ],
+        },
+      },
+    });
+    const block = result.presentation.draft.blocks[0];
+    expect(block.scene.nodes.find((node: { id: string }) => node.id === nodeId)).toMatchObject({
+      text: translated,
+      lang: "fr",
+    });
+    expect(block.citations).toEqual(f.block.citations);
+    expect(block.sourceDisclosure).toEqual(f.block.sourceDisclosure);
+    await f.edit((draft) => {
+      const block = draft.blocks[0]!;
+      if (block.kind === "content" && block.scene) {
+        const node = block.scene.nodes.find((node) => node.id === nodeId)!;
+        if (node.type === "text") node.lang = "de";
+      }
+    });
+    await f.presentationTextAssistance.jobs.purgeExpired(new Date(Date.now() + 25 * 60 * 60_000));
+    expect((await f.post(request)).statusCode).toBe(200);
+    const replay = await f.apply(job, { mutationId });
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toEqual(result);
+  });
+  it("binds the original language and rejects stale annotations even when wording is unchanged", async () => {
+    const f = await fixture();
+    await f.edit((draft) => {
+      draft.schemaVersion = 16;
+      const block = draft.blocks[0]!;
+      if (block.kind === "content" && block.scene) {
+        block.scene.schemaVersion = 7;
+        const node = block.scene.nodes.find((node) => node.id === nodeId)!;
+        if (node.type === "text") node.lang = "en";
+      }
+    });
+    const request = {
+      ...f.request,
+      expectedRevision: 2,
+      operation: "translate",
+      sourceLanguage: "en",
+      targetLanguage: "fr",
+    };
+    expect((await f.post({ ...request, sourceLanguage: null })).statusCode).toBe(409);
+    expect((await f.post({ ...request, targetLanguage: "en" })).statusCode).toBe(400);
+    expect((await f.post({ ...request, targetLanguage: "FR" })).statusCode).toBe(400);
+    expect((await f.post(request)).statusCode).toBe(202);
+    expect(await f.presentationTextAssistanceWorker.runOnce()).toBe("completed");
+    const job = PresentationTextAssistanceJobSchema.parse((await f.get()).json().job);
+    await f.edit((draft) => {
+      const block = draft.blocks[0]!;
+      if (block.kind === "content" && block.scene) {
+        const node = block.scene.nodes.find((node) => node.id === nodeId)!;
+        if (node.type === "text") node.lang = "de";
+      }
+    });
+    const before = await f.presentations.getPresentation(workspaceId, f.presentation.id);
+    expect((await f.apply(job, { expectedRevision: 3 })).statusCode).toBe(409);
+    expect(await f.presentations.getPresentation(workspaceId, f.presentation.id)).toEqual(before);
+    expect((await f.post(request)).statusCode).toBe(200);
+  });
+  it("accepts identical translated wording when applying a different language annotation", async () => {
+    const f = await fixture(vi.fn().mockResolvedValue({ text: originalText }));
+    expect(
+      (
+        await f.post({
+          ...f.request,
+          operation: "translate",
+          targetLanguage: "ko",
+          sourceLanguage: null,
+        })
+      ).statusCode,
+    ).toBe(202);
+    expect(await f.presentationTextAssistanceWorker.runOnce()).toBe("completed");
+    const job = PresentationTextAssistanceJobSchema.parse((await f.get()).json().job);
+    expect(job.proposal!.outputDigest).toBe(job.sourceDigest);
+    const response = await f.apply(job);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      response
+        .json()
+        .presentation.draft.blocks[0].scene.nodes.find(
+          (node: { id: string }) => node.id === nodeId,
+        ),
+    ).toMatchObject({ text: originalText, lang: "ko" });
+  });
   it("is optional and validates approved provider identities before spending the unchanged free allowance", async () => {
     const generate = vi.fn(),
       f = await fixture(generate, "x".repeat(121));

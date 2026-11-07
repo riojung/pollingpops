@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PresentationTextLanguageSchema } from "./presentation-languages";
 import { CanvasColorSchema, CanvasShapeVariantSchema } from "./canvas-content-v4";
 import {
   isSafePresentationLink,
@@ -6,13 +7,14 @@ import {
   presentationRichTextToPlainText,
 } from "./presentation-rich-text";
 
-/** Scene versions opt into Presentation document v4, v5, v7, v8 and v11 respectively. */
+/** Scene versions opt into Presentation document v4, v5, v7, v8, v11, v13 and v16 respectively. */
 export const PRESENTATION_SCENE_SCHEMA_VERSION = 1 as const;
 export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
 export const PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION = 3 as const;
 export const PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION = 4 as const;
 export const PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION = 5 as const;
 export const PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION = 6 as const;
+export const PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION = 7 as const;
 export const PRESENTATION_SCENE_GEOMETRY_EPSILON = 1e-8;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
@@ -140,6 +142,7 @@ const textNode = z
     role: z.enum(["title", "body"]),
     text: plainText(4_000),
     richText: PresentationRichTextSchema.optional(),
+    lang: PresentationTextLanguageSchema.optional(),
   })
   .strict()
   .superRefine((node, context) => {
@@ -396,6 +399,7 @@ export const PresentationSceneDraftSchema = z
       z.literal(PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION),
     ]),
     aspectRatio: z.literal("16:9"),
     design: PresentationSceneDesignSchema.optional(),
@@ -466,6 +470,16 @@ export const PresentationSceneDraftSchema = z
       });
     }
     for (const [index, node] of scene.nodes.entries()) {
+      if (
+        node.type === "text" &&
+        node.lang !== undefined &&
+        scene.schemaVersion < PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["nodes", index, "lang"],
+          message: "Text language requires scene schema version 7",
+        });
       if (
         scene.schemaVersion < PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION &&
         (node.type === "hotspot" ||

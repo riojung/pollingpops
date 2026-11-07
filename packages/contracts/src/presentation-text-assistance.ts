@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
+import {
+  PresentationTextLanguageSchema,
+  type PresentationTextLanguage,
+} from "./presentation-languages";
 import { PresentationAssistanceErrorCodeSchema } from "./presentation-assistance";
 
 export const PRESENTATION_TEXT_ASSISTANCE_MAX_ACTIVE_JOBS = 2;
@@ -12,7 +16,7 @@ const uuid = z.string().uuid().toLowerCase();
 const nodeId = z.string().min(1).max(200);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const role = z.enum(["title", "body"]);
-const operation = z.enum(["rewrite", "shorten"]);
+const operation = z.enum(["rewrite", "shorten", "translate"]);
 const text = z
   .string()
   .min(1)
@@ -21,6 +25,48 @@ const text = z
     message: "Select nonempty text",
   });
 const hash = (value: string) => bytesToHex(sha256(new TextEncoder().encode(value)));
+
+// Omitted for legacy operations: adding defaults would change accepted request/proposal hashes.
+const languageFields = {
+  targetLanguage: PresentationTextLanguageSchema.optional(),
+  sourceLanguage: PresentationTextLanguageSchema.nullable().optional(),
+};
+type LanguagePair = {
+  targetLanguage?: PresentationTextLanguage;
+  sourceLanguage?: PresentationTextLanguage | null;
+};
+function refineLanguagePair(value: LanguagePair, context: z.RefinementCtx, required = false) {
+  if (!required && !("targetLanguage" in value) && !("sourceLanguage" in value)) return;
+  if (value.targetLanguage === undefined)
+    context.addIssue({
+      code: "custom",
+      path: ["targetLanguage"],
+      message: "Choose a supported target language",
+    });
+  if (value.sourceLanguage === undefined)
+    context.addIssue({
+      code: "custom",
+      path: ["sourceLanguage"],
+      message: "Bind the original text language, or null for unmarked text",
+    });
+  if (value.sourceLanguage != null && value.sourceLanguage === value.targetLanguage)
+    context.addIssue({
+      code: "custom",
+      path: ["targetLanguage"],
+      message: "Choose a target language different from the original text language",
+    });
+}
+function refineTranslation(value: LanguagePair & { operation: string }, context: z.RefinementCtx) {
+  if (value.operation === "translate") refineLanguagePair(value, context, true);
+  else
+    for (const key of ["targetLanguage", "sourceLanguage"] as const)
+      if (key in value)
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: "Language fields are supported only for translation",
+        });
+}
 
 /** Exact plain-text digest. Target identity and role are independently bound by each job. */
 export const presentationTextAssistanceSourceDigest = (value: string) => hash(text.parse(value));
@@ -35,40 +81,46 @@ export const CreatePresentationTextAssistanceJobSchema = z
     operation,
     expectedRevision: z.number().int().nonnegative(),
     sourceDigest: digest,
+    ...languageFields,
   })
-  .strict();
+  .strict()
+  .superRefine(refineTranslation);
 export type CreatePresentationTextAssistanceJob = z.infer<
   typeof CreatePresentationTextAssistanceJobSchema
 >;
 
 /** Latest accepted AI text edit, not an attribution for the whole slide or an audit log. */
+const legacyProvenanceFields = {
+  schemaVersion: z.literal(1),
+  nodeId,
+  role,
+  operation,
+  sourceDigest: digest,
+  outputDigest: digest,
+  provider: z.string().trim().min(1).max(80),
+  model: z.string().trim().min(1).max(120),
+  generatedAt: z.string().datetime(),
+  reviewWarning: z.literal(PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING),
+};
 export const PresentationTextAssistanceProvenanceSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    nodeId,
-    role,
-    operation,
-    sourceDigest: digest,
-    outputDigest: digest,
-    provider: z.string().trim().min(1).max(80),
-    model: z.string().trim().min(1).max(120),
-    generatedAt: z.string().datetime(),
-    reviewWarning: z.literal(PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING),
-  })
-  .strict();
+  .object({ ...legacyProvenanceFields, ...languageFields })
+  .strict()
+  .superRefine(refineTranslation);
 export type PresentationTextAssistanceProvenance = z.infer<
   typeof PresentationTextAssistanceProvenanceSchema
 >;
 
 export const PresentationTextAssistanceProposalSchema = z
   .object({
-    ...PresentationTextAssistanceProvenanceSchema.shape,
+    ...legacyProvenanceFields,
     blockId: uuid,
     originalText: text,
     text,
+    ...languageFields,
   })
   .strict()
   .superRefine((proposal, context) => {
+    refineTranslation(proposal, context);
     if (
       proposal.role === "title" &&
       (proposal.text.length > 160 || proposal.originalText.length > 160)
@@ -78,7 +130,7 @@ export const PresentationTextAssistanceProposalSchema = z
         path: ["text"],
         message: "Title text is limited to 160 characters",
       });
-    if (proposal.text === proposal.originalText)
+    if (proposal.operation !== "translate" && proposal.text === proposal.originalText)
       context.addIssue({
         code: "custom",
         path: ["text"],
@@ -148,9 +200,11 @@ export const PresentationTextAssistanceJobSchema = z
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     expiresAt: z.string().datetime(),
+    ...languageFields,
   })
   .strict()
   .superRefine((job, context) => {
+    refineTranslation(job, context);
     if (job.id !== job.requestId)
       context.addIssue({
         code: "custom",
@@ -175,6 +229,8 @@ export const PresentationTextAssistanceJobSchema = z
         parsedProposal.data.role !== job.role ||
         parsedProposal.data.operation !== job.operation ||
         parsedProposal.data.sourceDigest !== job.sourceDigest ||
+        parsedProposal.data.targetLanguage !== job.targetLanguage ||
+        parsedProposal.data.sourceLanguage !== job.sourceLanguage ||
         hash(JSON.stringify(parsedProposal.data)) !== job.proposalHash)
     )
       context.addIssue({
@@ -215,8 +271,10 @@ export const ApplyPresentationTextAssistanceSchema = z
     reviewed: z.literal(true),
     expectedRevision: z.number().int().nonnegative(),
     mutationId: uuid,
+    ...languageFields,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => refineLanguagePair(value, context));
 export type ApplyPresentationTextAssistance = z.infer<typeof ApplyPresentationTextAssistanceSchema>;
 export const presentationTextAssistanceRequestHash = (value: unknown) =>
   hash(JSON.stringify(CreatePresentationTextAssistanceJobSchema.parse(value)));

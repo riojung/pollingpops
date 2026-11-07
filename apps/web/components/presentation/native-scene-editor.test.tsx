@@ -6,6 +6,7 @@ import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
+import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
 import {
   NativeSceneDesignControls,
   NativeSceneLayoutControls,
@@ -44,6 +45,8 @@ function editorHarness(
     onRedo?: () => void;
     onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten") => void;
     textAssistanceDisabled?: boolean;
+    layoutSuggestionsDisabled?: boolean;
+    layoutSuggestionsSourceKey?: string;
   } = {},
 ) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
@@ -88,6 +91,56 @@ function editorHarness(
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("reviewed native layout integration", () => {
+  it("applies through scene validation as one independent history change", () => {
+    const editor = editorHarness({ layoutSuggestionsSourceKey: "slide-source" });
+    editor.render("idle");
+    const control = editor.find((element) => element.type === NativeSceneLayoutSuggestions);
+    expect(control.props.sourceKey).toBe("slide-source");
+    expect(control.props.disabled).toBe(false);
+    const next = structuredClone(editor.scene);
+    const body = next.nodes[1]!;
+    if (body.type === "connector") throw new Error("Expected framed body");
+    body.frame = { x: 7, y: 28, width: 86, height: 65 };
+    expect((control.props.onChange as (scene: unknown) => boolean)(next)).toBe(true);
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    expect(editor.onChange.mock.calls[0]![0]).toEqual(next);
+    expect(editor.onChange.mock.calls[0]![1]).toBeUndefined();
+    expect(editor.scene.nodes[1]).not.toEqual(body);
+  });
+
+  it.each([
+    [true, "idle", false],
+    [false, "uploading", false],
+    [false, "scanning", false],
+    [false, "idle", true],
+  ] as const)(
+    "rejects apply while editor/media work is blocked (%s, %s, %s)",
+    (blocked, media, pending) => {
+      const editor = editorHarness({ layoutSuggestionsDisabled: blocked });
+      editor.render(media, pending);
+      const control = editor.find((element) => element.type === NativeSceneLayoutSuggestions);
+      expect(control.props.disabled).toBe(true);
+      expect(
+        (control.props.onChange as (scene: unknown) => boolean)(structuredClone(editor.scene)),
+      ).toBe(false);
+      expect(editor.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects invalid suggested geometry before the parent draft changes", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const control = editor.find((element) => element.type === NativeSceneLayoutSuggestions);
+    const invalid = structuredClone(editor.scene);
+    const node = invalid.nodes[0]!;
+    if (node.type === "connector") throw new Error("Expected title");
+    node.frame.width = 0;
+    expect((control.props.onChange as (scene: unknown) => boolean)(invalid)).toBe(false);
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+});
 
 describe("native text history focus", () => {
   it("keeps keyboard Undo and Redo reachable when formatting replaces the textarea", () => {

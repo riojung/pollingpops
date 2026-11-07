@@ -29,6 +29,7 @@ import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneCompositionControls } from "./native-scene-composition-controls";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
+import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
 import { NativeSceneDataEditor } from "./native-scene-data-editor";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import { createNativeChartNode, createNativeTableNode } from "../../lib/presentation-native-data";
@@ -69,6 +70,8 @@ export function NativeSceneEditor({
   navigationTargets,
   onTextAssistance,
   textAssistanceDisabled = false,
+  layoutSuggestionsDisabled = false,
+  layoutSuggestionsSourceKey,
 }: {
   scene: PresentationScene;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
@@ -83,6 +86,8 @@ export function NativeSceneEditor({
   navigationTargets?: readonly { id: string; title: string }[];
   onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten") => void;
   textAssistanceDisabled?: boolean;
+  layoutSuggestionsDisabled?: boolean;
+  layoutSuggestionsSourceKey?: string;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
@@ -282,6 +287,16 @@ export function NativeSceneEditor({
         onChange={onChange}
       />
       <div className={styles.controls} aria-label="Native slide editor" lang="en-CA">
+        <NativeSceneLayoutSuggestions
+          scene={scene}
+          sourceKey={layoutSuggestionsSourceKey}
+          disabled={layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending}
+          onChange={(next) => {
+            if (layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending)
+              return false;
+            return onChange(next);
+          }}
+        />
         <NativeSceneLayoutControls scene={scene} onChange={onChange} />
         <NativeSceneArrangementControls
           scene={scene}

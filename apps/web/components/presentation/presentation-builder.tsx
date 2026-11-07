@@ -2981,6 +2981,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 scene={selectedBlock.scene}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
+                layoutSuggestionsDisabled={!canEdit || builderMutationBlocked || preparingImport}
+                layoutSuggestionsSourceKey={selectedBlock.id}
                 navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
                 onUndo={undo}
                 onRedo={redo}

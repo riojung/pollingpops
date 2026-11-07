@@ -12,6 +12,9 @@
   border: 1px solid var(--native-border, var(--ui-border, #cbd5e1));
   font-family: var(--native-font, inherit);
 }
+.stage[data-native-fixed-layout="true"] {
+  box-sizing: border-box;
+}
 .connections {
   position: absolute;
   inset: 0;
@@ -336,7 +339,7 @@
   color: var(--ui-text-muted, #52616f);
 }
 @media (max-width: 700px) {
-  .stage {
+  .stage:where(:not([data-native-fixed-layout="true"])) {
     aspect-ratio: auto;
     display: flex;
     flex-direction: column;
@@ -344,10 +347,10 @@
     padding: 12px;
     container-type: normal;
   }
-  .connections {
+  :where(.stage:not([data-native-fixed-layout="true"])) .connections {
     display: none;
   }
-  .node {
+  :where(.stage:not([data-native-fixed-layout="true"])) .node {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -355,66 +358,66 @@
     height: auto !important;
     transform: none !important;
   }
-  .groupOutline,
+  :where(.stage:not([data-native-fixed-layout="true"])) .groupOutline,
   .snapGuides {
     display: none;
   }
-  .node h1,
-  .node p {
+  :where(.stage:not([data-native-fixed-layout="true"])) .node h1,
+  :where(.stage:not([data-native-fixed-layout="true"])) .node p {
     height: auto;
     overflow: visible;
   }
-  .node h1 {
+  :where(.stage:not([data-native-fixed-layout="true"])) .node h1 {
     font-size: 30px;
   }
-  .node p {
+  :where(.stage:not([data-native-fixed-layout="true"])) .node p {
     font-size: 18px;
   }
-  .richBody {
+  :where(.stage:not([data-native-fixed-layout="true"])) .richBody {
     height: auto;
     overflow: visible;
     font-size: 18px;
   }
-  .richBody p {
+  :where(.stage:not([data-native-fixed-layout="true"])) .richBody p {
     font-size: inherit;
   }
-  .shape {
+  :where(.stage:not([data-native-fixed-layout="true"])) .shape {
     min-height: 100px;
   }
-  .shape span {
+  :where(.stage:not([data-native-fixed-layout="true"])) .shape span {
     font-size: 18px;
   }
-  .image {
+  :where(.stage:not([data-native-fixed-layout="true"])) .image {
     min-height: 80px;
   }
-  .image,
-  .image > :not(img) {
+  :where(.stage:not([data-native-fixed-layout="true"])) .image,
+  :where(.stage:not([data-native-fixed-layout="true"])) .image > :not(img) {
     height: auto;
     overflow: visible;
   }
-  .image img {
+  :where(.stage:not([data-native-fixed-layout="true"])) .image img {
     height: auto;
     max-height: none;
     object-fit: contain;
     object-position: 50% 50%;
   }
-  .editableNode {
+  :where(.stage:not([data-native-fixed-layout="true"])) .editableNode {
     cursor: auto;
   }
-  .handles {
+  :where(.stage:not([data-native-fixed-layout="true"])) .handles {
     position: relative;
     inset: auto;
     justify-content: flex-end;
     gap: 3px;
   }
-  .handles .resizeHandle {
+  :where(.stage:not([data-native-fixed-layout="true"])) .handles .resizeHandle {
     position: static;
   }
-  .handles button {
+  :where(.stage:not([data-native-fixed-layout="true"])) .handles button {
     touch-action: auto;
     cursor: auto;
   }
-  .connectorSummary {
+  :where(.stage:not([data-native-fixed-layout="true"])) .connectorSummary {
     position: static;
     width: auto;
     height: auto;

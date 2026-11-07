@@ -132,7 +132,9 @@ story map and first E11 review slice are merged in [PR #202](https://github.com/
 and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected outline assistance
 slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204). Its outline-first
 new-deck entry point is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
-Selected plain-text rewrite/shorten is implemented on `codex/presentation-e12-text-assistance`.
+Selected plain-text rewrite/shorten is merged in
+[PR #206](https://github.com/riojung/pollingpops/pull/206). Reviewed local layout alternatives
+are implemented on `codex/presentation-layout-suggestions`.
 Self-paced attempts and the remaining later packages stay planned; deployment and release
 qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
@@ -522,7 +524,8 @@ shared admission ledger reuse the existing authoring allowance, provider configu
 controls. Exact intent recovery and atomic draft/source fences protect insertion; no Presentation
 document/scene version, new provider or entitlement is added. See the
 [E12 record](evidence/presentation-e12-outline-assistance.md) for verification and limits.
-Translation, layout/question suggestions and conversational editing remain later E12 work.
+Translation, model-generated layout, question suggestions and conversational editing remain
+later E12 work; the deterministic layout increment is described below.
 This slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
 and remains undeployed.
 
@@ -546,6 +549,18 @@ Exact request/application recovery, current authority/source checks, combined ou
 concurrency, shared monthly allowance and bounded provider work reuse existing facilities.
 No paid service or new commercial entitlement is introduced. See the
 [selected-text record](evidence/presentation-e12-text-assistance.md) for verification and limits.
+This increment is merged in [PR #206](https://github.com/riojung/pollingpops/pull/206).
+
+The reviewed layout increment on `codex/presentation-layout-suggestions` adds deterministic
+alternatives for one native title/body pair, optionally with a table. It covers common dense
+text and title/lead/table compositions beyond the existing manual presets. Character density
+guides geometry and ordering; only actual rendered-font measurements establish fit feedback.
+Creators inspect the current and candidate layouts, including a complete reading copy, before
+applying one frame-only, undoable edit. Unsupported groups/rotation and other compositions retain
+manual editing. Data, rich text, design, reading order, provenance, versions and publication remain
+under their existing controls. There are no model calls, new jobs, commercial allowance changes
+or migrations. This is the low-cost layout-assistance slice, distinct from later model-generated
+design. See the [layout record](evidence/presentation-layout-suggestions.md).
 
 ### E13 Deliver static export and later richer portability
 

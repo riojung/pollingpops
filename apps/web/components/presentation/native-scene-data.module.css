@@ -173,7 +173,7 @@
   }
 }
 @media (max-width: 700px) {
-  .dataView {
+  .dataView:where(:not([data-native-fixed-layout="true"])) {
     height: auto;
     overflow: visible;
     font-size: 16px;
@@ -188,21 +188,21 @@
   .editGrid td {
     display: block;
   }
-  .dataTable,
-  .dataTable thead,
-  .dataTable tbody,
-  .dataTable tr,
-  .dataTable td,
-  .dataTable th,
-  .dataTable caption {
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable,
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable thead,
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable tbody,
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable tr,
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable td,
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable th,
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable caption {
     display: block;
     box-sizing: border-box;
     width: 100%;
   }
-  .dataTable tr {
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable tr {
     margin-block: 8px;
   }
-  .dataTable td::before {
+  :where(.dataView:not([data-native-fixed-layout="true"])) .dataTable td::before {
     content: attr(data-label) ": ";
     font-weight: 700;
   }

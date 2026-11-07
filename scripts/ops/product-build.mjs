@@ -23,13 +23,14 @@ import {
 } from "./lib.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const hostBuildGeneratedFiles = [join(repositoryRoot, "apps", "web", "next-env.d.ts")];
 
 function usage() {
   return `Usage: scripts/product-build.sh <environment> [--manifest PATH] [--sign] [--prepare | --finalize] [--dry-run]
        scripts/product-build.sh --environment <environment> [options]
 
 Build environments: development (or dev), staging, production.
+Development accepts --component server|web|control; omit it to build every application image.
+The server image contains both API and background jobs. Image builds do not compile host artifacts.
 Hosted builds require --api-url HTTPS, --registry REPOSITORY, and --push.
 The reviewed staging and production targets require signed images.`;
 }
@@ -244,7 +245,7 @@ export async function finalizeImages(imageRecords, { config, shouldSign, runComm
 
 export async function main(argv = process.argv.slice(2)) {
   const parsed = parseCliArguments(argv, {
-    valueOptions: ["environment", "manifest", "api-url", "registry"],
+    valueOptions: ["environment", "manifest", "api-url", "registry", "component"],
     booleanOptions: ["sign", "push", "prepare", "finalize", "dry-run", "help"],
   });
   if (parsed.flags.has("help")) {
@@ -253,6 +254,18 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (parsed.positionals.length > 1) throw new Error("Too many positional arguments");
   const environment = resolveEnvironmentArgument(parsed);
+  const hosted = isHostedEnvironment(environment);
+  const component = parsed.values.get("component");
+  if (component !== undefined && !["server", "web", "control"].includes(component)) {
+    throw new Error(
+      "--component must be server, web, or control; API and jobs share the server image",
+    );
+  }
+  if (hosted && component !== undefined) {
+    throw new Error(
+      "--component is development-only; hosted builds require a complete release manifest",
+    );
+  }
   const dryRun = parsed.flags.has("dry-run");
   const prepare = parsed.flags.has("prepare");
   const finalize = parsed.flags.has("finalize");
@@ -264,7 +277,6 @@ export async function main(argv = process.argv.slice(2)) {
   const config = hostedBuildInputs(parsed, environment, await loadConfig(environment), {
     finalize,
   });
-  const hosted = isHostedEnvironment(environment);
   const manifestOutputPath = hosted
     ? assertPathWithin(
         resolve(
@@ -336,13 +348,10 @@ export async function main(argv = process.argv.slice(2)) {
     dryRun,
     env: buildEnvironment,
   });
-  await withPreservedFiles(hostBuildGeneratedFiles, async () => {
-    await run("pnpm", ["build"], { cwd: repositoryRoot, dryRun, env: buildEnvironment });
-  });
   if (hosted) await assertCleanHostedWorktree();
 
   if (!hosted) {
-    await run("docker", composeBuildArgv(), {
+    await run("docker", composeBuildArgv("core", { component }), {
       cwd: repositoryRoot,
       dryRun,
       env: {
@@ -356,7 +365,7 @@ export async function main(argv = process.argv.slice(2)) {
       );
     } else {
       process.stdout.write(
-        `Built host artifacts and development Compose images from ${buildId}.\n`,
+        `Built development ${component ?? "server, web, control"} images from ${buildId}.\n`,
       );
     }
     return;

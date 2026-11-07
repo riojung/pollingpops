@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
+import { nextOutputDirectory } from "../../scripts/build/next-config.mjs";
 const nextConfig: NextConfig = {
   output: "standalone",
-  distDir: process.env.PLAYWRIGHT_CONTROL === "true" ? ".next-control-test" : ".next",
+  distDir: nextOutputDirectory("control"),
+  typescript: { tsconfigPath: "tsconfig.build.json" },
+  experimental: { cpus: 2 },
   allowedDevOrigins: ["127.0.0.1"],
   poweredByHeader: false,
   reactStrictMode: true,

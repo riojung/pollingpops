@@ -85,25 +85,17 @@ describe("browser CI scheduling and serving", () => {
     }
   });
 
-  it("builds the correct API origin and serves the standalone production output with assets", async () => {
+  it("selects isolated production browser roles with the correct ports", async () => {
     const configs = await browserConfigs(true, true);
     for (const [index, config] of configs.entries()) {
       const [api, web] = servers(config);
       const apiPort = index === 0 ? 4100 : 4200;
       const webPort = index === 0 ? 3100 : 3200;
       expect(api.command).toContain("NODE_ENV=test");
-      expect(web.command).toContain(`NEXT_PUBLIC_API_URL=http://127.0.0.1:${apiPort}`);
-      expect(web.command).toContain("pnpm --filter @openround/web build");
-      expect(web.command).toContain(
-        "cp -r apps/web/public apps/web/.next/standalone/apps/web/public",
+      expect(web.command).toBe(
+        `node scripts/build/browser.mjs start ${index === 0 ? "core" : "beta"} ${webPort} ${apiPort}`,
       );
-      expect(web.command).toContain(
-        "cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static",
-      );
-      expect(web.command).toContain(
-        `PORT=${webPort} HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js`,
-      );
-      expect(web.command).not.toContain("next dev");
+      expect(web.gracefulShutdown).toEqual({ signal: "SIGTERM", timeout: 10_000 });
       expect(web.timeout).toBe(180_000);
     }
   });
@@ -113,8 +105,8 @@ describe("browser CI scheduling and serving", () => {
     expect(featureOff.workers).toBeUndefined();
     for (const config of [featureOff, beta]) {
       const [, web] = servers(config);
-      expect(web.command).toContain("next dev -p");
-      expect(web.command).not.toContain("@openround/web build");
+      expect(web.command).toMatch(/^node scripts\/build\/browser.mjs dev (core|beta) /);
+      expect(web.gracefulShutdown).toEqual({ signal: "SIGTERM", timeout: 10_000 });
       expect(web.timeout).toBe(120_000);
       expect(config.use?.video).toBe("retain-on-failure");
     }

@@ -529,13 +529,19 @@ export async function assertDockerReady({
 
 export const buildComposeArgv = composeArgv;
 
-export function composeBuildArgv(profile = "core") {
+export function composeBuildArgv(profile = "core", { component } = {}) {
   const files = DEV_COMPOSE_PROFILES[profile];
   if (!files) throw new Error(`Unsupported Compose profile ${JSON.stringify(profile)}`);
+  const components = ["server", "web", "control"];
+  if (component !== undefined && !components.includes(component)) {
+    throw new Error(
+      "--component must be server, web, or control; API and jobs share the server image",
+    );
+  }
   const args = ["compose", "--project-name", DEV_COMPOSE_PROJECT];
   for (const file of files) args.push("--file", file);
   if (profile === "observability") args.push("--profile", "observability");
-  return [...args, "build", "server", "web", "control"];
+  return [...args, "build", ...(component === undefined ? components : [component])];
 }
 
 function assertExactKeys(object, allowed, label) {

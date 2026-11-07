@@ -8,6 +8,42 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Component build pipeline November 7, 2026
+
+The source on `codex/component-build-pipeline` separates host builds into customer web, server,
+operator control and admin CLI tasks. Source dependency hashes replace unused shared-package
+declaration prerequisites. Optional library artifacts remain available. Docker image builds
+avoid duplicate host compilation, accept a development component selector and preserve hosted
+exact-SHA release controls. Compiler and dependency caches are retained within their proper
+component boundaries.
+
+Guarded Next builds have isolated outputs, strict production type profiles, bounded worker
+counts, progress heartbeats, deadlines and owned-process cancellation. Workspace type checks
+retain tests. Browser CI builds once per role/profile and verifies source/environment/complete
+standalone output before reuse with fresh API fixtures. The media and authoring cases that
+previously used incompatible/shared fixtures now have explicit phases. Both Playwright configs
+send SIGTERM with a ten-second graceful shutdown window, allowing the helper to await detached
+Next cleanup and release its output lease.
+
+`VITEST_MAX_WORKERS=1 pnpm check` passed in 395.98 seconds, including 6,362 package and 420 support
+tests, strict checks and all four runtime/admin builds. Normal opt-in skips remain. This full run
+preceded the final import-only Node/ESLint cleanup, after which 131 focused tests, workspace/build
+lint, formatting and the Docker closure guard passed. Selected production browser qualification
+passed 22 cases with two compilations and seven fresh API phases; manifests were unchanged,
+schema-2 provenance passed, and no owned fixture ports or leases remained after exit.
+Both roles also passed rebuild, standalone HTTP and SIGTERM cleanup checks after the Node import
+cleanup. A subsequent review fix adds terminal SIGHUP cleanup with exit status 129; all 22 compiler
+guard tests pass, including configuration restoration, lease release and owned-descendant cleanup.
+
+The configured all-pass CI web compilation count falls from 21 to 9. One local cold observation
+fell from 32.69 to 20.51 seconds and 2.46 to 1.90 GiB peak process-tree RSS; warm timings varied.
+The Docker daemon was unavailable, so actual image builds remain unqualified despite passing
+closure and fake-tool orchestration checks. See the
+[diagnosis and measurement record](evidence/component-build-pipeline.md) and
+[component build runbook](runbooks/component-builds.md). Application schemas and deployed
+topology remain unchanged. The existing mobile word-cloud viewport and inert Pack-update Retry
+failures and release gates stay open; this work does not claim hosted CI is green.
+
 ### Presentation offline interactive HTML November 7, 2026
 
 The source on `codex/presentation-offline-export` adds **Offline interactive HTML** to the

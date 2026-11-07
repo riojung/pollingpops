@@ -159,6 +159,16 @@ pnpm check
 ```
 
 `pnpm check` runs formatting, Docker-context validation, linting, type checks, tests, and builds.
+For a focused edit, use `pnpm build:web`, `pnpm build:server`, `pnpm build:control`, or
+`pnpm build:admin`. `pnpm build` builds all application artifacts; shared package bundles and
+declarations are available separately through `pnpm build:packages`.
+
+For local images, use `pnpm product:build development --component web` (or `server` / `control`),
+or omit `--component` to build all application images. These commands compile inside Docker and
+do not require a preceding host build. Hosted releases continue to use a complete manifest from
+one exact Git commit. See [component builds and compiler recovery](docs/runbooks/component-builds.md)
+for cache rules, production browser test reuse, deadlines, and output-lock inspection.
+
 The host-native application also needs explicit development environment variables; use the
 [native development recipe](docs/quick-start.md#optional-native-developer-mode) rather than copying
 the Compose-oriented `.env.example` unchanged.

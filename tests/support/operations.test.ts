@@ -3003,7 +3003,7 @@ describe("operations CLI dry runs", () => {
   it("accepts development build and service dry runs without Docker", async () => {
     const buildOutput = await captureStdout(() => productBuildMain(["dev", "--dry-run"]));
     expect(buildOutput).toContain("pnpm check:docker-context");
-    expect(buildOutput).toContain("pnpm build");
+    expect(buildOutput).not.toContain("pnpm build");
     expect(buildOutput).toContain("docker compose");
     expect(buildOutput).toContain("compose.local-control.yaml build server web control");
     expect(buildOutput).toContain("Dry run complete for development");

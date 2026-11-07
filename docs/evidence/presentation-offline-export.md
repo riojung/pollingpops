@@ -91,5 +91,16 @@ API and object-store listeners and Firefox fixture directories are cleaned up. L
 retained privately. No database persistence change requires a new PostgreSQL qualification run
 for this increment.
 
+## Review follow-up: case-insensitive HTML assertions
+
+The API's forbidden-tag assertion now checks tag casing without distinction. Its real offline
+export fixture includes lowercase, uppercase and mixed-case script markup and verifies that
+each is escaped as readable text. The related initially-closed disclosure assertion also
+checks casing without distinction. Runtime escaping, export formats and content policy remain
+unchanged.
+
+All 83 focused renderer, worker, API and source-projection privacy tests pass after the fix,
+along with server type checking, touched-file lint, formatting and diff checks.
+
 Physical-device/manual assistive-technology checks, observed creator usability, hosted
 storage/scanning, production capacity, operating cost and deployment remain separate gates.

@@ -612,7 +612,7 @@ describe("Presentation static HTML readable companion", () => {
       expect(fetch).not.toHaveBeenCalled();
       if (format === "offline_html") {
         expect(html.match(/<details>/g)).toHaveLength(3);
-        expect(html).not.toMatch(/<details[^>]+\bopen\b/);
+        expect(html).not.toMatch(/<details[^>]+\bopen\b/i);
         expect(html).toContain(
           "Published broadcast reveal content is a local disclosure in this file",
         );

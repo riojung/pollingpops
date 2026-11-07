@@ -166,7 +166,7 @@ describe("published Presentation static export API", () => {
             type: "reveal" as const,
             scope: "broadcast" as const,
             label: "Public broadcast detail",
-            body: "PUBLIC_BODY <script>alert(1)</script>",
+            body: "PUBLIC_BODY <script>alert(1)</script> <SCRIPT>alert(2)</SCRIPT> <ScRiPt>alert(3)</sCrIpT>",
             frame: { x: 5, y: 30, width: 40, height: 10 },
           },
         ],
@@ -187,6 +187,8 @@ describe("published Presentation static export API", () => {
     );
     expect(response.body).toContain("<details><summary>Public broadcast detail</summary>");
     expect(response.body).toContain("PUBLIC_BODY &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(response.body).toContain("&lt;SCRIPT&gt;alert(2)&lt;/SCRIPT&gt;");
+    expect(response.body).toContain("&lt;ScRiPt&gt;alert(3)&lt;/sCrIpT&gt;");
     expect(response.body).toContain("Published broadcast reveal content is a local disclosure");
     expect(response.body).toContain("Public prompt");
     expect(response.body).toContain(
@@ -194,7 +196,7 @@ describe("published Presentation static export API", () => {
     );
     expect(response.body.match(/class="snapshot"/g)).toHaveLength(2);
     expect(response.body).not.toMatch(
-      /<script\b|<form\b|<input\b|PRIVATE_|speakerNotes|correctValue|explanation|expiresAt|versionId|workspaceId|controlToken|idempotencyKey|>917</,
+      /<script\b|<form\b|<input\b|PRIVATE_|speakerNotes|correctValue|explanation|expiresAt|versionId|workspaceId|controlToken|idempotencyKey|>917</i,
     );
     for (const privateId of [published.id, f.actor.workspaceId, f.actor.userId])
       expect(response.body).not.toContain(privateId);

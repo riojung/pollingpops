@@ -111,4 +111,45 @@ describe("browser CI scheduling and serving", () => {
       expect(config.use?.video).toBe("retain-on-failure");
     }
   });
+
+  it("starts demo capture through the beta dev wrapper with matching API and browser ports", async () => {
+    vi.stubEnv("PLAYWRIGHT_PRODUCTION", "true");
+    const [{ default: demo }, { browserSettings }] = await Promise.all([
+      import("../../playwright.demo.config"),
+      import("../../scripts/build/browser.mjs"),
+    ]);
+    const [api, web] = servers(demo);
+    const [runtime, script, mode, role, webPort, apiPort, ...extra] = web.command.split(/\s+/);
+    expect([runtime, script, mode, role]).toEqual([
+      "node",
+      "scripts/build/browser.mjs",
+      "dev",
+      "beta",
+    ]);
+    expect(extra).toEqual([]);
+    const settings = browserSettings(role, { env: {}, webPort, apiPort });
+    expect(settings.dist).toBe(".next-browser-beta");
+    expect(web.port).toBe(settings.webPort);
+    expect(api.port).toBe(Number(new URL(settings.apiOrigin).port));
+    expect(new URL(demo.use!.baseURL!).origin).toBe(`http://127.0.0.1:${settings.webPort}`);
+    const apiEnvironment = Object.fromEntries(
+      api.command
+        .split(/\s+/)
+        .filter((token) => token.includes("="))
+        .map((token) => token.split("=")),
+    );
+    expect(apiEnvironment).toMatchObject({
+      NODE_ENV: "test",
+      PORT: String(api.port),
+      ALLOW_IN_MEMORY: "true",
+      COMMUNITY_MODE: "true",
+      WEB_ORIGIN: demo.use!.baseURL,
+      PUBLIC_API_URL: settings.apiOrigin,
+    });
+    expect(servers(demo)).toHaveLength(2);
+    for (const server of servers(demo)) {
+      expect(server.reuseExistingServer).toBe(false);
+    }
+    expect(web.gracefulShutdown).toEqual({ signal: "SIGTERM", timeout: 10_000 });
+  });
 });

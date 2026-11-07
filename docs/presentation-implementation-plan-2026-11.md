@@ -137,7 +137,8 @@ Selected plain-text rewrite/shorten is merged in
 separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207).
 Reviewed selected-text translation is merged in
 [PR #208](https://github.com/riojung/pollingpops/pull/208). Local reviewed question starters are
-implemented on `codex/presentation-question-starters`.
+merged in [PR #209](https://github.com/riojung/pollingpops/pull/209). Optional reviewed AI
+discussion suggestions are implemented on `codex/presentation-question-suggestions`.
 Self-paced attempts and the remaining later packages stay planned; deployment and release
 qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
@@ -574,7 +575,20 @@ one normal Undo/autosave step, inherits the source section and preserves spatial
 Private source attribution stays out of recipient/review/export content. No AI service, job,
 allowance, schema, migration, version or entitlement is added. See the
 [starter record](evidence/presentation-question-starters.md). This is a low-cost question-starter
-slice; source-grounded AI question generation remains separately planned.
+slice; reviewed AI discussion questions follow in the increment below, while scored assessment
+generation remains separately planned.
+
+The next bounded AI increment on `codex/presentation-question-suggestions` proposes exactly
+two source-specific English discussion/reflection questions from one visible native slide's
+authored title/body. Creators inspect both prompts and exact body citations, select one and
+explicitly confirm before inserting an unscored opinion open-text question. Generation alone
+does not edit or publish. Migration104's separate expiring queue reuses the approved provider,
+shared monthly ledger and combined two-active-job limit. Saved source/language/list/order
+fences, exact admission/insertion recovery and fresh-only Undo preserve unrelated source and
+later work. No new content version, dependency or commercial entitlement is added. See the
+[discussion-suggestion record](evidence/presentation-question-suggestions.md). Scored assessment
+generation, other generated question formats and conversational whole-deck editing remain
+separately planned.
 
 ### E13 Deliver static export and later richer portability
 

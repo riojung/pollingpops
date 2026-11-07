@@ -22,6 +22,8 @@ import {
   PRESENTATION_SCENE_MAX_NODES,
   preparePresentationPublication,
   presentationTextAssistanceSourceDigest,
+  presentationQuestionSuggestionSource,
+  presentationQuestionSuggestionsSourceDigest,
   presentationTextLanguageLabel,
   resolvePresentationSpatialFrames,
   type PresentationDraftMutation,
@@ -38,7 +40,7 @@ import {
   type ApplyPresentationRecoveryPackUpdate,
   type PresentationRecoveryPackUpdatePreview,
 } from "@openround/contracts";
-import { ApiClientError, apiFetch, humanError } from "../../lib/api";
+import { AUTH_CHANGE_EVENT, ApiClientError, apiFetch, humanError } from "../../lib/api";
 import { clientUuid } from "../../lib/uuid";
 import {
   clearBuilderRecovery,
@@ -120,6 +122,8 @@ import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { PresentationQuestionStarters } from "./presentation-question-starters";
 import { insertPresentationQuestionStarter } from "../../lib/presentation-question-starters";
+import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
+import type { QuestionSuggestionsTarget } from "../../lib/presentation-question-suggestions-client";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationTextAssistance } from "./presentation-text-assistance";
@@ -502,6 +506,21 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   );
   const textAssistanceActive = useRef(false);
   textAssistanceActive.current = textAssistanceOpen || textAssistancePending;
+  const [questionSuggestionsOpen, setQuestionSuggestionsOpen] = useState(false);
+  const [questionSuggestionsPending, setQuestionSuggestionsPending] = useState(false);
+  const [questionSuggestionsRecovery, setQuestionSuggestionsRecovery] = useState(false);
+  const [questionSuggestionsTarget, setQuestionSuggestionsTarget] =
+    useState<QuestionSuggestionsTarget | null>(null);
+  const questionSuggestionsActive = useRef(false);
+  questionSuggestionsActive.current = questionSuggestionsOpen || questionSuggestionsPending;
+  const questionSuggestionsAuthorization = useRef(true);
+  useEffect(() => {
+    const changed = () => {
+      questionSuggestionsAuthorization.current = false;
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, changed);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, changed);
+  }, []);
   const [assistanceOpen, setAssistanceOpen] = useState(false);
   const [assistancePending, setAssistancePending] = useState(false);
   const [assistanceTarget, setAssistanceTarget] = useState({
@@ -567,6 +586,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     canEdit && Boolean(productFeatures?.presentations && productFeatures?.recoveryPacks);
   const builderMutationBlocked =
     textAssistanceOpen ||
+    questionSuggestionsOpen ||
+    questionSuggestionsPending ||
     textAssistancePending ||
     assistanceOpen ||
     assistancePending ||
@@ -614,6 +635,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, []);
 
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  const questionSuggestionSource = selectedBlock
+    ? presentationQuestionSuggestionSource(selectedBlock)
+    : null;
   const questionStarterContext = {
     actorKey: textRecoveryContext,
     presentationId,
@@ -639,12 +663,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   latestQuestionStarterContext.current = questionStarterContext;
   const questionStarterFocus = useRef<string | null>(null);
   useEffect(() => {
-    if (!questionStarterFocus.current) return;
+    if (!questionStarterFocus.current || questionSuggestionsOpen || questionSuggestionsPending)
+      return;
     const target = questionStarterFocus.current;
     questionStarterFocus.current = null;
     if (target !== selectedBlockId || selectedBlock?.kind !== "question") return;
     document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Question prompt"]')?.focus();
-  }, [selectedBlockId, selectedBlock?.kind]);
+  }, [selectedBlockId, selectedBlock?.kind, questionSuggestionsOpen, questionSuggestionsPending]);
   const selectedOpinionOnly =
     selectedBlock?.kind === "question" &&
     (isTextQuestion(selectedBlock.question.type) ||
@@ -865,6 +890,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     (value: SetStateAction<PresentationDraft>, historyKey?: string) => {
       if (
         textAssistanceActive.current ||
+        questionSuggestionsActive.current ||
         importPreparation.current ||
         assistanceActive.current ||
         visualImportActive.current ||
@@ -1042,6 +1068,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       !draft ||
       saveConflictPresent ||
       textAssistanceOpen ||
+      questionSuggestionsOpen ||
+      questionSuggestionsPending ||
       textAssistancePending ||
       preparingImport ||
       assistanceOpen ||
@@ -1064,6 +1092,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     loaded,
     saveConflictPresent,
     textAssistanceOpen,
+    questionSuggestionsOpen,
+    questionSuggestionsPending,
     textAssistancePending,
     preparingImport,
     assistanceOpen,
@@ -1088,6 +1118,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         pendingNativeImage !== null ||
         ordinarySavePending ||
         textAssistancePending ||
+        questionSuggestionsPending ||
         assistancePending ||
         visualImportReceiptPending
       ) {
@@ -1104,6 +1135,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     pendingNativeImage,
     ordinarySavePending,
     textAssistancePending,
+    questionSuggestionsPending,
     assistancePending,
     visualImportReceiptPending,
   ]);
@@ -1248,6 +1280,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     if (
       importPreparation.current ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
@@ -1276,6 +1309,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     if (
       importPreparation.current ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
@@ -1303,6 +1337,12 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     >,
     textPermissionFence = false,
     recoveryReset?: { canAdopt: () => boolean; preserveWorkingDraft: () => boolean },
+    exactQuestionSource?: { blockId: string; sourceDigest: string },
+    questionRead?: {
+      canAdopt: () => boolean;
+      minimumRevision: number;
+      acceptedDraft?: PresentationDraft;
+    },
   ) {
     if (retainedSave.current.pending && !recoveryReset) {
       setError("Retry the outstanding save acknowledgement before loading another draft.");
@@ -1318,6 +1358,31 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         `/v1/presentations/${presentationId}`,
         { cache: "no-store" },
       );
+      if (questionRead) {
+        if (!questionRead.canAdopt()) return false;
+        if (
+          typeof response.presentation?.id !== "string" ||
+          !sameTextAssistanceBlockId(response.presentation.id, presentationId) ||
+          !Number.isSafeInteger(questionRead.minimumRevision) ||
+          questionRead.minimumRevision < 0 ||
+          !Number.isSafeInteger(response.presentation.draftRevision) ||
+          response.presentation.draftRevision <
+            Math.max(questionRead.minimumRevision, revisionRef.current, draftBaseRevision.current)
+        )
+          throw new Error(
+            "The saved deck read is invalid or older than the reviewed request. Recover the latest saved deck before continuing.",
+          );
+        response.presentation.draft = PresentationDraftSchema.parse(response.presentation.draft);
+        if (
+          questionRead.acceptedDraft &&
+          response.presentation.draftRevision === questionRead.minimumRevision &&
+          JSON.stringify(response.presentation.draft) !==
+            JSON.stringify(PresentationDraftSchema.parse(questionRead.acceptedDraft))
+        )
+          throw new Error(
+            "The saved deck does not match the accepted insertion. Retry receipt recovery before editing.",
+          );
+      }
       if (recoveryReset) {
         if (!recoveryReset.canAdopt()) return false;
         if (
@@ -1368,6 +1433,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         if (!recoveryReset.canAdopt()) return false;
       }
       if (textPermissionFence && (!alive.current || !assistancePermission.current)) return false;
+      if (exactQuestionSource) {
+        const block = response.presentation.draft.blocks.find((candidate) =>
+          sameTextAssistanceBlockId(candidate.id, exactQuestionSource.blockId),
+        );
+        const source = block ? presentationQuestionSuggestionSource(block) : null;
+        if (
+          !source?.supported ||
+          presentationQuestionSuggestionsSourceDigest(source.source) !==
+            exactQuestionSource.sourceDigest
+        )
+          throw new Error(
+            "The exact slide text or its language changed. Discard this proposal and review the current slide before generating again.",
+          );
+      }
       if (exactTextTarget) {
         const block = response.presentation.draft.blocks.find((block) =>
           sameTextAssistanceBlockId(block.id, exactTextTarget.blockId),
@@ -1434,7 +1513,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     } catch (caught) {
       setError(humanError(caught));
       setSaveState("error");
-      if (exactTextTarget) throw caught;
+      if (exactTextTarget || exactQuestionSource) throw caught;
       return false;
     }
   }
@@ -1584,6 +1663,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packOperation.current ||
       packImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       packUpdateOperation.current ||
@@ -1605,6 +1685,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packUpdatePending.current ||
       importPreparation.current ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       roundImportOpen ||
@@ -1748,6 +1829,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       importPreparation.current ||
       roundImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       packImportOpen ||
@@ -1810,6 +1892,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packImportOpen ||
       roundImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       mediaState !== "idle"
@@ -1925,6 +2008,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       roundImportOpen ||
       sourceImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current
     )
       return;
@@ -1972,6 +2056,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         !canEdit ||
         importPreparation.current ||
         textAssistanceActive.current ||
+        questionSuggestionsActive.current ||
         assistanceActive.current ||
         packOperation.current ||
         packPending.current ||
@@ -2109,6 +2194,110 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     }
   }
 
+  async function openQuestionSuggestions() {
+    if (
+      !alive.current ||
+      !assistancePermission.current ||
+      !questionSuggestionsAuthorization.current ||
+      !draft ||
+      !canEdit ||
+      questionSuggestionsOpen ||
+      importPreparation.current ||
+      textAssistanceActive.current ||
+      assistanceActive.current ||
+      visualImportActive.current ||
+      packOperation.current ||
+      packPending.current ||
+      packUpdateOperation.current ||
+      packUpdatePending.current ||
+      pendingNativeImageRef.current ||
+      mediaState !== "idle" ||
+      previewOpen ||
+      spatialOpen ||
+      recoveryPreviewOpen ||
+      packImportOpen ||
+      packBusy ||
+      packUpdateBusy ||
+      importingQuestions ||
+      roundImportOpen ||
+      sourceImportOpen
+    )
+      return;
+    const resuming = questionSuggestionsRecovery;
+    // An uncertain insertion owns the server revision; recover it before any ordinary save.
+    if (resuming && questionSuggestionsPending) {
+      questionSuggestionsActive.current = true;
+      setQuestionSuggestionsOpen(true);
+      return;
+    }
+    if (questionSuggestionsActive.current) return;
+    if (
+      recovery !== null ||
+      saveConflict.current ||
+      (!resuming &&
+        (!selectedBlockId ||
+          questionStarterContext.blocked ||
+          !questionSuggestionSource?.supported))
+    )
+      return;
+    const selectedSource =
+      !resuming && questionSuggestionSource?.supported ? questionSuggestionSource.source : null;
+    const sourceDigest = selectedSource
+      ? presentationQuestionSuggestionsSourceDigest(selectedSource)
+      : null;
+    const blockId = resuming
+      ? (questionSuggestionsTarget?.blockId ?? null)
+      : selectedBlockId!.toLowerCase();
+    const context = textRecoveryContext;
+    importPreparation.current = true;
+    setPreparingImport(true);
+    setError("");
+    try {
+      const expectedRevision = await prepareVisualInsertion();
+      if (
+        !alive.current ||
+        !assistancePermission.current ||
+        !questionSuggestionsAuthorization.current ||
+        currentTextRecoveryContext.current !== context ||
+        (!resuming &&
+          latestQuestionStarterContext.current.selectedBlockId?.toLowerCase() !== blockId)
+      )
+        return;
+      const saved = JSON.parse(lastSavedJson.current) as PresentationDraft;
+      const block = blockId
+        ? saved.blocks.find((candidate) => sameTextAssistanceBlockId(candidate.id, blockId))
+        : null;
+      const source = block ? presentationQuestionSuggestionSource(block) : null;
+      if (
+        !resuming &&
+        (!source?.supported ||
+          presentationQuestionSuggestionsSourceDigest(source.source) !== sourceDigest)
+      )
+        throw new Error(
+          "The exact slide text could not be saved. Retry after saving your changes.",
+        );
+      // Resuming a proposal also saves manual edits. A changed source remains visible to the
+      // controller as a mismatch, rather than inserting against a stale saved copy.
+      setQuestionSuggestionsTarget(
+        source?.supported
+          ? {
+              blockId: source.source.blockId,
+              expectedRevision,
+              source: source.source,
+              sourceDigest: presentationQuestionSuggestionsSourceDigest(source.source),
+            }
+          : null,
+      );
+      questionSuggestionsActive.current = true;
+      setQuestionSuggestionsOpen(true);
+    } catch (caught) {
+      if (alive.current) setError(humanError(caught));
+    } finally {
+      importPreparation.current = false;
+      if (alive.current) setPreparingImport(false);
+    }
+  }
+
   function openVisualImport() {
     if (
       importPreparation.current ||
@@ -2119,6 +2308,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       sourceImportOpen ||
       roundImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       assistanceActive.current ||
       packImportOpen ||
       mediaState !== "idle" ||
@@ -2406,6 +2596,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           <p>Recover the outline insertion acknowledgement before continuing to edit.</p>
           <button type="button" onClick={() => setAssistanceOpen(true)}>
             Resume outline assistance
+          </button>
+        </div>
+      ) : null}
+      {questionSuggestionsRecovery && !questionSuggestionsOpen ? (
+        <div className={styles.errorBanner} role="status" lang="en-CA">
+          <p>
+            {questionSuggestionsPending
+              ? "A discussion question insertion receipt is outstanding. Recover it before editing this deck."
+              : "A discussion question proposal is available for review."}
+          </p>
+          <button
+            type="button"
+            data-question-suggestions-resume
+            onClick={() => void openQuestionSuggestions()}
+          >
+            Resume discussion suggestions
           </button>
         </div>
       ) : null}
@@ -3026,6 +3232,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     !assistancePermission.current ||
                     importPreparation.current ||
                     textAssistanceActive.current ||
+                    questionSuggestionsActive.current ||
                     assistanceActive.current ||
                     visualImportActive.current ||
                     packOperation.current ||
@@ -3070,6 +3277,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   return true;
                 }}
               />
+              <div className={styles.canvasToolbar}>
+                <button
+                  type="button"
+                  data-question-suggestions-trigger
+                  disabled={questionStarterContext.blocked || !questionSuggestionSource?.supported}
+                  onClick={() => void openQuestionSuggestions()}
+                >
+                  Suggest discussion questions
+                </button>
+                <p className={styles.helpText}>
+                  Optional AI assistance. Review the source and shared AI allowance before
+                  generating two English discussion suggestions.
+                </p>
+              </div>
               {selectedBlock.textAssistance ? (
                 <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
                   <strong>Latest AI text edit — unverified wording</strong>
@@ -4063,6 +4284,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         preparationBlocked={
           preparingImport ||
           textAssistanceOpen ||
+          questionSuggestionsOpen ||
+          questionSuggestionsPending ||
           textAssistancePending ||
           assistanceOpen ||
           assistancePending
@@ -4180,6 +4403,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               packOperation.current ||
               packUpdateOperation.current ||
               assistanceActive.current ||
+              questionSuggestionsActive.current ||
               visualImportActive.current ||
               importPreparation.current,
             );
@@ -4232,6 +4456,144 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           consumeOutlineStart();
         }}
         onPendingChange={setAssistancePending}
+      />
+      <PresentationQuestionSuggestions
+        presentationId={presentationId}
+        actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+        canEdit={canEdit}
+        open={questionSuggestionsOpen}
+        target={questionSuggestionsTarget}
+        onClose={() => setQuestionSuggestionsOpen(false)}
+        onPendingChange={(pending) => {
+          if (pending) questionSuggestionsActive.current = true;
+          setQuestionSuggestionsPending(pending);
+        }}
+        onRecoveryChange={setQuestionSuggestionsRecovery}
+        onInserted={async (receipt) => {
+          const context = textRecoveryContext;
+          const canAdopt = () =>
+            questionSuggestionsAuthorization.current &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          if (!canAdopt())
+            throw new Error("Your sign-in changed. Reload before recovering this insertion.");
+          const beforeJson = latestDraftJson.current;
+          const before = JSON.parse(beforeJson) as PresentationDraft;
+          const beforeRevision = draftBaseRevision.current;
+          const clean =
+            beforeJson === lastSavedJson.current && beforeRevision === revisionRef.current;
+          const history = undoStack;
+          const block = before.blocks.find((candidate) =>
+            sameTextAssistanceBlockId(candidate.id, receipt.sourceBlockId),
+          );
+          const source = block ? presentationQuestionSuggestionSource(block) : null;
+          const sourceMatches =
+            source?.supported &&
+            presentationQuestionSuggestionsSourceDigest(source.source) === receipt.sourceDigest;
+          questionStarterFocus.current = receipt.insertedBlockId;
+          const loaded = await reloadLatestDraft(
+            receipt.insertedBlockId,
+            undefined,
+            true,
+            undefined,
+            undefined,
+            {
+              canAdopt,
+              minimumRevision: receipt.acceptedRevision,
+              acceptedDraft: receipt.acceptedDraft,
+            },
+          );
+          if (!loaded || !canAdopt() || saveConflict.current || retainedSave.current.pending)
+            throw new Error(
+              "Recover the discussion question insertion acknowledgement before continuing.",
+            );
+          if (
+            clean &&
+            sourceMatches &&
+            beforeRevision === receipt.acceptedRevision - 1 &&
+            loaded.revision === receipt.acceptedRevision &&
+            JSON.stringify(PresentationDraftSchema.parse(loaded.draft)) ===
+              JSON.stringify(receipt.acceptedDraft)
+          ) {
+            setUndoStack([...history, before].slice(-HISTORY_LIMIT));
+            setRedoStack([]);
+          }
+        }}
+        onReloadTarget={async (binding) => {
+          const context = textRecoveryContext;
+          const canAdopt = () =>
+            questionSuggestionsAuthorization.current &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          if (!canAdopt())
+            throw new Error("Your sign-in changed. Reload before recovering this source.");
+          const loaded = await reloadLatestDraft(
+            binding.blockId,
+            undefined,
+            true,
+            undefined,
+            binding,
+            { canAdopt, minimumRevision: binding.expectedRevision },
+          );
+          if (!loaded || !canAdopt())
+            throw new Error("The exact saved source could not be loaded. Your review is retained.");
+          const block = loaded.draft.blocks.find((candidate) =>
+            sameTextAssistanceBlockId(candidate.id, binding.blockId),
+          );
+          const source = block ? presentationQuestionSuggestionSource(block) : null;
+          if (!source?.supported) throw new Error("The exact source is unavailable.");
+          const target = {
+            blockId: binding.blockId,
+            expectedRevision: loaded.revision,
+            source: source.source,
+            sourceDigest: presentationQuestionSuggestionsSourceDigest(source.source),
+          };
+          setQuestionSuggestionsTarget(target);
+          return target;
+        }}
+        onReloadForInvalidRecovery={async (canContinue) => {
+          const context = textRecoveryContext;
+          const current = () =>
+            canContinue() &&
+            questionSuggestionsAuthorization.current &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          const otherReceiptPending = () =>
+            Boolean(
+              retainedSave.current.pending ||
+              packPending.current ||
+              packUpdatePending.current ||
+              packOperation.current ||
+              packUpdateOperation.current ||
+              textAssistanceActive.current ||
+              assistanceActive.current ||
+              visualImportActive.current ||
+              importPreparation.current,
+            );
+          if (!current())
+            throw new Error(
+              "Editor permission changed. Reload before clearing discussion recovery.",
+            );
+          const loaded = await reloadLatestDraft(
+            selectedBlockId ?? undefined,
+            undefined,
+            true,
+            { canAdopt: current, preserveWorkingDraft: otherReceiptPending },
+            undefined,
+            {
+              canAdopt: current,
+              minimumRevision: Math.max(revisionRef.current, draftBaseRevision.current),
+            },
+          );
+          if (!loaded || !current())
+            throw new Error(
+              "The current saved deck could not be checked. The recovery record is retained.",
+            );
+          setQuestionSuggestionsTarget(null);
+        }}
       />
       {packImportOpen ? (
         <RecoveryPackPresentationPicker

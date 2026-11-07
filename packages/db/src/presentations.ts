@@ -16,6 +16,12 @@ import {
   assertPresentationTextAssistanceSource,
 } from "./presentation-text-assistance.js";
 import { PresentationTextAssistanceError } from "./presentation-text-assistance-types.js";
+import {
+  assertMemoryPresentationQuestionSuggestionsReady,
+  assertPresentationQuestionSuggestionsSource,
+  assertPresentationQuestionSuggestionsInsertion,
+} from "./presentation-question-suggestions.js";
+import { PresentationQuestionSuggestionsError } from "./presentation-question-suggestions-types.js";
 import { lockPresentationAssistanceActors } from "./presentation-assistance-identity.js";
 import { FolderError, type LibraryArtifactDeletionResult, type Repository } from "./types.js";
 import { presentationMediaIds } from "./media-references.js";
@@ -498,7 +504,7 @@ export class MemoryPresentationRepository
     }
     assertRecoveryPackUpdateSource(input);
     if (
-      (input.assistanceJobId || input.textAssistanceJobId) &&
+      (input.assistanceJobId || input.textAssistanceJobId || input.questionSuggestionsJobId) &&
       this.repository instanceof MemoryRepository
     ) {
       const editor = this.repository.users.get(input.editorId),
@@ -510,9 +516,11 @@ export class MemoryPresentationRepository
         !["owner", "editor"].includes(member.role) ||
         this.repository.workspaceMediaDeletionClaims.has(input.workspaceId)
       )
-        throw input.textAssistanceJobId
-          ? new PresentationTextAssistanceError("CONFLICT")
-          : new PresentationAssistanceError("CONFLICT");
+        throw input.questionSuggestionsJobId
+          ? new PresentationQuestionSuggestionsError("CONFLICT")
+          : input.textAssistanceJobId
+            ? new PresentationTextAssistanceError("CONFLICT")
+            : new PresentationAssistanceError("CONFLICT");
     }
     const key = mutationKey(input.workspaceId, input.mutationId);
     const retry = this.mutations.get(key);
@@ -551,6 +559,21 @@ export class MemoryPresentationRepository
         normalizePresentationRecord(presentation).draft,
         input.textAssistanceTargetLanguage,
         input.textAssistanceSourceLanguage,
+      );
+    }
+    if (input.questionSuggestionsJobId && this.repository instanceof MemoryRepository) {
+      assertMemoryPresentationQuestionSuggestionsReady(
+        this.repository,
+        input.workspaceId,
+        input.presentationId,
+        input.questionSuggestionsJobId,
+        input.questionSuggestionsProposalHash ?? "",
+        input.questionSuggestionsSourceDigest ?? "",
+        input.questionSuggestionsBlockId ?? "",
+        input.questionSuggestionsSuggestionId ?? "",
+        normalizePresentationRecord(presentation).draft,
+        draft,
+        input.mutationId,
       );
     }
     if (presentation.draftRevision !== input.expectedRevision) {
@@ -1067,13 +1090,13 @@ export class PostgresPresentationRepository implements PresentationRepository {
       ]);
       let assistanceActorsReady = false;
       let assistanceEditorReady = false;
-      if (input.assistanceJobId || input.textAssistanceJobId) {
+      if (input.assistanceJobId || input.textAssistanceJobId || input.questionSuggestionsJobId) {
         const source = await client.query<{ created_by: string | null }>(
-          `SELECT created_by FROM ${input.textAssistanceJobId ? "presentation_text_assistance_jobs" : "presentation_assistance_jobs"} WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3`,
+          `SELECT created_by FROM ${input.questionSuggestionsJobId ? "presentation_question_suggestions_jobs" : input.textAssistanceJobId ? "presentation_text_assistance_jobs" : "presentation_assistance_jobs"} WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3`,
           [
             input.workspaceId,
             input.presentationId,
-            input.textAssistanceJobId ?? input.assistanceJobId,
+            input.questionSuggestionsJobId ?? input.textAssistanceJobId ?? input.assistanceJobId,
           ],
         );
         const creator = source.rows[0]?.created_by;
@@ -1106,10 +1129,15 @@ export class PostgresPresentationRepository implements PresentationRepository {
       );
       if (!locked.rows[0]) return null;
       assertRecoveryPackUpdateSource(input);
-      if ((input.assistanceJobId || input.textAssistanceJobId) && !assistanceEditorReady)
-        throw input.textAssistanceJobId
-          ? new PresentationTextAssistanceError("CONFLICT")
-          : new PresentationAssistanceError("CONFLICT");
+      if (
+        (input.assistanceJobId || input.textAssistanceJobId || input.questionSuggestionsJobId) &&
+        !assistanceEditorReady
+      )
+        throw input.questionSuggestionsJobId
+          ? new PresentationQuestionSuggestionsError("CONFLICT")
+          : input.textAssistanceJobId
+            ? new PresentationTextAssistanceError("CONFLICT")
+            : new PresentationAssistanceError("CONFLICT");
       const retried = await client.query(
         `SELECT * FROM presentation_draft_mutations
          WHERE workspace_id = $1 AND mutation_id = $2`,
@@ -1184,6 +1212,43 @@ export class PostgresPresentationRepository implements PresentationRepository {
           undefined,
           ready.rows[0].operation === "translate" ? ready.rows[0].source_language : undefined,
         );
+      }
+      if (input.questionSuggestionsJobId) {
+        if (
+          !input.questionSuggestionsProposalHash ||
+          !input.questionSuggestionsSourceDigest ||
+          !input.questionSuggestionsBlockId ||
+          !input.questionSuggestionsSuggestionId
+        )
+          throw new PresentationQuestionSuggestionsError("CONFLICT");
+        const ready = await client.query(
+          "SELECT proposal FROM presentation_question_suggestions_jobs WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 AND status='ready' AND proposal_hash=$4 AND source_digest=$5 AND block_id=$6 AND expires_at>clock_timestamp() FOR SHARE",
+          [
+            input.workspaceId,
+            input.presentationId,
+            input.questionSuggestionsJobId,
+            input.questionSuggestionsProposalHash,
+            input.questionSuggestionsSourceDigest,
+            input.questionSuggestionsBlockId,
+          ],
+        );
+        if (!assistanceActorsReady || ready.rowCount !== 1)
+          throw new PresentationQuestionSuggestionsError("CONFLICT");
+        const current = mapPresentation(locked.rows[0]);
+        assertPresentationQuestionSuggestionsSource(
+          current.draft,
+          input.questionSuggestionsBlockId,
+          input.questionSuggestionsSourceDigest,
+          ready.rows[0].proposal.source,
+        );
+        assertPresentationQuestionSuggestionsInsertion({
+          draft,
+          current: current.draft,
+          proposal: ready.rows[0].proposal,
+          jobId: input.questionSuggestionsJobId,
+          suggestionId: input.questionSuggestionsSuggestionId,
+          mutationId: input.mutationId,
+        });
       }
       if (input.visualImportId) {
         await client.query(

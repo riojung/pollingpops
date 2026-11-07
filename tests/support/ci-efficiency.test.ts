@@ -184,7 +184,7 @@ describe("CI efficiency without coverage bypasses", () => {
     }
     const betaRun = beta.steps.find((step) => step.name === "Run isolated UX beta browser project");
     expect(betaRun?.run).toBe(
-      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --grep-invert=\'presentation-translation\\.spec\\.ts\' --reporter=github,line,html',
+      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --grep-invert=\'presentation-(translation|question-suggestions)\\.spec\\.ts\' --reporter=github,line,html',
     );
     expect(betaRun?.if).toBeUndefined();
     expect(betaRun?.env).toEqual({
@@ -207,6 +207,20 @@ describe("CI efficiency without coverage bypasses", () => {
       PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-translation",
     });
     expect(beta.steps.indexOf(translationRun!)).toBeGreaterThan(beta.steps.indexOf(betaRun!));
+    const suggestionsRun = beta.steps.find(
+      (step) => step.name === "Run discussion-suggestion browser journeys with a fresh API",
+    );
+    expect(suggestionsRun?.run).toBe(
+      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/presentation-question-suggestions-diagnostics/resources.jsonl" -- pnpm test:e2e:beta tests/beta-e2e/presentation-question-suggestions.spec.ts --project="${{ matrix.project }}" --output=test-results-question-suggestions --reporter=github,line,html',
+    );
+    expect(suggestionsRun?.if).toBe("${{ !cancelled() }}");
+    expect(suggestionsRun?.env).toEqual({
+      ...betaRun?.env,
+      PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-question-suggestions",
+    });
+    expect(beta.steps.indexOf(suggestionsRun!)).toBeGreaterThan(
+      beta.steps.indexOf(translationRun!),
+    );
     const webServers = Array.isArray(config.webServer) ? config.webServer : [config.webServer];
     expect(webServers[0]?.reuseExistingServer).toBe(false);
     const coreArtifacts = core.steps.find((step) =>
@@ -221,7 +235,7 @@ describe("CI efficiency without coverage bypasses", () => {
       "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
     );
     expect(betaArtifacts?.with?.path).toBe(
-      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-translation/\nplaywright-report-translation/\n${{ runner.temp }}/presentation-translation-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n",
+      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-translation/\nplaywright-report-translation/\n${{ runner.temp }}/presentation-translation-diagnostics/\ntest-results-question-suggestions/\nplaywright-report-question-suggestions/\n${{ runner.temp }}/presentation-question-suggestions-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n",
     );
     for (const artifacts of [coreArtifacts, betaArtifacts]) {
       // A passing retry must not discard the first attempt's failure evidence.

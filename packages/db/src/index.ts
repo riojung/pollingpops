@@ -56,3 +56,10 @@ export {
 
 export * from "./presentation-text-assistance-types.js";
 export { createPresentationTextAssistanceRepository } from "./presentation-text-assistance.js";
+
+export * from "./presentation-question-suggestions-types.js";
+export {
+  createPresentationQuestionSuggestionsRepository,
+  assertPresentationQuestionSuggestionsSource,
+  buildPresentationQuestionSuggestionsDraft,
+} from "./presentation-question-suggestions.js";

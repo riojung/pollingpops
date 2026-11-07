@@ -8039,6 +8039,13 @@ export class PostgresRepository implements Repository {
            WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,
           [workspaceIds, userId],
         );
+        const presentationQuestionSuggestionsJobs = await client.query(
+          `SELECT id,workspace_id,presentation_id,created_by,block_id,source_revision,source_digest,output_language,
+                  status,attempts,source_snapshot,proposal,proposal_hash,error_code,created_at,updated_at,expires_at
+           FROM presentation_question_suggestions_jobs
+           WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,
+          [workspaceIds, userId],
+        );
         const institutionPolicies = await queryWorkspaceData(
           `SELECT * FROM workspace_institution_policies
            WHERE workspace_id = ANY($1::uuid[]) ORDER BY workspace_id`,
@@ -8262,6 +8269,7 @@ export class PostgresRepository implements Repository {
           authoringJobs: authoringJobs.rows,
           presentationAssistanceJobs: presentationAssistanceJobs.rows,
           presentationTextAssistanceJobs: presentationTextAssistanceJobs.rows,
+          presentationQuestionSuggestionsJobs: presentationQuestionSuggestionsJobs.rows,
           institutionPolicies: institutionPolicies.rows,
           externalIdentities: externalIdentities.rows,
           ltiRegistrations: ltiRegistrations.rows,
@@ -8479,6 +8487,7 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM authoring_jobs WHERE expires_at <= $1", [now]);
         await client.query("SELECT erase_expired_presentation_assistance($1)", [now]);
         await client.query("SELECT erase_expired_presentation_text_assistance($1)", [now]);
+        await client.query("SELECT erase_expired_presentation_question_suggestions($1)", [now]);
         await client.query("DELETE FROM federated_auth_transactions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM lti_login_transactions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM lti_launches WHERE expires_at <= $1", [now]);

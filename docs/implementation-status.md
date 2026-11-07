@@ -8,6 +8,28 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Reviewed AI discussion suggestions November 7, 2026
+
+The source on `codex/presentation-question-suggestions` adds optional **Suggest discussion
+questions** from a visible native slide's exact title/body text. Explicit generation uses one
+existing AI job to propose two English discussion/reflection questions; creators review both,
+choose one and confirm before inserting an independent unscored open-text opinion question.
+Free local starters and manual authoring remain available. No generation publishes or edits
+the deck automatically.
+
+Migration104 adds a private expiring queue, sharing the monthly admission ledger and combined
+two-active-job limit with outline and text assistance. Exact saved-source/revision checks,
+durable insertion receipts, account-bound recovery and fresh-only Undo protect source and
+unrelated work. Source attribution remains private in recipient, review and export projections.
+No new provider, service, dependency, entitlement or document/scene version is introduced.
+
+Focused contracts, controller/modal, editor and privacy checks, 56 selected real PostgreSQL
+cases and 66 production-browser workflows across four profiles pass. The full repository check
+also passes: 958 contracts, 584 database, 1,419 server, 2,946 web and 354 support tests, plus
+strict checks and production builds. See the
+[discussion-suggestion record](evidence/presentation-question-suggestions.md). Source remains
+undeployed; scored AI assessment generation and broader E12 scopes remain separate work.
+
 ### Reviewed local question starters November 6, 2026
 
 The source on `codex/presentation-question-starters` adds **Question starters** for a visible
@@ -25,9 +47,10 @@ migration, persisted version or entitlement is introduced.
 Focused checks and 18 production-browser workflows across four desktop/mobile profiles pass.
 The full repository check passes, including 938 contracts, 578 database, 1,393 server, 2,878 web
 and 354 repository-support tests, strict checks and production builds. See the
-[starter record](evidence/presentation-question-starters.md). Source remains undeployed.
-AI-generated questions, classic-slide starters and broader conversational generation remain
-separate work.
+[starter record](evidence/presentation-question-starters.md). This increment is merged in
+[PR #209](https://github.com/riojung/pollingpops/pull/209) and remains undeployed.
+Reviewed AI discussion questions follow in the November 7 increment above. Scored AI assessment
+generation, classic-slide starters and broader conversational generation remain separate work.
 
 ### Presentation E12 reviewed translation November 6, 2026
 

@@ -96,13 +96,23 @@ function NativePlainText({
   text,
   title,
   layoutKey,
+  lang,
 }: {
   text: string;
   title: boolean;
   layoutKey: string;
+  lang?: string;
 }) {
-  const scroll = useNativeTextOverflow(JSON.stringify([text, title, layoutKey]));
-  return title ? <h1 {...scroll}>{text}</h1> : <p {...scroll}>{text}</p>;
+  const scroll = useNativeTextOverflow(JSON.stringify([text, title, layoutKey, lang]));
+  return title ? (
+    <h1 lang={lang} {...scroll}>
+      {text}
+    </h1>
+  ) : (
+    <p lang={lang} {...scroll}>
+      {text}
+    </p>
+  );
 }
 
 interface NativeSceneViewProps {
@@ -311,6 +321,7 @@ function NativeSceneSurface({
                     richText={node.richText}
                     title={node.role === "title"}
                     editing={editing}
+                    lang={node.lang}
                     layoutKey={JSON.stringify([node.frame, design])}
                   />
                 ) : (
@@ -321,6 +332,7 @@ function NativeSceneSurface({
                     }
                     title={node.role === "title"}
                     layoutKey={JSON.stringify([node.frame, design])}
+                    lang={node.lang}
                   />
                 )
               ) : null}

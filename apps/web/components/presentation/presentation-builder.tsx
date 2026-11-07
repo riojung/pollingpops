@@ -22,6 +22,7 @@ import {
   PRESENTATION_SCENE_MAX_NODES,
   preparePresentationPublication,
   presentationTextAssistanceSourceDigest,
+  presentationTextLanguageLabel,
   resolvePresentationSpatialFrames,
   type PresentationDraftMutation,
   resolveContentSlideFrames,
@@ -262,6 +263,12 @@ function AuthenticatedMedia({ mediaId, altText }: { mediaId: string; altText: st
       Loading instructional image…
     </div>
   );
+}
+
+function nativeSlideTitleLanguage(block: PresentationBlockDraft) {
+  if (block.kind !== "content") return undefined;
+  const title = block.scene?.nodes.find((node) => node.type === "text" && node.role === "title");
+  return title?.type === "text" && title.text.trim() ? title.lang : undefined;
 }
 
 function PresentationPreview({
@@ -1257,7 +1264,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   async function reloadLatestDraft(
     preferredBlockId?: string,
-    exactTextTarget?: Pick<TextAssistanceRecovery, "blockId" | "nodeId" | "role" | "sourceDigest">,
+    exactTextTarget?: Pick<
+      TextAssistanceRecovery,
+      "blockId" | "nodeId" | "role" | "sourceDigest" | "operation" | "sourceLanguage"
+    >,
     textPermissionFence = false,
     recoveryReset?: { canAdopt: () => boolean; preserveWorkingDraft: () => boolean },
   ) {
@@ -1337,10 +1347,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           node?.type !== "text" ||
           node.richText ||
           node.role !== exactTextTarget.role ||
-          presentationTextAssistanceSourceDigest(node.text) !== exactTextTarget.sourceDigest
+          presentationTextAssistanceSourceDigest(node.text) !== exactTextTarget.sourceDigest ||
+          (exactTextTarget.operation === "translate" &&
+            (node.lang ?? null) !== exactTextTarget.sourceLanguage)
         ) {
           throw new Error(
-            "The exact text object was changed or deleted. Discard this proposal and select text for a new request.",
+            exactTextTarget.operation === "translate"
+              ? "The exact text object or its language was changed or deleted. Discard this proposal and select text for a new request."
+              : "The exact text object was changed or deleted. Discard this proposal and select text for a new request.",
           );
         }
       }
@@ -1989,7 +2003,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     void openAssistance(true);
   }, [startOutline, outlineStartBlocked, preparingImport, openAssistance]);
 
-  async function openTextAssistance(nodeId: string, operation: "rewrite" | "shorten") {
+  async function openTextAssistance(nodeId: string, operation: TextAssistanceTarget["operation"]) {
     if (textAssistanceRecovery) {
       setTextAssistanceOpen(true);
       return;
@@ -2037,7 +2051,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         savedNode?.type !== "text" ||
         savedNode.richText ||
         savedNode.role !== sourceNode.role ||
-        savedNode.text !== sourceNode.text
+        savedNode.text !== sourceNode.text ||
+        (operation === "translate" && savedNode.lang !== sourceNode.lang)
       )
         throw new Error(
           "The exact selected text could not be saved. Retry after saving your changes.",
@@ -2049,6 +2064,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         text: savedNode.text,
         operation,
         expectedRevision,
+        ...(operation === "translate" ? { sourceLanguage: savedNode.lang ?? null } : {}),
       });
       textAssistanceActive.current = true;
       setTextAssistanceOpen(true);
@@ -2606,7 +2622,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                           ? contentSlideTitle(block)
                           : block.question.prompt
                         ).trim()
-                          ? ""
+                          ? (nativeSlideTitleLanguage(block) ?? "")
                           : undefined
                       }
                     >
@@ -2962,9 +2978,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
                   <strong>Latest AI text edit — unverified wording</strong>
                   <p>
-                    {selectedBlock.textAssistance.operation === "shorten"
-                      ? "Shortened"
-                      : "Rewritten"}{" "}
+                    {selectedBlock.textAssistance.operation === "translate"
+                      ? `Translated to ${presentationTextLanguageLabel(selectedBlock.textAssistance.targetLanguage!)}`
+                      : selectedBlock.textAssistance.operation === "shorten"
+                        ? "Shortened"
+                        : "Rewritten"}{" "}
                     {selectedBlock.textAssistance.role} object {selectedBlock.textAssistance.nodeId}{" "}
                     by {selectedBlock.textAssistance.provider} /{" "}
                     {selectedBlock.textAssistance.model} at{" "}
@@ -4005,7 +4023,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             !node.richText &&
             node.role === receipt.role &&
             node.text.trim().length > 0 &&
-            presentationTextAssistanceSourceDigest(node.text) === receipt.sourceDigest;
+            presentationTextAssistanceSourceDigest(node.text) === receipt.sourceDigest &&
+            (receipt.operation !== "translate" || (node.lang ?? null) === receipt.sourceLanguage);
           const loaded = await reloadLatestDraft(receipt.blockId, undefined, true);
           if (!loaded || saveConflict.current || retainedSave.current.pending)
             throw new Error("Recover the text application acknowledgement before continuing.");
@@ -4043,6 +4062,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             operation: binding.operation,
             text: node.text,
             expectedRevision: loadedTarget.revision,
+            ...(binding.operation === "translate"
+              ? { targetLanguage: binding.targetLanguage, sourceLanguage: binding.sourceLanguage }
+              : {}),
           };
           setTextAssistanceTarget(target);
           return target;

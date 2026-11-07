@@ -626,6 +626,31 @@ Verify combined capacity/quota races, unchanged-source/revision fencing, accepte
 after expiry, erasure and all existing document15 response/scoring semantics before rollout.
 No new paid provider, service or commercial allowance is introduced.
 
+### Selected-text translation and document16
+
+Coordinate the HTTP, jobs, web, history/publication, private-review, static-export and live reader
+upgrade. Disable AI admission and drain/stop assistance workers before applying
+`103_presentation_text_translation.sql` after102. Deploy matching operation/language-capable
+readers and writers, refresh active editors, then re-enable admission. Translation jobs need the
+new readers even before Apply creates scene7/document16 content; disabled admission alone does
+not prevent an old worker from claiming an existing translation job.
+
+Migration103 retains all prior migration bytes and old rewrite/shorten canonical hashes. New
+translation intents bind exact source/target languages; fresh Apply checks the original node's
+wording, role, annotation and revision. Scene7 stores per-text `lang`; document16 permits the
+new scene and private translation provenance. Keep all corresponding SQL guards and optimized
+response readers together. Rehearse original-language-only source changes, unchanged proper
+nouns with changed language, exact lost creation/Apply acknowledgements, Undo/Redo, privacy
+projections, erasure and mixed document16 live questions alongside older document15 fixtures.
+
+After translated jobs or content exist, rollback images must retain operation/language and
+scene7/document16 support and migration103. An older strict job parser cannot list those rows;
+an older document reader cannot read their history or immutable publications. Use a compatible
+image set or forward repair. Do not remove language/provenance, change receipt identities or
+rewrite immutable versions to fit an older binary. See the
+[translation record](../evidence/presentation-e12-translation.md) for the bounded language scope
+and software qualification.
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

@@ -8033,7 +8033,7 @@ export class PostgresRepository implements Repository {
           [workspaceIds, userId],
         );
         const presentationTextAssistanceJobs = await client.query(
-          `SELECT id,workspace_id,presentation_id,created_by,block_id,node_id,operation,role,source_revision,source_digest,
+          `SELECT id,workspace_id,presentation_id,created_by,block_id,node_id,operation,role,source_revision,source_digest,target_language,source_language,
                   status,attempts,proposal,proposal_hash,error_code,created_at,updated_at,expires_at
            FROM presentation_text_assistance_jobs
            WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,

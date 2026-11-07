@@ -187,7 +187,9 @@ export class PresentationTextAssistanceService {
     if (
       !metadata ||
       metadata.nodeId !== input.nodeId ||
-      metadata.sourceDigest !== input.sourceDigest
+      metadata.sourceDigest !== input.sourceDigest ||
+      metadata.targetLanguage !== input.targetLanguage ||
+      metadata.sourceLanguage !== input.sourceLanguage
     )
       throw new PresentationTextAssistanceServiceError(
         "CONFLICT",
@@ -207,6 +209,9 @@ export class PresentationTextAssistanceService {
       proposalHash: input.proposalHash,
       sourceDigest: input.sourceDigest,
       outputDigest: metadata.outputDigest,
+      ...(metadata.operation === "translate"
+        ? { targetLanguage: metadata.targetLanguage, sourceLanguage: metadata.sourceLanguage }
+        : {}),
     };
   }
 
@@ -252,7 +257,11 @@ export class PresentationTextAssistanceService {
       job.sourceDigest !== input.sourceDigest ||
       proposal.blockId !== input.blockId ||
       proposal.nodeId !== input.nodeId ||
-      proposal.sourceDigest !== input.sourceDigest
+      proposal.sourceDigest !== input.sourceDigest ||
+      proposal.targetLanguage !== input.targetLanguage ||
+      proposal.sourceLanguage !== input.sourceLanguage ||
+      job.targetLanguage !== input.targetLanguage ||
+      job.sourceLanguage !== input.sourceLanguage
     )
       throw new PresentationTextAssistanceServiceError(
         "CONFLICT",
@@ -273,7 +282,8 @@ export class PresentationTextAssistanceService {
     if (
       target.role !== proposal.role ||
       target.text !== proposal.originalText ||
-      presentationTextAssistanceSourceDigest(target.text) !== input.sourceDigest
+      presentationTextAssistanceSourceDigest(target.text) !== input.sourceDigest ||
+      (proposal.operation === "translate" && (target.lang ?? null) !== proposal.sourceLanguage)
     )
       throw new PresentationTextAssistanceServiceError(
         "CONFLICT",
@@ -296,6 +306,10 @@ export class PresentationTextAssistanceService {
         "The selected text is no longer available",
       );
     node.text = proposal.text;
+    if (proposal.operation === "translate") {
+      node.lang = proposal.targetLanguage!;
+      block.scene.schemaVersion = 7;
+    }
     block.textAssistance = {
       schemaVersion: 1,
       nodeId: input.nodeId,
@@ -307,10 +321,13 @@ export class PresentationTextAssistanceService {
       model: proposal.model,
       generatedAt: proposal.generatedAt,
       reviewWarning: proposal.reviewWarning,
+      ...(proposal.operation === "translate"
+        ? { targetLanguage: proposal.targetLanguage, sourceLanguage: proposal.sourceLanguage }
+        : {}),
     };
     const validated = PresentationDraftSchema.parse({
       ...draft,
-      schemaVersion: Math.max(15, draft.schemaVersion),
+      schemaVersion: Math.max(proposal.operation === "translate" ? 16 : 15, draft.schemaVersion),
     });
     await this.authorize(actor, presentationId);
     const updated = await this.presentations.updatePresentationDraft({
@@ -326,6 +343,12 @@ export class PresentationTextAssistanceService {
       textAssistanceSourceDigest: input.sourceDigest,
       textAssistanceBlockId: input.blockId,
       textAssistanceNodeId: input.nodeId,
+      ...(proposal.operation === "translate"
+        ? {
+            textAssistanceTargetLanguage: input.targetLanguage,
+            textAssistanceSourceLanguage: input.sourceLanguage,
+          }
+        : {}),
     });
     if (!updated)
       throw new PresentationTextAssistanceServiceError("NOT_FOUND", 404, "Presentation not found");

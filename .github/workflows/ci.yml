@@ -199,9 +199,25 @@ jobs:
         run: >-
           node scripts/ci/browser-diagnostics.mjs
           --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" --
-          pnpm test:e2e:beta --project="${{ matrix.project }}" --reporter=github,line,html
+          pnpm test:e2e:beta --project="${{ matrix.project }}"
+          --grep-invert='presentation-translation\.spec\.ts' --reporter=github,line,html
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-beta
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run translation browser journeys with a fresh API
+        # The shared actor gets a fresh fixture and its normal authoring rate budget.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/presentation-translation-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-translation.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-translation
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-translation
           PLAYWRIGHT_HTML_OPEN: never
           BETA_E2E_AUTHORING: "true"
           BETA_E2E_ROUND_PROTOCOL: "true"
@@ -228,6 +244,9 @@ jobs:
             playwright-report-beta/
             test-results-beta/
             ${{ runner.temp }}/browser-beta-diagnostics/
+            test-results-translation/
+            playwright-report-translation/
+            ${{ runner.temp }}/presentation-translation-diagnostics/
             test-results-visual-import/
             playwright-report-visual-import/
             ${{ runner.temp }}/visual-import-diagnostics/

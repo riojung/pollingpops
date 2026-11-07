@@ -139,7 +139,9 @@ export function promotePresentationOpinionFormats(
       ? 9
       : draft.schemaVersion;
   const advanced = draft.blocks.some((block) =>
-    block.kind === "question" ? block.branches !== undefined : block.scene?.schemaVersion === 6,
+    block.kind === "question"
+      ? block.branches !== undefined
+      : (block.scene?.schemaVersion ?? 0) >= 6,
   );
   const schemaVersion = Math.max(
     draft.schemaVersion,
@@ -148,6 +150,13 @@ export function promotePresentationOpinionFormats(
     advanced ? 13 : 2,
     draft.sections === undefined ? 2 : 12,
     draft.spatial === undefined ? 2 : 14,
+    draft.blocks.some(
+      (block) =>
+        block.kind === "content" &&
+        (block.scene?.schemaVersion === 7 || block.textAssistance?.operation === "translate"),
+    )
+      ? 16
+      : 2,
   ) as PresentationDraft["schemaVersion"];
   if (draft.schemaVersion === schemaVersion) return draft;
   return {

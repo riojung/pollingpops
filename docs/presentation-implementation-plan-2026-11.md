@@ -132,7 +132,10 @@ story map and first E11 review slice are merged in [PR #202](https://github.com/
 and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected outline assistance
 slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204). Its outline-first
 new-deck entry point is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
-Selected plain-text rewrite/shorten is implemented on `codex/presentation-e12-text-assistance`.
+Selected plain-text rewrite/shorten is merged in
+[PR #206](https://github.com/riojung/pollingpops/pull/206). Reviewed layout alternatives are
+separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207).
+Reviewed selected-text translation is implemented on `codex/presentation-e12-translation`.
 Self-paced attempts and the remaining later packages stay planned; deployment and release
 qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
@@ -546,6 +549,19 @@ Exact request/application recovery, current authority/source checks, combined ou
 concurrency, shared monthly allowance and bounded provider work reuse existing facilities.
 No paid service or new commercial entitlement is introduced. See the
 [selected-text record](evidence/presentation-e12-text-assistance.md) for verification and limits.
+
+The selected translation increment on `codex/presentation-e12-translation` extends the same
+reviewed workflow to one plain native text object and 12 canonical target languages. Only the
+selected text, role, operation and requested target enter the existing approved provider.
+Source/target annotations bind creation, proposals, exact application and recovery; changing
+only the original language invalidates a fresh application/rebase. Scene7/document16 retain
+per-object language independently from private latest-edit provenance. The manual **Text
+language** control corrects or clears annotations without AI use. Migration103 extends the
+existing queue and matching readers while preserving migrations001–102 and legacy hashes.
+Generation does not change the deck; creators review complete wording before one undoable
+application. No new provider, service, dependency or entitlement is added. See the
+[translation record](evidence/presentation-e12-translation.md). Whole-deck/rich-text translation,
+RTL, question suggestions, model-generated design and conversational editing remain later scope.
 
 ### E13 Deliver static export and later richer portability
 

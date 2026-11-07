@@ -42,7 +42,7 @@ function editorHarness(
   history: {
     onUndo?: () => void;
     onRedo?: () => void;
-    onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten") => void;
+    onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten" | "translate") => void;
     textAssistanceDisabled?: boolean;
   } = {},
 ) {
@@ -496,6 +496,11 @@ describe("selected native text assistance", () => {
     )!;
     (shorten.props.onClick as () => void)();
     expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "shorten");
+    const translate = elements(fieldset).find(
+      (node) => node.type === "button" && node.props.children === "Translate text",
+    )!;
+    (translate.props.onClick as () => void)();
+    expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "translate");
   });
   it("explicitly disables rich-text and pending-intent assistance, including stale handlers", () => {
     const assistance = vi.fn();
@@ -514,6 +519,12 @@ describe("selected native text assistance", () => {
     expect(assistance).not.toHaveBeenCalled();
     const fieldset = editor.find((node) => node.props["data-native-text-fields"] === "true");
     expect(JSON.stringify(fieldset)).toContain("Formatted text cannot be rewritten or shortened");
+    const translate = editor.find(
+      (node) => node.type === "button" && node.props.children === "Translate text",
+    );
+    expect(translate.props.disabled).toBe(true);
+    (translate.props.onClick as () => void)();
+    expect(assistance).not.toHaveBeenCalled();
     const pending = editorHarness({ onTextAssistance: assistance, textAssistanceDisabled: true });
     pending.render("idle");
     (
@@ -521,5 +532,27 @@ describe("selected native text assistance", () => {
         .onClick as () => void
     )();
     expect(assistance).not.toHaveBeenCalled();
+  });
+  it("sets and clears the selected text language without changing its content or other objects", () => {
+    const editor = editorHarness();
+    const original = structuredClone(editor.scene);
+    editor.render("idle");
+    const selectLanguage = (value: string) =>
+      (
+        editor.find((node) => node.props["aria-label"] === "Text language").props
+          .onChange as (event: { target: { value: string } }) => void
+      )({ target: { value } });
+    selectLanguage("fr-CA");
+    expect(editor.onChange).not.toHaveBeenCalled();
+    selectLanguage("fr");
+    const marked = editor.onChange.mock.calls[0]![0];
+    expect(marked).toMatchObject({ schemaVersion: 7 });
+    expect(marked.nodes[0]).toEqual({ ...original.nodes[0], lang: "fr" });
+    expect(marked.nodes[1]).toEqual(original.nodes[1]);
+    Object.assign(editor.scene, marked);
+    editor.render("idle");
+    selectLanguage("");
+    const cleared = editor.onChange.mock.calls[1]![0];
+    expect(cleared).toEqual({ ...original, schemaVersion: 7 });
   });
 });

@@ -14,6 +14,7 @@ import {
   type PresentationDraft,
   type PresentationTextAssistanceJob,
   type PresentationTextAssistanceErrorCode,
+  type PresentationTextLanguage,
 } from "@openround/contracts";
 import {
   MemoryRepository,
@@ -45,6 +46,7 @@ export function assertPresentationTextAssistanceSource(
   sourceDigest: string,
   role?: "title" | "body",
   originalText?: string,
+  sourceLanguage?: PresentationTextLanguage | null,
 ) {
   const blocks = draft.blocks.filter((block) => block.id.toLowerCase() === blockId.toLowerCase());
   const block = blocks.length === 1 ? blocks[0] : undefined;
@@ -59,6 +61,7 @@ export function assertPresentationTextAssistanceSource(
     node.text.length > (node.role === "title" ? 160 : 4000) ||
     (role !== undefined && node.role !== role) ||
     (originalText !== undefined && node.text !== originalText) ||
+    (sourceLanguage !== undefined && (node.lang ?? null) !== sourceLanguage) ||
     presentationTextAssistanceSourceDigest(node.text) !== sourceDigest
   )
     throw new PresentationTextAssistanceError(
@@ -143,6 +146,9 @@ function checked(input: PresentationTextAssistanceCreateInput): Row {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
+      ...(request.operation === "translate"
+        ? { targetLanguage: request.targetLanguage, sourceLanguage: request.sourceLanguage }
+        : {}),
     }),
   };
 }
@@ -219,7 +225,9 @@ function completeRow(
     proposal.role !== row.job.role ||
     proposal.operation !== row.job.operation ||
     proposal.sourceDigest !== row.job.sourceDigest ||
-    proposal.originalText !== row.originalText
+    proposal.originalText !== row.originalText ||
+    proposal.targetLanguage !== row.job.targetLanguage ||
+    proposal.sourceLanguage !== row.job.sourceLanguage
   )
     throw new PresentationTextAssistanceError(
       "CONFLICT",
@@ -286,6 +294,8 @@ export class MemoryPresentationTextAssistanceRepository
     blockId: string,
     nodeId: string,
     draft: PresentationDraft,
+    targetLanguage?: PresentationTextLanguage,
+    sourceLanguage?: PresentationTextLanguage | null,
   ) {
     const row = this.rows.get(jobId.toLowerCase());
     if (
@@ -298,6 +308,8 @@ export class MemoryPresentationTextAssistanceRepository
       row.job.sourceDigest !== sourceDigest ||
       row.job.blockId !== blockId.toLowerCase() ||
       row.job.nodeId !== nodeId ||
+      row.job.targetLanguage !== targetLanguage ||
+      row.job.sourceLanguage !== sourceLanguage ||
       Date.parse(row.job.expiresAt) <= Date.now() ||
       !this.creatorEligible(row)
     )
@@ -311,6 +323,8 @@ export class MemoryPresentationTextAssistanceRepository
       row.job.nodeId,
       row.job.sourceDigest,
       row.job.role,
+      undefined,
+      row.job.operation === "translate" ? row.job.sourceLanguage : undefined,
     );
   }
   private eligible(input: PresentationTextAssistanceContext) {
@@ -377,6 +391,7 @@ export class MemoryPresentationTextAssistanceRepository
       row.job.sourceDigest,
       row.job.role,
       row.originalText!,
+      row.job.operation === "translate" ? row.job.sourceLanguage : undefined,
     );
     const used = this.parent.authoringUsageSince(input.workspaceId, input.since);
     if (input.monthlyLimit !== null && used >= input.monthlyLimit)
@@ -542,6 +557,9 @@ function mapped(row: QueryResultRow): Row {
       createdAt: stamp(row.created_at),
       updatedAt: stamp(row.updated_at),
       expiresAt: stamp(row.expires_at),
+      ...(row.operation === "translate"
+        ? { targetLanguage: row.target_language, sourceLanguage: row.source_language }
+        : {}),
     }),
   };
 }
@@ -697,6 +715,7 @@ export class PostgresPresentationTextAssistanceRepository implements Presentatio
         row.job.sourceDigest,
         row.job.role,
         row.originalText!,
+        row.job.operation === "translate" ? row.job.sourceLanguage : undefined,
       );
       const usage = Number(
         (
@@ -719,7 +738,7 @@ export class PostgresPresentationTextAssistanceRepository implements Presentatio
       if (count >= PRESENTATION_TEXT_ASSISTANCE_MAX_ACTIVE_JOBS)
         throw new PresentationTextAssistanceError("ACTIVE_LIMIT_REACHED");
       const result = await client.query(
-        `INSERT INTO presentation_text_assistance_jobs(id,workspace_id,presentation_id,created_by,request_hash,source_digest,block_id,node_id,operation,role,source_revision,original_text,status,attempts,available_at,created_at,updated_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',0,$13,$13,$13,$14) RETURNING *`,
+        `INSERT INTO presentation_text_assistance_jobs(id,workspace_id,presentation_id,created_by,request_hash,source_digest,block_id,node_id,operation,role,source_revision,original_text,status,attempts,available_at,created_at,updated_at,expires_at,target_language,source_language) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',0,$13,$13,$13,$14,$15,$16) RETURNING *`,
         [
           row.job.id,
           row.workspaceId,
@@ -735,6 +754,8 @@ export class PostgresPresentationTextAssistanceRepository implements Presentatio
           row.originalText,
           now,
           row.job.expiresAt,
+          row.job.targetLanguage ?? null,
+          row.job.sourceLanguage ?? null,
         ],
       );
       return { status: "created" as const, job: mapped(result.rows[0]!).job };
@@ -946,6 +967,8 @@ export function assertMemoryPresentationTextAssistanceReady(
   blockId: string,
   nodeId: string,
   draft: PresentationDraft,
+  targetLanguage?: PresentationTextLanguage,
+  sourceLanguage?: PresentationTextLanguage | null,
 ): void {
   repository
     .getOrCreateLifecycleExtension(
@@ -961,5 +984,7 @@ export function assertMemoryPresentationTextAssistanceReady(
       blockId,
       nodeId,
       draft,
+      targetLanguage,
+      sourceLanguage,
     );
 }

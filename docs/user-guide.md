@@ -610,6 +610,29 @@ the same action. Per-tab recovery keeps identities and review choices without st
 outline. When another editor changes the saved deck, use **Reload saved deck**, check the
 insertion point and confirm the proposal review again. Private proposals expire after 24 hours.
 
+### Translate selected native text
+
+Select one plain native title/body object and choose **Translate text**. Pick a **Target
+language**, review the available authoring allowance, then choose **Generate translation
+proposal**. Opening the panel or choosing a language does not generate or consume allowance.
+Translation shares the existing outline/rewrite/shorten allowance and provider configuration.
+
+Compare complete original and translated wording, the requested language and previous citations.
+Check meaning, terminology, unsupported claims and slide fit, confirm the review, then choose
+**Apply reviewed translation**. Only the selected text and its language change, together with
+the latest AI-edit record; notes, citations, other objects and publication remain intact.
+Previous citations do not verify a translation. Proper nouns can retain identical wording while
+their language changes. Use normal Undo/Redo after a fresh application and **Resume text
+assistance** for interrupted generation/application; recovery retains the exact language intent.
+
+The initial options are English, French, Spanish, German, Italian, Portuguese, Dutch, Polish,
+Japanese, Korean, Simplified Chinese and Traditional Chinese. Translation supports one plain
+text object at a time. Formatted text remains manually editable. **Text language** lets you
+correct an object's language or clear it to **Unspecified** without AI use. The annotation stays
+with that object through later edits and formatting and helps screen readers pronounce it.
+Changing a source language during review requires a new request. Review expanded text in the
+slide preview before publishing; translation does not resize frames automatically.
+
 ### Rewrite or shorten selected native text
 
 Select a plain text object in a saved native slide, then choose **Rewrite text** or **Shorten

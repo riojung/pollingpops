@@ -69,7 +69,12 @@ describe("Presentation v9 durable readers", () => {
         blocks: document.blocks,
       });
       expect(() => parse(document, 15)).toThrow("matching embedded schema version");
-      expect(() => parse(document, 16)).toThrow(UnsupportedArtifactSchemaVersionError);
+      expect(parse({ ...document, schemaVersion: 16 }, 16)).toMatchObject({
+        schemaVersion: 16,
+        blocks: document.blocks,
+      });
+      expect(() => parse(document, 16)).toThrow("matching embedded schema version");
+      expect(() => parse(document, 17)).toThrow(UnsupportedArtifactSchemaVersionError);
     }
     const block = document.blocks[0]!;
     if (block.kind !== "question") throw new Error("Expected ranking");

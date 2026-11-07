@@ -175,6 +175,7 @@ export function NativeRichTextEditor({
       <label>
         {label}
         <textarea
+          lang={node.lang}
           ref={input}
           data-native-text-input="true"
           aria-label={label}

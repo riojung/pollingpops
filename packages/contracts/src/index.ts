@@ -17,6 +17,7 @@ export * from "./presentation-text";
 export * from "./presentation-visual-import";
 export * from "./presentation-assistance";
 export * from "./presentation-text-assistance";
+export * from "./presentation-languages";
 import { PresentationTextAssistanceProvenanceSchema } from "./presentation-text-assistance";
 import { PresentationTextResponseMetadataSchema } from "./presentation-text";
 export * from "./session-summaries";
@@ -4956,7 +4957,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4995,10 +4996,10 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
     blocks: Array<{
       kind: string;
-      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 };
+      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 };
       hidden?: true;
     }>;
   },
@@ -5029,6 +5030,16 @@ function applyPresentationSceneRules(
         message: "Native scenes require Presentation schema version 4 or later",
       });
     }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === 7 &&
+      presentation.schemaVersion < 16
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Text language scenes require Presentation schema version 16",
+      });
     if (
       block.kind === "content" &&
       block.scene?.schemaVersion === 2 &&
@@ -5220,7 +5231,7 @@ function applyPresentationAdvancedInteractions(
   const branchIds = new Set<string>();
   let broadcastCount = 0;
   presentation.blocks.forEach((block, index) => {
-    const advanced = block.scene?.schemaVersion === 6 || block.branches !== undefined;
+    const advanced = (block.scene?.schemaVersion ?? 0) >= 6 || block.branches !== undefined;
     if (advanced && presentation.schemaVersion < 13)
       issue(["blocks", index], "Advanced interactions require Presentation schema version 13");
     block.scene?.nodes.forEach((node, nodeIndex) => {
@@ -5290,17 +5301,24 @@ function applyPresentationSpatialRules(
 function applyPresentationTextAssistanceRules(
   presentation: {
     schemaVersion: number;
-    blocks: Array<{ kind: string; textAssistance?: unknown }>;
+    blocks: Array<{ kind: string; textAssistance?: { operation: string } }>;
   },
   context: z.RefinementCtx,
 ) {
-  for (const [index, block] of presentation.blocks.entries())
+  for (const [index, block] of presentation.blocks.entries()) {
+    if (block.textAssistance?.operation === "translate" && presentation.schemaVersion < 16)
+      context.addIssue({
+        code: "custom",
+        path: ["blocks", index, "textAssistance"],
+        message: "Translation provenance requires Presentation schema version 16",
+      });
     if (block.textAssistance !== undefined && presentation.schemaVersion < 15)
       context.addIssue({
         code: "custom",
         path: ["blocks", index, "textAssistance"],
         message: "AI text edit provenance requires Presentation schema version 15",
       });
+  }
 }
 
 export const PresentationDraftSchema = z
@@ -5324,6 +5342,7 @@ export const PresentationDraftSchema = z
         z.literal(13),
         z.literal(14),
         z.literal(15),
+        z.literal(16),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5398,6 +5417,7 @@ export const PresentationContentSchema = z
       z.literal(13),
       z.literal(14),
       z.literal(15),
+      z.literal(16),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),

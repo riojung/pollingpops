@@ -48,6 +48,35 @@ function nativeSceneFixture(): PresentationScene {
 
 describe("production native scene rendering", () => {
   it.each(["preview", "live", "editor"] as const)(
+    "retains each text object's language in %s, including rich text after formatting",
+    (variant) => {
+      const scene = nativeSceneFixture();
+      scene.schemaVersion = 7;
+      scene.nodes = scene.nodes.map((node) =>
+        node.type !== "text"
+          ? node
+          : node.role === "title"
+            ? { ...node, text: "Le prochain choix", lang: "fr" }
+            : {
+                ...node,
+                text: "一緒に決めましょう",
+                lang: "ja",
+                richText: {
+                  paragraphs: [
+                    { kind: "paragraph", runs: [{ text: "一緒に決めましょう", bold: true }] },
+                  ],
+                },
+              },
+      );
+      const markup = renderToStaticMarkup(
+        <ContentSlideView block={{ ...createNativeContentBlock(), scene }} variant={variant} />,
+      );
+      expect(markup).toMatch(/<h1[^>]*lang="fr"[^>]*>Le prochain choix/);
+      expect(markup).toMatch(/<div[^>]*lang="ja"[^>]*><p><strong>一緒に決めましょう/);
+      expect(markup).not.toContain('lang="undefined"');
+    },
+  );
+  it.each(["preview", "live", "editor"] as const)(
     "keeps rotated connector anchors and group content consistent in %s",
     (variant) => {
       const scene = nativeSceneFixture();

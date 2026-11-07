@@ -450,9 +450,9 @@ describe("composed Presentation document8", () => {
       expect(schema.parse({ ...deck(), schemaVersion: 13 }).schemaVersion).toBe(13);
       expect(schema.safeParse({ ...deck(), schemaVersion: 14 }).success).toBe(true);
       expect(schema.safeParse({ ...deck(), schemaVersion: 15 }).success).toBe(true);
-      expect(schema.safeParse({ ...deck(), schemaVersion: 16 }).success).toBe(false);
+      expect(schema.safeParse({ ...deck(), schemaVersion: 17 }).success).toBe(false);
     }
-    expect(PresentationSceneDraftSchema.safeParse({ ...scene(), schemaVersion: 7 }).success).toBe(
+    expect(PresentationSceneDraftSchema.safeParse({ ...scene(), schemaVersion: 8 }).success).toBe(
       false,
     );
   });

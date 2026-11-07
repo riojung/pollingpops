@@ -1,4 +1,8 @@
-import type { PresentationContent, PresentationDraft } from "@openround/contracts";
+import type {
+  PresentationContent,
+  PresentationDraft,
+  PresentationTextLanguage,
+} from "@openround/contracts";
 import type { LibraryArtifactDeletionResult } from "./types.js";
 
 export interface PresentationRecord {
@@ -69,6 +73,8 @@ export interface PresentationDraftUpdate {
   textAssistanceSourceDigest?: string;
   textAssistanceBlockId?: string;
   textAssistanceNodeId?: string;
+  textAssistanceTargetLanguage?: PresentationTextLanguage;
+  textAssistanceSourceLanguage?: PresentationTextLanguage | null;
 }
 
 export interface PresentationRepository {

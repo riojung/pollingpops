@@ -343,6 +343,39 @@ describe("Presentation static renderer visual output", () => {
 });
 
 describe("Presentation static HTML readable companion", () => {
+  it("retains separate language annotations on plain and formatted text in the readable export", async () => {
+    const block = native([
+      {
+        id: "translated-body",
+        type: "text",
+        role: "body",
+        text: "Choisir ensemble",
+        lang: "fr",
+        frame: { x: 8, y: 25, width: 84, height: 20 },
+      },
+      {
+        id: "formatted-body",
+        type: "text",
+        role: "body",
+        text: "一緒に決めましょう",
+        lang: "ja",
+        richText: {
+          paragraphs: [{ kind: "paragraph", runs: [{ text: "一緒に決めましょう", bold: true }] }],
+        },
+        frame: { x: 8, y: 55, width: 84, height: 20 },
+      },
+    ]);
+    block.scene!.schemaVersion = 7;
+    const result = await renderPresentationStaticCore({
+      review: review([block]),
+      images: new Map(),
+      format: "html",
+    });
+    const html = result.bytes.toString("utf8");
+    expect(html).toContain('<p lang="fr">Choisir ensemble</p>');
+    expect(html).toContain('<div lang="ja"><p><strong>一緒に決めましょう</strong></p></div>');
+    expect(html).toContain("<h3>Published visual</h3>");
+  });
   it("preserves semantic order, tables, full panel text and safe links without scripts or remote resources", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

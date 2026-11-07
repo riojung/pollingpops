@@ -161,12 +161,19 @@ function Cartesian({ node }: { node: NativeChartNode }) {
 }
 
 /** The same closed local data view is used by editor, preview and participant surfaces. */
-export function NativeSceneDataView({ node }: { node: NativeDataNode }) {
+export function NativeSceneDataView({
+  node,
+  fixedLayout = false,
+}: {
+  node: NativeDataNode;
+  fixedLayout?: boolean;
+}) {
   if (node.type === "table")
     return (
       <div
         className={styles.dataView}
         data-native-data="table"
+        data-native-fixed-layout={fixedLayout ? "true" : undefined}
         role="group"
         aria-label={node.caption.trim() || "Data table"}
         tabIndex={0}
@@ -203,6 +210,7 @@ export function NativeSceneDataView({ node }: { node: NativeDataNode }) {
     <figure
       className={`${styles.dataView} ${styles.chart}`}
       data-native-data="chart"
+      data-native-fixed-layout={fixedLayout ? "true" : undefined}
       data-chart-type={node.chartType}
       aria-label={node.title.trim() || "Chart"}
       tabIndex={0}

@@ -1127,6 +1127,19 @@ Distribution is unavailable when their sizes cannot fit without overlap. Layer c
 last selected object, or its stored group, in front of or behind other visual objects; reading order stays unchanged.
 Connectors follow their objects and stay behind them.
 
+Choose **Suggest layouts** for a slide with one title and one body text object, with an optional
+table. Select an alternative to compare its placement with the current layout. **Complete slide
+content** shows all wording and table values in reading order. Fit feedback measures the wide
+preview using the fonts available on your device; a suggestion can still need larger frames or
+shorter content. On phones, the scaled previews retain wide-slide geometry and the reading copy
+stays readable.
+
+Choose **Apply reviewed layout** to change placement in one Undo step, or **Cancel** to leave the
+slide as it is. Wording, formatting, links, data, reading order and source information are kept.
+Grouping, rotation and other object combinations use the existing manual layout and arrangement
+controls. Suggestions are generated on your device and use no AI allowance. Wait for **Saved**
+before leaving; publication remains a separate action.
+
 For an image, **Contain** shows the whole image; **Cover** crops it to fill the frame. Adjust its
 focal X/Y position to keep the important area in view. Narrow screens show the complete image in
 the reading column. Cropping never changes the source image or its access permissions. Preview

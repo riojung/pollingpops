@@ -8,6 +8,27 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Reviewed native layout suggestions November 6, 2026
+
+The source on `codex/presentation-layout-suggestions` adds **Suggest layouts** for native slides
+with one title and one body, with an optional table. Creators compare current and suggested
+placement, read complete content and measured fit feedback, then explicitly **Apply reviewed
+layout**. The change uses the ordinary save/recovery flow and one independent Undo step.
+
+Alternatives use local content-density rules and change only frames. Rich text, links, data,
+reading order, design, citations, source disclosure, latest AI-edit metadata and stored versions
+are preserved. Grouped, rotated and other unsupported compositions keep their manual tools.
+This supports the 19 built-in title/lead/table slides that the existing preset picker could not
+arrange, and provides alternatives for common title/body slides. It introduces no provider call,
+AI allowance use, paid service, dependency, migration or content version.
+
+Fixed wide-slide previews retain their geometry on phones and use actual rendered fonts for fit
+feedback; a separate reading copy contains complete text and table values. The full repository
+check and 24 production-browser workflows across four profiles pass; see the
+[layout record](evidence/presentation-layout-suggestions.md). This is a bounded
+deterministic authoring increment. Translation, question suggestions and the other E12 scopes
+remain planned. Source remains undeployed.
+
 ### Presentation E12 selected-text assistance November 6, 2026
 
 The source on `codex/presentation-e12-text-assistance` adds optional **Rewrite text** and
@@ -25,9 +46,10 @@ selected PostgreSQL cases passed. The review corrections also pass all 2,808 web
 production-browser journeys across four profiles, including editing after generation refusal
 and safe removal of unreadable recovery records;
 see the
-[selected-text record](evidence/presentation-e12-text-assistance.md). Translation, suggested
-layouts/questions, rich-text rewriting, conversational editing and generated media remain later
-E12 work. Source is ready for review and remains undeployed.
+[selected-text record](evidence/presentation-e12-text-assistance.md). Translation, model-generated
+layouts, question suggestions, rich-text rewriting, conversational editing and generated media remain later
+E12 work. This slice is merged in [PR #206](https://github.com/riojung/pollingpops/pull/206)
+and remains undeployed.
 
 ### Presentation E12 outline-first creation November 6, 2026
 

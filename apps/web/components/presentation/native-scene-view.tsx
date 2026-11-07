@@ -107,6 +107,8 @@ function NativePlainText({
 
 interface NativeSceneViewProps {
   scene: PresentationScene;
+  /** Review previews retain the wide coordinate plane at every viewport size. */
+  fixedLayout?: boolean;
   renderImage?: SceneImageRenderer;
   /** Session/credential/connection identity, excluding ordinary snapshot revisions. */
   interactionSourceKey?: string;
@@ -148,6 +150,7 @@ export function NativeSceneView(props: NativeSceneViewProps) {
 function NativeSceneSurface({
   scene,
   renderImage,
+  fixedLayout = false,
   selectedNodeId,
   selectedNodeIds,
   onSelect,
@@ -234,6 +237,7 @@ function NativeSceneSurface({
         }
         aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
         data-native-scene="true"
+        data-native-fixed-layout={fixedLayout ? "true" : undefined}
         data-native-theme={design?.theme}
         data-native-font={design?.font}
         data-native-spacing={design?.spacing}
@@ -333,7 +337,7 @@ function NativeSceneSurface({
                 />
               ) : null}
               {node.type === "table" || node.type === "chart" ? (
-                <NativeSceneDataView node={node} />
+                <NativeSceneDataView node={node} fixedLayout={fixedLayout} />
               ) : null}
               {node.type === "image" ? (
                 <div

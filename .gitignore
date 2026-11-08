@@ -4,6 +4,7 @@
 .env.local
 artifacts/
 .next/
+.next-*/
 .next-business/
 .next-canvas-capacity*/
 .next-control-test/

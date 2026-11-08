@@ -157,6 +157,7 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(beta["timeout-minutes"]).toBe(30);
     for (const browser of [core, beta]) {
       expect(browser.env?.PLAYWRIGHT_PRODUCTION).toBe("true");
+      expect(browser.env?.PLAYWRIGHT_REUSE_BUILD).toBe("true");
       expect(browser.if).toBeUndefined();
       expect(browser["continue-on-error"]).toBeUndefined();
       expect(browser.steps.every((step) => step["continue-on-error"] === undefined)).toBe(true);
@@ -165,6 +166,24 @@ describe("CI efficiency without coverage bypasses", () => {
           (step) => step.run === "pnpm exec playwright install --with-deps chromium firefox webkit",
         ),
       ).toBe(true);
+    }
+    for (const [browser, role, node] of [
+      [core, "core", 22],
+      [beta, "beta", 26],
+    ] as const) {
+      const prepares = browser.steps.filter((step) =>
+        step.run?.includes("scripts/build/browser.mjs build"),
+      );
+      expect(prepares).toHaveLength(1);
+      expect(prepares[0]?.run).toContain(`node scripts/build/browser.mjs build ${role}`);
+      const compilerCache = browser.steps.find((step) => step.uses?.startsWith("actions/cache@"));
+      // Cache only compiler intermediates. Reusable output must be prepared and
+      // provenance-checked within the job, independently of any cache hit.
+      expect(compilerCache?.with?.path).toBe(`apps/web/.next-browser-${role}/cache`);
+      expect(compilerCache?.with?.key).toContain(`node${node}`);
+      expect(compilerCache?.with?.key).toContain("pnpm-lock.yaml");
+      expect(compilerCache?.with?.key).toContain("github.sha");
+      expect(prepares[0]?.if).toBeUndefined();
     }
     const coreRun = core.steps.find((step) => step.name === "Run feature-off browser suite");
     expect(coreRun?.run).toBe('pnpm test:e2e --project="${{ matrix.project }}"');
@@ -184,7 +203,7 @@ describe("CI efficiency without coverage bypasses", () => {
     }
     const betaRun = beta.steps.find((step) => step.name === "Run isolated UX beta browser project");
     expect(betaRun?.run).toBe(
-      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --grep-invert=\'presentation-(translation|question-suggestions)\\.spec\\.ts\' --reporter=github,line,html',
+      'node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" -- pnpm test:e2e:beta --project="${{ matrix.project }}" --grep-invert=\'presentation-(translation|question-suggestions|private-sharing|text-assistance)\\.spec\\.ts\' --reporter=github,line,html',
     );
     expect(betaRun?.if).toBeUndefined();
     expect(betaRun?.env).toEqual({
@@ -221,6 +240,38 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(beta.steps.indexOf(suggestionsRun!)).toBeGreaterThan(
       beta.steps.indexOf(translationRun!),
     );
+    const receiptRecovery = beta.steps.find(
+      (step) => step.name === "Run text-assistance receipt recovery with a fresh API",
+    );
+    const remainingTextAssistance = beta.steps.find(
+      (step) => step.name === "Run remaining text-assistance journeys with a fresh API",
+    );
+    const receiptTitle = "reviewed text edits recover exact acknowledgements and support safe Undo";
+    for (const [step, name, selector] of [
+      [receiptRecovery, "recovery", "--grep"],
+      [remainingTextAssistance, "remaining", "--grep-invert"],
+    ] as const) {
+      expect(step?.run).toBe(
+        `node scripts/ci/browser-diagnostics.mjs --output "$RUNNER_TEMP/text-assistance-${name}-diagnostics/resources.jsonl" -- pnpm test:e2e:beta tests/beta-e2e/presentation-text-assistance.spec.ts --project="\${{ matrix.project }}" --output=test-results-text-assistance-${name} ${selector}='${receiptTitle}' --reporter=github,line,html`,
+      );
+      expect(step?.if).toBe("${{ !cancelled() }}");
+      expect(step?.env).toEqual({
+        ...betaRun?.env,
+        PLAYWRIGHT_HTML_OUTPUT_DIR: `playwright-report-text-assistance-${name}`,
+      });
+      expect(beta.steps.indexOf(step!)).toBeGreaterThan(beta.steps.indexOf(suggestionsRun!));
+    }
+    // Keep every case selected once while giving the receipt-heavy case its own actor window.
+    const textAssistance = await readFile(
+      new URL("../beta-e2e/presentation-text-assistance.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const textTitles = [...textAssistance.matchAll(/^ {2}test\(`([^`]+)\$\{suffix\}/gm)].map(
+      (match) => match[1]!,
+    );
+    expect(textTitles).toHaveLength(4);
+    expect(textTitles.filter((title) => title.includes(receiptTitle))).toHaveLength(1);
+    expect(textTitles.filter((title) => !title.includes(receiptTitle))).toHaveLength(3);
     const mediaRun = beta.steps.find(
       (step) =>
         step.name ===
@@ -228,6 +279,7 @@ describe("CI efficiency without coverage bypasses", () => {
     );
     expect(mediaRun?.run).toContain("tests/beta-e2e/presentation-visual-import.spec.ts");
     expect(mediaRun?.run).toContain("tests/beta-e2e/presentation-static-export.spec.ts");
+    expect(mediaRun?.run).toContain("tests/beta-e2e/presentation-private-sharing.spec.ts");
     expect(mediaRun?.env?.BETA_E2E_VISUAL_IMPORTS).toBe("true");
     expect(mediaRun?.if).toBe("${{ !cancelled() }}");
     expect(mediaRun?.["timeout-minutes"]).toBe(5);
@@ -242,10 +294,10 @@ describe("CI efficiency without coverage bypasses", () => {
     expect(coreArtifacts?.with?.name).toBe("browser-core-${{ matrix.project }}-results");
     expect(betaArtifacts?.with?.name).toBe("browser-beta-${{ matrix.project }}-results");
     expect(coreArtifacts?.with?.path).toBe(
-      "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n",
+      "playwright-report/\ntest-results/\ntest-results-business/\nplaywright-report-business/\n${{ runner.temp }}/browser-core-build-diagnostics/\n",
     );
     expect(betaArtifacts?.with?.path).toBe(
-      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-translation/\nplaywright-report-translation/\n${{ runner.temp }}/presentation-translation-diagnostics/\ntest-results-question-suggestions/\nplaywright-report-question-suggestions/\n${{ runner.temp }}/presentation-question-suggestions-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n",
+      "playwright-report-beta/\ntest-results-beta/\n${{ runner.temp }}/browser-beta-diagnostics/\ntest-results-translation/\nplaywright-report-translation/\n${{ runner.temp }}/presentation-translation-diagnostics/\ntest-results-question-suggestions/\nplaywright-report-question-suggestions/\n${{ runner.temp }}/presentation-question-suggestions-diagnostics/\ntest-results-text-assistance-recovery/\nplaywright-report-text-assistance-recovery/\n${{ runner.temp }}/text-assistance-recovery-diagnostics/\ntest-results-text-assistance-remaining/\nplaywright-report-text-assistance-remaining/\n${{ runner.temp }}/text-assistance-remaining-diagnostics/\ntest-results-visual-import/\nplaywright-report-visual-import/\n${{ runner.temp }}/visual-import-diagnostics/\n${{ runner.temp }}/browser-beta-build-diagnostics/\n",
     );
     for (const artifacts of [coreArtifacts, betaArtifacts]) {
       // A passing retry must not discard the first attempt's failure evidence.

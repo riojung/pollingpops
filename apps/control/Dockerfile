@@ -1,8 +1,6 @@
 FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /app
-ARG OPENROUND_BUILD_ID=development
-RUN printf '%s\n' "$OPENROUND_BUILD_ID" > /app/BUILD_ID
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/control/package.json apps/control/package.json
 COPY packages/control-plane/package.json packages/control-plane/package.json
@@ -11,17 +9,20 @@ COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/game-engine/package.json packages/game-engine/package.json
 COPY packages/experience/package.json packages/experience/package.json
 COPY packages/insights/package.json packages/insights/package.json
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=polling-pops-control-pnpm,target=/pnpm/store,sharing=locked pnpm install --frozen-lockfile --store-dir /pnpm/store
 COPY apps/control apps/control
+COPY scripts/build scripts/build
 COPY packages/control-plane packages/control-plane
 COPY packages/db packages/db
 COPY packages/contracts packages/contracts
 COPY packages/game-engine packages/game-engine
 COPY packages/experience packages/experience
 COPY packages/insights packages/insights
-RUN pnpm --filter @openround/control build
+RUN --mount=type=cache,id=polling-pops-control-next-node22,target=/app/apps/control/.next/cache,sharing=locked pnpm --filter @openround/control build
 COPY tsup.admin.config.ts ./
 RUN pnpm admin:build
+ARG OPENROUND_BUILD_ID=development
+RUN printf '%s\n' "$OPENROUND_BUILD_ID" > /app/BUILD_ID
 
 FROM node:22-alpine AS runtime
 # Runtime entry points use Node directly; package managers are build-only tools.

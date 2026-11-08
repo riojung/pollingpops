@@ -26,6 +26,15 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Restore application compiler caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/control/.next/cache
+          key: next-check-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/*/next.config.ts', 'apps/*/tsconfig.build.json', 'scripts/build/*.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            next-check-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/*/next.config.ts', 'apps/*/tsconfig.build.json', 'scripts/build/*.mjs') }}-
       - run: pnpm format:check
       - run: pnpm check:docker-context
       - run: pnpm lint
@@ -135,6 +144,7 @@ jobs:
           - webkit-mobile
     env:
       PLAYWRIGHT_PRODUCTION: "true"
+      PLAYWRIGHT_REUSE_BUILD: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -146,6 +156,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Restore feature-off browser compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/web/.next-browser-core/cache
+          key: next-browser-core-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            next-browser-core-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-
+      - name: Prepare feature-off production web once
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/browser-core-build-diagnostics/resources.jsonl" --
+          node scripts/build/browser.mjs build core
       - name: Run feature-off browser suite
         run: pnpm test:e2e --project="${{ matrix.project }}"
       - name: Run business administration browser journeys
@@ -167,6 +189,7 @@ jobs:
             test-results/
             test-results-business/
             playwright-report-business/
+            ${{ runner.temp }}/browser-core-build-diagnostics/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -183,6 +206,7 @@ jobs:
           - webkit-beta-mobile
     env:
       PLAYWRIGHT_PRODUCTION: "true"
+      PLAYWRIGHT_REUSE_BUILD: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -194,13 +218,25 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Restore beta browser compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/web/.next-browser-beta/cache
+          key: next-browser-beta-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            next-browser-beta-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-
+      - name: Prepare beta production web once for all fresh API phases
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/browser-beta-build-diagnostics/resources.jsonl" --
+          node scripts/build/browser.mjs build beta
       - name: Run isolated UX beta browser project
         # Keep GitHub annotations and the existing HTML artifact; line also names the active case.
         run: >-
           node scripts/ci/browser-diagnostics.mjs
           --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" --
           pnpm test:e2e:beta --project="${{ matrix.project }}"
-          --grep-invert='presentation-(translation|question-suggestions)\.spec\.ts' --reporter=github,line,html
+          --grep-invert='presentation-(translation|question-suggestions|private-sharing|text-assistance)\.spec\.ts' --reporter=github,line,html
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-beta
           PLAYWRIGHT_HTML_OPEN: never
@@ -239,6 +275,40 @@ jobs:
           BETA_E2E_ROUND_PROTOCOL: "true"
           BETA_E2E_SESSION_SUMMARIES: "true"
           BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run text-assistance receipt recovery with a fresh API
+        if: ${{ !cancelled() }}
+        # Exact replay and its CI retry can consume the shared actor's admission window.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/text-assistance-recovery-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-text-assistance.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-text-assistance-recovery
+          --grep='reviewed text edits recover exact acknowledgements and support safe Undo'
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-text-assistance-recovery
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run remaining text-assistance journeys with a fresh API
+        if: ${{ !cancelled() }}
+        # Give stale-source checks their normal actor budget after receipt-recovery retries.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/text-assistance-remaining-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-text-assistance.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-text-assistance-remaining
+          --grep-invert='reviewed text edits recover exact acknowledgements and support safe Undo'
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-text-assistance-remaining
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
       - name: Verify visual import and presentation downloads with isolated synthetic media
         if: ${{ !cancelled() }}
         timeout-minutes: 5
@@ -247,6 +317,7 @@ jobs:
           --output "$RUNNER_TEMP/visual-import-diagnostics/resources.jsonl" --
           pnpm test:e2e:beta tests/beta-e2e/presentation-visual-import.spec.ts
           tests/beta-e2e/presentation-static-export.spec.ts
+          tests/beta-e2e/presentation-private-sharing.spec.ts
           --project="${{ matrix.project }}" --output=test-results-visual-import
           --reporter=github,line,html
         env:
@@ -268,9 +339,16 @@ jobs:
             test-results-question-suggestions/
             playwright-report-question-suggestions/
             ${{ runner.temp }}/presentation-question-suggestions-diagnostics/
+            test-results-text-assistance-recovery/
+            playwright-report-text-assistance-recovery/
+            ${{ runner.temp }}/text-assistance-recovery-diagnostics/
+            test-results-text-assistance-remaining/
+            playwright-report-text-assistance-remaining/
+            ${{ runner.temp }}/text-assistance-remaining-diagnostics/
             test-results-visual-import/
             playwright-report-visual-import/
             ${{ runner.temp }}/visual-import-diagnostics/
+            ${{ runner.temp }}/browser-beta-build-diagnostics/
           if-no-files-found: ignore
           retention-days: 14
 

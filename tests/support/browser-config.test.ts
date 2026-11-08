@@ -85,25 +85,17 @@ describe("browser CI scheduling and serving", () => {
     }
   });
 
-  it("builds the correct API origin and serves the standalone production output with assets", async () => {
+  it("selects isolated production browser roles with the correct ports", async () => {
     const configs = await browserConfigs(true, true);
     for (const [index, config] of configs.entries()) {
       const [api, web] = servers(config);
       const apiPort = index === 0 ? 4100 : 4200;
       const webPort = index === 0 ? 3100 : 3200;
       expect(api.command).toContain("NODE_ENV=test");
-      expect(web.command).toContain(`NEXT_PUBLIC_API_URL=http://127.0.0.1:${apiPort}`);
-      expect(web.command).toContain("pnpm --filter @openround/web build");
-      expect(web.command).toContain(
-        "cp -r apps/web/public apps/web/.next/standalone/apps/web/public",
+      expect(web.command).toBe(
+        `node scripts/build/browser.mjs start ${index === 0 ? "core" : "beta"} ${webPort} ${apiPort}`,
       );
-      expect(web.command).toContain(
-        "cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static",
-      );
-      expect(web.command).toContain(
-        `PORT=${webPort} HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js`,
-      );
-      expect(web.command).not.toContain("next dev");
+      expect(web.gracefulShutdown).toEqual({ signal: "SIGTERM", timeout: 10_000 });
       expect(web.timeout).toBe(180_000);
     }
   });
@@ -113,10 +105,51 @@ describe("browser CI scheduling and serving", () => {
     expect(featureOff.workers).toBeUndefined();
     for (const config of [featureOff, beta]) {
       const [, web] = servers(config);
-      expect(web.command).toContain("next dev -p");
-      expect(web.command).not.toContain("@openround/web build");
+      expect(web.command).toMatch(/^node scripts\/build\/browser.mjs dev (core|beta) /);
+      expect(web.gracefulShutdown).toEqual({ signal: "SIGTERM", timeout: 10_000 });
       expect(web.timeout).toBe(120_000);
       expect(config.use?.video).toBe("retain-on-failure");
     }
+  });
+
+  it("starts demo capture through the beta dev wrapper with matching API and browser ports", async () => {
+    vi.stubEnv("PLAYWRIGHT_PRODUCTION", "true");
+    const [{ default: demo }, { browserSettings }] = await Promise.all([
+      import("../../playwright.demo.config"),
+      import("../../scripts/build/browser.mjs"),
+    ]);
+    const [api, web] = servers(demo);
+    const [runtime, script, mode, role, webPort, apiPort, ...extra] = web.command.split(/\s+/);
+    expect([runtime, script, mode, role]).toEqual([
+      "node",
+      "scripts/build/browser.mjs",
+      "dev",
+      "beta",
+    ]);
+    expect(extra).toEqual([]);
+    const settings = browserSettings(role, { env: {}, webPort, apiPort });
+    expect(settings.dist).toBe(".next-browser-beta");
+    expect(web.port).toBe(settings.webPort);
+    expect(api.port).toBe(Number(new URL(settings.apiOrigin).port));
+    expect(new URL(demo.use!.baseURL!).origin).toBe(`http://127.0.0.1:${settings.webPort}`);
+    const apiEnvironment = Object.fromEntries(
+      api.command
+        .split(/\s+/)
+        .filter((token) => token.includes("="))
+        .map((token) => token.split("=")),
+    );
+    expect(apiEnvironment).toMatchObject({
+      NODE_ENV: "test",
+      PORT: String(api.port),
+      ALLOW_IN_MEMORY: "true",
+      COMMUNITY_MODE: "true",
+      WEB_ORIGIN: demo.use!.baseURL,
+      PUBLIC_API_URL: settings.apiOrigin,
+    });
+    expect(servers(demo)).toHaveLength(2);
+    for (const server of servers(demo)) {
+      expect(server.reuseExistingServer).toBe(false);
+    }
+    expect(web.gracefulShutdown).toEqual({ signal: "SIGTERM", timeout: 10_000 });
   });
 });

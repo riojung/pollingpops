@@ -15,9 +15,7 @@ const authoringEnvironment = authoringFixture
   ? `ALLOW_INSECURE_LOCAL_HTTP=true AUTHORING_AI_MODE=openai_compatible AUTHORING_AI_ENDPOINT=http://127.0.0.1:${authoringPort}/chat/completions AUTHORING_AI_PROVIDER_NAME=beta-fixture AUTHORING_AI_MODEL=synthetic-source-fixture`
   : "";
 const audienceEnvironment = `FEATURE_AUDIENCE_SCOPES=true FEATURE_FEEDBACK_ROOMS=true FEATURE_SURVEYS=true FEATURE_IDEA_BOARDS=${process.env.BETA_E2E_IDEA_BOARDS === "true"} FEATURE_SESSION_SUMMARIES=${process.env.BETA_E2E_SESSION_SUMMARIES === "true"} FEATURE_ROUND_CLIENT_PROTOCOL=${process.env.BETA_E2E_ROUND_PROTOCOL === "true"} CORE_PARITY_WORKSPACE_ALLOWLIST=${betaWorkspaceId}`;
-const nextCommand = productionWeb
-  ? `NEXT_PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} pnpm --filter @openround/web build && cp -r apps/web/public apps/web/.next/standalone/apps/web/public && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && PORT=${betaE2eWebPort} HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js`
-  : `NEXT_PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} pnpm --filter @openround/web exec next dev -p ${betaE2eWebPort}`;
+const nextCommand = `node scripts/build/browser.mjs ${productionWeb ? "start" : "dev"} beta ${betaE2eWebPort} ${betaE2eApiPort}`;
 
 export default defineConfig({
   testDir: "./tests/beta-e2e",
@@ -76,7 +74,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `node scripts/prepare-playwright-next.mjs && ${nextCommand}`,
+      command: nextCommand,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
       port: betaE2eWebPort,
       reuseExistingServer: false,
       timeout: productionWeb ? 180_000 : 120_000,

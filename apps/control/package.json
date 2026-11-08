@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack --hostname 127.0.0.1 --port 3002",
-    "build": "next build --webpack",
+    "build": "node ../../scripts/build/next.mjs control",
     "start": "next start --hostname 127.0.0.1 --port 3002",
     "lint": "eslint app lib test next.config.ts proxy.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:admin": "cd ../.. && tsup --config tsup.admin.config.ts && node apps/control/admin-dist/admin-cli.mjs --help"
   },
   "dependencies": {
     "@openround/contracts": "workspace:*",

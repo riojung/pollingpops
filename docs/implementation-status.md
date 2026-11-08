@@ -8,6 +8,31 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation self-paced reading assignments November 8, 2026
+
+The source on `codex/presentation-e08-self-paced` adds **Assign reading** to a published
+Presentation. A creator chooses a deadline, copies a private assignment link and can revoke it.
+The frozen publication is independent of later draft/publication changes. Preview does not start
+an attempt; the reader explicitly starts, acknowledges each page and finishes reading.
+
+Anonymous attempts have separate private credentials, revision-fenced progress and compact exact
+retry receipts. A personal resume link requires an explicit resume action; a shared assignment
+link never loads another reader's progress. Recipient credentials and uncertain operations stay
+in memory, and Clear reader removes private progress from that view. Creator pending-link
+recovery is bound to the current user/workspace. Reading completion is self-reported and does not
+claim identity, assessment or mastery; questions remain readable previews.
+
+Migration105 adds separate assignment, attempt and receipt records with forced scoped RLS,
+immutable capability/receipt guards, bounded admission and existing account/source erasure and
+retention integration. The implementation reuses safe publication/media projection and rendering,
+adds no provider call or service, and preserves existing document/scene and live/report meanings.
+See the [reading-assignment record](evidence/presentation-e08-reading-assignments.md) for scope and
+qualification. The full repository check passed with 6,824 tests and four application/admin builds;
+targeted restricted PostgreSQL and all eight selected production-browser workflows across four
+profiles also pass. Response collection, assessment feedback, identified learner assignments and
+attempt reporting remain later E08 work. Source remains undeployed; existing release gates remain
+open.
+
 ### Component build pipeline November 7, 2026
 
 The source on `codex/component-build-pipeline` separates host builds into customer web, server,

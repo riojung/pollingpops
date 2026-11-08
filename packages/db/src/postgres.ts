@@ -7720,6 +7720,17 @@ export class PostgresRepository implements Repository {
            FROM presentation_shares WHERE workspace_id = ANY($1::uuid[])
            ORDER BY created_at, id`,
         );
+        const presentationAssignments = await queryWorkspaceData(
+          `SELECT id,workspace_id AS "workspaceId",presentation_id AS "presentationId",version_id AS "versionId",
+                  actor_id AS "actorId",request_id AS "requestId",created_at AS "createdAt",expires_at AS "expiresAt",revoked_at AS "revokedAt"
+           FROM presentation_assignments WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
+        );
+        const presentationReadingAttempts = await queryWorkspaceData(
+          `SELECT id,workspace_id AS "workspaceId",assignment_id AS "assignmentId",revision::integer AS revision,
+                  read_block_ids AS "readBlockIds",current_block_id AS "currentBlockId",
+                  started_at AS "startedAt",updated_at AS "updatedAt",completed_at AS "completedAt"
+           FROM presentation_reading_attempts WHERE workspace_id=ANY($1::uuid[]) ORDER BY started_at,id`,
+        );
         // Feedback can belong to a reviewer's account even when the publication is in another workspace.
         await client.query("SELECT set_config('app.presentation_review_lifecycle','on',true)");
         const presentationReviewCycles = await queryWorkspaceData(
@@ -8147,6 +8158,8 @@ export class PostgresRepository implements Repository {
           sessionSummarySnapshots: sessionSummarySnapshots.rows,
           sessionSummaryShares: sessionSummaryShares.rows,
           presentationShares: presentationShares.rows,
+          presentationAssignments: presentationAssignments.rows,
+          presentationReadingAttempts: presentationReadingAttempts.rows,
           presentationReviewCycles: presentationReviewCycles.rows,
           presentationReviewMessages: presentationReviewMessages.rows,
           quizzes: quizzes.rows.map((row) => ({
@@ -8341,6 +8354,7 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM beta_feedback WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM session_summary_shares WHERE actor_id=$1", [userId]);
         await client.query("DELETE FROM presentation_shares WHERE actor_id=$1", [userId]);
+        await client.query("DELETE FROM presentation_assignments WHERE actor_id=$1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id=$1", [userId]);
         await client.query(
           "UPDATE session_staff_credentials SET revoked_at=now() WHERE created_by=$1 AND revoked_at IS NULL",
@@ -8392,6 +8406,7 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM session_summary_shares WHERE actor_id = $1", [userId]);
         await client.query("DELETE FROM presentation_shares WHERE actor_id = $1", [userId]);
+        await client.query("DELETE FROM presentation_assignments WHERE actor_id = $1", [userId]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM workspace_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id = $1", [userId]);
@@ -8479,6 +8494,10 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM session_summary_snapshots WHERE expires_at <= $1", [now]);
         await client.query(
           "DELETE FROM presentation_shares WHERE expires_at <= $1::timestamptz - interval '7 days'",
+          [now],
+        );
+        await client.query(
+          "DELETE FROM presentation_assignments WHERE expires_at <= $1::timestamptz - interval '7 days'",
           [now],
         );
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);

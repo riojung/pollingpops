@@ -63,3 +63,5 @@ export {
   assertPresentationQuestionSuggestionsSource,
   buildPresentationQuestionSuggestionsDraft,
 } from "./presentation-question-suggestions.js";
+export * from "./presentation-assignment-types.js";
+export * from "./presentation-assignments.js";

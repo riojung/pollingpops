@@ -697,6 +697,30 @@ admission/mutation receipts to make an older binary appear compatible. Free loca
 manual editing remain available without the AI provider. See the
 [discussion-suggestion record](../evidence/presentation-question-suggestions.md).
 
+## Self-paced Presentation reading assignments
+
+Apply migration105 after104 before enabling new reading-assignment writes. Deploy matching HTTP,
+jobs/retention, account lifecycle and web readers together. The migration adds independent
+assignment, attempt and operation-receipt state; existing Presentation document/scene formats,
+live sessions, private review links and reports keep their current meanings.
+
+Verify forced tenant RLS, published-version binding, revocation and deadlines, source/account
+deletion and expiry cleanup. Test concurrent starts and page acknowledgements, exact retries after
+lost responses, stale revisions, early completion rejection and completion replay. Preview requests
+must not start attempts. Assignment credentials must not read private attempt progress. Verify
+private images again after storage reads and keep capabilities out of account exports and logs.
+
+Recipients must explicitly retain their personal resume links: active credentials and uncertain
+mutations stay in memory, and shared assignment links never automatically load another reader.
+Reading completion is a self-report and must not be presented as an assessment result or verified
+identity. Activity response collection remains outside this slice.
+
+After assignment records exist, rollback must retain migration105 and compatible retention,
+erasure and receipt readers. Fence new assignment writes before rollback; preserve accepted
+operations and frozen publications rather than dropping the new tables. Existing unrelated
+Presentation delivery can remain on its established gates. See the
+[reading-assignment record](../evidence/presentation-e08-reading-assignments.md).
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

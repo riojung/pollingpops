@@ -23,6 +23,7 @@ import {
   createLibraryMetadataRepository,
   createPresentationRepository,
   createPresentationShareRepository,
+  createPresentationAssignmentRepository,
   createPresentationReviewFeedbackRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
@@ -92,6 +93,7 @@ import { StorageService } from "./storage.js";
 import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
 import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
+import { registerPresentationAssignmentRoutes } from "./presentation-assignment-routes.js";
 import { registerPresentationReviewFeedbackRoutes } from "./presentation-review-feedback-routes.js";
 import { registerPresentationStaticExportRoutes } from "./presentation-static-export-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
@@ -244,6 +246,7 @@ export async function buildApp(
   }
   const presentations = createPresentationRepository(repository);
   const presentationShares = createPresentationShareRepository(repository);
+  const presentationAssignments = createPresentationAssignmentRepository(repository);
   const presentationReviewFeedback = createPresentationReviewFeedbackRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
@@ -770,6 +773,15 @@ export async function buildApp(
     consumeAdmission: cache.consumeRateLimit.bind(cache),
     featureEnabled: presentationsEnabled,
   });
+  await registerPresentationAssignmentRoutes(app, {
+    auth,
+    repository,
+    assignments: presentationAssignments,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
   await registerPresentationStaticExportRoutes(app, {
     auth,
     repository,
@@ -881,6 +893,7 @@ export async function buildApp(
     presentationSessions,
     presentationService,
     presentationShares,
+    presentationAssignments,
     presentationReviewFeedback,
     groups,
     libraryMetadata,

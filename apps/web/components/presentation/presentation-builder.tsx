@@ -86,6 +86,7 @@ import { PresentationSpatialDelivery } from "../presentation-live/presentation-s
 import { PresentationSpatialEditor } from "./presentation-spatial-editor";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import { PresentationShareButton } from "../presentation-sharing/share-dialog";
+import { PresentationAssignmentButton } from "../presentation-assignments/assignment-dialog";
 import { PresentationExportButton } from "../presentation-export/export-dialog";
 import {
   applyNativeDesignToDeck,
@@ -2551,6 +2552,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               : t("delivery.common.publish")}
           </button>
           <PresentationShareButton
+            className={styles.shareButton}
+            presentationId={presentationId}
+            versionId={record.currentVersionId}
+            disabled={!canEdit}
+          />
+          <PresentationAssignmentButton
+            actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
             className={styles.shareButton}
             presentationId={presentationId}
             versionId={record.currentVersionId}

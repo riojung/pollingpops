@@ -142,8 +142,9 @@ discussion suggestions are merged in [PR #210](https://github.com/riojung/pollin
 The bounded E13 offline interactive HTML companion is implemented on
 `codex/presentation-offline-export`; its full repository check, compiled-worker smoke and eight
 production-browser workflows across four profiles pass.
-Self-paced attempts and the remaining later packages stay planned; deployment and release
-qualification remain open.
+The bounded E08 reading-assignment/attempt foundation is implemented on
+`codex/presentation-e08-self-paced`. Self-paced responses, assessment feedback and the remaining
+later packages stay planned; deployment and release qualification remain open.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -429,8 +430,16 @@ adds expiring/revocable hash-only capabilities pinned to
 immutable versions. The recipient projection excludes private authoring and assessment data;
 page transitions and image reads recheck access. Link creation preserves exact uncertain intent
 across reload. The [E08 private-sharing record](evidence/presentation-e08-private-sharing.md)
-separates this source work from deployment, hosted/device acceptance and the still-planned
-self-paced assignment/attempt system.
+separates this source work from deployment, hosted/device acceptance and independent self-paced
+delivery.
+
+The bounded E08 slice on `codex/presentation-e08-self-paced` adds **self-paced reading assignments** with separate frozen-version
+assignments, private resumable attempts, explicit page acknowledgements and explicit reading
+completion. It reuses the recipient-safe renderer; activity blocks remain readable previews.
+Reading completion is not assessment or mastery. Recipient capabilities and pending actions stay
+in memory; returning requires the personal resume link and an explicit resume action. See the
+[reading-assignment record](evidence/presentation-e08-reading-assignments.md). Answer submission,
+assessment feedback, identified learners and attempt reports remain later E08 scope.
 
 ### E09 Add useful creator and audience reports
 

@@ -1,8 +1,45 @@
 .entry {
   min-width: 0;
-  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  height: 100%;
+  padding: 16px;
+  background: var(--ui-surface);
   border: 1px solid var(--ui-border, #cbd5e1);
   border-radius: 10px;
+}
+.entryHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.localBadge {
+  margin-inline-start: auto;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  font-size: 9px;
+}
+.entry > button {
+  text-align: start;
+  font-size: 13px;
+  font-weight: 650;
+  border-color: var(--ui-border);
+  background: var(--ui-surface-soft);
+}
+.entry > button:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.entry > .help {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
 }
 .entry button,
 .dialog button {

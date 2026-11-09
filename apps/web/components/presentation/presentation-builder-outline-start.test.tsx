@@ -375,7 +375,8 @@ describe("Question insertion workflows", () => {
   }
   function openSuggestions(view: ReturnType<typeof editor>) {
     const trigger = view.nodes.find(
-      (node) => node.type === "button" && node.props.children === "Suggest discussion questions",
+      (node) =>
+        node.type === "button" && node.props["data-question-suggestions-trigger"] !== undefined,
     )!;
     (trigger.props.onClick as () => void)();
   }
@@ -1008,7 +1009,7 @@ describe("Saved-deck outline handoff", () => {
       expect(view.assistance.open).toBe(false);
       expect(
         view.nodes.some(
-          (node) => node.type === "button" && node.props.children === "Outline to slides",
+          (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
         ),
       ).toBe(true);
       expect(fixture.router.replace).not.toHaveBeenCalled();
@@ -1048,7 +1049,7 @@ describe("Saved-deck outline handoff", () => {
     expect(drain).toHaveBeenCalledTimes(1);
     expect(fixture.router.replace).not.toHaveBeenCalled();
     const manual = view.nodes.find(
-      (node) => node.type === "button" && node.props.children === "Outline to slides",
+      (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
     )!;
     (manual.props.onClick as () => void)();
     await view.settle();
@@ -1090,7 +1091,7 @@ describe("Saved-deck outline handoff", () => {
       expect(fixture.clear).not.toHaveBeenCalled();
       expect(
         view.nodes.some(
-          (node) => node.type === "button" && node.props.children === "Outline to slides",
+          (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
         ),
       ).toBe(true);
       expect(fixture.request.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);

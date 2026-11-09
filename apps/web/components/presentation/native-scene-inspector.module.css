@@ -1,0 +1,470 @@
+/* Authoring controls only: audience slide styles remain independent. */
+.toolbar.toolbar {
+  gap: 6px;
+  padding: 10px 16px;
+}
+
+.toolbar > div {
+  gap: 4px;
+}
+
+.toolbar.toolbar button,
+.toolbar.toolbar summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border-color: transparent;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar.toolbar button:hover:not(:disabled),
+.toolbar.toolbar summary:hover,
+.toolbar.toolbar details[open] > summary {
+  border-color: var(--ui-border);
+  background: var(--ui-surface-soft);
+}
+
+.toolbar svg,
+.inspector svg {
+  flex: 0 0 auto;
+}
+
+.insertMenu {
+  margin-left: 2px;
+}
+
+.toolbar.toolbar .insertMenu button {
+  justify-content: flex-start;
+  min-height: 40px;
+  text-align: left;
+}
+
+.menuHint {
+  margin: 6px 8px 4px;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.inspector.inspector {
+  gap: 18px;
+  font-size: 13px;
+}
+
+.inspector > [data-native-inspector-section] {
+  gap: 16px;
+}
+
+.inspector .selectionSummary {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.objectContext {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.objectContext > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.objectContext strong {
+  color: var(--ui-text-strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.objectIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 36px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 9px;
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.eyebrow {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.selectionCount {
+  margin-left: auto;
+  padding: 4px 7px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 6px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.inspector .selectionSummary label {
+  margin: 0;
+}
+
+/* The selection is already visible above; keep its live status available to readers. */
+.selectionSummary > [role="status"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.inspector label {
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--ui-text-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.inspector input,
+.inspector textarea,
+.inspector select {
+  padding: 9px 10px;
+  border-color: var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.inspector input:focus-visible,
+.inspector textarea:focus-visible,
+.inspector select:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+  border-color: var(--ui-focus);
+}
+
+.inspector textarea[data-native-text-input] {
+  min-height: 138px;
+}
+
+.inspector input[type="file"] {
+  padding: 5px;
+  font-size: 11px;
+}
+
+.inspector input[type="file"]::file-selector-button {
+  margin-right: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 5px;
+  color: var(--ui-text);
+  background: var(--ui-surface-soft);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inspector .card,
+.inspector .mediaCard {
+  min-width: 0;
+  margin: 0;
+  padding: 15px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.inspector .card + .card {
+  padding-top: 15px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.inspector .card > legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin: 0 0 6px -4px;
+  padding: 0 4px;
+  color: var(--ui-text-strong);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.inspector .card > legend svg {
+  width: 15px;
+  height: 15px;
+  color: var(--ui-text-muted);
+}
+
+.sectionHint {
+  margin: 0 0 14px;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.contentFields {
+  min-width: 0;
+}
+
+.inspector button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.inspector button:hover:not(:disabled) {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-soft);
+}
+
+.inspector button:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.inspector button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.inspector button [data-editor-icon] {
+  width: 15px;
+  height: 15px;
+}
+
+.assistanceCard {
+  margin-top: 18px;
+  padding: 13px 12px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+}
+
+.assistanceHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.assistanceHeader svg {
+  width: 15px;
+  height: 15px;
+  color: var(--ui-accent-ink);
+}
+
+.assistanceHeader h3 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.assistanceCard > p:last-child {
+  margin: 10px 0 0;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistanceCard > .sectionHint {
+  margin-bottom: 10px;
+}
+
+.assistanceActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.inspector .assistanceActions button {
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-height: 58px;
+  padding: 8px 3px;
+  font-size: 10px;
+}
+
+.inspector .assistanceActions button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.objectFooter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border-subtle);
+}
+
+.objectFooter .sectionHint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.inspector .deleteButton {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-color: transparent;
+  color: var(--ui-danger-text);
+  background: transparent;
+  font-size: 11px;
+}
+
+.inspector .deleteButton:hover:not(:disabled) {
+  border-color: var(--ui-danger-border);
+  background: var(--ui-danger-bg);
+}
+
+.propertyGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 0 2px;
+}
+
+.sectionHeader > svg {
+  margin-top: 2px;
+  color: var(--ui-text-muted);
+}
+
+.sectionHeader h3 {
+  margin: 0 0 5px;
+  color: var(--ui-text-strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.suggestionCard,
+.mediaCard {
+  min-width: 0;
+}
+
+.inspector .mediaCard > fieldset {
+  padding: 0;
+  border: 0;
+}
+
+.inspector .mediaCard legend {
+  font-size: 13px;
+}
+
+.inspector .readingOrder {
+  gap: 8px;
+}
+
+.readingOrder li {
+  overflow: hidden;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+}
+
+.inspector .readingOrder button {
+  justify-content: flex-start;
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px 7px 0 0;
+  box-shadow: none;
+  background: transparent;
+  text-align: left;
+}
+
+.inspector .readingOrder button[aria-pressed="true"] {
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.inspector .readingOrder label {
+  padding: 6px 10px 8px;
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+}
+
+.inspector .readingOrder input {
+  width: auto;
+  accent-color: var(--ui-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector input,
+  .inspector textarea,
+  .inspector select {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .toolbar.toolbar {
+    padding: 8px 10px;
+  }
+
+  .toolbar.toolbar button,
+  .toolbar.toolbar summary,
+  .inspector.inspector button {
+    min-height: 44px;
+  }
+
+  .selectionCount {
+    font-size: 9px;
+  }
+}

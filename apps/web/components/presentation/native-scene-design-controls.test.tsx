@@ -61,7 +61,9 @@ function text(node: ReactNode): string {
 }
 function button(tree: ReactNode, label: string) {
   return elements(tree).find(
-    (element) => element.type === "button" && text(element.props.children as ReactNode) === label,
+    (element) =>
+      element.type === "button" &&
+      (element.props["aria-label"] ?? text(element.props.children as ReactNode)) === label,
   )!;
 }
 function input(tree: ReactNode, label: string) {
@@ -115,6 +117,29 @@ describe("native design controls", () => {
     expect(onChange.mock.calls[0]![0].nodes).toEqual(scene.nodes);
     click(button(tree, "Apply design to all native slides"));
     expect(onApplyDesignToDeck).toHaveBeenCalledExactlyOnceWith(design);
+  });
+
+  it("offers named palette previews without adding history for the active palette", () => {
+    const scene: PresentationScene = {
+      ...createNativeContentBlock().scene!,
+      schemaVersion: 3,
+      design,
+    };
+    const onChange = vi.fn();
+    const tree = NativeSceneDesignControls({ scene, onChange });
+    expect(button(tree, "Use Midnight theme").props["aria-pressed"]).toBe(true);
+    expect(button(tree, "Use Ocean theme").props["aria-pressed"]).toBe(false);
+    click(button(tree, "Use Midnight theme"));
+    expect(onChange).not.toHaveBeenCalled();
+    click(button(tree, "Use Ocean theme"));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0]).toMatchObject({
+      design: { ...design, theme: "ocean" },
+      nodes: scene.nodes,
+      readingOrder: scene.readingOrder,
+    });
+    for (const label of ["Slide theme", "Slide font", "Slide spacing"])
+      expect(input(tree, label).type).toBe("select");
   });
 
   it("disables inapplicable layouts and explains the required objects", () => {
@@ -311,6 +336,21 @@ describe("native design scene budget recovery", () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(scene).toEqual(original);
     change(input(tree, "Slide theme"), { value: "ocean" });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0].design.theme).toBe("ocean");
+    expect(alert(render(component))).toBeUndefined();
+  });
+
+  it("validates palette preview actions against the scene budget", () => {
+    const scene = budgetFixture({ design: { theme: "paper", font: "sans", spacing: "relaxed" } });
+    const original = structuredClone(scene);
+    const onChange = vi.fn();
+    const component = () => NativeSceneDesignControls({ scene, onChange });
+    click(button(render(component), "Use Midnight theme"));
+    expect(alert(render(component))).toBeDefined();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(scene).toEqual(original);
+    click(button(render(component), "Use Ocean theme"));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0]![0].design.theme).toBe("ocean");
     expect(alert(render(component))).toBeUndefined();

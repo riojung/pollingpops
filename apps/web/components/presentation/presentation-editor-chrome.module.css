@@ -39,36 +39,131 @@
   display: none;
 }
 .chevron {
-  font-size: 13px;
-  opacity: 0.65;
+  display: inline-flex;
+  margin-left: auto;
+  opacity: 0.55;
+}
+.chevron svg {
+  width: 13px;
+  height: 13px;
+}
+.disclosure[open] > summary .chevron {
+  transform: rotate(180deg);
 }
 .disclosureBody {
-  position: absolute;
-  z-index: 65;
-  inset: calc(100% + 8px) 0 auto auto;
+  position: fixed;
+  z-index: 100;
+  inset: auto;
   display: grid;
-  gap: 5px;
-  min-width: min(260px, calc(100vw - 32px));
-  max-width: min(350px, calc(100vw - 24px));
-  max-height: min(570px, calc(100dvh - 100px));
-  overflow-y: auto;
-  padding: 9px;
+  align-content: start;
+  gap: 3px;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: min(570px, calc(100dvh - 24px));
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: 11px;
   box-shadow: var(--ui-shadow-lg);
   color: var(--ui-text);
   background: var(--ui-surface-raised);
 }
-.disclosureBody > button {
-  width: 100%;
-  text-align: left;
+.disclosure:not([open]) > .disclosureBody {
+  display: none;
+}
+.disclosureBody[data-suspended] {
+  /* Existing custom modal backdrops start at 60. */
+  z-index: 50;
+}
+.disclosureBody::backdrop {
+  background: transparent;
+}
+.disclosureBody:where([popover], [data-suspended]) button:not(:where(dialog *, [role="dialog"] *)) {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *)):hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *)):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
+  background: var(--ui-surface-hover);
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *)):disabled {
+  color: var(--ui-text-muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *))
+  > svg {
+  flex: 0 0 18px;
+  color: var(--ui-text-muted);
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *))
+  > span {
+  flex: 1;
+  min-width: 0;
 }
 .disclosureBody > hr {
   width: 100%;
   border: 0;
   border-top: 1px solid var(--ui-border);
   margin: 4px 0;
+}
+.menuSection {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-block: 3px;
+}
+.menuSection + .menuSection {
+  border-top: 1px solid var(--ui-border);
+  margin-top: 3px;
+  padding-top: 7px;
+}
+.menuSectionLabel {
+  padding: 5px 10px 4px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.inline > .disclosureBody {
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  margin-top: 8px;
 }
 .thumbnail {
   position: absolute;
@@ -197,4 +292,11 @@
     var(--ui-surface-soft) 0 18px,
     var(--ui-surface) 18px 36px
   );
+}
+
+@media (max-width: 700px) {
+  .disclosureBody:where([popover], [data-suspended])
+    button:not(:where(dialog *, [role="dialog"] *)) {
+    min-height: 44px;
+  }
 }

@@ -124,7 +124,10 @@ import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import {
   EditorIcon,
+  EDITOR_MODAL_SELECTOR,
   EditorDisclosure,
+  EditorMenuSection,
+  type EditorIconName,
   PresentationSlideThumbnail,
 } from "./presentation-editor-chrome";
 import { PresentationQuestionStarters } from "./presentation-question-starters";
@@ -184,6 +187,18 @@ type InspectorTab =
   | "notes"
   | "accessibility"
   | "readiness";
+
+const inspectorTabIcons: Record<InspectorTab, EditorIconName> = {
+  build: "content",
+  diagnose: "preview",
+  recover: "recovery",
+  content: "content",
+  layout: "layout",
+  media: "media",
+  notes: "notes",
+  accessibility: "accessibility",
+  readiness: "check",
+};
 
 const HISTORY_LIMIT = 40;
 const TEXT_EDIT_COALESCE_MS = 750;
@@ -480,22 +495,31 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     const measure = () => {
       // Layout pixels keep offsets and the responsive mode correct under page zoom.
       builder.style.setProperty("--presentation-command-height", `${element.offsetHeight}px`);
+      // Container units under CSS zoom differ between engines. Size drawers
+      // from the same layout width used for the responsive mode.
+      builder.style.setProperty(
+        "--presentation-panel-width",
+        `${Math.min(340, builder.offsetWidth * 0.9)}px`,
+      );
       const compact = builder.offsetWidth <= 920;
       if (compactLayout.current !== compact) {
         compactLayout.current = compact;
         setCompactEditor(compact);
-        setMapOpen(!compact);
-        // Keep an interaction preview's invoking panel available for focus return;
-        // native modals inside the panel also inherit display:none if it closes.
-        setInspectorOpen(
-          !compact ||
-            Boolean(inspectorPanel.current?.querySelector("dialog[open]")) ||
-            Boolean(
-              document.querySelector(
-                '[data-presentation-preview="true"][data-preview-origin="interaction"]',
-              ),
-            ),
+        const inspectorDialogOpen = Boolean(
+          inspectorPanel.current?.querySelector("dialog[open]") ||
+          document.querySelector(
+            '[data-presentation-preview="true"][data-preview-origin="interaction"]',
+          ),
         );
+        // Only the insertion menu can invoke an external navigator dialog.
+        // The Sections panel is also an open <details>, but does not own one.
+        const mapDialogOpen = Boolean(
+          !inspectorDialogOpen &&
+          document.querySelector(EDITOR_MODAL_SELECTOR) &&
+          mapPanel.current?.querySelector(`details.${styles.insertMenu}[open]`),
+        );
+        setMapOpen(!compact || mapDialogOpen);
+        setInspectorOpen(!compact || inspectorDialogOpen);
       }
     };
     measure();
@@ -507,6 +531,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       observer?.disconnect();
       if (!observer) window.removeEventListener("resize", measure);
       builder.style.removeProperty("--presentation-command-height");
+      builder.style.removeProperty("--presentation-panel-width");
     };
   }, []);
   const recoveryKey = `presentation:${presentationId}`;
@@ -548,7 +573,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     if (!panel) return;
     // A breakpoint change can mount drawer behavior while a preview owns focus.
     // Preserve its active control and the original drawer opener until the modal closes.
-    if (!document.querySelector('dialog[open], [data-presentation-preview="true"]')) {
+    if (!document.querySelector(EDITOR_MODAL_SELECTOR)) {
       drawerOpener.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : trigger;
       panel
@@ -556,11 +581,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         ?.focus({ preventScroll: true });
     }
     const outside = (event: Event) => {
-      if (
-        document.querySelector('dialog[open], [data-presentation-preview="true"]') ||
-        !(event.target instanceof Node)
-      )
-        return;
+      if (document.querySelector(EDITOR_MODAL_SELECTOR) || !(event.target instanceof Node)) return;
       if (event.target instanceof Element && event.target.closest("[data-editor-history]")) return;
       if (!panel.contains(event.target) && !trigger?.contains(event.target)) closeEditorPanels();
     };
@@ -568,7 +589,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       if (
         event.defaultPrevented ||
         event.key !== "Escape" ||
-        document.querySelector('dialog[open], [data-presentation-preview="true"]')
+        document.querySelector(EDITOR_MODAL_SELECTOR)
       )
         return;
       event.preventDefault();
@@ -3150,56 +3171,74 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             >
               <EditorIcon name="plus" /> New slide
             </button>
-            <EditorDisclosure label="Insert & import" className={styles.insertMenu}>
-              <button onClick={() => addBlock(createNativeContentBlock())} type="button">
-                Blank slide
-              </button>
-              <button onClick={() => addBlock(createContentBlock())} type="button">
-                + {t("delivery.presentation.contentSlide")}
-              </button>
-              <button onClick={() => addBlock(createQuestionBlock())} type="button">
-                + {t("delivery.builder.addQuestion")}
-              </button>
-              <button
-                disabled={!roundSources.length || preparingImport}
-                onClick={openRoundImport}
-                type="button"
-              >
-                + {t("delivery.presentationBuilder.fromPublishedRound")}
-              </button>
-              <button
-                disabled={preparingImport}
-                onClick={() => void openSourceImport()}
-                type="button"
-              >
-                + {t("delivery.presentationBuilder.fromTrustedSource")}
-              </button>
-              <button
-                disabled={!canEdit || preparingImport}
-                lang="en-CA"
-                onClick={() => void openAssistance()}
-                type="button"
-              >
-                Outline to slides
-              </button>
-              <button
-                disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
-                lang="en-CA"
-                onClick={openVisualImport}
-                type="button"
-              >
-                + Import visual slides
-              </button>
-              {canInsertPack ? (
+            <EditorDisclosure
+              label="Insert & import"
+              icon="import"
+              align="start"
+              className={styles.insertMenu}
+            >
+              <EditorMenuSection label="Create a slide">
+                <button onClick={() => addBlock(createNativeContentBlock())} type="button">
+                  <EditorIcon name="slides" />
+                  <span>Blank slide</span>
+                </button>
+                <button onClick={() => addBlock(createContentBlock())} type="button">
+                  <EditorIcon name="content" />
+                  <span>{t("delivery.presentation.contentSlide")}</span>
+                </button>
+                <button onClick={() => addBlock(createQuestionBlock())} type="button">
+                  <EditorIcon name="interaction" />
+                  <span>{t("delivery.builder.addQuestion")}</span>
+                </button>
                 <button
-                  disabled={mediaState !== "idle" || preparingImport}
+                  aria-label="Outline to slides"
+                  disabled={!canEdit || preparingImport}
                   lang="en-CA"
-                  onClick={() => void openPackImport()}
+                  onClick={() => void openAssistance()}
                   type="button"
                 >
-                  + From Recovery Pack
+                  <EditorIcon name="outline" />
+                  <span>Outline to slides</span>
                 </button>
-              ) : null}
+              </EditorMenuSection>
+              <EditorMenuSection label="Bring content in">
+                <button
+                  disabled={!roundSources.length || preparingImport}
+                  onClick={openRoundImport}
+                  type="button"
+                >
+                  <EditorIcon name="round" />
+                  <span>{t("delivery.presentationBuilder.fromPublishedRound")}</span>
+                </button>
+                <button
+                  disabled={preparingImport}
+                  onClick={() => void openSourceImport()}
+                  type="button"
+                >
+                  <EditorIcon name="source" />
+                  <span>{t("delivery.presentationBuilder.fromTrustedSource")}</span>
+                </button>
+                <button
+                  disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
+                  lang="en-CA"
+                  onClick={openVisualImport}
+                  type="button"
+                >
+                  <EditorIcon name="image" />
+                  <span>Import visual slides</span>
+                </button>
+                {canInsertPack ? (
+                  <button
+                    disabled={mediaState !== "idle" || preparingImport}
+                    lang="en-CA"
+                    onClick={() => void openPackImport()}
+                    type="button"
+                  >
+                    <EditorIcon name="recovery" />
+                    <span>From Recovery Pack</span>
+                  </button>
+                ) : null}
+              </EditorMenuSection>
             </EditorDisclosure>
           </div>
         </aside>
@@ -3214,7 +3253,12 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             </button>
           </div>
           {selectedBlock ? (
-            <div className={styles.canvasToolbar} aria-label="Selected block actions" lang="en-CA">
+            <div
+              className={styles.canvasToolbar}
+              role="group"
+              aria-label="Selected block actions"
+              lang="en-CA"
+            >
               <span className={styles.slidePosition}>
                 Slide {draft.blocks.findIndex((block) => block.id === selectedBlock.id) + 1} of{" "}
                 {draft.blocks.length}
@@ -3286,69 +3330,90 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   Convert to native slide
                 </button>
               ) : null}
-              <button
-                disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
-                title="Keep linked rechecks after their source question."
-                onClick={() =>
-                  commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
-                }
-                type="button"
-              >
-                Move earlier
-              </button>
-              <button
-                disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
-                title="Keep linked rechecks after their source question."
-                onClick={() =>
-                  commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
-                }
-                type="button"
-              >
-                Move later
-              </button>
-              {selectedBlock.kind === "content" ? (
+              <div className={styles.slideActionGroup} role="group" aria-label="Slide order">
                 <button
-                  type="button"
+                  aria-label="Move earlier"
+                  disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
+                  title="Move earlier. Linked rechecks stay after their source question."
                   onClick={() =>
-                    commit((current) =>
-                      setPresentationSlideHidden(current, selectedBlock.id, !selectedBlock.hidden),
-                    )
+                    commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
                   }
+                  type="button"
                 >
-                  {selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                  <EditorIcon name="arrow-up" />
                 </button>
-              ) : (
-                <p className={styles.helpText} lang="en-CA">
-                  Activities stay in the presentation. Remove an activity to exclude it; linked
-                  rechecks keep their order.
-                </p>
-              )}
-              <button
-                disabled={draft.blocks.length >= 200}
-                onClick={() => {
-                  const copy = duplicatePresentationBlock(selectedBlock);
-                  commit((current) =>
-                    insertPresentationBlockDuplicate(current, selectedBlock.id, copy),
-                  );
-                  setSelectedBlockId(copy.id);
-                  setInspectorTab(copy.kind === "content" ? "content" : "build");
-                }}
-                type="button"
-              >
-                Duplicate
-              </button>
-              <button
-                className={styles.dangerButton}
-                onClick={() => {
-                  const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
-                  const remaining = draft.blocks.filter((block) => block.id !== selectedBlock.id);
-                  commit((current) => removePresentationBlock(current, selectedBlock.id));
-                  setSelectedBlockId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
-                }}
-                type="button"
-              >
-                Delete
-              </button>
+                <button
+                  aria-label="Move later"
+                  disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
+                  title="Move later. Linked rechecks stay after their source question."
+                  onClick={() =>
+                    commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
+                  }
+                  type="button"
+                >
+                  <EditorIcon name="arrow-down" />
+                </button>
+              </div>
+              <div className={styles.slideActionGroup} role="group" aria-label="Slide actions">
+                {selectedBlock.kind === "content" ? (
+                  <button
+                    aria-label={selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                    title={selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                    type="button"
+                    onClick={() =>
+                      commit((current) =>
+                        setPresentationSlideHidden(
+                          current,
+                          selectedBlock.id,
+                          !selectedBlock.hidden,
+                        ),
+                      )
+                    }
+                  >
+                    <EditorIcon name={selectedBlock.hidden ? "preview" : "eye-off"} />
+                    <span>{selectedBlock.hidden ? "Show slide" : "Hide slide"}</span>
+                  </button>
+                ) : (
+                  <p className={styles.helpText} lang="en-CA">
+                    Activities stay in the presentation. Remove an activity to exclude it; linked
+                    rechecks keep their order.
+                  </p>
+                )}
+                <button
+                  aria-label="Duplicate"
+                  title="Duplicate slide"
+                  disabled={draft.blocks.length >= 200}
+                  onClick={() => {
+                    const copy = duplicatePresentationBlock(selectedBlock);
+                    commit((current) =>
+                      insertPresentationBlockDuplicate(current, selectedBlock.id, copy),
+                    );
+                    setSelectedBlockId(copy.id);
+                    setInspectorTab(copy.kind === "content" ? "content" : "build");
+                  }}
+                  type="button"
+                >
+                  <EditorIcon name="duplicate" />
+                  <span>Duplicate</span>
+                </button>
+                <button
+                  aria-label="Delete"
+                  title="Delete slide"
+                  className={styles.dangerButton}
+                  onClick={() => {
+                    const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
+                    const remaining = draft.blocks.filter((block) => block.id !== selectedBlock.id);
+                    commit((current) => removePresentationBlock(current, selectedBlock.id));
+                    setSelectedBlockId(
+                      remaining[Math.min(index, remaining.length - 1)]?.id ?? null,
+                    );
+                  }}
+                  type="button"
+                >
+                  <EditorIcon name="trash" />
+                  <span>Delete</span>
+                </button>
+              </div>
             </div>
           ) : null}
           {selectedBlock?.kind === "content" && selectedBlock.hidden ? (
@@ -3501,6 +3566,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <EditorDisclosure
                 label="Slide ideas & audience activities"
                 className={styles.slideIdeas}
+                icon="interaction"
+                inline
               >
                 <PresentationQuestionStarters
                   key={`question-starters:${selectedBlock.id}`}
@@ -3566,7 +3633,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     return true;
                   }}
                 />
-                <div className={styles.canvasToolbar}>
+                <section className={styles.ideaCard} aria-label="AI discussion suggestions">
+                  <div className={styles.ideaCardHeading}>
+                    <EditorIcon name="sparkle" />
+                    <span>AI assistance</span>
+                  </div>
                   <button
                     type="button"
                     data-question-suggestions-trigger
@@ -3575,13 +3646,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }
                     onClick={() => void openQuestionSuggestions()}
                   >
-                    Suggest discussion questions
+                    <EditorIcon name="sparkle" />
+                    <span>Suggest discussion questions</span>
                   </button>
                   <p className={styles.helpText}>
-                    Optional AI assistance. Review the source and shared AI allowance before
-                    generating two English discussion suggestions.
+                    Review your source and shared AI allowance before generating two English
+                    discussion suggestions.
                   </p>
-                </div>
+                </section>
                 {selectedBlock.textAssistance ? (
                   <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
                     <strong>Latest AI text edit — unverified wording</strong>
@@ -3698,7 +3770,12 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             </section>
           )}
           {productFeatures?.canvasBoards || draft.recoveryPackInsertions?.length ? (
-            <EditorDisclosure label="Related content" className={styles.slideIdeas}>
+            <EditorDisclosure
+              label="Related content"
+              icon="source"
+              inline
+              className={styles.slideIdeas}
+            >
               {productFeatures?.canvasBoards ? (
                 <CanvasArtifactLinks
                   target={{ kind: "presentation", targetId: presentationId }}
@@ -3718,13 +3795,16 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           aria-label={t("delivery.presentationBuilder.blockInspector")}
         >
           <div className={styles.inspectorHeading}>
-            <strong>Slide tools</strong>
+            <div>
+              <span className={styles.inspectorEyebrow}>Customize your slide</span>
+              <h2>Slide tools</h2>
+            </div>
             <button
               type="button"
               onClick={() => (compactEditor ? closeEditorPanels(true) : setInspectorOpen(false))}
               aria-label="Close inspector panel"
             >
-              ×
+              <EditorIcon name="close" />
             </button>
           </div>
           <div
@@ -3747,7 +3827,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 tabIndex={inspectorTab === tab.id ? 0 : -1}
                 type="button"
               >
-                {tab.label}
+                <EditorIcon name={inspectorTabIcons[tab.id]} />
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>

@@ -268,7 +268,7 @@ describe("Presentation Builder UI", () => {
     (canEdit) => {
       workspace.canEdit = canEdit;
       const markup = opinionMarkup(createQuestionBlock("poll").question);
-      const button = markup.match(/<button[^>]*>Outline to slides<\/button>/)?.[0];
+      const button = markup.match(/<button[^>]*aria-label="Outline to slides"[^>]*>/)?.[0];
       expect(button).toBeDefined();
       expect(button?.includes('disabled=""')).toBe(!canEdit);
       expect(markup).toContain("New slide");

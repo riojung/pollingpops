@@ -6,7 +6,13 @@ import { AUTH_CHANGE_EVENT } from "../../lib/api";
 import { createContentBlock, createQuestionBlock } from "../../lib/presentation-builder";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { ContentSlideView } from "./content-slide-view";
-import { EditorDisclosure, PresentationSlideThumbnail } from "./presentation-editor-chrome";
+import {
+  EditorDisclosure,
+  EditorIcon,
+  EditorMenuItem,
+  EditorMenuSection,
+  PresentationSlideThumbnail,
+} from "./presentation-editor-chrome";
 import { PresentationThumbnailImage } from "./presentation-thumbnail-image";
 
 const mocked = vi.hoisted(() => ({
@@ -55,7 +61,11 @@ function elements(node: ReactNode): ReactElement<Record<string, any>>[] {
   if (!isValidElement<Record<string, any>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
-function hookHarness(component: () => ReactElement<Record<string, any>>, root: unknown) {
+function hookHarness(
+  component: () => ReactElement<Record<string, any>>,
+  root: unknown,
+  attachChildren?: (tree: ReactElement<Record<string, any>>) => void,
+) {
   const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as (() => void)[] };
   let tree: ReactElement<Record<string, any>>;
   const render = () => {
@@ -67,6 +77,7 @@ function hookHarness(component: () => ReactElement<Record<string, any>>, root: u
       mocked.hooks = null;
     }
     tree.props.ref.current = root;
+    attachChildren?.(tree);
     hooks.effects.splice(0).forEach((effect) => effect());
     return tree;
   };
@@ -87,7 +98,10 @@ class FakeElement extends FakeNode {
   closest = (selector: string) =>
     selector === "button" ? this.buttonAncestor : this.modalAncestor ? this : null;
 }
-function disclosureHarness(children: ReactNode) {
+function disclosureHarness(
+  children: ReactNode,
+  options: Partial<Parameters<typeof EditorDisclosure>[0]> = {},
+) {
   const documentListeners = new Map<string, Set<(event: unknown) => void>>();
   const windowListeners = new Map<string, Set<(event: unknown) => void>>();
   const listen = (
@@ -99,7 +113,39 @@ function disclosureHarness(children: ReactNode) {
     callbacks.add(callback);
     registry.set(name, callbacks);
   };
-  const summary = { focus: vi.fn() };
+  const anchor = { left: 500, right: 540, top: 80, bottom: 120 };
+  const summary = { focus: vi.fn(), getBoundingClientRect: () => anchor };
+  let popoverOpen = false;
+  let popoverAttribute = !options.inline;
+  const popup = {
+    scrollHeight: 300,
+    zoom: 1,
+    get offsetWidth() {
+      return Math.min(280, Number.parseFloat(popup.style.maxWidth) || 280);
+    },
+    style: { maxHeight: "", maxWidth: "", top: "", left: "" },
+    dataset: {} as Record<string, string>,
+    matches: () => popoverOpen,
+    contains: () => false,
+    hasAttribute: () => popoverAttribute,
+    removeAttribute: () => {
+      popoverAttribute = false;
+    },
+    setAttribute: () => {
+      popoverAttribute = true;
+    },
+    showPopover: vi.fn(() => {
+      popoverOpen = true;
+    }),
+    hidePopover: vi.fn(() => {
+      popoverOpen = false;
+    }),
+    getBoundingClientRect: () => ({
+      width: popup.offsetWidth * popup.zoom,
+      height:
+        Math.min(popup.scrollHeight, Number.parseFloat(popup.style.maxHeight) || 300) * popup.zoom,
+    }),
+  };
   const inside = new FakeElement();
   const outside = new FakeElement();
   const details = {
@@ -108,24 +154,30 @@ function disclosureHarness(children: ReactNode) {
     querySelector: () => summary,
   };
   let modalOpen = false;
+  let modalTagName = "DIALOG";
   vi.stubGlobal("Node", FakeNode);
   vi.stubGlobal("Element", FakeElement);
   vi.stubGlobal("document", {
-    querySelector: () => (modalOpen ? {} : null),
+    querySelector: () => (modalOpen ? { tagName: modalTagName } : null),
     addEventListener: (name: string, callback: (event: unknown) => void) =>
       listen(documentListeners, name, callback),
     removeEventListener: (name: string, callback: (event: unknown) => void) =>
       documentListeners.get(name)?.delete(callback),
   });
   vi.stubGlobal("window", {
+    innerWidth: 960,
+    innerHeight: 720,
     addEventListener: (name: string, callback: (event: unknown) => void) =>
       listen(windowListeners, name, callback),
     removeEventListener: (name: string, callback: (event: unknown) => void) =>
       windowListeners.get(name)?.delete(callback),
   });
   const harness = hookHarness(
-    () => EditorDisclosure({ label: "Share and deliver", children }),
+    () => EditorDisclosure({ label: "Share and deliver", children, ...options }),
     details,
+    (tree) => {
+      elements(tree).find((element) => element.props.role === "group")!.props.ref.current = popup;
+    },
   );
   harness.render();
   const keydown = (target = inside, key = "Escape") => {
@@ -137,13 +189,27 @@ function disclosureHarness(children: ReactNode) {
     ...harness,
     details,
     summary,
+    anchor,
+    popup,
     inside,
+    toggle: () => harness.tree().props.onToggle(),
+    scroll: () =>
+      windowListeners.get("scroll")?.forEach((listener) => listener({ type: "scroll" })),
+    focusOutside: () =>
+      documentListeners
+        .get("focusin")
+        ?.forEach((listener) => listener({ type: "focusin", target: outside })),
     keydown,
     clickCapture: (target = inside) =>
       harness.tree().props.onClickCapture({ target, currentTarget: details }),
-    setModal: (open: boolean) => {
+    setModal: (open: boolean, custom = false) => {
       modalOpen = open;
+      modalTagName = custom ? "DIV" : "DIALOG";
     },
+    focusOut: () =>
+      documentListeners
+        .get("focusout")
+        ?.forEach((listener) => listener({ type: "focusout", target: inside })),
     pointer: (target = outside) =>
       documentListeners
         .get("pointerdown")
@@ -159,6 +225,84 @@ function disclosureHarness(children: ReactNode) {
 afterEach(() => {
   mocked.hooks = null;
   vi.unstubAllGlobals();
+});
+
+describe("editor menu primitives", () => {
+  it("renders decorative original icons and ordinary labeled button groups", () => {
+    const action = vi.fn();
+    const markup = renderToStaticMarkup(
+      <EditorDisclosure label="Insert" icon="plus" align="start">
+        <EditorMenuSection label="Slide elements">
+          <EditorMenuItem icon="text" onClick={action}>
+            Text box
+          </EditorMenuItem>
+          <EditorMenuItem icon="table" disabled>
+            Table
+          </EditorMenuItem>
+        </EditorMenuSection>
+      </EditorDisclosure>,
+    );
+    expect(markup).toContain('aria-label="Insert"');
+    expect(markup).toContain('role="group" aria-label="Slide elements"');
+    expect(markup).toContain('data-editor-icon="text"');
+    expect(markup).toContain('aria-hidden="true" focusable="false"');
+    expect(markup).toContain('type="button"');
+    expect(markup).not.toContain('role="menu"');
+    expect(renderToStaticMarkup(<EditorIcon name="distribute-vertical" />)).toContain("<path");
+  });
+
+  it("uses a top-layer popup that flips above a bottom-edge opener and stays inside the viewport", () => {
+    const disclosure = disclosureHarness(<button>Duplicate</button>);
+    Object.assign(disclosure.anchor, { left: 900, right: 940, top: 650, bottom: 690 });
+    const body = elements(disclosure.tree()).find((element) => element.props.role === "group")!;
+    expect(body.props.popover).toBe("manual");
+    disclosure.toggle();
+    expect(disclosure.popup.showPopover).toHaveBeenCalledOnce();
+    expect(disclosure.popup.dataset.placement).toBe("top");
+    expect(disclosure.popup.style.left).toBe("660px");
+    expect(disclosure.popup.style.top).toBe("342px");
+    disclosure.scroll();
+    expect(disclosure.popup.showPopover).toHaveBeenCalledOnce();
+    disclosure.details.open = false;
+    disclosure.toggle();
+    expect(disclosure.popup.hidePopover).toHaveBeenCalledOnce();
+    disclosure.unmount();
+  });
+
+  it("honors start alignment while clamping left and right edges and available height", () => {
+    const disclosure = disclosureHarness(<button>Insert</button>, { align: "start" });
+    Object.assign(disclosure.anchor, { left: 920, right: 950, top: 330, bottom: 370 });
+    disclosure.popup.scrollHeight = 900;
+    disclosure.toggle();
+    expect(disclosure.popup.style.left).toBe("668px");
+    expect(disclosure.popup.style.maxHeight).toBe("330px");
+    expect(disclosure.popup.dataset.placement).toBe("bottom");
+    disclosure.anchor.left = -20;
+    disclosure.scroll();
+    expect(disclosure.popup.style.left).toBe("12px");
+    disclosure.unmount();
+  });
+
+  it("converts viewport coordinates into CSS pixels under 200 percent ancestor zoom", () => {
+    const disclosure = disclosureHarness(<button>Duplicate</button>);
+    Object.assign(disclosure.anchor, { left: 900, right: 940, top: 650, bottom: 690 });
+    disclosure.popup.zoom = 2;
+    disclosure.toggle();
+    expect(disclosure.popup.style.left).toBe("190px");
+    expect(disclosure.popup.style.top).toBe("36px");
+    expect(disclosure.popup.style.maxHeight).toBe("285px");
+    disclosure.unmount();
+  });
+
+  it("keeps intentional inline panels in normal flow without opening a popover", () => {
+    const disclosure = disclosureHarness(<button>Audience activity</button>, { inline: true });
+    const body = elements(disclosure.tree()).find((element) => element.props.role === "group")!;
+    expect(body.props.popover).toBeUndefined();
+    disclosure.toggle();
+    expect(disclosure.popup.showPopover).not.toHaveBeenCalled();
+    expect(disclosure.popup.style.top).toBe("");
+    disclosure.unmount();
+  });
 });
 
 describe("editor disclosure lifecycle", () => {
@@ -234,6 +378,70 @@ describe("editor disclosure lifecycle", () => {
     expect(disclosure.summary.focus).toHaveBeenCalledOnce();
     disclosure.keydown();
     expect(disclosure.summary.focus).toHaveBeenCalledOnce();
+    disclosure.unmount();
+  });
+
+  it("closes after Tab moves focus outside while preserving the action child", () => {
+    const child = <button>Pending action</button>;
+    const disclosure = disclosureHarness(child);
+    const tab = disclosure.keydown(disclosure.inside, "Tab");
+    expect(tab.preventDefault).not.toHaveBeenCalled();
+    disclosure.focusOutside();
+    expect(disclosure.details.open).toBe(false);
+    disclosure.render();
+    expect(
+      elements(disclosure.tree()).find((element) => element.props.role === "group")!.props.children,
+    ).toBe(child);
+    disclosure.unmount();
+  });
+
+  it("does not dismiss Safari pointer actions between pointerdown blur and click focus", async () => {
+    const disclosure = disclosureHarness(<button>Assign reading</button>);
+    disclosure.pointer(disclosure.inside);
+    disclosure.focusOut();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disclosure.details.open).toBe(true);
+    disclosure.unmount();
+  });
+
+  it("closes when Safari Tabs out of the document without a subsequent focusin", async () => {
+    const disclosure = disclosureHarness(<button>Final action</button>);
+    disclosure.focusOut();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disclosure.details.open).toBe(false);
+    expect(disclosure.popup.hidePopover).toHaveBeenCalledOnce();
+    disclosure.unmount();
+  });
+
+  it("suspends the top layer for external custom modals and restores it with its native ancestry intact", () => {
+    const child = <button>Outline to slides</button>;
+    const disclosure = disclosureHarness(child);
+    disclosure.toggle();
+    disclosure.setModal(true, true);
+    disclosure.pointer();
+    expect(disclosure.details.open).toBe(true);
+    expect(disclosure.popup.hasAttribute()).toBe(false);
+    expect(disclosure.popup.dataset.suspended).toBe("true");
+    const modalControl = new FakeElement();
+    modalControl.modalAncestor = true;
+    const escape = disclosure.keydown(modalControl);
+    expect(escape.preventDefault).not.toHaveBeenCalled();
+    disclosure.setModal(false);
+    disclosure.scroll();
+    expect(disclosure.popup.hasAttribute()).toBe(true);
+    expect(disclosure.popup.dataset.suspended).toBeUndefined();
+    expect(disclosure.popup.showPopover).toHaveBeenCalledTimes(2);
+    expect(
+      elements(disclosure.tree()).find((element) => element.props.role === "group")!.props.children,
+    ).toBe(child);
+    disclosure.unmount();
+  });
+
+  it("closes on an authorization change even while a modal owns focus", () => {
+    const disclosure = disclosureHarness(<button>Pending export</button>);
+    disclosure.setModal(true);
+    disclosure.authChange();
+    expect(disclosure.details.open).toBe(false);
     disclosure.unmount();
   });
 

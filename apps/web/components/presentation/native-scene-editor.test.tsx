@@ -9,6 +9,7 @@ import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { EditorDisclosure, EditorIcon } from "./presentation-editor-chrome";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
@@ -52,6 +53,14 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
     return elements((node as ReactPortal).children);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
+}
+
+function controlText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(controlText).join("");
+  if (!isValidElement<Record<string, unknown>>(node)) return "";
+  if (typeof node.props["aria-label"] === "string") return node.props["aria-label"];
+  return controlText(node.props.children as ReactNode);
 }
 
 function editorHarness(
@@ -113,15 +122,22 @@ function editorHarness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("interaction insertion picker", () => {
-  it.each([true, false])(
-    "closes the picker and opens editing tools only for an accepted insertion (%s)",
-    (accepted) => {
+  it.each([
+    ["Add reveal panel", true],
+    ["Add reveal panel", false],
+    ["Add table", true],
+    ["Add table", false],
+    ["Add bar chart", true],
+    ["Add bar chart", false],
+  ] as const)(
+    "closes %s and opens editing tools only for an accepted insertion (%s)",
+    (label, accepted) => {
       const inspect = vi.fn();
       const editor = editorHarness({ onInspectSelection: inspect });
       editor.onChange.mockReturnValue(accepted);
       editor.render("idle");
       const trigger = editor.find(
-        (element) => element.type === "button" && element.props.children === "Add reveal panel",
+        (element) => element.type === "button" && controlText(element) === label,
       );
       const focus = vi.fn(),
         removeAttribute = vi.fn();
@@ -141,6 +157,58 @@ describe("interaction insertion picker", () => {
       }
     },
   );
+});
+
+describe("native editor control hierarchy", () => {
+  it("pairs native insertion actions with representative icons and shared disclosure controls", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    for (const [label, icon] of [
+      ["Add native text", "text"],
+      ["Add native shape", "shape"],
+      ["Add native connector", "connector"],
+      ["Add table", "table"],
+      ["Add reveal panel", "reveal"],
+      ["Add detail dialog", "dialog"],
+      ["Add image hotspot", "hotspot"],
+      ["Add link", "link"],
+      ["Add slide link", "navigation"],
+    ]) {
+      const button = editor.find(
+        (element) => element.type === "button" && controlText(element) === label,
+      );
+      expect(
+        elements(button).some(
+          (element) => element.type === EditorIcon && element.props.name === icon,
+        ),
+      ).toBe(true);
+    }
+    const menus = editor.all().filter((element) => element.type === EditorDisclosure);
+    expect(menus.map((element) => [element.props.label, element.props.icon])).toEqual([
+      ["Interactions", "interaction"],
+      ["Insert more", "plus"],
+    ]);
+  });
+
+  it("places content editing before writing assistance and keeps deletion in the object footer", () => {
+    const editor = editorHarness({ onTextAssistance: vi.fn() });
+    editor.render("idle");
+    const fieldset = editor.find((element) => element.props["data-native-text-fields"] === "true");
+    const controls = elements(fieldset);
+    const textIndex = controls.findIndex(
+      (element) =>
+        element.type === "textarea" && element.props["aria-label"] === "Native slide title",
+    );
+    const assistanceIndex = controls.findIndex(
+      (element) => element.props["aria-label"] === "Writing assistance",
+    );
+    const deleteIndex = controls.findIndex(
+      (element) => element.type === "button" && controlText(element) === "Delete object",
+    );
+    expect(textIndex).toBeGreaterThan(-1);
+    expect(assistanceIndex).toBeGreaterThan(textIndex);
+    expect(deleteIndex).toBeGreaterThan(assistanceIndex);
+  });
 });
 
 describe("reviewed native layout integration", () => {
@@ -288,7 +356,7 @@ describe("native upload capacity guard", () => {
       "Add link",
     ]) {
       const button = editor.find(
-        (element) => element.type === "button" && element.props.children === label,
+        (element) => element.type === "button" && controlText(element) === label,
       );
       expect(button.props.disabled).toBe(true);
       // The handler also protects capacity when invoked from a stale/programmatic event.
@@ -334,8 +402,8 @@ describe("native upload capacity guard", () => {
       "Add link",
     ]) {
       expect(
-        editor.find((element) => element.type === "button" && element.props.children === label)
-          .props.disabled,
+        editor.find((element) => element.type === "button" && controlText(element) === label).props
+          .disabled,
       ).toBe(false);
     }
     expect(
@@ -351,7 +419,7 @@ describe("native multi-object selection", () => {
     const editor = editorHarness();
     editor.render("idle");
     const format = editor.find(
-      (element) => element.type === "button" && element.props.children === "Format text",
+      (element) => element.type === "button" && controlText(element) === "Format text",
     );
     (format.props.onClick as () => void)();
     expect(editor.onChange).toHaveBeenCalledTimes(1);
@@ -389,8 +457,7 @@ describe("native multi-object selection", () => {
     expect(moved.nodes[0].frame.x).toBe(9);
     expect(moved.nodes[1].frame.x).toBe(9);
     const remove = editor.find(
-      (element) =>
-        element.type === "button" && element.props.children === "Delete selected objects",
+      (element) => element.type === "button" && controlText(element) === "Delete selected objects",
     );
     (remove.props.onClick as () => void)();
     expect(editor.onChange.mock.calls[1]![0].nodes).toEqual([editor.scene.nodes[0]]);
@@ -460,7 +527,7 @@ describe("native external video insertion selection", () => {
     function insert() {
       const button = elements(videoTree).find(
         (element) =>
-          element.type === "button" && element.props.children === "Add external video link",
+          element.type === "button" && controlText(element) === "Add external video link",
       )!;
       expect(button.props.disabled).toBe(false);
       (button.props.onClick as () => void)();
@@ -545,7 +612,7 @@ describe("native design and rich text coexistence", () => {
       }
       editor.render("idle");
       const format = editor.find(
-        (element) => element.type === "button" && element.props.children === "Format text",
+        (element) => element.type === "button" && controlText(element) === "Format text",
       );
       (format.props.onClick as () => void)();
       const formatted = editor.onChange.mock.calls[0]![0];
@@ -588,7 +655,7 @@ describe("native edit validation", () => {
       const editor = editorHarness();
       editor.render("idle");
       const button = editor.find(
-        (element) => element.type === "button" && element.props.children === label,
+        (element) => element.type === "button" && controlText(element) === label,
       );
       (button.props.onClick as () => void)();
       const next = editor.onChange.mock.calls[0]![0];
@@ -608,7 +675,7 @@ describe("native edit validation", () => {
         editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
       ).toEqual([next.nodes.at(-1).id]);
       const table = editor.find(
-        (element) => element.type === "button" && element.props.children === "Add table",
+        (element) => element.type === "button" && controlText(element) === "Add table",
       );
       (table.props.onClick as () => void)();
       expect(editor.onChange.mock.calls[1]![0]).toMatchObject({
@@ -623,7 +690,7 @@ describe("native edit validation", () => {
     editor.onChange.mockReturnValue(false);
     editor.render("idle");
     const add = () =>
-      editor.find((element) => element.type === "button" && element.props.children === "Add table");
+      editor.find((element) => element.type === "button" && controlText(element) === "Add table");
     (add().props.onClick as () => void)();
     editor.render("idle");
     expect(
@@ -756,9 +823,8 @@ describe("native canvas and contextual inspector", () => {
       "native:body:text",
     );
     (
-      editor.find(
-        (element) => element.type === "button" && element.props.children === "Format text",
-      ).props.onClick as () => void
+      editor.find((element) => element.type === "button" && controlText(element) === "Format text")
+        .props.onClick as () => void
     )();
     Object.assign(editor.scene, editor.onChange.mock.calls.at(-1)![0]);
     for (const section of ["content", "layout", "media", "accessibility"] as const) {
@@ -807,18 +873,18 @@ describe("selected native text assistance", () => {
     editor.render("idle");
     const fieldset = editor.find((node) => node.props["data-native-text-fields"] === "true");
     const rewrite = elements(fieldset).find(
-      (node) => node.type === "button" && node.props.children === "Rewrite text",
+      (node) => node.type === "button" && controlText(node) === "Rewrite text",
     )!;
     expect(rewrite.props.disabled).toBe(false);
     (rewrite.props.onClick as () => void)();
     expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "rewrite");
     const shorten = elements(fieldset).find(
-      (node) => node.type === "button" && node.props.children === "Shorten text",
+      (node) => node.type === "button" && controlText(node) === "Shorten text",
     )!;
     (shorten.props.onClick as () => void)();
     expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "shorten");
     const translate = elements(fieldset).find(
-      (node) => node.type === "button" && node.props.children === "Translate text",
+      (node) => node.type === "button" && controlText(node) === "Translate text",
     )!;
     (translate.props.onClick as () => void)();
     expect(assistance).toHaveBeenCalledWith("Imported Title / CASE", "translate");
@@ -833,7 +899,7 @@ describe("selected native text assistance", () => {
     };
     editor.render("idle");
     const rewrite = editor.find(
-      (node) => node.type === "button" && node.props.children === "Rewrite text",
+      (node) => node.type === "button" && controlText(node) === "Rewrite text",
     );
     expect(rewrite.props.disabled).toBe(true);
     (rewrite.props.onClick as () => void)();
@@ -841,7 +907,7 @@ describe("selected native text assistance", () => {
     const fieldset = editor.find((node) => node.props["data-native-text-fields"] === "true");
     expect(JSON.stringify(fieldset)).toContain("Formatted text cannot be rewritten or shortened");
     const translate = editor.find(
-      (node) => node.type === "button" && node.props.children === "Translate text",
+      (node) => node.type === "button" && controlText(node) === "Translate text",
     );
     expect(translate.props.disabled).toBe(true);
     (translate.props.onClick as () => void)();
@@ -849,7 +915,7 @@ describe("selected native text assistance", () => {
     const pending = editorHarness({ onTextAssistance: assistance, textAssistanceDisabled: true });
     pending.render("idle");
     (
-      pending.find((node) => node.type === "button" && node.props.children === "Shorten text").props
+      pending.find((node) => node.type === "button" && controlText(node) === "Shorten text").props
         .onClick as () => void
     )();
     expect(assistance).not.toHaveBeenCalled();

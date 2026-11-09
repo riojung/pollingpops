@@ -302,7 +302,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
     .locator("#presentation-canvas")
     .getByLabel("Slide title", { exact: true })
     .fill("Context for linked recovery");
-  await clickNavigatorAction(page, "+ From Recovery Pack");
+  await clickNavigatorAction(page, "From Recovery Pack");
   const picker = page.getByRole("dialog", { name: "Insert a published Recovery Pack" });
   await expect(picker).toBeVisible();
   await picker.getByLabel("Published Recovery Pack").selectOption(pack.id);
@@ -390,7 +390,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
   await navigator.locator('summary[aria-label="Insert & import"]').click();
   await expect(
     navigator.getByRole("button", {
-      name: "+ From Recovery Pack",
+      name: "From Recovery Pack",
       exact: true,
       includeHidden: true,
     }),
@@ -511,13 +511,13 @@ test("Presentation workspace retry and deferred import preparation preserve one 
   });
   try {
     await page.getByLabel("Presentation title", { exact: true }).fill(`${title} — pending edit`);
-    await clickNavigatorAction(page, "+ From trusted source");
+    await clickNavigatorAction(page, "From trusted source");
     await saveStarted;
     await expect(
-      page.getByRole("button", { name: "+ From Recovery Pack", exact: true }),
+      page.getByRole("button", { name: "From Recovery Pack", exact: true }),
     ).toBeDisabled();
     await expect(
-      page.getByRole("button", { name: "+ From published Round", exact: true }),
+      page.getByRole("button", { name: "From published Round", exact: true }),
     ).toBeDisabled();
     await expect(
       page.getByRole("dialog", { name: "Insert a published Recovery Pack" }),
@@ -528,7 +528,7 @@ test("Presentation workspace retry and deferred import preparation preserve one 
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await source.getByRole("button", { name: "Close", exact: true }).click();
     await expect(source).toHaveCount(0);
-    await clickNavigatorAction(page, "+ From Recovery Pack");
+    await clickNavigatorAction(page, "From Recovery Pack");
     const pack = page.getByRole("dialog", { name: "Insert a published Recovery Pack" });
     await expect(pack).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);

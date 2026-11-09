@@ -14,7 +14,7 @@
     "lint": "eslint src test",
     "migrate": "tsx src/migrate.ts",
     "test": "vitest run",
-    "test:postgres": "vitest run test/postgres.test.ts test/platform-conformance.test.ts test/canvas-boards.test.ts test/canvas-group-sharing.test.ts test/board-invitations.test.ts test/group-lifecycle.test.ts test/presentation-assignments-postgres.test.ts",
+    "test:postgres": "vitest run test/postgres.test.ts test/platform-conformance.test.ts test/canvas-boards.test.ts test/canvas-group-sharing.test.ts test/board-invitations.test.ts test/group-lifecycle.test.ts test/presentation-assignments-postgres.test.ts test/presentation-practice-postgres.test.ts",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },

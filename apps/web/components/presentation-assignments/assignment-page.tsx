@@ -21,11 +21,9 @@ import {
   type ReadingCredentials,
 } from "../../lib/presentation-assignments-client";
 import { Brand } from "../brand";
-import { ContentSlideView } from "../presentation/content-slide-view";
-import { PresentationReviewImageError } from "../../lib/presentation-sharing-client";
+import { AssignmentContentPage, AssignmentImage } from "./assignment-content-page";
 import {
   presentationReviewBlockTitle,
-  PresentationReviewImageFallback,
   PresentationReviewQuestion,
 } from "../presentation-sharing/review-page";
 import styles from "../presentation-sharing/sharing.module.css";
@@ -34,56 +32,6 @@ import readingStyles from "./assignment.module.css";
 const denied = (error: unknown) =>
   error instanceof ApiClientError && [401, 403, 404, 410].includes(error.status);
 const sameId = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-function ReadingImage({
-  assignmentId,
-  token,
-  mediaId,
-  alt,
-}: {
-  assignmentId: string;
-  token: string;
-  mediaId: string;
-  alt: string | null;
-}) {
-  const [source, setSource] = useState(""),
-    [failed, setFailed] = useState(false),
-    [retryable, setRetryable] = useState(false),
-    [retry, setRetry] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    let objectUrl = "";
-    setSource("");
-    setFailed(false);
-    setRetryable(false);
-    void fetchReadingImage(assignmentId, token, mediaId, controller.signal)
-      .then((blob) => {
-        if (!controller.signal.aborted) {
-          objectUrl = URL.createObjectURL(blob);
-          setSource(objectUrl);
-        }
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setFailed(true);
-          setRetryable(error instanceof PresentationReviewImageError && error.retryable);
-        }
-      });
-    return () => {
-      controller.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [assignmentId, token, mediaId, retry]);
-  return source ? (
-    <img className={styles.image} src={source} alt={alt ?? ""} />
-  ) : (
-    <PresentationReviewImageFallback
-      failed={failed}
-      retryable={retryable}
-      onRetry={() => setRetry((value) => value + 1)}
-    />
-  );
-}
-
 /** Only explicit reader actions create attempts or acknowledge pages. */
 export function PresentationAssignmentPage({ assignmentId }: { assignmentId: string }) {
   const credentials = useRef<ReadingCredentials | null>(null),
@@ -578,61 +526,23 @@ export function PresentationAssignmentPage({ assignmentId }: { assignmentId: str
                   Page {index + 1} of {review.blocks.length}
                 </p>
                 {block.kind === "content" ? (
-                  <>
-                    <ContentSlideView
-                      block={block}
-                      variant="preview"
-                      interactionSourceKey={`${assignmentId}:${review.versionId}:${block.id}`}
-                      interactionRuntime={{
-                        mode: "review",
-                        navigationTargets: review.blocks.map((page) => ({
-                          blockId: page.id,
-                          available: true,
-                          blockedReason: null,
-                        })),
-                        onNavigate: (_nodeId, id) => {
-                          const target = review.blocks.findIndex((page) => sameId(page.id, id));
-                          if (target >= 0) void changePage(target);
-                        },
-                      }}
-                      media={
-                        block.mediaId ? (
-                          <ReadingImage
-                            assignmentId={assignmentId}
-                            token={credentials.current.token}
-                            mediaId={block.mediaId}
-                            alt={block.mediaAlt}
-                          />
-                        ) : undefined
-                      }
-                      renderSceneImage={(mediaId, alt) => (
-                        <ReadingImage
-                          assignmentId={assignmentId}
-                          token={credentials.current!.token}
-                          mediaId={mediaId}
-                          alt={alt}
-                        />
-                      )}
-                    />
-                    <details open className={styles.readable}>
-                      <summary>Readable text</summary>
-                      {block.scene
-                        ? block.scene.nodes.map((node) =>
-                            node.type === "text" ? <p key={node.id}>{node.text}</p> : null,
-                          )
-                        : block.textElements.map((element) => (
-                            <p key={element.id}>{element.text}</p>
-                          ))}
-                    </details>
-                  </>
+                  <AssignmentContentPage
+                    block={block}
+                    review={review}
+                    sourceId={assignmentId}
+                    token={credentials.current.token}
+                    fetchImage={fetchReadingImage}
+                    onNavigate={(target) => void changePage(target)}
+                  />
                 ) : (
                   <>
                     {block.question.mediaId ? (
-                      <ReadingImage
-                        assignmentId={assignmentId}
+                      <AssignmentImage
+                        sourceId={assignmentId}
                         token={credentials.current.token}
                         mediaId={block.question.mediaId}
                         alt={block.question.mediaAlt}
+                        fetchImage={fetchReadingImage}
                       />
                     ) : null}
                     <PresentationReviewQuestion block={block} />

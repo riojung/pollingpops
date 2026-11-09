@@ -7725,6 +7725,11 @@ export class PostgresRepository implements Repository {
                   actor_id AS "actorId",request_id AS "requestId",created_at AS "createdAt",expires_at AS "expiresAt",revoked_at AS "revokedAt"
            FROM presentation_assignments WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
         );
+        const presentationPracticeAssignments = await queryWorkspaceData(
+          `SELECT id,workspace_id AS "workspaceId",presentation_id AS "presentationId",version_id AS "versionId",
+                  actor_id AS "actorId",request_id AS "requestId",created_at AS "createdAt",expires_at AS "expiresAt",revoked_at AS "revokedAt"
+           FROM presentation_practice_assignments WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
+        );
         const presentationReadingAttempts = await queryWorkspaceData(
           `SELECT id,workspace_id AS "workspaceId",assignment_id AS "assignmentId",revision::integer AS revision,
                   read_block_ids AS "readBlockIds",current_block_id AS "currentBlockId",
@@ -8159,6 +8164,7 @@ export class PostgresRepository implements Repository {
           sessionSummaryShares: sessionSummaryShares.rows,
           presentationShares: presentationShares.rows,
           presentationAssignments: presentationAssignments.rows,
+          presentationPracticeAssignments: presentationPracticeAssignments.rows,
           presentationReadingAttempts: presentationReadingAttempts.rows,
           presentationReviewCycles: presentationReviewCycles.rows,
           presentationReviewMessages: presentationReviewMessages.rows,
@@ -8355,6 +8361,9 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM session_summary_shares WHERE actor_id=$1", [userId]);
         await client.query("DELETE FROM presentation_shares WHERE actor_id=$1", [userId]);
         await client.query("DELETE FROM presentation_assignments WHERE actor_id=$1", [userId]);
+        await client.query("DELETE FROM presentation_practice_assignments WHERE actor_id=$1", [
+          userId,
+        ]);
         await client.query("DELETE FROM consent_records WHERE user_id=$1", [userId]);
         await client.query(
           "UPDATE session_staff_credentials SET revoked_at=now() WHERE created_by=$1 AND revoked_at IS NULL",
@@ -8407,6 +8416,9 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM session_summary_shares WHERE actor_id = $1", [userId]);
         await client.query("DELETE FROM presentation_shares WHERE actor_id = $1", [userId]);
         await client.query("DELETE FROM presentation_assignments WHERE actor_id = $1", [userId]);
+        await client.query("DELETE FROM presentation_practice_assignments WHERE actor_id = $1", [
+          userId,
+        ]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM workspace_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id = $1", [userId]);
@@ -8498,6 +8510,10 @@ export class PostgresRepository implements Repository {
         );
         await client.query(
           "DELETE FROM presentation_assignments WHERE expires_at <= $1::timestamptz - interval '7 days'",
+          [now],
+        );
+        await client.query(
+          "DELETE FROM presentation_practice_assignments WHERE expires_at <= $1::timestamptz - interval '7 days'",
           [now],
         );
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);

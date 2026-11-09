@@ -110,7 +110,7 @@ describe("CI efficiency without coverage bypasses", () => {
     for (const job of Object.values(ci.jobs)) expect(job["runs-on"]).toBe("ubuntu-26.04");
   });
 
-  it("runs reading-assignment conformance with restricted PostgreSQL in CI", async () => {
+  it("runs reading and practice assignment conformance with restricted PostgreSQL in CI", async () => {
     const postgres = (await workflow("ci")).jobs["postgres-migration"];
     const tests = postgres.steps.find(
       (step) => step.run === "pnpm --filter @openround/db test:postgres",
@@ -123,9 +123,12 @@ describe("CI efficiency without coverage bypasses", () => {
     const databasePackage = JSON.parse(
       await readFile(new URL("../../packages/db/package.json", import.meta.url), "utf8"),
     ) as { scripts: Record<string, string> };
-    expect(databasePackage.scripts["test:postgres"]?.split(/\s+/)).toContain(
+    for (const conformance of [
       "test/presentation-assignments-postgres.test.ts",
-    );
+      "test/presentation-practice-postgres.test.ts",
+    ]) {
+      expect(databasePackage.scripts["test:postgres"]?.split(/\s+/)).toContain(conformance);
+    }
   });
 
   it("does not let an audit failure suppress notices or secrets while retaining the threshold", async () => {

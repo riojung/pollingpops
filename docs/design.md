@@ -296,6 +296,15 @@ in the inspector instead of pushing the slide below a long form. Content, layout
 accessibility sections retain their state when switching; private notes and readiness remain
 separate. Compact panels, keyboard navigation and visible focus are part of this source design.
 
+The next design-quality source scales wide native type and spacing with the authored 1280×720
+plane, keeping relative fit consistent when the editor canvas narrows. The phone reading column
+retains readable type and complete content. The Layout inspector adds reviewed local alternatives
+for one title/body and an optional table; only frames change in one undoable action. Visible
+filmstrip rows may resolve authorized private image previews through scoped, bounded readers.
+These use original image assets and the shared crop renderer; hidden rows/panels release readers,
+and authorization/image failures retain placeholders. No new thumbnail service or AI dependency
+is introduced. See the [design-quality record](evidence/presentation-design-quality.md).
+
 This foundation reorganizes existing capabilities without changing document/scene formats,
 creation intent, allowances, immutable publication or role authority. It uses the existing neutral
 graphite/mint tokens and system typography, with no paid design service or required generation.

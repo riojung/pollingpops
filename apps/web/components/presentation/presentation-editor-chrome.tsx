@@ -4,6 +4,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PresentationBlockDraft } from "@openround/contracts";
 import { AUTH_CHANGE_EVENT } from "../../lib/api";
 import { ContentSlideView } from "./content-slide-view";
+import {
+  PresentationThumbnailImage,
+  ThumbnailImagePlaceholder,
+} from "./presentation-thumbnail-image";
+import type { PresentationThumbnailMediaScope } from "./presentation-thumbnail-media";
 import styles from "./presentation-editor-chrome.module.css";
 
 type IconName =
@@ -119,16 +124,21 @@ export function EditorDisclosure({
   );
 }
 
-/** Shared renderer, visible thumbnails only, and no duplicate private-media downloads. */
+/** Shared renderer; only observed visible rows mount authorized media readers. */
 export function PresentationSlideThumbnail({
   block,
   priority = false,
+  mediaScope,
+  mediaEnabled = true,
 }: {
   block: PresentationBlockDraft;
   priority?: boolean;
+  mediaScope?: PresentationThumbnailMediaScope;
+  mediaEnabled?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(priority),
+    [imagesVisible, setImagesVisible] = useState(false),
     [width, setWidth] = useState(210);
   useEffect(() => {
     const node = container.current;
@@ -137,23 +147,46 @@ export function PresentationSlideThumbnail({
     measure();
     const size = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     size?.observe(node);
+    const checkVisible = () => {
+      const box = node.getBoundingClientRect();
+      const shown =
+        box.width > 0 &&
+        box.height > 0 &&
+        box.bottom > 0 &&
+        box.right > 0 &&
+        box.top < window.innerHeight &&
+        box.left < window.innerWidth;
+      setVisible(shown || priority);
+      setImagesVisible(shown);
+    };
     const visibility =
       typeof IntersectionObserver === "undefined"
         ? null
-        : new IntersectionObserver(([entry]) => setVisible(!!entry?.isIntersecting), {
-            rootMargin: "120px",
+        : new IntersectionObserver(([entry]) => {
+            setVisible(!!entry?.isIntersecting);
+            setImagesVisible(!!entry?.isIntersecting);
           });
     visibility?.observe(node);
+    if (!visibility) {
+      checkVisible();
+      window.addEventListener("scroll", checkVisible, true);
+      window.addEventListener("resize", checkVisible);
+    }
     return () => {
       size?.disconnect();
       visibility?.disconnect();
+      if (!visibility) {
+        window.removeEventListener("scroll", checkVisible, true);
+        window.removeEventListener("resize", checkVisible);
+      }
     };
   }, []);
-  const image = (
-    <div className={styles.imagePlaceholder}>
-      <EditorIcon name="image" />
-    </div>
-  );
+  const image = (mediaId: string, altText: string | null) =>
+    mediaEnabled && imagesVisible && mediaScope ? (
+      <PresentationThumbnailImage scope={mediaScope} mediaId={mediaId} altText={altText} />
+    ) : (
+      <ThumbnailImagePlaceholder />
+    );
   return (
     <div
       ref={container}
@@ -169,13 +202,21 @@ export function PresentationSlideThumbnail({
               block={block}
               variant="preview"
               staticThumbnail
-              media={block.mediaId ? image : undefined}
-              renderSceneImage={() => image}
+              media={block.mediaId ? image(block.mediaId, block.mediaAlt) : undefined}
+              renderSceneImage={image}
             />
           ) : (
-            <div className={styles.activityThumbnail}>
+            <div
+              className={styles.activityThumbnail}
+              data-has-media={Boolean(block.question.mediaId)}
+            >
               <span>Audience activity</span>
               <strong>{block.question.prompt || "Your question"}</strong>
+              {block.question.mediaId ? (
+                <div className={styles.activityMedia}>
+                  {image(block.question.mediaId, block.question.mediaAlt)}
+                </div>
+              ) : null}
               {"choices" in block.question ? (
                 block.question.choices
                   .slice(0, 4)

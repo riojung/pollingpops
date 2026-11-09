@@ -117,6 +117,8 @@ function NativePlainText({
 
 interface NativeSceneViewProps {
   scene: PresentationScene;
+  /** Scaled previews retain the authored coordinate plane even on phone viewports. */
+  fixedLayout?: boolean;
   renderImage?: SceneImageRenderer;
   /** Session/credential/connection identity, excluding ordinary snapshot revisions. */
   interactionSourceKey?: string;
@@ -150,7 +152,13 @@ export function NativeSceneView(props: NativeSceneViewProps) {
       : props.scene;
   return (
     <NativeSceneSurface
-      key={props.onSelect ? "editor" : JSON.stringify([props.interactionSourceKey, identityScene])}
+      key={
+        props.staticThumbnail
+          ? "thumbnail"
+          : props.onSelect
+            ? "editor"
+            : JSON.stringify([props.interactionSourceKey, identityScene])
+      }
       {...props}
     />
   );
@@ -160,6 +168,7 @@ export function NativeSceneView(props: NativeSceneViewProps) {
 function NativeSceneSurface({
   scene,
   renderImage,
+  fixedLayout = false,
   selectedNodeId,
   selectedNodeIds,
   onSelect,
@@ -188,7 +197,8 @@ function NativeSceneSurface({
           "--native-link": palette.link,
           "--native-border": palette.border,
           "--native-font": NATIVE_DESIGN_FONTS[design.font],
-          "--native-padding": design.spacing === "compact" ? "5px" : "10px",
+          "--native-padding": design.spacing === "compact" ? "0.390625cqw" : "0.78125cqw",
+          "--native-reading-padding": design.spacing === "compact" ? "5px" : "10px",
           "--native-body-leading": design.spacing === "compact" ? 1.2 : 1.45,
           "--native-title-leading": design.spacing === "compact" ? 1.04 : 1.12,
           "--native-paragraph-gap": design.spacing === "compact" ? "0.25em" : "0.55em",
@@ -254,6 +264,7 @@ function NativeSceneSurface({
         }
         aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
         data-native-scene={staticThumbnail ? undefined : "true"}
+        data-native-fixed-layout={fixedLayout ? "true" : undefined}
         data-thumbnail-scene={staticThumbnail ? "true" : undefined}
         data-static-thumbnail={staticThumbnail || undefined}
         data-native-theme={design?.theme}
@@ -357,7 +368,7 @@ function NativeSceneSurface({
                 />
               ) : null}
               {node.type === "table" || node.type === "chart" ? (
-                <NativeSceneDataView node={node} />
+                <NativeSceneDataView node={node} fixedLayout={fixedLayout} />
               ) : null}
               {node.type === "image" ? (
                 <div

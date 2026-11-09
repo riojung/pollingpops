@@ -471,7 +471,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         compactLayout.current = compact;
         setCompactEditor(compact);
         setMapOpen(!compact);
-        setInspectorOpen(!compact);
+        // A native modal still inherits display:none from a closed inspector. Keep its
+        // invoking panel visible through a breakpoint change, including focus restoration.
+        setInspectorOpen(
+          !compact || Boolean(inspectorPanel.current?.querySelector("dialog[open]")),
+        );
       }
     };
     measure();
@@ -3022,6 +3026,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 <PresentationSlideThumbnail
                   block={block}
                   priority={index < 3 || selectedBlockId === block.id}
+                  mediaEnabled={mapOpen}
+                  mediaScope={{
+                    actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
+                    presentationId,
+                  }}
                 />
                 <button
                   aria-current={selectedBlockId === block.id ? "step" : undefined}
@@ -3383,6 +3392,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 onInspectSelection={() => setInspectorTab("content")}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
+                layoutSuggestionsDisabled={!canEdit || builderMutationBlocked || preparingImport}
+                layoutSuggestionsSourceKey={selectedBlock.id}
                 navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
                 onUndo={undo}
                 onRedo={redo}

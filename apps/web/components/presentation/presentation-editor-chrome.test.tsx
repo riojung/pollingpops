@@ -7,6 +7,7 @@ import { createContentBlock, createQuestionBlock } from "../../lib/presentation-
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { ContentSlideView } from "./content-slide-view";
 import { EditorDisclosure, PresentationSlideThumbnail } from "./presentation-editor-chrome";
+import { PresentationThumbnailImage } from "./presentation-thumbnail-image";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as null | { cursor: number; slots: unknown[]; effects: (() => void)[] },
@@ -267,6 +268,7 @@ describe("presentation filmstrip thumbnails", () => {
     });
     vi.stubGlobal("ResizeObserver", undefined);
     vi.stubGlobal("IntersectionObserver", undefined);
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
     harness.render();
     const slide = elements(harness.tree()).find((element) => element.type === ContentSlideView)!;
     expect(slide.props.staticThumbnail).toBe(true);
@@ -345,6 +347,50 @@ describe("presentation filmstrip thumbnails", () => {
     harness.unmount();
     expect(resizeDisconnect).toHaveBeenCalledOnce();
     expect(visibilityDisconnect).toHaveBeenCalledOnce();
+  });
+
+  it("authorizes media only after observing the row and releases image children when its rail closes", () => {
+    const block = createContentBlock();
+    block.mediaId = "11111111-1111-4111-8111-111111111111";
+    block.mediaAlt = "Private reference";
+    let show: (entries: { isIntersecting: boolean }[]) => void = () => {};
+    vi.stubGlobal("ResizeObserver", undefined);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: typeof show) {
+          show = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    let mediaEnabled = true;
+    const mediaScope = { actorKey: "actor:workspace", presentationId: "deck" };
+    const harness = hookHarness(
+      () => PresentationSlideThumbnail({ block, priority: true, mediaScope, mediaEnabled }),
+      { getBoundingClientRect: () => ({ width: 192 }) },
+    );
+    harness.render();
+    const media = () =>
+      elements(harness.tree()).find((element) => element.type === ContentSlideView)?.props.media;
+    expect(media().type).not.toBe(PresentationThumbnailImage);
+    show([{ isIntersecting: true }]);
+    harness.render();
+    expect(media().type).toBe(PresentationThumbnailImage);
+    expect(media().props).toMatchObject({
+      scope: mediaScope,
+      mediaId: block.mediaId,
+      altText: block.mediaAlt,
+    });
+    mediaEnabled = false;
+    harness.render();
+    expect(media().type).not.toBe(PresentationThumbnailImage);
+    mediaEnabled = true;
+    show([{ isIntersecting: false }]);
+    harness.render();
+    expect(media()).toBeUndefined();
+    harness.unmount();
   });
 
   it("renders a bounded activity summary rather than answer inputs or correctness", () => {

@@ -1204,11 +1204,18 @@ builder. Wait for **Saved**, reload to verify the saved slide, then preview and 
 freezes that version; later draft edits do not change a running Presentation. Speaker notes and
 source information remain private.
 
-In **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
+Open the **Layout** inspector, then in **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
 **Apply design to all native slides** applies those choices to existing native slides, including
 hidden ones. Ordinary slides and activities keep their current appearance. Undo/Redo restores
 the complete design change. System fonts use those available on the viewer's device; review fit
 feedback after changing the font or layout.
+
+In the **Layout** inspector, choose **Suggest layouts** for a slide with one title and one body,
+optionally with one table. Compare up to three alternatives with the current slide, check the fit
+feedback and read the complete content below the previews. **Apply reviewed layout** changes only
+the object positions and sizes in one undoable edit. **Cancel** or Escape keeps the current slide.
+These alternatives use no AI credits. Grouped, rotated and other mixed-object slides keep their
+manual layout tools.
 
 Choose an available layout button to reposition existing text and images. Presets require the
 shown object combination and never delete content to make it fit. Use **Undo** to restore the

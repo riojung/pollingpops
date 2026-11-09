@@ -33,6 +33,7 @@ import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneCompositionControls } from "./native-scene-composition-controls";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
+import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
 import { NativeSceneDataEditor } from "./native-scene-data-editor";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import { createNativeChartNode, createNativeTableNode } from "../../lib/presentation-native-data";
@@ -73,6 +74,8 @@ export function NativeSceneEditor({
   navigationTargets,
   onTextAssistance,
   textAssistanceDisabled = false,
+  layoutSuggestionsDisabled = false,
+  layoutSuggestionsSourceKey,
   inspectorTarget,
   inspectorSection = "content",
   onInspectSelection,
@@ -90,6 +93,8 @@ export function NativeSceneEditor({
   navigationTargets?: readonly { id: string; title: string }[];
   onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten" | "translate") => void;
   textAssistanceDisabled?: boolean;
+  layoutSuggestionsDisabled?: boolean;
+  layoutSuggestionsSourceKey?: string;
   /** Undefined keeps standalone controls inline; null waits for the shell's inspector. */
   inspectorTarget?: HTMLElement | null;
   inspectorSection?: "content" | "layout" | "media" | "accessibility";
@@ -549,6 +554,16 @@ export function NativeSceneEditor({
         </fieldset>
       </div>
       <div hidden={sectionHidden("layout")} data-native-inspector-section="layout">
+        <NativeSceneLayoutSuggestions
+          scene={scene}
+          sourceKey={layoutSuggestionsSourceKey}
+          disabled={layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending}
+          onChange={(next) => {
+            if (layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending)
+              return false;
+            return onChange(next);
+          }}
+        />
         <NativeSceneDesignControls
           scene={scene}
           onChange={onChange}

@@ -3,6 +3,8 @@ import { createServer, type Server } from "node:http";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import {
+  selectE01Object,
+  openSlideIdeas,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -150,7 +152,7 @@ async function fixture(page: Page) {
 }
 async function closeDrawers(page: Page) {
   if ((page.viewportSize()?.width ?? 1280) > 920) return;
-  await expect(page.getByRole("button", { name: "Arrange space", exact: true })).toBeVisible();
+  await expect(page.locator('summary[aria-label="More options"]')).toBeVisible();
   for (const name of ["Hide inspector", "Collapse map"]) {
     const button = page.getByRole("button", { name, exact: true });
     if (await button.isVisible()) await button.click();
@@ -158,6 +160,7 @@ async function closeDrawers(page: Page) {
 }
 async function openSuggestions(page: Page, resume = false) {
   if (!resume) await closeDrawers(page);
+  await openSlideIdeas(page);
   await page
     .getByRole("button", {
       name: resume ? "Resume discussion suggestions" : "Suggest discussion questions",
@@ -450,6 +453,7 @@ for (const suffix of ["", " @mobile"]) {
     expect((await readE01Record(page, original.id)).draft).toEqual(original.draft);
     await dialog.getByRole("button", { name: "Discard proposal", exact: true }).click();
     await expect(dialog).toBeHidden();
+    await openSlideIdeas(page);
     await page.getByRole("button", { name: "Question starters", exact: true }).click();
     const local = page.getByRole("dialog", { name: "Review question starters", exact: true });
     await expect(local).toBeVisible();
@@ -484,9 +488,11 @@ for (const suffix of ["", " @mobile"]) {
       await route.fulfill({ response: result });
     });
     try {
+      await selectE01Object(page, /^1\./);
       await page
         .getByLabel("Native slide title", { exact: true })
         .fill("A manually revised launch plan");
+      await openSlideIdeas(page);
       await page
         .getByRole("button", { name: "Resume discussion suggestions", exact: true })
         .click();

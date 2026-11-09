@@ -26,16 +26,113 @@ The complete workflow is:
 3. Apply a consistent theme, add notes and preview the audience experience.
 4. Present through a private control surface and clean audience display.
 5. Optionally run activities with explicit collect, close and reveal controls.
-6. Share a private read-only link or static file; later assign genuinely self-paced activities.
+6. Share a private read-only link or static file, or choose supported self-paced reading/practice.
 
 Do not force points, correct answers, confidence or educational language into a business deck.
 Do not require AI for any ordinary creation, edit or presentation action.
+
+## UX upgrade track and current gaps
+
+November 8, 2026 source checkpoint: `codex/presentation-ux-foundation` improves the entry and editor
+around existing capabilities. Blank creation and the visual gallery lead; all 21 templates have
+real first-slide thumbnails, use-case filters, search, clear/no-results states and separate
+content/activity counts. Source proposals and optional outline assistance remain secondary and
+keep their existing explicit intent, review and allowance behavior. Source proposals are not
+visual slide import; PDF/image visual import remains in the editor.
+
+The current editor adds a stable thumbnail filmstrip, central slide and contextual inspector,
+with title/save/publication state and Preview/Publish/Present/Share in the command bar. Secondary
+insertion/delivery controls use disclosures. Native inspector sections preserve object selection
+and in-progress fields while switching. Filmstrip images currently use placeholders to avoid
+additional private-media downloads; accurate authorized image thumbnails remain a design-quality
+refinement. Existing schemas, exact retries, permissions and frozen publications remain the
+authority. Responsive mode uses available editor width so page zoom also closes crowded rails;
+Undo/Redo preserves an open inspector, and closing secondary dialogs restores the invoking action.
+
+Automated qualification for this source passes `VITEST_MAX_WORKERS=1 pnpm check`: 6,909 tests,
+formatting, lint, types, Docker-context validation, all four application/admin builds and the
+compiled-server startup/configuration smoke. Standard opt-in database/provider suites remain
+skipped. Initial browser qualification passed 68 selected workflows across desktop Chromium/Firefox and
+phone Chromium/WebKit using one final beta artifact and a synthetic API/media fixture. Coverage
+includes the new creation/inspector journeys, editing/history, grouping, image placement,
+interactions, choice practice, private sharing, question starters, rich text and actual static/
+offline downloads. The workflows include automated accessibility, focus, 320px layout and 200%
+zoom checks; they do not cover every existing browser journey.
+
+The November 9 review follow-up additionally passes all 14 Recovery Pack browser cases across
+the same four profiles with a rebuilt production artifact. Existing journeys now open the import
+and related-reference disclosures and handle initially closed phone panels. The follow-up also
+fixes a real retry blocker: Pack update/undo acknowledgements can be recovered while ordinary
+editing remains paused. Competing assistance/import operations still fence the recovery panel;
+transport-driven tests preserve exact retry bytes and reject stale retries.
+
+The compiled-server smoke also guards the practice/sharing contracts import-cycle regression:
+shared content schemas now have an acyclic module without changing stored content or API shapes.
+Manual assistive-technology, physical-device, observed creator-task, hosted/capacity/cost,
+deployment and release qualification remain open. Earlier package evidence records retain their
+own scope; the current check does not turn them into a complete product-parity claim.
+
+The table below is the current gap map; the detailed E00–E14 sections retain implementation
+history and acceptance contracts. “Implemented” means the selected software slice, not complete
+competitor parity or successful creator task observation.
+
+| Package | Implemented foundation                                                                 | Remaining scope or evidence                                                                                     |
+| ------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| E00     | Scene decision and original local fixtures                                             | Observed creator baselines and comparable authenticated competitor tasks                                        |
+| E01     | Durable native editor, rich text, filmstrip, save/recovery and current workspace shell | Integrated workflow, creator usability and manual assistive-technology qualification                            |
+| E02     | Bounded themes/layouts, composition, tables/charts and 21 scenario decks               | Observed template fitness, consistent design quality, overflow repair and task-led refinements                  |
+| E03     | Private notes, next slide, elapsed timer and scoped audience stage                     | Actual screen sharing, managed-browser/popup behavior and richer phone remote                                   |
+| E04     | Selected opinion, ranking, moderated text and word-cloud software                      | Complete mobile/moderation usability and hosted/device/cost qualification                                       |
+| E05     | Reviewed PDF/image visual import and reading alternatives                              | Editable/PPTX conversion fidelity, compatibility corpus and hosted scanner/storage qualification                |
+| E06     | Local/broadcast reveals, links, dialogs, hotspots and explicit branches                | Visual-stage interaction coverage and authored keyboard/touch task observation; variables/games remain separate |
+| E07     | Sections and durable phase-safe jump/return                                            | Observed nonlinear demo/navigation tasks and cross-surface discoverability                                      |
+| E08     | Private review, reading assignments and bounded choice practice                        | Other response formats, configurable feedback, verified identity and individual creator reports                 |
+| E09     | Live insights and anonymous reading/practice counts                                    | Creator usefulness and measured resource cost; private-link view tracking remains excluded by policy            |
+| E10     | Bounded story map and existing linear cursor                                           | Content-plane camera rendering, nested frames and host-broadcast overview                                       |
+| E11     | Free signed-in review, threads, resolve/reopen and approval                            | Object-level concurrent authoring, attachments, mentions and notifications                                      |
+| E12     | Reviewed outline, selected plain-text edits/translation and question assistance        | Separately proposed layouts, rich-text/whole-deck/RTL and broader generation; ordinary editing stays AI-free    |
+| E13     | PDF/PNG, readable HTML and bounded offline interactive HTML                            | Editable PPTX, full visual-stage interaction and verified tagged-PDF accessibility                              |
+| E14     | Extension candidates and cost boundaries                                               | Separately funded media, recording, advanced animation, add-ins, LMS and virtual-camera work                    |
+
+Upgrade the experience in phases using those capabilities rather than restarting the feature plan:
+
+| Phase                             | Scope and next exit                                                                                                                                                                                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Creation and editor foundation | Current source slice: template/blank first, real previews, stable navigation, contextual tools and clear saving/publication. Verify end-to-end creation, selection, undo, recovery and all existing query/feature boundaries.                                                            |
+| 2. Design and interactions        | Refine reusable layouts, type/spacing, fit feedback and original templates. Make action trigger/target/preview understandable. A pitch, proposal and interactive demo must retain complete content through edits and publish without requiring AI.                                       |
+| 3. Presenting and sharing         | Walk through rehearsal, screen sharing, live controls, private review, export and assignment choices. Authors and recipients must understand the version/mode and recover without exposing backstage data. Preserve distinct reading, practice and live meanings.                        |
+| 4. Device and accessibility       | Exercise the whole workflow on representative phones/tablets/desktops, keyboard, VoiceOver/NVDA, 200% zoom and reduced motion; verify contrast, touch targets, focus restoration and remaining localization. Record physical-device and managed-browser gaps explicitly.                 |
+| 5. Observed broad-creator pilot   | Observe pitch/proposal/update/portfolio/talk/demo/workshop tasks with real creators. Record time to a sendable deck, repair effort, discoverability, delivery/share success and total customer cost. Feed failures into the next bounded slice before any parity or broad-release claim. |
+
+Keep the lowest sustainable customer subscription constraint throughout: reuse the shared renderer,
+deterministic layouts, bundled/system assets and existing services. No phase requires a paid canvas
+SDK, stock marketplace or model call for ordinary work. The price hypotheses below remain
+experiments; fewer clicks and less repair time must also reduce customer cost.
+
+### Official UX reference patterns
+
+These sources were checked November 8, 2026. They are vendor documentation, not authenticated
+hands-on tests, comparative usability measurements or market-share evidence. Polling Pops choices
+above are design inferences; they do not imply matching every documented capability.
+
+| Reference                                                                                                            | Documented pattern informing the track                                                                           |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [Canva editor guide](https://www.canva.com/design-school/resources/using-and-customizing-templates/)                 | Side panel, canvas, selection-dependent toolbar, page/grid controls and save indicator                           |
+| [Google Slides templates/layouts](https://support.google.com/docs/answer/1705254?co=GENIE.Platform%3DDesktop&hl=en)  | Distinct theme/layout/template concepts and individual-slide or full-template insertion                          |
+| [Genially page management](https://help.genially.com/how-to-manage-the-pages-of-your-genially-BylHcvHnj)             | Named pages, list/grid overview and reordering                                                                   |
+| [Genially Reveal setup](https://help.genially.com/how-to-set-up-reveal-interactivity-in-genially-B1LqcwHhi)          | Explicit trigger/target selection and an editor connection indicating the interaction                            |
+| [Genially navigation modes](https://help.genially.com/en_us/navigation-modes-between-pages-rkrHjPB2i)                | Deliberate linear, automatic or authored-link navigation choices and preview guidance                            |
+| [Canva presentation modes](https://www.canva.com/help/presentation-modes/)                                           | Separate audience and presenter windows with notes and upcoming slides                                           |
+| [Genially publication](https://help.genially.com/en_us/how-to-publish-changes-in-genially-HkJAcHNskl)                | Autosaved editor work stays distinct from changes applied to an existing public link                             |
+| [Prezi editor updates](https://support.prezi.com/hc/en-us/articles/360050232633-What-s-new-in-Prezi-Product-updates) | Direct Present/Share with secondary options in a dropdown, intentional frame selection and explicit pan controls |
 
 ## Delivery strategy and realistic scope
 
 Assumption: one experienced full-time maintainer using Codex, with access to design/customer
 feedback and reviewers. Estimates are planning judgments, not measured velocity or commitments.
-External evidence collection and production qualification can extend calendar time.
+They describe the original work-package plan, not the remaining effort after implemented slices.
+Use the current gap map and UX track for next selection. External evidence collection and
+production qualification can extend calendar time.
 
 | Milestone                     | Scope                                                                                            | Development estimate              | Exit                                                              |
 | ----------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------- | ----------------------------------------------------------------- |
@@ -56,10 +153,10 @@ Expanded responses, full navigation, self-paced delivery, analytics, collaborati
 portability follow as independently selected releases. Their estimates appear below and are
 additional to the broad pilot except where explicitly included.
 
-The pilot uses a conventional slide sequence with basic reveals/links. Full section-map navigation,
-hotspot dialogs and branching follow in E06/E07; the pilot's product-demo task must be defined
-accordingly. If customer testing makes nonlinear navigation a launch requirement, add E07's
-2–4 weeks to the selected scope.
+The original minimum pilot scope uses a conventional slide sequence with basic reveals/links.
+E06/E07 now contain section navigation, hotspot dialogs and branching software; selecting those for
+the pilot also requires their observed creator and delivery tasks. The earlier 2–4-week E07
+estimate is not a new implementation charge or evidence that navigation is qualified.
 
 ## Architecture decision
 
@@ -87,8 +184,9 @@ flowchart LR
     H --> I[Versioned reports]
 ```
 
-The diagram describes the target, including future review and self-paced runs. It does not imply
-that those modes are already implemented.
+The diagram spans implemented and planned modes. Private review and bounded reading/choice-practice
+now exist; the current gap map and E08 retain their limits. It does not imply unrestricted
+self-paced question support or common live/independent attempt semantics.
 
 Proposed scene fields, to settle in E00 rather than copy directly into code:
 
@@ -139,8 +237,8 @@ Reviewed selected-text translation is merged in
 [PR #208](https://github.com/riojung/pollingpops/pull/208). Local reviewed question starters are
 merged in [PR #209](https://github.com/riojung/pollingpops/pull/209). Optional reviewed AI
 discussion suggestions are merged in [PR #210](https://github.com/riojung/pollingpops/pull/210).
-The bounded E13 offline interactive HTML companion is implemented on
-`codex/presentation-offline-export`; its full repository check, compiled-worker smoke and eight
+The bounded E13 offline interactive HTML companion is merged in
+[PR #211](https://github.com/riojung/pollingpops/pull/211); its full repository check, compiled-worker smoke and eight
 production-browser workflows across four profiles pass.
 The bounded E08 reading-assignment/attempt foundation is merged in
 [PR #214](https://github.com/riojung/pollingpops/pull/214). Creator aggregate reading
@@ -148,9 +246,11 @@ insights and CSV are merged in [PR #215](https://github.com/riojung/pollingpops/
 frozen-version denominators, small-group suppression and no individual learner records in the
 report. Broader response/feedback policies and later packages remain planned; deployment and
 release qualification remain open.
-The next bounded E08 increment on `codex/presentation-self-paced-practice` adds independent
-single-choice/true-false practice with accepted-answer-only personal feedback and explicit
-completion. Existing reading behavior and report contracts remain intact.
+The bounded E08 choice-practice increment is merged in
+[PR #216](https://github.com/riojung/pollingpops/pull/216): independent single-choice/true-false
+practice with accepted-answer-only personal feedback and explicit completion. Existing reading
+behavior and report contracts remain intact. Its compiled-server startup regression is fixed in
+the current UX branch by removing a contracts import cycle and adding a post-build startup smoke.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds

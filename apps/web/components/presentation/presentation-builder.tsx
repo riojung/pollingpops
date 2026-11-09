@@ -122,6 +122,11 @@ import {
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
+import {
+  EditorIcon,
+  EditorDisclosure,
+  PresentationSlideThumbnail,
+} from "./presentation-editor-chrome";
 import { PresentationQuestionStarters } from "./presentation-question-starters";
 import { insertPresentationQuestionStarter } from "../../lib/presentation-question-starters";
 import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
@@ -454,18 +459,25 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const { creator, canEdit, productFeatures } = useWorkspace();
   const { locale, t } = useLocale();
   const router = useRouter();
+  const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
     const builder = element?.parentElement;
     if (!element || !builder) return;
     const measure = () => {
-      builder.style.setProperty(
-        "--presentation-command-height",
-        `${Math.ceil(element.getBoundingClientRect().height)}px`,
-      );
+      // Layout pixels keep offsets and the responsive mode correct under page zoom.
+      builder.style.setProperty("--presentation-command-height", `${element.offsetHeight}px`);
+      const compact = builder.offsetWidth <= 920;
+      if (compactLayout.current !== compact) {
+        compactLayout.current = compact;
+        setCompactEditor(compact);
+        setMapOpen(!compact);
+        setInspectorOpen(!compact);
+      }
     };
     measure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element, { box: "border-box" });
+    observer?.observe(builder, { box: "border-box" });
     if (!observer) window.addEventListener("resize", measure);
     return () => {
       observer?.disconnect();
@@ -480,8 +492,60 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
   const [showLayoutGuides, setShowLayoutGuides] = useState(true);
-  const [mapOpen, setMapOpen] = useState(true);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [compactEditor, setCompactEditor] = useState(false);
+  const [nativeInspectorTarget, setNativeInspectorTarget] = useState<HTMLDivElement | null>(null);
+  const mapTrigger = useRef<HTMLButtonElement>(null);
+  const inspectorTrigger = useRef<HTMLButtonElement>(null);
+  const mapPanel = useRef<HTMLElement>(null);
+  const inspectorPanel = useRef<HTMLElement>(null);
+  const drawerOpener = useRef<HTMLElement | null>(null);
+  function toggleMap() {
+    if (compactEditor) setInspectorOpen(false);
+    setMapOpen((value) => !value);
+  }
+  function toggleInspector() {
+    if (compactEditor) setMapOpen(false);
+    setInspectorOpen((value) => !value);
+  }
+  function closeEditorPanels(restoreFocus = false) {
+    setMapOpen(false);
+    setInspectorOpen(false);
+    if (restoreFocus) {
+      const opener = drawerOpener.current;
+      requestAnimationFrame(() => (opener?.isConnected ? opener : mapTrigger.current)?.focus());
+    }
+  }
+  useEffect(() => {
+    if (!compactEditor || (!mapOpen && !inspectorOpen)) return;
+    const panel = mapOpen ? mapPanel.current : inspectorPanel.current;
+    const trigger = mapOpen ? mapTrigger.current : inspectorTrigger.current;
+    if (!panel) return;
+    drawerOpener.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : trigger;
+    panel
+      .querySelector<HTMLElement>("button:not(:disabled),[tabindex='0']")
+      ?.focus({ preventScroll: true });
+    const outside = (event: Event) => {
+      if (document.querySelector("dialog[open]") || !(event.target instanceof Node)) return;
+      if (event.target instanceof Element && event.target.closest("[data-editor-history]")) return;
+      if (!panel.contains(event.target) && !trigger?.contains(event.target)) closeEditorPanels();
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+      event.preventDefault();
+      closeEditorPanels(true);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [compactEditor, mapOpen, inspectorOpen]);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("build");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
@@ -586,7 +650,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const previousBlockCount = useRef<number | null>(null);
   const canInsertPack =
     canEdit && Boolean(productFeatures?.presentations && productFeatures?.recoveryPacks);
-  const builderMutationBlocked =
+  // Pack review owns its exact update/undo retry; competing operations still fence the panel.
+  const unrelatedEditorMutationBlocked =
     textAssistanceOpen ||
     questionSuggestionsOpen ||
     questionSuggestionsPending ||
@@ -594,10 +659,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     assistanceOpen ||
     assistancePending ||
     packImportOpen ||
-    packUpdateBusy ||
-    packUpdateReceiptPending ||
     visualImportOpen ||
     visualImportReceiptPending;
+  const builderMutationBlocked =
+    unrelatedEditorMutationBlocked || packUpdateBusy || packUpdateReceiptPending;
   const outlineStartBlocked =
     !loaded ||
     !record ||
@@ -2476,6 +2541,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           : saveState === "conflict"
             ? t("delivery.presentationBuilder.newerVersion")
             : t("delivery.common.saved");
+  const hasUnpublishedChanges =
+    record.hasUnpublishedChanges ||
+    (record.currentVersionId !== null && JSON.stringify(draft) !== lastSavedJson.current);
 
   return (
     <div className={styles.builder}>
@@ -2499,95 +2567,181 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             className={styles.exitLink}
             href="/library?type=presentations"
             onClick={guardBuilderExit}
+            aria-label={t("delivery.presentationBuilder.library")}
+            title={t("delivery.presentationBuilder.library")}
           >
-            ← {t("delivery.presentationBuilder.library")}
+            <EditorIcon name="back" />
+            <span className={styles.exitLabel}>{t("delivery.presentationBuilder.library")}</span>
           </Link>
           <button
+            ref={mapTrigger}
             aria-expanded={mapOpen}
+            aria-controls="presentation-slide-navigator"
+            aria-label={
+              mapOpen
+                ? t("delivery.presentationBuilder.hideMap")
+                : t("delivery.presentationBuilder.openMap")
+            }
+            title={
+              mapOpen
+                ? t("delivery.presentationBuilder.hideMap")
+                : t("delivery.presentationBuilder.openMap")
+            }
             className={styles.iconButton}
-            onClick={() => setMapOpen((value) => !value)}
+            onClick={toggleMap}
             type="button"
           >
-            {mapOpen
-              ? t("delivery.presentationBuilder.hideMap")
-              : t("delivery.presentationBuilder.showMap")}
-          </button>
-        </div>
-        <label className={styles.titleField}>
-          <span className="sr-only">{t("delivery.presentationBuilder.titleLabel")}</span>
-          <input
-            lang={draft.title.trim() ? "" : locale}
-            maxLength={160}
-            onChange={(event) =>
-              commit((current) => ({ ...current, title: event.target.value }), "presentation:title")
-            }
-            placeholder={t("delivery.presentationBuilder.untitled")}
-            value={draft.title}
-          />
-        </label>
-        <div className={styles.commandActions}>
-          <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
-            {saveLabel}
-          </span>
-          <button disabled={!undoStack.length} onClick={undo} type="button">
-            {t("delivery.builder.undo")}
-          </button>
-          <button disabled={!redoStack.length} onClick={redo} type="button">
-            {t("delivery.builder.redo")}
-          </button>
-          <button onClick={() => setPreviewOpen(true)} type="button">
-            {t("delivery.common.preview")}
+            <EditorIcon name="slides" />
           </button>
           <button
-            className={styles.spatialButton}
-            disabled={!canEdit}
-            lang="en-CA"
-            onClick={() => setSpatialOpen(true)}
+            ref={inspectorTrigger}
+            aria-expanded={inspectorOpen}
+            aria-controls="presentation-object-inspector"
+            className={styles.iconButton}
+            onClick={toggleInspector}
             type="button"
+            aria-label={
+              inspectorOpen
+                ? t("delivery.presentationBuilder.hideInspector")
+                : t("delivery.presentationBuilder.openInspector")
+            }
+            title={
+              inspectorOpen
+                ? t("delivery.presentationBuilder.hideInspector")
+                : t("delivery.presentationBuilder.openInspector")
+            }
           >
-            Arrange space
+            <EditorIcon name="inspector" />
+          </button>
+        </div>
+        <div className={styles.documentIdentity}>
+          <label className={styles.titleField}>
+            <span className="sr-only">{t("delivery.presentationBuilder.titleLabel")}</span>
+            <input
+              lang={draft.title.trim() ? "" : locale}
+              maxLength={160}
+              onChange={(event) =>
+                commit(
+                  (current) => ({ ...current, title: event.target.value }),
+                  "presentation:title",
+                )
+              }
+              placeholder={t("delivery.presentationBuilder.untitled")}
+              value={draft.title}
+            />
+          </label>
+          <div className={styles.documentState}>
+            <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
+              {saveLabel}
+            </span>
+            <span className={styles.publicationState} lang="en-CA">
+              {!record.currentVersionId
+                ? "Draft"
+                : hasUnpublishedChanges
+                  ? "Unpublished changes"
+                  : "Published version ready"}
+            </span>
+          </div>
+        </div>
+        <div className={styles.commandActions}>
+          <div className={styles.historyActions} data-editor-history>
+            <button
+              className={styles.iconButton}
+              disabled={!undoStack.length}
+              onClick={undo}
+              type="button"
+              aria-label={t("delivery.builder.undo")}
+              title={t("delivery.builder.undo")}
+            >
+              <EditorIcon name="undo" />
+            </button>
+            <button
+              className={styles.iconButton}
+              disabled={!redoStack.length}
+              onClick={redo}
+              type="button"
+              aria-label={t("delivery.builder.redo")}
+              title={t("delivery.builder.redo")}
+            >
+              <EditorIcon name="redo" />
+            </button>
+          </div>
+          <button
+            className={styles.iconButton}
+            onClick={() => setPreviewOpen(true)}
+            type="button"
+            aria-label={t("delivery.common.preview")}
+            title={t("delivery.common.preview")}
+          >
+            <EditorIcon name="preview" />
           </button>
           <button className={styles.publishButton} onClick={() => void publish()} type="button">
-            {record.status === "published" && !record.hasUnpublishedChanges
+            {record.status === "published" && !hasUnpublishedChanges
               ? t("delivery.presentationBuilder.published")
               : t("delivery.common.publish")}
           </button>
+          {record.currentVersionId && canEdit ? (
+            <Link
+              className={styles.presentButton}
+              href={`/presentation/${presentationId}/host`}
+              prefetch={false}
+              onClick={guardBuilderExit}
+              title="Present the published version"
+              lang="en-CA"
+            >
+              <EditorIcon name="play" />
+              Present
+            </Link>
+          ) : (
+            <button
+              className={styles.presentButton}
+              disabled
+              type="button"
+              title="Publish a version before presenting"
+              lang="en-CA"
+            >
+              <EditorIcon name="play" />
+              Present
+            </button>
+          )}
           <PresentationShareButton
             className={styles.shareButton}
             presentationId={presentationId}
             versionId={record.currentVersionId}
             disabled={!canEdit}
           />
-          <PresentationAssignmentButton
-            actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
-            className={styles.shareButton}
-            presentationId={presentationId}
-            versionId={record.currentVersionId}
-            disabled={!canEdit}
-          />
-          <PresentationPracticeButton
-            actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
-            className={styles.shareButton}
-            presentationId={presentationId}
-            versionId={record.currentVersionId}
-            disabled={!canEdit}
-          />
-          <PresentationExportButton
-            className={styles.shareButton}
-            presentationId={presentationId}
-            versionId={record.currentVersionId}
-            disabled={!canEdit}
-          />
-          <button
-            aria-expanded={inspectorOpen}
-            className={styles.iconButton}
-            onClick={() => setInspectorOpen((value) => !value)}
-            type="button"
-          >
-            {inspectorOpen
-              ? t("delivery.presentationBuilder.hideInspector")
-              : t("delivery.presentationBuilder.openInspector")}
-          </button>
+          <EditorDisclosure label="More options" compact className={styles.moreActions}>
+            <PresentationAssignmentButton
+              actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+              className={styles.shareButton}
+              presentationId={presentationId}
+              versionId={record.currentVersionId}
+              disabled={!canEdit}
+            />
+            <PresentationPracticeButton
+              actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+              className={styles.shareButton}
+              presentationId={presentationId}
+              versionId={record.currentVersionId}
+              disabled={!canEdit}
+            />
+            <PresentationExportButton
+              className={styles.shareButton}
+              presentationId={presentationId}
+              versionId={record.currentVersionId}
+              disabled={!canEdit}
+            />
+            <hr />
+            <button
+              className={styles.spatialButton}
+              disabled={!canEdit}
+              lang="en-CA"
+              onClick={() => setSpatialOpen(true)}
+              type="button"
+            >
+              Arrange space
+            </button>
+          </EditorDisclosure>
         </div>
       </header>
 
@@ -2771,7 +2925,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         <section
           className={styles.packReviews}
           aria-label="Presentation Recovery Pack updates"
-          inert={builderMutationBlocked || preparingImport}
+          inert={unrelatedEditorMutationBlocked || preparingImport}
         >
           {packUpdateReceiptPending ? (
             <p className="notice" role="status" lang="en-CA">
@@ -2802,18 +2956,29 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </section>
       ) : null}
 
+      {compactEditor && (mapOpen || inspectorOpen) ? (
+        <button
+          type="button"
+          className={styles.drawerBackdrop}
+          aria-label="Close editor panel"
+          onClick={() => closeEditorPanels(true)}
+          tabIndex={-1}
+        />
+      ) : null}
       <div
         className={`${styles.workspace} ${mapOpen ? "" : styles.mapClosed} ${inspectorOpen ? "" : styles.inspectorClosed}`}
         inert={builderMutationBlocked || preparingImport}
       >
         <aside
+          id="presentation-slide-navigator"
+          ref={mapPanel}
           className={styles.map}
           aria-label={t("delivery.presentationBuilder.presentationMap")}
         >
           <div className={styles.mapHeader}>
             <div>
               <span className={styles.eyebrow}>
-                {t("delivery.presentationBuilder.presentationMap")}
+                <span lang="en-CA">Slides</span>
               </span>
               <strong>
                 {t(
@@ -2825,7 +2990,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               </strong>
             </div>
             <button
-              onClick={() => setMapOpen(false)}
+              onClick={() => (compactEditor ? closeEditorPanels(true) : setMapOpen(false))}
               type="button"
               aria-label={t("delivery.presentationBuilder.collapseMap")}
             >
@@ -2853,13 +3018,18 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           />
           <ol className={styles.blockList}>
             {draft.blocks.map((block, index) => (
-              <li key={block.id}>
+              <li key={block.id} className={styles.filmstripItem}>
+                <PresentationSlideThumbnail
+                  block={block}
+                  priority={index < 3 || selectedBlockId === block.id}
+                />
                 <button
                   aria-current={selectedBlockId === block.id ? "step" : undefined}
                   className={selectedBlockId === block.id ? styles.blockActive : styles.blockButton}
                   onClick={() => setSelectedBlockId(block.id)}
                   type="button"
                 >
+                  <span className={styles.thumbnailSpace} aria-hidden="true" />
                   <span className={styles.blockNumber}>{index + 1}</span>
                   <span className={styles.blockText}>
                     <small>
@@ -2915,11 +3085,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     >
                       {issuesByBlock.get(block.id)}
                     </span>
-                  ) : (
-                    <span className={styles.readyBadge} aria-label={t("delivery.builder.ready")}>
-                      ✓
-                    </span>
-                  )}
+                  ) : null}
                 </button>
                 {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
                   <span className={styles.recoveryLink}>
@@ -2930,55 +3096,64 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             ))}
           </ol>
           <div className={styles.addActions}>
-            <button onClick={() => addBlock(createNativeContentBlock())} type="button">
-              Add native slide
-            </button>
-            <button onClick={() => addBlock(createContentBlock())} type="button">
-              + {t("delivery.presentation.contentSlide")}
-            </button>
-            <button onClick={() => addBlock(createQuestionBlock())} type="button">
-              + {t("delivery.builder.addQuestion")}
-            </button>
             <button
-              disabled={!roundSources.length || preparingImport}
-              onClick={openRoundImport}
+              className={styles.newSlideButton}
+              onClick={() => addBlock(createDesignedNativeContentBlock())}
               type="button"
             >
-              + {t("delivery.presentationBuilder.fromPublishedRound")}
+              <EditorIcon name="plus" /> New slide
             </button>
-            <button
-              disabled={preparingImport}
-              onClick={() => void openSourceImport()}
-              type="button"
-            >
-              + {t("delivery.presentationBuilder.fromTrustedSource")}
-            </button>
-            <button
-              disabled={!canEdit || preparingImport}
-              lang="en-CA"
-              onClick={() => void openAssistance()}
-              type="button"
-            >
-              Outline to slides
-            </button>
-            <button
-              disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
-              lang="en-CA"
-              onClick={openVisualImport}
-              type="button"
-            >
-              + Import visual slides
-            </button>
-            {canInsertPack ? (
+            <EditorDisclosure label="Insert & import" className={styles.insertMenu}>
+              <button onClick={() => addBlock(createNativeContentBlock())} type="button">
+                Blank slide
+              </button>
+              <button onClick={() => addBlock(createContentBlock())} type="button">
+                + {t("delivery.presentation.contentSlide")}
+              </button>
+              <button onClick={() => addBlock(createQuestionBlock())} type="button">
+                + {t("delivery.builder.addQuestion")}
+              </button>
               <button
-                disabled={mediaState !== "idle" || preparingImport}
-                lang="en-CA"
-                onClick={() => void openPackImport()}
+                disabled={!roundSources.length || preparingImport}
+                onClick={openRoundImport}
                 type="button"
               >
-                + From Recovery Pack
+                + {t("delivery.presentationBuilder.fromPublishedRound")}
               </button>
-            ) : null}
+              <button
+                disabled={preparingImport}
+                onClick={() => void openSourceImport()}
+                type="button"
+              >
+                + {t("delivery.presentationBuilder.fromTrustedSource")}
+              </button>
+              <button
+                disabled={!canEdit || preparingImport}
+                lang="en-CA"
+                onClick={() => void openAssistance()}
+                type="button"
+              >
+                Outline to slides
+              </button>
+              <button
+                disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
+                lang="en-CA"
+                onClick={openVisualImport}
+                type="button"
+              >
+                + Import visual slides
+              </button>
+              {canInsertPack ? (
+                <button
+                  disabled={mediaState !== "idle" || preparingImport}
+                  lang="en-CA"
+                  onClick={() => void openPackImport()}
+                  type="button"
+                >
+                  + From Recovery Pack
+                </button>
+              ) : null}
+            </EditorDisclosure>
           </div>
         </aside>
 
@@ -2995,48 +3170,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               {t("delivery.common.preview")}
             </button>
           </div>
-          {productFeatures?.canvasBoards ? (
-            <CanvasArtifactLinks
-              target={{ kind: "presentation", targetId: presentationId }}
-              editable={canEdit}
-              disabled={builderMutationBlocked}
-            />
-          ) : null}
-          <RecoveryPackPresentationReferences insertions={draft.recoveryPackInsertions ?? []} />
-          {!mapOpen ? (
-            <button
-              className={styles.floatingMapButton}
-              onClick={() => setMapOpen(true)}
-              type="button"
-            >
-              {t("delivery.presentationBuilder.openMap")}
-            </button>
-          ) : null}
           {selectedBlock ? (
             <div className={styles.canvasToolbar} aria-label="Selected block actions" lang="en-CA">
-              <button
-                className={styles.primarySlideAction}
-                onClick={() => addBlock(createDesignedNativeContentBlock())}
-                type="button"
-              >
-                New slide
-              </button>
-              <button
-                className={styles.compactHistory}
-                disabled={!undoStack.length}
-                onClick={undo}
-                type="button"
-              >
-                {t("delivery.builder.undo")}
-              </button>
-              <button
-                className={styles.compactHistory}
-                disabled={!redoStack.length}
-                onClick={redo}
-                type="button"
-              >
-                {t("delivery.builder.redo")}
-              </button>
+              <span className={styles.slidePosition}>
+                Slide {draft.blocks.findIndex((block) => block.id === selectedBlock.id) + 1} of{" "}
+                {draft.blocks.length}
+              </span>
+
               {selectedBlock.kind === "content" && !selectedBlock.scene ? (
                 <>
                   <button
@@ -3200,7 +3340,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <p>{t("delivery.presentationBuilder.emptyDescription")}</p>
               <div>
                 <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
-                  New slide
+                  Create first slide
                 </button>
                 <button onClick={() => addBlock(createContentBlock())} type="button">
                   {t("delivery.presentationBuilder.addContentSlide")}
@@ -3229,107 +3369,18 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             </section>
           ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
             <section className={styles.slideCanvas} lang="en-CA">
-              <PresentationQuestionStarters
-                key={`question-starters:${selectedBlock.id}`}
-                block={selectedBlock}
-                sourceKey={selectedBlock.id}
-                disabled={questionStarterContext.blocked}
-                onInsert={(starter) => {
-                  if (
-                    latestQuestionStarterContext.current.actorKey !==
-                      questionStarterContext.actorKey ||
-                    latestQuestionStarterContext.current.presentationId !==
-                      questionStarterContext.presentationId ||
-                    latestQuestionStarterContext.current.selectedBlockId !==
-                      questionStarterContext.selectedBlockId ||
-                    latestQuestionStarterContext.current.blocked ||
-                    questionStarterContext.blocked ||
-                    !alive.current ||
-                    !assistancePermission.current ||
-                    importPreparation.current ||
-                    textAssistanceActive.current ||
-                    questionSuggestionsActive.current ||
-                    assistanceActive.current ||
-                    visualImportActive.current ||
-                    packOperation.current ||
-                    packPending.current ||
-                    packUpdateOperation.current ||
-                    packUpdatePending.current ||
-                    mediaUploadInFlight.current ||
-                    pendingNativeImageRef.current ||
-                    starter.source.blockId.toLowerCase() !== selectedBlock.id.toLowerCase()
-                  )
-                    return false;
-                  const ids = {
-                    blockId: clientUuid(),
-                    questionId: clientUuid(),
-                    ...(starter.type === "poll"
-                      ? { choiceIds: (starter.choices ?? []).map(() => clientUuid()) }
-                      : {}),
-                  };
-                  const checked = insertPresentationQuestionStarter(
-                    JSON.parse(latestDraftJson.current) as PresentationDraft,
-                    starter,
-                    ids,
-                  );
-                  if (!checked.ok) {
-                    setError(checked.reason);
-                    return false;
-                  }
-                  // Recheck the current draft in the ordinary commit; identities stay stable
-                  // if React replays the updater. One insertion is one independent Undo step.
-                  commit((current) => {
-                    const result = insertPresentationQuestionStarter(current, starter, ids);
-                    if (!result.ok) {
-                      setError(result.reason);
-                      return current;
-                    }
-                    questionStarterFocus.current = result.blockId;
-                    setSelectedBlockId(result.blockId);
-                    setInspectorTab("build");
-                    setError("");
-                    return result.draft;
-                  });
-                  return true;
-                }}
-              />
-              <div className={styles.canvasToolbar}>
-                <button
-                  type="button"
-                  data-question-suggestions-trigger
-                  disabled={questionStarterContext.blocked || !questionSuggestionSource?.supported}
-                  onClick={() => void openQuestionSuggestions()}
-                >
-                  Suggest discussion questions
-                </button>
-                <p className={styles.helpText}>
-                  Optional AI assistance. Review the source and shared AI allowance before
-                  generating two English discussion suggestions.
-                </p>
-              </div>
-              {selectedBlock.textAssistance ? (
-                <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
-                  <strong>Latest AI text edit — unverified wording</strong>
-                  <p>
-                    {selectedBlock.textAssistance.operation === "translate"
-                      ? `Translated to ${presentationTextLanguageLabel(selectedBlock.textAssistance.targetLanguage!)}`
-                      : selectedBlock.textAssistance.operation === "shorten"
-                        ? "Shortened"
-                        : "Rewritten"}{" "}
-                    {selectedBlock.textAssistance.role} object {selectedBlock.textAssistance.nodeId}{" "}
-                    by {selectedBlock.textAssistance.provider} /{" "}
-                    {selectedBlock.textAssistance.model} at{" "}
-                    {selectedBlock.textAssistance.generatedAt}.
-                  </p>
-                  <p>
-                    {selectedBlock.textAssistance.reviewWarning} This records the latest edit on
-                    this slide, not a complete edit history or fact check.
-                  </p>
-                </aside>
-              ) : null}
               <NativeSceneEditor
                 key={selectedBlock.id}
                 scene={selectedBlock.scene}
+                inspectorTarget={nativeInspectorTarget}
+                inspectorSection={
+                  inspectorTab === "layout" ||
+                  inspectorTab === "media" ||
+                  inspectorTab === "accessibility"
+                    ? inspectorTab
+                    : "content"
+                }
+                onInspectSelection={() => setInspectorTab("content")}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
                 navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
@@ -3384,6 +3435,111 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   void uploadSelectedImage(file, altText);
                 }}
               />
+              <EditorDisclosure
+                label="Slide ideas & audience activities"
+                className={styles.slideIdeas}
+              >
+                <PresentationQuestionStarters
+                  key={`question-starters:${selectedBlock.id}`}
+                  block={selectedBlock}
+                  sourceKey={selectedBlock.id}
+                  disabled={questionStarterContext.blocked}
+                  onInsert={(starter) => {
+                    if (
+                      latestQuestionStarterContext.current.actorKey !==
+                        questionStarterContext.actorKey ||
+                      latestQuestionStarterContext.current.presentationId !==
+                        questionStarterContext.presentationId ||
+                      latestQuestionStarterContext.current.selectedBlockId !==
+                        questionStarterContext.selectedBlockId ||
+                      latestQuestionStarterContext.current.blocked ||
+                      questionStarterContext.blocked ||
+                      !alive.current ||
+                      !assistancePermission.current ||
+                      importPreparation.current ||
+                      textAssistanceActive.current ||
+                      questionSuggestionsActive.current ||
+                      assistanceActive.current ||
+                      visualImportActive.current ||
+                      packOperation.current ||
+                      packPending.current ||
+                      packUpdateOperation.current ||
+                      packUpdatePending.current ||
+                      mediaUploadInFlight.current ||
+                      pendingNativeImageRef.current ||
+                      starter.source.blockId.toLowerCase() !== selectedBlock.id.toLowerCase()
+                    )
+                      return false;
+                    const ids = {
+                      blockId: clientUuid(),
+                      questionId: clientUuid(),
+                      ...(starter.type === "poll"
+                        ? { choiceIds: (starter.choices ?? []).map(() => clientUuid()) }
+                        : {}),
+                    };
+                    const checked = insertPresentationQuestionStarter(
+                      JSON.parse(latestDraftJson.current) as PresentationDraft,
+                      starter,
+                      ids,
+                    );
+                    if (!checked.ok) {
+                      setError(checked.reason);
+                      return false;
+                    }
+                    // Recheck the current draft in the ordinary commit; identities stay stable
+                    // if React replays the updater. One insertion is one independent Undo step.
+                    commit((current) => {
+                      const result = insertPresentationQuestionStarter(current, starter, ids);
+                      if (!result.ok) {
+                        setError(result.reason);
+                        return current;
+                      }
+                      questionStarterFocus.current = result.blockId;
+                      setSelectedBlockId(result.blockId);
+                      setInspectorTab("build");
+                      setError("");
+                      return result.draft;
+                    });
+                    return true;
+                  }}
+                />
+                <div className={styles.canvasToolbar}>
+                  <button
+                    type="button"
+                    data-question-suggestions-trigger
+                    disabled={
+                      questionStarterContext.blocked || !questionSuggestionSource?.supported
+                    }
+                    onClick={() => void openQuestionSuggestions()}
+                  >
+                    Suggest discussion questions
+                  </button>
+                  <p className={styles.helpText}>
+                    Optional AI assistance. Review the source and shared AI allowance before
+                    generating two English discussion suggestions.
+                  </p>
+                </div>
+                {selectedBlock.textAssistance ? (
+                  <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
+                    <strong>Latest AI text edit — unverified wording</strong>
+                    <p>
+                      {selectedBlock.textAssistance.operation === "translate"
+                        ? `Translated to ${presentationTextLanguageLabel(selectedBlock.textAssistance.targetLanguage!)}`
+                        : selectedBlock.textAssistance.operation === "shorten"
+                          ? "Shortened"
+                          : "Rewritten"}{" "}
+                      {selectedBlock.textAssistance.role} object{" "}
+                      {selectedBlock.textAssistance.nodeId} by{" "}
+                      {selectedBlock.textAssistance.provider} / {selectedBlock.textAssistance.model}{" "}
+                      at {selectedBlock.textAssistance.generatedAt}.
+                    </p>
+                    <p>
+                      {selectedBlock.textAssistance.reviewWarning} This records the latest edit on
+                      this slide, not a complete edit history or fact check.
+                    </p>
+                  </aside>
+                ) : null}
+              </EditorDisclosure>
             </section>
           ) : selectedBlock.kind === "content" ? (
             <section className={styles.slideCanvas} lang="en-CA">
@@ -3478,12 +3634,36 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               />
             </section>
           )}
+          {productFeatures?.canvasBoards || draft.recoveryPackInsertions?.length ? (
+            <EditorDisclosure label="Related content" className={styles.slideIdeas}>
+              {productFeatures?.canvasBoards ? (
+                <CanvasArtifactLinks
+                  target={{ kind: "presentation", targetId: presentationId }}
+                  editable={canEdit}
+                  disabled={builderMutationBlocked}
+                />
+              ) : null}
+              <RecoveryPackPresentationReferences insertions={draft.recoveryPackInsertions ?? []} />
+            </EditorDisclosure>
+          ) : null}
         </main>
 
         <aside
+          id="presentation-object-inspector"
+          ref={inspectorPanel}
           className={styles.inspector}
           aria-label={t("delivery.presentationBuilder.blockInspector")}
         >
+          <div className={styles.inspectorHeading}>
+            <strong>Slide tools</strong>
+            <button
+              type="button"
+              onClick={() => (compactEditor ? closeEditorPanels(true) : setInspectorOpen(false))}
+              aria-label="Close inspector panel"
+            >
+              ×
+            </button>
+          </div>
           <div
             className={styles.inspectorTabs}
             role="tablist"
@@ -3515,6 +3695,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             aria-labelledby={`inspector-tab-${inspectorTab}`}
             tabIndex={0}
           >
+            {selectedBlock?.kind === "content" && selectedBlock.scene ? (
+              <div
+                ref={setNativeInspectorTarget}
+                hidden={inspectorTab === "notes" || inspectorTab === "readiness"}
+                className={styles.nativeInspectorHost}
+              />
+            ) : null}
             {inspectorTab === "readiness" ? (
               <section>
                 <p className={styles.eyebrow}>
@@ -3566,31 +3753,30 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             ) : !selectedBlock ? (
               <p>{t("delivery.presentationBuilder.selectBlock")}</p>
             ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
-              <section lang="en-CA">
-                <h2>Native slide</h2>
-                <p className={styles.helpText}>
-                  Select and edit slide objects below the canvas. Readiness checks include every
-                  image description and shape label.
-                </p>
-                <label className={styles.field}>
-                  <span>Speaker notes</span>
-                  <textarea
-                    aria-label="Speaker notes"
-                    maxLength={2000}
-                    value={selectedBlock.speakerNotes}
-                    onChange={(event) =>
-                      updateSelected(
-                        (block) =>
-                          block.kind === "content"
-                            ? { ...block, speakerNotes: event.target.value }
-                            : block,
-                        "speakerNotes",
-                      )
-                    }
-                    placeholder="Private facilitation cues"
-                  />
-                </label>
-              </section>
+              inspectorTab === "notes" ? (
+                <section lang="en-CA">
+                  <h2>Speaker notes</h2>
+                  <p className={styles.helpText}>Private notes for your presenter view.</p>
+                  <label className={styles.field}>
+                    <span>Speaker notes</span>
+                    <textarea
+                      aria-label="Speaker notes"
+                      maxLength={2000}
+                      value={selectedBlock.speakerNotes}
+                      onChange={(event) =>
+                        updateSelected(
+                          (block) =>
+                            block.kind === "content"
+                              ? { ...block, speakerNotes: event.target.value }
+                              : block,
+                          "speakerNotes",
+                        )
+                      }
+                      placeholder="Add a cue for your talk"
+                    />
+                  </label>
+                </section>
+              ) : null
             ) : selectedBlock.kind === "content" ? (
               <section>
                 <p className={styles.eyebrow}>{t("delivery.presentation.contentSlide")}</p>

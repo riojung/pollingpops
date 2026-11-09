@@ -127,6 +127,7 @@ async function openText(page: Page, operation: "rewrite" | "shorten", recovering
   });
   const resume = page.getByRole("button", { name: "Resume text assistance", exact: true });
   if (recovering) {
+    await closeDrawers(page);
     await expect(resume).toBeVisible();
     await resume.click();
   } else {
@@ -589,7 +590,7 @@ for (const suffix of ["", " @mobile"]) {
         .poll(async () => body(await readE01Record(page, record.id)).node.text)
         .toBe(manualText);
       await page.reload();
-      await expect(page.getByRole("button", { name: "Arrange space", exact: true })).toBeVisible();
+      await expect(page.locator('summary[aria-label="More options"]')).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Resume text assistance", exact: true }),
       ).toBeHidden();

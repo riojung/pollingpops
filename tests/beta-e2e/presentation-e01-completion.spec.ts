@@ -7,6 +7,8 @@ import {
 } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
+  openE01Inspector,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -82,9 +84,11 @@ for (const suffix of ["", " @mobile"]) {
     await expect(preview.getByText(/HIDDEN (opening|closing)/)).toHaveCount(0);
     await page.getByRole("button", { name: "Close preview", exact: true }).click();
     await enterE01Editor(page, record.id, narrow);
+    await openE01Inspector(page, "Content");
     await expect(page.getByLabel("Native slide title", { exact: true })).toHaveValue(
       "Audience plan",
     );
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Hide slide", exact: true }).click();
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     await expect(preview.getByText(/Show a slide|add an activity/i)).toBeVisible();

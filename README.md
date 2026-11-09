@@ -158,7 +158,8 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-`pnpm check` runs formatting, Docker-context validation, linting, type checks, tests, and builds.
+`pnpm check` runs formatting, Docker-context validation, linting, type checks, tests, and builds,
+followed by a compiled-server startup/configuration smoke check.
 For a focused edit, use `pnpm build:web`, `pnpm build:server`, `pnpm build:control`, or
 `pnpm build:admin`. `pnpm build` builds all application artifacts; shared package bundles and
 declarations are available separately through `pnpm build:packages`.

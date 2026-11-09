@@ -7,7 +7,12 @@ import type {
 } from "../../packages/contracts/src/index.ts";
 import nativeContent from "../../apps/web/lib/presentation-native-template-content.json";
 import { signInBeta } from "./sign-in";
-import { e01ApiUrl, readE01Record } from "./presentation-e01-support";
+import {
+  openE01Inspector,
+  closeE01Overlays,
+  e01ApiUrl,
+  readE01Record,
+} from "./presentation-e01-support";
 
 test.use({ actionTimeout: 30_000 });
 
@@ -47,8 +52,7 @@ async function openNativeGallery(page: Page, scenario: string) {
 
 async function collapseOverlays(page: Page, narrow: boolean) {
   if (!narrow) return;
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+  await closeE01Overlays(page);
 }
 
 async function expectCompleteChartPlot(preview: Locator, label: string) {
@@ -138,6 +142,7 @@ for (const suffix of ["", " @mobile"]) {
         (block) => block.kind === "content" && block.scene?.schemaVersion === 4,
       ),
     ).toBe(true);
+    await openE01Inspector(page, "Content");
     await page
       .getByLabel("Native slide title", { exact: true })
       .fill("Pitch tailored for our workshop");
@@ -156,6 +161,7 @@ for (const suffix of ["", " @mobile"]) {
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === `/v1/presentations/${first.id}/publish`,
     );
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     const published = await publishing;
     expect(published.status(), await published.text()).toBe(200);
@@ -165,6 +171,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(
       version.content.blocks.every((block: { kind: string }) => block.kind === "content"),
     ).toBe(true);
+    await openE01Inspector(page, "Content");
     await page
       .getByLabel("Native slide title", { exact: true })
       .fill("Unpublished headline after the review");

@@ -4,6 +4,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { PresentationDraft } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Body,
@@ -59,8 +60,7 @@ async function openRecoveryDeck(page: Page, narrow = false) {
 async function reloadRecoveryEditor(page: Page, narrow = false) {
   await page.reload();
   if (narrow) {
-    await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-    await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+    await closeE01Overlays(page);
   }
   await selectE01Body(page);
 }

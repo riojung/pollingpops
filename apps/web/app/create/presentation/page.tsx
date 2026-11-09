@@ -11,7 +11,7 @@ import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { recordCreationEvent } from "../../../components/workspace/product-events";
 import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
 import { PresentationOutlineStart } from "../../../components/workspace/presentation-outline-start";
-import styles from "../../../components/workspace/workspace-hub.module.css";
+import styles from "./presentation-launcher.module.css";
 
 function PresentationLauncher() {
   const router = useRouter();
@@ -91,60 +91,107 @@ function PresentationLauncher() {
             </div>
           ) : null}
           {!selectedStart ? (
-            <div className={styles.methodGrid}>
-              <Link
-                className={styles.methodCard}
-                href="/create/presentation?start=outline"
-                lang="en-CA"
-                aria-label="From outline"
-              >
-                <span className={styles.cardIcon} data-tone="violet" aria-hidden="true">
-                  O
-                </span>
-                <small>Optional AI assistance</small>
-                <h2>From outline</h2>
-                <p>Create a saved draft, then turn your outline into editable slides for review.</p>
-                <span className={styles.cardLink}>Start from an outline →</span>
-              </Link>
-              <Link className={styles.methodCard} href="/create/presentation?start=source">
-                <span className={styles.cardIcon} data-tone="violet">
-                  S
-                </span>
-                <small>{t("create.presentation.method.source.kicker")}</small>
-                <h2>{t("create.presentation.method.source.title")}</h2>
-                <p>{t("create.presentation.method.source.description")}</p>
-                <span className={styles.cardLink}>
-                  {t("create.presentation.method.source.action")}
-                </span>
-              </Link>
-              <Link className={styles.methodCard} href="/create/presentation?start=template">
-                <span className={styles.cardIcon}>T</span>
-                <small>{t("create.common.fastestStart")}</small>
-                <h2>{t("create.presentation.method.template.title")}</h2>
-                <p>{t("create.presentation.method.template.description")}</p>
-                <span className={styles.cardLink}>
-                  {t("create.presentation.method.template.action")}
-                </span>
-              </Link>
+            <section className={styles.blankStart}>
+              <span className={styles.blankMark} aria-hidden="true">
+                <svg viewBox="0 0 72 52" fill="none">
+                  <rect x="2" y="2" width="68" height="48" rx="5" />
+                  <path d="M28 26h16M36 18v16" />
+                </svg>
+              </span>
+              <div className={styles.blankCopy}>
+                <p className={styles.kicker}>{t("create.common.fullControl")}</p>
+                <h2>{t("create.presentation.method.blank.title")}</h2>
+                <p>{t("create.presentation.method.blank.description")}</p>
+              </div>
               <button
-                className={styles.methodCard}
+                className="button"
                 disabled={creating}
                 onClick={() => void createBlankPresentation()}
                 type="button"
               >
-                <span className={styles.cardIcon} data-tone="coral">
-                  B
-                </span>
-                <small>{t("create.common.fullControl")}</small>
-                <h2>{t("create.presentation.method.blank.title")}</h2>
-                <p>{t("create.presentation.method.blank.description")}</p>
-                <span className={styles.cardLink}>
-                  {creating
-                    ? t("create.presentation.method.blank.creating")
-                    : t("create.presentation.method.blank.action")}
-                </span>
+                {creating
+                  ? t("create.presentation.method.blank.creating")
+                  : t("create.presentation.method.blank.action")}
               </button>
-            </div>
+            </section>
+          ) : null}
+
+          {error ? (
+            <p className="error" lang="en-CA" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          {!selectedStart ? (
+            <nav className={styles.quickStarts} aria-label="Other starting points" lang="en-CA">
+              <Link href="/create/presentation?start=source">Use source material →</Link>
+              <span>
+                <Link
+                  href="/create/presentation?start=outline"
+                  aria-label="Optional outline assistance"
+                >
+                  From outline →
+                </Link>
+                <small>Optional assistance</small>
+              </span>
+            </nav>
+          ) : null}
+
+          {!selectedStart || selectedStart === "template" ? (
+            <section className={styles.templates} aria-labelledby="presentation-templates-title">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p className={styles.kicker}>{t("create.common.fastestStart")}</p>
+                  <h2 id="presentation-templates-title">
+                    {t("create.presentation.templates.title")}
+                  </h2>
+                  <p>{t("create.presentation.method.template.description")}</p>
+                </div>
+                {!selectedStart ? (
+                  <Link
+                    className="button-quiet small-button"
+                    href="/create/presentation?start=template"
+                  >
+                    <span lang="en-CA">Browse templates →</span>
+                  </Link>
+                ) : null}
+              </div>
+              <PresentationTemplateGallery />
+            </section>
+          ) : null}
+
+          {!selectedStart ? (
+            <section className={styles.alternatives} aria-labelledby="other-starts-title">
+              <h2 id="other-starts-title" lang="en-CA">
+                Already have a starting point?
+              </h2>
+              <div className={styles.methodGrid}>
+                <Link className={styles.methodCard} href="/create/presentation?start=source">
+                  <small lang="en-CA">Source assistance</small>
+                  <h3>{t("create.presentation.method.source.title")}</h3>
+                  <p lang="en-CA">
+                    Review content proposals from PowerPoint, PDF, Word or pasted text. Original
+                    slide layouts are not preserved.
+                  </p>
+                  <span className={styles.cardLink}>
+                    {t("create.presentation.method.source.action")}
+                  </span>
+                </Link>
+                <Link
+                  className={styles.methodCard}
+                  href="/create/presentation?start=outline"
+                  lang="en-CA"
+                  aria-label="From outline"
+                >
+                  <small>Optional AI assistance</small>
+                  <h3>From outline</h3>
+                  <p>
+                    Create a saved draft, then turn your outline into editable slides for review.
+                  </p>
+                  <span className={styles.cardLink}>Start from an outline →</span>
+                </Link>
+              </div>
+            </section>
           ) : null}
 
           {selectedStart === "source" ? (
@@ -164,25 +211,10 @@ function PresentationLauncher() {
             </section>
           ) : null}
 
-          {selectedStart === "template" ? (
-            <section className={styles.panel}>
-              <p className="eyebrow">{t("create.presentation.templates.eyebrow")}</p>
-              <h2>{t("create.presentation.templates.title")}</h2>
-              <PresentationTemplateGallery />
-            </section>
-          ) : null}
-
           {selectedStart === "outline" ? <PresentationOutlineStart /> : null}
 
-          {error ? (
-            <p className="error" lang="en-CA" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <p className={styles.notice}>
-            <strong>{t("create.presentation.notice.title")}</strong>{" "}
-            {t("create.presentation.notice.description")}
+          <p className={styles.notice} lang="en-CA">
+            Your work starts as a private draft. Review and publish when you are ready.
           </p>
         </>
       )}

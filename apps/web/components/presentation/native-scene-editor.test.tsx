@@ -1,4 +1,4 @@
-import { isValidElement, type ReactElement, type ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode, type ReactPortal } from "react";
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
@@ -34,6 +34,13 @@ vi.mock("react", async (original) => {
 
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
+  if (
+    node &&
+    typeof node === "object" &&
+    "$$typeof" in node &&
+    node.$$typeof === Symbol.for("react.portal")
+  )
+    return elements((node as ReactPortal).children);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
@@ -44,6 +51,9 @@ function editorHarness(
     onRedo?: () => void;
     onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten" | "translate") => void;
     textAssistanceDisabled?: boolean;
+    inspectorTarget?: HTMLElement | null;
+    inspectorSection?: "content" | "layout" | "media" | "accessibility";
+    onInspectSelection?: () => void;
   } = {},
 ) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
@@ -61,6 +71,8 @@ function editorHarness(
   return {
     scene,
     onChange,
+    root: () => tree,
+    all: () => elements(tree),
     render(mediaState: "idle" | "uploading" | "scanning", attachmentPending = false) {
       hooks.cursor = 0;
       mocked.hooks = hooks;
@@ -127,7 +139,11 @@ describe("native text history focus", () => {
       documentState.activeElement = body;
       replacement = rich;
     });
-    const editor = editorHarness({ onUndo, onRedo });
+    const editor = editorHarness({
+      onUndo,
+      onRedo,
+      inspectorTarget: { nodeType: 1 } as HTMLElement,
+    });
     editor.render("idle");
     const fieldset = editor.find((element) => element.props["data-native-text-fields"] === "true");
     function key(target: FakeTextarea, shiftKey: boolean) {
@@ -438,9 +454,9 @@ describe("native edit validation", () => {
   });
 });
 
-describe("native design discoverability", () => {
+describe("native canvas and contextual inspector", () => {
   it.each(["legacy", "designed"] as const)(
-    "places one %s design fieldset above the canvas while object controls stay below",
+    "keeps the %s standalone canvas ahead of its single inline inspector",
     (kind) => {
       const editor = editorHarness();
       if (kind === "designed") {
@@ -451,28 +467,123 @@ describe("native design discoverability", () => {
       editor.render("idle");
       const root = editor.find((element) => element.type === "div");
       const children = root.props.children as ReactElement<Record<string, unknown>>[];
-      const design = elements(children[0]).filter(
-        (element) => element.type === NativeSceneDesignControls,
+      const canvasIndex = children.findIndex((element) => element?.type === NativeSceneCanvas);
+      const inspectorIndex = children.findIndex(
+        (element) => element?.props["aria-label"] === "Native slide editor",
       );
-      expect(design).toHaveLength(1);
+      expect(canvasIndex).toBeGreaterThan(0);
+      expect(inspectorIndex).toBeGreaterThan(canvasIndex);
       expect(
-        elements(root).filter((element) => element.type === NativeSceneDesignControls),
+        editor.all().filter((element) => element.type === NativeSceneDesignControls),
       ).toHaveLength(1);
-      expect(design[0]!.props.scene).toBe(editor.scene);
-      expect(children[1]!.type).toBe(NativeSceneCanvas);
-      const lower = children[2]!;
-      expect(lower.props["aria-label"]).toBe("Native slide editor");
-      expect(children[0]!.props.className).toBe(lower.props.className);
-      expect(elements(lower).some((element) => element.type === NativeSceneLayoutControls)).toBe(
-        true,
-      );
       expect(
-        elements(lower).some((element) => element.props["data-native-text-fields"] === "true"),
+        elements(children[inspectorIndex]).some(
+          (element) => element.type === NativeSceneLayoutControls,
+        ),
       ).toBe(true);
       expect(editor.onChange).not.toHaveBeenCalled();
       expect(editor.scene).toEqual(original);
     },
   );
+
+  it("waits for the shell target without duplicating fields inline, then portals exactly one inspector", () => {
+    const shell = { inspectorTarget: null as HTMLElement | null };
+    const editor = editorHarness(shell);
+    editor.render("idle");
+    expect(editor.all().filter((element) => element.type === NativeSceneCanvas)).toHaveLength(1);
+    expect(
+      editor.all().some((element) => element.props["aria-label"] === "Native slide editor"),
+    ).toBe(false);
+    expect(editor.all().some((element) => element.type === NativeSceneDesignControls)).toBe(false);
+    shell.inspectorTarget = { nodeType: 1 } as HTMLElement;
+    editor.render("idle");
+    const root = editor.root() as ReactElement<{ children: ReactNode[] }>;
+    const portal = root.props.children.find(
+      (child) =>
+        child &&
+        typeof child === "object" &&
+        "$$typeof" in child &&
+        child.$$typeof === Symbol.for("react.portal"),
+    ) as ReactPortal & { containerInfo: HTMLElement };
+    expect(portal.containerInfo).toBe(shell.inspectorTarget);
+    expect(
+      elements(portal.children).filter(
+        (element) => element.props["aria-label"] === "Native slide editor",
+      ),
+    ).toHaveLength(1);
+    expect(editor.all().filter((element) => element.type === NativeSceneCanvas)).toHaveLength(1);
+    expect(
+      editor.all().filter((element) => element.props["aria-label"] === "Native slide title"),
+    ).toHaveLength(1);
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps selection and rich-text history mounted while showing the requested inspector section", () => {
+    const inspect = vi.fn();
+    const undo = vi.fn();
+    const shell = {
+      inspectorTarget: { nodeType: 1 } as HTMLElement,
+      inspectorSection: "content" as "content" | "layout" | "media" | "accessibility",
+      onInspectSelection: inspect,
+      onUndo: undo,
+    };
+    const editor = editorHarness(shell);
+    editor.render("idle");
+    const canvas = editor.find((element) => element.type === NativeSceneCanvas);
+    (canvas.props.onSelect as (id: string) => void)("body");
+    editor.render("idle");
+    expect(inspect).toHaveBeenCalledTimes(1);
+    const body = editor.find((element) => element.props["aria-label"] === "Node text");
+    (body.props.onChange as (event: unknown) => void)({
+      target: { value: "Updated through inspector" },
+    });
+    expect(editor.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: "body", text: "Updated through inspector" }),
+        ]),
+      }),
+      "native:body:text",
+    );
+    (
+      editor.find(
+        (element) => element.type === "button" && element.props.children === "Format text",
+      ).props.onClick as () => void
+    )();
+    Object.assign(editor.scene, editor.onChange.mock.calls.at(-1)![0]);
+    for (const section of ["content", "layout", "media", "accessibility"] as const) {
+      shell.inspectorSection = section;
+      editor.render("idle");
+      const sections = editor
+        .all()
+        .filter((element) => element.props["data-native-inspector-section"]);
+      expect(sections).toHaveLength(4);
+      expect(
+        sections
+          .filter((element) => !element.props.hidden)
+          .map((element) => element.props["data-native-inspector-section"]),
+      ).toEqual([section]);
+      expect(
+        editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+      ).toEqual(["body"]);
+      const rich = editor.find((element) => element.type === NativeRichTextEditor);
+      expect(rich.key).toBe("body");
+      expect(rich.props.node).toBe(editor.scene.nodes[1]);
+      expect(rich.props.onUndo).toBeTypeOf("function");
+    }
+    expect(inspect).toHaveBeenCalledTimes(1);
+    // Choosing an object from Access must leave Access open for reading-order changes.
+    (
+      editor.find((element) => element.props["aria-label"] === "Selected object").props
+        .onChange as (event: unknown) => void
+    )({ target: { value: editor.scene.nodes[0]!.id } });
+    editor.render("idle");
+    expect(inspect).toHaveBeenCalledTimes(1);
+    expect(
+      editor.find((element) => element.props["data-native-inspector-section"] === "accessibility")
+        .props.hidden,
+    ).toBe(false);
+  });
 });
 
 describe("selected native text assistance", () => {

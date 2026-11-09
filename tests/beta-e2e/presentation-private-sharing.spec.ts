@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import {
+  selectE01Object,
+  openE01Inspector,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -82,6 +84,7 @@ for (const suffix of ["", " @mobile"]) {
     const record = await createE01Deck(page, [opening, question, closing], 13);
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
+    await openE01Inspector(page, "Media");
     await page
       .getByRole("textbox", { name: "New image description", exact: true })
       .fill("Synthetic review diagram");
@@ -272,6 +275,7 @@ for (const suffix of ["", " @mobile"]) {
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     const closeInspector = page.getByRole("button", { name: "Hide inspector", exact: true });
     if (narrow && (await closeInspector.isVisible())) await closeInspector.click();
+    await selectE01Object(page, /^1\./);
     await page
       .getByRole("textbox", { name: "Native slide title", exact: true })
       .fill("New publication title");

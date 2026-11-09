@@ -8,6 +8,9 @@ import type {
 } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
+  openE01Inspector,
+  selectE01Object,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -69,10 +72,7 @@ function framed(value: PresentationScene, id: string) {
 }
 
 async function select(page: Page, label: string) {
-  await page
-    .getByRole("group", { name: "Slide objects · reading order", exact: true })
-    .getByRole("button", { name: label, exact: true })
-    .click();
+  await selectE01Object(page, label, "Access");
 }
 
 for (const suffix of ["", " @mobile"]) {
@@ -93,6 +93,7 @@ for (const suffix of ["", " @mobile"]) {
     await objects
       .getByRole("checkbox", { name: "Include Review the plan in selection", exact: true })
       .check();
+    await openE01Inspector(page, "Layout");
     await page.getByRole("button", { name: "Group selected objects", exact: true }).click();
     await expect
       .poll(async () => {
@@ -108,6 +109,7 @@ for (const suffix of ["", " @mobile"]) {
     await expect(
       objects.getByRole("checkbox", { name: "Include Review the plan in selection", exact: true }),
     ).toBeChecked();
+    await openE01Inspector(page, "Layout");
     await expect(
       page.getByRole("button", { name: "Group selected objects", exact: true }),
     ).toBeDisabled();
@@ -155,12 +157,14 @@ for (const suffix of ["", " @mobile"]) {
       .toEqual(rotated);
     await select(page, "1. Slide title");
     const beforeRefusal = await readE01Record(page, record.id);
+    await openE01Inspector(page, "Layout");
     await page.getByLabel("Last selected angle (degrees)", { exact: true }).fill("90");
     await expect(
       page.getByRole("alert").filter({ hasText: /rotated selection would leave the slide/ }),
     ).toBeVisible();
     expect((await readE01Record(page, record.id)).draftRevision).toBe(beforeRefusal.draftRevision);
     await select(page, "2. Plan the launch");
+    await openE01Inspector(page, "Layout");
     await page.getByLabel("Last selected angle (degrees)", { exact: true }).fill("30");
     await expect
       .poll(
@@ -173,6 +177,7 @@ for (const suffix of ["", " @mobile"]) {
     page.on("request", (request) => {
       if (request.url().startsWith("https://example.com/")) providerRequests.push(request.url());
     });
+    await openE01Inspector(page, "Media");
     await page.getByLabel("Video title", { exact: true }).fill("Launch walkthrough");
     await page
       .getByLabel("Video HTTPS link", { exact: true })
@@ -193,6 +198,7 @@ for (const suffix of ["", " @mobile"]) {
     const saved = (await readE01Record(page, record.id)).draft;
     expect(saved.schemaVersion).toBe(8);
     expect(scene(saved).groups).toEqual(rotated.groups);
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const preview = page.getByRole("dialog", { name: "Presentation preview", exact: true });
     const video = preview.getByRole("link", { name: /^External video: Launch walkthrough/ });
@@ -210,8 +216,7 @@ for (const suffix of ["", " @mobile"]) {
     await preview.getByRole("button", { name: "Close preview", exact: true }).click();
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     expect((await readE01Record(page, record.id)).draft).toEqual(saved);
     const duplicate = page

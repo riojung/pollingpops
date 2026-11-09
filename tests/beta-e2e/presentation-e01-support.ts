@@ -85,26 +85,99 @@ export async function readE01Record(page: Page, id: string): Promise<E01Record> 
 
 export async function enterE01Editor(page: Page, id: string, narrow: boolean) {
   await page.goto(`/presentation/${id}`);
-  if (narrow) {
-    await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-    await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+  if (narrow) await closeE01Overlays(page);
+}
+
+export async function closeE01Overlays(page: Page) {
+  for (const name of ["Hide inspector", "Collapse map"]) {
+    const button = page.getByRole("button", { name, exact: true });
+    if (await button.isVisible()) await button.click();
   }
 }
 
+export async function openE01Inspector(
+  page: Page,
+  section: "Content" | "Layout" | "Media" | "Notes" | "Access" | "Ready",
+) {
+  const trigger = page.locator('button[aria-controls="presentation-object-inspector"]');
+  await expect(trigger).toBeVisible();
+  if ((await trigger.getAttribute("aria-expanded")) === "false") await trigger.click();
+  const inspector = page.locator("#presentation-object-inspector");
+  await expect(inspector).toBeVisible();
+  await inspector.getByRole("tab", { name: section, exact: true }).click();
+  return inspector;
+}
+
+export async function openEditorActions(page: Page) {
+  const more = page.locator('summary[aria-label="More options"]');
+  const disclosure = more.locator("xpath=ancestor::details[1]");
+  if ((await disclosure.getAttribute("open")) === null) await more.click();
+}
+
+export async function clickEditorAction(page: Page, name: string) {
+  const action = page.getByRole("button", { name, exact: true });
+  if (!(await action.isVisible())) await openEditorActions(page);
+  await action.click();
+}
+
+export async function openSlideIdeas(page: Page) {
+  if ((page.viewportSize()?.width ?? 1280) <= 920) await closeE01Overlays(page);
+  const summary = page.locator('summary[aria-label="Slide ideas & audience activities"]');
+  if ((await summary.locator("xpath=ancestor::details[1]").getAttribute("open")) === null)
+    await summary.click();
+}
+
+export async function clickNativeInsert(page: Page, name: string) {
+  if ((page.viewportSize()?.width ?? 1280) <= 920) await closeE01Overlays(page);
+  const action = page.getByRole("button", { name, exact: true });
+  if (!(await action.isVisible())) await page.getByText("Insert more", { exact: true }).click();
+  await action.click();
+  await openE01Inspector(page, "Content");
+}
+
+export async function openE01Navigator(page: Page) {
+  const trigger = page.locator('button[aria-controls="presentation-slide-navigator"]');
+  await expect(trigger).toBeVisible();
+  if ((await trigger.getAttribute("aria-expanded")) === "false") await trigger.click();
+  const navigator = page.locator("#presentation-slide-navigator");
+  await expect(navigator).toBeVisible();
+  return navigator;
+}
+
+export async function clickNavigatorAction(page: Page, name: string | RegExp) {
+  const navigator = await openE01Navigator(page);
+  const action = navigator.getByRole("button", { name, exact: typeof name === "string" });
+  if (!(await action.isVisible()))
+    await navigator.locator('summary[aria-label="Insert & import"]').click();
+  await action.click();
+  if ((page.viewportSize()?.width ?? 1280) <= 920 && (await page.getByRole("dialog").count()) === 0)
+    await closeE01Overlays(page);
+}
+
 export async function selectE01Block(page: Page, title: string, narrow: boolean) {
-  if (narrow) await page.getByRole("button", { name: "Open map", exact: true }).click();
+  await openE01Navigator(page);
   await page
     .getByRole("complementary", { name: "Presentation map", exact: true })
     .getByRole("button", { name: new RegExp(title) })
     .click();
-  if (narrow) await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+  if (narrow) await closeE01Overlays(page);
 }
 
 export async function selectE01Body(page: Page) {
+  await selectE01Object(page, /^2\./);
+}
+
+export async function selectE01Object(
+  page: Page,
+  name: string | RegExp,
+  section: "Content" | "Layout" | "Media" | "Notes" | "Access" | "Ready" = "Content",
+) {
+  await openE01Inspector(page, "Access");
   await page
     .getByRole("group", { name: "Slide objects · reading order", exact: true })
-    .getByRole("button", { name: /^2\./ })
+    .getByRole("button", { name, exact: typeof name === "string" })
     .click();
+  await openE01Inspector(page, section);
 }
 
 export function e01Body(draft: PresentationDraft) {

@@ -6,7 +6,13 @@ import {
   PresentationAssignmentCreatedSchema,
   PresentationReadingReportSchema,
 } from "../../packages/contracts/src/index.ts";
-import { createE01Deck, e01ApiUrl, e01Slide, enterE01Editor } from "./presentation-e01-support";
+import {
+  clickEditorAction,
+  createE01Deck,
+  e01ApiUrl,
+  e01Slide,
+  enterE01Editor,
+} from "./presentation-e01-support";
 import { signInBeta } from "./sign-in";
 
 interface Reader {
@@ -92,7 +98,7 @@ for (const suffix of ["", " @mobile"]) {
       if (new URL(req.url()).pathname === path) insightRequests++;
     });
     await enterE01Editor(page, record.id, (info.project.use.viewport?.width ?? 1280) <= 700);
-    await page.getByRole("button", { name: "Assign reading", exact: true }).click();
+    await clickEditorAction(page, "Assign reading");
     const dialog = page.getByRole("dialog", { name: "Assign a reading assignment", exact: true });
     await dialog.getByRole("button", { name: "Reading insights", exact: true }).click();
     const insights = dialog.getByRole("region", { name: "Reading insights", exact: true });
@@ -204,7 +210,7 @@ for (const suffix of ["", " @mobile"]) {
     await insights.screenshot({ path: info.outputPath("reading-insights.png") });
     // Closing and re-opening requires a fresh explicit load, with no cached report/export state.
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await page.getByRole("button", { name: "Assign reading", exact: true }).click();
+    await clickEditorAction(page, "Assign reading");
     await dialog.getByRole("button", { name: "Reading insights", exact: true }).click();
     await expect(
       insights.getByRole("button", { name: "Load reading insights", exact: true }),

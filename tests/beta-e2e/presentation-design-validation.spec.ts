@@ -11,6 +11,8 @@ import {
 } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
+  openE01Inspector,
+  selectE01Object,
   createE01Deck,
   e01ApiUrl,
   enterE01Editor,
@@ -137,10 +139,7 @@ async function expectSceneIds(page: Page, original: PresentationScene) {
 }
 
 async function shortenObject(page: Page) {
-  await page
-    .getByRole("group", { name: "Slide objects · reading order", exact: true })
-    .getByRole("button", { name: /^2\. Reduce this object 01 / })
-    .click();
+  await selectE01Object(page, /^2\. Reduce this object 01 /);
   await page.getByLabel("Node text", { exact: true }).fill(reducedText);
 }
 
@@ -156,6 +155,7 @@ test("a slide design over the byte limit shows recovery guidance and preserves t
   await enterE01Editor(page, record.id, false);
   const observed = observeFailures(page, record.id);
   const attemptedSave = observed.expectNoSave();
+  await openE01Inspector(page, "Layout");
   await page.getByRole("button", { name: "Enable slide design", exact: true }).click();
   const alert = page.getByRole("alert").filter({ hasText: designError });
   await expect(alert).toBeVisible();
@@ -172,6 +172,7 @@ test("a slide design over the byte limit shows recovery guidance and preserves t
   await expect.poll(async () => body(await readE01Record(page, record.id)).text).toBe(reducedText);
   const reduced = (await readE01Record(page, record.id)).draft;
   expect(reduced.schemaVersion).toBe(4);
+  await openE01Inspector(page, "Layout");
   await page.getByRole("button", { name: "Enable slide design", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveValue(
     "paper",
@@ -261,11 +262,7 @@ for (const mode of ["image-fit", "image-focal"] as const) {
     const original = structuredClone(fixture.read());
     await enterE01Editor(page, original.id, false);
     const observed = observeFailures(page, original.id);
-    const selectImage = () =>
-      page
-        .getByRole("group", { name: "Slide objects · reading order", exact: true })
-        .getByRole("button", { name: "36. Synthetic budget image", exact: true })
-        .click();
+    const selectImage = () => selectE01Object(page, "36. Synthetic budget image", "Media");
     await selectImage();
     const changeImage = () =>
       mode === "image-fit"

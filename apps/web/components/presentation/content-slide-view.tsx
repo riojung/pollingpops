@@ -66,6 +66,8 @@ interface ContentSlideViewProps {
   renderSceneImage?: SceneImageRenderer;
   interactionSourceKey?: string;
   interactionRuntime?: NativeSceneInteractionRuntime;
+  /** Inert fixed-layout artwork; ordinary preview/live retain readable phone flow. */
+  staticThumbnail?: boolean;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -270,6 +272,7 @@ export function ContentSlideView(props: ContentSlideViewProps) {
       scene={props.block.scene}
       renderImage={props.renderSceneImage}
       interactionEditing={props.variant === "editor"}
+      staticThumbnail={props.staticThumbnail}
       interactionRuntime={props.interactionRuntime}
       interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
     />
@@ -282,6 +285,7 @@ function LegacyContentSlideView({
   block,
   media,
   variant,
+  staticThumbnail = false,
   selectedElementId = null,
   titlePlaceholder = "Give this moment a clear title",
   bodyPlaceholder = "Add the context your audience needs",
@@ -291,7 +295,7 @@ function LegacyContentSlideView({
   onMoveElement,
   onChangeFrame,
 }: ContentSlideViewProps) {
-  const editing = variant === "editor";
+  const editing = !staticThumbnail && variant === "editor";
   const showGuides = editing && showGuidesProp;
   const hasMedia = block.mediaId === undefined ? Boolean(media) : Boolean(block.mediaId);
   const pendingMoveFocusId = useRef<string | null>(null);
@@ -562,8 +566,11 @@ function LegacyContentSlideView({
 
   return (
     <article
-      className={`${styles.slide} ${styles[`layout_${block.layout}`]} ${styles[`variant_${variant}`]}`}
+      className={`${styles.slide} ${styles[`layout_${block.layout}`]} ${styles[`variant_${variant}`]}${staticThumbnail ? ` ${styles.staticThumbnail}` : ""}`}
       data-layout={block.layout}
+      data-static-thumbnail={staticThumbnail || undefined}
+      inert={staticThumbnail || undefined}
+      aria-hidden={staticThumbnail || undefined}
       lang="en-CA"
     >
       <div className={styles.regions} ref={regionsRef}>

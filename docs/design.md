@@ -15,9 +15,15 @@ graphite/near-white and secondary controls stay neutral, with clear focus outlin
 subtle shadows. Published live experiences retain their versioned palette. See the
 [brand guide](brand.md) for assets, accessible color use, and compatibility rules.
 
-Polling Pops is a privacy-preserving comprehension recovery system for higher education and workplace
-learning. Its promise is that a facilitator can see what did not land, take an appropriate action,
-and check whether understanding recovered without requiring participant accounts.
+Polling Pops targets broad presentation creation: pitches, proposals, project updates, portfolios,
+talks and learning experiences, at the lowest sustainable customer subscription price. An ordinary
+deck must be useful without AI, questions, scoring or educational terminology. The
+[presentation plan](presentation-implementation-plan-2026-11.md) tracks that broader creator scope
+and its remaining software and qualification gaps.
+
+Privacy-preserving comprehension recovery remains a differentiated learning workflow. A facilitator
+can see what did not land, take an appropriate action, and check whether understanding recovered
+without requiring participant accounts.
 
 The product loop is:
 
@@ -42,6 +48,8 @@ learning, individual ability, or an automated judgment about a participant.
 7. **Portable work.** Native JSON is lossless; standard and tabular formats report any loss.
 8. **Accessible without disclosure.** Flexible time and accommodation passes require no stored
    reason and no public marker.
+9. **Show the work being created.** Keep the slide visible, navigation predictable and tools
+   contextual. Saving a draft, publishing a version and presenting it are separate visible actions.
 
 ## Roles and permission model
 
@@ -71,6 +79,10 @@ flowchart LR
   Recheck --> Evidence[Versioned report]
   Evidence --> Followup[Optional accountless follow-up]
 ```
+
+The diagram describes the Recovery Loop. Presentations additionally retain one artifact from
+template/blank/import through draft, publication, live delivery and permitted independent viewing;
+their modes and current limits are tracked in the presentation plan.
 
 The host, presenter, participant, report, and embed views are separate surfaces. They share the
 same authoritative round but expose only the information and controls appropriate to their role.
@@ -268,7 +280,34 @@ retention window and is purged directly at its immutable expiry.
 
 ## Presentation and portability
 
-### Structured Presentation slides
+### Creator workspace and UX foundation
+
+The November 8, 2026 source foundation makes blank creation and visual template browsing the main
+entry points. All 21 original templates have real shared-renderer first-slide thumbnails; use-case
+filters, search, clear/no-results states and separate content/activity counts support selection.
+Preview remains read-only, and choosing a template requires an explicit creation action.
+Source-assisted content proposals and optional outline assistance remain secondary. They are
+distinct from PDF/image visual import in the editor; source proposals do not preserve slide layouts.
+
+The editor centers the current slide between a thumbnail filmstrip and contextual slide tools.
+The command bar exposes title, save/publication state, Undo/Redo, Preview, Publish, Present and
+Share; secondary delivery actions are grouped under More options. Native selection controls live
+in the inspector instead of pushing the slide below a long form. Content, layout, media and
+accessibility sections retain their state when switching; private notes and readiness remain
+separate. Compact panels, keyboard navigation and visible focus are part of this source design.
+
+This foundation reorganizes existing capabilities without changing document/scene formats,
+creation intent, allowances, immutable publication or role authority. It uses the existing neutral
+graphite/mint tokens and system typography, with no paid design service or required generation.
+It is not a claim that the resulting workflow has passed integrated browser, manual accessibility,
+physical-device, broad-creator pilot or release qualification.
+
+The [phased UX track](presentation-implementation-plan-2026-11.md#ux-upgrade-track-and-current-gaps)
+connects design/interactions, presenting/sharing and device work to observed creator tasks. Its
+official competitor references document vendor patterns; no authenticated competitor authoring
+trial or usability comparison was conducted.
+
+### Legacy structured Presentation slides
 
 The gated Presentation builder combines content slides with interactive question blocks. Its v2
 content model supports six structured layouts—Title, Title + body, Media, Quote, Section, and
@@ -289,8 +328,10 @@ Narrow screens use a complete reading column; desktop overflow remains scrollabl
 silently hiding text. An attached image reserves its preset area. Starter text reflows; custom
 frames intersecting the image are adjusted and later moves/resizes remain clear of it. Removing
 the image restores starter space while preserving custom arrangements. Speaker notes and source
-citations remain outside participant content. Rotation, shapes, detailed typography, and an
-unbounded freeform design canvas remain deferred.
+citations remain outside participant content. These are legacy structured-slide bounds. Opt-in
+native scenes additionally support multiple images, shapes/connectors, rotation, bounded rich text,
+themes, grouping and simple tables/charts; the presentation plan records their version boundaries
+and remaining gaps. An unbounded freeform design canvas remains outside the selected scope.
 
 ### Presenter access and exports
 

@@ -5,12 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PresentationTemplateGallery } from "./presentation-template-gallery";
 import { PresentationTemplatePreview } from "./presentation-template-preview";
 import { instantiatePresentationTemplate } from "../../lib/presentation-templates";
+import { recordAuthoringEvent, recordCreationEvent } from "./product-events";
 
 interface Hooks {
   cursor: number;
   slots: unknown[];
 }
-const mocked = vi.hoisted(() => ({ hooks: null as Hooks | null, fetch: vi.fn(), push: vi.fn() }));
+const mocked = vi.hoisted(() => ({
+  hooks: null as Hooks | null,
+  fetch: vi.fn(),
+  push: vi.fn(),
+  canEdit: true,
+  presentations: true,
+}));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
@@ -50,7 +57,10 @@ vi.mock("../locale-provider", () => ({
   useLocale: () => ({ locale: "en-CA", t: (key: string) => key }),
 }));
 vi.mock("./workspace-provider", () => ({
-  useWorkspace: () => ({ canEdit: true, productFeatures: { presentations: true } }),
+  useWorkspace: () => ({
+    canEdit: mocked.canEdit,
+    productFeatures: { presentations: mocked.presentations },
+  }),
 }));
 vi.mock("./product-events", () => ({
   recordAuthoringEvent: vi.fn(),
@@ -101,6 +111,8 @@ async function settle() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocked.canEdit = true;
+  mocked.presentations = true;
 });
 afterEach(() => {
   mocked.hooks = null;
@@ -144,6 +156,16 @@ describe("Presentation template gallery", () => {
     expect(envelope.draft.blocks).toHaveLength(8);
     expect(envelope.expectedRevision).toBe(0);
     expect(mocked.push).toHaveBeenCalledExactlyOnceWith(`/presentation/${id}`);
+    expect(recordCreationEvent).toHaveBeenCalledWith("creation_started", "starter", "presentation");
+    expect(recordCreationEvent).toHaveBeenCalledWith(
+      "creation_completed",
+      "starter",
+      "presentation",
+    );
+    expect(recordAuthoringEvent).toHaveBeenCalledExactlyOnceWith(
+      "first_block_created",
+      "presentation",
+    );
   });
 
   it("searches broad scenario labels and keeps a staged preview stable across gallery renders", () => {
@@ -169,15 +191,78 @@ describe("Presentation template gallery", () => {
     expect(mocked.fetch).not.toHaveBeenCalled();
   });
 
-  it("renders twenty-one cards with twelve shared-renderer thumbnails hidden from duplicate announcements", () => {
+  it("renders all twenty-one real first slides with separate content and activity counts", () => {
     const view = harness(() => PresentationTemplateGallery());
     view.render();
     const html = view.markup();
     expect(html.match(/data-template-id=/g)).toHaveLength(21);
+    expect(html.match(/data-template-thumbnail=/g)).toHaveLength(21);
     expect(html.match(/data-native-template-thumbnail=/g)).toHaveLength(12);
-    expect(html.match(/data-native-scene=/g)).toHaveLength(12);
+    expect(html.match(/data-thumbnail-scene=/g)).toHaveLength(12);
+    expect(html).not.toContain("data-native-scene=");
+    expect(html.match(/aria-hidden="true" inert=""/g)).toHaveLength(21);
+    expect(renderToStaticMarkup(view.card("native-startup-pitch"))).toContain("8 content slides");
+    expect(renderToStaticMarkup(view.card("native-startup-pitch"))).toContain(
+      "0 audience activities",
+    );
+    expect(renderToStaticMarkup(view.card("meeting"))).toContain("3 content slides");
+    expect(renderToStaticMarkup(view.card("meeting"))).toContain("2 audience activities");
+    expect(html).not.toContain("Native scenario");
+    expect(html).not.toContain(">Facilitated<");
     expect(html).not.toContain("Replace HarborTask and the workshop segment");
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    expect(recordCreationEvent).not.toHaveBeenCalled();
   });
+
+  it("combines scenario filters and search, then clears both after no results", () => {
+    const view = harness(() => PresentationTemplateGallery());
+    view.render();
+    const chip = (label: string) =>
+      view.find((element) => element.type === "button" && element.props.children === label);
+    (chip("Pitch & propose").props.onClick as () => void)();
+    view.render();
+    expect(chip("Pitch & propose").props["aria-pressed"]).toBe(true);
+    expect(
+      elements(view.render()).filter((element) => element.props["data-template-id"]),
+    ).toHaveLength(2);
+    (view.find((element) => element.type === "input").props.onChange as (event: unknown) => void)({
+      target: { value: "  CLIENT  " },
+    });
+    view.render();
+    expect(
+      elements(view.render()).filter((element) => element.props["data-template-id"]),
+    ).toHaveLength(1);
+    expect(view.card("native-client-proposal")).toBeDefined();
+    (chip("Teach & explore").props.onClick as () => void)();
+    view.render();
+    expect(view.markup()).toContain("starter.noMatches");
+    expect(
+      elements(view.render()).filter((element) => element.props["data-template-id"]),
+    ).toHaveLength(0);
+    (chip("Clear filters").props.onClick as () => void)();
+    view.render();
+    expect(chip("All templates").props["aria-pressed"]).toBe(true);
+    expect(view.find((element) => element.type === "input").props.value).toBe("");
+    expect(
+      elements(view.render()).filter((element) => element.props["data-template-id"]),
+    ).toHaveLength(21);
+    expect(view.markup()).not.toContain("starter.noMatches");
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    expect(recordCreationEvent).not.toHaveBeenCalled();
+  });
+
+  it.each(["read-only", "feature disabled"])(
+    "keeps previews available without creation for %s",
+    (mode) => {
+      mocked.canEdit = mode !== "read-only";
+      mocked.presentations = mode !== "feature disabled";
+      const view = harness(() => PresentationTemplateGallery());
+      view.render();
+      expect(view.markup()).not.toContain("templateLibrary.usePresentation");
+      expect(button(view.card("meeting"), "templateLibrary.previewStructure")).toBeDefined();
+      expect(mocked.fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it("mounts only the current shared-renderer slide while navigating a complete preview", () => {
     const draft = instantiatePresentationTemplate("native-startup-pitch");

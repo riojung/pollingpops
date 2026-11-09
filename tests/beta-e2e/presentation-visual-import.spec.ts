@@ -10,6 +10,8 @@ import {
   type PresentationVisualImportJob,
 } from "../../packages/contracts/src/index.ts";
 import {
+  clickNavigatorAction,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -108,7 +110,7 @@ for (const suffix of ["", " @mobile"]) {
       .getByRole("textbox", { name: "Presentation title", exact: true })
       .fill(`${marker} reviewed deck`);
     await openMap(page);
-    await page.getByRole("button", { name: /Import visual slides/ }).click();
+    await clickNavigatorAction(page, "+ Import visual slides");
     let dialog = page.getByRole("dialog", { name: "Import visual slides", exact: true });
     await expect(dialog).toBeVisible();
     await expect(dialog).toBeFocused();
@@ -410,8 +412,7 @@ for (const suffix of ["", " @mobile"]) {
       expectedIds,
     );
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     await selectPosition(page, 1, narrow);
     await expect(page.getByText("Imported visual slide", { exact: true })).toBeVisible();

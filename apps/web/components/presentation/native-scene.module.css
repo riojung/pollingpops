@@ -336,7 +336,7 @@
   color: var(--ui-text-muted, #52616f);
 }
 @media (max-width: 700px) {
-  .stage {
+  .stage:not(.staticThumbnail) {
     aspect-ratio: auto;
     display: flex;
     flex-direction: column;
@@ -344,10 +344,10 @@
     padding: 12px;
     container-type: normal;
   }
-  .connections {
+  .stage:not(.staticThumbnail) .connections {
     display: none;
   }
-  .node {
+  .stage:not(.staticThumbnail) .node {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -359,40 +359,40 @@
   .snapGuides {
     display: none;
   }
-  .node h1,
-  .node p {
+  .stage:not(.staticThumbnail) .node h1,
+  .stage:not(.staticThumbnail) .node p {
     height: auto;
     overflow: visible;
   }
-  .node h1 {
+  .stage:not(.staticThumbnail) .node h1 {
     font-size: 30px;
   }
-  .node p {
+  .stage:not(.staticThumbnail) .node p {
     font-size: 18px;
   }
-  .richBody {
+  .stage:not(.staticThumbnail) .richBody {
     height: auto;
     overflow: visible;
     font-size: 18px;
   }
-  .richBody p {
+  .stage:not(.staticThumbnail) .richBody p {
     font-size: inherit;
   }
-  .shape {
+  .stage:not(.staticThumbnail) .shape {
     min-height: 100px;
   }
-  .shape span {
+  .stage:not(.staticThumbnail) .shape span {
     font-size: 18px;
   }
-  .image {
+  .stage:not(.staticThumbnail) .image {
     min-height: 80px;
   }
-  .image,
-  .image > :not(img) {
+  .stage:not(.staticThumbnail) .image,
+  .stage:not(.staticThumbnail) .image > :not(img) {
     height: auto;
     overflow: visible;
   }
-  .image img {
+  .stage:not(.staticThumbnail) .image img {
     height: auto;
     max-height: none;
     object-fit: contain;
@@ -414,7 +414,7 @@
     touch-action: auto;
     cursor: auto;
   }
-  .connectorSummary {
+  .stage:not(.staticThumbnail) .connectorSummary {
     position: static;
     width: auto;
     height: auto;
@@ -660,4 +660,133 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Native editor chrome stays separate from the audience slide and its phone reader. */
+.objectToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.objectToolbar .actions button,
+.insertDisclosure > summary,
+.editorDisclosure > summary {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--ui-surface-raised);
+  cursor: pointer;
+}
+
+.objectToolbar .actions button:focus-visible,
+.insertDisclosure > summary:focus-visible,
+.editorDisclosure > summary:focus-visible {
+  outline: 3px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+
+.insertDisclosure {
+  min-width: 0;
+}
+
+.insertDisclosure[open] {
+  flex-basis: 100%;
+}
+
+.insertDisclosure > summary {
+  width: fit-content;
+}
+
+.insertPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.insertPanel fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.insertPanel legend {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.contextInspector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.contextInspector > [data-native-inspector-section] {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+
+.contextInspector > [hidden] {
+  display: none;
+}
+
+.contextInspector .actions button,
+.contextInspector .nodeList button {
+  min-height: 40px;
+}
+
+.contextInspector fieldset + fieldset {
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.selectionSummary {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.selectionSummary label,
+.selectionSummary .help {
+  margin-bottom: 0;
+}
+
+.editorDisclosure > summary {
+  font-weight: 500;
+}
+
+@media (max-width: 700px) {
+  .objectToolbar {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .objectToolbar .actions button,
+  .insertDisclosure > summary,
+  .contextInspector .actions button,
+  .contextInspector .nodeList button {
+    min-height: 44px;
+  }
+}
+
+.staticThumbnail {
+  pointer-events: none;
 }

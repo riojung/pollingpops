@@ -173,7 +173,7 @@
   }
 }
 @media (max-width: 700px) {
-  .dataView {
+  .dataView:not(:global([data-static-thumbnail="true"]) *) {
     height: auto;
     overflow: visible;
     font-size: 16px;
@@ -188,21 +188,21 @@
   .editGrid td {
     display: block;
   }
-  .dataTable,
-  .dataTable thead,
-  .dataTable tbody,
-  .dataTable tr,
-  .dataTable td,
-  .dataTable th,
-  .dataTable caption {
+  .dataTable:not(:global([data-static-thumbnail="true"]) *),
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) thead,
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) tbody,
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) tr,
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) td,
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) th,
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) caption {
     display: block;
     box-sizing: border-box;
     width: 100%;
   }
-  .dataTable tr {
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) tr {
     margin-block: 8px;
   }
-  .dataTable td::before {
+  .dataTable:not(:global([data-static-thumbnail="true"]) *) td::before {
     content: attr(data-label) ": ";
     font-weight: 700;
   }

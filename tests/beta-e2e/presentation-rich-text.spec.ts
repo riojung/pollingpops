@@ -1,3 +1,9 @@
+import {
+  selectE01Object,
+  clickNavigatorAction,
+  openE01Inspector,
+  closeE01Overlays,
+} from "./presentation-e01-support";
 import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { PresentationDraft } from "../../packages/contracts/src/index.ts";
@@ -15,6 +21,7 @@ async function savedDraft(page: Page, id: string): Promise<PresentationDraft> {
 }
 
 async function selectText(textarea: Locator, start: number, end: number) {
+  if (!(await textarea.isVisible())) await openE01Inspector(textarea.page(), "Content");
   await textarea.focus();
   await textarea.evaluate(
     (element, range) => {
@@ -105,12 +112,12 @@ for (const suffix of ["", " @mobile"]) {
     });
     expect(saved.status()).toBe(200);
     await page.goto(`/presentation/${record.id}`);
+    const canvas = page.locator("[data-native-scene]");
     const narrow = (testInfo.project.use.viewport?.width ?? 1280) <= 700;
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
-    await page.getByRole("button", { name: /^2\. Decide together/ }).click();
+    await selectE01Object(page, /^2\. Decide together/);
     const textarea = page.getByLabel("Node text", { exact: true });
     await page.getByRole("button", { name: "Format text", exact: true }).click();
     await selectText(textarea, 1, 4);
@@ -137,22 +144,23 @@ for (const suffix of ["", " @mobile"]) {
     await expect(page.getByRole("button", { name: "Bold", exact: true })).toBeEnabled();
     await selectText(textarea, 0, "Decide".length);
     await page.getByRole("button", { name: "Bold", exact: true }).click();
-    await expect(page.locator('[data-node-id="body"] strong')).toHaveText("Decide");
+    await expect(canvas.locator('[data-node-id="body"] strong')).toHaveText("Decide");
     const bulletStart = bodyText.indexOf("Assign");
     await selectText(textarea, bulletStart, bulletStart + "Assign an owner".length);
     await page
       .getByRole("combobox", { name: "Paragraph style", exact: true })
       .selectOption("bullet");
-    await expect(page.locator('[data-node-id="body"] ul li')).toHaveText("Assign an owner");
+    await expect(canvas.locator('[data-node-id="body"] ul li')).toHaveText("Assign an owner");
     const linkStart = bodyText.indexOf("Review");
     await selectText(textarea, linkStart, bodyText.length);
     await page.getByLabel("Link address", { exact: true }).fill("javascript:alert(1)");
     await page.getByRole("button", { name: "Apply link", exact: true }).click();
-    await expect(page.locator('[data-node-id="body"] a')).toHaveCount(0);
+    await expect(canvas.locator('[data-node-id="body"] a')).toHaveCount(0);
     await page.getByLabel("Link address", { exact: true }).fill(link);
     await page.getByRole("button", { name: "Apply link", exact: true }).click();
-    const editorLink = page.getByRole("link", { name: "Review the brief", exact: true });
+    const editorLink = canvas.getByRole("link", { name: "Review the brief", exact: true });
     await expect(editorLink).toHaveAttribute("href", link);
+    if (narrow) await closeE01Overlays(page);
     await editorLink.click();
     await expect(page).toHaveURL(`/presentation/${record.id}`);
     await expect
@@ -195,12 +203,11 @@ for (const suffix of ["", " @mobile"]) {
 
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
-    await expect(page.locator('[data-node-id="body"] strong')).toHaveText("Decide");
-    await expect(page.locator('[data-node-id="body"] ul li')).toHaveText("Assign an owner");
-    await page.getByRole("button", { name: /^2\. Decide together/ }).click();
+    await expect(canvas.locator('[data-node-id="body"] strong')).toHaveText("Decide");
+    await expect(canvas.locator('[data-node-id="body"] ul li')).toHaveText("Assign an owner");
+    await selectE01Object(page, /^2\. Decide together/);
     // Unsupported clipboard formats must not replace a selected, formatted text range.
     await selectText(textarea, 0, "Decide".length);
     for (const kind of ["html", "image", "file", "empty"]) {
@@ -221,7 +228,7 @@ for (const suffix of ["", " @mobile"]) {
       expect(clipboard.types).not.toContain("text/plain");
       expect(clipboard.prevented).toBe(true);
       await expect(textarea).toHaveValue(bodyText);
-      await expect(page.locator('[data-node-id="body"] strong')).toHaveText("Decide");
+      await expect(canvas.locator('[data-node-id="body"] strong')).toHaveText("Decide");
       expect(
         await textarea.evaluate((element) => {
           const input = element as HTMLTextAreaElement;
@@ -237,18 +244,18 @@ for (const suffix of ["", " @mobile"]) {
     const repeatedStart = bodyText.length + 1;
     await selectText(textarea, repeatedStart, repeatedStart + 1);
     await page.getByRole("button", { name: "Bold", exact: true }).click();
-    await expect(page.locator('[data-node-id="body"] p:last-child strong')).toHaveText("a");
+    await expect(canvas.locator('[data-node-id="body"] p:last-child strong')).toHaveText("a");
     await selectText(textarea, repeatedStart, repeatedStart + 1);
     await textarea.press("Backspace");
     await expect(textarea).toHaveValue(`${bodyText}\na`);
-    await expect(page.locator('[data-node-id="body"] p:last-child strong')).toHaveCount(0);
+    await expect(canvas.locator('[data-node-id="body"] p:last-child strong')).toHaveCount(0);
     await textarea.press("End");
     await textarea.press("ControlOrMeta+z");
     await expect(textarea).toHaveValue(`${bodyText}\naa`);
-    await expect(page.locator('[data-node-id="body"] p:last-child strong')).toHaveText("a");
+    await expect(canvas.locator('[data-node-id="body"] p:last-child strong')).toHaveText("a");
     await textarea.press("ControlOrMeta+Shift+z");
     await expect(textarea).toHaveValue(`${bodyText}\na`);
-    await expect(page.locator('[data-node-id="body"] p:last-child strong')).toHaveCount(0);
+    await expect(canvas.locator('[data-node-id="body"] p:last-child strong')).toHaveCount(0);
     for (let step = 0; step < 3; step += 1) {
       await page.getByRole("button", { name: "Undo", exact: true }).click();
     }
@@ -265,8 +272,8 @@ for (const suffix of ["", " @mobile"]) {
       element.dispatchEvent(event);
     });
     await expect(textarea).toHaveValue(`${bodyText} soon`);
-    await expect(page.locator('[data-node-id="body"] img')).toHaveCount(0);
-    await expect(page.locator('[data-node-id="body"] strong')).toHaveText("Decide");
+    await expect(canvas.locator('[data-node-id="body"] img')).toHaveCount(0);
+    await expect(canvas.locator('[data-node-id="body"] strong')).toHaveText("Decide");
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(textarea).toHaveValue(bodyText);
     await page.getByRole("button", { name: "Redo", exact: true }).click();
@@ -277,13 +284,15 @@ for (const suffix of ["", " @mobile"]) {
     await page.screenshot({ path: testInfo.outputPath("rich-text-editor.png"), fullPage: true });
 
     // Adding another plain native slide must not downgrade the formatted document.
-    if (narrow) await page.getByRole("button", { name: "Open map", exact: true }).click();
-    await page.getByRole("button", { name: "Add native slide", exact: true }).click();
-    if (narrow) await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+    await clickNavigatorAction(page, "Blank slide");
+    await openE01Inspector(page, "Content");
     await page.getByLabel("Native slide title", { exact: true }).fill("Next actions");
     await expect.poll(async () => (await savedDraft(page, record.id)).blocks.length).toBe(3);
     expect((await savedDraft(page, record.id)).schemaVersion).toBe(5);
-    if (narrow) await page.getByRole("button", { name: "Open map", exact: true }).click();
+    if (narrow) {
+      await closeE01Overlays(page);
+      await page.getByRole("button", { name: "Open map", exact: true }).click();
+    }
     await page
       .getByRole("complementary", { name: "Presentation map", exact: true })
       .getByRole("button", { name: /Legacy follow-up/ })
@@ -331,23 +340,24 @@ for (const suffix of ["", " @mobile"]) {
       reducedMotion: "reduce",
     });
     const guest = await guestContext.newPage();
+    const guestStage = guest.locator("[data-native-scene]");
     try {
       await guest.goto(`/join?code=${lobby.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("Rich text attendee");
       await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
-      await expect(guest.locator('[data-node-id="body"] strong')).toHaveText("Decide");
-      await expect(guest.locator('[data-node-id="body"] ul li')).toHaveText("Assign an owner");
-      const audienceLink = guest.getByRole("link", { name: "Review the brief", exact: true });
+      await expect(guestStage.locator('[data-node-id="body"] strong')).toHaveText("Decide");
+      await expect(guestStage.locator('[data-node-id="body"] ul li')).toHaveText("Assign an owner");
+      const audienceLink = guestStage.getByRole("link", { name: "Review the brief", exact: true });
       await expect(audienceLink).toHaveAttribute("href", link);
       await expect(audienceLink).toHaveAttribute("target", "_blank");
       await expect(audienceLink).toHaveAttribute("rel", /noopener/);
       await expect(audienceLink).toHaveAttribute("referrerpolicy", "no-referrer");
       expect(await guest.locator("body").innerText()).not.toContain("PRIVATE");
-      await expect(guest.locator("[data-native-scene] button")).toHaveCount(0);
+      await expect(guestStage.locator("button")).toHaveCount(0);
       await guest.reload();
-      await expect(guest.locator('[data-node-id="body"] strong')).toHaveText("Decide");
+      await expect(guestStage.locator('[data-node-id="body"] strong')).toHaveText("Decide");
       await guest.screenshot({
         path: testInfo.outputPath("rich-text-audience.png"),
         fullPage: true,

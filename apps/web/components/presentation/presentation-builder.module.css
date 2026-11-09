@@ -458,13 +458,13 @@
   border-top: 1px solid var(--ui-border);
 }
 
-.addActions button:first-child {
+.addActions > button:first-child {
   border-color: var(--ui-accent);
   color: var(--ui-accent-ink);
   background: var(--ui-accent-soft);
 }
 
-.addActions button:last-child {
+.addActions > button:last-child {
   border-color: var(--ui-violet-text);
   color: var(--ui-violet-text);
   background: var(--ui-violet-bg);
@@ -1160,7 +1160,7 @@
     z-index: 30;
     top: var(--presentation-command-height, 122px);
     bottom: 0;
-    width: min(340px, 90cqw);
+    width: var(--presentation-panel-width, min(340px, 90cqw));
     box-shadow: var(--ui-shadow-lg);
   }
 
@@ -1509,14 +1509,7 @@
   box-sizing: border-box;
   font-size: 11px;
 }
-.insertMenu > div {
-  inset: auto 0 calc(100% + 8px);
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-  box-sizing: border-box;
-  max-height: min(440px, calc(100dvh - 200px));
-}
+
 .canvasArea {
   min-width: 0;
   padding: 16px 22px 40px;
@@ -1528,32 +1521,61 @@
   display: none !important;
 }
 .canvasToolbar {
-  gap: 5px;
-  padding: 7px 8px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
   margin-bottom: 14px;
-  border-radius: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
   background: var(--ui-surface);
   box-shadow: var(--ui-shadow-sm);
 }
 .canvasToolbar button {
-  min-height: 34px;
-  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
   border-color: transparent;
-  border-radius: 6px;
-  font-size: 10px;
+  border-radius: 7px;
+  font-size: 11px;
   font-weight: 600;
   background: transparent;
 }
+.canvasToolbar button svg {
+  flex: 0 0 18px;
+}
 .canvasToolbar button:hover:not(:disabled) {
   background: var(--ui-surface-hover);
+}
+.slideActionGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.slideActionGroup + .slideActionGroup {
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--ui-border);
+}
+.canvasToolbar .dangerButton {
+  border-color: transparent !important;
+}
+.canvasToolbar .dangerButton:hover:not(:disabled) {
+  background: var(--ui-danger-bg);
 }
 .slidePosition {
   margin-inline-end: auto;
   padding: 4px;
   color: var(--ui-text-muted);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
 }
+
 .slideCanvas {
   margin-inline: auto;
   max-width: 1200px;
@@ -1566,62 +1588,161 @@
   background: var(--ui-surface);
 }
 .slideIdeas > div {
-  position: static;
-  min-width: 0;
-  max-width: none;
-  max-height: none;
-  margin-top: 8px;
-  box-shadow: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  align-items: start;
+  gap: 12px;
+  margin-top: 10px;
   padding: 12px;
 }
+.slideIdeas > div > aside {
+  grid-column: 1 / -1;
+}
+.ideaCard {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+.ideaCardHeading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.ideaCard > button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  text-align: start;
+}
+.ideaCard > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ideaCard > button:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.ideaCard > button svg {
+  flex: 0 0 18px;
+}
+.ideaCard .helpText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
 .inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-left: 1px solid var(--ui-border);
   border-right: 0;
   background: var(--ui-surface);
 }
 .inspectorHeading {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 5px;
-  font-size: 12px;
+  padding: 16px 14px 12px;
+  font-size: 15px;
+}
+.inspectorHeading > div {
+  display: grid;
+  gap: 4px;
+}
+.inspectorHeading h2 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+}
+.inspectorEyebrow {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 550;
 }
 .inspectorHeading button {
-  width: 30px;
-  height: 30px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--ui-text-muted);
   background: transparent;
   cursor: pointer;
-  font-size: 22px;
 }
 .inspectorHeading button:hover {
   background: var(--ui-surface-hover);
 }
 .inspectorTabs {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3px;
-  padding: 5px 10px 10px;
-  background: var(--ui-surface);
+  gap: 4px;
+  margin: 0 10px 10px;
+  padding: 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 11px;
+  background: var(--ui-surface-soft);
 }
 .inspectorTab,
 .inspectorTabActive {
-  min-height: 34px;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 52px;
+  padding: 7px 2px;
+  border-radius: 7px;
   font-size: 10px;
   font-weight: 600;
+  text-transform: none;
+}
+.inspectorTab svg,
+.inspectorTabActive svg {
+  width: 17px;
+  height: 17px;
+}
+.inspectorTab:hover {
+  color: var(--ui-text);
+  background: var(--ui-surface-hover);
 }
 .inspectorTabActive {
-  color: var(--ui-text-strong);
-  background: var(--ui-surface-hover);
-  box-shadow: inset 0 -2px var(--ui-accent);
+  color: var(--ui-accent-ink);
+  background: var(--ui-surface);
+  box-shadow:
+    var(--ui-shadow-sm),
+    inset 0 -2px var(--ui-accent);
 }
 .inspectorBody {
-  padding: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  padding: 0 12px 20px;
+  scrollbar-gutter: stable;
 }
+
 .nativeInspectorHost {
   min-width: 0;
 }
@@ -1712,7 +1833,7 @@
   .map,
   .inspector {
     top: var(--presentation-command-height, 120px);
-    width: min(340px, 90cqw);
+    width: var(--presentation-panel-width, min(340px, 90cqw));
   }
   .canvasArea {
     padding: 12px 12px 28px;
@@ -1728,14 +1849,31 @@
     margin-top: 4px;
   }
   .canvasToolbar button {
-    min-height: 40px;
-    font-size: 10px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 11px;
+  }
+  .slideActionGroup + .slideActionGroup {
+    padding-inline-start: 4px;
+  }
+  .slideActionGroup button > span {
+    display: none;
   }
   .slidePosition {
     flex-basis: 100%;
   }
 }
 @container (max-width: 420px) {
+  /* Short zoomed screens need one scrollable panel; fixed tab chrome can
+     otherwise consume all of the space available to the editable fields. */
+  .inspector {
+    display: block;
+    overflow-y: auto;
+  }
+  .inspectorBody {
+    height: auto;
+    overflow: visible;
+  }
   .commandBar {
     padding-inline: 8px;
     gap: 7px;

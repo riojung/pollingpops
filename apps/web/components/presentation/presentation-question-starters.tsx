@@ -9,6 +9,7 @@ import {
   type PresentationQuestionStarterSource,
 } from "../../lib/presentation-question-starters";
 import styles from "./presentation-question-starters.module.css";
+import { EditorIcon } from "./presentation-editor-chrome";
 
 interface Props {
   block: ContentSlideDraft;
@@ -254,6 +255,11 @@ export function PresentationQuestionStarters(props: Props) {
   const selected = review?.starters.find((starter) => starter.id === review.selectedId);
   return (
     <section className={styles.entry} aria-label="Local question starters" lang="en-CA">
+      <div className={styles.entryHeading}>
+        <EditorIcon name="interaction" />
+        <span>From this slide</span>
+        <span className={styles.localBadge}>No AI needed</span>
+      </div>
       <button
         ref={trigger}
         type="button"

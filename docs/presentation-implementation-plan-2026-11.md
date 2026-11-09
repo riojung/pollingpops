@@ -108,6 +108,18 @@ Qualification for this slice passes 6,986 repository tests, all four builds, com
 startup and all 40 selected production-browser cases across the four profiles. Standard opt-in
 integration skips and external evidence gates remain explicit in its record.
 
+The current `codex/presentation-editor-workspace` slice follows the six creator screenshots:
+icon-led grouped insertion menus, an aligned slide action bar, contextual Content/Media/Access
+cards, visual theme and layout choices, compact arrangement properties, and local/AI audience
+idea cards. Viewport-aware menus preserve keyboard navigation and modal focus at phone sizes
+and 200% CSS zoom. Existing scene/history/save/recovery/publication contracts remain in use;
+ordinary editing adds no paid dependency or model calls. See the
+[editor workspace record](evidence/presentation-editor-workspace.md) for final qualification.
+Selected qualification passes 7,004 repository tests, all four builds and 58 production-browser
+cases across Chromium desktop/phone and WebKit phone. Firefox qualification remains incomplete
+at sign-in; see the record for the interruption and evidence limits. Visual trigger/target cues,
+presenting/sharing and external creator/device evidence remain next.
+
 The table below is the current gap map; the detailed E00–E14 sections retain implementation
 history and acceptance contracts. “Implemented” means the selected software slice, not complete
 competitor parity or successful creator task observation.

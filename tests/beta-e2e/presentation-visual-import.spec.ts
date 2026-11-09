@@ -110,7 +110,7 @@ for (const suffix of ["", " @mobile"]) {
       .getByRole("textbox", { name: "Presentation title", exact: true })
       .fill(`${marker} reviewed deck`);
     await openMap(page);
-    await clickNavigatorAction(page, "+ Import visual slides");
+    await clickNavigatorAction(page, "Import visual slides");
     let dialog = page.getByRole("dialog", { name: "Import visual slides", exact: true });
     await expect(dialog).toBeVisible();
     await expect(dialog).toBeFocused();

@@ -1,0 +1,457 @@
+/* Original inspector previews and chrome; audience slide styles live separately. */
+.section.section {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.section.section > legend {
+  max-width: 100%;
+  margin: 0 0 8px -4px;
+  padding: 0 4px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ui-text-strong);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sectionTitle > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--ui-text-muted);
+}
+
+.sectionBody {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.section .field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 550;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fieldLabel > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.section .field select,
+.section .field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.section button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.section button:focus-visible,
+.section .field select:focus-visible,
+.section .field input:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.themeField {
+  display: grid;
+  gap: 10px;
+}
+
+.themeOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.section .themeOption {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  text-align: left;
+}
+
+.section .themeOption:hover {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-hover);
+}
+
+.section .themeOption[aria-pressed="true"] {
+  border-color: var(--ui-accent-ink);
+  box-shadow: inset 0 0 0 1px var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.themePreview {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 44px;
+  overflow: hidden;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.themePreviewType {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.themePreviewLines {
+  display: grid;
+  gap: 3px;
+  width: 55%;
+}
+
+.themePreviewLines > span {
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.themePreviewLines > span:last-child {
+  width: 75%;
+}
+
+.themePreviewAccent {
+  position: absolute;
+  top: 13px;
+  right: 10px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+.themeOptionName {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 3px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.themeSelected {
+  min-width: 14px;
+  color: var(--ui-accent-ink);
+  font-size: 13px;
+}
+
+.designFields {
+  display: grid;
+  gap: 10px;
+}
+
+.section .help {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.deckAction {
+  display: grid;
+  gap: 7px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border-subtle);
+}
+
+.section .actionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface);
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  text-align: center;
+}
+
+.actionButton > svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.section .actionButton:hover {
+  background: var(--ui-surface-hover);
+  border-color: var(--ui-border-strong);
+}
+
+.layoutOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px 8px;
+}
+
+.layoutOption {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.section .layoutButton {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 5px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface);
+  text-align: left;
+}
+
+.section .layoutButton:not(:disabled):hover {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+
+.section .layoutButton:disabled {
+  cursor: not-allowed;
+  color: var(--ui-text-muted);
+  background: var(--ui-surface-soft);
+}
+
+.layoutButton:disabled .layoutPreview {
+  opacity: 0.65;
+}
+
+.layoutPreview {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.previewCanvas {
+  fill: var(--ui-surface);
+  stroke: var(--ui-border);
+}
+
+.previewTitle {
+  fill: var(--ui-text-subtle);
+}
+
+.previewText {
+  fill: var(--ui-border-strong);
+  opacity: 0.55;
+}
+
+.previewImage {
+  fill: var(--ui-accent-soft);
+}
+
+.previewImageLine {
+  stroke: var(--ui-accent-ink);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.previewAxis {
+  stroke: var(--ui-border-strong);
+}
+
+.previewChart {
+  fill: var(--ui-accent-ink);
+  opacity: 0.6;
+}
+
+.layoutName {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  padding-inline: 3px;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+
+.layoutReady {
+  color: var(--ui-accent-ink);
+}
+
+.layoutOption[data-available="true"] .layoutButton {
+  border-color: var(--ui-accent-ink);
+}
+
+.layoutOption .help {
+  padding-inline: 3px;
+  font-size: 11px;
+}
+
+.subsectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.selectionCount {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 450;
+}
+
+.alignGrid,
+.twoColumnGrid,
+.frameFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.alignGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.section .iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+.alignGrid .iconButton {
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-height: 54px;
+  padding: 7px 4px;
+}
+
+.iconButton > svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.section .iconButton:not(:disabled):hover {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-hover);
+}
+
+.section .iconButton:disabled {
+  cursor: not-allowed;
+  color: var(--ui-text-muted);
+  background: var(--ui-surface-soft);
+}
+
+.iconButton:disabled > svg {
+  opacity: 0.55;
+}
+
+.shortLabel {
+  text-transform: capitalize;
+}
+
+.layerSection,
+.cropSection {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border-subtle);
+}
+
+.section .formatError {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--ui-danger-border);
+  border-radius: 7px;
+  color: var(--ui-danger-text);
+  background: var(--ui-danger-bg);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .section .field select,
+  .section .field input,
+  .section .actionButton,
+  .section .iconButton {
+    min-height: 44px;
+  }
+
+  .section .help {
+    font-size: 12px;
+  }
+
+  .layoutOption .help {
+    font-size: 11px;
+  }
+}

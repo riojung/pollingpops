@@ -316,7 +316,7 @@ test("Presentation Builder dialogs and drawers pass automated accessibility chec
   await expect(page.getByLabel("Presentation title")).toHaveValue("Accessible presentation");
   await expectNoAxeViolations(page);
 
-  await clickNavigatorAction(page, "+ Add question");
+  await clickNavigatorAction(page, "Add question");
   const questionPrompt = page.getByLabel("Question prompt");
   await questionPrompt.focus();
   await expect(questionPrompt).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");

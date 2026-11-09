@@ -776,7 +776,8 @@ order. Spatial arrangement does not turn them into an interactive spatial packag
 
 ### Add reveal panels and safe links
 
-On a native slide, choose **Add reveal panel** or **Add link**. Give each control a short,
+On a native slide, open **Interactions**, then choose **Add reveal panel** or **Add link**. The
+new action opens in the Content inspector. Give each control a short,
 descriptive label. For a panel, enter **Revealed audience content**; for a link, enter a complete
 HTTP or HTTPS address without embedded credentials. An invalid address stays in the editor with
 a correction message until it can be saved safely. Complete labels, content and links before
@@ -791,7 +792,15 @@ want the host to reveal an assessment answer to the room.
 Use **Show accessible outline** for a readable layout in the slide's semantic order; the same
 panels and links work there. Buttons support touch, Enter and Space, and links announce that they
 open a new tab. Editing previews do not navigate. Page reloads or a new slide/source begin with
-panels collapsed. Hotspots, pop-up dialogs and branching are not part of this basic release.
+panels collapsed. The additional interactions below use the same picker.
+
+In the Content inspector, expand **How this interaction works** to see the trigger, result
+and audience. Complete the requested fields, then choose **Preview this slide** to try the current
+visible slide. Preview starts there even when earlier slides are hidden. Reveals stay local to
+your screen, including broadcast reveals; slide links navigate through the preview. Escape closes
+open details first, then the preview and returns to the invoking tools. Correct unsaved link
+entries before using this action. The regular header Preview still starts at the first visible
+slide. Trying an action does not publish changes or start a live session.
 
 ### Add hotspots, detail dialogs and shared reveals
 
@@ -1165,14 +1174,17 @@ when you need several images, shapes or connectors.
 ### Build a native slide
 
 Choose **New slide** above the canvas for a designed native starter; **Add native slide** in the
-map still adds a plain native starter. Select a node in the slide or its reading
-order list to edit its text, image description, shape or connector. The position and size fields
-use percentages of the slide. Focus a move or resize button and use arrow keys for 1% steps,
+map still adds a plain native starter. Select a node in the slide, its reading order list or the
+**Canvas object** selector above the slide to edit its text, image description, shape or connector.
+The selected object's **Move** and **Resize** controls stay outside the authored slide so they do
+not cover content. The position and size fields use percentages of the slide. Focus Move or
+Resize and use arrow keys for 1% steps,
 or hold Shift for 5% steps.
 Give shapes meaningful labels and images useful descriptions for people who cannot see them.
 
 On a desktop, drag an object or its move button to reposition it. Drag its resize button to change
-its width and height from the bottom-right corner. Release to save the change as one **Undo** step;
+its width and height from the bottom-right corner, even though the control sits above the slide.
+Release to save the change as one **Undo** step;
 press Escape before releasing to cancel. Movement stays inside the slide. During movement, local
 snap guides appear within six screen pixels of nearby object or slide edges/centres. Hold Alt to
 move freely. Guides are temporary editor feedback and are not saved in the slide.

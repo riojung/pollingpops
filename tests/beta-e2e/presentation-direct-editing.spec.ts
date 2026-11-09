@@ -131,11 +131,13 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   const stage = page.locator("[data-native-scene]");
   const body = stage.locator('[data-node-id="body"]');
   const shape = stage.locator('[data-node-id="shape"]');
-  const move = page.getByRole("button", {
+  const controls = page.getByRole("group", { name: "Selected object controls", exact: true });
+  const selection = controls.getByRole("combobox", { name: "Canvas object", exact: true });
+  const move = controls.getByRole("button", {
     name: "Move Evidence. Use arrow keys to nudge.",
     exact: true,
   });
-  const resize = page.getByRole("button", {
+  const resize = controls.getByRole("button", {
     name: "Resize Decision. Use arrow keys to change size.",
     exact: true,
   });
@@ -162,6 +164,7 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect.poll(() => savedScene(page, id)).toEqual(moved);
 
+  await selection.selectOption("shape");
   await startDrag(page, resize, stageBounds.width * 0.1, stageBounds.height * 0.1);
   expect((await renderedFrame(shape)).width).toBeCloseTo(35, 0);
   expect((await renderedFrame(shape)).height).toBeCloseTo(30, 0);
@@ -176,6 +179,7 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect.poll(() => savedScene(page, id)).toEqual(resized);
 
+  await selection.selectOption("body");
   await startDrag(page, move, stageBounds.width * 0.05, 0);
   await page.keyboard.press("Escape");
   await page.mouse.up();
@@ -197,7 +201,12 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
       .first(),
   ).toBeVisible();
   await openE01Inspector(page, "Content");
-  await startDrag(page, move, stageBounds.width, 0);
+  const groupMove = controls.getByRole("button", {
+    name: "Move Decision. Use arrow keys to nudge.",
+    exact: true,
+  });
+  // Exceed the group’s remaining travel while keeping the external handle inside the viewport.
+  await startDrag(page, groupMove, stageBounds.width * 0.5, 0);
   await page.mouse.up();
   const expectedDx = Math.min(
     ...["body", "shape"].map((nodeId) => {
@@ -242,10 +251,12 @@ for (const suffix of ["", " @mobile"]) {
       .getByRole("checkbox", { name: "Include Decision in selection", exact: true })
       .check();
     await closeE01Overlays(page);
-    const move = page.getByRole("button", {
-      name: "Move Evidence. Use arrow keys to nudge.",
-      exact: true,
-    });
+    const move = page
+      .getByRole("group", { name: "Selected object controls", exact: true })
+      .getByRole("button", {
+        name: "Move Decision. Use arrow keys to nudge.",
+        exact: true,
+      });
     await move.press("Shift+ArrowRight");
     await expect.poll(async () => frame(await savedScene(page, id), "body").x).toBe(15);
     const moved = await savedScene(page, id);

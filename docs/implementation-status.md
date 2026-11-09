@@ -8,6 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation editing and interaction clarity November 9, 2026
+
+The `codex/presentation-interaction-polish` source moves geometry controls into a selected-object
+toolbar outside authored frames. Existing selection, group, pointer, keyboard and history paths
+remain the authority. Interactions have a dedicated picker, trigger/result/audience guidance and a
+current-slide preview using the existing viewer-local review renderer. Missing destinations and
+unsaved URL entries remain explicit; preview preserves tools and focus across compact layouts.
+No live command, session, publication or response is created by trying a draft action.
+
+See the [editing/interaction record](evidence/presentation-interaction-polish.md) for verification,
+boundaries and remaining design/qualification work. No contract, service, dependency or AI cost
+is introduced by this slice.
+The final repository check passes **6,986 tests**, all four builds and compiled-server startup;
+513 standard opt-in skips remain. All **40 selected production-browser cases** pass across four
+profiles with a fresh API fixture per profile. Automated focus/Axe, 320px layout and CSS-zoom
+coverage retain their local scope; manual/device/observed-creator and hosted gates remain open.
+
 ### Presentation design-quality gaps November 9, 2026
 
 The source on `codex/presentation-design-quality` integrates reviewed local layout alternatives

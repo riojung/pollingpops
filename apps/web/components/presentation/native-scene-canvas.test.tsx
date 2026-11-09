@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type PresentationScene } from "@openround/contracts";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeSceneView } from "./native-scene-view";
+import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as null | {
@@ -150,6 +151,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     event,
     render,
     view,
+    controls: () => elements(tree).find((child) => child.type === NativeSceneSelectionControls)!,
     start: (ev = event(), id = "body", resize = false, handle = true) =>
       view().props.onNodePointerDown(ev, id, resize, handle),
     move: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerMove(ev),
@@ -179,6 +181,63 @@ beforeEach(() => {
 });
 
 describe("native pointer gesture lifecycle", () => {
+  it("places selection controls outside the authored surface and disables in-stage handles", () => {
+    const editor = harness();
+    expect(editor.view().props.hideGeometryControls).toBe(true);
+    expect(elements(editor.controls()).some((node) => node.type === NativeSceneView)).toBe(false);
+    expect(editor.controls().props.selectedNodeIds).toEqual(["body", "shape"]);
+  });
+
+  it("keeps the external pointer control bound to the original scene during previews and cancels before changing selection", () => {
+    const editor = harness();
+    editor.controls().props.onPointerDown(editor.event(), "shape", true, true);
+    editor.move();
+    editor.render();
+    expect(editor.controls().props.scene).toBe(editor.original);
+    expect(editor.view().props.scene).not.toBe(editor.original);
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.controls().props.onSelect("title");
+    editor.render();
+    expect(editor.view().props.scene).toBe(editor.original);
+    expect(editor.onSelect).toHaveBeenCalledWith("title");
+    editor.finish();
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+
+  it("resizes a persistent group from the external handle proportionally and commits only on release", () => {
+    const editor = harness();
+    const scene = {
+      ...editor.original,
+      schemaVersion: 4 as const,
+      groups: [{ id: "group", nodeIds: ["body", "shape"] }],
+    };
+    editor.render(scene);
+    editor.controls().props.onPointerDown(editor.event(), "shape", true, true);
+    editor.move(editor.event({ clientX: 150, clientY: 125 }));
+    editor.render();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(frame(editor.view().props.scene).width).toBeCloseTo(24);
+    expect(frame(editor.view().props.scene, "shape").width).toBeCloseTo(30);
+    editor.finish(editor.event({ clientX: 150, clientY: 125 }));
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    const result = editor.onChange.mock.calls[0]![0] as PresentationScene;
+    expect(result.groups).toEqual(scene.groups);
+    expect(result.readingOrder).toEqual(scene.readingOrder);
+    expect(frame(result, "title")).toEqual(frame(scene, "title"));
+  });
+
+  it("keeps external keyboard move/resize available in phone reading mode", () => {
+    const editor = harness(["body"]);
+    editor.setNarrow();
+    editor
+      .controls()
+      .props.onPointerDown(editor.event({ pointerType: "touch" }), "body", true, true);
+    expect(editor.root.setPointerCapture).not.toHaveBeenCalled();
+    editor.controls().props.onGeometryKey("body", 5, 0, false);
+    expect(frame(editor.onChange.mock.calls[0]![0]).x).toBe(15);
+    editor.controls().props.onGeometryKey("body", 0, 1, true);
+    expect(frame(editor.onChange.mock.calls[1]![0]).height).toBe(21);
+  });
   it("previews a whole selection locally and commits once on release", () => {
     const editor = harness();
     editor.start();

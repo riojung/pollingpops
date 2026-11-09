@@ -342,7 +342,11 @@ test("pointer snap guides are transient, Alt bypasses snapping and Escape cancel
   const record = await createE01Deck(page, [original.slide], 7);
   await enterE01Editor(page, record.id, false);
   const stage = page.locator("[data-native-scene]");
-  const move = stage.getByRole("button", {
+  const controls = page.getByRole("group", { name: "Selected object controls", exact: true });
+  await controls
+    .getByRole("combobox", { name: "Canvas object", exact: true })
+    .selectOption(original.body.id);
+  const move = controls.getByRole("button", {
     name: "Move Plan the launch. Use arrow keys to nudge.",
     exact: true,
   });

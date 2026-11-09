@@ -11,6 +11,7 @@ import {
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import styles from "./native-scene.module.css";
 import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
+import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
 
 type Gesture = {
   base: PresentationScene;
@@ -163,6 +164,15 @@ export function NativeSceneCanvas({
     release(active);
     if (active.base === scene && active.preview !== scene) onChange(active.preview);
   }
+  function geometryKey(id: string, dx: number, dy: number, resize: boolean) {
+    cancel();
+    const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
+    if (!selectedNodeIds.includes(id)) onSelect(id);
+    const next = resize
+      ? resizeNativeSceneNode(scene, id, dx, dy)
+      : moveNativeSceneNodes(scene, ids, dx, dy);
+    if (next !== scene) onChange(next);
+  }
   return (
     <div
       ref={root}
@@ -185,22 +195,25 @@ export function NativeSceneCanvas({
         }
       }}
     >
+      <NativeSceneSelectionControls
+        scene={scene}
+        selectedNodeIds={selectedNodeIds}
+        onSelect={(id) => {
+          cancel();
+          onSelect(id);
+        }}
+        onPointerDown={start}
+        onGeometryKey={geometryKey}
+      />
       <div className={styles.canvasSurface}>
         <NativeSceneView
           scene={preview?.base === scene ? preview.scene : scene}
           renderImage={renderImage}
           selectedNodeIds={selectedNodeIds}
+          hideGeometryControls
           onSelect={onSelect}
           onNodePointerDown={start}
-          onGeometryKey={(id, dx, dy, resize) => {
-            cancel();
-            const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
-            if (!selectedNodeIds.includes(id)) onSelect(id);
-            const next = resize
-              ? resizeNativeSceneNode(scene, id, dx, dy)
-              : moveNativeSceneNodes(scene, ids, dx, dy);
-            if (next !== scene) onChange(next);
-          }}
+          onGeometryKey={geometryKey}
         />
         {preview?.base === scene && preview.guides.length ? (
           <svg

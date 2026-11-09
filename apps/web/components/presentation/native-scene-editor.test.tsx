@@ -112,6 +112,37 @@ function editorHarness(
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("interaction insertion picker", () => {
+  it.each([true, false])(
+    "closes the picker and opens editing tools only for an accepted insertion (%s)",
+    (accepted) => {
+      const inspect = vi.fn();
+      const editor = editorHarness({ onInspectSelection: inspect });
+      editor.onChange.mockReturnValue(accepted);
+      editor.render("idle");
+      const trigger = editor.find(
+        (element) => element.type === "button" && element.props.children === "Add reveal panel",
+      );
+      const focus = vi.fn(),
+        removeAttribute = vi.fn();
+      const picker = { removeAttribute, querySelector: () => ({ focus }) };
+      (trigger.props.onClick as (event: unknown) => void)({
+        currentTarget: { closest: () => picker },
+      });
+      expect(editor.onChange).toHaveBeenCalledOnce();
+      if (accepted) {
+        expect(removeAttribute).toHaveBeenCalledWith("open");
+        expect(focus).toHaveBeenCalledOnce();
+        expect(inspect).toHaveBeenCalledWith(true);
+      } else {
+        expect(removeAttribute).not.toHaveBeenCalled();
+        expect(focus).not.toHaveBeenCalled();
+        expect(inspect).not.toHaveBeenCalled();
+      }
+    },
+  );
+});
+
 describe("reviewed native layout integration", () => {
   it("applies through scene validation as one independent history change", () => {
     const editor = editorHarness({ layoutSuggestionsSourceKey: "slide-source" });

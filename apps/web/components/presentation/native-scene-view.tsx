@@ -125,6 +125,8 @@ interface NativeSceneViewProps {
   interactionEditing?: boolean;
   /** Inert fixed-layout artwork for a creator's filmstrip, including on phones. */
   staticThumbnail?: boolean;
+  /** Canvas supplies normal-flow selection controls outside the authored slide. */
+  hideGeometryControls?: boolean;
   interactionRuntime?: NativeSceneInteractionRuntime;
   selectedNodeId?: string;
   selectedNodeIds?: readonly string[];
@@ -178,6 +180,7 @@ function NativeSceneSurface({
   interactionEditing = false,
   interactionRuntime,
   staticThumbnail = false,
+  hideGeometryControls = false,
 }: NativeSceneViewProps) {
   const markerId = useId();
   const [outline, setOutline] = useState(false);
@@ -390,7 +393,7 @@ function NativeSceneSurface({
                   )}
                 </div>
               ) : null}
-              {editing ? (
+              {editing && !hideGeometryControls ? (
                 <div className={styles.handles}>
                   <button
                     type="button"
@@ -455,21 +458,23 @@ function NativeSceneSurface({
                     zIndex: scene.nodes.length + 1,
                   }}
                 >
-                  <button
-                    type="button"
-                    aria-label={`Resize group ${index + 1}. Use arrow keys to change size.`}
-                    onKeyDown={(event) => frameKey(event, member, true)}
-                    onPointerDown={
-                      onNodePointerDown
-                        ? (event) => {
-                            event.stopPropagation();
-                            onNodePointerDown(event, member.id, true, true);
-                          }
-                        : undefined
-                    }
-                  >
-                    ↘
-                  </button>
+                  {!hideGeometryControls ? (
+                    <button
+                      type="button"
+                      aria-label={`Resize group ${index + 1}. Use arrow keys to change size.`}
+                      onKeyDown={(event) => frameKey(event, member, true)}
+                      onPointerDown={
+                        onNodePointerDown
+                          ? (event) => {
+                              event.stopPropagation();
+                              onNodePointerDown(event, member.id, true, true);
+                            }
+                          : undefined
+                      }
+                    >
+                      ↘
+                    </button>
+                  ) : null}
                 </div>
               );
             })

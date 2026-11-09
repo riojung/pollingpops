@@ -340,6 +340,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.getByLabel("Object y (%)", { exact: true }).fill("60");
     if (narrow) await closeE01Overlays(page);
     await page
+      .getByRole("group", { name: "Selected object controls", exact: true })
       .getByRole("button", { name: "Move Decision owner. Use arrow keys to nudge.", exact: true })
       .press("ArrowRight");
     await openE01Inspector(page, "Layout");

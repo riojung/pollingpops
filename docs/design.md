@@ -291,8 +291,10 @@ distinct from PDF/image visual import in the editor; source proposals do not pre
 
 The editor centers the current slide between a thumbnail filmstrip and contextual slide tools.
 The command bar exposes title, save/publication state, Undo/Redo, Preview, Publish, Present and
-Share; secondary delivery actions are grouped under More options. Native selection controls live
-in the inspector instead of pushing the slide below a long form. Content, layout, media and
+Share; secondary delivery actions are grouped under More options. Native object fields live
+in the inspector, and selected Move/Resize controls occupy a normal-flow toolbar outside the
+authored slide. The Interactions picker and a collapsible trigger/result/audience overview lead
+to a current-slide, viewer-local preview without creating a live session. Content, layout, media and
 accessibility sections retain their state when switching; private notes and readiness remain
 separate. Compact panels, keyboard navigation and visible focus are part of this source design.
 

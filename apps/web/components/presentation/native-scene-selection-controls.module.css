@@ -1,0 +1,79 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 12px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  border-bottom: 1px solid var(--ui-border, #cbd5e1);
+}
+.selection {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 4px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.selection select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  color: inherit;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  font: inherit;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.actions button {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 12px;
+  color: inherit;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.actions button:first-child {
+  cursor: grab;
+}
+.actions button:last-child {
+  cursor: nwse-resize;
+}
+.actions button:focus-visible,
+.selection select:focus-visible {
+  outline: 3px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+.help {
+  flex-basis: 100%;
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-text-muted, #52616f);
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (min-width: 701px) {
+  .actions button {
+    touch-action: none;
+  }
+}
+@media (max-width: 700px) {
+  .actions button {
+    cursor: auto;
+  }
+}

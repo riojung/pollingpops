@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   isSafePresentationLink,
   type PresentationScene,
@@ -8,6 +8,7 @@ import {
 } from "@openround/contracts";
 import { updateNativeNode, createNativeHotspotNode } from "../../lib/presentation-native-scene";
 import styles from "./native-scene.module.css";
+import { NativeInteractionSummary } from "./native-interaction-summary";
 
 type InteractionNode = Extract<
   PresentationSceneNode,
@@ -21,11 +22,15 @@ export function NativeSceneInteractionEditor({
   node,
   onChange,
   navigationTargets = [],
+  onPreview,
+  previewUnavailableReason,
 }: {
   scene: PresentationScene;
   node: InteractionNode | null;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
   navigationTargets?: readonly { id: string; title: string }[];
+  onPreview?: () => void;
+  previewUnavailableReason?: string;
 }) {
   const [entries, setEntries] = useState<Record<string, LinkEntry>>({});
   // Preserve incomplete entries while selecting other objects or moving them, but honor
@@ -41,6 +46,24 @@ export function NativeSceneInteractionEditor({
   if (Object.keys(currentEntries).length !== Object.keys(entries).length)
     setEntries(currentEntries);
   if (!node) return null;
+  function withOverview(fields: ReactNode) {
+    return (
+      <>
+        <NativeInteractionSummary
+          scene={scene}
+          node={node!}
+          navigationTargets={navigationTargets}
+          onPreview={onPreview}
+          previewUnavailableReason={
+            Object.keys(currentEntries).length
+              ? "Correct the unsaved link entries on this slide before previewing."
+              : previewUnavailableReason
+          }
+        />
+        {fields}
+      </>
+    );
+  }
 
   function update(next: InteractionNode, field: string) {
     const sceneVersion =
@@ -63,7 +86,7 @@ export function NativeSceneInteractionEditor({
   }
 
   if (node.type === "navigation")
-    return (
+    return withOverview(
       <div role="group" aria-label="Slide link editor">
         <label>
           Slide link label
@@ -107,11 +130,11 @@ export function NativeSceneInteractionEditor({
           The facilitator follows this link for everyone during a live session. Shared readers
           navigate only their own copy. Hidden slides, rechecks and this slide cannot be targets.
         </p>
-      </div>
+      </div>,
     );
 
   if (node.type === "hotspot" || node.type === "dialog")
-    return (
+    return withOverview(
       <div
         role="group"
         aria-label={node.type === "hotspot" ? "Image hotspot editor" : "Detail dialog editor"}
@@ -186,11 +209,11 @@ export function NativeSceneInteractionEditor({
             ? "Keep the hotspot inside its unrotated image; moving or resizing the image carries its hotspots."
             : "The dialog supports keyboard opening, Escape and focus return."}
         </p>
-      </div>
+      </div>,
     );
 
   if (node.type === "reveal")
-    return (
+    return withOverview(
       <div role="group" aria-label="Reveal panel editor">
         <label>
           Reveal audience
@@ -232,7 +255,7 @@ export function NativeSceneInteractionEditor({
             : "This content is available to every viewer. Each viewer opens and closes their own panel."}
           Add a label and audience content before publishing.
         </p>
-      </div>
+      </div>,
     );
 
   const entry = currentEntries[node.id];
@@ -254,7 +277,7 @@ export function NativeSceneInteractionEditor({
       return next;
     });
   }
-  return (
+  return withOverview(
     <div role="group" aria-label="Link editor">
       <label>
         Link label
@@ -286,6 +309,6 @@ export function NativeSceneInteractionEditor({
           {entry.error}
         </p>
       ) : null}
-    </div>
+    </div>,
   );
 }

@@ -93,8 +93,20 @@ stored scenes or publications, introduce a service, or require AI credits. See t
 [design-quality record](evidence/presentation-design-quality.md) for qualification and boundaries.
 The final repository check passes 6,964 tests, all four builds and compiled-server startup;
 34 selected browser cases are verified across four profiles, with an isolated export fixture
-for the ordinary account throttle. Selection-handle placement and interaction discoverability
-remain next, followed by presenting/sharing UX and the external observation/device gates.
+for the ordinary account throttle.
+
+The next `codex/presentation-interaction-polish` source moves selected Move/Resize controls out of
+the authored slide, retaining pointer/keyboard/group history semantics. A dedicated interaction
+picker and trigger/result/audience overview make existing actions easier to configure. Contextual
+preview starts on the current visible slide and stays viewer-local, including broadcast reveals;
+retained unsaved URL entries and unavailable targets remain explicit barriers. Compact tools and
+preview preserve focus through resizing. See the
+[editing/interaction record](evidence/presentation-interaction-polish.md) for qualification and
+boundaries. Next are visual trigger/target cues, presenting/sharing UX and external observation/
+device gates; broad E00–E14 completion remains a separate claim.
+Qualification for this slice passes 6,986 repository tests, all four builds, compiled-server
+startup and all 40 selected production-browser cases across the four profiles. Standard opt-in
+integration skips and external evidence gates remain explicit in its record.
 
 The table below is the current gap map; the detailed E00–E14 sections retain implementation
 history and acceptance contracts. “Implemented” means the selected software slice, not complete

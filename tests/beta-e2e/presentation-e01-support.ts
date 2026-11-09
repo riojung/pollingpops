@@ -130,7 +130,18 @@ export async function openSlideIdeas(page: Page) {
 export async function clickNativeInsert(page: Page, name: string) {
   if ((page.viewportSize()?.width ?? 1280) <= 920) await closeE01Overlays(page);
   const action = page.getByRole("button", { name, exact: true });
-  if (!(await action.isVisible())) await page.getByText("Insert more", { exact: true }).click();
+  if (!(await action.isVisible())) {
+    const interactions = [
+      "Add reveal panel",
+      "Add link",
+      "Add detail dialog",
+      "Add image hotspot",
+      "Add slide link",
+    ];
+    await page
+      .getByText(interactions.includes(name) ? "Interactions" : "Insert more", { exact: true })
+      .click();
+  }
   await action.click();
   await openE01Inspector(page, "Content");
 }

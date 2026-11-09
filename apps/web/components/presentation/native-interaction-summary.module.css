@@ -1,0 +1,83 @@
+.summary {
+  min-width: 0;
+  margin-block-end: 18px;
+  padding: 14px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 10px;
+  background: var(--ui-surface-soft, #f5f7f9);
+  overflow-wrap: anywhere;
+}
+.summary summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding-block: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.summary details[open] > summary {
+  margin-bottom: 10px;
+}
+.summary summary:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+.summary dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.summary dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-text-muted);
+}
+.summary dd {
+  margin: 3px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.guidance {
+  margin-block: 10px;
+  font-size: 13px;
+}
+.guidance ul {
+  margin-block: 6px 0;
+  padding-inline-start: 20px;
+}
+.guidance li + li {
+  margin-block-start: 5px;
+}
+.ready,
+.help {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ready {
+  color: var(--ui-text);
+}
+.help {
+  margin-block-end: 0;
+  color: var(--ui-text-muted);
+}
+.summary button {
+  margin-top: 10px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+}
+.summary button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.summary button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}

@@ -76,6 +76,8 @@ export function NativeSceneEditor({
   textAssistanceDisabled = false,
   layoutSuggestionsDisabled = false,
   layoutSuggestionsSourceKey,
+  onPreviewInteraction,
+  previewInteractionUnavailableReason,
   inspectorTarget,
   inspectorSection = "content",
   onInspectSelection,
@@ -95,10 +97,12 @@ export function NativeSceneEditor({
   textAssistanceDisabled?: boolean;
   layoutSuggestionsDisabled?: boolean;
   layoutSuggestionsSourceKey?: string;
+  onPreviewInteraction?: () => void;
+  previewInteractionUnavailableReason?: string;
   /** Undefined keeps standalone controls inline; null waits for the shell's inspector. */
   inspectorTarget?: HTMLElement | null;
   inspectorSection?: "content" | "layout" | "media" | "accessibility";
-  onInspectSelection?: () => void;
+  onInspectSelection?: (openInspector?: boolean) => void;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
@@ -167,7 +171,7 @@ export function NativeSceneEditor({
     );
   }
   function add(node: PresentationSceneNode) {
-    if (!canAdd) return;
+    if (!canAdd) return false;
     const minimumVersion =
       node.type === "hotspot" ||
       node.type === "dialog" ||
@@ -187,8 +191,15 @@ export function NativeSceneEditor({
     });
     if (added) {
       setSelection([node.id]);
-      onInspectSelection?.();
+      onInspectSelection?.(true);
     }
+    return added;
+  }
+  function insertInteraction(node: PresentationSceneNode, source?: HTMLButtonElement) {
+    if (!add(node)) return;
+    const picker = source?.closest("details");
+    picker?.removeAttribute("open");
+    picker?.querySelector("summary")?.focus({ preventScroll: true });
   }
   function requestTextAssistance(operation: "rewrite" | "shorten" | "translate") {
     if (
@@ -281,6 +292,8 @@ export function NativeSceneEditor({
             node={isNativeInteractionNode(selected) ? selected : null}
             onChange={onChange}
             navigationTargets={navigationTargets}
+            onPreview={onPreviewInteraction}
+            previewUnavailableReason={previewInteractionUnavailableReason}
           />
           {selected.type === "text" && onTextAssistance ? (
             <>
@@ -880,7 +893,7 @@ export function NativeSceneEditor({
           </button>
         </div>
         <details className={styles.insertDisclosure}>
-          <summary>Insert more</summary>
+          <summary>Interactions</summary>
           <div className={styles.insertPanel}>
             <fieldset className={styles.designControls}>
               <legend>Audience interactions</legend>
@@ -888,33 +901,42 @@ export function NativeSceneEditor({
                 <button
                   type="button"
                   disabled={!canAdd}
-                  onClick={() => add(createNativeRevealNode())}
+                  onClick={(event) =>
+                    insertInteraction(createNativeRevealNode(), event?.currentTarget)
+                  }
                 >
                   Add reveal panel
                 </button>
                 <button
                   type="button"
                   disabled={!canAdd}
-                  onClick={() => add(createNativeLinkNode())}
+                  onClick={(event) =>
+                    insertInteraction(createNativeLinkNode(), event?.currentTarget)
+                  }
                 >
                   Add link
                 </button>
                 <button
                   type="button"
                   disabled={!canAdd}
-                  onClick={() => add(createNativeDialogNode())}
+                  onClick={(event) =>
+                    insertInteraction(createNativeDialogNode(), event?.currentTarget)
+                  }
                 >
                   Add detail dialog
                 </button>
                 <button
                   type="button"
                   disabled={!canAdd}
-                  onClick={() => {
+                  onClick={(event) => {
                     const image =
                       selected.type === "image"
                         ? selected
                         : scene.nodes.find((node) => node.type === "image" && !node.rotation);
-                    add(createNativeHotspotNode(image?.type === "image" ? image : undefined));
+                    insertInteraction(
+                      createNativeHotspotNode(image?.type === "image" ? image : undefined),
+                      event?.currentTarget,
+                    );
                   }}
                 >
                   Add image hotspot
@@ -922,7 +944,9 @@ export function NativeSceneEditor({
                 <button
                   type="button"
                   disabled={!canAdd}
-                  onClick={() => add(createNativeNavigationNode())}
+                  onClick={(event) =>
+                    insertInteraction(createNativeNavigationNode(), event?.currentTarget)
+                  }
                 >
                   Add slide link
                 </button>
@@ -933,6 +957,11 @@ export function NativeSceneEditor({
                 answers. Keep confidential notes in speaker notes.
               </p>
             </fieldset>
+          </div>
+        </details>
+        <details className={styles.insertDisclosure}>
+          <summary>Insert more</summary>
+          <div className={styles.insertPanel}>
             <fieldset className={styles.designControls}>
               <legend>Tables and charts</legend>
               <div className={styles.actions}>

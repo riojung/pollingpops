@@ -223,6 +223,35 @@ describe("production native scene rendering", () => {
     expect(renderToStaticMarkup(<NativeSceneView scene={scene} />)).not.toContain("<button");
   });
 
+  it("leaves tight, edge, rotated and grouped authored content free of geometry buttons when Canvas supplies external controls", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 4;
+    scene.groups = [{ id: "group", nodeIds: ["body", "shape"] }];
+    const title = scene.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.frame = { x: 0, y: 0, width: 100, height: 1 };
+    const shape = scene.nodes.find((node) => node.type === "shape")!;
+    if (shape.type !== "shape") throw new Error("Expected shape");
+    shape.rotation = 25;
+    shape.frame = { x: 85, y: 85, width: 10, height: 10 };
+    const original = structuredClone(scene);
+    const markup = renderToStaticMarkup(
+      <NativeSceneView
+        scene={scene}
+        onSelect={() => {}}
+        selectedNodeIds={["body", "shape"]}
+        hideGeometryControls
+      />,
+    );
+    expect(markup).not.toContain("<button");
+    expect(markup).toContain('data-native-group="group"');
+    expect(markup).toContain("rotate(25deg)");
+    expect(markup).toContain("Native workflow");
+    expect(markup).toContain("Start here");
+    expect(markup).toContain("Decision");
+    expect(scene).toEqual(original);
+  });
+
   it("exposes complete native authoring controls while requiring a description before upload", () => {
     const markup = renderToStaticMarkup(
       <NativeSceneEditor

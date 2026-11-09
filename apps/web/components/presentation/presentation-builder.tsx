@@ -287,13 +287,22 @@ function nativeSlideTitleLanguage(block: PresentationBlockDraft) {
 function PresentationPreview({
   draft,
   onClose,
+  initialBlockId,
 }: {
   draft: PresentationDraft;
   onClose: () => void;
+  initialBlockId?: string | null;
 }) {
-  const [index, setIndex] = useState(0);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const publication = preparePresentationPublication(draft);
+  const [index, setIndex] = useState(
+    Math.max(
+      0,
+      publication.blocks.findIndex(
+        (candidate) => candidate.id.toLowerCase() === initialBlockId?.toLowerCase(),
+      ),
+    ),
+  );
+  const dialogRef = useRef<HTMLDivElement>(null);
   const block = publication.blocks[index];
   useEffect(() => focusModal(dialogRef.current), []);
   return (
@@ -303,8 +312,13 @@ function PresentationPreview({
       role="dialog"
       aria-modal="true"
       aria-label="Presentation preview"
+      data-presentation-preview="true"
+      data-preview-origin={initialBlockId ? "interaction" : undefined}
       lang="en-CA"
-      onKeyDown={(event) => handleModalKeyDown(event, onClose)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") event.stopPropagation();
+        handleModalKeyDown(event, onClose);
+      }}
       tabIndex={-1}
     >
       <div className={styles.previewStage}>
@@ -471,10 +485,16 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         compactLayout.current = compact;
         setCompactEditor(compact);
         setMapOpen(!compact);
-        // A native modal still inherits display:none from a closed inspector. Keep its
-        // invoking panel visible through a breakpoint change, including focus restoration.
+        // Keep an interaction preview's invoking panel available for focus return;
+        // native modals inside the panel also inherit display:none if it closes.
         setInspectorOpen(
-          !compact || Boolean(inspectorPanel.current?.querySelector("dialog[open]")),
+          !compact ||
+            Boolean(inspectorPanel.current?.querySelector("dialog[open]")) ||
+            Boolean(
+              document.querySelector(
+                '[data-presentation-preview="true"][data-preview-origin="interaction"]',
+              ),
+            ),
         );
       }
     };
@@ -526,18 +546,31 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     const panel = mapOpen ? mapPanel.current : inspectorPanel.current;
     const trigger = mapOpen ? mapTrigger.current : inspectorTrigger.current;
     if (!panel) return;
-    drawerOpener.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : trigger;
-    panel
-      .querySelector<HTMLElement>("button:not(:disabled),[tabindex='0']")
-      ?.focus({ preventScroll: true });
+    // A breakpoint change can mount drawer behavior while a preview owns focus.
+    // Preserve its active control and the original drawer opener until the modal closes.
+    if (!document.querySelector('dialog[open], [data-presentation-preview="true"]')) {
+      drawerOpener.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : trigger;
+      panel
+        .querySelector<HTMLElement>("button:not(:disabled),[tabindex='0']")
+        ?.focus({ preventScroll: true });
+    }
     const outside = (event: Event) => {
-      if (document.querySelector("dialog[open]") || !(event.target instanceof Node)) return;
+      if (
+        document.querySelector('dialog[open], [data-presentation-preview="true"]') ||
+        !(event.target instanceof Node)
+      )
+        return;
       if (event.target instanceof Element && event.target.closest("[data-editor-history]")) return;
       if (!panel.contains(event.target) && !trigger?.contains(event.target)) closeEditorPanels();
     };
     const escape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+      if (
+        event.defaultPrevented ||
+        event.key !== "Escape" ||
+        document.querySelector('dialog[open], [data-presentation-preview="true"]')
+      )
+        return;
       event.preventDefault();
       closeEditorPanels(true);
     };
@@ -554,6 +587,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewStartBlockId, setPreviewStartBlockId] = useState<string | null>(null);
+  function openDraftPreview() {
+    setPreviewStartBlockId(null);
+    setPreviewOpen(true);
+  }
   const [spatialOpen, setSpatialOpen] = useState(false);
   useEffect(() => {
     if (!canEdit) setSpatialOpen(false);
@@ -2672,7 +2710,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           </div>
           <button
             className={styles.iconButton}
-            onClick={() => setPreviewOpen(true)}
+            onClick={openDraftPreview}
             type="button"
             aria-label={t("delivery.common.preview")}
             title={t("delivery.common.preview")}
@@ -3171,11 +3209,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
               {saveLabel}
             </span>
-            <button
-              className={styles.compactPreview}
-              onClick={() => setPreviewOpen(true)}
-              type="button"
-            >
+            <button className={styles.compactPreview} onClick={openDraftPreview} type="button">
               {t("delivery.common.preview")}
             </button>
           </div>
@@ -3389,11 +3423,29 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     ? inspectorTab
                     : "content"
                 }
-                onInspectSelection={() => setInspectorTab("content")}
+                onInspectSelection={(openInspector = false) => {
+                  setInspectorTab("content");
+                  if (openInspector) {
+                    if (compactEditor) setMapOpen(false);
+                    setInspectorOpen(true);
+                  }
+                }}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
                 layoutSuggestionsDisabled={!canEdit || builderMutationBlocked || preparingImport}
                 layoutSuggestionsSourceKey={selectedBlock.id}
+                onPreviewInteraction={() => {
+                  if (builderMutationBlocked || preparingImport || selectedBlock.hidden) return;
+                  setPreviewStartBlockId(selectedBlock.id);
+                  setPreviewOpen(true);
+                }}
+                previewInteractionUnavailableReason={
+                  selectedBlock.hidden
+                    ? "Show this slide before previewing it."
+                    : builderMutationBlocked || preparingImport
+                      ? "Finish the pending edit before previewing."
+                      : undefined
+                }
                 navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
                 onUndo={undo}
                 onRedo={redo}
@@ -4320,7 +4372,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </aside>
       </div>
       {previewOpen ? (
-        <PresentationPreview draft={draft} onClose={() => setPreviewOpen(false)} />
+        <PresentationPreview
+          draft={draft}
+          initialBlockId={previewStartBlockId}
+          onClose={() => setPreviewOpen(false)}
+        />
       ) : null}
       {recoveryPreviewOpen && recovery ? (
         <PresentationPreview draft={recovery.draft} onClose={() => setRecoveryPreviewOpen(false)} />
@@ -4454,7 +4510,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           onClose={() => setSpatialOpen(false)}
           onPreviewPath={() => {
             setSpatialOpen(false);
-            setPreviewOpen(true);
+            openDraftPreview();
           }}
           renderPreview={(block) =>
             block.kind === "content" ? (

@@ -15,6 +15,7 @@ import {
   createNativeNavigationNode,
 } from "../../lib/presentation-native-scene";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
+import { NativeInteractionSummary } from "./native-interaction-summary";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -48,7 +49,7 @@ type InteractionNode = Extract<
   { type: "link" | "reveal" | "hotspot" | "dialog" | "navigation" }
 >;
 
-function harness(initial: InteractionNode, accept = () => true) {
+function harness(initial: InteractionNode, accept = () => true, onPreview?: () => void) {
   const base = createNativeContentBlock().scene!;
   let scene: PresentationScene = {
     ...base,
@@ -73,6 +74,7 @@ function harness(initial: InteractionNode, accept = () => true) {
         scene,
         node: (scene.nodes.find((item) => item.id === selected) as InteractionNode) ?? null,
         onChange,
+        onPreview,
         navigationTargets: [
           { id: "11111111-1111-4111-8111-111111111111", title: "Next checkpoint" },
         ],
@@ -113,6 +115,9 @@ function harness(initial: InteractionNode, accept = () => true) {
     markup() {
       return renderToStaticMarkup(tree);
     },
+    overview() {
+      return elements(tree).find((element) => element.type === NativeInteractionSummary)!;
+    },
     alerts() {
       return elements(tree)
         .filter((element) => element.props.role === "alert")
@@ -123,6 +128,34 @@ function harness(initial: InteractionNode, accept = () => true) {
 }
 
 describe("native audience interaction editing", () => {
+  it.each(["https://user:secret@example.com", "https://example.com/rejected"])(
+    "retains the slide-wide preview barrier for an unsaved URL after selecting another action (%s)",
+    (entry) => {
+      const link = {
+        ...createNativeLinkNode(),
+        label: "Source",
+        href: "https://example.com/saved",
+      };
+      const editor = harness(link, () => false, vi.fn());
+      const reveal = {
+        ...createNativeRevealNode(),
+        label: "Show evidence",
+        body: "Audience content",
+      };
+      editor.scene.nodes.push(reveal);
+      editor.scene.readingOrder.push(reveal.id);
+      editor.change("Link URL", entry);
+      editor.select(reveal.id);
+      expect(editor.overview().props.previewUnavailableReason).toContain("unsaved link entries");
+      expect(editor.markup()).toContain("Preview this slide</button>");
+      expect(editor.markup()).toMatch(/<button[^>]*disabled=""[^>]*>Preview this slide/);
+      editor.upstream((node) =>
+        node.type === "link" ? { ...node, href: "https://example.com/recovered" } : node,
+      );
+      expect(editor.overview().props.previewUnavailableReason).toBeUndefined();
+      expect(editor.markup()).not.toContain("unsaved link entries");
+    },
+  );
   it("promotes an existing local reveal to broadcast without losing audience content", () => {
     const reveal = { ...createNativeRevealNode(), label: "Evidence", body: "Audience evidence" };
     const editor = harness(reveal);

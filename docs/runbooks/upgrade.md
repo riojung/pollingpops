@@ -730,6 +730,23 @@ reportable until expiry plus seven days; delayed cleanup must not extend report 
 identity/source changes fence late results and clear export state. See the
 [reading-insights record](../evidence/presentation-reading-insights.md).
 
+## Self-paced Presentation choice practice
+
+Apply additive migration106 after105 before enabling practice writes. Deploy matching HTTP, web,
+retention and account-lifecycle readers. Separate practice tables/routes preserve existing reading
+and live delivery; no document or scene version changes.
+
+Check supported-publication eligibility, forced assignment-scoped RLS, preview without attempts,
+no keys/feedback before an accepted personal answer, immutable answers, CAS and exact historical
+receipt replay. Test private resume/clear and late requests, current permission/source/deletion
+fences after lock waits, media reauthorization, explicit completion and small-group reports.
+Verify erasure/export and expiry-plus-seven-day cleanup/access boundaries.
+
+After records exist, rollback retains106 and compatible source/lifecycle/receipt readers. Disable
+new practice admission first; preserve accepted progress and frozen publications. This slice adds
+no service/provider and does not enable timers, points, verified assessment or mastery claims.
+See the [practice record](../evidence/presentation-self-paced-practice.md).
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

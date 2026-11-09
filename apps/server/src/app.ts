@@ -24,6 +24,7 @@ import {
   createPresentationRepository,
   createPresentationShareRepository,
   createPresentationAssignmentRepository,
+  createPresentationPracticeAssignmentRepository,
   createPresentationReviewFeedbackRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
@@ -94,6 +95,7 @@ import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
 import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
 import { registerPresentationAssignmentRoutes } from "./presentation-assignment-routes.js";
+import { registerPresentationPracticeRoutes } from "./presentation-practice-routes.js";
 import { registerPresentationReviewFeedbackRoutes } from "./presentation-review-feedback-routes.js";
 import { registerPresentationStaticExportRoutes } from "./presentation-static-export-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
@@ -247,6 +249,7 @@ export async function buildApp(
   const presentations = createPresentationRepository(repository);
   const presentationShares = createPresentationShareRepository(repository);
   const presentationAssignments = createPresentationAssignmentRepository(repository);
+  const presentationPractice = createPresentationPracticeAssignmentRepository(repository);
   const presentationReviewFeedback = createPresentationReviewFeedbackRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
@@ -777,6 +780,15 @@ export async function buildApp(
     auth,
     repository,
     assignments: presentationAssignments,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationPracticeRoutes(app, {
+    auth,
+    repository,
+    assignments: presentationPractice,
     storage,
     config,
     consumeAdmission: cache.consumeRateLimit.bind(cache),

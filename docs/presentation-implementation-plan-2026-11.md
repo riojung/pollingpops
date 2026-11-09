@@ -142,12 +142,15 @@ discussion suggestions are merged in [PR #210](https://github.com/riojung/pollin
 The bounded E13 offline interactive HTML companion is implemented on
 `codex/presentation-offline-export`; its full repository check, compiled-worker smoke and eight
 production-browser workflows across four profiles pass.
-The bounded E08 reading-assignment/attempt foundation is implemented on
-`codex/presentation-e08-self-paced`. Self-paced responses, assessment feedback and the remaining
-later packages stay planned; deployment and release qualification remain open.
-Its next increment on `codex/presentation-reading-reports` adds creator aggregate reading
-insights and CSV from the independent assignment system, with frozen-version denominators,
-small-group suppression and no individual learner records in the report.
+The bounded E08 reading-assignment/attempt foundation is merged in
+[PR #214](https://github.com/riojung/pollingpops/pull/214). Creator aggregate reading
+insights and CSV are merged in [PR #215](https://github.com/riojung/pollingpops/pull/215), with
+frozen-version denominators, small-group suppression and no individual learner records in the
+report. Broader response/feedback policies and later packages remain planned; deployment and
+release qualification remain open.
+The next bounded E08 increment on `codex/presentation-self-paced-practice` adds independent
+single-choice/true-false practice with accepted-answer-only personal feedback and explicit
+completion. Existing reading behavior and report contracts remain intact.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -447,6 +450,14 @@ Creator aggregate reports follow in `codex/presentation-reading-reports`: explic
 anonymous starts/completions and per-page acknowledgements, complementary small-group
 suppression and an exact-snapshot CSV. See the
 [reading-insights record](evidence/presentation-reading-insights.md).
+
+The separate practice slice on `codex/presentation-self-paced-practice` supports 1–50 frozen pages
+and 1–25 ordinary single-choice/true-false checks. It adds explicit start, content acknowledgement,
+one final answer, immediate personal feedback after acceptance, private resume and explicit finish.
+Additive migration106 keeps practice attempts and compact receipts separate from reading records.
+Creators receive anonymous privacy-suppressed start/completion counts. See the
+[practice record](evidence/presentation-self-paced-practice.md). Other response formats, configurable
+feedback timing, verified identity and individual creator attempt reports remain later E08 work.
 
 ### E09 Add useful creator and audience reports
 

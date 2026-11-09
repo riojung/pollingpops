@@ -8,6 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation self-paced choice practice November 8, 2026
+
+The source on `codex/presentation-self-paced-practice` adds **Assign practice** for an immutable
+publication containing ordinary single-choice and true/false checks. Recipients explicitly start,
+acknowledge content pages, submit each answer once and finish after every page/check. Personal
+correctness and authored feedback appear only after that attempt's answer is accepted. A private
+resume link restores accepted progress; shared links and preview do not discover another attempt.
+
+Separate practice records/receipts in additive migration106 preserve existing reading/live/report
+meanings. Current authority, source lifecycle, deadlines, exact retries and small-group suppression
+apply. There is no timer, points, verified identity, mastery claim, new provider or service.
+See the [practice record](evidence/presentation-self-paced-practice.md) for boundaries and
+qualification. The full repository check passes 6,889 tests and four builds; the updated restricted
+PostgreSQL CI suite passes 499 tests, and all 16 selected production-browser workflows pass across
+four desktop/mobile profiles. Broader question formats, opinion responses, delayed feedback policy and identified/
+individual creator reporting remain later E08 work. Source remains undeployed.
+
 ### Presentation reading insights November 8, 2026
 
 The source on `codex/presentation-reading-reports` adds explicit **Reading insights** to each

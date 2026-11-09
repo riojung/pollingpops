@@ -1,0 +1,26 @@
+.choices {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.choices legend {
+  font-weight: 600;
+}
+.choices label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+.choices input {
+  flex-shrink: 0;
+}
+.feedback {
+  margin: 16px 0;
+  padding: 16px;
+  border-left: 3px solid var(--ui-accent);
+  background: var(--ui-surface);
+  overflow-wrap: anywhere;
+}

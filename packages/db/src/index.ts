@@ -65,3 +65,6 @@ export {
 } from "./presentation-question-suggestions.js";
 export * from "./presentation-assignment-types.js";
 export * from "./presentation-assignments.js";
+
+export * from "./presentation-practice-types.js";
+export * from "./presentation-practice.js";

@@ -59,6 +59,15 @@ export interface PresentationReadingAttemptRecord {
   updatedAt: Date;
   completedAt: Date | null;
 }
+/** Internal counts only. Creator-facing readers must apply the reporting privacy policy. */
+export interface PresentationReadingReportRecord {
+  assignment: PresentationAssignmentRecord;
+  generatedAt: Date;
+  blockIds: string[];
+  started: number;
+  completed: number;
+  readCounts: Record<string, number>;
+}
 export interface CreatePresentationAssignmentInput extends Omit<
   CreatePresentationAssignment,
   "token"
@@ -100,6 +109,13 @@ export interface PresentationAssignmentRepository {
     presentationId: string,
     actorId: string,
   ): Promise<PresentationAssignmentRecord[]>;
+  getReadingReport(
+    workspaceId: string,
+    presentationId: string,
+    assignmentId: string,
+    actorId: string,
+    now: Date,
+  ): Promise<PresentationReadingReportRecord | null>;
   revokeAssignment(
     workspaceId: string,
     presentationId: string,

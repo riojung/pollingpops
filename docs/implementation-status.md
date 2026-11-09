@@ -8,6 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation reading insights November 8, 2026
+
+The source on `codex/presentation-reading-reports` adds explicit **Reading insights** to each
+reading assignment. Current owners/editors can load and refresh frozen-version anonymous attempt,
+explicit completion and page-acknowledgement counts, then export the exact displayed snapshot as
+a formula-safe CSV. Preview visits are excluded. Small total and complementary groups are
+suppressed; attempts are not unique people and reading completion is not assessment or mastery.
+
+Counts-only repository reads preserve assignment RLS, current authority, source lifecycle and
+the expiry-plus-seven-day boundary. Revoked/expired assignments remain reportable during that
+window. The client fences late results and clears reports/exports on identity or source changes.
+No new migration, provider, service or dependency is added. This increment also repairs the stale
+migration105 ledger assertion and includes the E08 restricted PostgreSQL cases in CI. See the
+[reading-insights record](evidence/presentation-reading-insights.md) for scope and qualification.
+The full repository check passes with 6,853 tests and four builds; the actual restricted
+PostgreSQL CI command passes 482 tests, and all eight selected production-browser workflows pass
+across four desktop/mobile profiles.
+Answer collection, assessment feedback and identified/individual attempt reporting remain later
+E08 work. Source remains undeployed.
+
 ### Presentation self-paced reading assignments November 8, 2026
 
 The source on `codex/presentation-e08-self-paced` adds **Assign reading** to a published

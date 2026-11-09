@@ -20,12 +20,19 @@ async function fixture() {
   const assignments = createPresentationAssignmentRepository(repository);
   const enabled = { value: true };
   const admitted = { value: true };
+  const authenticated = { value: true };
   const actor = { value: source.actor };
   const readImage = vi.fn(async () => Buffer.alloc(8));
   const app = Fastify({ logger: false });
   apps.push(app);
   await registerPresentationAssignmentRoutes(app, {
-    auth: { requireCreator: async () => actor.value },
+    auth: {
+      requireCreator: async (_request, reply) => {
+        if (authenticated.value) return actor.value;
+        reply.code(401).send({ error: { code: "UNAUTHORIZED" } });
+        return null;
+      },
+    },
     repository,
     assignments,
     storage: { readImage },
@@ -97,6 +104,7 @@ async function fixture() {
     app,
     enabled,
     admitted,
+    authenticated,
     actor,
     readImage,
     mediaId,
@@ -112,6 +120,190 @@ async function fixture() {
 }
 
 describe("self-paced reading assignment APIs", () => {
+  it("reports anonymous explicit acknowledgements once and keeps preview visits out of totals", async () => {
+    const f = await fixture();
+    const { assignment } = (await f.create()).json();
+    const insights = () =>
+      f.app.inject({
+        url: `/v1/presentations/${f.presentation.id.toUpperCase()}/assignments/${assignment.id.toUpperCase()}/insights`,
+      });
+    for (let i = 0; i < 6; i++) await f.preview(assignment.id);
+    expect((await insights()).json()).toMatchObject({
+      startedAttempts: null,
+      completedAttempts: null,
+      inProgressAttempts: null,
+    });
+    const credentials: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const input = { attemptId: randomUUID(), token: token() };
+      credentials.push(input.token, input.attemptId);
+      expect((await f.start(assignment.id, input)).statusCode).toBe(201);
+      expect((await f.start(assignment.id, input)).statusCode).toBe(200);
+      const firstRead = {
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        kind: "read",
+        blockId: f.content.blocks[0]!.id,
+      };
+      expect(
+        (await f.progress(assignment.id, input.attemptId, input.token, firstRead)).statusCode,
+      ).toBe(200);
+      expect(
+        (await f.progress(assignment.id, input.attemptId, input.token, firstRead)).json().replayed,
+      ).toBe(true);
+      if (i < 5) {
+        await f.progress(assignment.id, input.attemptId, input.token, {
+          requestId: randomUUID(),
+          expectedRevision: 1,
+          kind: "read",
+          blockId: f.content.blocks[1]!.id,
+        });
+        const finish = { requestId: randomUUID(), expectedRevision: 2, kind: "complete" };
+        expect(
+          (await f.progress(assignment.id, input.attemptId, input.token, finish)).statusCode,
+        ).toBe(200);
+        expect(
+          (await f.progress(assignment.id, input.attemptId, input.token, finish)).json().replayed,
+        ).toBe(true);
+      }
+    }
+    const result = await insights();
+    expect(result.statusCode, result.body).toBe(200);
+    expect(result.headers["cache-control"]).toBe("private, no-store");
+    expect(result.json()).toMatchObject({
+      schemaVersion: 1,
+      assignment: { id: assignment.id, versionId: f.version.id },
+      minimumAttempts: 5,
+      startedAttempts: 10,
+      completedAttempts: 5,
+      inProgressAttempts: 5,
+      pages: [
+        { blockId: f.content.blocks[0]!.id, pageNumber: 1, readAttempts: 10 },
+        { blockId: f.content.blocks[1]!.id, pageNumber: 2, readAttempts: 5 },
+      ],
+    });
+    for (const secret of [
+      ...credentials,
+      f.createInput.token,
+      "tokenHash",
+      "speakerNotes",
+      "PRIVATE_EXPLANATION",
+      '"917"',
+      '"startedAt":',
+      "readRevisions",
+    ])
+      expect(result.body).not.toContain(secret);
+    await f.revoke(assignment.id);
+    expect((await insights()).json().assignment.revokedAt).toEqual(expect.any(String));
+  });
+  it("suppresses both completion cells and page complements below five", async () => {
+    const f = await fixture();
+    const { assignment } = (await f.create()).json();
+    const insights = () =>
+      f.app.inject({
+        url: `/v1/presentations/${f.presentation.id}/assignments/${assignment.id}/insights`,
+      });
+    for (let i = 0; i < 5; i++) {
+      const input = { attemptId: randomUUID(), token: token() };
+      await f.start(assignment.id, input);
+      if (i === 0) {
+        for (let page = 0; page < f.content.blocks.length; page++)
+          await f.progress(assignment.id, input.attemptId, input.token, {
+            requestId: randomUUID(),
+            expectedRevision: page,
+            kind: "read",
+            blockId: f.content.blocks[page]!.id,
+          });
+        await f.progress(assignment.id, input.attemptId, input.token, {
+          requestId: randomUUID(),
+          expectedRevision: f.content.blocks.length,
+          kind: "complete",
+        });
+      }
+      if (i === 3)
+        expect((await insights()).json()).toMatchObject({
+          startedAttempts: null,
+          pages: [{ readAttempts: null }, { readAttempts: null }],
+        });
+    }
+    expect((await insights()).json()).toMatchObject({
+      startedAttempts: 5,
+      completedAttempts: null,
+      inProgressAttempts: null,
+      pages: [{ readAttempts: null }, { readAttempts: null }],
+    });
+  });
+  it("suppresses page coverage that would identify a small in-progress reader group", async () => {
+    const f = await fixture();
+    const { assignment } = (await f.create()).json();
+    for (let i = 0; i < 15; i++) {
+      const input = { attemptId: randomUUID(), token: token() };
+      await f.start(assignment.id, input);
+      if (i < 6)
+        await f.progress(assignment.id, input.attemptId, input.token, {
+          requestId: randomUUID(),
+          expectedRevision: 0,
+          kind: "read",
+          blockId: f.content.blocks[0]!.id,
+        });
+      if (i < 5) {
+        await f.progress(assignment.id, input.attemptId, input.token, {
+          requestId: randomUUID(),
+          expectedRevision: 1,
+          kind: "read",
+          blockId: f.content.blocks[1]!.id,
+        });
+        await f.progress(assignment.id, input.attemptId, input.token, {
+          requestId: randomUUID(),
+          expectedRevision: 2,
+          kind: "complete",
+        });
+      }
+    }
+    const response = await f.app.inject({
+      url: `/v1/presentations/${f.presentation.id}/assignments/${assignment.id}/insights`,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      startedAttempts: 15,
+      completedAttempts: 5,
+      inProgressAttempts: 10,
+      pages: [{ readAttempts: null }, { readAttempts: 5 }],
+    });
+  });
+  it("fences insight reads by current authority, source, tenant, feature and admission", async () => {
+    const f = await fixture();
+    const { assignment } = (await f.create()).json();
+    const insights = (presentationId = f.presentation.id, assignmentId = assignment.id) =>
+      f.app.inject({
+        url: `/v1/presentations/${presentationId}/assignments/${assignmentId}/insights`,
+      });
+    f.authenticated.value = false;
+    expect((await insights()).statusCode).toBe(401);
+    f.authenticated.value = true;
+    expect((await insights(randomUUID())).statusCode).toBe(404);
+    expect((await insights(f.presentation.id, randomUUID())).statusCode).toBe(404);
+    const owner = f.actor.value;
+    f.actor.value = { ...owner, workspaceId: randomUUID() };
+    expect((await insights()).statusCode).toBe(404);
+    f.actor.value = { ...owner, role: "viewer" };
+    expect((await insights()).statusCode).toBe(404);
+    f.actor.value = owner;
+    f.repository.users.get(owner.userId)!.role = "viewer";
+    expect((await insights()).statusCode).toBe(404);
+    f.repository.users.get(owner.userId)!.role = "owner";
+    f.enabled.value = false;
+    expect((await insights()).statusCode).toBe(404);
+    f.enabled.value = true;
+    f.admitted.value = false;
+    expect((await insights()).statusCode).toBe(429);
+    f.admitted.value = true;
+    await f.presentations.archivePresentation(owner.workspaceId, f.presentation.id, true);
+    expect(await f.presentations.deletePresentation(owner.workspaceId, f.presentation.id)).toBe(
+      "deleted",
+    );
+    expect((await insights()).statusCode).toBe(404);
+  });
   it("canonicalizes UUID case for creation, start, resume and exact progress retry", async () => {
     const f = await fixture();
     const created = await f.app.inject({

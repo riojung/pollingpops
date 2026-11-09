@@ -145,6 +145,9 @@ production-browser workflows across four profiles pass.
 The bounded E08 reading-assignment/attempt foundation is implemented on
 `codex/presentation-e08-self-paced`. Self-paced responses, assessment feedback and the remaining
 later packages stay planned; deployment and release qualification remain open.
+Its next increment on `codex/presentation-reading-reports` adds creator aggregate reading
+insights and CSV from the independent assignment system, with frozen-version denominators,
+small-group suppression and no individual learner records in the report.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -439,7 +442,11 @@ completion. It reuses the recipient-safe renderer; activity blocks remain readab
 Reading completion is not assessment or mastery. Recipient capabilities and pending actions stay
 in memory; returning requires the personal resume link and an explicit resume action. See the
 [reading-assignment record](evidence/presentation-e08-reading-assignments.md). Answer submission,
-assessment feedback, identified learners and attempt reports remain later E08 scope.
+assessment feedback, identified learners and individual attempt reports remain later E08 scope.
+Creator aggregate reports follow in `codex/presentation-reading-reports`: explicit load/refresh,
+anonymous starts/completions and per-page acknowledgements, complementary small-group
+suppression and an exact-snapshot CSV. See the
+[reading-insights record](evidence/presentation-reading-insights.md).
 
 ### E09 Add useful creator and audience reports
 
@@ -463,7 +470,8 @@ identities, notes and answer keys are excluded. Historical Report V1–V7 and pu
 V1 remain unchanged. Bounded counts-only database reads and low-cardinality resource metrics avoid
 a model or hosted-service dependency. See the [E09 record](evidence/presentation-e09-session-insights.md).
 Private-link view tracking is excluded under the E08 policy. Self-paced attempt/completion
-reporting depends on the separate assignment system; this slice does not claim either feature.
+reporting now has its own bounded increment on `codex/presentation-reading-reports`, using the
+separate assignment system. Live-session reporting retains its existing contract and meaning.
 
 ### E10 Add spatial storytelling
 

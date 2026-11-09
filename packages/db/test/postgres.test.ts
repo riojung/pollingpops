@@ -1305,6 +1305,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   const database = `postgres_conformance_${randomUUID().replaceAll("-", "")}`;
   let adminUrl = clusterAdminUrl;
   let runtimeUrl = clusterRuntimeUrl;
+  let migrationRepository: PostgresRepository | undefined;
   let repository: PostgresRepository;
   let runtimePool: Pool;
 
@@ -1326,7 +1327,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     runtime.pathname = `/${database}`;
     runtimeUrl = runtime.toString();
 
-    const migrationRepository = new PostgresRepository(adminUrl!);
+    migrationRepository = new PostgresRepository(adminUrl!);
     await migrationRepository.migrate();
     await migrationRepository.migrate();
     const migrations = await migrationRepository.pool.query<{
@@ -1438,6 +1439,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 102, name: "presentation_text_assistance" },
       { version: 103, name: "presentation_text_translation" },
       { version: 104, name: "presentation_question_suggestions" },
+      { version: 105, name: "presentation_reading_assignments" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -1463,6 +1465,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       await rm(alteredDirectory, { recursive: true, force: true });
     }
     await migrationRepository.close();
+    migrationRepository = undefined;
 
     repository = new PostgresRepository(runtimeUrl!);
     runtimePool = new Pool({ connectionString: runtimeUrl });
@@ -1471,6 +1474,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
 
   afterAll(async () => {
     try {
+      // beforeAll can fail before it closes the migration pool.
+      await migrationRepository?.close();
       await repository?.close();
       await runtimePool?.end();
     } finally {

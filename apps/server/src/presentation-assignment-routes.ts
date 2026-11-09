@@ -10,6 +10,7 @@ import {
   PresentationAssignmentAccessSchema,
   PresentationReadingAttemptSnapshotSchema,
   PresentationReadingMutationResultSchema,
+  PresentationReadingReportSchema,
 } from "@openround/contracts";
 import {
   PresentationAssignmentError,
@@ -185,6 +186,13 @@ export async function registerPresentationAssignmentRoutes(
       return reply
         .code(result.replayed ? 200 : 201)
         .send(PresentationAssignmentCreatedSchema.parse(result));
+    });
+    scoped.get(`${author}/:assignmentId/insights`, async (request, reply) => {
+      const actor = await deps.auth.requireCreator(request, reply);
+      if (!actor) return;
+      const { id, assignmentId } = assignmentParams.parse(request.params);
+      if (!(await budget(request, reply, "insights", actor.userId, 30))) return;
+      return PresentationReadingReportSchema.parse(await service.insights(actor, id, assignmentId));
     });
     scoped.delete(`${author}/:assignmentId`, async (request, reply) => {
       const actor = await deps.auth.requireCreator(request, reply);

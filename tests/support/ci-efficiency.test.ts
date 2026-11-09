@@ -110,6 +110,24 @@ describe("CI efficiency without coverage bypasses", () => {
     for (const job of Object.values(ci.jobs)) expect(job["runs-on"]).toBe("ubuntu-26.04");
   });
 
+  it("runs reading-assignment conformance with restricted PostgreSQL in CI", async () => {
+    const postgres = (await workflow("ci")).jobs["postgres-migration"];
+    const tests = postgres.steps.find(
+      (step) => step.run === "pnpm --filter @openround/db test:postgres",
+    );
+    expect(tests?.env?.TEST_DATABASE_ADMIN_URL).toEqual(expect.any(String));
+    expect(tests?.env?.TEST_DATABASE_URL).toEqual(expect.any(String));
+    expect(new URL(tests!.env!.TEST_DATABASE_URL!).username).not.toBe(
+      new URL(tests!.env!.TEST_DATABASE_ADMIN_URL!).username,
+    );
+    const databasePackage = JSON.parse(
+      await readFile(new URL("../../packages/db/package.json", import.meta.url), "utf8"),
+    ) as { scripts: Record<string, string> };
+    expect(databasePackage.scripts["test:postgres"]?.split(/\s+/)).toContain(
+      "test/presentation-assignments-postgres.test.ts",
+    );
+  });
+
   it("does not let an audit failure suppress notices or secrets while retaining the threshold", async () => {
     const steps = (await workflow("security")).jobs["dependency-and-secret-review"].steps;
     expect(steps.find((step) => step.id === "install")?.run).toBe("pnpm install --frozen-lockfile");

@@ -12,6 +12,7 @@ import type {
   CreatePresentationAssignmentInput,
   PresentationAssignmentRecord,
   PresentationAssignmentRepository,
+  PresentationReadingReportRecord,
   StartPresentationReadingAttemptInput,
   MutatePresentationReadingAttemptInput,
 } from "./presentation-assignment-types.js";
@@ -167,6 +168,64 @@ export class MemoryPresentationAssignmentRepository
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
       .slice(0, 100)
       .map((a) => structuredClone(a));
+  }
+  async getReadingReport(
+    workspaceId: string,
+    presentationId: string,
+    assignmentId: string,
+    actorId: string,
+    now: Date,
+  ): Promise<PresentationReadingReportRecord | null> {
+    return this.serial(async () => {
+      if (!Number.isFinite(now.getTime()) || !this.member(workspaceId, actorId)) return null;
+      const assignment = this.assignments.get(assignmentId);
+      if (
+        !assignment ||
+        assignment.workspaceId !== workspaceId ||
+        assignment.presentationId !== presentationId
+      )
+        return null;
+      const presentation = await this.presentations.getPresentation(workspaceId, presentationId),
+        version = await this.presentations.getPresentationVersion(
+          workspaceId,
+          assignment.versionId,
+        );
+      if (
+        !presentation ||
+        !version ||
+        version.presentationId !== presentationId ||
+        !this.parent.hasLibraryArtifact(workspaceId, "presentation", presentationId) ||
+        !this.member(workspaceId, actorId) ||
+        this.assignments.get(assignmentId) !== assignment
+      )
+        return null;
+      try {
+        this.parent.assertWorkspaceLiveSessionCreationAllowed(workspaceId);
+      } catch {
+        return null;
+      }
+      const generatedAt = effectiveNow(now);
+      if (assignment.expiresAt.getTime() + 7 * day <= generatedAt.getTime()) return null;
+      const visible = blockIds(version);
+      if (!visible.length || visible.length > 200) return null;
+      const readCounts = Object.fromEntries(visible.map((id) => [id, 0]));
+      let started = 0,
+        completed = 0;
+      for (const { attempt } of this.attempts.values()) {
+        if (attempt.workspaceId !== workspaceId || attempt.assignmentId !== assignmentId) continue;
+        started++;
+        if (attempt.completedAt) completed++;
+        for (const id of attempt.readBlockIds) if (id in readCounts) readCounts[id]!++;
+      }
+      return {
+        assignment: structuredClone(assignment),
+        generatedAt,
+        blockIds: visible,
+        started,
+        completed,
+        readCounts,
+      };
+    });
   }
   async revokeAssignment(
     workspaceId: string,

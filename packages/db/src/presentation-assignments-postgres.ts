@@ -8,6 +8,7 @@ import type {
   PresentationAssignmentRecord,
   PresentationAssignmentRepository,
   PresentationReadingAttemptRecord,
+  PresentationReadingReportRecord,
   StartPresentationReadingAttemptInput,
   MutatePresentationReadingAttemptInput,
 } from "./presentation-assignment-types.js";
@@ -256,6 +257,84 @@ export class PostgresPresentationAssignmentRepository implements PresentationAss
         )
       ).rows.map(mapAssignment);
     });
+  }
+  async getReadingReport(
+    workspaceId: string,
+    presentationId: string,
+    assignmentId: string,
+    actorId: string,
+    now: Date,
+  ): Promise<PresentationReadingReportRecord | null> {
+    if (!Number.isFinite(now.getTime())) return null;
+    try {
+      return await this.transaction(async (client) => {
+        if (!(await this.writer(client, workspaceId, actorId))) return null;
+        await this.scope(client, workspaceId, assignmentId);
+        await this.workspace(client, workspaceId);
+        const initial = (
+          await client.query(
+            "SELECT * FROM presentation_assignments WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3",
+            [workspaceId, presentationId, assignmentId],
+          )
+        ).rows[0];
+        if (!initial) return null;
+        // Match the source-before-assignment lock order used by recipient reads and deletion.
+        const version = (
+          await client.query(
+            "SELECT version.* FROM presentations parent JOIN presentation_versions version ON version.workspace_id=parent.workspace_id AND version.presentation_id=parent.id WHERE parent.workspace_id=$1 AND parent.id=$2 AND version.id=$3 FOR SHARE OF parent",
+            [workspaceId, presentationId, initial.version_id],
+          )
+        ).rows[0];
+        if (!version) return null;
+        const current = (
+          await client.query(
+            "SELECT * FROM presentation_assignments WHERE workspace_id=$1 AND presentation_id=$2 AND id=$3 FOR SHARE",
+            [workspaceId, presentationId, assignmentId],
+          )
+        ).rows[0];
+        if (!current) return null;
+        const visible = blockIds(mapVersion(version));
+        if (!visible.length || visible.length > 200) return null;
+        // Every count comes from this one statement snapshot; no attempt rows or receipts leave SQL.
+        const counts = (
+          await client.query(
+            `WITH report_clock AS MATERIALIZED (
+              SELECT greatest($3::timestamptz,clock_timestamp()) AS generated_at
+            ), totals AS (
+              SELECT count(*)::integer AS started,
+                count(*) FILTER(WHERE completed_at IS NOT NULL)::integer AS completed
+              FROM presentation_reading_attempts WHERE workspace_id=$1 AND assignment_id=$2
+            ), coverage AS (
+              SELECT acknowledged.block_id,count(*)::integer AS read_count
+              FROM presentation_reading_attempts attempt
+              CROSS JOIN LATERAL unnest(attempt.read_block_ids) acknowledged(block_id)
+              WHERE attempt.workspace_id=$1 AND attempt.assignment_id=$2
+                AND acknowledged.block_id=ANY($4::uuid[])
+              GROUP BY acknowledged.block_id
+            )
+            SELECT report_clock.generated_at,totals.started,totals.completed,
+              (SELECT jsonb_object_agg(visible.block_id::text,coalesce(coverage.read_count,0))
+               FROM unnest($4::uuid[]) visible(block_id)
+               LEFT JOIN coverage ON coverage.block_id=visible.block_id) AS read_counts
+            FROM report_clock CROSS JOIN totals
+            WHERE $5::timestamptz+interval '7 days'>report_clock.generated_at`,
+            [workspaceId, assignmentId, now, visible, current.expires_at],
+          )
+        ).rows[0];
+        if (!counts) return null;
+        return {
+          assignment: mapAssignment(current),
+          generatedAt: new Date(counts.generated_at),
+          blockIds: visible,
+          started: counts.started,
+          completed: counts.completed,
+          readCounts: counts.read_counts,
+        };
+      });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "UNAVAILABLE") return null;
+      throw error;
+    }
   }
   async revokeAssignment(
     workspaceId: string,

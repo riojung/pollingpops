@@ -8,6 +8,25 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation design-quality gaps November 9, 2026
+
+The source on `codex/presentation-design-quality` integrates reviewed local layout alternatives
+into the Layout inspector and corrects native typography/spacing that changed fit when editor
+rails constrained the slide. The ordinary phone reading view remains readable. Fit guidance
+waits for fonts and does not infer wide-slide fit from a stacked reader. Visible filmstrip images
+use scoped creator-authorized readers; hidden rows/panels release them and access/image failures
+show placeholders. No AI credits, paid service, dependency or content migration is added.
+
+The [design-quality record](evidence/presentation-design-quality.md) records verification and the
+remaining boundary. These changes close selected design gaps; broad-creator observation, manual
+accessibility/device work, deeper mixed-object layouts and the wider E00–E14 scope remain open.
+The final repository check passes **6,964 tests**, all four builds and compiled-server startup;
+513 standard opt-in skips remain. **34 distinct selected production-browser cases are verified**
+across four profiles, with one export case isolated to avoid a shared-fixture rate limit.
+Editing-handle placement and interaction discoverability remain the next design refinements.
+The review follow-up fixes activity images covering answer rows and verifies eight production
+browser cases across the four profiles, including all four choices and wrapping labels.
+
 ### Presentation creator UX foundation November 8, 2026
 
 The source on `codex/presentation-ux-foundation` puts blank creation and visual browsing first.

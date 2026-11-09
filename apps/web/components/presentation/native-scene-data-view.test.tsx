@@ -14,6 +14,30 @@ function luminance(hex: string) {
 
 describe("native information rendering", () => {
   it.each([createNativeTableNode(), createNativeChartNode()])(
+    "retains the authored $type plane in a fixed preview without changing its data",
+    (node) => {
+      const original = structuredClone(node);
+      expect(
+        NativeSceneDataView({ node, fixedLayout: true }).props["data-native-fixed-layout"],
+      ).toBe("true");
+      expect(NativeSceneDataView({ node }).props["data-native-fixed-layout"]).toBeUndefined();
+      expect(node).toEqual(original);
+    },
+  );
+
+  it("chooses chart columns from authored width at the canonical plane rather than editor width", () => {
+    const node = createNativeChartNode();
+    node.frame.width = 46.8;
+    expect(NativeSceneDataView({ node }).props["data-chart-layout"]).toBe("stack");
+    node.frame.width = 46.875;
+    expect(NativeSceneDataView({ node }).props["data-chart-layout"]).toBe("split");
+    node.frame.width = 86;
+    expect(NativeSceneDataView({ node, fixedLayout: true }).props["data-chart-layout"]).toBe(
+      "split",
+    );
+  });
+
+  it.each([createNativeTableNode(), createNativeChartNode()])(
     "makes overflowing $type content a named keyboard focus target and keeps scroll keys away from slide shortcuts",
     (node) => {
       const view = NativeSceneDataView({ node });

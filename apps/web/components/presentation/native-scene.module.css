@@ -12,6 +12,9 @@
   border: 1px solid var(--native-border, var(--ui-border, #cbd5e1));
   font-family: var(--native-font, inherit);
 }
+.stage[data-native-fixed-layout="true"] {
+  box-sizing: border-box;
+}
 .connections {
   position: absolute;
   inset: 0;
@@ -31,7 +34,7 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -48,7 +51,9 @@
   outline-offset: -4px;
 }
 .node h1 {
-  font-size: clamp(20px, 5cqw, 48px);
+  /* The authored 1280px plane uses 48px titles and 26px body text. Frames,
+     type and padding scale together, so a smaller editor does not change text fit. */
+  font-size: 3.75cqw;
   line-height: var(--native-title-leading, 1.08);
 }
 .stage[data-native-theme] .node h1 {
@@ -57,18 +62,18 @@
   font-family: inherit;
 }
 .node p {
-  font-size: clamp(14px, 2.5cqw, 26px);
+  font-size: 2.03125cqw;
   line-height: var(--native-body-leading, 1.35);
 }
 .richBody {
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: clamp(14px, 2.5cqw, 26px);
+  font-size: 2.03125cqw;
   line-height: var(--native-body-leading, 1.35);
 }
 .richBody p {
@@ -112,7 +117,7 @@
 .shape span {
   position: relative;
   max-width: 85%;
-  font-size: clamp(12px, 2cqw, 22px);
+  font-size: 1.71875cqw;
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -336,7 +341,7 @@
   color: var(--ui-text-muted, #52616f);
 }
 @media (max-width: 700px) {
-  .stage:not(.staticThumbnail) {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) {
     aspect-ratio: auto;
     display: flex;
     flex-direction: column;
@@ -344,10 +349,10 @@
     padding: 12px;
     container-type: normal;
   }
-  .stage:not(.staticThumbnail) .connections {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .connections {
     display: none;
   }
-  .stage:not(.staticThumbnail) .node {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -359,40 +364,45 @@
   .snapGuides {
     display: none;
   }
-  .stage:not(.staticThumbnail) .node h1,
-  .stage:not(.staticThumbnail) .node p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node h1,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node p {
     height: auto;
     overflow: visible;
   }
-  .stage:not(.staticThumbnail) .node h1 {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node > h1,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node > p {
+    padding: var(--native-reading-padding, 6px);
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node h1 {
     font-size: 30px;
   }
-  .stage:not(.staticThumbnail) .node p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node p {
     font-size: 18px;
   }
-  .stage:not(.staticThumbnail) .richBody {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody {
     height: auto;
     overflow: visible;
     font-size: 18px;
+    padding: var(--native-reading-padding, 6px);
   }
-  .stage:not(.staticThumbnail) .richBody p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody p {
     font-size: inherit;
   }
-  .stage:not(.staticThumbnail) .shape {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape {
     min-height: 100px;
   }
-  .stage:not(.staticThumbnail) .shape span {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape span {
     font-size: 18px;
   }
-  .stage:not(.staticThumbnail) .image {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image {
     min-height: 80px;
   }
-  .stage:not(.staticThumbnail) .image,
-  .stage:not(.staticThumbnail) .image > :not(img) {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image > :not(img) {
     height: auto;
     overflow: visible;
   }
-  .stage:not(.staticThumbnail) .image img {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image img {
     height: auto;
     max-height: none;
     object-fit: contain;
@@ -414,7 +424,7 @@
     touch-action: auto;
     cursor: auto;
   }
-  .stage:not(.staticThumbnail) .connectorSummary {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .connectorSummary {
     position: static;
     width: auto;
     height: auto;
@@ -623,6 +633,11 @@
   height: auto;
   overflow: visible;
 }
+.outline .node > h1,
+.outline .node > p,
+.outline .richBody {
+  padding: var(--native-reading-padding, 6px);
+}
 .outline .node h1 {
   font-size: clamp(22px, 5cqw, 36px);
 }
@@ -633,6 +648,9 @@
 .outline .shape,
 .outline .image {
   min-height: 140px;
+}
+.outline .shape span {
+  font-size: 18px;
 }
 .outline .image img {
   max-height: 400px;

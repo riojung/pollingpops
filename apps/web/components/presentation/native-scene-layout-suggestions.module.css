@@ -1,0 +1,195 @@
+.controls {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 10px;
+}
+.controls button,
+.dialog button {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--ui-border-strong, #8294a5);
+  border-radius: 8px;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #102a43);
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.controls button:disabled,
+.dialog button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.controls button:focus-visible,
+.dialog :is(button, input, a, [tabindex]):focus-visible {
+  outline: 3px solid var(--ui-focus, #1769aa);
+  outline-offset: 3px;
+}
+.help {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ui-text-muted, #52616f);
+  overflow-wrap: anywhere;
+}
+.dialog {
+  --native-layout-dialog-padding: clamp(14px, 3vw, 26px);
+  box-sizing: border-box;
+  width: min(1080px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  padding: var(--native-layout-dialog-padding);
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 14px;
+  background: var(--ui-surface-raised, #fff);
+  color: var(--ui-text, #102a43);
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+.dialog .heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dialog .heading h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(20px, 3vw, 26px);
+}
+.dialog .heading > button {
+  flex: 0 0 auto;
+  min-width: 70px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.dialog .choices {
+  min-width: 0;
+  margin: 18px 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+}
+.dialog .choices legend {
+  margin: 0;
+  padding-inline: 4px;
+  font-weight: 700;
+}
+.dialog .choices label {
+  margin: 0;
+  font: inherit;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+.dialog .choices input {
+  box-sizing: border-box;
+  appearance: auto;
+  flex: 0 0 20px;
+  min-width: 20px;
+  max-width: 20px;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: initial;
+  border-radius: initial;
+  background: initial;
+}
+.dialog .choices label > span {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.previews {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.preview,
+.reading,
+.readingText,
+.readingTable {
+  min-width: 0;
+  max-width: 100%;
+}
+.preview h3 {
+  margin: 0 0 10px;
+}
+.viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  contain: layout paint;
+  border-radius: 6px;
+  background: #fff;
+}
+.plane {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: top left;
+  overflow: hidden;
+}
+.reading {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 9px;
+  line-height: 1.5;
+}
+.readingText > p {
+  white-space: pre-wrap;
+}
+.readingText > div,
+.readingTable > [data-native-data] {
+  height: auto;
+  overflow: visible;
+  font-size: 1rem;
+}
+.readingText :is(p, li),
+.readingTable :is(td, th, caption) {
+  overflow-wrap: anywhere;
+}
+.reading h4 {
+  margin: 16px 0 6px;
+}
+.dialog .actions {
+  position: sticky;
+  bottom: calc(-1 * var(--native-layout-dialog-padding));
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  margin-inline: calc(-1 * var(--native-layout-dialog-padding));
+  margin-bottom: calc(-1 * var(--native-layout-dialog-padding));
+  padding: 12px var(--native-layout-dialog-padding) var(--native-layout-dialog-padding);
+  background: var(--ui-surface-raised, #fff);
+}
+.error {
+  padding: 12px;
+  border: 1px solid var(--ui-danger, #a42828);
+  border-radius: 8px;
+}
+@media (max-width: 700px) {
+  .previews {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dialog {
+    width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+}

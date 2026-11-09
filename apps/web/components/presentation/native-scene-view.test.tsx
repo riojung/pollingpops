@@ -8,6 +8,7 @@ import { type PresentationScene } from "@openround/contracts";
 import { ContentSlideView } from "./content-slide-view";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneView } from "./native-scene-view";
+import { createNativeTableNode } from "../../lib/presentation-native-data";
 
 function nativeSceneFixture(): PresentationScene {
   return {
@@ -249,6 +250,36 @@ describe("production native scene rendering", () => {
 });
 
 describe("shared native design rendering", () => {
+  it("keeps thumbnail media mounted across text and frame edits while delivery retains source identity", () => {
+    const scene = nativeSceneFixture();
+    const edited = structuredClone(scene);
+    const title = edited.nodes.find((node) => node.type === "text" && node.role === "title")!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "A revised title";
+    title.frame.x += 1;
+    expect(NativeSceneView({ scene, staticThumbnail: true }).key).toBe("thumbnail");
+    expect(NativeSceneView({ scene: edited, staticThumbnail: true }).key).toBe("thumbnail");
+    expect(NativeSceneView({ scene, onSelect: () => {} }).key).toBe("editor");
+    expect(NativeSceneView({ scene: edited, onSelect: () => {} }).key).toBe("editor");
+    expect(NativeSceneView({ scene, interactionSourceKey: "published-version" }).key).not.toBe(
+      NativeSceneView({ scene: edited, interactionSourceKey: "published-version" }).key,
+    );
+  });
+
+  it("passes fixed-layout preview intent to native data without changing the stored scene", () => {
+    const scene = nativeSceneFixture();
+    const table = createNativeTableNode();
+    scene.schemaVersion = 4;
+    scene.nodes.push(table);
+    scene.readingOrder.push(table.id);
+    const original = structuredClone(scene);
+    const markup = renderToStaticMarkup(<NativeSceneView scene={scene} fixedLayout />);
+    expect(markup.match(/data-native-fixed-layout="true"/g)).toHaveLength(2);
+    expect(markup).toContain('data-native-scene="true"');
+    expect(markup).toContain(table.caption);
+    expect(scene).toEqual(original);
+  });
+
   it.each(["preview", "live", "editor"] as const)(
     "renders the same fixed design for %s",
     (variant) => {
@@ -263,7 +294,8 @@ describe("shared native design rendering", () => {
       expect(markup).toContain('data-native-spacing="compact"');
       expect(markup).toContain("--native-background:#111b2e");
       expect(markup).toContain("--native-text:#f6f8ff");
-      expect(markup).toContain("--native-padding:5px");
+      expect(markup).toContain("--native-padding:0.390625cqw");
+      expect(markup).toContain("--native-reading-padding:5px");
       expect(markup).not.toContain("fonts.googleapis");
     },
   );

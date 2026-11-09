@@ -43,9 +43,9 @@ visual slide import; PDF/image visual import remains in the editor.
 The current editor adds a stable thumbnail filmstrip, central slide and contextual inspector,
 with title/save/publication state and Preview/Publish/Present/Share in the command bar. Secondary
 insertion/delivery controls use disclosures. Native inspector sections preserve object selection
-and in-progress fields while switching. Filmstrip images currently use placeholders to avoid
-additional private-media downloads; accurate authorized image thumbnails remain a design-quality
-refinement. Existing schemas, exact retries, permissions and frozen publications remain the
+and in-progress fields while switching. That foundation used filmstrip image placeholders;
+the next design-quality slice below adds authorized previews. Existing schemas, exact retries,
+permissions and frozen publications remain the
 authority. Responsive mode uses available editor width so page zoom also closes crowded rails;
 Undo/Redo preserves an open inspector, and closing secondary dialogs restores the invoking action.
 
@@ -80,27 +80,43 @@ Manual assistive-technology, physical-device, observed creator-task, hosted/capa
 deployment and release qualification remain open. Earlier package evidence records retain their
 own scope; the current check does not turn them into a complete product-parity claim.
 
+November 9, 2026 next source: `codex/presentation-design-quality` closes three selected design
+gaps. Wide native typography and spacing scale from the 1280×720 presentation plane rather than
+changing relative to authored frames as editor rails open. Ordinary phone delivery keeps its
+readable semantic column. Fit feedback waits for fonts and distinguishes wide geometry from
+stacked reading content. Local reviewed layout alternatives from the earlier PR #207 proposal
+now live in the Layout inspector, retain complete content and apply as one ordinary Undo step.
+Visible filmstrip rows resolve private images through current creator authorization, with
+bounded, scoped readers and placeholders when access or image loading fails. These are original
+authorized image assets, not newly generated small raster files. Source changes do not rewrite
+stored scenes or publications, introduce a service, or require AI credits. See the
+[design-quality record](evidence/presentation-design-quality.md) for qualification and boundaries.
+The final repository check passes 6,964 tests, all four builds and compiled-server startup;
+34 selected browser cases are verified across four profiles, with an isolated export fixture
+for the ordinary account throttle. Selection-handle placement and interaction discoverability
+remain next, followed by presenting/sharing UX and the external observation/device gates.
+
 The table below is the current gap map; the detailed E00–E14 sections retain implementation
 history and acceptance contracts. “Implemented” means the selected software slice, not complete
 competitor parity or successful creator task observation.
 
-| Package | Implemented foundation                                                                 | Remaining scope or evidence                                                                                     |
-| ------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| E00     | Scene decision and original local fixtures                                             | Observed creator baselines and comparable authenticated competitor tasks                                        |
-| E01     | Durable native editor, rich text, filmstrip, save/recovery and current workspace shell | Integrated workflow, creator usability and manual assistive-technology qualification                            |
-| E02     | Bounded themes/layouts, composition, tables/charts and 21 scenario decks               | Observed template fitness, consistent design quality, overflow repair and task-led refinements                  |
-| E03     | Private notes, next slide, elapsed timer and scoped audience stage                     | Actual screen sharing, managed-browser/popup behavior and richer phone remote                                   |
-| E04     | Selected opinion, ranking, moderated text and word-cloud software                      | Complete mobile/moderation usability and hosted/device/cost qualification                                       |
-| E05     | Reviewed PDF/image visual import and reading alternatives                              | Editable/PPTX conversion fidelity, compatibility corpus and hosted scanner/storage qualification                |
-| E06     | Local/broadcast reveals, links, dialogs, hotspots and explicit branches                | Visual-stage interaction coverage and authored keyboard/touch task observation; variables/games remain separate |
-| E07     | Sections and durable phase-safe jump/return                                            | Observed nonlinear demo/navigation tasks and cross-surface discoverability                                      |
-| E08     | Private review, reading assignments and bounded choice practice                        | Other response formats, configurable feedback, verified identity and individual creator reports                 |
-| E09     | Live insights and anonymous reading/practice counts                                    | Creator usefulness and measured resource cost; private-link view tracking remains excluded by policy            |
-| E10     | Bounded story map and existing linear cursor                                           | Content-plane camera rendering, nested frames and host-broadcast overview                                       |
-| E11     | Free signed-in review, threads, resolve/reopen and approval                            | Object-level concurrent authoring, attachments, mentions and notifications                                      |
-| E12     | Reviewed outline, selected plain-text edits/translation and question assistance        | Separately proposed layouts, rich-text/whole-deck/RTL and broader generation; ordinary editing stays AI-free    |
-| E13     | PDF/PNG, readable HTML and bounded offline interactive HTML                            | Editable PPTX, full visual-stage interaction and verified tagged-PDF accessibility                              |
-| E14     | Extension candidates and cost boundaries                                               | Separately funded media, recording, advanced animation, add-ins, LMS and virtual-camera work                    |
+| Package | Implemented foundation                                                                            | Remaining scope or evidence                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| E00     | Scene decision and original local fixtures                                                        | Observed creator baselines and comparable authenticated competitor tasks                                        |
+| E01     | Durable native editor, rich text, filmstrip, save/recovery and current workspace shell            | Integrated workflow, creator usability and manual assistive-technology qualification                            |
+| E02     | Bounded themes/layouts, composition, tables/charts and 21 scenario decks                          | Observed template fitness, consistent design quality, overflow repair and task-led refinements                  |
+| E03     | Private notes, next slide, elapsed timer and scoped audience stage                                | Actual screen sharing, managed-browser/popup behavior and richer phone remote                                   |
+| E04     | Selected opinion, ranking, moderated text and word-cloud software                                 | Complete mobile/moderation usability and hosted/device/cost qualification                                       |
+| E05     | Reviewed PDF/image visual import and reading alternatives                                         | Editable/PPTX conversion fidelity, compatibility corpus and hosted scanner/storage qualification                |
+| E06     | Local/broadcast reveals, links, dialogs, hotspots and explicit branches                           | Visual-stage interaction coverage and authored keyboard/touch task observation; variables/games remain separate |
+| E07     | Sections and durable phase-safe jump/return                                                       | Observed nonlinear demo/navigation tasks and cross-surface discoverability                                      |
+| E08     | Private review, reading assignments and bounded choice practice                                   | Other response formats, configurable feedback, verified identity and individual creator reports                 |
+| E09     | Live insights and anonymous reading/practice counts                                               | Creator usefulness and measured resource cost; private-link view tracking remains excluded by policy            |
+| E10     | Bounded story map and existing linear cursor                                                      | Content-plane camera rendering, nested frames and host-broadcast overview                                       |
+| E11     | Free signed-in review, threads, resolve/reopen and approval                                       | Object-level concurrent authoring, attachments, mentions and notifications                                      |
+| E12     | Reviewed outline, plain-text edits/translation, question assistance and local layout alternatives | Rich-text/whole-deck/RTL and broader generation; ordinary editing stays AI-free                                 |
+| E13     | PDF/PNG, readable HTML and bounded offline interactive HTML                                       | Editable PPTX, full visual-stage interaction and verified tagged-PDF accessibility                              |
+| E14     | Extension candidates and cost boundaries                                                          | Separately funded media, recording, advanced animation, add-ins, LMS and virtual-camera work                    |
 
 Upgrade the experience in phases using those capabilities rather than restarting the feature plan:
 
@@ -239,8 +255,9 @@ and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected o
 slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204). Its outline-first
 new-deck entry point is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
 Selected plain-text rewrite/shorten is merged in
-[PR #206](https://github.com/riojung/pollingpops/pull/206). Reviewed layout alternatives are
-separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207).
+[PR #206](https://github.com/riojung/pollingpops/pull/206). Reviewed layout alternatives were
+separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207); the current
+`codex/presentation-design-quality` source integrates them into the contextual Layout inspector.
 Reviewed selected-text translation is merged in
 [PR #208](https://github.com/riojung/pollingpops/pull/208). Local reviewed question starters are
 merged in [PR #209](https://github.com/riojung/pollingpops/pull/209). Optional reviewed AI

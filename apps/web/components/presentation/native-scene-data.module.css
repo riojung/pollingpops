@@ -86,39 +86,35 @@
   max-width: 100%;
   min-width: 0;
   margin: 0;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   color: var(--native-text, #102a43);
   background: var(--native-background, #fff);
-  font-size: clamp(12px, 1.7cqw, 20px);
+  font-size: 1.5625cqw;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .dataTable caption {
-  padding-block: 0 8px;
+  padding-block: 0 0.4em;
   font-weight: 700;
   text-align: start;
   white-space: pre-wrap;
 }
 .dataTable th,
 .dataTable td {
-  padding: 6px;
+  padding: 0.3em;
   text-align: start;
   vertical-align: top;
-  border: 1px solid var(--native-border, #94a3b8);
+  border: 0.05em solid var(--native-border, #94a3b8);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 .dataTable th {
   font-weight: 700;
 }
-.chart {
-  container-type: inline-size;
-  container-name: native-data-chart;
-}
 .chart figcaption {
   display: grid;
-  gap: 6px;
+  gap: 0.3em;
   white-space: pre-wrap;
 }
 .chart figcaption strong {
@@ -127,8 +123,8 @@
 .chartColumns {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  margin-top: 8px;
+  gap: 0.6em;
+  margin-top: 0.4em;
   min-width: 0;
   align-items: start;
 }
@@ -140,12 +136,12 @@
   display: block;
   width: 100%;
   height: auto;
-  margin-block: 8px;
+  margin-block: 0.4em;
 }
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px 14px;
+  gap: 0.25em 0.7em;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -158,25 +154,27 @@
   display: inline-block;
   width: 0.8em;
   height: 0.8em;
-  margin-inline-end: 5px;
+  margin-inline-end: 0.25em;
 }
 .categoryHelp {
-  margin-block: 8px;
+  margin-block: 0.4em;
   font-size: 0.9em;
 }
-@media (min-width: 701px) {
-  @container native-data-chart (min-width: 600px) {
-    .chartColumns {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 16px;
-    }
-  }
+.chart[data-chart-layout="split"] .chartColumns {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.8em;
 }
 @media (max-width: 700px) {
-  .dataView:not(:global([data-static-thumbnail="true"]) *) {
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *) {
     height: auto;
     overflow: visible;
     font-size: 16px;
+    padding: var(--native-reading-padding, 6px);
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .chartColumns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
   .editGrid tr {
     display: grid;
@@ -188,22 +186,48 @@
   .editGrid td {
     display: block;
   }
-  .dataTable:not(:global([data-static-thumbnail="true"]) *),
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) thead,
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) tbody,
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) tr,
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) td,
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) th,
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) caption {
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    thead,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    tbody,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    tr,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    td,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    th,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    caption {
     display: block;
     box-sizing: border-box;
     width: 100%;
   }
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) tr {
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    tr {
     margin-block: 8px;
   }
-  .dataTable:not(:global([data-static-thumbnail="true"]) *) td::before {
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    td::before {
     content: attr(data-label) ": ";
     font-weight: 700;
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    th,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    td {
+    padding: 6px;
+    border-width: 1px;
   }
 }

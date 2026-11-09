@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import {
+  openSlideIdeas,
   e01Slide,
   createE01Deck,
   e01ApiUrl,
@@ -81,13 +82,14 @@ async function fixture(page: Page, many = false) {
 }
 async function closeDrawers(page: Page) {
   if ((page.viewportSize()?.width ?? 1280) > 920) return;
-  await expect(page.getByRole("button", { name: "Arrange space", exact: true })).toBeVisible();
+  await expect(page.locator('summary[aria-label="More options"]')).toBeVisible();
   for (const name of ["Hide inspector", "Collapse map"]) {
     const button = page.getByRole("button", { name, exact: true });
     if (await button.isVisible()) await button.click();
   }
 }
 async function openStarters(page: Page) {
+  await openSlideIdeas(page);
   await page.getByRole("button", { name: "Question starters", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Review question starters", exact: true });
   await expect(dialog).toBeVisible();
@@ -343,6 +345,7 @@ for (const suffix of ["", " @mobile"]) {
       ).status(),
     ).toBe(200);
     await page.reload();
+    await openSlideIdeas(page);
     await expect(
       page.getByRole("button", { name: "Question starters", exact: true }),
     ).toBeDisabled();

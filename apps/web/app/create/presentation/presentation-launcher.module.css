@@ -1,0 +1,287 @@
+.blankStart {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface);
+  padding: clamp(1.2rem, 3vw, 2rem);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.blankMark {
+  display: grid;
+  flex: 0 0 6rem;
+  place-items: center;
+  align-self: stretch;
+  min-block-size: 5rem;
+  border-radius: 0.7rem;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+.blankMark svg {
+  inline-size: 4rem;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.blankCopy {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.blankCopy h2,
+.sectionHeading h2,
+.alternatives h2,
+.panel h2 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+
+.blankCopy > p:last-child,
+.sectionHeading p:last-child,
+.panel > p {
+  margin: 0.5rem 0 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.kicker {
+  margin: 0 0 0.5rem;
+  color: var(--ui-accent-ink);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.blankStart > button {
+  flex-shrink: 0;
+  min-block-size: 44px;
+  margin: 0;
+}
+
+.templates,
+.alternatives {
+  margin-block-start: 2.5rem;
+  min-inline-size: 0;
+}
+
+.quickStarts,
+.quickStarts > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+.quickStarts {
+  justify-content: flex-end;
+  margin-block-start: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.quickStarts > span {
+  gap: 0.5rem;
+}
+
+.quickStarts a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  border-radius: 0.25rem;
+  color: var(--ui-accent-ink);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.quickStarts a:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.quickStarts small {
+  color: var(--ui-text-subtle);
+  font-size: 0.7rem;
+}
+
+.methodToolbar + .templates {
+  margin-block-start: 1.75rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-end: 1.5rem;
+}
+
+.sectionHeading > div {
+  min-inline-size: 0;
+  flex: 1 1 20rem;
+}
+
+.sectionHeading > a {
+  min-block-size: 44px;
+}
+
+.alternatives > h2 {
+  font-size: 1.1rem;
+  margin-block-end: 1rem;
+}
+
+.methodGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.methodCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 0.85rem;
+  padding: 1.4rem;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  text-decoration: none;
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.methodCard:hover {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-soft);
+}
+
+.methodCard:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.methodCard small {
+  color: var(--ui-text-subtle);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.methodCard h3 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: 1.1rem;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+}
+
+.methodCard p {
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.cardLink {
+  margin-block-start: auto;
+  padding-block-start: 0.25rem;
+  color: var(--ui-accent-ink);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.methodToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: var(--ui-text-subtle);
+  font-size: 0.82rem;
+}
+
+.panel {
+  margin-block-start: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface);
+  padding: clamp(1rem, 3vw, 1.75rem);
+}
+
+.panel > div {
+  margin-block-start: 1.25rem;
+}
+
+.notice {
+  margin: 2rem 0 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.emptyCanvas {
+  display: grid;
+  min-block-size: 22rem;
+  place-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface);
+  padding: 2rem;
+  text-align: center;
+}
+
+.emptyCanvas > div {
+  max-inline-size: 30rem;
+}
+
+.emptyMark {
+  display: inline-grid;
+  inline-size: 3rem;
+  block-size: 3rem;
+  place-items: center;
+  border-radius: 0.8rem;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  font-weight: 750;
+}
+
+.emptyCanvas p {
+  color: var(--ui-text-subtle);
+  line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+  .blankStart {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .blankMark {
+    flex-basis: 4.5rem;
+    min-block-size: 4rem;
+  }
+
+  .blankMark svg {
+    inline-size: 3rem;
+  }
+
+  .blankCopy {
+    flex-basis: calc(100% - 6rem);
+  }
+
+  .blankStart > button {
+    inline-size: 100%;
+  }
+
+  .methodGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quickStarts {
+    justify-content: flex-start;
+  }
+}

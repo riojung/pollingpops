@@ -1,4 +1,5 @@
 .builder {
+  container-type: inline-size;
   min-height: 100vh;
   color: var(--ui-text);
   background: var(--ui-canvas);
@@ -79,7 +80,6 @@
 
 .commandBar button,
 .exitLink,
-.floatingMapButton,
 .canvasToolbar button,
 .compactCommands button,
 .addActions button,
@@ -481,13 +481,6 @@
   background:
     radial-gradient(circle at 15% 10%, var(--ui-hero-glow-warm), transparent 28%),
     radial-gradient(circle at 88% 86%, var(--ui-canvas-glow), transparent 32%), var(--ui-canvas);
-}
-
-.floatingMapButton {
-  position: absolute;
-  z-index: 2;
-  top: 16px;
-  left: 16px;
 }
 
 .canvasToolbar .primarySlideAction,
@@ -1112,7 +1105,7 @@
   }
 }
 
-@media (max-width: 1180px) {
+@container (max-width: 1180px) {
   .compactCommands {
     display: flex;
     gap: 8px;
@@ -1133,18 +1126,12 @@
     column-gap: 12px;
   }
 
-  .saveStatus,
-  .commandActions > button:nth-of-type(1),
-  .commandActions > button:nth-of-type(2) {
-    display: none;
-  }
-
   .workspace {
     grid-template-columns: 230px minmax(420px, 1fr) 300px;
   }
 }
 
-@media (max-width: 920px) {
+@container (max-width: 920px) {
   .commandStart {
     flex: 1 1 auto;
   }
@@ -1173,7 +1160,7 @@
     z-index: 30;
     top: var(--presentation-command-height, 122px);
     bottom: 0;
-    width: min(340px, 90vw);
+    width: min(340px, 90cqw);
     box-shadow: var(--ui-shadow-lg);
   }
 
@@ -1197,7 +1184,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container (max-width: 640px) {
   .compactPreview {
     display: inline-flex;
     align-items: center;
@@ -1206,12 +1193,6 @@
   .commandBar {
     gap: 8px;
     padding: 8px;
-  }
-
-  .commandStart .iconButton,
-  .commandActions
-    > button:not(.publishButton):not(.iconButton):not(.shareButton):not(.spatialButton) {
-    display: none;
   }
 
   .exitLink {
@@ -1282,4 +1263,493 @@
   border-radius: 8px;
   color: var(--ui-text-strong, #102a43);
   background: var(--ui-surface, #fff);
+}
+
+/* Authoring workspace: stable global commands, visual slide rail, contextual inspector. */
+.commandBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-height: 76px;
+  padding: 10px 18px;
+  background: var(--ui-surface);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.commandStart {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.commandActions {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 7px;
+}
+.commandBar .iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  padding: 8px;
+  background: transparent;
+}
+.commandBar .exitLink {
+  display: inline-flex;
+  gap: 6px;
+  padding: 8px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+.historyActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-inline-end: 8px;
+  margin-inline-end: 1px;
+  border-inline-end: 1px solid var(--ui-border);
+}
+.documentIdentity {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+.titleField {
+  display: block;
+  max-width: 480px;
+}
+.titleField input {
+  padding: 3px 5px;
+  margin-inline-start: -5px;
+  border-radius: 5px;
+  text-align: left;
+  font-size: 15px;
+  line-height: 1.4;
+  background: transparent;
+}
+.documentState {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+.documentState .saveStatus {
+  display: inline-flex;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 550;
+}
+.publicationState {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+}
+.commandBar .publishButton {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-color: var(--ui-border-strong) !important;
+  color: var(--ui-text) !important;
+  background: var(--ui-surface) !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+.commandBar .shareButton {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.commandBar .presentButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 9px;
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
+  text-decoration: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+.presentButton:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+.commandBar .presentButton:disabled {
+  opacity: 0.45;
+}
+.workspace {
+  grid-template-columns: 238px minmax(0, 1fr) 310px;
+  height: calc(100dvh - var(--presentation-command-height, 76px));
+  min-height: 0;
+}
+.workspace.mapClosed {
+  grid-template-columns: 0 minmax(0, 1fr) 310px;
+}
+.workspace.inspectorClosed {
+  grid-template-columns: 238px minmax(0, 1fr) 0;
+}
+.workspace.mapClosed.inspectorClosed {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+.map {
+  background: var(--ui-surface-soft);
+}
+.mapHeader {
+  padding: 16px 14px 10px;
+  border-bottom: 0;
+}
+.mapHeader .eyebrow {
+  font-size: 13px;
+  font-weight: 750;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.mapHeader strong {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ui-text-muted);
+  font-weight: 500;
+}
+.blockList {
+  padding: 8px 11px 16px;
+  gap: 12px;
+}
+.filmstripItem {
+  position: relative;
+}
+.blockButton,
+.blockActive {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  background: var(--ui-surface);
+}
+.blockButton:hover {
+  background: var(--ui-surface);
+  border-color: var(--ui-border-strong);
+}
+.blockActive {
+  border: 2px solid var(--ui-accent);
+  padding: 7px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  box-shadow: 0 0 0 2px var(--ui-canvas-glow);
+}
+.thumbnailSpace {
+  grid-column: 1/-1;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16/9;
+  margin-bottom: 4px;
+  pointer-events: none;
+}
+.blockNumber {
+  grid-row: 2;
+  align-self: start;
+  margin-top: 3px;
+  width: 21px;
+  height: 21px;
+  font-size: 10px;
+  border-radius: 5px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-muted);
+}
+.blockText {
+  grid-row: 2;
+  min-width: 0;
+}
+.blockText small {
+  color: var(--ui-text-muted);
+  font-size: 9px;
+  font-weight: 500;
+}
+.blockText strong {
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.blockButton > :is(.hiddenBadge, .issueBadge),
+.blockActive > :is(.hiddenBadge, .issueBadge) {
+  grid-row: 2;
+}
+.addActions {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  padding: 12px;
+  background: var(--ui-surface-soft);
+  border-top: 1px solid var(--ui-border);
+}
+.addActions .newSlideButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
+  font-size: 12px;
+}
+.insertMenu > summary {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 11px;
+}
+.insertMenu > div {
+  inset: auto 0 calc(100% + 8px);
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
+  max-height: min(440px, calc(100dvh - 200px));
+}
+.canvasArea {
+  min-width: 0;
+  padding: 16px 22px 40px;
+  background-color: var(--ui-canvas);
+  background-image: radial-gradient(var(--ui-border) 0.65px, transparent 0.65px);
+  background-size: 18px 18px;
+}
+.compactCommands {
+  display: none !important;
+}
+.canvasToolbar {
+  gap: 5px;
+  padding: 7px 8px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+.canvasToolbar button {
+  min-height: 34px;
+  padding: 6px 9px;
+  border-color: transparent;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  background: transparent;
+}
+.canvasToolbar button:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.slidePosition {
+  margin-inline-end: auto;
+  padding: 4px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.slideCanvas {
+  margin-inline: auto;
+  max-width: 1200px;
+}
+.slideIdeas {
+  margin-top: 20px;
+}
+.slideIdeas > summary {
+  font-size: 12px;
+  background: var(--ui-surface);
+}
+.slideIdeas > div {
+  position: static;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  margin-top: 8px;
+  box-shadow: none;
+  padding: 12px;
+}
+.inspector {
+  border-left: 1px solid var(--ui-border);
+  border-right: 0;
+  background: var(--ui-surface);
+}
+.inspectorHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 5px;
+  font-size: 12px;
+}
+.inspectorHeading button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ui-text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 22px;
+}
+.inspectorHeading button:hover {
+  background: var(--ui-surface-hover);
+}
+.inspectorTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 5px 10px 10px;
+  background: var(--ui-surface);
+}
+.inspectorTab,
+.inspectorTabActive {
+  min-height: 34px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.inspectorTabActive {
+  color: var(--ui-text-strong);
+  background: var(--ui-surface-hover);
+  box-shadow: inset 0 -2px var(--ui-accent);
+}
+.inspectorBody {
+  padding: 12px;
+}
+.nativeInspectorHost {
+  min-width: 0;
+}
+.nativeInspectorHost[hidden] {
+  display: none;
+}
+.drawerBackdrop {
+  position: fixed;
+  z-index: 25;
+  inset: var(--presentation-command-height, 76px) 0 0;
+  border: 0;
+  background: rgb(15 23 42 / 20%);
+  cursor: pointer;
+}
+@container (max-width: 1180px) {
+  .commandBar {
+    gap: 10px;
+    padding-inline: 12px;
+  }
+  .commandActions {
+    gap: 4px;
+  }
+  .exitLabel {
+    display: none;
+  }
+  .workspace {
+    grid-template-columns: 210px minmax(0, 1fr) 290px;
+  }
+  .workspace.mapClosed {
+    grid-template-columns: 0 minmax(0, 1fr) 290px;
+  }
+  .workspace.inspectorClosed {
+    grid-template-columns: 210px minmax(0, 1fr) 0;
+  }
+  .blockList {
+    padding-inline: 9px;
+  }
+}
+@container (max-width: 920px) {
+  .commandBar {
+    display: grid;
+    position: sticky;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 7px 12px;
+    padding: 8px 12px;
+  }
+  .documentIdentity {
+    padding-inline-end: 43px;
+  }
+  .commandStart {
+    align-self: start;
+  }
+  .commandActions {
+    grid-column: 1/-1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .historyActions {
+    margin-inline-end: auto;
+    padding-inline-end: 5px;
+    border: 0;
+  }
+  .titleField {
+    order: initial;
+  }
+  .titleField input {
+    font-size: 14px;
+  }
+  .documentState {
+    gap: 8px;
+  }
+  .publicationState {
+    font-size: 9px;
+  }
+  .moreActions {
+    position: absolute !important;
+    top: 8px;
+    right: 12px;
+  }
+  .workspace,
+  .workspace.mapClosed,
+  .workspace.inspectorClosed,
+  .workspace.mapClosed.inspectorClosed {
+    grid-template-columns: 0 minmax(0, 1fr) 0;
+    height: calc(100dvh - var(--presentation-command-height, 120px));
+  }
+  .map,
+  .inspector {
+    top: var(--presentation-command-height, 120px);
+    width: min(340px, 90cqw);
+  }
+  .canvasArea {
+    padding: 12px 12px 28px;
+  }
+  .saveStatus {
+    display: inline-flex;
+  }
+  .exitLabel {
+    display: none;
+  }
+  .canvasToolbar {
+    gap: 3px;
+    margin-top: 4px;
+  }
+  .canvasToolbar button {
+    min-height: 40px;
+    font-size: 10px;
+  }
+  .slidePosition {
+    flex-basis: 100%;
+  }
+}
+@container (max-width: 420px) {
+  .commandBar {
+    padding-inline: 8px;
+    gap: 7px;
+  }
+  .commandBar .iconButton {
+    min-width: 36px;
+    width: 36px;
+  }
+  .commandActions {
+    gap: 4px;
+  }
+  .commandBar .presentButton,
+  .commandBar .publishButton,
+  .commandBar .shareButton {
+    padding-inline: 9px;
+  }
 }

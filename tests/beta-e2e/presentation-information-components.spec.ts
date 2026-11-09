@@ -10,6 +10,9 @@ import type {
 } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
+  selectE01Object,
+  openE01Inspector,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -89,10 +92,7 @@ function chartNode(draft: PresentationDraft): ChartNode {
 }
 
 async function selectObject(page: Page, label: string) {
-  await page
-    .getByRole("group", { name: "Slide objects · reading order", exact: true })
-    .getByRole("button", { name: label, exact: true })
-    .click();
+  await selectE01Object(page, label);
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -257,6 +257,7 @@ for (const suffix of ["", " @mobile"]) {
     await expectInformation(stage);
     await expectNoHorizontalOverflow(page);
     await page.emulateMedia({ colorScheme: "dark" });
+    await openE01Inspector(page, "Layout");
     await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
     await expect(stage).toHaveCSS("background-color", "rgb(17, 27, 46)");
     await expect(stage.getByRole("table", { name: tableCaption, exact: true })).toHaveCSS(
@@ -264,8 +265,7 @@ for (const suffix of ["", " @mobile"]) {
       "rgb(246, 248, 255)",
     );
     if (!narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     // CSS zoom emulates document magnification; this is not physical-device evidence.
     testInfo.annotations.push({
@@ -294,8 +294,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(saved.schemaVersion).toBe(8);
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     await expectInformation(page.locator("[data-native-scene]"));
     expect((await readE01Record(page, record.id)).draft).toEqual(saved);

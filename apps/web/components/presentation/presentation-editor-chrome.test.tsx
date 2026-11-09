@@ -1,0 +1,360 @@
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import type * as ReactModule from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AUTH_CHANGE_EVENT } from "../../lib/api";
+import { createContentBlock, createQuestionBlock } from "../../lib/presentation-builder";
+import { createNativeContentBlock } from "../../lib/presentation-native-scene";
+import { ContentSlideView } from "./content-slide-view";
+import { EditorDisclosure, PresentationSlideThumbnail } from "./presentation-editor-chrome";
+
+const mocked = vi.hoisted(() => ({
+  hooks: null as null | { cursor: number; slots: unknown[]; effects: (() => void)[] },
+}));
+vi.mock("react", async (original) => {
+  const react = await original<typeof ReactModule>();
+  return {
+    ...react,
+    useRef: <T,>(initial: T) => {
+      if (!mocked.hooks) return react.useRef(initial);
+      const hooks = mocked.hooks;
+      const index = hooks.cursor++;
+      if (!(index in hooks.slots)) hooks.slots[index] = { current: initial };
+      return hooks.slots[index];
+    },
+    useState: <T,>(initial: T) => {
+      if (!mocked.hooks) return react.useState(initial);
+      const hooks = mocked.hooks;
+      const index = hooks.cursor++;
+      if (!(index in hooks.slots)) hooks.slots[index] = initial;
+      return [
+        hooks.slots[index],
+        (value: T) => {
+          hooks.slots[index] = value;
+        },
+      ];
+    },
+    useEffect: (callback: () => void | (() => void), dependencies: unknown[]) => {
+      if (!mocked.hooks) return react.useEffect(callback, dependencies);
+      const hooks = mocked.hooks;
+      const index = hooks.cursor++;
+      const previous = hooks.slots[index] as
+        { dependencies: unknown[]; cleanup?: () => void } | undefined;
+      if (previous && dependencies.every((value, i) => value === previous.dependencies[i])) return;
+      hooks.effects.push(() => {
+        previous?.cleanup?.();
+        hooks.slots[index] = { dependencies, cleanup: callback() };
+      });
+    },
+  };
+});
+
+function elements(node: ReactNode): ReactElement<Record<string, any>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement<Record<string, any>>(node)) return [];
+  return [node, ...elements(node.props.children as ReactNode)];
+}
+function hookHarness(component: () => ReactElement<Record<string, any>>, root: unknown) {
+  const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as (() => void)[] };
+  let tree: ReactElement<Record<string, any>>;
+  const render = () => {
+    hooks.cursor = 0;
+    mocked.hooks = hooks;
+    try {
+      tree = component();
+    } finally {
+      mocked.hooks = null;
+    }
+    tree.props.ref.current = root;
+    hooks.effects.splice(0).forEach((effect) => effect());
+    return tree;
+  };
+  return {
+    render,
+    tree: () => tree,
+    unmount: () =>
+      hooks.slots.forEach((slot) => (slot as { cleanup?: () => void } | null)?.cleanup?.()),
+  };
+}
+
+class FakeNode {}
+class FakeElement extends FakeNode {
+  modalAncestor = false;
+  buttonAncestor: FakeElement | null = null;
+  disabled = false;
+  focus = vi.fn();
+  closest = (selector: string) =>
+    selector === "button" ? this.buttonAncestor : this.modalAncestor ? this : null;
+}
+function disclosureHarness(children: ReactNode) {
+  const documentListeners = new Map<string, Set<(event: unknown) => void>>();
+  const windowListeners = new Map<string, Set<(event: unknown) => void>>();
+  const listen = (
+    registry: typeof documentListeners,
+    name: string,
+    callback: (event: unknown) => void,
+  ) => {
+    const callbacks = registry.get(name) ?? new Set();
+    callbacks.add(callback);
+    registry.set(name, callbacks);
+  };
+  const summary = { focus: vi.fn() };
+  const inside = new FakeElement();
+  const outside = new FakeElement();
+  const details = {
+    open: true,
+    contains: (target: unknown) => target === inside,
+    querySelector: () => summary,
+  };
+  let modalOpen = false;
+  vi.stubGlobal("Node", FakeNode);
+  vi.stubGlobal("Element", FakeElement);
+  vi.stubGlobal("document", {
+    querySelector: () => (modalOpen ? {} : null),
+    addEventListener: (name: string, callback: (event: unknown) => void) =>
+      listen(documentListeners, name, callback),
+    removeEventListener: (name: string, callback: (event: unknown) => void) =>
+      documentListeners.get(name)?.delete(callback),
+  });
+  vi.stubGlobal("window", {
+    addEventListener: (name: string, callback: (event: unknown) => void) =>
+      listen(windowListeners, name, callback),
+    removeEventListener: (name: string, callback: (event: unknown) => void) =>
+      windowListeners.get(name)?.delete(callback),
+  });
+  const harness = hookHarness(
+    () => EditorDisclosure({ label: "Share and deliver", children }),
+    details,
+  );
+  harness.render();
+  const keydown = (target = inside, key = "Escape") => {
+    const event = { key, target, preventDefault: vi.fn(), stopPropagation: vi.fn() };
+    harness.tree().props.onKeyDown(event);
+    return event;
+  };
+  return {
+    ...harness,
+    details,
+    summary,
+    inside,
+    keydown,
+    clickCapture: (target = inside) =>
+      harness.tree().props.onClickCapture({ target, currentTarget: details }),
+    setModal: (open: boolean) => {
+      modalOpen = open;
+    },
+    pointer: (target = outside) =>
+      documentListeners
+        .get("pointerdown")
+        ?.forEach((listener) => listener({ type: "pointerdown", target })),
+    authChange: () =>
+      windowListeners
+        .get(AUTH_CHANGE_EVENT)
+        ?.forEach((listener) => listener({ type: AUTH_CHANGE_EVENT })),
+    listeners: documentListeners,
+  };
+}
+
+afterEach(() => {
+  mocked.hooks = null;
+  vi.unstubAllGlobals();
+});
+
+describe("editor disclosure lifecycle", () => {
+  it("focuses a pointer-activated action before its dialog records the opener", () => {
+    let focused: unknown = null;
+    const recordOpener = vi.fn();
+    const child = <button onClick={() => recordOpener(focused)}>Assign reading</button>;
+    const disclosure = disclosureHarness(child);
+    disclosure.inside.buttonAncestor = disclosure.inside;
+    disclosure.inside.focus.mockImplementation(() => {
+      focused = disclosure.inside;
+    });
+    const icon = new FakeElement();
+    icon.buttonAncestor = disclosure.inside;
+    // Model Safari's pointer activation: the browser has not focused the clicked button.
+    disclosure.clickCapture(icon);
+    child.props.onClick();
+    expect(disclosure.inside.focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(recordOpener).toHaveBeenCalledWith(disclosure.inside);
+    expect(disclosure.details.open).toBe(true);
+    disclosure.unmount();
+  });
+
+  it("leaves native dialog buttons and disabled actions in control of their own focus", () => {
+    const disclosure = disclosureHarness(<button>Export</button>);
+    disclosure.inside.buttonAncestor = disclosure.inside;
+    disclosure.inside.modalAncestor = true;
+    disclosure.clickCapture();
+    expect(disclosure.inside.focus).not.toHaveBeenCalled();
+    disclosure.inside.modalAncestor = false;
+    disclosure.inside.disabled = true;
+    disclosure.clickCapture();
+    expect(disclosure.inside.focus).not.toHaveBeenCalled();
+    disclosure.unmount();
+  });
+
+  it("retains the pending operation child and exact retry receipt when closed and reopened", () => {
+    const receipt = { mutationId: "uncertain-share-operation", versionId: "published-version" };
+    const retry = vi.fn();
+    const child = <button onClick={() => retry(receipt)}>Retry link creation</button>;
+    const disclosure = disclosureHarness(child);
+    const body = () =>
+      elements(disclosure.tree()).find((element) => element.props.role === "group")!;
+    expect(body().props.children).toBe(child);
+    disclosure.pointer(disclosure.inside);
+    expect(disclosure.details.open).toBe(true);
+    disclosure.pointer();
+    expect(disclosure.details.open).toBe(false);
+    disclosure.render();
+    expect(body().props.children).toBe(child);
+    disclosure.details.open = true;
+    (body().props.children as typeof child).props.onClick();
+    disclosure.authChange();
+    expect(disclosure.details.open).toBe(false);
+    disclosure.render();
+    expect(body().props.children).toBe(child);
+    (body().props.children as typeof child).props.onClick();
+    expect(retry.mock.calls).toEqual([[receipt], [receipt]]);
+    expect(retry.mock.calls[0]![0]).toBe(retry.mock.calls[1]![0]);
+    disclosure.unmount();
+    expect(disclosure.listeners.get("pointerdown")?.size).toBe(0);
+  });
+
+  it("closes on Escape and restores focus to its summary while leaving other keys alone", () => {
+    const disclosure = disclosureHarness(<button>Share link</button>);
+    const arrow = disclosure.keydown(disclosure.inside, "ArrowRight");
+    expect(disclosure.details.open).toBe(true);
+    expect(arrow.preventDefault).not.toHaveBeenCalled();
+    const escape = disclosure.keydown();
+    expect(disclosure.details.open).toBe(false);
+    expect(escape.preventDefault).toHaveBeenCalledOnce();
+    expect(escape.stopPropagation).toHaveBeenCalledOnce();
+    expect(disclosure.summary.focus).toHaveBeenCalledOnce();
+    disclosure.keydown();
+    expect(disclosure.summary.focus).toHaveBeenCalledOnce();
+    disclosure.unmount();
+  });
+
+  it("lets an open native dialog own outside clicks and Escape without closing its disclosure", () => {
+    const disclosure = disclosureHarness(
+      <dialog open>
+        <button>Retry pending export</button>
+      </dialog>,
+    );
+    const dialogControl = new FakeElement();
+    dialogControl.modalAncestor = true;
+    disclosure.setModal(true);
+    disclosure.pointer();
+    expect(disclosure.details.open).toBe(true);
+    const escape = disclosure.keydown(dialogControl);
+    expect(disclosure.details.open).toBe(true);
+    expect(escape.preventDefault).not.toHaveBeenCalled();
+    expect(escape.stopPropagation).not.toHaveBeenCalled();
+    expect(disclosure.summary.focus).not.toHaveBeenCalled();
+    disclosure.setModal(false);
+    disclosure.pointer();
+    expect(disclosure.details.open).toBe(false);
+    disclosure.unmount();
+  });
+});
+
+describe("presentation filmstrip thumbnails", () => {
+  it("keeps ordinary legacy slides free of fake media and makes every thumbnail inert", () => {
+    const block = createContentBlock();
+    const harness = hookHarness(() => PresentationSlideThumbnail({ block, priority: true }), {
+      getBoundingClientRect: () => ({ width: 180 }),
+    });
+    vi.stubGlobal("ResizeObserver", undefined);
+    vi.stubGlobal("IntersectionObserver", undefined);
+    harness.render();
+    const slide = elements(harness.tree()).find((element) => element.type === ContentSlideView)!;
+    expect(slide.props.staticThumbnail).toBe(true);
+    expect(slide.props.variant).toBe("preview");
+    expect(slide.props.media).toBeUndefined();
+    expect(harness.tree().props.inert).toBe(true);
+    expect(harness.tree().props["aria-hidden"]).toBe("true");
+    const markup = renderToStaticMarkup(<PresentationSlideThumbnail block={block} priority />);
+    expect(markup).toContain('data-static-thumbnail="true"');
+    expect(markup).not.toContain("Image unavailable");
+    expect(markup).not.toContain("imagePlaceholder");
+    harness.unmount();
+  });
+
+  it("uses a local placeholder for private images without issuing media requests", () => {
+    const block = createNativeContentBlock();
+    const imageId = "11111111-1111-4111-8111-111111111111";
+    block.scene!.nodes.push({
+      id: "private-image",
+      type: "image",
+      mediaId: imageId,
+      altText: "Private reference",
+      frame: { x: 60, y: 35, width: 30, height: 40 },
+    });
+    block.scene!.readingOrder.push("private-image");
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const markup = renderToStaticMarkup(<PresentationSlideThumbnail block={block} priority />);
+    expect(markup).toContain('data-thumbnail-scene="true"');
+    expect(markup).toContain("imagePlaceholder");
+    expect(markup).not.toContain("<img");
+    expect(markup).not.toContain(imageId);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("mounts shared scene rendering only while observed visible and releases its observers", () => {
+    const block = createContentBlock();
+    const resizeDisconnect = vi.fn();
+    const visibilityDisconnect = vi.fn();
+    let show: (entries: { isIntersecting: boolean }[]) => void = () => {};
+    const observed = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = observed;
+        disconnect = resizeDisconnect;
+      },
+    );
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: typeof show) {
+          show = callback;
+        }
+        observe = observed;
+        disconnect = visibilityDisconnect;
+      },
+    );
+    const container = { getBoundingClientRect: () => ({ width: 192 }) };
+    const harness = hookHarness(() => PresentationSlideThumbnail({ block }), container);
+    harness.render();
+    const slides = () =>
+      elements(harness.tree()).filter((element) => element.type === ContentSlideView);
+    expect(slides()).toHaveLength(0);
+    expect(observed).toHaveBeenCalledWith(container);
+    show([{ isIntersecting: true }]);
+    harness.render();
+    expect(slides()).toHaveLength(1);
+    expect(
+      elements(harness.tree()).find((element) => element.props.style?.transform)?.props.style
+        .transform,
+    ).toBe("scale(0.2)");
+    show([{ isIntersecting: false }]);
+    harness.render();
+    expect(slides()).toHaveLength(0);
+    harness.unmount();
+    expect(resizeDisconnect).toHaveBeenCalledOnce();
+    expect(visibilityDisconnect).toHaveBeenCalledOnce();
+  });
+
+  it("renders a bounded activity summary rather than answer inputs or correctness", () => {
+    const block = createQuestionBlock();
+    block.question.prompt = "Choose a direction";
+    const markup = renderToStaticMarkup(<PresentationSlideThumbnail block={block} priority />);
+    expect(markup).toContain("Choose a direction");
+    expect(markup).toContain("Audience activity");
+    expect(markup).not.toContain("<input");
+    expect(markup).not.toContain("Correct answer");
+    expect(markup).toContain('inert=""');
+  });
+});

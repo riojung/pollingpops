@@ -101,13 +101,14 @@ async function fixture(page: Page, marked = false) {
 }
 async function closeDrawers(page: Page) {
   if ((page.viewportSize()?.width ?? 1280) > 920) return;
-  await expect(page.getByRole("button", { name: "Arrange space", exact: true })).toBeVisible();
+  await expect(page.locator('summary[aria-label="More options"]')).toBeVisible();
   for (const name of ["Hide inspector", "Collapse map"]) {
     const button = page.getByRole("button", { name, exact: true });
     if (await button.isVisible()) await button.click();
   }
 }
 async function openTranslation(page: Page, recover = false) {
+  await closeDrawers(page);
   if (recover)
     await page.getByRole("button", { name: "Resume text assistance", exact: true }).click();
   else {

@@ -11,6 +11,8 @@ import {
   type PresentationStageSnapshot,
 } from "../../packages/contracts/src/index.ts";
 import {
+  closeE01Overlays,
+  clickEditorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -54,7 +56,7 @@ function checkpoint(prompt: string): InteractiveQuestionBlockDraft {
 }
 
 async function openArrange(page: Page) {
-  await page.getByRole("button", { name: "Arrange space", exact: true }).click();
+  await clickEditorAction(page, "Arrange space");
   const dialog = page.getByRole("dialog", { name: "Arrange space", exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -137,7 +139,7 @@ async function createFixture(page: Page, info: TestInfo) {
     )
     .toBe(1600);
   await page.reload();
-  if (narrow) await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
+  if (narrow) await closeE01Overlays(page);
   arrange = await openArrange(page);
   await arrange
     .getByRole("combobox", { name: "Selected frame", exact: true })

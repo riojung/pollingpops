@@ -9,6 +9,7 @@ import {
   type InsertPresentationAssistanceProposals,
 } from "../../packages/contracts/src/index.ts";
 import {
+  clickNavigatorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -127,10 +128,7 @@ async function openAssistance(page: Page) {
     const hideInspector = page.getByRole("button", { name: "Hide inspector", exact: true });
     if ((page.viewportSize()?.width ?? 1280) <= 700 && (await hideInspector.isVisible()))
       await hideInspector.click();
-    const open = page.getByRole("button", { name: "Outline to slides", exact: true });
-    const map = page.getByRole("button", { name: "Open map", exact: true });
-    if (!(await open.isVisible()) && (await map.isVisible())) await map.click();
-    await open.click();
+    await clickNavigatorAction(page, "Outline to slides");
   }
   await expect(dialog).toBeVisible();
   return dialog;
@@ -471,7 +469,7 @@ for (const suffix of ["", " @mobile"]) {
     });
 
     await page.goto("/create/presentation");
-    await page.locator('a[href="/create/presentation?start=outline"]').click();
+    await page.getByRole("link", { name: "Optional outline assistance", exact: true }).click();
     const input = page.getByRole("textbox", { name: "Presentation title", exact: true });
     await input.fill(title);
     await page.setViewportSize({ width: 320, height: 760 });

@@ -1,3 +1,4 @@
+import { openE01Inspector, closeE01Overlays } from "./presentation-e01-support";
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -148,7 +149,7 @@ for (const suffix of ["", " @mobile"]) {
       .fill(
         "Review the evidence, identify the main signal, and explain how it informs the next decision.",
       );
-    await page.getByRole("tab", { name: "Media", exact: true }).click();
+    await openE01Inspector(page, "Media");
     await page.getByLabel("Image alternative text", { exact: true }).fill("Evidence diagram");
     await page.getByLabel("Instructional image", { exact: true }).setInputFiles({
       name: "evidence.png",
@@ -190,7 +191,7 @@ for (const suffix of ["", " @mobile"]) {
     }
 
     await expectImageClear(slide);
-    await page.getByRole("tab", { name: "Layout", exact: true }).click();
+    await openE01Inspector(page, "Layout");
     for (const layout of ["title", "title_body", "media", "quote", "section", "callout"]) {
       await page.getByRole("combobox", { name: "Structured layout" }).selectOption(layout);
       await expectImageClear(slide);
@@ -208,7 +209,7 @@ for (const suffix of ["", " @mobile"]) {
       .getByRole("button", { name: "Add text box", exact: true })
       .click();
     await canvas.getByLabel("Text box 2", { exact: true }).fill("Audience takeaway.");
-    await page.getByRole("tab", { name: "Layout", exact: true }).click();
+    await openE01Inspector(page, "Layout");
     for (const label of ["Text box 1", "Text box 2"]) {
       await page.getByRole("combobox", { name: "Selected text element" }).selectOption({ label });
       await page.getByRole("combobox", { name: "Position on slide" }).selectOption("bottom_right");
@@ -228,7 +229,7 @@ for (const suffix of ["", " @mobile"]) {
       .getByLabel("Selected block actions")
       .getByRole("button", { name: "Delete text box", exact: true })
       .click();
-    await page.getByRole("tab", { name: "Layout", exact: true }).click();
+    await openE01Inspector(page, "Layout");
     await page
       .getByRole("combobox", { name: "Selected text element" })
       .selectOption({ label: "Text box 1" });
@@ -250,9 +251,9 @@ for (const suffix of ["", " @mobile"]) {
     await expectImageClear(slide);
 
     // Removing a newly attached image restores the wide starter; Undo restores both together.
-    await page.getByRole("tab", { name: "Layout", exact: true }).click();
+    await openE01Inspector(page, "Layout");
     await page.getByRole("combobox", { name: "Structured layout" }).selectOption("title_body");
-    await page.getByRole("tab", { name: "Media", exact: true }).click();
+    await openE01Inspector(page, "Media");
     await page.getByRole("button", { name: "Remove image", exact: true }).click();
     await expect(slide.getByRole("img")).toHaveCount(0);
     expect(
@@ -262,8 +263,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expectImageClear(slide);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole("button", { name: "Hide inspector" }).click();
-    await page.getByRole("button", { name: "Collapse map" }).click();
+    await closeE01Overlays(page);
     await expectImageClear(slide);
     await expectReadableSlide(slide, true);
   });
@@ -285,7 +285,7 @@ test("authors can edit, save, publish, and deliver the same slide arrangement", 
   await title.fill("Training and recovery");
   await canvas.getByLabel("Text box 1", { exact: true }).fill("Review the evidence together.");
   await expectAccessibleSlide(page);
-  await page.getByRole("tab", { name: "Layout", exact: true }).click();
+  await openE01Inspector(page, "Layout");
   for (const layout of ["title", "media", "quote", "section", "callout", "title_body"]) {
     await page.getByRole("combobox", { name: "Structured layout" }).selectOption(layout);
     await expectAccessibleSlide(page);
@@ -296,7 +296,7 @@ test("authors can edit, save, publish, and deliver the same slide arrangement", 
     .click();
   await canvas.getByLabel("Text box 2", { exact: true }).fill("Set the context before responding.");
 
-  await page.getByRole("tab", { name: "Layout", exact: true }).click();
+  await openE01Inspector(page, "Layout");
   await page.getByRole("combobox", { name: "Structured layout" }).selectOption("section");
   await page.getByRole("combobox", { name: "Selected text element" }).selectOption({
     label: "Text box 2",
@@ -323,7 +323,7 @@ test("authors can edit, save, publish, and deliver the same slide arrangement", 
   await expect(canvas.getByLabel("Text box 3", { exact: true })).toHaveCount(0);
 
   const titleHandle = canvas.getByRole("button", { name: /Move Slide title/ });
-  await page.getByRole("tab", { name: "Layout", exact: true }).click();
+  await openE01Inspector(page, "Layout");
   await page
     .getByRole("combobox", { name: "Selected text element" })
     .selectOption({ label: "Slide title" });
@@ -643,8 +643,7 @@ test("slide regions reflow into one reading column on narrow screens @mobile", a
   });
   expect(saved.status()).toBe(200);
   await page.goto(`/presentation/${presentationId}`);
-  await page.getByRole("button", { name: "Hide inspector" }).click();
-  await page.getByRole("button", { name: "Collapse map" }).click();
+  await closeE01Overlays(page);
   const slide = page.locator("#presentation-canvas [data-layout]");
   await expect(slide).toBeVisible();
   await expect

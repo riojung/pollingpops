@@ -1,3 +1,12 @@
+import {
+  openE01Navigator,
+  openE01Inspector,
+  selectE01Object,
+  clickNativeInsert,
+  clickNavigatorAction,
+  selectE01Block,
+  closeE01Overlays,
+} from "./presentation-e01-support";
 import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
@@ -122,10 +131,11 @@ test("retains a scanned native image when history fills its original slide durin
   };
   try {
     await page.goto(`/presentation/${record.id}`);
-    await page.getByRole("button", { name: "Add native shape", exact: true }).click();
+    await clickNativeInsert(page, "Add native shape");
     await page.getByLabel("Shape label", { exact: true }).fill("Capacity marker");
     await page.getByRole("button", { name: "Delete object", exact: true }).click();
     await expect.poll(() => targetNodes().length).toBe(49);
+    await openE01Inspector(page, "Media");
     await page
       .getByLabel("New image description", { exact: true })
       .fill("Uploaded reference image");
@@ -142,10 +152,7 @@ test("retains a scanned native image when history fills its original slide durin
     await expect.poll(() => targetNodes().length).toBe(50);
     releaseUpload();
     await expect.poll(() => scanRequests).toBe(1);
-    await page
-      .getByRole("complementary", { name: "Presentation map", exact: true })
-      .getByRole("button", { name: /Other slide/ })
-      .click();
+    await selectE01Block(page, "Other slide", false);
     for (const name of ["Add native text", "Add native shape", "Add native connector"]) {
       await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
     }
@@ -153,7 +160,9 @@ test("retains a scanned native image when history fills its original slide durin
     const pending = page.getByRole("status", { name: "Uploaded image attachment", exact: true });
     await expect(pending).toContainText("waiting for space on its original slide");
     expect(targetNodes().filter((node) => node.type === "image")).toEqual([]);
+    await openE01Inspector(page, "Content");
     await expect(page.getByLabel("Native slide title", { exact: true })).toBeEnabled();
+    await openE01Inspector(page, "Media");
     await expect(page.getByLabel("Add native image", { exact: true })).toBeDisabled();
     // Redo the removal while viewing a different slide. Reuse the completed scan.
     await page.getByRole("button", { name: "Redo", exact: true }).click();
@@ -253,9 +262,9 @@ test("dense native slides keep mobile map and inspector controls above their nod
   await page.goto(`/presentation/${presentation.id}`);
   const layeredText = page.locator(`[data-native-scene] [data-node-id="${highNode.id}"]`);
   await expect(layeredText).toHaveCSS("z-index", "31");
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-  // Design and slide actions now precede the canvas. Put the dense node behind the fixed
-  // drawers explicitly so this remains a test of overlapping layers and pointer access.
+  await closeE01Overlays(page);
+  await openE01Navigator(page);
+  // Position the dense node behind each fixed drawer to exercise pointer access above scene layers.
   await layeredText.scrollIntoViewIfNeeded();
   const slide = page
     .getByRole("complementary", { name: "Presentation map", exact: true })
@@ -268,7 +277,7 @@ test("dense native slides keep mobile map and inspector controls above their nod
     .toEqual({ overlapsSceneNode: true, receivesPointer: true });
   await slide.click();
   await page.getByRole("button", { name: "Collapse map", exact: true }).click();
-  await page.getByRole("button", { name: "Open inspector", exact: true }).click();
+  await openE01Inspector(page, "Notes");
   const notes = page.getByLabel("Speaker notes", { exact: true });
   await expect
     .poll(
@@ -317,30 +326,32 @@ for (const suffix of ["", " @mobile"]) {
     });
     expect(cleared.status()).toBe(200);
     await page.goto(`/presentation/${presentation.id}`);
-    // On phones, the existing map and inspector are overlays. Open one at a time.
-    if (narrow) await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-    await page.getByRole("button", { name: "Add native slide", exact: true }).click();
-    if (narrow) await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+    await clickNavigatorAction(page, "Blank slide");
+    await openE01Inspector(page, "Content");
     await page.getByLabel("Native slide title", { exact: true }).fill(firstTitle);
-    await page.getByRole("button", { name: "Add native text", exact: true }).click();
+    await clickNativeInsert(page, "Add native text");
     await page.getByLabel("Node text", { exact: true }).fill(body);
-    await page.getByRole("button", { name: "Add native shape", exact: true }).click();
+    await clickNativeInsert(page, "Add native shape");
     await page.getByLabel("Shape label", { exact: true }).fill("Decision owner");
+    await openE01Inspector(page, "Layout");
     await page.getByLabel("Object width (%)", { exact: true }).fill("24");
     await page.getByLabel("Object height (%)", { exact: true }).fill("18");
     await page.getByLabel("Object x (%)", { exact: true }).fill("64");
     await page.getByLabel("Object y (%)", { exact: true }).fill("60");
+    if (narrow) await closeE01Overlays(page);
     await page
       .getByRole("button", { name: "Move Decision owner. Use arrow keys to nudge.", exact: true })
       .press("ArrowRight");
+    await openE01Inspector(page, "Layout");
     await expect(page.getByLabel("Object x (%)", { exact: true })).toHaveValue("65");
-    await page.getByRole("button", { name: "Add native connector", exact: true }).click();
+    await clickNativeInsert(page, "Add native connector");
     await page.getByLabel("Connector label", { exact: true }).fill("Decision path");
     await page
       .getByRole("combobox", { name: "Connect to", exact: true })
       .selectOption({ label: "Decision owner" }, { timeout: 10_000 });
+    await openE01Inspector(page, "Access");
     await page.getByRole("button", { name: "Read object earlier", exact: true }).click();
-    if (narrow) await page.getByRole("button", { name: "Open inspector", exact: true }).click();
+    await openE01Inspector(page, "Notes");
     await page.getByLabel("Speaker notes", { exact: true }).fill(privateNote);
     if (narrow) await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
     await expect
@@ -371,25 +382,30 @@ for (const suffix of ["", " @mobile"]) {
 
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
+    await selectE01Object(page, /^1\./);
     await expect(page.getByLabel("Native slide title", { exact: true })).toHaveValue(firstTitle);
     await expect(page.getByRole("heading", { name: firstTitle, exact: true })).toHaveCSS(
       "text-align",
       "left",
     );
     await expect(page.getByRole("img", { name: "Decision owner", exact: true })).toBeVisible();
+    await openE01Inspector(page, "Notes");
     await expect(page.getByLabel("Speaker notes", { exact: true })).toHaveValue(privateNote);
+    if (narrow) await closeE01Overlays(page);
     await page.screenshot({ path: testInfo.outputPath("native-editor.png"), fullPage: true });
     await page.getByRole("button", { name: "Duplicate", exact: true }).click();
+    await selectE01Object(page, /^1\./);
     await page.getByLabel("Native slide title", { exact: true }).fill(secondTitle);
     await expect
       .poll(async () => {
         const block = (await savedDraft(page, presentation.id)).blocks[1];
-        return block?.kind === "content"
-          ? block.scene?.nodes.find((node) => node.type === "text" && node.role === "title")?.text
-          : "";
+        const title =
+          block?.kind === "content"
+            ? block.scene?.nodes.find((node) => node.type === "text" && node.role === "title")
+            : null;
+        return title?.type === "text" ? title.text : "";
       })
       .toBe(secondTitle);
     const copied = (await savedDraft(page, presentation.id)).blocks[1];
@@ -404,6 +420,7 @@ for (const suffix of ["", " @mobile"]) {
       }
     }
     await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await selectE01Object(page, /^1\./);
     await expect(page.getByLabel("Native slide title", { exact: true })).toHaveValue(firstTitle);
     await page.getByRole("button", { name: "Redo", exact: true }).click();
     await expect(page.getByLabel("Native slide title", { exact: true })).toHaveValue(secondTitle);
@@ -412,6 +429,7 @@ for (const suffix of ["", " @mobile"]) {
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === `/v1/presentations/${presentation.id}/publish`,
     );
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     expect((await publishing).status()).toBe(200);
 

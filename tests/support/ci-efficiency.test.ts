@@ -98,6 +98,19 @@ describe("CI efficiency without coverage bypasses", () => {
       await readFile(new URL("../../turbo.json", import.meta.url), "utf8"),
     ) as { tasks: { test: { env?: string[] } } };
     expect(turbo.tasks.test.env).toContain("VITEST_MAX_WORKERS");
+    const startup = ci.jobs.check.steps.findIndex(
+      (step) => step.run === "pnpm check:server-startup",
+    );
+    expect(startup).toBeGreaterThan(
+      ci.jobs.check.steps.findIndex((step) => step.run === "pnpm build"),
+    );
+    const rootPackage = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    ) as { scripts: Record<string, string> };
+    expect(rootPackage.scripts.check).toMatch(/pnpm build && pnpm check:server-startup$/);
+    expect(rootPackage.scripts["check:server-startup"]).toBe(
+      "node scripts/build/server-startup.mjs",
+    );
     const postgres = ci.jobs["postgres-migration"].steps;
     expect(ci.jobs["postgres-migration"].env?.VITEST_MAX_WORKERS).toBe("1");
     expect(

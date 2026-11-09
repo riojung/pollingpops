@@ -10,6 +10,7 @@ import {
   type PresentationDraft,
 } from "../../packages/contracts/src/index.ts";
 import {
+  clickEditorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -98,7 +99,7 @@ for (const suffix of ["", " @mobile"]) {
     const frozenVersionId = (await published.json()).version.id as string;
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
-    await page.getByRole("button", { name: "Assign practice", exact: true }).click();
+    await clickEditorAction(page, "Assign practice");
     const dialog = page.getByRole("dialog", { name: "Assign self-paced practice", exact: true });
     await dialog
       .getByRole("combobox", { name: "Practice deadline", exact: true })
@@ -415,7 +416,7 @@ for (const suffix of ["", " @mobile"]) {
       ).status(),
     ).toBe(200);
     await enterE01Editor(page, record.id, (info.project.use.viewport?.width ?? 1280) <= 700);
-    await page.getByRole("button", { name: "Assign practice", exact: true }).click();
+    await clickEditorAction(page, "Assign practice");
     const dialog = page.getByRole("dialog", { name: "Assign self-paced practice", exact: true });
     const rejectedResponse = page.waitForResponse(
       (response) =>
@@ -463,7 +464,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(published.status()).toBe(200);
     const versionId = (await published.json()).version.id as string;
     await enterE01Editor(page, record.id, (info.project.use.viewport?.width ?? 1280) <= 700);
-    await page.getByRole("button", { name: "Assign practice", exact: true }).click();
+    await clickEditorAction(page, "Assign practice");
     const acceptedResponse = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&

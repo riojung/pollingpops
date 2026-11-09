@@ -8,6 +8,38 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation creator UX foundation November 8, 2026
+
+The source on `codex/presentation-ux-foundation` puts blank creation and visual browsing first.
+All 21 original templates have real slide thumbnails, use-case/search filters, clear/no-results
+states and content/activity counts. Source proposals remain distinct from visual import and
+optional outline assistance. The editor uses a thumbnail filmstrip, central stage, contextual
+inspector and command bar with visible save/publication state and explicit delivery actions.
+Existing creation intents, gates, allowances, document/scene formats, retry recovery and immutable
+publication retain their meanings; no provider, service or paid design dependency is added.
+
+The full repository check passes 6,910 tests and all builds, including a compiled-server
+startup/configuration smoke that catches the practice/sharing contracts import cycle fixed in
+this branch. Initial browser qualification passed 68 selected workflows across desktop Chromium/Firefox
+and phone Chromium/WebKit, including actual exports, automated accessibility, focus, 320px layout
+and 200% zoom. Standard opt-in integration skips remain. Manual accessibility, physical-device,
+observed broad-creator, hosted/capacity/cost and release qualification remain open. The
+[current E00–E14 gap map and phased UX track](presentation-implementation-plan-2026-11.md#ux-upgrade-track-and-current-gaps)
+preserve the broad-creator and lowest sustainable subscription priorities; implemented slices
+below do not imply competitor parity. Source remains undeployed.
+
+The November 9 review follow-up passes 14 additional Recovery Pack browser cases across all four
+profiles. It migrates the remaining import/reference journeys to the new disclosures and fixes
+the inert ancestor that prevented recovery of lost update/undo acknowledgements. Ordinary edits
+remain paused, competing operations still block the recovery panel, and exact retry identities
+remain unchanged. Transport-driven apply/undo regressions are included in the repository count.
+
+The PR review follow-up also retains a newly inserted video node's selection while the parent
+scene updates. Deferred-render/rejection tests and 36 selected composition, information,
+accessibility and AI-assistance browser cases pass. Remaining journey selectors now follow the
+new launcher and inspector, and pending discussion recovery uses its reachable banner. These are
+selected local qualifications, not a claim that the full hosted CI matrix is green.
+
 ### Presentation self-paced choice practice November 8, 2026
 
 The source on `codex/presentation-self-paced-practice` adds **Assign practice** for an immutable

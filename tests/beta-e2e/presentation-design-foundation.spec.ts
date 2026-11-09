@@ -9,6 +9,8 @@ import type {
 } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
+  openE01Inspector,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -168,6 +170,7 @@ for (const suffix of ["", " @mobile"]) {
     await expect(originalHeading).toHaveCSS("color", legacyHeading.color);
     await expect(originalHeading).toHaveCSS("font-family", legacyHeading.font);
     await expect(originalHeading).toHaveCSS("max-width", legacyHeading.maxWidth);
+    await openE01Inspector(page, "Layout");
     await page.getByRole("button", { name: "Enable slide design", exact: true }).click();
     await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
     await page.getByRole("combobox", { name: "Slide font", exact: true }).selectOption("serif");
@@ -233,13 +236,15 @@ for (const suffix of ["", " @mobile"]) {
     await expectDesign(page.locator("[data-native-scene]"));
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath("design-editor.png"), fullPage: true });
-    if (!narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
-    }
+    if (narrow) await closeE01Overlays(page);
     await page.evaluate(() => {
       document.documentElement.style.zoom = "2";
     });
+    await expect(page.locator("#presentation-slide-navigator")).toBeHidden();
+    await expect(page.locator("#presentation-object-inspector")).toBeHidden();
+    await expect
+      .poll(async () => (await page.locator("[data-native-scene]").boundingBox())?.width ?? 0)
+      .toBeGreaterThan((page.viewportSize()?.width ?? 1280) * 0.75);
     await expectDesign(page.locator("[data-native-scene]"));
     await expectRichText(page.locator("[data-native-scene]"), fixture.bodyId);
     await expectNoHorizontalOverflow(page);
@@ -258,9 +263,9 @@ for (const suffix of ["", " @mobile"]) {
     ).toBeVisible();
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
+    await openE01Inspector(page, "Layout");
     await expect(page.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveValue(
       "midnight",
     );
@@ -271,6 +276,7 @@ for (const suffix of ["", " @mobile"]) {
       "compact",
     );
     expect((await readE01Record(page, record.id)).draft).toEqual(expectedApplied);
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const preview = page.getByRole("dialog", { name: "Presentation preview", exact: true });
     await expectDesign(preview.locator("[data-native-scene]"));
@@ -407,6 +413,7 @@ test("native arrangement aligns, distributes and layers without changing reading
   const record = await createE01Deck(page, [slide], 4);
   const original = nativeSlide(record.draft).scene;
   await enterE01Editor(page, record.id, false);
+  await openE01Inspector(page, "Access");
   const objects = page.getByRole("group", { name: "Slide objects · reading order", exact: true });
   await objects.getByRole("button", { name: "2. First evidence", exact: true }).click();
   await objects
@@ -415,7 +422,13 @@ test("native arrangement aligns, distributes and layers without changing reading
   await objects
     .getByRole("checkbox", { name: "Include Last evidence in selection", exact: true })
     .check();
-  await expect(page.getByText("3 objects selected", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: /^3 objects selected$/ })
+      .first(),
+  ).toBeVisible();
+  await openE01Inspector(page, "Layout");
   await page.getByRole("button", { name: "Align top", exact: true }).click();
   await expect
     .poll(async () => {

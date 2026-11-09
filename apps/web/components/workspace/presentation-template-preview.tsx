@@ -1,21 +1,53 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PresentationDraft } from "@openround/contracts";
+import type { ContentSlideDraft, PresentationDraft } from "@openround/contracts";
 import {
+  isNativePresentationTemplateId,
   nativePresentationTemplateThumbnail,
-  type NativePresentationTemplateId,
 } from "../../lib/presentation-native-templates";
+import {
+  legacyPresentationTemplates,
+  type PresentationTemplateId,
+} from "../../lib/presentation-templates";
 import { ContentSlideView } from "../presentation/content-slide-view";
 import styles from "./presentation-template-preview.module.css";
 
+function templateThumbnail(templateId: PresentationTemplateId): ContentSlideDraft | undefined {
+  if (isNativePresentationTemplateId(templateId))
+    return nativePresentationTemplateThumbnail(templateId);
+  const templateIndex = legacyPresentationTemplates.findIndex(
+    (template) => template.id === templateId,
+  );
+  const opening = legacyPresentationTemplates[templateIndex]?.blocks.find(
+    (block) => block.kind === "content",
+  );
+  if (!opening || opening.kind !== "content") return undefined;
+  // Thumbnail IDs are stable across server rendering and hydration. The first
+  // content slide uses the same title/body layout as the instantiated template.
+  const id = (offset: number) =>
+    `00000000-0000-4000-8000-${((templateIndex + 1) * 100 + offset).toString(16).padStart(12, "0")}`;
+  return {
+    id: id(0),
+    kind: "content",
+    layout: "title_body",
+    textElements: [
+      { id: id(1), role: "title", text: opening.title, region: "middle_center", order: 0 },
+      { id: id(2), role: "body", text: opening.body, region: "middle_center", order: 1 },
+    ],
+    mediaId: null,
+    mediaAlt: null,
+    speakerNotes: opening.notes,
+  };
+}
+
 /** A real shared-renderer first slide, scaled to a stable thumbnail size. */
-export function NativePresentationTemplateThumbnail({
+export function PresentationTemplateThumbnail({
   templateId,
 }: {
-  templateId: NativePresentationTemplateId;
+  templateId: PresentationTemplateId;
 }) {
-  const block = useMemo(() => nativePresentationTemplateThumbnail(templateId), [templateId]);
+  const block = useMemo(() => templateThumbnail(templateId), [templateId]);
   const container = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
   useEffect(() => {
@@ -33,10 +65,14 @@ export function NativePresentationTemplateThumbnail({
       ref={container}
       className={styles.thumbnail}
       aria-hidden="true"
-      data-native-template-thumbnail={templateId}
+      inert
+      data-template-thumbnail={templateId}
+      data-native-template-thumbnail={
+        isNativePresentationTemplateId(templateId) ? templateId : undefined
+      }
     >
       <div className={styles.thumbnailScene} style={{ transform: `scale(${width / 960})` }}>
-        <ContentSlideView block={block} variant="preview" />
+        {block ? <ContentSlideView block={block} variant="preview" staticThumbnail /> : null}
       </div>
     </div>
   );

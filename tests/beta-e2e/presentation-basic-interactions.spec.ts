@@ -6,6 +6,10 @@ import type {
   PresentationParticipantSnapshot,
 } from "../../packages/contracts/src/index.ts";
 import {
+  clickNativeInsert,
+  openE01Inspector,
+  selectE01Object,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -89,12 +93,12 @@ for (const suffix of ["", " @mobile"]) {
     const record = await createE01Deck(page, [slide]);
     const narrow = (testInfo.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
-    await page.getByRole("button", { name: "Add reveal panel", exact: true }).click();
+    await clickNativeInsert(page, "Add reveal panel");
     await page.getByRole("textbox", { name: "Reveal panel label", exact: true }).fill(revealLabel);
     await page
       .getByRole("textbox", { name: "Revealed audience content", exact: true })
       .fill(audienceBody);
-    await page.getByRole("button", { name: "Add link", exact: true }).click();
+    await clickNativeInsert(page, "Add link");
     await page.getByRole("textbox", { name: "Link label", exact: true }).fill(sourceLabel);
     const url = page.getByRole("textbox", { name: "Link URL", exact: true });
     await url.fill("javascript:alert(1)");
@@ -104,6 +108,7 @@ for (const suffix of ["", " @mobile"]) {
     ).toBeVisible();
     await url.fill(href);
     await expect(url).toHaveAttribute("aria-invalid", "false");
+    await openE01Inspector(page, "Access");
     await page.getByRole("button", { name: "Read object earlier", exact: true }).click();
     const editor = page.locator("[data-native-scene]");
     await expect(editor.getByRole("link", { name: new RegExp(sourceLabel) })).toHaveCount(0);
@@ -138,8 +143,11 @@ for (const suffix of ["", " @mobile"]) {
     expect(original.scene.readingOrder.indexOf(linkNode.id)).toBeLessThan(
       original.scene.readingOrder.indexOf(revealNode.id),
     );
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Duplicate", exact: true }).click();
+    await selectE01Object(page, /^1\./);
     await page.getByRole("textbox", { name: "Native slide title", exact: true }).fill(copyTitle);
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Move earlier", exact: true }).click();
     await expect
       .poll(async () => {
@@ -154,8 +162,7 @@ for (const suffix of ["", " @mobile"]) {
       .toBe(true);
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     const publishing = page.waitForResponse(
       (response) =>

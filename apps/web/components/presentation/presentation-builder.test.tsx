@@ -271,7 +271,7 @@ describe("Presentation Builder UI", () => {
       const button = markup.match(/<button[^>]*>Outline to slides<\/button>/)?.[0];
       expect(button).toBeDefined();
       expect(button?.includes('disabled=""')).toBe(!canEdit);
-      expect(markup).toContain("Add native slide");
+      expect(markup).toContain("New slide");
       expect(markup).not.toContain('aria-labelledby="presentation-assistance-title"');
     },
   );

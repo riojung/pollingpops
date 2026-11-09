@@ -121,6 +121,8 @@ interface NativeSceneViewProps {
   /** Session/credential/connection identity, excluding ordinary snapshot revisions. */
   interactionSourceKey?: string;
   interactionEditing?: boolean;
+  /** Inert fixed-layout artwork for a creator's filmstrip, including on phones. */
+  staticThumbnail?: boolean;
   interactionRuntime?: NativeSceneInteractionRuntime;
   selectedNodeId?: string;
   selectedNodeIds?: readonly string[];
@@ -166,6 +168,7 @@ function NativeSceneSurface({
   onNodePointerDown,
   interactionEditing = false,
   interactionRuntime,
+  staticThumbnail = false,
 }: NativeSceneViewProps) {
   const markerId = useId();
   const [outline, setOutline] = useState(false);
@@ -192,7 +195,7 @@ function NativeSceneSurface({
         } as CSSProperties)
       : undefined;
   const nodes = new Map(scene.nodes.map((node) => [node.id, node]));
-  const editing = Boolean(onSelect);
+  const editing = !staticThumbnail && Boolean(onSelect);
   function frameKey(event: KeyboardEvent<HTMLButtonElement>, node: FramedNode, resize: boolean) {
     const step = event.shiftKey ? 5 : 1;
     const dx = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
@@ -218,8 +221,13 @@ function NativeSceneSurface({
     );
   }
   return (
-    <div className={styles.sceneDelivery} style={designStyle}>
-      {hasInteractions && !editing && !interactionEditing ? (
+    <div
+      className={styles.sceneDelivery}
+      style={designStyle}
+      inert={staticThumbnail || undefined}
+      aria-hidden={staticThumbnail || undefined}
+    >
+      {hasInteractions && !editing && !interactionEditing && !staticThumbnail ? (
         <div className={styles.interactionToolbar} onKeyDown={containNativeInteractionKey}>
           <p>
             {sharedReveals
@@ -238,12 +246,16 @@ function NativeSceneSurface({
       ) : null}
       <article
         id={sceneId}
-        className={`${styles.stage}${outline ? ` ${styles.outline}` : ""}`}
+        className={`${styles.stage}${outline ? ` ${styles.outline}` : ""}${staticThumbnail ? ` ${styles.staticThumbnail}` : ""}`}
         data-native-outline={
-          hasInteractions && !editing && !interactionEditing ? outline : undefined
+          hasInteractions && !editing && !interactionEditing && !staticThumbnail
+            ? outline
+            : undefined
         }
         aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
-        data-native-scene="true"
+        data-native-scene={staticThumbnail ? undefined : "true"}
+        data-thumbnail-scene={staticThumbnail ? "true" : undefined}
+        data-static-thumbnail={staticThumbnail || undefined}
         data-native-theme={design?.theme}
         data-native-font={design?.font}
         data-native-spacing={design?.spacing}
@@ -298,7 +310,7 @@ function NativeSceneSurface({
           return (
             <div
               key={id}
-              className={`${styles.node} ${editing ? styles.editableNode : ""} ${(selectedNodeIds?.includes(id) ?? selectedNodeId === id) ? styles.selected : ""}`}
+              className={`${styles.node} ${editing ? styles.editableNode : ""} ${!staticThumbnail && (selectedNodeIds?.includes(id) ?? selectedNodeId === id) ? styles.selected : ""}`}
               style={style}
               data-node-id={id}
               data-node-type={node.type}
@@ -310,7 +322,7 @@ function NativeSceneSurface({
                   : undefined
               }
               onPointerDown={
-                onNodePointerDown
+                editing && onNodePointerDown
                   ? (event) => onNodePointerDown(event, id, false, false)
                   : undefined
               }
@@ -340,7 +352,7 @@ function NativeSceneSurface({
               {isNativeInteractionNode(node) ? (
                 <NativeSceneInteractionView
                   node={node}
-                  editing={editing || interactionEditing}
+                  editing={editing || interactionEditing || staticThumbnail}
                   runtime={interactionRuntime}
                 />
               ) : null}

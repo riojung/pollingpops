@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { createNativeContentBlock } from "../../lib/presentation-native-scene";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createNativeContentBlock,
+  createNativeRevealNode,
+} from "../../lib/presentation-native-scene";
 import { type PresentationScene } from "@openround/contracts";
 import { ContentSlideView } from "./content-slide-view";
 import { NativeSceneEditor } from "./native-scene-editor";
@@ -47,6 +50,58 @@ function nativeSceneFixture(): PresentationScene {
 }
 
 describe("production native scene rendering", () => {
+  it("renders static thumbnail artwork without live controls, selection handles or private notes", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 5;
+    const reveal = { ...createNativeRevealNode(), label: "More context", body: "Audience detail" };
+    scene.nodes.push(reveal, {
+      id: "image",
+      type: "image",
+      mediaId: "11111111-1111-4111-8111-111111111111",
+      altText: "Workflow evidence",
+      frame: { x: 70, y: 40, width: 20, height: 30 },
+    });
+    scene.readingOrder.push(reveal.id, "image");
+    const renderImage = vi.fn(() => <span>Image placeholder</span>);
+    const block = { ...createNativeContentBlock(), scene, speakerNotes: "PRIVATE thumbnail cue" };
+    const markup = renderToStaticMarkup(
+      <ContentSlideView
+        block={block}
+        variant="editor"
+        staticThumbnail
+        renderSceneImage={renderImage}
+      />,
+    );
+    expect(markup).toContain('data-static-thumbnail="true"');
+    expect(markup).toContain('data-thumbnail-scene="true"');
+    expect(markup).not.toContain("data-native-scene");
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain('inert=""');
+    expect(markup).toContain("Native workflow");
+    expect(markup).toContain("Image placeholder");
+    expect(renderImage).toHaveBeenCalledExactlyOnceWith(
+      "11111111-1111-4111-8111-111111111111",
+      "Workflow evidence",
+    );
+    expect(markup).not.toContain("PRIVATE thumbnail cue");
+    expect(markup).not.toContain("Show accessible outline");
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("<textarea");
+    const select = vi.fn();
+    const direct = renderToStaticMarkup(
+      <NativeSceneView scene={scene} staticThumbnail onSelect={select} selectedNodeId="body" />,
+    );
+    expect(direct).not.toContain("Move Start here");
+    expect(direct).not.toContain("<button");
+    expect(select).not.toHaveBeenCalled();
+    const ordinary = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    expect(ordinary).not.toContain("data-static-thumbnail");
+    expect(ordinary).toContain('data-native-scene="true"');
+    expect(ordinary).not.toContain("data-thumbnail-scene");
+    expect(ordinary).not.toContain('inert=""');
+    expect(ordinary).toContain("Show accessible outline");
+  });
+
   it.each(["preview", "live", "editor"] as const)(
     "retains each text object's language in %s, including rich text after formatting",
     (variant) => {

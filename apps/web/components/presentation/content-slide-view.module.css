@@ -333,13 +333,13 @@
 }
 
 @media (max-width: 700px) {
-  .slide {
+  .slide:not(.staticThumbnail) {
     aspect-ratio: auto;
     min-height: 0;
     overflow: visible;
   }
 
-  .regions {
+  .slide:not(.staticThumbnail) .regions {
     position: relative;
     inset: auto;
     display: flex;
@@ -348,7 +348,7 @@
     gap: 12px;
   }
 
-  .region {
+  .slide:not(.staticThumbnail) .region {
     position: static;
     inset: auto;
     display: flex;
@@ -358,7 +358,7 @@
     pointer-events: auto;
   }
 
-  .textElement {
+  .slide:not(.staticThumbnail) .textElement {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -367,40 +367,40 @@
     min-height: 0;
   }
 
-  .titleElement > h1,
-  .bodyElement > p {
+  .slide:not(.staticThumbnail) .titleElement > h1,
+  .slide:not(.staticThumbnail) .bodyElement > p {
     height: auto;
     min-height: 0;
     overflow: visible;
   }
 
-  .titleElement > h1,
-  .titleInput {
+  .slide:not(.staticThumbnail) .titleElement > h1,
+  .slide:not(.staticThumbnail) .titleInput {
     font-size: clamp(28px, 8vw, 42px);
   }
 
-  .bodyElement > p,
-  .bodyInput {
+  .slide:not(.staticThumbnail) .bodyElement > p,
+  .slide:not(.staticThumbnail) .bodyInput {
     font-size: clamp(17px, 4.5vw, 22px);
   }
 
-  .titleInput {
+  .slide:not(.staticThumbnail) .titleInput {
     height: auto;
     min-height: 2.5em;
     overflow-y: hidden;
   }
 
-  .bodyInput {
+  .slide:not(.staticThumbnail) .bodyInput {
     height: auto;
     min-height: 6em;
     overflow-y: hidden;
   }
 
-  .fitWarning {
+  .slide:not(.staticThumbnail) .fitWarning {
     display: none;
   }
 
-  .media {
+  .slide:not(.staticThumbnail) .media {
     position: relative;
     inset: auto !important;
     width: 100% !important;
@@ -408,11 +408,11 @@
     margin-top: 12px;
   }
 
-  .mediaBayGuide {
+  .slide:not(.staticThumbnail) .mediaBayGuide {
     display: none;
   }
 
-  .media > img {
+  .slide:not(.staticThumbnail) .media > img {
     width: auto;
     height: auto;
     max-width: 100%;
@@ -424,4 +424,8 @@
   .textElement {
     scroll-behavior: auto;
   }
+}
+
+.staticThumbnail {
+  pointer-events: none;
 }

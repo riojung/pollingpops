@@ -8,7 +8,9 @@ import type {
 import { signInBeta } from "./sign-in";
 import {
   createE01Deck,
+  closeE01Overlays,
   enterE01Editor,
+  openE01Inspector,
   readE01Record,
   type E01Record,
 } from "./presentation-e01-support";
@@ -53,9 +55,11 @@ async function expectAbove(control: Locator, canvas: Locator) {
   expect(controlBounds!.y + controlBounds!.height).toBeLessThanOrEqual(canvasBounds!.y + 1);
 }
 
-async function expectReadyDesign(page: Page) {
+async function expectReadyDesign(page: Page, narrow: boolean) {
   const canvas = page.locator("[data-native-scene]");
-  const panel = page.getByRole("group", { name: "Design", exact: true });
+  const inspector = await openE01Inspector(page, "Layout");
+  const panel = inspector.getByRole("group", { name: "Design", exact: true });
+  await expect(panel).toBeVisible();
   await expect(panel.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveValue(
     "paper",
   );
@@ -69,26 +73,39 @@ async function expectReadyDesign(page: Page) {
     0,
   );
   await expect(canvas).toHaveAttribute("data-native-theme", "paper");
-  await expectAbove(panel, canvas);
+  if (narrow) await closeE01Overlays(page);
+  await expect(canvas).toBeVisible();
+  const canvasBounds = await canvas.boundingBox();
+  expect(canvasBounds).not.toBeNull();
+  if (narrow) {
+    expect(canvasBounds!.width).toBeGreaterThan((page.viewportSize()?.width ?? 390) * 0.75);
+  } else {
+    const inspectorBounds = await inspector.boundingBox();
+    expect(inspectorBounds).not.toBeNull();
+    expect(canvasBounds!.width).toBeGreaterThan(inspectorBounds!.width);
+  }
 }
 
 async function expectSlideActionsAbove(page: Page) {
   const toolbar = page.locator('[aria-label="Selected block actions"]');
   const canvas = page.locator("[data-native-scene]");
-  for (const name of ["New slide", "Hide slide", "Duplicate", "Move earlier", "Move later"]) {
+  for (const name of ["Hide slide", "Duplicate", "Move earlier", "Move later"]) {
     await expectAbove(toolbar.getByRole("button", { name, exact: true }), canvas);
   }
   return toolbar;
 }
 
-async function collapseOverlays(page: Page, narrow: boolean) {
-  if (!narrow) return;
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+async function addSlideFromNavigator(page: Page, narrow: boolean) {
+  const open = page.getByRole("button", { name: "Open map", exact: true });
+  if (await open.isVisible()) await open.click();
+  const navigator = page.locator("#presentation-slide-navigator");
+  await expect(navigator).toBeVisible();
+  await navigator.getByRole("button", { name: "New slide", exact: true }).click();
+  if (narrow) await closeE01Overlays(page);
 }
 
 for (const suffix of ["", " @mobile"]) {
-  test(`blank and existing presentations expose native design and slide actions above the canvas${suffix}`, async ({
+  test(`blank and existing presentations expose contextual design and navigator slide creation${suffix}`, async ({
     page,
   }, testInfo) => {
     test.setTimeout(150_000);
@@ -101,7 +118,7 @@ for (const suffix of ["", " @mobile"]) {
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === "/v1/presentations",
     );
-    await page.getByRole("button", { name: /Start a blank presentation/ }).click();
+    await page.getByRole("button", { name: /^Start blank/ }).click();
     const response = await creating;
     expect(response.status()).toBe(201);
     expect(response.request().postDataJSON()).toMatchObject({ initialSlide: "native" });
@@ -123,8 +140,8 @@ for (const suffix of ["", " @mobile"]) {
     expect(new Set(first.scene.nodes.map((node) => node.id)).size).toBe(2);
     expect(first.scene.readingOrder).toEqual(first.scene.nodes.map((node) => node.id));
     await expect(page).toHaveURL(`/presentation/${launched.id}`);
-    await collapseOverlays(page, narrow);
-    await expectReadyDesign(page);
+    if (narrow) await closeE01Overlays(page);
+    await expectReadyDesign(page, narrow);
     await expectSlideActionsAbove(page);
     await page.screenshot({
       path: testInfo.outputPath("blank-presentation-native-design-entry.png"),
@@ -175,13 +192,14 @@ for (const suffix of ["", " @mobile"]) {
     await expect(
       page.getByRole("button", { name: "Convert to native slide", exact: true }),
     ).toHaveCount(0);
-    await expectAbove(
-      page.getByRole("button", { name: "Enable slide design", exact: true }),
-      page.locator("[data-native-scene]"),
-    );
+    const inspector = await openE01Inspector(page, "Layout");
+    await expect(
+      inspector.getByRole("button", { name: "Enable slide design", exact: true }),
+    ).toBeVisible();
+    if (narrow) await closeE01Overlays(page);
     await expectSlideActionsAbove(page);
 
-    await toolbar.getByRole("button", { name: "New slide", exact: true }).click();
+    await addSlideFromNavigator(page, narrow);
     await expect
       .poll(async () => (await readE01Record(page, legacy.id)).draft.blocks.length)
       .toBe(3);
@@ -196,8 +214,9 @@ for (const suffix of ["", " @mobile"]) {
     );
     expect(draft.blocks[0]).toEqual(converted);
     expect(draft.blocks[2]).toEqual(legacy.draft.blocks[1]);
-    await expectReadyDesign(page);
+    await expectReadyDesign(page, narrow);
     await expectSlideActionsAbove(page);
+    await openE01Inspector(page, "Content");
     await page
       .getByLabel("Native slide title", { exact: true })
       .fill("A discoverable native slide");
@@ -209,6 +228,7 @@ for (const suffix of ["", " @mobile"]) {
         return title?.type === "text" ? title.text : "";
       })
       .toBe("A discoverable native slide");
+    if (narrow) await closeE01Overlays(page);
     await toolbar.getByRole("button", { name: "Hide slide", exact: true }).click();
     await expect
       .poll(async () => nativeBlock((await readE01Record(page, legacy.id)).draft, 1).hidden)
@@ -240,7 +260,7 @@ for (const suffix of ["", " @mobile"]) {
     draft = (await readE01Record(page, legacy.id)).draft;
     expect(draft.blocks[0]).toEqual(converted);
     expect(draft.blocks[3]).toEqual(legacy.draft.blocks[1]);
-    await expectReadyDesign(page);
+    await expectReadyDesign(page, narrow);
     await expectAbove(
       toolbar.getByRole("button", { name: "Duplicate", exact: true }),
       page.locator("[data-native-scene]"),

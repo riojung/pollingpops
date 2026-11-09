@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CanvasColorSchema,
   CanvasShapeVariantSchema,
@@ -72,6 +73,9 @@ export function NativeSceneEditor({
   navigationTargets,
   onTextAssistance,
   textAssistanceDisabled = false,
+  inspectorTarget,
+  inspectorSection = "content",
+  onInspectSelection,
 }: {
   scene: PresentationScene;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
@@ -86,6 +90,10 @@ export function NativeSceneEditor({
   navigationTargets?: readonly { id: string; title: string }[];
   onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten" | "translate") => void;
   textAssistanceDisabled?: boolean;
+  /** Undefined keeps standalone controls inline; null waits for the shell's inspector. */
+  inspectorTarget?: HTMLElement | null;
+  inspectorSection?: "content" | "layout" | "media" | "accessibility";
+  onInspectSelection?: () => void;
 }) {
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
@@ -172,7 +180,10 @@ export function NativeSceneEditor({
       nodes: [...scene.nodes, node],
       readingOrder: [...scene.readingOrder, node.id],
     });
-    if (added) setSelection([node.id]);
+    if (added) {
+      setSelection([node.id]);
+      onInspectSelection?.();
+    }
   }
   function requestTextAssistance(operation: "rewrite" | "shorten" | "translate") {
     if (
@@ -206,249 +217,40 @@ export function NativeSceneEditor({
       replacement?.setSelectionRange(start, end);
     });
   }
-  return (
-    <div className={styles.editor}>
-      <div className={styles.controls} lang="en-CA">
-        <NativeSceneDesignControls
-          scene={scene}
-          onChange={onChange}
-          onApplyDesignToDeck={onApplyDesignToDeck}
-        />
-        <fieldset className={styles.designControls}>
-          <legend>Audience interactions</legend>
-          <div className={styles.actions}>
-            <button type="button" disabled={!canAdd} onClick={() => add(createNativeRevealNode())}>
-              Add reveal panel
-            </button>
-            <button type="button" disabled={!canAdd} onClick={() => add(createNativeLinkNode())}>
-              Add link
-            </button>
-            <button type="button" disabled={!canAdd} onClick={() => add(createNativeDialogNode())}>
-              Add detail dialog
-            </button>
-            <button
-              type="button"
-              disabled={!canAdd}
-              onClick={() => {
-                const image =
-                  selected.type === "image"
-                    ? selected
-                    : scene.nodes.find((node) => node.type === "image" && !node.rotation);
-                add(createNativeHotspotNode(image?.type === "image" ? image : undefined));
-              }}
-            >
-              Add image hotspot
-            </button>
-            <button
-              type="button"
-              disabled={!canAdd}
-              onClick={() => add(createNativeNavigationNode())}
-            >
-              Add slide link
-            </button>
-          </div>
-          <p className={styles.help}>
-            Local panels and detail dialogs open on each viewer’s screen. Broadcast reveals are
-            controlled by the facilitator during live delivery. Interactions do not submit answers.
-            Keep confidential notes in speaker notes.
-          </p>
-        </fieldset>
-        <fieldset className={styles.designControls}>
-          <legend>Tables and charts</legend>
-          <div className={styles.actions}>
-            <button type="button" disabled={!canAdd} onClick={() => add(createNativeTableNode())}>
-              Add table
-            </button>
-            {(["bar", "line", "pie"] as const).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                disabled={!canAdd}
-                onClick={() => add(createNativeChartNode(kind))}
-              >
-                Add {kind} chart
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        {changeFailure?.scene === scene ? (
-          <p className={styles.formatError} role="alert">
-            {changeFailure.message}
-          </p>
-        ) : null}
-      </div>
-      <NativeSceneCanvas
-        scene={scene}
-        renderImage={renderImage}
-        selectedNodeIds={selectedIds}
-        onSelect={select}
-        onChange={onChange}
-      />
-      <div className={styles.controls} aria-label="Native slide editor" lang="en-CA">
-        <NativeSceneLayoutControls scene={scene} onChange={onChange} />
-        <NativeSceneArrangementControls
-          scene={scene}
-          selectedIds={selectedIds}
-          selectedId={selected.id}
-          onChange={onChange}
-        />
-        <NativeSceneCompositionControls
-          scene={scene}
-          selectedIds={selectedIds}
-          selectedId={selected.id}
-          onChange={onChange}
-        />
-        <fieldset>
-          <legend>Slide objects · reading order</legend>
-          <ol className={styles.nodeList}>
-            {scene.readingOrder.map((id, index) => {
+  const inlineInspector = inspectorTarget === undefined;
+  const sectionHidden = (section: typeof inspectorSection) =>
+    !inlineInspector && inspectorSection !== section;
+  // Keep every section mounted in one stable portal. Switching inspector tabs must not
+  // reset object selection, rich-text formatting, or a partially entered media link.
+  const inspector = (
+    <div
+      className={`${styles.controls} ${styles.contextInspector}`}
+      aria-label="Native slide editor"
+      lang="en-CA"
+    >
+      <div className={styles.selectionSummary}>
+        <label>
+          Selected object
+          <select
+            aria-label="Selected object"
+            value={selected.id}
+            onChange={(event) => select(event.target.value)}
+          >
+            {scene.readingOrder.map((id) => {
               const node = scene.nodes.find((item) => item.id === id)!;
               return (
-                <li key={id}>
-                  <button
-                    type="button"
-                    aria-pressed={selectedIds.includes(id)}
-                    onClick={(event) => select(id, event.shiftKey)}
-                  >
-                    {index + 1}. {nativeNodeLabel(node)}
-                  </button>
-                  <label className={styles.selectionToggle}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Include ${nativeNodeLabel(node)} in selection`}
-                      checked={selectedIds.includes(id)}
-                      onChange={() => select(id, true)}
-                    />
-                    Include in selection
-                  </label>
-                </li>
+                <option key={id} value={id}>
+                  {nativeNodeLabel(node)}
+                </option>
               );
             })}
-          </ol>
-          <p role="status" className={styles.help}>
-            {selectedIds.length} {multiple ? "objects selected" : "object selected"}
-          </p>
-          {multiple ? (
-            <div className={styles.actions} aria-label="Selection actions">
-              {(
-                [
-                  ["left", -1, 0],
-                  ["right", 1, 0],
-                  ["up", 0, -1],
-                  ["down", 0, 1],
-                ] as const
-              ).map(([direction, dx, dy]) => (
-                <button
-                  key={direction}
-                  type="button"
-                  disabled={!canMoveSelection}
-                  onClick={() => onChange(moveNativeSceneNodes(scene, selectedIds, dx, dy))}
-                >
-                  Move selection {direction}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => onChange(removeNativeSceneNodes(scene, selectedIds))}
-              >
-                Delete selected objects
-              </button>
-            </div>
-          ) : null}
-          <div className={styles.actions}>
-            <button
-              type="button"
-              disabled={!canAdd}
-              onClick={() =>
-                add({
-                  id: clientUuid(),
-                  type: "text",
-                  role: "body",
-                  text: "",
-                  frame: { x: 8, y: 35, width: 55, height: 25 },
-                })
-              }
-            >
-              Add native text
-            </button>
-            <button
-              type="button"
-              disabled={!canAdd}
-              onClick={() =>
-                add({
-                  id: clientUuid(),
-                  type: "shape",
-                  shape: "rounded_rectangle",
-                  color: "blue",
-                  label: "",
-                  frame: { x: 65, y: 35, width: 25, height: 25 },
-                })
-              }
-            >
-              Add native shape
-            </button>
-            <button
-              type="button"
-              disabled={!canAdd || framed.length < 2}
-              onClick={() =>
-                add({
-                  id: clientUuid(),
-                  type: "connector",
-                  from: { nodeId: framed[0]!.id, anchor: "bottom" },
-                  to: { nodeId: framed[1]!.id, anchor: "top" },
-                  label: "",
-                  color: "blue",
-                })
-              }
-            >
-              Add native connector
-            </button>
-          </div>
-          <p className={styles.help}>
-            Up to {PRESENTATION_SCENE_MAX_NODES} objects. Reading order is independent of visual
-            position. On narrow screens objects appear in this order.
-          </p>
-          <label>
-            New image description
-            <input
-              aria-label="New image description"
-              maxLength={300}
-              value={imageAlt}
-              onChange={(event) => setImageAlt(event.target.value)}
-            />
-          </label>
-          <label>
-            Add native image
-            <input
-              aria-label="Add native image"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              disabled={!uploadsEnabled || mediaState !== "idle" || !canAdd || !imageAlt.trim()}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onUploadImage(file, imageAlt.trim());
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <p className={styles.help}>
-            {attachmentPending
-              ? "Finish or discard the uploaded image attachment before choosing another image."
-              : mediaState === "uploading"
-                ? "Uploading to quarantine…"
-                : mediaState === "scanning"
-                  ? "Checking image safety…"
-                  : uploadsEnabled
-                    ? "JPEG, PNG or WebP up to 10 MB. Describe each image before uploading; clean scanned images are added to this slide."
-                    : "Uploads are unavailable until malware scanning is configured."}
-          </p>
-        </fieldset>
-        <NativeSceneVideoControls
-          scene={scene}
-          canAdd={canAdd}
-          onChange={onChange}
-          onSelect={(id) => setSelection([id])}
-        />
+          </select>
+        </label>
+        <p role="status" className={styles.help}>
+          {selectedIds.length} {multiple ? "objects selected" : "object selected"}
+        </p>
+      </div>
+      <div hidden={sectionHidden("content")} data-native-inspector-section="content">
         <fieldset
           data-native-text-fields="true"
           onKeyDown={(event) => {
@@ -527,43 +329,6 @@ export function NativeSceneEditor({
               ) : null}
             </>
           ) : null}
-          {selected.type === "text" ? (
-            <label>
-              Text language
-              <select
-                aria-label="Text language"
-                value={selected.lang ?? ""}
-                disabled={multiple}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  const parsed = PresentationTextLanguageSchema.safeParse(value);
-                  if (value && !parsed.success) return;
-                  try {
-                    onChange(
-                      setNativeTextLanguage(
-                        scene,
-                        selected.id,
-                        parsed.success ? parsed.data : null,
-                      ),
-                    );
-                  } catch {
-                    setChangeFailure({
-                      scene,
-                      message:
-                        "The language change cannot fit within the slide’s limits. Reduce content and try again; the current slide is retained.",
-                    });
-                  }
-                }}
-              >
-                <option value="">Unspecified</option>
-                {PRESENTATION_TEXT_LANGUAGES.map(({ code, label }) => (
-                  <option key={code} value={code}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           {selected.type === "text" && selected.richText ? (
             <NativeRichTextEditor
               key={selected.id}
@@ -638,27 +403,6 @@ export function NativeSceneEditor({
               node={selected}
               onChange={onChange}
             />
-          ) : null}
-          {selected.type === "image" ? (
-            <label>
-              Image alternative text
-              <textarea
-                maxLength={300}
-                value={selected.altText ?? ""}
-                onChange={(event) =>
-                  update(
-                    (node) =>
-                      node.type === "image"
-                        ? { ...node, altText: event.target.value || null }
-                        : node,
-                    "altText",
-                  )
-                }
-              />
-            </label>
-          ) : null}
-          {selected.type === "image" ? (
-            <NativeSceneImageDesignControls scene={scene} node={selected} onChange={onChange} />
           ) : null}
           {selected.type === "shape" ? (
             <>
@@ -788,6 +532,43 @@ export function NativeSceneEditor({
               </select>
             </label>
           ) : null}
+          {selected.type === "image" ? (
+            <p className={styles.help}>
+              Use Media to adjust this image and Access to edit its description.
+            </p>
+          ) : null}
+          <div className={styles.actions}>
+            <button
+              type="button"
+              disabled={selected.type === "text" && selected.role === "title"}
+              onClick={() => onChange(removeNativeSceneNodes(scene, [selected.id]))}
+            >
+              Delete object
+            </button>
+          </div>
+        </fieldset>
+      </div>
+      <div hidden={sectionHidden("layout")} data-native-inspector-section="layout">
+        <NativeSceneDesignControls
+          scene={scene}
+          onChange={onChange}
+          onApplyDesignToDeck={onApplyDesignToDeck}
+        />
+        <NativeSceneLayoutControls scene={scene} onChange={onChange} />
+        <NativeSceneArrangementControls
+          scene={scene}
+          selectedIds={selectedIds}
+          selectedId={selected.id}
+          onChange={onChange}
+        />
+        <NativeSceneCompositionControls
+          scene={scene}
+          selectedIds={selectedIds}
+          selectedId={selected.id}
+          onChange={onChange}
+        />
+        <fieldset>
+          <legend>Position and size</legend>
           {selected.type !== "connector" ? (
             <div className={styles.frameFields}>
               {(["x", "y", "width", "height"] as const).map((field) => (
@@ -819,6 +600,128 @@ export function NativeSceneEditor({
               ))}
             </div>
           ) : null}
+          {multiple ? (
+            <div className={styles.actions} aria-label="Selection actions">
+              {(
+                [
+                  ["left", -1, 0],
+                  ["right", 1, 0],
+                  ["up", 0, -1],
+                  ["down", 0, 1],
+                ] as const
+              ).map(([direction, dx, dy]) => (
+                <button
+                  key={direction}
+                  type="button"
+                  disabled={!canMoveSelection}
+                  onClick={() => onChange(moveNativeSceneNodes(scene, selectedIds, dx, dy))}
+                >
+                  Move selection {direction}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => onChange(removeNativeSceneNodes(scene, selectedIds))}
+              >
+                Delete selected objects
+              </button>
+            </div>
+          ) : null}
+        </fieldset>
+        <details className={styles.editorDisclosure}>
+          <summary>Moving and resizing objects</summary>
+          <p className={styles.help}>
+            On wide screens, drag an object or its move button; drag its resize button to change
+            size. Dragging near an object or slide edge/center shows snap guides; hold Alt to move
+            freely. Press Escape to cancel a drag. Shift-click objects or use the selection
+            checkboxes to move several together. Arrow keys on a move button nudge the selection by
+            1%, or 5% with Shift. Resize keys proportionally resize a stored group or change the
+            focused object; numeric fields change the last selected object. Narrow screens use the
+            reading-order view with keyboard and numeric controls. Deleting objects also removes
+            their connectors. The title stays on the slide.
+          </p>
+        </details>
+      </div>
+      <div hidden={sectionHidden("media")} data-native-inspector-section="media">
+        {selected.type === "image" ? (
+          <NativeSceneImageDesignControls scene={scene} node={selected} onChange={onChange} />
+        ) : null}
+        <fieldset>
+          <legend>Add an image</legend>
+          <label>
+            New image description
+            <input
+              aria-label="New image description"
+              maxLength={300}
+              value={imageAlt}
+              onChange={(event) => setImageAlt(event.target.value)}
+            />
+          </label>
+          <label>
+            Add native image
+            <input
+              aria-label="Add native image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={!uploadsEnabled || mediaState !== "idle" || !canAdd || !imageAlt.trim()}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onUploadImage(file, imageAlt.trim());
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+          <p className={styles.help}>
+            {attachmentPending
+              ? "Finish or discard the uploaded image attachment before choosing another image."
+              : mediaState === "uploading"
+                ? "Uploading to quarantine…"
+                : mediaState === "scanning"
+                  ? "Checking image safety…"
+                  : uploadsEnabled
+                    ? "JPEG, PNG or WebP up to 10 MB. Describe each image before uploading; clean scanned images are added to this slide."
+                    : "Uploads are unavailable until malware scanning is configured."}
+          </p>
+        </fieldset>
+        <NativeSceneVideoControls
+          scene={scene}
+          canAdd={canAdd}
+          onChange={onChange}
+          // The accepted node is absent from this render's scene until the parent updates.
+          onSelect={(id) => setSelection([id])}
+        />
+      </div>
+      <div hidden={sectionHidden("accessibility")} data-native-inspector-section="accessibility">
+        <fieldset>
+          <legend>Slide objects · reading order</legend>
+          <ol className={styles.nodeList}>
+            {scene.readingOrder.map((id, index) => {
+              const node = scene.nodes.find((item) => item.id === id)!;
+              return (
+                <li key={id}>
+                  <button
+                    type="button"
+                    aria-pressed={selectedIds.includes(id)}
+                    onClick={(event) => select(id, event.shiftKey)}
+                  >
+                    {index + 1}. {nativeNodeLabel(node)}
+                  </button>
+                  <label className={styles.selectionToggle}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Include ${nativeNodeLabel(node)} in selection`}
+                      checked={selectedIds.includes(id)}
+                      onChange={() => select(id, true)}
+                    />
+                    Include in selection
+                  </label>
+                </li>
+              );
+            })}
+          </ol>
+          <p role="status" className={styles.help}>
+            {selectedIds.length} {multiple ? "objects selected" : "object selected"}
+          </p>
           <div className={styles.actions}>
             <button
               type="button"
@@ -834,26 +737,233 @@ export function NativeSceneEditor({
             >
               Read object later
             </button>
-            <button
-              type="button"
-              disabled={selected.type === "text" && selected.role === "title"}
-              onClick={() => onChange(removeNativeSceneNodes(scene, [selected.id]))}
-            >
-              Delete object
-            </button>
           </div>
           <p className={styles.help}>
-            On wide screens, drag an object or its move button; drag its resize button to change
-            size. Dragging near an object or slide edge/center shows snap guides; hold Alt to move
-            freely. Press Escape to cancel a drag. Shift-click objects or use the selection
-            checkboxes to move several together. Arrow keys on a move button nudge the selection by
-            1%, or 5% with Shift. Resize keys proportionally resize a stored group or change the
-            focused object; numeric fields change the last selected object. Narrow screens use the
-            reading-order view with keyboard and numeric controls. Deleting objects also removes
-            their connectors. The title stays on the slide.
+            Reading order is independent of visual position. On narrow screens objects appear in
+            this order.
           </p>
         </fieldset>
+        <fieldset>
+          <legend>Selected object accessibility</legend>
+          {selected.type === "text" ? (
+            <label>
+              Text language
+              <select
+                aria-label="Text language"
+                value={selected.lang ?? ""}
+                disabled={multiple}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const parsed = PresentationTextLanguageSchema.safeParse(value);
+                  if (value && !parsed.success) return;
+                  try {
+                    onChange(
+                      setNativeTextLanguage(
+                        scene,
+                        selected.id,
+                        parsed.success ? parsed.data : null,
+                      ),
+                    );
+                  } catch {
+                    setChangeFailure({
+                      scene,
+                      message:
+                        "The language change cannot fit within the slide’s limits. Reduce content and try again; the current slide is retained.",
+                    });
+                  }
+                }}
+              >
+                <option value="">Unspecified</option>
+                {PRESENTATION_TEXT_LANGUAGES.map(({ code, label }) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {selected.type === "image" ? (
+            <label>
+              Image alternative text
+              <textarea
+                maxLength={300}
+                value={selected.altText ?? ""}
+                onChange={(event) =>
+                  update(
+                    (node) =>
+                      node.type === "image"
+                        ? { ...node, altText: event.target.value || null }
+                        : node,
+                    "altText",
+                  )
+                }
+              />
+            </label>
+          ) : null}
+          {selected.type !== "text" && selected.type !== "image" ? (
+            <p className={styles.help}>
+              Edit this object’s visible label in Content. Its label also identifies it to readers.
+            </p>
+          ) : null}
+        </fieldset>
       </div>
+    </div>
+  );
+  return (
+    <div className={styles.editor}>
+      <div className={styles.objectToolbar} aria-label="Insert slide objects" lang="en-CA">
+        <div className={styles.actions}>
+          <button
+            aria-label="Add native text"
+            type="button"
+            disabled={!canAdd}
+            onClick={() =>
+              add({
+                id: clientUuid(),
+                type: "text",
+                role: "body",
+                text: "",
+                frame: { x: 8, y: 35, width: 55, height: 25 },
+              })
+            }
+          >
+            {inspectorTarget === undefined ? "Add native text" : "Text"}
+          </button>
+          <button
+            aria-label="Add native shape"
+            type="button"
+            disabled={!canAdd}
+            onClick={() =>
+              add({
+                id: clientUuid(),
+                type: "shape",
+                shape: "rounded_rectangle",
+                color: "blue",
+                label: "",
+                frame: { x: 65, y: 35, width: 25, height: 25 },
+              })
+            }
+          >
+            {inspectorTarget === undefined ? "Add native shape" : "Shape"}
+          </button>
+          <button
+            aria-label="Add native connector"
+            type="button"
+            disabled={!canAdd || framed.length < 2}
+            onClick={() =>
+              add({
+                id: clientUuid(),
+                type: "connector",
+                from: { nodeId: framed[0]!.id, anchor: "bottom" },
+                to: { nodeId: framed[1]!.id, anchor: "top" },
+                label: "",
+                color: "blue",
+              })
+            }
+          >
+            {inspectorTarget === undefined ? "Add native connector" : "Connector"}
+          </button>
+        </div>
+        <details className={styles.insertDisclosure}>
+          <summary>Insert more</summary>
+          <div className={styles.insertPanel}>
+            <fieldset className={styles.designControls}>
+              <legend>Audience interactions</legend>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  disabled={!canAdd}
+                  onClick={() => add(createNativeRevealNode())}
+                >
+                  Add reveal panel
+                </button>
+                <button
+                  type="button"
+                  disabled={!canAdd}
+                  onClick={() => add(createNativeLinkNode())}
+                >
+                  Add link
+                </button>
+                <button
+                  type="button"
+                  disabled={!canAdd}
+                  onClick={() => add(createNativeDialogNode())}
+                >
+                  Add detail dialog
+                </button>
+                <button
+                  type="button"
+                  disabled={!canAdd}
+                  onClick={() => {
+                    const image =
+                      selected.type === "image"
+                        ? selected
+                        : scene.nodes.find((node) => node.type === "image" && !node.rotation);
+                    add(createNativeHotspotNode(image?.type === "image" ? image : undefined));
+                  }}
+                >
+                  Add image hotspot
+                </button>
+                <button
+                  type="button"
+                  disabled={!canAdd}
+                  onClick={() => add(createNativeNavigationNode())}
+                >
+                  Add slide link
+                </button>
+              </div>
+              <p className={styles.help}>
+                Local panels and detail dialogs open on each viewer’s screen. Broadcast reveals are
+                controlled by the facilitator during live delivery. Interactions do not submit
+                answers. Keep confidential notes in speaker notes.
+              </p>
+            </fieldset>
+            <fieldset className={styles.designControls}>
+              <legend>Tables and charts</legend>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  disabled={!canAdd}
+                  onClick={() => add(createNativeTableNode())}
+                >
+                  Add table
+                </button>
+                {(["bar", "line", "pie"] as const).map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    disabled={!canAdd}
+                    onClick={() => add(createNativeChartNode(kind))}
+                  >
+                    Add {kind} chart
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <p className={styles.help}>Up to {PRESENTATION_SCENE_MAX_NODES} objects per slide.</p>
+          </div>
+        </details>
+      </div>
+      {changeFailure?.scene === scene ? (
+        <p className={styles.formatError} role="alert">
+          {changeFailure.message}
+        </p>
+      ) : null}
+      <NativeSceneCanvas
+        scene={scene}
+        renderImage={renderImage}
+        selectedNodeIds={selectedIds}
+        onSelect={(id, additive) => {
+          select(id, additive);
+          onInspectSelection?.();
+        }}
+        onChange={onChange}
+      />
+      {inlineInspector
+        ? inspector
+        : inspectorTarget
+          ? createPortal(inspector, inspectorTarget)
+          : null}
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
   PresentationReadingMutationResultSchema,
 } from "../../packages/contracts/src/index.ts";
 import {
+  openEditorActions,
+  clickEditorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -81,8 +83,9 @@ for (const suffix of ["", " @mobile"]) {
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
     const assignButton = page.getByRole("button", { name: "Assign reading", exact: true });
+    await openEditorActions(page);
     await expect(assignButton).toBeInViewport();
-    await assignButton.click();
+    await clickEditorAction(page, "Assign reading");
     const dialog = page.getByRole("dialog", { name: "Assign a reading assignment", exact: true });
     await dialog.getByRole("combobox", { name: "Reading deadline", exact: true }).selectOption("7");
     const createdResponse = page.waitForResponse(

@@ -48,16 +48,7 @@ jobs:
           VITEST_MAX_WORKERS: "1"
       - run: pnpm build
       - name: Validate fail-fast hosted production configuration
-        run: pnpm --filter @openround/server config:check
-        env:
-          NODE_ENV: production
-          DATABASE_URL: postgresql://runtime:example@database.internal/openround
-          REDIS_URL: rediss://cache.internal:6380
-          WEB_ORIGIN: https://quiz.example.ca
-          PUBLIC_API_URL: https://api.example.ca
-          COOKIE_SECURE: "true"
-          FEATURE_SIGNUPS: "false"
-          METRICS_ENABLED: "false"
+        run: pnpm check:server-startup
       - run: pnpm readiness:check
       - run: pnpm smoke:tracing
       - name: Validate Prometheus configuration and alert rules

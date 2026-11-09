@@ -5,6 +5,8 @@ import {
   presentationQuestionSuggestionSource,
   presentationQuestionSuggestionsSourceDigest,
   PresentationDraftSchema,
+  RecoveryPackContentSchema,
+  recoveryPackContentHash,
   PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING,
   type PresentationDraft,
 } from "@openround/contracts";
@@ -122,6 +124,8 @@ vi.mock("../workspace/workspace-provider", () => ({ useWorkspace: () => fixture.
 
 import { ApiClientError, AUTH_CHANGE_EVENT } from "../../lib/api";
 import { PresentationBuilder } from "./presentation-builder";
+import { PresentationRecoveryPackUpdateReview } from "./recovery-pack-update-review";
+import { RecoveryPackUpdatePanel } from "../editor/recovery-pack-update-panel";
 import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationTextAssistance } from "./presentation-text-assistance";
@@ -160,13 +164,15 @@ function render<T>(hooks: Hooks, component: () => T): T {
 function effects(hooks: Hooks) {
   for (const effect of hooks.effects.splice(0)) effect();
 }
-function editor(startOutline = true, mountText = false) {
+function editor(startOutline = true, mountText = false, mountPack = false) {
   const wrapper = render(host(), () => PresentationBuilder({ presentationId, startOutline }));
   const Editor = wrapper.type as (props: ComponentProps<typeof PresentationBuilder>) => ReactNode;
   const parent = host();
   const child = host();
   const visual = host();
   const text = host();
+  const pack = host();
+  let packPanel: ReactNode;
   let textModal: ReactNode;
   let visualModal: ReactNode;
   let tree: ReactNode;
@@ -202,6 +208,18 @@ function editor(startOutline = true, mountText = false) {
         effects(text);
       }
     }
+    if (mountPack) {
+      const packNode = elements(tree).find(
+        (element) => element.type === PresentationRecoveryPackUpdateReview,
+      );
+      if (packNode) {
+        const panel = PresentationRecoveryPackUpdateReview(
+          packNode.props as unknown as ComponentProps<typeof PresentationRecoveryPackUpdateReview>,
+        );
+        packPanel = render(pack, () => RecoveryPackUpdatePanel(panel.props));
+        effects(pack);
+      }
+    }
     effects(parent);
   };
   return {
@@ -212,7 +230,14 @@ function editor(startOutline = true, mountText = false) {
     },
     async settle() {
       for (let turn = 0; turn < 40; turn++) {
-        if (parent.dirty || child.dirty || visual.dirty || (mountText && text.dirty)) update();
+        if (
+          parent.dirty ||
+          child.dirty ||
+          visual.dirty ||
+          (mountText && text.dirty) ||
+          (mountPack && pack.dirty)
+        )
+          update();
         await Promise.resolve();
       }
     },
@@ -226,6 +251,9 @@ function editor(startOutline = true, mountText = false) {
     get nativeEditor() {
       return elements(tree).find((element) => element.type === NativeSceneEditor)!
         .props as unknown as ComponentProps<typeof NativeSceneEditor>;
+    },
+    get packNodes() {
+      return elements(packPanel);
     },
     get nodes() {
       return elements(tree);
@@ -393,14 +421,14 @@ describe("Question insertion workflows", () => {
     expect(inserted.spatial!.frames[0]).toEqual(source.draft.spatial!.frames[0]);
     expect(inserted.spatial!.frames).toHaveLength(2);
     const undo = view.nodes.find(
-      (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+      (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
     )!;
     expect(undo.props.disabled).toBe(false);
     (undo.props.onClick as () => void)();
     await view.settle();
     expect(lastDraft()).toEqual(source.draft);
     const redo = view.nodes.find(
-      (node) => node.type === "button" && node.props.children === "delivery.builder.redo",
+      (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.redo",
     )!;
     (redo.props.onClick as () => void)();
     await view.settle();
@@ -419,7 +447,7 @@ describe("Question insertion workflows", () => {
     expect(view.nativeEditor.scene).toEqual(source.block.scene);
     expect(
       view.nodes.find(
-        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+        (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
       )?.props.disabled,
     ).toBe(true);
   });
@@ -646,7 +674,7 @@ describe("Question insertion workflows", () => {
     await view.settle();
     expect(focus).toHaveBeenCalledOnce();
     const undo = view.nodes.find(
-      (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+      (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
     )!;
     expect(undo.props.disabled).toBe(false);
     (undo.props.onClick as () => void)();
@@ -715,7 +743,7 @@ describe("Question insertion workflows", () => {
     await view.settle();
     expect(
       view.nodes.find(
-        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+        (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
       )?.props.disabled,
     ).toBe(true);
     expect(deckRecoveryWrites()).toEqual([]);
@@ -1336,7 +1364,7 @@ describe("Saved native text assistance", () => {
     await view.settle();
     expect(
       view.nodes.find(
-        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+        (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
       )?.props.disabled,
     ).toBe(false);
     view.nativeEditor.onUndo!();
@@ -1366,7 +1394,7 @@ describe("Saved native text assistance", () => {
       await view.settle();
       expect(
         view.nodes.find(
-          (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+          (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
         )?.props.disabled,
       ).toBe(true);
       view.nativeEditor.onUndo!();
@@ -1760,4 +1788,265 @@ describe("Saved native text assistance", () => {
     ).toBe(body);
     expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Reviewed title" });
   });
+});
+
+describe("Recovery Pack acknowledgement recovery", () => {
+  function savedPack() {
+    const diagnosticId = "60000000-0000-4000-8000-000000000001";
+    const recheckId = "60000000-0000-4000-8000-000000000002";
+    const diagnostic = {
+      id: diagnosticId,
+      type: "numeric",
+      prompt: "What is half of 8?",
+      correctValue: "4",
+      tolerance: "0",
+      unit: null,
+      purpose: "diagnostic",
+      delivery: "main",
+      confidence: "off",
+      conceptKeys: ["halves"],
+      linkedRecheckQuestionId: recheckId,
+      timeLimitSeconds: 30,
+      basePoints: 100,
+      explanation: "Divide by two.",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const originalContent = RecoveryPackContentSchema.parse({
+      schemaVersion: 1,
+      title: "Halves",
+      diagnostic,
+      recheck: {
+        ...diagnostic,
+        id: recheckId,
+        prompt: "What is half of 12?",
+        correctValue: "6",
+        delivery: "recheck",
+        linkedRecheckQuestionId: null,
+      },
+      interventions: [
+        {
+          id: "60000000-0000-4000-8000-000000000003",
+          title: "Equal groups",
+          body: "Split the total into two equal groups.",
+        },
+      ],
+      conceptKeys: ["halves"],
+    });
+    const insertion = {
+      id: "60000000-0000-4000-8000-000000000004",
+      packId: "60000000-0000-4000-8000-000000000005",
+      packVersionId: "60000000-0000-4000-8000-000000000006",
+      packVersion: 1,
+      contentHash: recoveryPackContentHash(originalContent),
+      diagnosticQuestionId: diagnosticId,
+      recheckQuestionId: recheckId,
+      originalContent,
+    };
+    const draft = PresentationDraftSchema.parse({
+      ...savedDraft,
+      blocks: [
+        createNativeContentBlock(),
+        {
+          id: "60000000-0000-4000-8000-000000000007",
+          kind: "question",
+          question: originalContent.diagnostic,
+        },
+        {
+          id: "60000000-0000-4000-8000-000000000008",
+          kind: "question",
+          question: originalContent.recheck,
+        },
+      ],
+      recoveryPackInsertions: [insertion],
+    });
+    const latestContent = RecoveryPackContentSchema.parse({
+      ...originalContent,
+      diagnostic: {
+        ...originalContent.diagnostic,
+        prompt: "What is half of 16?",
+        correctValue: "8",
+      },
+    });
+    const latestVersionId = "60000000-0000-4000-8000-000000000009";
+    const appliedDraft = PresentationDraftSchema.parse({
+      ...draft,
+      blocks: draft.blocks.map((block) =>
+        block.kind === "question" && block.question.id === diagnosticId
+          ? { ...block, question: latestContent.diagnostic }
+          : block,
+      ),
+      recoveryPackInsertions: [
+        {
+          ...insertion,
+          updateBaseline: {
+            packVersionId: latestVersionId,
+            packVersion: 2,
+            contentHash: recoveryPackContentHash(latestContent),
+            content: latestContent,
+          },
+        },
+      ],
+    });
+    return {
+      draft,
+      appliedDraft,
+      review: {
+        presentationId,
+        insertionId: insertion.id,
+        draftRevision: 4,
+        baselineVersionId: insertion.packVersionId,
+        baselineVersion: 1,
+        latestVersionId,
+        latestVersion: 2,
+        baselineContent: originalContent,
+        latestContent,
+        contextChanged: false,
+        items: [
+          {
+            role: "diagnostic",
+            questionId: diagnosticId,
+            baseline: originalContent.diagnostic,
+            local: originalContent.diagnostic,
+            latest: latestContent.diagnostic,
+            status: "source_changed",
+          },
+          {
+            role: "recheck",
+            questionId: recheckId,
+            baseline: originalContent.recheck,
+            local: originalContent.recheck,
+            latest: latestContent.recheck,
+            status: "unchanged",
+          },
+        ],
+      },
+    };
+  }
+
+  it.each(["apply", "undo"] as const)(
+    "keeps the exact %s retry reachable while normal editing stays paused",
+    async (operation) => {
+      const pack = savedPack();
+      Object.assign(fixture.workspace.productFeatures, { recoveryPacks: true });
+      const defaultRequest = fixture.request.getMockImplementation()!;
+      const updateBodies: string[] = [];
+      const undoBodies: string[] = [];
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path === `/v1/presentations/${presentationId}`)
+          return {
+            presentation: {
+              id: presentationId,
+              draft: pack.draft,
+              draftRevision: 4,
+              status: "draft",
+            },
+          };
+        if (path.endsWith("/recovery-packs/update-review")) return { review: pack.review };
+        if (path.endsWith("/recovery-packs/update")) {
+          updateBodies.push(String(init?.body));
+          if (operation === "apply" && updateBodies.length === 1)
+            throw new Error("Accepted update; acknowledgement lost");
+          return {
+            presentation: {
+              id: presentationId,
+              draft: pack.appliedDraft,
+              draftRevision: 5,
+              status: "draft",
+            },
+            undo: { sourceRevision: 4, appliedRevision: 5 },
+          };
+        }
+        if (path.endsWith("/history/4/restore")) {
+          undoBodies.push(String(init?.body));
+          if (undoBodies.length === 1) throw new Error("Accepted undo; acknowledgement lost");
+          return {
+            presentation: {
+              id: presentationId,
+              draft: pack.draft,
+              draftRevision: 6,
+              status: "draft",
+            },
+            undo: { sourceRevision: 5, appliedRevision: 6 },
+          };
+        }
+        return defaultRequest(path, init);
+      });
+      const view = editor(false, false, true);
+      await view.settle();
+      const nodeText = (node: ReactNode): string =>
+        Array.isArray(node)
+          ? node.map(nodeText).join("")
+          : isValidElement<{ children?: ReactNode }>(node)
+            ? nodeText(node.props.children)
+            : typeof node === "string"
+              ? node
+              : "";
+      const button = (name: string) => {
+        const found = view.packNodes.find(
+          (node) => node.type === "button" && nodeText(node.props.children as ReactNode) === name,
+        );
+        expect(found, name).toBeDefined();
+        return found!;
+      };
+      const click = async (name: string) => {
+        expect(button(name).props.disabled).toBe(false);
+        (button(name).props.onClick as () => void)();
+        await view.settle();
+      };
+      const reviewSection = () =>
+        view.nodes.find(
+          (node) => node.props["aria-label"] === "Presentation Recovery Pack updates",
+        )!;
+      const paused = () => {
+        expect(view.nodes.find((node) => node.type === "header")?.props.inert).toBe(true);
+        expect(
+          view.nodes.find((node) => node.props.className?.toString().includes("workspace"))?.props
+            .inert,
+        ).toBe(true);
+      };
+      await click("Review latest Pack version");
+      await click("Apply reviewed Pack update");
+      if (operation === "undo") await click("Undo this Pack update");
+      const retryLabel =
+        operation === "apply" ? "Retry Pack update acknowledgement" : "Retry undo acknowledgement";
+      expect(button(retryLabel).props.disabled).toBe(false);
+      expect(reviewSection().props.inert).toBe(false);
+      paused();
+      const scene = view.nativeEditor.scene;
+      expect(
+        view.nativeEditor.onChange({
+          ...scene,
+          nodes: scene.nodes.map((node) =>
+            node.type === "text" ? { ...node, text: "Blocked ordinary edit" } : node,
+          ),
+        }),
+      ).toBe(false);
+      expect(deckRecoveryWrites()).toEqual([]);
+      // Another operation still owns its fence, including against a stale programmatic retry.
+      view.textAssistance.onPendingChange(true);
+      await view.settle();
+      expect(reviewSection().props.inert).toBe(true);
+      paused();
+      const before = updateBodies.length + undoBodies.length;
+      await click(retryLabel);
+      expect(updateBodies.length + undoBodies.length).toBe(before);
+      view.textAssistance.onPendingChange(false);
+      await view.settle();
+      expect(reviewSection().props.inert).toBe(false);
+      await click(retryLabel);
+      const bodies = operation === "apply" ? updateBodies : undoBodies;
+      expect(bodies).toHaveLength(2);
+      expect(bodies[1]).toBe(bodies[0]);
+      expect(view.nodes.find((node) => node.type === "header")?.props.inert).toBe(false);
+      expect(reviewSection().props.inert).toBe(false);
+      expect(
+        view.packNodes.some(
+          (node) =>
+            node.type === "button" && nodeText(node.props.children as ReactNode) === retryLabel,
+        ),
+      ).toBe(false);
+      expect(fixture.request.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    },
+  );
 });

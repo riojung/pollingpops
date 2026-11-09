@@ -66,6 +66,23 @@ function slideFixture() {
 }
 
 describe("ContentSlideView", () => {
+  it("opts legacy slides into inert thumbnail artwork without editor controls", () => {
+    const block = slideFixture();
+    const markup = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="editor" staticThumbnail />,
+    );
+    expect(markup).toContain('data-static-thumbnail="true"');
+    expect(markup).toContain('inert=""');
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain("Start with the evidence");
+    expect(markup).toContain('style="left:68%;top:5%;width:28%;height:20%"');
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("<textarea");
+    const ordinary = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    expect(ordinary).not.toContain("data-static-thumbnail");
+    expect(ordinary).not.toContain('inert=""');
+  });
+
   it.each(["constructor", "toString", "__proto__"])(
     "resolves opaque element ID %s without reading inherited transient properties",
     (id) => {

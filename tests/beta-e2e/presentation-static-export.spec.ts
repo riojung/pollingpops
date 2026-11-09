@@ -2,12 +2,16 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
+  clickEditorAction,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
   enterE01Editor,
+  openE01Inspector,
+  openEditorActions,
   readE01Record,
 } from "./presentation-e01-support";
 import { signInBeta } from "./sign-in";
@@ -17,6 +21,22 @@ test.skip(
   "Static image export uses the opt-in synthetic scanner and loopback object store.",
 );
 test.use({ actionTimeout: 30_000 });
+
+async function viewExportImages(page: Page) {
+  for (const image of await page.locator("img").all()) {
+    // Inline assets may be lazy: exercise a reader viewing each image before checking decode.
+    await image.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() =>
+        image.evaluate(
+          (element) =>
+            (element as HTMLImageElement).complete &&
+            (element as HTMLImageElement).naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+  }
+}
 
 for (const suffix of ["", " @mobile"]) {
   test(`downloads pin publication and provide readable static and offline interactive HTML${suffix}`, async ({
@@ -171,7 +191,9 @@ for (const suffix of ["", " @mobile"]) {
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
     const exportButton = page.getByRole("button", { name: "Export presentation", exact: true });
+    await openEditorActions(page);
     await expect(exportButton).toBeDisabled();
+    await page.locator('summary[aria-label="More options"]').click();
 
     const imageBytes = await page.evaluate(() => {
       const canvas = document.createElement("canvas");
@@ -184,6 +206,7 @@ for (const suffix of ["", " @mobile"]) {
       drawing.fillRect(40, 10, 40, 60);
       return canvas.toDataURL("image/png").split(",")[1]!;
     });
+    await openE01Inspector(page, "Media");
     await page
       .getByRole("textbox", { name: "New image description", exact: true })
       .fill("Export diagram");
@@ -205,8 +228,10 @@ for (const suffix of ["", " @mobile"]) {
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === `/v1/presentations/${record.id}/publish`,
     );
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     expect((await publication).status()).toBe(200);
+    await openEditorActions(page);
     await expect(exportButton).toBeEnabled();
     const publishedRecord = await (
       await page.request.get(`${e01ApiUrl}/v1/presentations/${record.id}`)
@@ -233,7 +258,7 @@ for (const suffix of ["", " @mobile"]) {
     });
     expect(saved.status()).toBe(200);
 
-    await exportButton.click();
+    await clickEditorAction(page, "Export presentation");
     const dialog = page.getByRole("dialog", { name: "Export presentation", exact: true });
     await expect(dialog).toBeVisible();
     await expect
@@ -315,18 +340,23 @@ for (const suffix of ["", " @mobile"]) {
     ).toBeVisible();
     await expect(readable.getByText("Published review question", { exact: true })).toBeVisible();
     expect(await readable.locator("script,iframe,form,input").count()).toBe(0);
-    expect(
-      await readable
-        .locator("img")
-        .evaluateAll((images) =>
-          images.every(
-            (image) =>
-              (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0,
+    await viewExportImages(readable);
+    await expect
+      .poll(() =>
+        readable
+          .locator("img")
+          .evaluateAll((images) =>
+            images.every(
+              (image) =>
+                (image as HTMLImageElement).complete &&
+                (image as HTMLImageElement).naturalWidth > 0,
+            ),
           ),
-        ),
-    ).toBe(true);
+      )
+      .toBe(true);
     expect((await new AxeBuilder({ page: readable }).analyze()).violations).toEqual([]);
     expect(external).toEqual([]);
+    await readable.evaluate(() => window.scrollTo(0, 0));
     await readable.screenshot({ path: info.outputPath("readable-export.png"), fullPage: true });
     await page.screenshot({ path: info.outputPath("export-dialog.png"), fullPage: true });
     await readable.close();
@@ -389,6 +419,7 @@ for (const suffix of ["", " @mobile"]) {
       expect(
         await file.locator("script,iframe,form,input,textarea,select,object,embed").count(),
       ).toBe(0);
+      await viewExportImages(file);
       await expect
         .poll(() =>
           file
@@ -424,11 +455,13 @@ for (const suffix of ["", " @mobile"]) {
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(exportButton).toBeFocused();
+    await page.locator('summary[aria-label="More options"]').click();
 
     // Wrapped commands must remain reachable when the viewport narrows after mounting.
     await page.setViewportSize({ width: 320, height: 780 });
     const openInspector = page.getByRole("button", { name: "Open inspector", exact: true });
-    if (await openInspector.isVisible()) await openInspector.click();
+    await expect(openInspector).toBeVisible();
+    await openInspector.click();
     await expect
       .poll(async () => {
         const header = await page.getByRole("banner").boundingBox();

@@ -1891,3 +1891,192 @@
     padding-inline: 9px;
   }
 }
+
+.insertChoice {
+  display: grid;
+  gap: 3px;
+}
+.insertChoice small {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.activityEditor {
+  width: min(100%, 1200px);
+  min-width: 0;
+  margin-inline: auto;
+}
+.activityHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.activityHeading > div {
+  display: grid;
+  gap: 4px;
+}
+.activityHeading > div > span {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.activityHeading strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.activityHeading > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.activitySettings {
+  min-width: 0;
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+}
+.activitySettingsHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 15px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--ui-border-subtle);
+}
+.activitySettingsHeading > svg {
+  flex: 0 0 18px;
+  margin-top: 1px;
+  color: var(--ui-text-muted);
+}
+.activitySettingsHeading h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.activitySettingsHeading p {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.activitySettings .responseSurface {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--ui-text);
+  background: transparent;
+}
+.activitySettings > fieldset {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface-soft);
+}
+.activitySettings > fieldset legend {
+  padding-inline: 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.previewWorkspace,
+.previewWorkspacePresenter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.previewWorkspacePresenter {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 31%);
+}
+.previewWorkspacePresenter > section {
+  min-height: 0;
+  overflow: auto;
+  margin: 14px 14px 14px 0;
+}
+.previewWorkspace .previewCanvas,
+.previewWorkspacePresenter .previewCanvas {
+  align-content: start;
+  padding: 16px;
+  min-height: 0;
+}
+.previewModes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+}
+.previewModes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ui-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.previewModes button[aria-pressed="true"] {
+  color: var(--ui-accent-ink);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+.previewBar {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.previewBar > strong {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .previewWorkspacePresenter {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    overflow: auto;
+  }
+  .previewWorkspacePresenter .previewCanvas {
+    overflow: visible;
+    padding-bottom: 0;
+  }
+  .previewWorkspacePresenter > section {
+    margin: 14px;
+    overflow: visible;
+  }
+  .previewModes button,
+  .activityHeading > button {
+    min-height: 44px;
+  }
+  .activitySettings {
+    padding: 14px;
+  }
+}

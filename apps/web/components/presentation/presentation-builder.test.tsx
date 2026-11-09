@@ -192,6 +192,7 @@ describe("Presentation Builder UI", () => {
         messages,
       });
       expect(markup).toContain('aria-label="Presentation preview"');
+      expect(markup).toMatch(/role="region" aria-label="Slide preview" tabindex="0"/);
       expect(markup).toContain(type === "open_text" ? "Your response" : "A word or short phrase");
       expect(markup).toContain(`0 of ${type === "open_text" ? 1000 : 80} characters`);
       expect(markup).toContain("Only approved responses can appear publicly after reveal");

@@ -271,3 +271,29 @@ describe("ContentSlideView", () => {
     expect(markups[2]).not.toContain('data-media-bay="true"');
   });
 });
+
+describe("contextual deck appearance", () => {
+  const design = { theme: "sunset", font: "serif", spacing: "compact" } as const;
+  it("styles source content without changing its stored text or geometry", () => {
+    const block = createContentBlock("section");
+    block.textElements[0]!.text = "An imported plan remains editable";
+    const before = JSON.stringify(block);
+    const base = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    const themed = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="preview" designOverride={design} />,
+    );
+    expect(themed).toContain('data-design-theme="sunset"');
+    expect(themed).toContain("--content-slide-background:#fff0e5");
+    expect(themed).toContain("An imported plan remains editable");
+    expect(renderedFrames(themed)).toEqual(renderedFrames(base));
+    expect(JSON.stringify(block)).toBe(before);
+  });
+  it("uses public block context for participant and companion callers without rewriting content", () => {
+    const block = { ...createContentBlock(), design };
+    const before = JSON.stringify(block);
+    const markup = renderToStaticMarkup(<ContentSlideView block={block} variant="live" />);
+    expect(markup).toContain('data-design-theme="sunset"');
+    expect(markup).toContain("--content-slide-background:#fff0e5");
+    expect(JSON.stringify(block)).toBe(before);
+  });
+});

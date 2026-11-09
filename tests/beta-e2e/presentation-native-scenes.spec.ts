@@ -371,7 +371,9 @@ for (const suffix of ["", " @mobile"]) {
     const originalDraft = await savedDraft(page, presentation.id);
     const original = originalDraft.blocks[0];
     if (original?.kind !== "content" || !original.scene) throw new Error("Expected native slide");
-    expect(originalDraft.schemaVersion).toBe(4);
+    expect(originalDraft.schemaVersion).toBe(7);
+    expect(original.scene.schemaVersion).toBe(3);
+    expect(original.scene.design).toEqual({ theme: "paper", font: "sans", spacing: "relaxed" });
     expect(original.textElements).toEqual([]);
     expect(original.mediaId).toBeNull();
     const shape = original.scene.nodes.find((node) => node.type === "shape")!;

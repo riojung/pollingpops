@@ -7,6 +7,7 @@ import {
   type PresentationCompanionSnapshot,
   type PresentationHostSnapshot,
   type PresentationParticipantSnapshot,
+  type PresentationSceneDesign,
   type PresentationStageSnapshot,
   type QuestionDraft,
   presentationQuestionSupported,
@@ -49,6 +50,39 @@ import {
 } from "./presentation-response-identifiers.js";
 
 const PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS = 15_000;
+
+/** Only frozen, visible scene tokens cross the public delivery boundary. */
+function presentationBlockDesign(
+  block: PresentationBlock,
+  session?: PresentationSessionRecord,
+): PresentationSceneDesign | undefined {
+  if (!session) return undefined;
+  const blocks = session.content.blocks;
+  const index = blocks.findIndex((candidate) => candidate.id === block.id);
+  if (index < 0) return undefined;
+  const explicitDesign = (candidate: PresentationBlock | undefined) => {
+    if (
+      candidate?.kind !== "content" ||
+      ("hidden" in candidate && candidate.hidden === true) ||
+      !candidate.scene?.design
+    )
+      return undefined;
+    const { theme, font, spacing } = candidate.scene.design;
+    return { theme, font, spacing };
+  };
+  const ownDesign = explicitDesign(blocks[index]);
+  if (ownDesign) return ownDesign;
+  for (let preceding = index - 1; preceding >= 0; preceding--) {
+    const design = explicitDesign(blocks[preceding]);
+    if (design) return design;
+  }
+  for (let following = index + 1; following < blocks.length; following++) {
+    const design = explicitDesign(blocks[following]);
+    if (design) return design;
+  }
+  // Omission keeps legacy wire records compatible; the renderer defaults to Paper/Sans/Relaxed.
+  return undefined;
+}
 
 export interface PresentationProjectionData {
   participants: PresentationSessionParticipantRecord[];
@@ -121,6 +155,7 @@ export function presentationParticipantBlock(
   session?: PresentationSessionRecord,
 ) {
   if (!block) return null;
+  const design = presentationBlockDesign(block, session);
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -129,10 +164,12 @@ export function presentationParticipantBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
+      ...(design ? { design } : {}),
       ...(block.scene ? { scene: presentationDeliveredScene(block, session) } : {}),
     };
   }
   const question = block.question;
+  const blockFields = { id: block.id, kind: block.kind, ...(design ? { design } : {}) };
   if (!presentationQuestionSupported(question)) {
     throw new Error("This response format currently supports Live Rounds only");
   }
@@ -155,11 +192,10 @@ export function presentationParticipantBlock(
       : {}),
   };
   if (question.type === "numeric" || isPresentationTextResultQuestion(question))
-    return { id: block.id, kind: block.kind, question: base };
+    return { ...blockFields, question: base };
   if (question.type === "rating") {
     return {
-      id: block.id,
-      kind: block.kind,
+      ...blockFields,
       question: {
         ...base,
         min: question.min,
@@ -171,8 +207,7 @@ export function presentationParticipantBlock(
   }
   if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
   return {
-    id: block.id,
-    kind: block.kind,
+    ...blockFields,
     question: {
       ...base,
       choices: question.choices.map(({ id, label }) => ({ id, label })),
@@ -269,6 +304,7 @@ function presentationRealtimeBlock(
   staffScene = facilitator,
 ) {
   if (!block) return null;
+  const design = presentationBlockDesign(block, session);
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -277,12 +313,14 @@ function presentationRealtimeBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
+      ...(design ? { design } : {}),
       ...(block.scene ? { scene: presentationDeliveredScene(block, session, staffScene) } : {}),
     };
   }
   return {
     id: block.id,
     kind: block.kind,
+    ...(design ? { design } : {}),
     question: presentationLiveQuestion(block.question, facilitator),
     ...(facilitator
       ? {
@@ -771,6 +809,7 @@ export function buildPresentationListSnapshot(
       session.phase === "question_reveal" ||
         session.phase === "intervention" ||
         session.phase === "finished",
+      session,
     ),
     questionOpenedAt: session.questionOpenedAt?.toISOString() ?? null,
     questionClosesAt: presentationQuestionDeadline(session)?.toISOString() ?? null,

@@ -120,6 +120,16 @@ cases across Chromium desktop/phone and WebKit phone. Firefox qualification rema
 at sign-in; see the record for the interruption and evidence limits. Visual trigger/target cues,
 presenting/sharing and external creator/device evidence remain next.
 
+The `codex/presentation-activity-notes-polish` slice makes inserted activity artwork,
+filmstrip and preview share readable deck-aware rendering, with response settings outside the
+slide. New native slides inherit visible design; optional public design tokens come from frozen
+session content so host/stage and participant/companion content keep the same context. Notes gain
+a larger writing surface, expanded editor and explicit private current-slide presenter rehearsal;
+live notes stay host-only and publication-frozen. Qualification passes 7,062 repository tests,
+all four builds and 76 unique production-browser cases across Chromium desktop/phone,
+WebKit phone and Firefox desktop. See the
+[activity and notes record](evidence/presentation-activity-notes.md) for qualification and limits.
+
 The table below is the current gap map; the detailed E00–E14 sections retain implementation
 history and acceptance contracts. “Implemented” means the selected software slice, not complete
 competitor parity or successful creator task observation.

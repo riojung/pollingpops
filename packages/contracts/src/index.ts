@@ -32,7 +32,7 @@ export * from "./presentation-scene-prototype";
 export * from "./presentation-scene";
 export * from "./presentation-rich-text";
 export * from "./presentation-scene-adapter";
-import type { PresentationSceneNode } from "./presentation-scene";
+import { PresentationSceneDesignSchema, type PresentationSceneNode } from "./presentation-scene";
 import {
   ContentSlideLayoutSchema,
   ContentSlideDraftSchema,
@@ -5714,6 +5714,7 @@ export const PresentationParticipantQuestionBlockSchema = z
     id: z.string().uuid(),
     kind: z.literal("question"),
     question: PresentationParticipantQuestionSchema,
+    design: PresentationSceneDesignSchema.optional(),
   })
   .strict();
 export type PresentationParticipantQuestionBlock = z.infer<
@@ -5752,6 +5753,7 @@ export const PresentationHostQuestionBlockSchema = z
     id: z.string().uuid(),
     kind: z.literal("question"),
     question: PresentationFacilitatorQuestionSchema,
+    design: PresentationSceneDesignSchema.optional(),
     revealedAnswer: PresentationRevealedAnswerSchema.nullable().default(null),
   })
   .strict();
@@ -6252,6 +6254,7 @@ export const PresentationRestV1ParticipantCurrentBlockSchema = z.discriminatedUn
       id: z.string().uuid(),
       kind: z.literal("question"),
       question: PresentationRestV1ParticipantQuestionSchema,
+      design: PresentationSceneDesignSchema.optional(),
     })
     .strict(),
 ]);
@@ -6263,6 +6266,7 @@ export const PresentationRestV1HostCurrentBlockSchema = z.discriminatedUnion("ki
       id: z.string().uuid(),
       kind: z.literal("question"),
       question: PresentationRestV1HostQuestionSchema,
+      design: PresentationSceneDesignSchema.optional(),
       revealedAnswer: PresentationRevealedAnswerSchema.nullable(),
     })
     .strict(),

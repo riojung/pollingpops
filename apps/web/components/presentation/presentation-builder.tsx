@@ -56,7 +56,6 @@ import {
   assignPresentationBlockToSection,
   changePresentationQuestionType,
   contentSlideTitle,
-  createContentBlock,
   createContentTextElement,
   createQuestionBlock,
   duplicatePresentationBlock,
@@ -103,7 +102,6 @@ import {
 import { AuthoringAssistant } from "../authoring-assistant";
 import { CanvasArtifactLinks } from "../canvas-artifact-links/links";
 import { ResponseEditor } from "../editor/response-editor";
-import { TextResponseControl } from "../text-response-control";
 import { MediaEditor } from "../editor/media-editor";
 import type { RecoveryPackUpdateUndo } from "../editor/recovery-pack-update-panel";
 import { ContentSlideView, contentSlideRegionLabels } from "./content-slide-view";
@@ -122,6 +120,13 @@ import {
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { PresentationActivitySlide } from "./presentation-activity-slide";
+import { SpeakerNotesEditor, PresenterNotesPanel } from "./presentation-speaker-notes";
+import {
+  inheritPresentationSceneDesign,
+  resolvePresentationActivityDesign,
+} from "../../lib/presentation-activity-design";
+import { applyNativeSceneDesign } from "../../lib/presentation-native-design";
 import {
   EditorIcon,
   EDITOR_MODAL_SELECTOR,
@@ -303,11 +308,16 @@ function PresentationPreview({
   draft,
   onClose,
   initialBlockId,
+  initialMode = "audience",
+  origin,
 }: {
   draft: PresentationDraft;
   onClose: () => void;
   initialBlockId?: string | null;
+  initialMode?: "audience" | "presenter";
+  origin?: "interaction" | "notes" | "slide";
 }) {
+  const [mode, setMode] = useState(initialMode);
   const publication = preparePresentationPublication(draft);
   const [index, setIndex] = useState(
     Math.max(
@@ -328,7 +338,8 @@ function PresentationPreview({
       aria-modal="true"
       aria-label="Presentation preview"
       data-presentation-preview="true"
-      data-preview-origin={initialBlockId ? "interaction" : undefined}
+      data-preview-origin={origin ?? (initialBlockId ? "interaction" : undefined)}
+      data-preview-mode={mode}
       lang="en-CA"
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
@@ -346,6 +357,22 @@ function PresentationPreview({
               ? `${index + 1} / ${publication.blocks.length}`
               : "No slides"}
           </span>
+          <div className={styles.previewModes} role="group" aria-label="Preview mode">
+            <button
+              type="button"
+              aria-pressed={mode === "audience"}
+              onClick={() => setMode("audience")}
+            >
+              <EditorIcon name="slides" /> Audience view
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "presenter"}
+              onClick={() => setMode("presenter")}
+            >
+              <EditorIcon name="notes" /> Presenter view
+            </button>
+          </div>
           <button className={styles.iconButton} onClick={onClose} type="button">
             Close preview
           </button>
@@ -368,62 +395,67 @@ function PresentationPreview({
           phase="content"
           sourceKey={`builder-preview:${JSON.stringify(publication.spatial)}:${publication.blocks.map((block) => block.id).join(":")}`}
         />
-        <div className={styles.previewCanvas}>
-          {!block ? (
-            <p>Show a slide or add an activity to preview this presentation.</p>
-          ) : block.kind === "content" ? (
-            <ContentSlideView
-              block={block}
-              media={
-                block.mediaId ? (
-                  <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
-                ) : undefined
-              }
-              renderSceneImage={(mediaId, altText) => (
-                <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
-              )}
-              variant="preview"
-              interactionRuntime={{
-                mode: "review",
-                navigationTargets: presentationInteractionTargets(publication, block.id).map(
-                  (target) => ({ blockId: target.id, available: true, blockedReason: null }),
-                ),
-                onNavigate: (_nodeId, targetId) => {
-                  const target = publication.blocks.findIndex(
-                    (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
-                  );
-                  if (target >= 0) setIndex(target);
-                },
-              }}
+        <div
+          className={
+            mode === "presenter" ? styles.previewWorkspacePresenter : styles.previewWorkspace
+          }
+        >
+          <div
+            className={styles.previewCanvas}
+            role="region"
+            aria-label="Slide preview"
+            tabIndex={0}
+          >
+            {!block ? (
+              <p>Show a slide or add an activity to preview this presentation.</p>
+            ) : block.kind === "content" ? (
+              <ContentSlideView
+                block={block}
+                media={
+                  block.mediaId ? (
+                    <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
+                  ) : undefined
+                }
+                renderSceneImage={(mediaId, altText) => (
+                  <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+                )}
+                variant="preview"
+                designOverride={inheritPresentationSceneDesign(publication.blocks, block.id)}
+                interactionRuntime={{
+                  mode: "review",
+                  navigationTargets: presentationInteractionTargets(publication, block.id).map(
+                    (target) => ({ blockId: target.id, available: true, blockedReason: null }),
+                  ),
+                  onNavigate: (_nodeId, targetId) => {
+                    const target = publication.blocks.findIndex(
+                      (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
+                    );
+                    if (target >= 0) setIndex(target);
+                  },
+                }}
+              />
+            ) : (
+              <PresentationActivitySlide
+                question={block.question}
+                design={resolvePresentationActivityDesign(publication.blocks, block.id)}
+                media={
+                  block.question.mediaId ? (
+                    <AuthenticatedMedia
+                      mediaId={block.question.mediaId}
+                      altText={block.question.mediaAlt}
+                    />
+                  ) : undefined
+                }
+              />
+            )}
+          </div>
+          {mode === "presenter" ? (
+            <PresenterNotesPanel
+              notes={block?.kind === "content" ? block.speakerNotes : ""}
+              slideNumber={block ? index + 1 : undefined}
+              totalSlides={publication.blocks.length}
             />
-          ) : (
-            <article className={styles.previewQuestion}>
-              <span className={styles.previewEyebrow}>Audience question</span>
-              <h1 lang={block.question.prompt ? "" : "en-CA"}>
-                {block.question.prompt || "Untitled question"}
-              </h1>
-              {"choices" in block.question ? (
-                <div className={styles.previewChoices}>
-                  {block.question.choices.map((choice, choiceIndex) => (
-                    <div key={choice.id}>
-                      <span>{String.fromCharCode(65 + choiceIndex)}</span>
-                      <span lang={choice.label ? "" : "en-CA"}>
-                        {choice.label || `Answer ${choiceIndex + 1}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : block.question.type === "numeric" ? (
-                <div className={styles.previewAnswer}>Participants enter a number</div>
-              ) : block.question.type === "rating" ? (
-                <div className={styles.previewAnswer}>
-                  {block.question.min} — {block.question.max}
-                </div>
-              ) : isTextQuestion(block.question.type) ? (
-                <TextResponseControl type={block.question.type} disabled />
-              ) : null}
-            </article>
-          )}
+          ) : null}
         </div>
         <div className={styles.previewControls}>
           <button
@@ -508,7 +540,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         const inspectorDialogOpen = Boolean(
           inspectorPanel.current?.querySelector("dialog[open]") ||
           document.querySelector(
-            '[data-presentation-preview="true"][data-preview-origin="interaction"]',
+            '[data-presentation-preview="true"][data-preview-origin="interaction"], [data-presentation-preview="true"][data-preview-origin="notes"]',
           ),
         );
         // Only the insertion menu can invoke an external navigator dialog.
@@ -609,7 +641,24 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewStartBlockId, setPreviewStartBlockId] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"audience" | "presenter">("audience");
+  const [previewOrigin, setPreviewOrigin] = useState<"interaction" | "notes" | "slide" | undefined>(
+    undefined,
+  );
+  const [selectedActivityChoiceId, setSelectedActivityChoiceId] = useState<string | undefined>(
+    undefined,
+  );
+  const acceptedInsertMenu = useRef<{ blockId: string; menu: HTMLDetailsElement } | null>(null);
+  useEffect(() => {
+    const pending = acceptedInsertMenu.current;
+    if (!pending || !draft?.blocks.some((block) => block.id === pending.blockId)) return;
+    acceptedInsertMenu.current = null;
+    pending.menu.open = false;
+    pending.menu.querySelector("summary")?.focus({ preventScroll: true });
+  }, [draft]);
   function openDraftPreview() {
+    setPreviewMode("audience");
+    setPreviewOrigin(undefined);
     setPreviewStartBlockId(null);
     setPreviewOpen(true);
   }
@@ -1387,17 +1436,43 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setSelectedTextElementId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
   }
 
-  function addBlock(block: PresentationBlockDraft) {
+  function changeSpeakerNotes(value: string) {
+    updateSelected(
+      (block) => (block.kind === "content" ? { ...block, speakerNotes: value } : block),
+      "speakerNotes",
+    );
+  }
+  function openSelectedPreview(mode: "audience" | "presenter", origin: "notes" | "slide") {
+    if (!selectedBlock || (selectedBlock.kind === "content" && selectedBlock.hidden)) return;
+    setPreviewMode(mode);
+    setPreviewOrigin(origin);
+    setPreviewStartBlockId(selectedBlock.id);
+    setPreviewOpen(true);
+  }
+  function addBlock(block: PresentationBlockDraft, source?: HTMLButtonElement) {
+    if (!draft || !canEdit || builderMutationBlocked || preparingImport) return;
+    const menu = source?.closest("details");
+    if (menu) acceptedInsertMenu.current = { blockId: block.id, menu };
     commit((current) => {
       const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
+      const created =
+        block.kind === "content" && block.scene
+          ? {
+              ...block,
+              scene: applyNativeSceneDesign(
+                block.scene,
+                inheritPresentationSceneDesign(current.blocks, selectedBlockId),
+              ),
+            }
+          : block;
       const blocks = [...current.blocks];
-      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, block);
+      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, created);
       return {
         ...current,
         blocks,
-        ...(block.kind === "content" && block.scene
+        ...(created.kind === "content" && created.scene
           ? {
-              schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, block.scene),
+              schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, created.scene),
             }
           : {}),
       };
@@ -3084,6 +3159,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <li key={block.id} className={styles.filmstripItem}>
                 <PresentationSlideThumbnail
                   block={block}
+                  design={inheritPresentationSceneDesign(draft.blocks, block.id)}
                   priority={index < 3 || selectedBlockId === block.id}
                   mediaEnabled={mapOpen}
                   mediaScope={{
@@ -3178,15 +3254,36 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               className={styles.insertMenu}
             >
               <EditorMenuSection label="Create a slide">
-                <button onClick={() => addBlock(createNativeContentBlock())} type="button">
+                <button
+                  aria-label="Blank slide"
+                  title="Empty canvas · matches this deck"
+                  onClick={(event) => addBlock(createNativeContentBlock(), event.currentTarget)}
+                  type="button"
+                >
                   <EditorIcon name="slides" />
-                  <span>Blank slide</span>
+                  <span className={styles.insertChoice}>
+                    <span>Blank slide</span>
+                    <small>Empty canvas · matches this deck</small>
+                  </span>
                 </button>
-                <button onClick={() => addBlock(createContentBlock())} type="button">
+                <button
+                  aria-label={t("delivery.presentation.contentSlide")}
+                  title="Title and body · matches this deck"
+                  onClick={(event) =>
+                    addBlock(createDesignedNativeContentBlock(), event.currentTarget)
+                  }
+                  type="button"
+                >
                   <EditorIcon name="content" />
-                  <span>{t("delivery.presentation.contentSlide")}</span>
+                  <span className={styles.insertChoice}>
+                    <span>{t("delivery.presentation.contentSlide")}</span>
+                    <small>Title and body · matches this deck</small>
+                  </span>
                 </button>
-                <button onClick={() => addBlock(createQuestionBlock())} type="button">
+                <button
+                  onClick={(event) => addBlock(createQuestionBlock(), event.currentTarget)}
+                  type="button"
+                >
                   <EditorIcon name="interaction" />
                   <span>{t("delivery.builder.addQuestion")}</span>
                 </button>
@@ -3450,7 +3547,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
                   Create first slide
                 </button>
-                <button onClick={() => addBlock(createContentBlock())} type="button">
+                <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
                   {t("delivery.presentationBuilder.addContentSlide")}
                 </button>
                 <button onClick={() => addBlock(createQuestionBlock())} type="button">
@@ -3501,6 +3598,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 layoutSuggestionsSourceKey={selectedBlock.id}
                 onPreviewInteraction={() => {
                   if (builderMutationBlocked || preparingImport || selectedBlock.hidden) return;
+                  setPreviewMode("audience");
+                  setPreviewOrigin("interaction");
                   setPreviewStartBlockId(selectedBlock.id);
                   setPreviewOpen(true);
                 }}
@@ -3680,6 +3779,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             <section className={styles.slideCanvas} lang="en-CA">
               <ContentSlideView
                 block={selectedBlock}
+                designOverride={inheritPresentationSceneDesign(draft.blocks, selectedBlock.id)}
                 bodyPlaceholder={
                   selectedBlock.layout === "quote"
                     ? "Add the quote or reflection prompt"
@@ -3703,70 +3803,103 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               />
             </section>
           ) : (
-            <section className={styles.questionCanvas}>
-              <div className={styles.questionMeta}>
-                <span>{t("delivery.presentation.interactiveQuestion")}</span>
-                <span lang="en-CA">{selectedBlock.question.timeLimitSeconds} seconds</span>
+            <section className={styles.activityEditor} aria-label="Activity editor">
+              <div className={styles.activityHeading}>
+                <div>
+                  <span>Audience activity</span>
+                  <strong>Edit the prompt and answers on the slide</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.currentTarget.focus({ preventScroll: true });
+                    openSelectedPreview("audience", "slide");
+                  }}
+                >
+                  <EditorIcon name="preview" /> Preview this slide
+                </button>
               </div>
-              <textarea
-                aria-label="Question prompt"
-                className={styles.questionPrompt}
-                lang={selectedBlock.question.prompt.trim() ? "" : "en-CA"}
-                maxLength={500}
-                onChange={(event) =>
+              <PresentationActivitySlide
+                question={selectedBlock.question}
+                design={resolvePresentationActivityDesign(draft.blocks, selectedBlock.id)}
+                editable
+                onPromptChange={(prompt) =>
+                  updateQuestion((question) => ({ ...question, prompt }), "prompt")
+                }
+                onChoiceChange={(id, label) =>
                   updateQuestion(
-                    (question) => ({ ...question, prompt: event.target.value }),
-                    "prompt",
+                    (question) =>
+                      isChoiceQuestion(question) && question.type !== "true_false"
+                        ? {
+                            ...question,
+                            choices: question.choices.map((choice) =>
+                              choice.id === id ? { ...choice, label } : choice,
+                            ),
+                          }
+                        : question,
+                    `choice:${id}`,
                   )
                 }
-                placeholder="What do you want the room to think about?"
-                value={selectedBlock.question.prompt}
+                selectedChoiceId={selectedActivityChoiceId}
+                onSelectChoice={setSelectedActivityChoiceId}
+                media={
+                  selectedBlock.question.mediaId ? (
+                    <AuthenticatedMedia
+                      altText={selectedBlock.question.mediaAlt}
+                      mediaId={selectedBlock.question.mediaId}
+                    />
+                  ) : undefined
+                }
               />
-              {selectedBlock.question.mediaId ? (
-                <div className={styles.canvasMedia}>
-                  <AuthenticatedMedia
-                    altText={selectedBlock.question.mediaAlt}
-                    mediaId={selectedBlock.question.mediaId}
+              <section className={styles.activitySettings} aria-label="Activity settings">
+                <div className={styles.activitySettingsHeading}>
+                  <EditorIcon name="inspector" />
+                  <div>
+                    <h2>Activity settings</h2>
+                    <p>
+                      Configure responses and follow-up paths. These controls are private editing
+                      tools.
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.responseSurface}>
+                  <ResponseEditor
+                    multiSelectPollsEnabled
+                    rankingPollsEnabled
+                    onStructuralChange={(question) => updateQuestion(() => question)}
+                    onUpdateChoiceQuestion={(updater) =>
+                      updateQuestion(
+                        (question) => (isChoiceQuestion(question) ? updater(question) : question),
+                        "response",
+                      )
+                    }
+                    onUpdateQuestion={(updater) => updateQuestion(updater, "response")}
+                    question={selectedBlock.question}
+                    uxBeta
                   />
                 </div>
-              ) : null}
-              <div className={styles.responseSurface}>
-                <ResponseEditor
-                  multiSelectPollsEnabled
-                  rankingPollsEnabled
-                  onStructuralChange={(question) => updateQuestion(() => question)}
-                  onUpdateChoiceQuestion={(updater) =>
-                    updateQuestion(
-                      (question) => (isChoiceQuestion(question) ? updater(question) : question),
-                      "response",
+                <PresentationBranchEditor
+                  block={selectedBlock}
+                  targets={presentationInteractionTargets(draft, selectedBlock.id, true)}
+                  onChange={(branches, historyField) =>
+                    commit(
+                      (current) => ({
+                        ...current,
+                        schemaVersion: current.schemaVersion >= 13 ? current.schemaVersion : 13,
+                        sections: current.sections ?? [],
+                        blocks: current.blocks.map((block) => {
+                          if (block.id !== selectedBlock.id || block.kind !== "question")
+                            return block;
+                          const copy = { ...block };
+                          delete copy.branches;
+                          return branches.length ? { ...copy, branches } : copy;
+                        }),
+                      }),
+                      historyField ? `${selectedBlock.id}:${historyField}` : undefined,
                     )
                   }
-                  onUpdateQuestion={(updater) => updateQuestion(updater, "response")}
-                  question={selectedBlock.question}
-                  uxBeta
                 />
-              </div>
-              <PresentationBranchEditor
-                block={selectedBlock}
-                targets={presentationInteractionTargets(draft, selectedBlock.id, true)}
-                onChange={(branches, historyField) =>
-                  commit(
-                    (current) => ({
-                      ...current,
-                      schemaVersion: current.schemaVersion >= 13 ? current.schemaVersion : 13,
-                      sections: current.sections ?? [],
-                      blocks: current.blocks.map((block) => {
-                        if (block.id !== selectedBlock.id || block.kind !== "question")
-                          return block;
-                        const copy = { ...block };
-                        delete copy.branches;
-                        return branches.length ? { ...copy, branches } : copy;
-                      }),
-                    }),
-                    historyField ? `${selectedBlock.id}:${historyField}` : undefined,
-                  )
-                }
-              />
+              </section>
             </section>
           )}
           {productFeatures?.canvasBoards || draft.recoveryPackInsertions?.length ? (
@@ -3898,28 +4031,19 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <p>{t("delivery.presentationBuilder.selectBlock")}</p>
             ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
               inspectorTab === "notes" ? (
-                <section lang="en-CA">
-                  <h2>Speaker notes</h2>
-                  <p className={styles.helpText}>Private notes for your presenter view.</p>
-                  <label className={styles.field}>
-                    <span>Speaker notes</span>
-                    <textarea
-                      aria-label="Speaker notes"
-                      maxLength={2000}
-                      value={selectedBlock.speakerNotes}
-                      onChange={(event) =>
-                        updateSelected(
-                          (block) =>
-                            block.kind === "content"
-                              ? { ...block, speakerNotes: event.target.value }
-                              : block,
-                          "speakerNotes",
-                        )
-                      }
-                      placeholder="Add a cue for your talk"
-                    />
-                  </label>
-                </section>
+                <SpeakerNotesEditor
+                  value={selectedBlock.speakerNotes}
+                  onChange={changeSpeakerNotes}
+                  onPreview={() => openSelectedPreview("presenter", "notes")}
+                  disabled={!canEdit || builderMutationBlocked || preparingImport}
+                  sourceKey={selectedBlock.id}
+                  previewDisabled={Boolean(selectedBlock.hidden)}
+                  previewDisabledReason={
+                    selectedBlock.hidden
+                      ? "Show this slide before previewing it. Hidden slides are excluded from delivery."
+                      : undefined
+                  }
+                />
               ) : null
             ) : selectedBlock.kind === "content" ? (
               <section>
@@ -4186,24 +4310,19 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     ) : null}
                   </>
                 ) : inspectorTab === "notes" ? (
-                  <label className={styles.field}>
-                    <span lang="en-CA">Speaker notes</span>
-                    <textarea
-                      lang={selectedBlock.speakerNotes.trim() ? "" : "en-CA"}
-                      maxLength={2000}
-                      onChange={(event) =>
-                        updateSelected(
-                          (block) =>
-                            block.kind === "content"
-                              ? { ...block, speakerNotes: event.target.value }
-                              : block,
-                          "speakerNotes",
-                        )
-                      }
-                      placeholder="Private facilitation cues"
-                      value={selectedBlock.speakerNotes}
-                    />
-                  </label>
+                  <SpeakerNotesEditor
+                    value={selectedBlock.speakerNotes}
+                    onChange={changeSpeakerNotes}
+                    onPreview={() => openSelectedPreview("presenter", "notes")}
+                    disabled={!canEdit || builderMutationBlocked || preparingImport}
+                    sourceKey={selectedBlock.id}
+                    previewDisabled={Boolean(selectedBlock.hidden)}
+                    previewDisabledReason={
+                      selectedBlock.hidden
+                        ? "Show this slide before previewing it. Hidden slides are excluded from delivery."
+                        : undefined
+                    }
+                  />
                 ) : (
                   <>
                     <label className={styles.field}>
@@ -4456,6 +4575,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         <PresentationPreview
           draft={draft}
           initialBlockId={previewStartBlockId}
+          initialMode={previewMode}
+          origin={previewOrigin}
           onClose={() => setPreviewOpen(false)}
         />
       ) : null}

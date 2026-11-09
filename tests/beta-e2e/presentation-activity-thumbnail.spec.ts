@@ -19,16 +19,20 @@ type MediaState = "ready" | "none" | "unavailable";
 
 test.use({ actionTimeout: 30_000 });
 
-async function textLines(locator: Locator) {
-  return locator.evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    return range.getClientRects().length;
-  });
-}
-
 async function expectUnobscuredChoices(thumbnail: Locator, mediaState: MediaState) {
-  const plane = thumbnail.locator("[data-has-media]");
+  const plane = thumbnail.locator(
+    '[data-presentation-activity][data-static-thumbnail="true"] > div',
+  );
+  // Scrolling mounts thumbnail artwork through IntersectionObserver. Wait for its
+  // canonical layout before measuring scaled coordinates, including WebKit's first frame.
+  await expect
+    .poll(() =>
+      plane.evaluate((element) => {
+        const node = element as HTMLElement;
+        return [node.offsetWidth, node.offsetHeight];
+      }),
+    )
+    .toEqual([960, 540]);
   const metrics = await plane.evaluate((element) => {
     const node = element as HTMLElement;
     const bounds = element.getBoundingClientRect();
@@ -37,8 +41,8 @@ async function expectUnobscuredChoices(thumbnail: Locator, mediaState: MediaStat
       y: bounds.y,
       width: bounds.width,
       height: bounds.height,
-      logicalWidth: node.clientWidth,
-      logicalHeight: node.clientHeight,
+      logicalWidth: node.offsetWidth,
+      logicalHeight: node.offsetHeight,
     };
   });
   expect(metrics.logicalWidth).toBe(960);
@@ -66,23 +70,63 @@ async function expectUnobscuredChoices(thumbnail: Locator, mediaState: MediaStat
       metrics.logicalHeight + 1,
     );
     expect(
-      await choice.evaluate(
-        (element) =>
-          element.scrollHeight <= element.clientHeight + 1 &&
-          element.scrollWidth <= element.clientWidth + 1,
-      ),
+      await choice.evaluate((element) => {
+        // Inline-span client/scroll dimensions differ across browser engines.
+        // Preserved trailing spaces may hang into card padding; every authored
+        // line must stay inside the card and clear of its answer badge.
+        const label = element.parentElement!.getBoundingClientRect();
+        const card = element.closest('[role="listitem"]')!.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const lines = Array.from(range.getClientRects());
+        return (
+          lines.length > 0 &&
+          lines.every(
+            (line) =>
+              line.left >= label.left - 1 &&
+              line.top >= card.top - 1 &&
+              line.right <= card.right + 1 &&
+              line.bottom <= card.bottom + 1,
+          )
+        );
+      }),
     ).toBe(true);
     boxes.push(box);
   }
-  expect(await textLines(thumbnail.getByText(choices[0]!, { exact: true }))).toBe(2);
-  for (let index = 1; index < boxes.length; index++)
-    expect(boxes[index - 1]!.bottom).toBeLessThanOrEqual(boxes[index]!.top + 1);
+  // The filmstrip uses the same two-column answer artwork as the full slide. All authored
+  // labels must fit in that plane, including the long first answer beside the media column.
+  for (let first = 0; first < boxes.length; first++) {
+    for (let second = first + 1; second < boxes.length; second++) {
+      const left = boxes[first]!;
+      const right = boxes[second]!;
+      const overlap =
+        left.left < right.right - 0.5 &&
+        left.right > right.left + 0.5 &&
+        left.top < right.bottom - 0.5 &&
+        left.bottom > right.top + 0.5;
+      expect(overlap, `answers ${first + 1} and ${second + 1} remain separate`).toBe(false);
+    }
+  }
+  const answerGrid = thumbnail.locator('[role="list"][aria-label="Answer choices"]');
+  const cells = await answerGrid.locator('[role="listitem"]').evaluateAll((elements) =>
+    elements.map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  expect(cells).toHaveLength(4);
+  expect(Math.abs(cells[0]!.top - cells[1]!.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(cells[2]!.top - cells[3]!.top)).toBeLessThanOrEqual(1);
+  expect(cells[0]!.right).toBeLessThanOrEqual(cells[1]!.left + 0.5);
+  expect(cells[2]!.right).toBeLessThanOrEqual(cells[3]!.left + 0.5);
+  expect(cells[0]!.bottom).toBeLessThanOrEqual(cells[2]!.top + 0.5);
+  expect(cells[1]!.bottom).toBeLessThanOrEqual(cells[3]!.top + 0.5);
   if (mediaState === "none") {
-    await expect(plane).toHaveAttribute("data-has-media", "false");
+    await expect(thumbnail.locator('[data-has-media="false"]')).toHaveCount(1);
     await expect(thumbnail.locator("img,[data-thumbnail-image-state]")).toHaveCount(0);
     return;
   }
-  await expect(plane).toHaveAttribute("data-has-media", "true");
+  await expect(thumbnail.locator("[data-has-media]")).toHaveAttribute("data-has-media", "true");
   const media = thumbnail.locator(`[data-thumbnail-image-state="${mediaState}"]`);
   await expect(media).toHaveCount(1);
   const bounds = await media.boundingBox();
@@ -93,6 +137,10 @@ async function expectUnobscuredChoices(thumbnail: Locator, mediaState: MediaStat
     right: (bounds!.x + bounds!.width - metrics.x) / scaleX,
     bottom: (bounds!.y + bounds!.height - metrics.y) / scaleY,
   };
+  expect(image.left).toBeGreaterThanOrEqual(-1);
+  expect(image.top).toBeGreaterThanOrEqual(-1);
+  expect(image.right).toBeLessThanOrEqual(metrics.logicalWidth + 1);
+  expect(image.bottom).toBeLessThanOrEqual(metrics.logicalHeight + 1);
   for (const [index, choice] of boxes.entries()) {
     const overlap =
       image.left < choice.right - 0.5 &&
@@ -104,7 +152,7 @@ async function expectUnobscuredChoices(thumbnail: Locator, mediaState: MediaStat
 }
 
 for (const suffix of ["", " @mobile"]) {
-  test(`activity thumbnails keep media and all four answer rows readable${suffix}`, async ({
+  test(`activity thumbnails keep media and all four answer choices readable${suffix}`, async ({
     page,
   }, testInfo) => {
     test.setTimeout(120_000);
@@ -213,7 +261,15 @@ for (const suffix of ["", " @mobile"]) {
       }
       const prompt = thumbnail.getByText(prompts[promptIndex]!, { exact: true });
       await expect(prompt).toBeVisible();
-      expect(await textLines(prompt)).toBe(promptIndex === 0 ? 1 : 2);
+      await expect(prompt).toHaveText(prompts[promptIndex]!);
+      expect(
+        await prompt.evaluate(
+          (element) =>
+            element.scrollHeight <= element.clientHeight + 1 &&
+            element.scrollWidth <= element.clientWidth + 1,
+        ),
+        "The full prompt remains visible in the shared slide artwork",
+      ).toBe(true);
       await expectUnobscuredChoices(thumbnail, mediaState);
       await thumbnail.screenshot({
         path: testInfo.outputPath(`activity-${mediaState}-${promptIndex + 1}.png`),

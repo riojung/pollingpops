@@ -23,8 +23,10 @@ import {
   type ContentSlideRegion,
   type ContentSlideTextElement,
   type PresentationScene,
+  type PresentationSceneDesign,
 } from "@openround/contracts";
 import styles from "./content-slide-view.module.css";
+import { NATIVE_DESIGN_THEMES, NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import type { NativeSceneInteractionRuntime } from "./native-scene-interaction-view";
 
@@ -58,10 +60,13 @@ type ContentSlideViewBlock = {
   textElements: ContentSlideTextElement[];
   mediaId?: string | null;
   scene?: PresentationScene;
+  design?: PresentationSceneDesign;
 };
 
 interface ContentSlideViewProps {
   block: ContentSlideViewBlock;
+  /** Contextual rendering only; imported source records are never rewritten. */
+  designOverride?: PresentationSceneDesign;
   media?: ReactNode;
   renderSceneImage?: SceneImageRenderer;
   interactionSourceKey?: string;
@@ -267,9 +272,19 @@ function frameBlockSignature(block: ContentSlideViewBlock, hasMedia: boolean) {
 }
 
 export function ContentSlideView(props: ContentSlideViewProps) {
+  const design = props.designOverride ?? props.block.design;
   return props.block.scene ? (
     <NativeSceneView
-      scene={props.block.scene}
+      scene={
+        props.block.scene.design || !design
+          ? props.block.scene
+          : {
+              ...props.block.scene,
+              schemaVersion:
+                props.block.scene.schemaVersion >= 3 ? props.block.scene.schemaVersion : 3,
+              design,
+            }
+      }
       renderImage={props.renderSceneImage}
       interactionEditing={props.variant === "editor"}
       staticThumbnail={props.staticThumbnail}
@@ -277,12 +292,13 @@ export function ContentSlideView(props: ContentSlideViewProps) {
       interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
     />
   ) : (
-    <LegacyContentSlideView {...props} />
+    <LegacyContentSlideView {...props} designOverride={design} />
   );
 }
 
 function LegacyContentSlideView({
   block,
+  designOverride,
   media,
   variant,
   staticThumbnail = false,
@@ -567,6 +583,16 @@ function LegacyContentSlideView({
   return (
     <article
       className={`${styles.slide} ${styles[`layout_${block.layout}`]} ${styles[`variant_${variant}`]}${staticThumbnail ? ` ${styles.staticThumbnail}` : ""}`}
+      data-design-theme={designOverride?.theme}
+      style={
+        designOverride
+          ? ({
+              "--content-slide-background": NATIVE_DESIGN_THEMES[designOverride.theme].background,
+              "--content-slide-text": NATIVE_DESIGN_THEMES[designOverride.theme].text,
+              fontFamily: NATIVE_DESIGN_FONTS[designOverride.font],
+            } as CSSProperties)
+          : undefined
+      }
       data-layout={block.layout}
       data-static-thumbnail={staticThumbnail || undefined}
       inert={staticThumbnail || undefined}

@@ -3,6 +3,7 @@ import {
   PresentationSceneDraftSchema,
   PresentationSceneSchema,
   PresentationDeliveredSceneSchema,
+  PresentationSceneDesignSchema,
 } from "./presentation-scene";
 import { PresentationTextAssistanceProvenanceSchema } from "./presentation-text-assistance";
 
@@ -202,6 +203,7 @@ export const PresentationLiveContentBlockSchema = z
     mediaId: z.string().uuid().nullable(),
     mediaAlt: z.string().max(300).nullable(),
     scene: PresentationDeliveredSceneSchema.optional(),
+    design: PresentationSceneDesignSchema.optional(),
   })
   .superRefine((block, ctx) => {
     const parsed = ContentSlideDraftSchema.safeParse({ ...block, speakerNotes: "" });

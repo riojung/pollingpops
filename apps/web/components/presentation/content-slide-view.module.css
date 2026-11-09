@@ -429,3 +429,15 @@
 .staticThumbnail {
   pointer-events: none;
 }
+
+/* Contextual deck appearance does not alter imported stored content or frames. */
+.slide[data-design-theme] {
+  color: var(--content-slide-text);
+  background: var(--content-slide-background);
+}
+.slide[data-design-theme] .titleElement > h1,
+.slide[data-design-theme] .titleInput,
+.slide[data-design-theme] .bodyElement > p,
+.slide[data-design-theme] .bodyInput {
+  color: inherit;
+}

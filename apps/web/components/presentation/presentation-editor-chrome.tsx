@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import type { PresentationBlockDraft } from "@openround/contracts";
+import type { PresentationBlockDraft, PresentationSceneDesign } from "@openround/contracts";
 import { AUTH_CHANGE_EVENT } from "../../lib/api";
 import { ContentSlideView } from "./content-slide-view";
+import { PresentationActivitySlide } from "./presentation-activity-slide";
 import {
   PresentationThumbnailImage,
   ThumbnailImagePlaceholder,
@@ -368,11 +369,13 @@ export function EditorDisclosure({
 /** Shared renderer; only observed visible rows mount authorized media readers. */
 export function PresentationSlideThumbnail({
   block,
+  design,
   priority = false,
   mediaScope,
   mediaEnabled = true,
 }: {
   block: PresentationBlockDraft;
+  design?: PresentationSceneDesign;
   priority?: boolean;
   mediaScope?: PresentationThumbnailMediaScope;
   mediaEnabled?: boolean;
@@ -442,30 +445,22 @@ export function PresentationSlideThumbnail({
             <ContentSlideView
               block={block}
               variant="preview"
+              designOverride={design}
               staticThumbnail
               media={block.mediaId ? image(block.mediaId, block.mediaAlt) : undefined}
               renderSceneImage={image}
             />
           ) : (
-            <div
-              className={styles.activityThumbnail}
-              data-has-media={Boolean(block.question.mediaId)}
-            >
-              <span>Audience activity</span>
-              <strong>{block.question.prompt || "Your question"}</strong>
-              {block.question.mediaId ? (
-                <div className={styles.activityMedia}>
-                  {image(block.question.mediaId, block.question.mediaAlt)}
-                </div>
-              ) : null}
-              {"choices" in block.question ? (
-                block.question.choices
-                  .slice(0, 4)
-                  .map((choice) => <div key={choice.id}>{choice.label || "Answer option"}</div>)
-              ) : (
-                <p>Collect audience responses</p>
-              )}
-            </div>
+            <PresentationActivitySlide
+              question={block.question}
+              design={design}
+              staticThumbnail
+              media={
+                block.question.mediaId
+                  ? image(block.question.mediaId, block.question.mediaAlt)
+                  : undefined
+              }
+            />
           )}
         </div>
       ) : (

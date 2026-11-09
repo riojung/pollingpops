@@ -15,6 +15,7 @@ import { PresentationMedia } from "../../../../components/presentation-live/pres
 import { PresentationCompanionLauncher } from "../../../../components/presentation-live/companion-launcher";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { PresentationActivitySlide } from "../../../../components/presentation/presentation-activity-slide";
 import {
   RecoveryPackCardPicker,
   RecoveryPackLiveCardView,
@@ -572,6 +573,7 @@ function PresentationHostContent() {
                         </span>
                         <ContentSlideView
                           block={block}
+                          designOverride={block.design}
                           interactionRuntime={interactionRuntime}
                           interactionSourceKey={JSON.stringify([
                             id,
@@ -621,36 +623,24 @@ function PresentationHostContent() {
                             {t("live.common.flexOpen")}
                           </p>
                         ) : null}
-                        <h1 lang="">{block.question.prompt}</h1>
-                        <PresentationMedia
-                          altText={block.question.mediaAlt}
-                          mediaId={block.question.mediaId}
-                          sessionId={id}
+                        <PresentationActivitySlide
+                          question={block.question}
+                          design={block.design}
+                          media={
+                            block.question.mediaId ? (
+                              <PresentationMedia
+                                altText={block.question.mediaAlt}
+                                mediaId={block.question.mediaId}
+                                sessionId={id}
+                              />
+                            ) : undefined
+                          }
+                          revealedChoiceIds={
+                            block.revealedAnswer?.kind === "choice"
+                              ? block.revealedAnswer.correctChoiceIds
+                              : undefined
+                          }
                         />
-                        {block.question.choices.length ? (
-                          <div className={styles.choiceGrid}>
-                            {block.question.choices.map((choice) => (
-                              <div
-                                className={styles.choice}
-                                data-correct={
-                                  block.revealedAnswer?.kind === "choice"
-                                    ? block.revealedAnswer.correctChoiceIds.includes(choice.id)
-                                    : undefined
-                                }
-                                key={choice.id}
-                                lang=""
-                              >
-                                {choice.label}
-                              </div>
-                            ))}
-                          </div>
-                        ) : block.question.type === "numeric" ? (
-                          <p>{t("live.presentationSession.numericResponse")}</p>
-                        ) : isTextQuestion(block.question.type) ? (
-                          <p lang="en-CA">Responses are reviewed before they appear.</p>
-                        ) : (
-                          <p>{t("live.presentationSession.ratingResponse")}</p>
-                        )}
                         {block.revealedAnswer?.kind === "numeric" ? (
                           <p className="notice" lang="">
                             {block.revealedAnswer.correctValue}

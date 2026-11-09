@@ -1,7 +1,11 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  NATIVE_DESIGN_THEMES,
+  NATIVE_DESIGN_FONTS,
+} from "../../../../lib/presentation-native-design";
 import {
   PresentationStageSnapshotSchema,
   type PresentationStageSnapshot,
@@ -205,6 +209,17 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
 
   const remaining = presentationRemainingSeconds(snapshot, receivedAt.current, now);
   const opinionSummary = presentationOpinionSummaryFor(snapshot);
+  const questionDesign =
+    snapshot?.currentBlock?.kind === "question" ? snapshot.currentBlock.design : undefined;
+  const questionPalette = questionDesign ? NATIVE_DESIGN_THEMES[questionDesign.theme] : undefined;
+  const questionStyle: CSSProperties | undefined =
+    questionPalette && questionDesign
+      ? {
+          background: questionPalette.background,
+          color: questionPalette.text,
+          fontFamily: NATIVE_DESIGN_FONTS[questionDesign.font],
+        }
+      : undefined;
   const textResults =
     snapshot?.currentBlock?.kind === "question" &&
     isTextQuestion(snapshot.currentBlock.question.type) &&
@@ -250,6 +265,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
             />
             <section
               aria-label="Audience slide"
+              style={questionStyle}
               className={`${styles.stageCanvas}${opinionSummary || textResults ? ` ${styles.stageOpinionCanvas}` : ""}`}
               tabIndex={0}
             >

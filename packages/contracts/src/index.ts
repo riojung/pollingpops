@@ -7829,3 +7829,4 @@ export * from "./presentation-static-export";
 export * from "./presentation-session-insights";
 export * from "./presentation-review-feedback";
 export * from "./presentation-assignments";
+export * from "./presentation-reading-reports";

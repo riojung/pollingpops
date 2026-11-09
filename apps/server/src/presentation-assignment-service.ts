@@ -22,6 +22,10 @@ import {
   presentationReviewMediaIds,
 } from "./presentation-sharing-projection.js";
 import type { StorageService } from "./storage.js";
+import {
+  assignmentMetadata,
+  projectPresentationReadingReport,
+} from "./presentation-assignment-projection.js";
 
 const unavailable = () => new PresentationAssignmentError("UNAVAILABLE");
 export class PresentationAssignmentMediaBusyError extends Error {}
@@ -33,16 +37,6 @@ function credential(value: string) {
   )
     throw unavailable();
   return hashToken(value);
-}
-export function assignmentMetadata(record: PresentationAssignmentRecord) {
-  return {
-    id: record.id,
-    mode: "reading" as const,
-    versionId: record.versionId,
-    createdAt: record.createdAt.toISOString(),
-    expiresAt: record.expiresAt.toISOString(),
-    revokedAt: record.revokedAt?.toISOString() ?? null,
-  };
 }
 function attemptMetadata(record: PresentationReadingAttemptRecord) {
   return {
@@ -140,6 +134,20 @@ export class PresentationAssignmentService {
       ))
     )
       throw unavailable();
+  }
+  async insights(actor: CreatorContext, presentationId: string, assignmentId: string) {
+    this.writer(actor);
+    await this.enabled(actor.workspaceId);
+    const result = await this.deps.assignments.getReadingReport(
+      actor.workspaceId,
+      presentationId.toLowerCase(),
+      assignmentId.toLowerCase(),
+      actor.userId,
+      new Date(),
+    );
+    if (!result) throw unavailable();
+    await this.enabled(actor.workspaceId);
+    return projectPresentationReadingReport(result);
   }
   private async source(assignmentId: string, token: string) {
     const result = await this.deps.assignments.getPublicAssignment(

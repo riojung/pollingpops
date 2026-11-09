@@ -4,6 +4,7 @@ import { MemoryRepository } from "../src/index.js";
 import {
   expectReadingConformance,
   expectReadingLifecycle,
+  expectReadingReportConformance,
   readingAssignmentFixture,
 } from "./support/presentation-assignments-conformance.js";
 describe("Presentation reading assignments", () => {
@@ -12,6 +13,17 @@ describe("Presentation reading assignments", () => {
   });
   it("exports credential-free metadata and erases assignments and anonymous attempts", async () => {
     await expectReadingLifecycle(new MemoryRepository());
+  });
+  it("reports frozen anonymous attempt counts within current creator authority and retention", async () => {
+    const repository = new MemoryRepository();
+    await expectReadingReportConformance(repository, async (actor, check) => {
+      repository.users.get(actor.userId)!.role = "viewer";
+      try {
+        await check();
+      } finally {
+        repository.users.get(actor.userId)!.role = "owner";
+      }
+    });
   });
   it("retains retries until seven days after assignment expiry and purges all children", async () => {
     const repository = new MemoryRepository(),

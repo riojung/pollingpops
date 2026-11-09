@@ -15,6 +15,7 @@ import {
   saveReadingAssignmentIntent,
 } from "../../lib/presentation-assignments-client";
 import styles from "../presentation-sharing/sharing.module.css";
+import { PresentationReadingInsights } from "./reading-insights";
 
 export function PresentationAssignmentButton({
   presentationId,
@@ -47,7 +48,7 @@ export function PresentationAssignmentButton({
       </button>
       {open && versionId ? (
         <PresentationAssignmentDialog
-          key={actorKey}
+          key={`${actorKey}:${presentationId}`}
           actorKey={actorKey}
           presentationId={presentationId}
           versionId={versionId}
@@ -77,6 +78,7 @@ export function PresentationAssignmentDialog({
     [busy, setBusy] = useState(false),
     [pending, setPending] = useState(false),
     [error, setError] = useState(""),
+    [insightsId, setInsightsId] = useState<string | null>(null),
     [url, setUrl] = useState("");
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -90,6 +92,7 @@ export function PresentationAssignmentDialog({
       controller.abort();
       intent.current = null;
       setUrl("");
+      setInsightsId(null);
       onClose();
     };
     window.addEventListener(AUTH_CHANGE_EVENT, authChanged);
@@ -266,6 +269,13 @@ export function PresentationAssignmentDialog({
                 </span>
                 <button
                   type="button"
+                  aria-pressed={insightsId === assignment.id}
+                  onClick={() => setInsightsId(assignment.id)}
+                >
+                  Reading insights
+                </button>
+                <button
+                  type="button"
                   disabled={busy || !!assignment.revokedAt || expired}
                   onClick={() => void revoke(assignment.id)}
                 >
@@ -278,6 +288,16 @@ export function PresentationAssignmentDialog({
       ) : (
         <p>No reading assignments yet.</p>
       )}
+      {assignments
+        .filter((assignment) => assignment.id === insightsId)
+        .map((assignment) => (
+          <PresentationReadingInsights
+            key={`${actorKey}:${presentationId}:${assignment.id}:${assignment.versionId}`}
+            actorKey={actorKey}
+            presentationId={presentationId}
+            assignment={assignment}
+          />
+        ))}
     </dialog>
   );
 }

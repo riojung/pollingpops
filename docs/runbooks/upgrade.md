@@ -721,6 +721,15 @@ operations and frozen publications rather than dropping the new tables. Existing
 Presentation delivery can remain on its established gates. See the
 [reading-assignment record](../evidence/presentation-e08-reading-assignments.md).
 
+Reading insights adds a current-owner/editor-only aggregate endpoint and an explicit report/CSV
+panel in Assign reading. It requires migration105 but adds no migration or stored report format.
+Deploy matching HTTP and web readers; existing lifecycle/retention readers remain required.
+Check frozen-version page coverage, exact retry counts, direct/complementary small-group
+suppression and current-authority/cross-tenant denial. Revoked/expired assignments remain
+reportable until expiry plus seven days; delayed cleanup must not extend report access. Verify
+identity/source changes fence late results and clear export state. See the
+[reading-insights record](../evidence/presentation-reading-insights.md).
+
 ## Native Presentation composition compatibility
 
 Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,

@@ -6,6 +6,7 @@ import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 import {
   expectReadingConformance,
   expectReadingLifecycle,
+  expectReadingReportConformance,
   readingAssignmentFixture,
 } from "./support/presentation-assignments-conformance.js";
 const adminUrl = process.env.TEST_DATABASE_ADMIN_URL,
@@ -108,6 +109,55 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation reading PostgreSQL", ()
         )
       ).rows[0].count,
     ).toBe(0);
+  });
+  it("reports counts under restricted assignment RLS with creator and retention fences", async () => {
+    await expectReadingReportConformance(repository, async (actor, check) => {
+      await administrator.pool.query(
+        "UPDATE workspace_members SET role='viewer' WHERE workspace_id=$1 AND user_id=$2",
+        [actor.workspaceId, actor.userId],
+      );
+      try {
+        await check();
+      } finally {
+        await administrator.pool.query(
+          "UPDATE workspace_members SET role='owner' WHERE workspace_id=$1 AND user_id=$2",
+          [actor.workspaceId, actor.userId],
+        );
+      }
+    });
+  });
+  it("rechecks the report retention deadline after waiting for an assignment lock", async () => {
+    const f = await readingAssignmentFixture(repository),
+      blocker = await administrator.pool.connect();
+    try {
+      // Age a valid retained fixture without changing the immutable production write path.
+      await blocker.query("BEGIN");
+      await blocker.query("SET LOCAL session_replication_role='replica'");
+      const aged = (
+        await blocker.query(
+          "UPDATE presentation_assignments SET created_at=clock_timestamp()-interval '8 days',expires_at=clock_timestamp()-interval '7 days'+interval '650 milliseconds' WHERE id=$1 RETURNING expires_at+interval '7 days' AS retention_end",
+          [f.assignment.id],
+        )
+      ).rows[0];
+      await blocker.query("COMMIT");
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT id FROM presentation_assignments WHERE id=$1 FOR UPDATE", [
+        f.assignment.id,
+      ]);
+      const pending = f.assignments.getReadingReport(
+        f.actor.workspaceId,
+        f.presentation.id,
+        f.assignment.id,
+        f.actor.userId,
+        new Date(),
+      );
+      await delay(Math.max(0, new Date(aged.retention_end).getTime() - Date.now() + 20));
+      await blocker.query("COMMIT");
+      expect(await pending).toBeNull();
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+    }
   });
   it("forces assignment scoped RLS and rejects raw source, page, revision and receipt changes", async () => {
     const f = await readingAssignmentFixture(repository);

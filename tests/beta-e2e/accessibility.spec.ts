@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import type { PresentationDraft } from "@openround/contracts";
 import { signInBeta } from "./sign-in";
+import { clickNavigatorAction } from "./presentation-e01-support";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const workspaceDestinations = [
@@ -315,7 +316,7 @@ test("Presentation Builder dialogs and drawers pass automated accessibility chec
   await expect(page.getByLabel("Presentation title")).toHaveValue("Accessible presentation");
   await expectNoAxeViolations(page);
 
-  await page.getByRole("button", { name: "+ Add question", exact: true }).click();
+  await clickNavigatorAction(page, "+ Add question");
   const questionPrompt = page.getByLabel("Question prompt");
   await questionPrompt.focus();
   await expect(questionPrompt).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");
@@ -333,7 +334,7 @@ test("Presentation Builder dialogs and drawers pass automated accessibility chec
   await expectNoAxeViolations(page);
   await page.getByRole("button", { name: "Close preview" }).click();
 
-  await page.getByRole("button", { name: "From published Round" }).click();
+  await clickNavigatorAction(page, /From published Round/);
   await expect(page.getByRole("dialog", { name: "Insert from a published Round" })).toBeVisible();
   await expectNoAxeViolations(page);
   await page.getByRole("button", { name: "Cancel" }).click();

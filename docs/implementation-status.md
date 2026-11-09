@@ -18,7 +18,7 @@ inspector and command bar with visible save/publication state and explicit deliv
 Existing creation intents, gates, allowances, document/scene formats, retry recovery and immutable
 publication retain their meanings; no provider, service or paid design dependency is added.
 
-The full repository check passes 6,909 tests and all builds, including a compiled-server
+The full repository check passes 6,910 tests and all builds, including a compiled-server
 startup/configuration smoke that catches the practice/sharing contracts import cycle fixed in
 this branch. Initial browser qualification passed 68 selected workflows across desktop Chromium/Firefox
 and phone Chromium/WebKit, including actual exports, automated accessibility, focus, 320px layout
@@ -33,6 +33,12 @@ profiles. It migrates the remaining import/reference journeys to the new disclos
 the inert ancestor that prevented recovery of lost update/undo acknowledgements. Ordinary edits
 remain paused, competing operations still block the recovery panel, and exact retry identities
 remain unchanged. Transport-driven apply/undo regressions are included in the repository count.
+
+The PR review follow-up also retains a newly inserted video node's selection while the parent
+scene updates. Deferred-render/rejection tests and 36 selected composition, information,
+accessibility and AI-assistance browser cases pass. Remaining journey selectors now follow the
+new launcher and inspector, and pending discussion recovery uses its reachable banner. These are
+selected local qualifications, not a claim that the full hosted CI matrix is green.
 
 ### Presentation self-paced choice practice November 8, 2026
 

@@ -687,7 +687,8 @@ export function NativeSceneEditor({
           scene={scene}
           canAdd={canAdd}
           onChange={onChange}
-          onSelect={(id) => select(id)}
+          // The accepted node is absent from this render's scene until the parent updates.
+          onSelect={(id) => setSelection([id])}
         />
       </div>
       <div hidden={sectionHidden("accessibility")} data-native-inspector-section="accessibility">

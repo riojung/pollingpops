@@ -173,6 +173,7 @@ for (const suffix of ["", " @mobile"]) {
       )
       .toBe(30);
 
+    const beforeVideo = scene((await readE01Record(page, record.id)).draft);
     const providerRequests: string[] = [];
     page.on("request", (request) => {
       if (request.url().startsWith("https://example.com/")) providerRequests.push(request.url());
@@ -195,9 +196,37 @@ for (const suffix of ["", " @mobile"]) {
     await expect
       .poll(async () => scene((await readE01Record(page, record.id)).draft).nodes.length)
       .toBe(5);
+    const insertedVideo = scene((await readE01Record(page, record.id)).draft).nodes.at(-1)!;
+    if (insertedVideo.type !== "text") throw new Error("Expected the inserted video text");
+    await expect(page.getByRole("combobox", { name: "Selected object", exact: true })).toHaveValue(
+      insertedVideo.id,
+    );
+    await openE01Inspector(page, "Content");
+    const selectedVideoText = page.getByRole("textbox", { name: "Node text", exact: true });
+    await expect(selectedVideoText).toHaveValue(insertedVideo.text);
+    const reviewedVideoText = `${insertedVideo.text}\nReviewed for the launch.`;
+    await selectedVideoText.focus();
+    await selectedVideoText.evaluate((element) => {
+      const input = element as HTMLTextAreaElement;
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+    // Match an append operation; replacing the entire field can replace its link formatting.
+    await selectedVideoText.press("Shift");
+    await selectedVideoText.press("Enter");
+    await selectedVideoText.pressSequentially("Reviewed for the launch.");
+    await expect
+      .poll(async () => {
+        const updated = scene((await readE01Record(page, record.id)).draft).nodes.find(
+          (node) => node.id === insertedVideo.id,
+        );
+        return updated?.type === "text" ? updated.text : null;
+      })
+      .toBe(reviewedVideoText);
     const saved = (await readE01Record(page, record.id)).draft;
     expect(saved.schemaVersion).toBe(8);
     expect(scene(saved).groups).toEqual(rotated.groups);
+    expect(scene(saved).nodes.slice(0, -1)).toEqual(beforeVideo.nodes);
+    expect(scene(saved).readingOrder).toEqual([...beforeVideo.readingOrder, insertedVideo.id]);
     if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const preview = page.getByRole("dialog", { name: "Presentation preview", exact: true });

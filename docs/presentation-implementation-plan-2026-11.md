@@ -49,7 +49,7 @@ refinement. Existing schemas, exact retries, permissions and frozen publications
 authority. Responsive mode uses available editor width so page zoom also closes crowded rails;
 Undo/Redo preserves an open inspector, and closing secondary dialogs restores the invoking action.
 
-Automated qualification for this source passes `VITEST_MAX_WORKERS=1 pnpm check`: 6,909 tests,
+Automated qualification for this source passes `VITEST_MAX_WORKERS=1 pnpm check`: 6,910 tests,
 formatting, lint, types, Docker-context validation, all four application/admin builds and the
 compiled-server startup/configuration smoke. Standard opt-in database/provider suites remain
 skipped. Initial browser qualification passed 68 selected workflows across desktop Chromium/Firefox and
@@ -65,6 +65,14 @@ and related-reference disclosures and handle initially closed phone panels. The 
 fixes a real retry blocker: Pack update/undo acknowledgements can be recovered while ordinary
 editing remains paused. Competing assistance/import operations still fence the recovery panel;
 transport-driven tests preserve exact retry bytes and reject stale retries.
+
+The PR review follow-up preserves selection of an accepted external-video node before the parent
+receives the updated scene, including rejection and deferred-render coverage. Another 36 selected
+browser cases verify video editing, outline/discussion assistance, information components and
+Presentation dialog accessibility across the four profiles. Remaining legacy journeys now use
+the contextual Layout tab and import disclosures, and resume assistance from its recovery banner
+without activating a paused workspace. AI cases use the normal worker server and fresh fixtures
+for rate-budget isolation; allowances and timeouts are unchanged.
 
 The compiled-server smoke also guards the practice/sharing contracts import-cycle regression:
 shared content schemas now have an acyclic module without changing stored content or API shapes.

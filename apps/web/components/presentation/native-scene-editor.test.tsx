@@ -1,10 +1,18 @@
-import { isValidElement, type ReactElement, type ReactNode, type ReactPortal } from "react";
+import {
+  isValidElement,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+  type ReactPortal,
+} from "react";
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneVideoControls } from "./native-scene-video-controls";
+import type { PresentationScene } from "@openround/contracts";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import {
   NativeSceneDesignControls,
@@ -318,6 +326,124 @@ describe("native multi-object selection", () => {
       editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
     ).toEqual([editor.scene.nodes[0]!.id]);
     expect(editor.onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("native external video insertion selection", () => {
+  it("retains rejected media entries and selects the accepted new node before the parent supplies its next scene", () => {
+    const editor = editorHarness();
+    editor.scene.schemaVersion = 4;
+    editor.scene.groups = [
+      { id: "existing-group", nodeIds: editor.scene.nodes.map((node) => node.id) },
+    ];
+    const original = structuredClone(editor.scene);
+    let accepted = false;
+    let pendingScene: PresentationScene | undefined;
+    editor.onChange.mockImplementation((next: PresentationScene) => {
+      if (!accepted) return false;
+      pendingScene = next;
+    });
+    editor.render("idle");
+    const initialSelectedIds = editor.find((element) => element.type === NativeSceneCanvas).props
+      .selectedNodeIds;
+    const videoHooks = { cursor: 0, slots: [] as unknown[] };
+    let videoTree: ReactNode;
+    function renderVideo() {
+      const props = editor.find((element) => element.type === NativeSceneVideoControls).props;
+      videoHooks.cursor = 0;
+      mocked.hooks = videoHooks;
+      try {
+        videoTree = NativeSceneVideoControls(
+          props as unknown as ComponentProps<typeof NativeSceneVideoControls>,
+        );
+      } finally {
+        mocked.hooks = null;
+      }
+    }
+    function input(label: string) {
+      const field = elements(videoTree).find(
+        (element) =>
+          element.type === "label" && (element.props.children as ReactNode[])[0] === label,
+      );
+      const control = elements(field).find((element) => element.type === "input");
+      if (!control) throw new Error(`Missing ${label}`);
+      return control;
+    }
+    function enter(label: string, value: string) {
+      (input(label).props.onChange as (event: unknown) => void)({ target: { value } });
+      renderVideo();
+    }
+    function insert() {
+      const button = elements(videoTree).find(
+        (element) =>
+          element.type === "button" && element.props.children === "Add external video link",
+      )!;
+      expect(button.props.disabled).toBe(false);
+      (button.props.onClick as () => void)();
+    }
+    renderVideo();
+    enter("Video title", "Launch walkthrough");
+    enter("Video HTTPS link", "https://example.com/launch-video");
+    enter("Captions or transcript HTTPS link", "https://example.com/launch-transcript");
+    insert();
+    editor.render("idle");
+    renderVideo();
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    expect(pendingScene).toBeUndefined();
+    expect(editor.scene).toEqual(original);
+    expect(
+      editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+    ).toEqual(initialSelectedIds);
+    expect(input("Video title").props.value).toBe("Launch walkthrough");
+    expect(input("Video HTTPS link").props.value).toBe("https://example.com/launch-video");
+    expect(input("Captions or transcript HTTPS link").props.value).toBe(
+      "https://example.com/launch-transcript",
+    );
+    accepted = true;
+    insert();
+    const addedScene = pendingScene!;
+    const inserted = addedScene.nodes.at(-1)!;
+    expect(inserted.type).toBe("text");
+    // onSelect has already run, while the parent is still rendering its original scene.
+    expect(editor.scene.nodes.some((node) => node.id === inserted.id)).toBe(false);
+    Object.assign(editor.scene, addedScene);
+    editor.render("idle");
+    renderVideo();
+    expect(
+      editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+    ).toEqual([inserted.id]);
+    expect(
+      editor.find((element) => element.props["aria-label"] === "Selected object").props.value,
+    ).toBe(inserted.id);
+    const rich = editor.find((element) => element.type === NativeRichTextEditor);
+    expect(rich.props.node).toEqual(inserted);
+    expect(input("Video title").props.value).toBe("");
+    expect(input("Video HTTPS link").props.value).toBe("");
+    expect(input("Captions or transcript HTTPS link").props.value).toBe("");
+    expect(addedScene.nodes.slice(0, -1)).toEqual(original.nodes);
+    expect(addedScene.groups).toEqual(original.groups);
+    expect(addedScene.readingOrder).toEqual([...original.readingOrder, inserted.id]);
+    if (inserted.type !== "text" || !inserted.richText) throw new Error("Expected video rich text");
+    const edited = {
+      ...inserted,
+      text: `${inserted.text}\nReviewed for the launch.`,
+      richText: {
+        paragraphs: [
+          ...inserted.richText.paragraphs,
+          { kind: "paragraph" as const, runs: [{ text: "Reviewed for the launch." }] },
+        ],
+      },
+    };
+    (rich.props.onChange as (node: unknown, field: string) => void)(edited, "text");
+    expect(editor.onChange).toHaveBeenCalledTimes(3);
+    expect(editor.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        nodes: [...original.nodes, edited],
+        groups: original.groups,
+        readingOrder: addedScene.readingOrder,
+      }),
+      `native:${inserted.id}:text`,
+    );
   });
 });
 

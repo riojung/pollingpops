@@ -159,8 +159,10 @@ async function closeDrawers(page: Page) {
   }
 }
 async function openSuggestions(page: Page, resume = false) {
-  if (!resume) await closeDrawers(page);
-  await openSlideIdeas(page);
+  await closeDrawers(page);
+  if (!resume) {
+    await openSlideIdeas(page);
+  }
   await page
     .getByRole("button", {
       name: resume ? "Resume discussion suggestions" : "Suggest discussion questions",
@@ -492,7 +494,7 @@ for (const suffix of ["", " @mobile"]) {
       await page
         .getByLabel("Native slide title", { exact: true })
         .fill("A manually revised launch plan");
-      await openSlideIdeas(page);
+      await closeDrawers(page);
       await page
         .getByRole("button", { name: "Resume discussion suggestions", exact: true })
         .click();

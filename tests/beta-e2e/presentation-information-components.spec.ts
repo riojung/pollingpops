@@ -11,6 +11,7 @@ import type {
 import { signInBeta } from "./sign-in";
 import {
   selectE01Object,
+  openE01Inspector,
   closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
@@ -256,6 +257,7 @@ for (const suffix of ["", " @mobile"]) {
     await expectInformation(stage);
     await expectNoHorizontalOverflow(page);
     await page.emulateMedia({ colorScheme: "dark" });
+    await openE01Inspector(page, "Layout");
     await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
     await expect(stage).toHaveCSS("background-color", "rgb(17, 27, 46)");
     await expect(stage.getByRole("table", { name: tableCaption, exact: true })).toHaveCSS(

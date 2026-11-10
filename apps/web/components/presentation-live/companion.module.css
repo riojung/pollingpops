@@ -146,6 +146,13 @@
   margin: 0;
   font-weight: 700;
 }
+@media (max-width: 54rem) {
+  .page {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+  }
+}
 @media (max-width: 380px) {
   .page {
     padding: 0.5rem;

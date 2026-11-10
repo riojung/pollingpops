@@ -1,8 +1,17 @@
 "use client";
 
 import { useEffect, useState, type RefObject } from "react";
-import { type PresentationScene } from "@openround/contracts";
-import { nativeNodeLabel } from "../../lib/presentation-native-scene";
+import {
+  type PresentationScene,
+  type PresentationSceneNode,
+  type SupportedLocale,
+} from "@openround/contracts";
+import { useLocale } from "../locale-provider";
+import {
+  nativeControlNodeLabel,
+  nativeControlsCopy,
+  type NativeControlsCopyKey,
+} from "./native-controls-copy";
 import styles from "./native-scene.module.css";
 
 const INITIAL_FEEDBACK =
@@ -12,6 +21,67 @@ const WAITING_FOR_FONTS =
 const READING_FEEDBACK =
   "Reading view shows complete content in reading order. Wide slide fit cannot be checked in this stacked view; use a wide layout preview to check frames.";
 
+export type NativeFitFeedback =
+  NativeControlsCopyKey | { nodes: (PresentationSceneNode | null)[]; data: boolean };
+
+/** Feedback stays language-neutral so changing locale never remeasures or changes the draft. */
+export function nativeFitFeedbackText(locale: SupportedLocale, feedback: NativeFitFeedback) {
+  const copy = nativeControlsCopy(locale);
+  if (typeof feedback === "string") return copy(feedback);
+  const names = feedback.nodes
+    .map((node) => (node ? nativeControlNodeLabel(locale, node).text : copy("Text object")))
+    .join(", ");
+  return copy("Fit check: {message}", {
+    message:
+      copy(
+        feedback.nodes.length === 1 ? "{names} exceeds its frame." : "{names} exceed their frames.",
+        { names },
+      ) +
+      " " +
+      copy(
+        feedback.data
+          ? "Enlarge object frames, change the layout or reduce content. Full text remains scrollable; data tables remain scrollable too; narrow screens show all content."
+          : "Enlarge text frames, change the layout or reduce text. Full text remains scrollable; narrow screens show all content.",
+      ),
+  });
+}
+
+function Feedback({ locale, feedback }: { locale: SupportedLocale; feedback: NativeFitFeedback }) {
+  const copy = nativeControlsCopy(locale);
+  if (typeof feedback === "string") return copy(feedback);
+  const marker = "__NATIVE_NAMES__";
+  // Keep authored labels outside the application language boundary without altering them.
+  const namesTemplate = copy("Fit check: {message}", {
+    message: copy(
+      feedback.nodes.length === 1 ? "{names} exceeds its frame." : "{names} exceed their frames.",
+      { names: marker },
+    ),
+  });
+  const [before, after] = namesTemplate.split(marker);
+  return (
+    <>
+      {before}
+      {feedback.nodes.map((node, index) => {
+        const label = node
+          ? nativeControlNodeLabel(locale, node)
+          : { text: copy("Text object"), language: locale };
+        return (
+          <span key={node?.id ?? index} lang={label.language}>
+            {index ? ", " : ""}
+            {label.text}
+          </span>
+        );
+      })}
+      {after}{" "}
+      {copy(
+        feedback.data
+          ? "Enlarge object frames, change the layout or reduce content. Full text remains scrollable; data tables remain scrollable too; narrow screens show all content."
+          : "Enlarge text frames, change the layout or reduce text. Full text remains scrollable; narrow screens show all content.",
+      )}
+    </>
+  );
+}
+
 /** Measure the wide rendered plane after fonts load; semantic reading views cannot prove fit. */
 export function NativeSceneFitFeedback({
   root,
@@ -20,7 +90,8 @@ export function NativeSceneFitFeedback({
   root: RefObject<HTMLDivElement | null>;
   scene: PresentationScene;
 }) {
-  const [feedback, setFeedback] = useState(INITIAL_FEEDBACK);
+  const { locale } = useLocale();
+  const [feedback, setFeedback] = useState<NativeFitFeedback>(INITIAL_FEEDBACK);
   useEffect(() => {
     let active = true;
     setFeedback(INITIAL_FEEDBACK);
@@ -67,13 +138,14 @@ export function NativeSceneFitFeedback({
           content.scrollWidth > content.clientWidth + 1
         );
       });
-      const labels = overflowing.map((node) => {
-        const model = scene.nodes.find((item) => item.id === node.dataset.nodeId);
-        return model ? nativeNodeLabel(model) : "Text object";
-      });
       setFeedback(
-        labels.length
-          ? `Fit check: ${labels.join(", ")} ${labels.length === 1 ? "exceeds its frame" : "exceed their frames"}. Enlarge ${data ? "object" : "text"} frames, change the layout or reduce ${data ? "content" : "text"}. Full text remains scrollable${data ? "; data tables remain scrollable too" : ""}; narrow screens show all content.`
+        overflowing.length
+          ? {
+              nodes: overflowing.map(
+                (node) => scene.nodes.find((item) => item.id === node.dataset.nodeId) ?? null,
+              ),
+              data,
+            }
           : data
             ? "Fit check: Text and data fit the current preview. Check again after changing content, fonts or layout. Narrow screens show complete data in reading order."
             : "Fit check: All text fits the current preview. Check again after changing text, fonts or layout. Narrow screens show full text and uncropped images in reading order.",
@@ -106,10 +178,11 @@ export function NativeSceneFitFeedback({
   return (
     <p
       role="status"
+      lang={locale}
       className={`${styles.help} ${styles.fitFeedback}`}
       data-native-fit-feedback="true"
     >
-      {feedback}
+      <Feedback locale={locale} feedback={feedback} />
     </p>
   );
 }

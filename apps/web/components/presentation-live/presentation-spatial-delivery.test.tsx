@@ -3,16 +3,23 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-  PresentationNavigationSnapshot,
-  PresentationSpatialSnapshot,
+import {
+  supportedLocales,
+  type SupportedLocale,
+  type PresentationNavigationSnapshot,
+  type PresentationSpatialSnapshot,
 } from "@openround/contracts";
+import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { shouldApplyPresentationSnapshot } from "../../lib/presentation-realtime";
 import { PresentationSpatialDelivery } from "./presentation-spatial-delivery";
 
 type Effect = { deps?: readonly unknown[]; run: () => void | (() => void); cleanup?: () => void };
 type Hooks = { cursor: number; slots: unknown[]; effects: Map<number, Effect>; pending: Effect[] };
-const fixture = vi.hoisted(() => ({ hooks: null as Hooks | null }));
+const fixture = vi.hoisted(() => ({
+  hooks: null as Hooks | null,
+  locale: "en-CA" as SupportedLocale,
+}));
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: fixture.locale }) }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
@@ -180,10 +187,70 @@ function setupObserver() {
 }
 afterEach(() => {
   fixture.hooks = null;
+  fixture.locale = "en-CA";
   vi.unstubAllGlobals();
 });
 
 describe("geometry-only live presentation spatial delivery", () => {
+  it.each(supportedLocales)(
+    "localizes audience spatial controls in %s without exposing private navigation metadata",
+    (locale) => {
+      fixture.locale = locale;
+      const before = structuredClone(spatial);
+      const markup = renderToStaticMarkup(
+        <PresentationSpatialDelivery
+          spatial={spatial}
+          navigation={navigation}
+          currentBlockIndex={0}
+          phase="content"
+          sourceKey="audience"
+        />,
+      );
+      const copy = sectionsSpatialCopy(locale);
+      expect(markup).toContain(`aria-label="${copy("Presentation spatial path")}"`);
+      expect(markup).toContain(copy("Show overview"));
+      expect(markup).toContain(copy("Use linear view"));
+      expect(markup).toContain(copy("Page {current} of {total}", { current: 1, total: 3 }));
+      expect(markup).not.toContain("Current private title");
+      expect(markup).not.toContain("Guarded activity");
+      expect(markup).not.toContain("00000000-");
+      expect(markup).not.toContain(copy("Jump to page"));
+      expect(spatial).toEqual(before);
+    },
+  );
+  it("localizes known server guards while preserving private targets, unknown errors and jump authority", () => {
+    setupObserver();
+    fixture.locale = "ko-KR";
+    const guarded = {
+      ...navigation,
+      entries: navigation.entries.map((entry, index) =>
+        index === 1
+          ? { ...entry, blockedReason: "Complete the linked recheck before navigating." }
+          : entry,
+      ),
+    };
+    const onJump = vi.fn();
+    const panel = harness({ navigation: guarded, onJump });
+    panel.select(guarded.entries[1]!.blockId);
+    expect(panel.markup()).toContain('lang="ko-KR">탐색하기 전에 연결된 재확인을 완료하세요.');
+    expect(panel.button("선택한 페이지로 이동").props.disabled).toBe(true);
+    (panel.button("선택한 페이지로 이동").props.onClick as () => void)();
+    expect(onJump).not.toHaveBeenCalled();
+    panel.render({
+      navigation: {
+        ...guarded,
+        entries: guarded.entries.map((entry, index) =>
+          index === 1 ? { ...entry, blockedReason: "Unknown service diagnostic 74" } : entry,
+        ),
+      },
+    });
+    expect(panel.markup()).toContain('lang="en-CA">Unknown service diagnostic 74');
+    panel.select(navigation.entries[2]!.blockId);
+    panel.click("선택한 페이지로 이동");
+    expect(onJump).toHaveBeenCalledExactlyOnceWith(navigation.entries[2]!.blockId);
+    expect(panel.markup()).toMatch(/<option[^>]*lang=""[^>]*>3\. Allowed slide<\/option>/);
+    panel.unmount();
+  });
   it("preserves legacy linear delivery and exposes only numbered geometry to audiences", () => {
     expect(
       PresentationSpatialDelivery({ currentBlockIndex: 0, phase: "content", sourceKey: "legacy" }),
@@ -331,7 +398,7 @@ describe("geometry-only live presentation spatial delivery", () => {
     expect(paintedFrames.at(-1)?.props["data-current"]).toBe(true);
     expect(
       elements(paintedFrames.at(-1)).find((element) => element.type === "text")?.props.children,
-    ).toBe(1);
+    ).toBe("1");
     expect(nodes.find((element) => element.type === "polyline")?.props.points).toBe(
       "640,360 640,360 18640,17360",
     );

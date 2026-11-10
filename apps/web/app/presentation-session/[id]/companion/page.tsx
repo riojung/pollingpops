@@ -43,6 +43,10 @@ import {
   type PresentationRealtimeController,
 } from "../../../../lib/presentation-realtime";
 import { formatNumber } from "../../../../lib/i18n/format";
+import {
+  companionCopy,
+  localizeCompanionError,
+} from "../../../../lib/i18n/domains/live-delivery/companion-translations";
 import { clientUuid } from "../../../../lib/uuid";
 import { isPresentationHostPassRejection } from "../../../../lib/presentation-host-pass";
 import {
@@ -104,6 +108,7 @@ type CompanionRecovery = ReturnType<
 export default function PresentationCompanionPage() {
   const { id } = useParams<{ id: string }>();
   const { locale, t } = useLocale();
+  const copy = companionCopy(locale);
   const [pass, setPass] = useState<string | null>(null);
   const [captured, setCaptured] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -165,10 +170,10 @@ export default function PresentationCompanionPage() {
         }),
       );
     } catch {
-      setError(t("live.companion.missingPass"));
+      setError("Launch the companion from the Presentation host to connect this window.");
     }
     setCaptured(true);
-  }, [id, t]);
+  }, [id]);
 
   const applySnapshot = useCallback(
     (incoming: PresentationCompanionSnapshot) => setSnapshot(incoming),
@@ -383,7 +388,7 @@ export default function PresentationCompanionPage() {
 
   function retryLabel(command: PresentationCompanionCommand) {
     return isPresentationRecoverableCommand(command)
-      ? presentationNavigationRetryLabel(command)
+      ? localizeCompanionError(locale, presentationNavigationRetryLabel(command)).text
       : t(companionCommandRetryMessageKey(command));
   }
 
@@ -541,6 +546,7 @@ export default function PresentationCompanionPage() {
     ? `${typeof window === "undefined" ? "" : window.location.origin}/join?code=${encodeURIComponent(snapshot.code)}`
     : "";
   const block = snapshot?.currentBlock;
+  const displayError = localizeCompanionError(locale, error);
   const interactionRuntime = presentationInteractionRuntime(snapshot, {
     mode: "live_staff",
     disabled:
@@ -552,7 +558,7 @@ export default function PresentationCompanionPage() {
     onSetReveal: (nodeId, revealed) => void sceneAction(nodeId, revealed),
   });
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <section className={styles.sidecar} aria-label={t("live.companion.title")}>
         <header>
           <h1>{t("live.companion.title")}</h1>
@@ -567,8 +573,8 @@ export default function PresentationCompanionPage() {
           </p>
         </header>
         {error ? (
-          <p className="error" role="alert">
-            {error}
+          <p className="error" role="alert" lang={displayError.language}>
+            {displayError.text}
           </p>
         ) : null}
         {!pass && captured ? (
@@ -613,7 +619,10 @@ export default function PresentationCompanionPage() {
               </p>
             </div>
             {block?.kind === "content" && block.scene?.nodes.some(isNativeInteractionNode) ? (
-              <section aria-label="Current slide interactions" className={styles.slideInteractions}>
+              <section
+                aria-label={copy("Current slide interactions")}
+                className={styles.slideInteractions}
+              >
                 <ContentSlideView
                   block={block}
                   interactionRuntime={interactionRuntime}
@@ -683,13 +692,12 @@ export default function PresentationCompanionPage() {
               {snapshot.navigation ? (
                 <button
                   className="button-quiet"
-                  lang="en-CA"
                   type="button"
                   onClick={() => setOverlay("navigation")}
                   aria-haspopup="dialog"
                   aria-expanded={overlay === "navigation"}
                 >
-                  Open navigation
+                  {copy("Open navigation")}
                 </button>
               ) : null}
               <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
@@ -770,7 +778,15 @@ export default function PresentationCompanionPage() {
               />
             ) : null}
             {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
-              <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
+              <RecoveryPackLiveCardView
+                card={snapshot.recoveryPackIntervention.card}
+                labels={{
+                  language: locale,
+                  regionName: copy("Active Recovery Pack card"),
+                  attribution: `${copy("Recovery Pack card")} · ${t("live.companion.packs.version", { version: formatNumber(locale, snapshot.recoveryPackIntervention.card.reference.packVersion) })}`,
+                  sources: copy("Sources"),
+                }}
+              />
             ) : null}
             {snapshot.branches ? (
               <PresentationBranches
@@ -811,7 +827,13 @@ export default function PresentationCompanionPage() {
           <p>{t("live.presentationSession.joinCode")}</p>
           <p className={styles.joinCode}>{snapshot.code}</p>
           <QRCodeSVG value={joinUrl} size={200} title={t("live.companion.joinQr")} />
-          <a className={styles.joinLink} href={joinUrl} target="_blank" rel="noopener noreferrer">
+          <a
+            className={styles.joinLink}
+            href={joinUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            lang=""
+          >
             {joinUrl}
           </a>
         </CompanionOverlay>
@@ -894,8 +916,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>
@@ -937,8 +959,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>
@@ -980,8 +1002,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>

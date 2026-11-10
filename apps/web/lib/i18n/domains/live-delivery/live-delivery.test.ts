@@ -42,11 +42,10 @@ describe("live delivery localization catalog", () => {
       for (const key of keys) expect(messages[key as keyof typeof messages].trim()).not.toBe("");
     }
   });
-  it("keeps Companion foundation copy in the existing English fallback with exact placeholders", async () => {
+  it("provides Companion translations with exact placeholders and preserves English defaults", async () => {
     const keys = Object.keys(liveDeliveryEnglishMessages).filter(
       (key) =>
-        key.startsWith("live.companion.quickCheck.") ||
-        key.startsWith("live.companion.publishedQuestions.") ||
+        key.startsWith("live.companion.") ||
         key === "live.presentationReport.sessionOnlyQuickCheck",
     );
     expect(keys).toContain("live.companion.quickCheck.retryAcknowledgement");
@@ -55,13 +54,14 @@ describe("live delivery localization catalog", () => {
       const messages = await loadLiveDeliveryMessages(locale);
       for (const key of keys) {
         const messageKey = key as keyof typeof liveDeliveryEnglishMessages;
-        expect(messages[messageKey], `${locale}: ${key}`).toBe(
-          liveDeliveryEnglishMessages[messageKey],
-        );
+        expect(messages[messageKey].trim(), `${locale}: ${key}`).not.toBe("");
+        if (locale === "en-CA")
+          expect(messages[messageKey]).toBe(liveDeliveryEnglishMessages[messageKey]);
         expect(placeholders(messages[messageKey])).toEqual(
           placeholders(liveDeliveryEnglishMessages[messageKey]),
         );
       }
+      if (locale === "ko-KR") expect(messages["live.companion.launch"]).toBe("Companion 실행");
     }
   });
 

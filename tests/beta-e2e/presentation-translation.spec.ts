@@ -255,6 +255,8 @@ for (const suffix of ["", " @mobile"]) {
     await expect(
       page
         .getByRole("complementary", { name: "Presentation map", exact: true })
+        .getByRole("button")
+        .filter({ has: page.getByText(otherObject, { exact: true }) })
         .getByText(otherObject, { exact: true }),
     ).toHaveAttribute("lang", "es");
     await closeDrawers(page);

@@ -234,6 +234,7 @@ for (const suffix of ["", " @mobile"]) {
       })
       .check();
     await expect(insert).toBeEnabled();
+    await expect(insert).toHaveCSS("opacity", "1");
     expect(
       (
         await new AxeBuilder({ page })

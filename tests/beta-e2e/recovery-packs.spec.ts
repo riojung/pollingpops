@@ -530,7 +530,7 @@ test("Presentation workspace retry and deferred import preparation preserve one 
         "inert",
         "",
       );
-      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+      await expect(backgroundAction).toBeDisabled();
       expect(
         await backgroundAction.evaluate((element) => {
           (element as HTMLElement).focus();

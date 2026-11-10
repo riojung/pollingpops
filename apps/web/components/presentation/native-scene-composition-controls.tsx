@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "../locale-provider";
+import { nativeControlsCopy, type NativeControlsCopyKey } from "./native-controls-copy";
 import { PresentationSceneDraftSchema, type PresentationScene } from "@openround/contracts";
 import {
   groupNativeSceneNodes,
@@ -23,9 +25,12 @@ export function NativeSceneCompositionControls({
   selectedId: string;
   onChange: (scene: PresentationScene) => void;
 }) {
-  const [failure, setFailure] = useState<{ scene: PresentationScene; message: string } | null>(
-    null,
-  );
+  const { locale } = useLocale();
+  const copy = nativeControlsCopy(locale);
+  const [failure, setFailure] = useState<{
+    scene: PresentationScene;
+    message: NativeControlsCopyKey;
+  } | null>(null);
   const units = nativeSceneSelectionUnits(scene, selectedIds);
   const selected = scene.nodes.find((node) => node.id === selectedId);
   const grouped =
@@ -58,28 +63,28 @@ export function NativeSceneCompositionControls({
     apply(next);
   }
   return (
-    <fieldset className={styles.designControls}>
-      <legend>Group and rotate</legend>
+    <fieldset lang={locale} className={styles.designControls}>
+      <legend>{copy("Group and rotate")}</legend>
       <div className={styles.actions}>
         <button
           type="button"
           disabled={units.length < 2}
           onClick={() => apply(groupNativeSceneNodes(scene, selectedIds))}
         >
-          Group selected objects
+          {copy("Group selected objects")}
         </button>
         <button
           type="button"
           disabled={!grouped}
           onClick={() => apply(ungroupNativeSceneNodes(scene, selectedIds))}
         >
-          Ungroup selected objects
+          {copy("Ungroup selected objects")}
         </button>
         <button type="button" disabled={!units.length} onClick={() => rotate(-15)}>
-          Rotate selection left 15°
+          {copy("Rotate selection left 15°")}
         </button>
         <button type="button" disabled={!units.length} onClick={() => rotate(15)}>
-          Rotate selection right 15°
+          {copy("Rotate selection right 15°")}
         </button>
         <button
           type="button"
@@ -96,7 +101,7 @@ export function NativeSceneCompositionControls({
               );
           }}
         >
-          Grow selection 5%
+          {copy("Grow selection 5%")}
         </button>
         <button
           type="button"
@@ -113,12 +118,12 @@ export function NativeSceneCompositionControls({
               );
           }}
         >
-          Shrink selection 5%
+          {copy("Shrink selection 5%")}
         </button>
       </div>
       {selected && selected.type !== "connector" ? (
         <label>
-          Last selected angle (degrees)
+          {copy("Last selected angle (degrees)")}
           <input
             type="number"
             min={-180}
@@ -134,14 +139,13 @@ export function NativeSceneCompositionControls({
         </label>
       ) : null}
       <p className={styles.help}>
-        Groups stay together when selected, moved, proportionally resized, aligned or layered.
-        Grouping preserves reading order and connectors. Rotation turns the whole selection around
-        its center; the angle field sets the last selected object’s angle and keeps relative angles.
-        Narrow screens show readable, unrotated content.
+        {copy(
+          "Groups stay together when selected, moved, proportionally resized, aligned or layered. Grouping preserves reading order and connectors. Rotation turns the whole selection around its center; the angle field sets the last selected object’s angle and keeps relative angles. Narrow screens show readable, unrotated content.",
+        )}
       </p>
       {failure?.scene === scene ? (
         <p role="alert" className={styles.formatError}>
-          {failure.message}
+          {copy(failure.message)}
         </p>
       ) : null}
     </fieldset>

@@ -8,6 +8,32 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B editor and Companion follow-up November 10, 2026
+
+The `codex/option-b-editor-companion` source extends selected-language guidance to native
+object selection and geometry, design/composition/fit controls, Sections and spatial
+navigation, and the Presentation Companion shell and auxiliary pickers. All ten configured
+locales are retained with English as default. Authored content and its language annotations,
+stored geometry/enums, playback order, aggregate privacy and exact command retries retain
+their existing meanings. Spatial controls use shared surface, focus and disabled tokens.
+
+Canonical read-only permission now disables Sections and native mutation controls while
+retaining selection, inspection and preview. Current-permission guards cover captured
+callbacks, deferred history writes, undo/redo and active native gestures.
+
+The integrated repository gate passes 7,426 tests and all four builds/startup checks.
+After the authored-language and stage-sizing follow-ups, all 3,547 web tests and web type
+checking pass. Fresh normal/beta production builds and 51 distinct selected desktop/phone
+browser cases pass, including a final twelve-case qualification after Companion's responsive
+layout fix. Scoped lint, formatting and diff checks pass. The verification record distinguishes
+these local results from the pending hosted matrix and local Firefox profile limitation.
+
+The [Option B implementation record](option-b-ux-implementation.md) preserves scope and
+verification. Detailed native text/data/video/interaction inspectors, authoring assistance
+and Pack library/editor tools remain pending. Customer observation, native-language review,
+manual accessibility/device qualification, the full hosted matrix and deferred launch-facing
+content remain release work.
+
 ### Option B specialist workflows November 10, 2026
 
 The `codex/option-b-secondary-flows` source extends selected-language controls and recovery

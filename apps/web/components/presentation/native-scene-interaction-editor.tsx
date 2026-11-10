@@ -19,6 +19,7 @@ type LinkEntry = { source: string; value: string; error: string };
 /** Unsafe or rejected URL entries stay local and never enter draft history or autosave. */
 export function NativeSceneInteractionEditor({
   scene,
+  disabled = false,
   node,
   onChange,
   navigationTargets = [],
@@ -26,6 +27,7 @@ export function NativeSceneInteractionEditor({
   previewUnavailableReason,
 }: {
   scene: PresentationScene;
+  disabled?: boolean;
   node: InteractionNode | null;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
   navigationTargets?: readonly { id: string; title: string }[];
@@ -60,7 +62,13 @@ export function NativeSceneInteractionEditor({
               : previewUnavailableReason
           }
         />
-        {fields}
+        {disabled ? (
+          <fieldset disabled className={styles.permissionControls}>
+            {fields}
+          </fieldset>
+        ) : (
+          fields
+        )}
       </>
     );
   }

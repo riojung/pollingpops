@@ -150,6 +150,7 @@ import {
   type TextAssistanceRecovery,
 } from "../../lib/presentation-text-assistance-client";
 import { PresentationSections } from "./presentation-sections";
+import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
 import { presentationCommandCopy } from "./presentation-command-copy";
@@ -502,6 +503,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const { locale, t } = useLocale();
   const authoring = authoringWorkflowCopy(locale);
   const commands = presentationCommandCopy(locale);
+  const sectionsSpatial = sectionsSpatialCopy(locale);
   const router = useRouter();
   const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -1069,6 +1071,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const commit = useCallback(
     (value: SetStateAction<PresentationDraft>, historyKey?: string) => {
       if (
+        !assistancePermission.current ||
         textAssistanceActive.current ||
         questionSuggestionsActive.current ||
         importPreparation.current ||
@@ -1081,7 +1084,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       )
         return;
       setDraft((current) => {
-        if (!current) return current;
+        if (!current || !assistancePermission.current) return current;
         const next = reconcilePresentationSpatialBlocks(
           current,
           promotePresentationOpinionFormats(
@@ -1484,6 +1487,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   function undo() {
     if (
+      !assistancePermission.current ||
       importPreparation.current ||
       textAssistanceActive.current ||
       questionSuggestionsActive.current ||
@@ -1513,6 +1517,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   function redo() {
     if (
+      !assistancePermission.current ||
       importPreparation.current ||
       textAssistanceActive.current ||
       questionSuggestionsActive.current ||
@@ -2813,7 +2818,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           <div className={styles.historyActions} data-editor-history>
             <button
               className={styles.iconButton}
-              disabled={!undoStack.length}
+              disabled={!canEdit || !undoStack.length}
               onClick={undo}
               type="button"
               aria-label={t("delivery.builder.undo")}
@@ -2823,7 +2828,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             </button>
             <button
               className={styles.iconButton}
-              disabled={!redoStack.length}
+              disabled={!canEdit || !redoStack.length}
               onClick={redo}
               type="button"
               aria-label={t("delivery.builder.redo")}
@@ -3197,18 +3202,26 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             enabled={draft.schemaVersion >= 12}
             sections={draft.sections ?? []}
             selectedBlockId={selectedBlockId}
-            onEnable={() => commit(enablePresentationSections)}
+            disabled={!canEdit}
+            onEnable={() => {
+              if (canEdit) commit(enablePresentationSections);
+            }}
             onAdd={() => {
+              if (!canEdit) return;
               const sectionId = clientUuid();
-              commit((current) => addPresentationSection(current, sectionId));
+              // A generated title is authored exactly once, in the creation locale.
+              commit((current) =>
+                addPresentationSection(current, sectionId, sectionsSpatial("New section")),
+              );
             }}
             onRename={(sectionId, title) =>
-              commit((current) => renamePresentationSection(current, sectionId, title))
+              canEdit && commit((current) => renamePresentationSection(current, sectionId, title))
             }
             onDelete={(sectionId) =>
-              commit((current) => removePresentationSection(current, sectionId))
+              canEdit && commit((current) => removePresentationSection(current, sectionId))
             }
             onAssign={(blockId, sectionId) =>
+              canEdit &&
               commit((current) => assignPresentationBlockToSection(current, blockId, sectionId))
             }
           />
@@ -3265,9 +3278,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                         )}
                     </strong>
                     {presentationSectionForBlock(draft.sections, block.id) ? (
-                      <span className={styles.sectionBadge} lang="">
+                      <span
+                        className={styles.sectionBadge}
+                        lang={
+                          presentationSectionForBlock(draft.sections, block.id)?.title ? "" : locale
+                        }
+                      >
                         {presentationSectionForBlock(draft.sections, block.id)?.title ||
-                          "Unnamed section"}
+                          sectionsSpatial("Unnamed section")}
                       </span>
                     ) : null}
                   </span>
@@ -3648,6 +3666,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
             <section className={styles.slideCanvas} lang="en-CA">
               <NativeSceneEditor
+                canEdit={canEdit}
                 key={selectedBlock.id}
                 scene={selectedBlock.scene}
                 inspectorTarget={nativeInspectorTarget}
@@ -4804,18 +4823,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               />
             ) : (
               <article>
-                <h3>{block.question.prompt || "Untitled activity"}</h3>
+                <h3 lang={block.question.prompt ? "" : locale}>
+                  {block.question.prompt || sectionsSpatial("Untitled activity")}
+                </h3>
                 {"choices" in block.question ? (
                   <ul>
                     {block.question.choices.map((choice) => (
-                      <li key={choice.id}>{choice.label}</li>
+                      <li key={choice.id} lang="">
+                        {choice.label}
+                      </li>
                     ))}
                   </ul>
                 ) : (
                   <p>
                     {block.question.type === "rating"
                       ? `${block.question.min} – ${block.question.max}`
-                      : "Participant response"}
+                      : sectionsSpatial("Participant response")}
                   </p>
                 )}
               </article>

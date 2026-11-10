@@ -1,6 +1,8 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 import {
   PRESENTATION_SCENE_MAX_BYTES,
   PresentationSceneDraftSchema,

@@ -7,6 +7,12 @@ import type {
 } from "@openround/contracts";
 import { fitPresentationSpatialFrames } from "../../lib/presentation-spatial-geometry";
 import styles from "./presentation-spatial-delivery.module.css";
+import { useLocale } from "../locale-provider";
+import {
+  sectionsSpatialCopy,
+  localizeSectionsSpatialMessage,
+} from "../../lib/i18n/sections-spatial-copy";
+import { formatNumber } from "../../lib/i18n/format";
 
 interface SpatialDeliveryProps {
   spatial?: PresentationSpatialSnapshot;
@@ -33,6 +39,8 @@ function SpatialPath({
   disabled = false,
   onJump,
 }: SpatialDeliveryProps & { spatial: PresentationSpatialSnapshot }) {
+  const { locale } = useLocale();
+  const copy = sectionsSpatialCopy(locale);
   const [view, setView] = useState<"automatic" | "overview" | "focus">("automatic");
   const [linear, setLinear] = useState(false);
   const [size, setSize] = useState({ width: 800, height: 240 });
@@ -55,10 +63,15 @@ function SpatialPath({
   const staffNavigation = !!navigation && !!onJump;
   const status =
     phase === "finished"
-      ? `Presentation complete · ${spatial.frames.length} pages`
+      ? copy("Presentation complete · {count} pages", {
+          count: formatNumber(locale, spatial.frames.length),
+        })
       : current && phase !== "lobby"
-        ? `Page ${currentBlockIndex + 1} of ${spatial.frames.length}`
-        : `Overview · ${spatial.frames.length} pages`;
+        ? copy("Page {current} of {total}", {
+            current: formatNumber(locale, currentBlockIndex + 1),
+            total: formatNumber(locale, spatial.frames.length),
+          })
+        : copy("Overview · {count} pages", { count: formatNumber(locale, spatial.frames.length) });
 
   useEffect(() => {
     const element = diagram.current;
@@ -83,7 +96,7 @@ function SpatialPath({
   }, []);
 
   return (
-    <section className={styles.panel} aria-label="Presentation spatial path" lang="en-CA">
+    <section className={styles.panel} aria-label={copy("Presentation spatial path")} lang={locale}>
       <div className={styles.toolbar}>
         <p className={styles.status} role="status">
           {status}
@@ -95,7 +108,7 @@ function SpatialPath({
             disabled={linear}
             onClick={() => setView("overview")}
           >
-            Show overview
+            {copy("Show overview")}
           </button>
           <button
             type="button"
@@ -103,17 +116,17 @@ function SpatialPath({
             disabled={linear || !current || phase === "lobby" || phase === "finished"}
             onClick={() => setView("focus")}
           >
-            Focus current page
+            {copy("Focus current page")}
           </button>
           <button type="button" aria-pressed={linear} onClick={() => setLinear((value) => !value)}>
-            {linear ? "Use spatial view" : "Use linear view"}
+            {copy(linear ? "Use spatial view" : "Use linear view")}
           </button>
         </div>
       </div>
       <p className={styles.explanation}>
         {linear
-          ? "Linear view. The current page remains below."
-          : "The path shows page positions only. Read the current page below."}
+          ? copy("Linear view. The current page remains below.")
+          : copy("The path shows page positions only. Read the current page below.")}
       </p>
       <div
         ref={diagram}
@@ -158,7 +171,7 @@ function SpatialPath({
                   textAnchor="middle"
                   fontSize={Math.min(140, frame.height / 2)}
                 >
-                  {frame.blockIndex + 1}
+                  {formatNumber(locale, frame.blockIndex + 1)}
                 </text>
               </g>
             ))}
@@ -167,7 +180,7 @@ function SpatialPath({
       </div>
       {staffNavigation ? (
         <div className={styles.staff}>
-          <label htmlFor={selectId}>Jump to page</label>
+          <label htmlFor={selectId}>{copy("Jump to page")}</label>
           <select
             id={selectId}
             value={selected}
@@ -175,10 +188,10 @@ function SpatialPath({
             aria-describedby={selection?.blockedReason ? reasonId : undefined}
             onChange={(event) => setSelected(event.target.value)}
           >
-            <option value="">Choose a page</option>
+            <option value="">{copy("Choose a page")}</option>
             {navigation.entries.map((entry, index) => (
-              <option key={entry.blockId} value={entry.blockId}>
-                {index + 1}. {entry.title}
+              <option key={entry.blockId} value={entry.blockId} lang="">
+                {formatNumber(locale, index + 1)}. {entry.title}
               </option>
             ))}
           </select>
@@ -192,11 +205,15 @@ function SpatialPath({
                 onJump(selection.blockId);
             }}
           >
-            Jump to selected page
+            {copy("Jump to selected page")}
           </button>
           {selection?.blockedReason ? (
-            <p id={reasonId} role="status">
-              {selection.blockedReason}
+            <p
+              id={reasonId}
+              role="status"
+              lang={localizeSectionsSpatialMessage(locale, selection.blockedReason).language}
+            >
+              {localizeSectionsSpatialMessage(locale, selection.blockedReason).text}
             </p>
           ) : null}
         </div>

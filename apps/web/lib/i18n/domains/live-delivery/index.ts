@@ -1,5 +1,6 @@
 import type { SupportedLocale } from "@openround/contracts";
 import liveDeliveryEnglishMessages, { type LiveDeliveryMessages } from "./en-CA";
+import { companionMessages } from "./companion-translations";
 
 const loaders: Record<SupportedLocale, () => Promise<{ default: LiveDeliveryMessages }>> = {
   "en-CA": async () => ({ default: liveDeliveryEnglishMessages }),
@@ -15,7 +16,7 @@ const loaders: Record<SupportedLocale, () => Promise<{ default: LiveDeliveryMess
 };
 
 export async function loadLiveDeliveryMessages(locale: SupportedLocale) {
-  return (await loaders[locale]()).default;
+  return { ...(await loaders[locale]()).default, ...companionMessages(locale) };
 }
 
 export { liveDeliveryEnglishMessages };

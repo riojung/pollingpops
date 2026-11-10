@@ -2,18 +2,21 @@
 
 import { type KeyboardEvent, type PointerEvent } from "react";
 import { type PresentationScene } from "@openround/contracts";
-import { nativeNodeLabel } from "../../lib/presentation-native-scene";
+import { useLocale } from "../locale-provider";
+import { nativeControlNodeLabel, nativeControlsCopy } from "./native-controls-copy";
 import styles from "./native-scene-selection-controls.module.css";
 
 /** Normal-flow controls stay outside every authored frame, including rotated groups. */
 export function NativeSceneSelectionControls({
   scene,
+  disabled = false,
   selectedNodeIds,
   onSelect,
   onPointerDown,
   onGeometryKey,
 }: {
   scene: PresentationScene;
+  disabled?: boolean;
   selectedNodeIds: readonly string[];
   onSelect: (id: string) => void;
   onPointerDown: (
@@ -24,6 +27,8 @@ export function NativeSceneSelectionControls({
   ) => void;
   onGeometryKey: (id: string, dx: number, dy: number, resize: boolean) => void;
 }) {
+  const { locale } = useLocale();
+  const copy = nativeControlsCopy(locale);
   const nodes = new Map(scene.nodes.map((node) => [node.id, node]));
   const selected = nodes.get(selectedNodeIds.at(-1) ?? "");
   const framed = selected && selected.type !== "connector" ? selected : null;
@@ -31,7 +36,7 @@ export function NativeSceneSelectionControls({
     ? (scene.groups?.findIndex((group) => group.nodeIds.includes(framed.id)) ?? -1)
     : -1;
   function key(event: KeyboardEvent<HTMLButtonElement>, resize: boolean) {
-    if (!framed) return;
+    if (disabled || !framed) return;
     const step = event.shiftKey ? 5 : 1;
     const dx = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
     const dy = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
@@ -44,18 +49,20 @@ export function NativeSceneSelectionControls({
     <div
       className={styles.controls}
       role="group"
-      aria-label="Selected object controls"
+      lang={locale}
+      aria-label={copy("Selected object controls")}
       data-native-selection-controls="true"
     >
       <label className={styles.selection}>
-        <span>Canvas object</span>
+        <span>{copy("Canvas object")}</span>
         <select value={selected?.id ?? ""} onChange={(event) => onSelect(event.target.value)}>
-          {!selected ? <option value="">Choose an object</option> : null}
+          {!selected ? <option value="">{copy("Choose an object")}</option> : null}
           {scene.readingOrder.map((id, index) => {
             const node = nodes.get(id);
-            return node ? (
-              <option key={id} value={id}>
-                {index + 1}. {nativeNodeLabel(node)}
+            const label = node ? nativeControlNodeLabel(locale, node) : null;
+            return node && label ? (
+              <option key={id} value={id} lang={label.language}>
+                {index + 1}. {label.text}
               </option>
             ) : null;
           })}
@@ -65,28 +72,42 @@ export function NativeSceneSelectionControls({
         <div className={styles.actions}>
           <button
             type="button"
-            aria-label={`Move ${nativeNodeLabel(framed)}. Use arrow keys to nudge.`}
+            disabled={disabled}
+            aria-label={copy("Move {name}. Use arrow keys to nudge.", {
+              name: nativeControlNodeLabel(locale, framed).text,
+            })}
             onKeyDown={(event) => key(event, false)}
             onPointerDown={(event) => onPointerDown(event, framed.id, false, true)}
           >
-            Move
+            {copy("Move")}
           </button>
           <button
             type="button"
-            aria-label={`Resize ${groupIndex >= 0 ? `group ${groupIndex + 1}` : nativeNodeLabel(framed)}. Use arrow keys to change size.`}
+            disabled={disabled}
+            aria-label={
+              groupIndex >= 0
+                ? copy("Resize group {number}. Use arrow keys to change size.", {
+                    number: groupIndex + 1,
+                  })
+                : copy("Resize {name}. Use arrow keys to change size.", {
+                    name: nativeControlNodeLabel(locale, framed).text,
+                  })
+            }
             onKeyDown={(event) => key(event, true)}
             onPointerDown={(event) => onPointerDown(event, framed.id, true, true)}
           >
-            {groupIndex >= 0 ? "Resize group" : "Resize"}
+            {copy(groupIndex >= 0 ? "Resize group" : "Resize")}
           </button>
         </div>
       ) : null}
       <p className={styles.help}>
-        {framed
-          ? `${selectedNodeIds.length > 1 ? "Move affects all selected objects. " : ""}Use arrow keys; hold Shift for larger steps. Drag controls on wide slides, or arrange in the inspector.`
-          : selected
-            ? "Connections follow their objects. Use the inspector to edit this connection."
-            : "Choose an object to move or resize it."}
+        {disabled
+          ? copy("Read-only. You can select objects and preview the slide.")
+          : framed
+            ? `${selectedNodeIds.length > 1 ? `${copy("Move affects all selected objects.")} ` : ""}${copy("Use arrow keys; hold Shift for larger steps. Drag controls on wide slides, or arrange in the inspector.")}`
+            : selected
+              ? copy("Connections follow their objects. Use the inspector to edit this connection.")
+              : copy("Choose an object to move or resize it.")}
       </p>
     </div>
   );

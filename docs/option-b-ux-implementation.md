@@ -62,9 +62,9 @@ The classic summary also excludes unanswered questions from review counts and do
 assign accuracy to an empty assessment. Stored historical reports without question-purpose
 metadata remain unchanged; their meaning is not inferred from zero values.
 
-This is a bounded translation pass over the primary customer journey. The specialist
-follow-up below extends that coverage; advanced slide-design/spatial navigation,
-Companion chrome, AI and Pack tools still require separate language review. Raw service
+This is a bounded translation pass over the primary customer journey. The specialist and
+editor/Companion follow-ups below extend that coverage; detailed native text/data/video/
+interaction inspectors, assistance and Pack library tools still require separate language review. Raw service
 diagnostics retain their original language. Existing language choices are preserved;
 launch-language acceptance remains a release gate.
 
@@ -149,6 +149,82 @@ physical-device checks and approved launch-facing content remain on the release 
   The existing local Firefox runtime limitation remains open.
 - The release ledger validates with **0 complete / 15 pending** gates. Public launch
   content remains deferred as requested.
+
+## Editor and Companion follow-up — November 10, 2026
+
+The `codex/option-b-editor-companion` slice extends the selected locale to native object
+selection/movement/resizing, palette/font/spacing, alignment/layering, grouping/rotation,
+image framing and fit feedback. Raw object text, labels and identifiers remain unchanged.
+Geometry, enum values, document versions and undo history retain their existing meanings.
+Authored object language annotations remain authoritative in control and fit labels.
+
+Sections and spatial navigation now localize controls, counts, hidden-slide guidance,
+frame editing and audience path descriptions. Section names remain published authored
+content. A generated section name follows the locale only at an explicit Add action;
+changing language never renames existing sections. Spatial positions remain an overview;
+the numbered block order remains the playback authority. Audience projections retain
+their geometry-only privacy boundary. Spatial dialog controls now share semantic surface,
+text, border and accent tokens, with keyboard focus and disabled states; authored preview
+content is excluded from those control styles.
+
+Read-only creators retain navigation, inspection and preview. Sections disable mutation
+controls, and the builder checks current editing permission before both scheduling and
+applying a history update, including captured callbacks and undo/redo. Native object
+mutation controls and gestures follow the same permission boundary without changing
+owner editing or server authorization.
+
+Companion shell, launch/revocation, connection/retry feedback and aggregate overlays use
+the existing locale, including its Quick Check, published-question and Recovery Pack
+pickers. Authored choices, questions, aliases and card content retain their language.
+Known application feedback translates when the locale changes; unknown service diagnostics
+retain explicit original-language attribution. Language changes preserve pending command
+identities rather than recapturing the scoped pass or creating another action.
+Screenshot review also identified a narrow-screen layout gap: Companion and its Q&A
+panel now stack below 54rem rather than shrinking into two cramped columns. A production
+browser geometry assertion checks readable card width and vertical panel order at
+320px on phones and 420px in the desktop Companion window.
+
+Integration qualification also follows up the previous hosted failures. The inert-background
+browser check asserts disabled controls plus actual focus rejection, preserving its single-dialog
+contract. Translation checks scope authored labels to their filmstrip button. Visual-import
+accessibility waits for enabled opacity before running the unchanged Axe scan. Compact stage
+word clouds use bounded decorative sizing so long terms leave room for the count table;
+complete labels, counts, public projections and join controls remain intact.
+
+This is another bounded implementation pass. Detailed native text/data/video/interaction
+inspectors, authoring assistance and Pack library/editor tools remain outside this slice.
+It does not complete customer observation, native-language review, manual accessibility,
+physical-device qualification, the hosted matrix or the deferred public launch content.
+
+### Editor/Companion verification
+
+- The integrated repository gate passes **7,426 tests**, with 513 standard opt-in skips,
+  formatting, lint, type checking, Docker context, four production builds and compiled-server
+  startup. This precedes the final authored-language, stage-sizing and layout polish below.
+- After the authored-language and compact stage-result follow-ups, all **366 web suites /
+  3,547 tests** and web type checking pass. Scoped lint and formatting pass. The last
+  Companion layout follow-up changes CSS only and is qualified through fresh production
+  builds and browser geometry/accessibility checks.
+- All ten configured locale catalogs and native-control render variants are covered by
+  focused tests. Korean production journeys retain original authored content, stored enums,
+  geometry/history, read-only inspection and privacy/command identity boundaries.
+
+- **51 distinct selected production-browser cases pass**: 18 desktop Chromium, 16 phone
+  Chromium and 17 phone WebKit, with fresh API fixtures per profile/phase. These cover the
+  three new Korean journeys, existing native design/image/geometry/rich-text and spatial
+  workflows, Companion core/auxiliary pickers, Q&A, both translation cases, compact stage
+  word clouds, deferred import preparation and WebKit visual-PDF review/insertion.
+- The final layout-only Companion change is followed by fresh normal and beta web builds
+  and **12 production-browser passes**: nine Companion/Q&A cases across the three local
+  profiles, desktop stage/deferred-import checks and WebKit visual import. These are included
+  in the 51 distinct cases; reruns are not added to that count. The new Companion journey
+  verifies stacked panel order and readable widths at 320px/420px as well as Axe, overflow,
+  focus, scoped credentials, exact retry identity, aggregate privacy and revocation.
+- Source formatting, scoped lint and diff checks pass. The release ledger remains valid
+  with **0 complete / 15 pending** gates. The preceding PR #225 hosted failures motivated
+  the local regressions above; they do not establish a passing hosted matrix for this branch.
+  Local Firefox still cannot start its profile, and the current full hosted matrix, manual
+  accessibility, physical-device/customer qualification and native-language review remain open.
 
 ## Release readiness checklist
 

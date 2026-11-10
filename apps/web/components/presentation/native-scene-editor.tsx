@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   CanvasColorSchema,
@@ -113,17 +113,18 @@ const objectContexts: Record<
 
 export function NativeSceneEditor({
   scene,
+  canEdit = true,
   onChange: onSceneChange,
   renderImage,
   uploadsEnabled,
   mediaState,
   attachmentPending = false,
-  onUploadImage,
-  onUndo,
-  onRedo,
-  onApplyDesignToDeck,
+  onUploadImage: uploadImage,
+  onUndo: undo,
+  onRedo: redo,
+  onApplyDesignToDeck: applyDesignToDeck,
   navigationTargets,
-  onTextAssistance,
+  onTextAssistance: textAssistance,
   textAssistanceDisabled = false,
   layoutSuggestionsDisabled = false,
   layoutSuggestionsSourceKey,
@@ -134,6 +135,7 @@ export function NativeSceneEditor({
   onInspectSelection,
 }: {
   scene: PresentationScene;
+  canEdit?: boolean;
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
   renderImage: SceneImageRenderer;
   uploadsEnabled: boolean;
@@ -155,6 +157,31 @@ export function NativeSceneEditor({
   inspectorSection?: "content" | "layout" | "media" | "accessibility";
   onInspectSelection?: (openInspector?: boolean) => void;
 }) {
+  const permission = useRef(canEdit);
+  permission.current = canEdit;
+  const onUndo = undo
+    ? () => {
+        if (permission.current) undo();
+      }
+    : undefined;
+  const onRedo = redo
+    ? () => {
+        if (permission.current) redo();
+      }
+    : undefined;
+  const onApplyDesignToDeck = applyDesignToDeck
+    ? (design: PresentationSceneDesign) => {
+        if (permission.current) applyDesignToDeck(design);
+      }
+    : undefined;
+  const onTextAssistance = textAssistance
+    ? (...args: Parameters<NonNullable<typeof textAssistance>>) => {
+        if (permission.current) textAssistance(...args);
+      }
+    : undefined;
+  const onUploadImage = (...args: Parameters<typeof uploadImage>) => {
+    if (permission.current) uploadImage(...args);
+  };
   const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
   const [imageAlt, setImageAlt] = useState("");
   const [formatError, setFormatError] = useState("");
@@ -187,7 +214,7 @@ export function NativeSceneEditor({
     });
   }
   function onChange(next: PresentationScene, historyField?: string) {
-    if (next === scene) return false;
+    if (!permission.current || next === scene) return false;
     next = synchronizeNativeHotspots(scene, next);
     const parsed = PresentationSceneDraftSchema.safeParse(next);
     if (!parsed.success) {
@@ -334,6 +361,7 @@ export function NativeSceneEditor({
       </div>
       <div hidden={sectionHidden("content")} data-native-inspector-section="content">
         <fieldset
+          disabled={!canEdit && !isNativeInteractionNode(selected)}
           className={`${inspectorStyles.card} ${inspectorStyles.contentCard}`}
           data-native-text-fields="true"
           onKeyDown={(event) => {
@@ -360,6 +388,7 @@ export function NativeSceneEditor({
           <p className={inspectorStyles.sectionHint}>{context.hint}</p>
           <div className={inspectorStyles.contentFields}>
             <NativeSceneInteractionEditor
+              disabled={!canEdit}
               scene={scene}
               node={isNativeInteractionNode(selected) ? selected : null}
               onChange={onChange}
@@ -647,7 +676,7 @@ export function NativeSceneEditor({
             <button
               className={inspectorStyles.deleteButton}
               type="button"
-              disabled={selected.type === "text" && selected.role === "title"}
+              disabled={!canEdit || (selected.type === "text" && selected.role === "title")}
               onClick={() => onChange(removeNativeSceneNodes(scene, [selected.id]))}
             >
               <EditorIcon name="trash" />
@@ -656,7 +685,12 @@ export function NativeSceneEditor({
           </div>
         </fieldset>
       </div>
-      <div hidden={sectionHidden("layout")} data-native-inspector-section="layout">
+      <fieldset
+        disabled={!canEdit}
+        className={styles.permissionControls}
+        hidden={sectionHidden("layout")}
+        data-native-inspector-section="layout"
+      >
         <div className={inspectorStyles.sectionHeader}>
           <EditorIcon name="layout" />
           <div>
@@ -772,8 +806,13 @@ export function NativeSceneEditor({
             their connectors. The title stays on the slide.
           </p>
         </details>
-      </div>
-      <div hidden={sectionHidden("media")} data-native-inspector-section="media">
+      </fieldset>
+      <fieldset
+        disabled={!canEdit}
+        className={styles.permissionControls}
+        hidden={sectionHidden("media")}
+        data-native-inspector-section="media"
+      >
         <div className={inspectorStyles.sectionHeader}>
           <EditorIcon name="media" />
           <div>
@@ -836,7 +875,7 @@ export function NativeSceneEditor({
             onSelect={(id) => setSelection([id])}
           />
         </div>
-      </div>
+      </fieldset>
       <div hidden={sectionHidden("accessibility")} data-native-inspector-section="accessibility">
         <div className={inspectorStyles.sectionHeader}>
           <EditorIcon name="accessibility" />
@@ -881,14 +920,14 @@ export function NativeSceneEditor({
           <div className={styles.actions}>
             <button
               type="button"
-              disabled={readingIndex <= 0}
+              disabled={!canEdit || readingIndex <= 0}
               onClick={() => onChange(reorderNativeNode(scene, selected.id, -1))}
             >
               Read object earlier
             </button>
             <button
               type="button"
-              disabled={readingIndex >= scene.readingOrder.length - 1}
+              disabled={!canEdit || readingIndex >= scene.readingOrder.length - 1}
               onClick={() => onChange(reorderNativeNode(scene, selected.id, 1))}
             >
               Read object later
@@ -899,7 +938,7 @@ export function NativeSceneEditor({
             this order.
           </p>
         </fieldset>
-        <fieldset className={inspectorStyles.card}>
+        <fieldset disabled={!canEdit} className={inspectorStyles.card}>
           <legend>
             <EditorIcon name={context.icon} />
             Selected object accessibility
@@ -970,8 +1009,9 @@ export function NativeSceneEditor({
   );
   return (
     <div className={styles.editor}>
-      <div
-        className={`${styles.objectToolbar} ${inspectorStyles.toolbar}`}
+      <fieldset
+        disabled={!canEdit}
+        className={`${styles.permissionControls} ${styles.objectToolbar} ${inspectorStyles.toolbar}`}
         aria-label="Insert slide objects"
         lang="en-CA"
       >
@@ -1130,13 +1170,14 @@ export function NativeSceneEditor({
             Up to {PRESENTATION_SCENE_MAX_NODES} objects per slide.
           </p>
         </EditorDisclosure>
-      </div>
+      </fieldset>
       {changeFailure?.scene === scene ? (
         <p className={styles.formatError} role="alert">
           {changeFailure.message}
         </p>
       ) : null}
       <NativeSceneCanvas
+        canEdit={canEdit}
         scene={scene}
         renderImage={renderImage}
         selectedNodeIds={selectedIds}

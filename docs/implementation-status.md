@@ -8,6 +8,28 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B specialized native editors November 10, 2026
+
+The `codex/option-b-specialist-editors` source extends all ten configured locales to
+rich-text, table/chart, video and interaction-authoring controls, including overview/map
+and known validation/recovery feedback. Mounted locale changes retain staged input,
+selection, invalid entries and source feedback. Authored content/language, URLs, stored
+enums, history, data revision fences, local-only preview and canonical viewer behavior
+retain their existing meanings.
+
+The repository gate passes 7,575 tests with 513 standard opt-in skips, all four production
+builds and compiled-server startup; web validation covers 372 suites / 3,692 tests.
+Forty-six distinct selected production-browser cases pass across desktop Chromium and phone
+Chromium/WebKit, including six new Korean editor cases and affected advanced image/map
+journeys. The preceding PR #227 hosted matrix now passes, including WebKit within its
+45-minute budget; this is baseline evidence and does not qualify the new specialist source.
+
+The [Option B implementation record](option-b-ux-implementation.md) preserves scope and
+verification. Remaining native audience/template copy, branching/shared navigation,
+assistance review/recovery and Pack library/editor tools remain pending. Hosted
+qualification of this source, native-language/customer review, manual accessibility/device
+checks and deferred launch-facing content remain release work.
+
 ### Option B native editor shell follow-up November 10, 2026
 
 The `codex/option-b-native-editor` source extends the selected locale to ordinary native

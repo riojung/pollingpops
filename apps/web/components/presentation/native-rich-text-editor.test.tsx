@@ -1,7 +1,11 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { plainTextToPresentationRichText, type PresentationSceneNode } from "@openround/contracts";
+import {
+  plainTextToPresentationRichText,
+  type PresentationSceneNode,
+  type SupportedLocale,
+} from "@openround/contracts";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { toggleNativeRichTextMark } from "../../lib/presentation-rich-text";
 
@@ -93,6 +97,7 @@ function harness(
   const onChange = vi.fn((next) => {
     node = next;
   });
+  let locale: SupportedLocale = "en-CA";
   let tree: ReactNode;
   const scheduled: (() => void)[] = [];
   const frames = new Map<number, () => void>();
@@ -110,7 +115,7 @@ function harness(
     hooks.cursor = 0;
     mocked.hooks = hooks;
     try {
-      tree = NativeRichTextEditor({ node, onChange, ...history });
+      tree = NativeRichTextEditor({ node, onChange, ...history, locale });
     } finally {
       mocked.hooks = null;
     }
@@ -126,6 +131,10 @@ function harness(
     node: () => node,
     render,
     find,
+    setLocale(next: SupportedLocale) {
+      locale = next;
+      render();
+    },
     element,
     activeElement: () => documentState.activeElement,
     focusOther(target: unknown) {
@@ -163,6 +172,106 @@ function harness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("native formatting controls", () => {
+  it("retranslates active feedback without changing a typed link, authored language or selection", () => {
+    const editor = harness();
+    editor.node().lang = "fr";
+    editor.node().richText!.paragraphs[0]!.runs = [
+      { text: "Read the ", italic: true },
+      { text: "plan", href: "https://example.com/original?lang=fr" },
+    ];
+    editor.render();
+    editor.select(9, 13);
+    const before = structuredClone(editor.node());
+    const linkField = {};
+    editor.focusOther(linkField);
+    editor
+      .find((element) => element.type === "input")
+      .props.onChange({
+        target: { value: "javascript:alert(1)" },
+      });
+    editor.render();
+    editor.click("Apply link");
+    editor.setLocale("ko-KR");
+    const alert = editor.find((element) => element.props.role === "alert");
+    expect(alert.props.children).toBe(
+      "사용자 이름이나 비밀번호가 없는 완전한 http:// 또는 https:// 링크를 입력하세요.",
+    );
+    expect(alert.props.lang).toBe("ko-KR");
+    expect(editor.find((element) => element.type === "div").props.lang).toBe("ko-KR");
+    const textarea = editor.find((element) => element.type === "textarea");
+    expect(textarea.props["aria-label"]).toBe("개체 텍스트");
+    expect(textarea.props.lang).toBe("fr");
+    expect(textarea.props.value).toBe(before.text);
+    const input = editor.find((element) => element.type === "input");
+    expect(input.props["aria-label"]).toBe("링크 주소");
+    expect(input.props.lang).toBe("");
+    expect(input.props.value).toBe("javascript:alert(1)");
+    expect(editor.node()).toEqual(before);
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(editor.activeElement()).toBe(linkField);
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([9, 13]);
+    input.props.onChange({ target: { value: "https://example.com/plan?lang=fr" } });
+    editor.render();
+    editor.click("링크 적용");
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    expect(editor.node().lang).toBe("fr");
+    expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([
+      { text: "Read the ", italic: true },
+      { text: "plan", href: "https://example.com/plan?lang=fr" },
+    ]);
+    editor.render();
+    editor.click("기울임꼴");
+    expect(editor.node().richText!.paragraphs[0]!.runs[1]).toEqual({
+      text: "plan",
+      italic: true,
+      href: "https://example.com/plan?lang=fr",
+    });
+  });
+
+  it("translates existing history and formatting-limit feedback and keeps the text history field stable", () => {
+    const editor = harness();
+    editor.beforeInput("historyUndo", false);
+    editor.setLocale("ja-JP");
+    expect(editor.find((element) => element.props.role === "alert").props.children).toBe(
+      "この画面では元に戻す操作とやり直しは使用できません。",
+    );
+    expect(editor.onChange).not.toHaveBeenCalled();
+    const textarea = editor.find((element) => element.type === "textarea");
+    expect(textarea.props.lang).toBe("");
+    textarea.props.onPaste({
+      preventDefault: vi.fn(),
+      currentTarget: { selectionStart: 0, selectionEnd: 0 },
+      clipboardData: { types: ["text/plain"], getData: () => "X".repeat(4001) },
+    });
+    editor.setLocale("ko-KR");
+    expect(editor.find((element) => element.props.role === "alert").props.children).toBe(
+      "이 텍스트 변경은 서식 제한을 초과하거나 지원하지 않는 문자를 포함합니다. 텍스트를 줄이거나 일부 서식을 제거한 후 다시 시도하세요.",
+    );
+    expect(editor.node().text).toBe("Read the plan");
+    editor
+      .find((element) => element.type === "textarea")
+      .props.onChange({
+        nativeEvent: { inputType: "insertText", data: "!" },
+        currentTarget: { selectionStart: 14, selectionEnd: 14 },
+        target: { value: "Read the plan!" },
+      });
+    expect(editor.onChange).toHaveBeenCalledExactlyOnceWith(editor.node(), "text");
+  });
+
+  it("retains unknown diagnostics verbatim with English language through a locale change", () => {
+    const editor = harness();
+    editor.select(9, 13);
+    editor.onChange.mockImplementationOnce(() => {
+      throw new Error("Unknown formatting diagnostic {link}");
+    });
+    editor.click("Bold");
+    editor.setLocale("ko-KR");
+    const alert = editor.find((element) => element.props.role === "alert");
+    expect(alert.props.children).toBe("Unknown formatting diagnostic {link}");
+    expect(alert.props.lang).toBe("en-CA");
+    expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([{ text: "Read the plan" }]);
+  });
+
   it("does not let an older paragraph restore overwrite a newer selection or blurred toolbar range", () => {
     const editor = harness();
     editor.select(5, 8);

@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { PresentationSceneDraftSchema, type PresentationScene } from "@openround/contracts";
+import {
+  PresentationSceneDraftSchema,
+  type PresentationScene,
+  type SupportedLocale,
+} from "@openround/contracts";
 import { createNativeVideoLink } from "../../lib/presentation-native-video";
+import {
+  nativeTextVideoCopy,
+  nativeTextVideoValidationFeedback,
+  type NativeTextVideoFeedback,
+} from "./native-text-video-copy";
 import styles from "./native-scene.module.css";
 
 export function NativeSceneVideoControls({
@@ -10,16 +19,19 @@ export function NativeSceneVideoControls({
   canAdd,
   onChange,
   onSelect,
+  locale = "en-CA",
 }: {
   scene: PresentationScene;
   canAdd: boolean;
   onChange: (scene: PresentationScene) => boolean | void;
   onSelect: (id: string) => void;
+  locale?: SupportedLocale;
 }) {
+  const copy = nativeTextVideoCopy(locale);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [transcript, setTranscript] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<NativeTextVideoFeedback | null>(null);
   function add() {
     if (!canAdd) return;
     let next: PresentationScene;
@@ -33,20 +45,22 @@ export function NativeSceneVideoControls({
         nodes: [...scene.nodes, node],
         readingOrder: [...scene.readingOrder, node.id],
       });
-      if (!parsed.success)
-        throw new Error(
-          "This link exceeds the slide’s limits. Shorten the links or remove some content, then try again.",
-        );
+      if (!parsed.success) {
+        setError({
+          key: "This link exceeds the slide’s limits. Shorten the links or remove some content, then try again.",
+        });
+        return;
+      }
       next = parsed.data;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Check the video and transcript links.");
+      setError(nativeTextVideoValidationFeedback(caught, "Check the video and transcript links."));
       return;
     }
-    setError("");
+    setError(null);
     if (onChange(next) === false) {
-      setError(
-        "The Presentation could not accept this link. Your entries are retained; reduce content and try again.",
-      );
+      setError({
+        key: "The Presentation could not accept this link. Your entries are retained; reduce content and try again.",
+      });
       return;
     }
     onSelect(id);
@@ -55,16 +69,22 @@ export function NativeSceneVideoControls({
     setTranscript("");
   }
   return (
-    <fieldset className={styles.designControls}>
-      <legend>External video</legend>
+    <fieldset lang={locale} className={styles.designControls}>
+      <legend>{copy("External video")}</legend>
       <div className={styles.designFields}>
         <label>
-          Video title
-          <input maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} />
+          {copy("Video title")}
+          <input
+            lang=""
+            maxLength={160}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
         </label>
         <label>
-          Video HTTPS link
+          {copy("Video HTTPS link")}
           <input
+            lang=""
             type="url"
             maxLength={2048}
             value={url}
@@ -72,8 +92,9 @@ export function NativeSceneVideoControls({
           />
         </label>
         <label>
-          Captions or transcript HTTPS link
+          {copy("Captions or transcript HTTPS link")}
           <input
+            lang=""
             type="url"
             maxLength={2048}
             value={transcript}
@@ -87,17 +108,17 @@ export function NativeSceneVideoControls({
           disabled={!canAdd || !title.trim() || !url.trim() || !transcript.trim()}
           onClick={add}
         >
-          Add external video link
+          {copy("Add external video link")}
         </button>
       </div>
       <p className={styles.help}>
-        Add a video destination and a captions or transcript fallback. The slide shows both links.
-        Playback opens on the external site when the audience chooses the link; availability is not
-        checked here.
+        {copy(
+          "Add a video destination and a captions or transcript fallback. The slide shows both links. Playback opens on the external site when the audience chooses the link; availability is not checked here.",
+        )}
       </p>
       {error ? (
-        <p className={styles.formatError} role="alert">
-          {error}
+        <p className={styles.formatError} role="alert" lang={error.key ? locale : "en-CA"}>
+          {error.key ? copy(error.key) : error.diagnostic}
         </p>
       ) : null}
     </fieldset>

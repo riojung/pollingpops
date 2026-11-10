@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { type PresentationScene } from "@openround/contracts";
+import { type PresentationScene, type SupportedLocale } from "@openround/contracts";
 import {
   moveNativeSceneNodes,
   resizeNativeSceneNode,
@@ -31,6 +31,7 @@ type Gesture = {
 /** Pointer previews are local; only a completed gesture enters draft history and autosave. */
 export function NativeSceneCanvas({
   scene,
+  locale = "en-CA",
   canEdit = true,
   renderImage,
   selectedNodeIds,
@@ -40,6 +41,7 @@ export function NativeSceneCanvas({
   onEditInteraction,
 }: {
   scene: PresentationScene;
+  locale?: SupportedLocale;
   canEdit?: boolean;
   renderImage: SceneImageRenderer;
   selectedNodeIds: readonly string[];
@@ -231,6 +233,7 @@ export function NativeSceneCanvas({
         onGeometryKey={geometryKey}
       />
       <NativeSceneInteractionMap
+        locale={locale}
         scene={displayedScene}
         navigationTargets={navigationTargets}
         selectedNodeIds={selectedNodeIds}

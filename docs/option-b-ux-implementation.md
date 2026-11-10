@@ -63,8 +63,8 @@ assign accuracy to an empty assessment. Stored historical reports without questi
 metadata remain unchanged; their meaning is not inferred from zero values.
 
 This is a bounded translation pass over the primary customer journey. The specialist and
-editor/Companion follow-ups below extend that coverage; specialized rich-text/data/video/
-interaction editors, branching/navigation, assistance and Pack library tools still require separate language review. Raw service
+editor/Companion follow-ups below extend that coverage; remaining native audience/template copy, branching/navigation, assistance and Pack library
+tools still require separate language review. Raw service
 diagnostics retain their original language. Existing language choices are preserved;
 launch-language acceptance remains a release gate.
 
@@ -295,6 +295,74 @@ cancellation; its later phases were skipped. Both observed runs used the previou
   editors remain explicitly English. Native-language review, manual accessibility and
   physical-device/customer acceptance remain open; the release ledger stays at 15 pending
   gates and public launch content remains deferred.
+
+## Specialized native editor follow-up — November 10, 2026
+
+The `codex/option-b-specialist-editors` slice extends selected-language controls and known
+validation/recovery guidance to rich text, tables/charts, external video and interaction
+authoring. English remains the default. Three typed catalogs cover 191 UI keys across all
+ten locales, reusing eleven existing shared translations. The parent passes its current
+locale through mounted editors and the interaction map; the audience renderer and shared
+library descriptors retain their existing contracts.
+
+Rich-text formatting, paragraph/link tools and feedback preserve selection, caret, exact
+history fields, authored runs/text and language annotations. Video guidance localizes its
+inputs and known errors while retaining raw titles, URLs, transcript destinations and the
+existing explicitly added link content. It does not load provider scripts or iframes.
+
+Data editors localize options, grid descriptions, cell names, paste/apply/discard controls
+and known validation/status feedback. Changing the mounted locale preserves staged cells,
+paste bytes, invalid values and feedback. Applying data, revision fences, numeric/byte
+limits, raw authored captions/headers/series and enum values retain their existing meanings.
+Generated default data values remain unchanged; the synthetic category heading is a
+localized display label rather than a staged-data edit.
+
+Interaction controls, overview and map distinguish authored labels, target titles and
+URLs from system-generated descriptions. Known readiness issues localize; unknown feedback
+retains explicit original-language attribution. Unsaved URL entries continue to block preview
+across object changes. Read-only users retain valid local Preview and map selection while
+mutation fields follow the existing canonical permission boundary. Opening previews or the
+map never publishes, starts live delivery, submits answers or invokes external destinations.
+
+Remaining native audience/template copy, branching/shared navigation, assistance
+review/recovery and Pack library/editor tools remain outside this slice. Native-language
+review, observed customer usability, manual accessibility/device acceptance and deferred
+public launch content remain release work. This implementation does not complete release
+acceptance or hosted qualification of the new source.
+
+### Specialized editor verification
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **7,575 tests** with 513 standard opt-in skips,
+  formatting, lint, type checks, Docker-context validation, all four production builds and
+  compiled-server startup. The web portion passes **372 suites / 3,692 tests**.
+- The three catalogs cover 191 typed keys across ten locales, including eleven reused
+  translations. Focused tests cover known/unknown feedback, all locale columns and
+  placeholders, active selection/staged entries across mounted locale changes, authored
+  collisions, exact history fields, stale data/URL/image/target fences and read-only preview.
+- The beta production web build passes. Local browser qualification uses fresh API fixtures
+  per profile/phase; the automated checks do not establish native-language, manual
+  accessibility, physical-device, customer or hosted acceptance of this new source.
+
+- **46 distinct selected production-browser cases pass**: 16 desktop Chromium, 14 phone
+  Chromium and 16 phone WebKit. These include six new Korean specialist/interaction cases,
+  German data-editor inspection, prior localized native controls, rich text, tables/charts,
+  grouped inspectors/insertion menus, native publish/delivery and upload/history recovery,
+  basic/advanced interactions, image-backed map geometry and both translation journeys.
+  The corrected interaction test checks effective inherited language rather than requiring
+  a redundant leaf `lang` attribute; its successful rerun is counted once.
+- New editor cases retain one-pixel phone-overflow and Axe checks with invalid data, staged
+  drafts and viewer inspection. They assert exact raw text/language, enum/data/history
+  values, no saves for rejected/staged/discarded input, no external requests from video/link
+  setup, and local preview/map actions with no publication, session or response writes.
+  Screenshot review includes desktop and 320px phone controls, map descriptions and raw
+  authored values. These checks retain their local automated scope.
+- The previous [PR #227 hosted CI run](https://github.com/riojung/pollingpops/actions/runs/42904644615)
+  has now passed the repository check, migration, all four core and all four beta browser
+  projects, including phone WebKit under its 45-minute budget, and browser-smoke. Security
+  and production-smoke checks also passed for that baseline. This evidence is bound to
+  `40057ec2de1bccf1b9f864f5fc65056c899f78bc`; it does not qualify these new uncommitted
+  specialist-editor changes. Their hosted matrix and local Firefox qualification remain
+  open. The release ledger remains valid with **0 complete / 15 pending** gates.
 
 ## Release readiness checklist
 

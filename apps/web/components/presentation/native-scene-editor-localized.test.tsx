@@ -6,6 +6,8 @@ import { englishMessages, localeDomains } from "../../lib/i18n/catalog";
 import { createNativeRevealNode } from "../../lib/presentation-native-scene";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { nativeEditorCopy } from "./native-editor-copy";
+import { nativeTextVideoCopy } from "./native-text-video-copy";
+import { nativeInteractionCopy } from "./native-interaction-copy";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/presentation/localized-native-editor" }));
 
@@ -141,7 +143,7 @@ describe("native editor real localized shell", () => {
           expect(html).toContain(text);
         expect(html).toContain('value="fr">프랑스어');
       } else if (locale === "en-CA") expect(html).toContain('value="zh-Hans">Chinese (Simplified)');
-      expect(languageAt(html, "External video")).toBe("en-CA");
+      expect(languageAt(html, nativeTextVideoCopy(locale)("External video"))).toBe(locale);
       expect(languageAt(html, 'data-native-scene-canvas="true"')).toBe("en-CA");
       expect(base).toEqual(before);
       expect(change).not.toHaveBeenCalled();
@@ -164,7 +166,7 @@ describe("native editor real localized shell", () => {
     expect(change).not.toHaveBeenCalled();
   });
 
-  it("retains explicit English boundaries for specialized rich text and interaction internals", () => {
+  it("passes the locale to specialized editors and the authoring map while retaining the audience boundary", () => {
     const richScene: PresentationScene = {
       ...base,
       nodes: base.nodes.map((node) =>
@@ -176,9 +178,12 @@ describe("native editor real localized shell", () => {
           : node,
       ),
     };
-    expect(languageAt(markup("ko-KR", richScene).html, 'aria-label="Text formatting"')).toBe(
-      "en-CA",
-    );
+    expect(
+      languageAt(
+        markup("ko-KR", richScene).html,
+        `aria-label="${nativeTextVideoCopy("ko-KR")("Text formatting")}"`,
+      ),
+    ).toBe("ko-KR");
     const reveal = createNativeRevealNode();
     reveal.label = "Original English reveal";
     reveal.body = "Raw authored details";
@@ -188,10 +193,14 @@ describe("native editor real localized shell", () => {
       readingOrder: [...base.readingOrder, reveal.id],
     };
     const { html, change } = markup("ko-KR", interactionScene, false);
-    expect(languageAt(html, 'aria-label="Interaction overview"')).toBe("en-CA");
-    expect(languageAt(html, 'aria-label="Interaction map"')).toBe("en-CA");
+    expect(
+      languageAt(html, `aria-label="${nativeInteractionCopy("ko-KR")("Interaction overview")}"`),
+    ).toBe("ko-KR");
+    expect(
+      languageAt(html, `aria-label="${nativeInteractionCopy("ko-KR")("Interaction map")}"`),
+    ).toBe("ko-KR");
     expect(html).toContain("Original English reveal");
-    expect(html).toContain("Preview this slide");
+    expect(html).toContain(nativeInteractionCopy("ko-KR")("Preview this slide"));
     expect(change).not.toHaveBeenCalled();
   });
 });

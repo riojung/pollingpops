@@ -417,8 +417,9 @@ export function NativeSceneEditor({
           </legend>
           <p className={inspectorStyles.sectionHint}>{copy(context.hint)}</p>
           <div className={inspectorStyles.contentFields}>
-            <div lang="en-CA" style={{ display: "contents" }}>
+            <div lang={locale} style={{ display: "contents" }}>
               <NativeSceneInteractionEditor
+                locale={locale}
                 disabled={!canEdit}
                 scene={scene}
                 node={isNativeInteractionNode(selected) ? selected : null}
@@ -429,8 +430,9 @@ export function NativeSceneEditor({
               />
             </div>
             {selected.type === "text" && selected.richText ? (
-              <div lang="en-CA" style={{ display: "contents" }}>
+              <div lang={locale} style={{ display: "contents" }}>
                 <NativeRichTextEditor
+                  locale={locale}
                   key={selected.id}
                   node={selected}
                   onUndo={onUndo ? () => restoreHistory(onUndo) : undefined}
@@ -504,8 +506,9 @@ export function NativeSceneEditor({
               </>
             ) : null}
             {selected.type === "table" || selected.type === "chart" ? (
-              <div lang="en-CA" style={{ display: "contents" }}>
+              <div lang={locale} style={{ display: "contents" }}>
                 <NativeSceneDataEditor
+                  locale={locale}
                   key={selected.id}
                   scene={scene}
                   node={selected}
@@ -918,8 +921,9 @@ export function NativeSceneEditor({
             )}
           </p>
         </fieldset>
-        <div className={inspectorStyles.mediaCard} lang="en-CA">
+        <div className={inspectorStyles.mediaCard} lang={locale}>
           <NativeSceneVideoControls
+            locale={locale}
             scene={scene}
             canAdd={canAdd}
             onChange={onChange}
@@ -1243,6 +1247,7 @@ export function NativeSceneEditor({
       ) : null}
       <div lang="en-CA" style={{ display: "contents" }}>
         <NativeSceneCanvas
+          locale={locale}
           canEdit={canEdit}
           scene={scene}
           renderImage={renderImage}

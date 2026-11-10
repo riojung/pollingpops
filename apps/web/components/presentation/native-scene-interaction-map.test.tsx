@@ -1,7 +1,13 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { PresentationScene, PresentationSceneNode } from "@openround/contracts";
+import {
+  supportedLocales,
+  type PresentationScene,
+  type PresentationSceneNode,
+  type SupportedLocale,
+} from "@openround/contracts";
+import { nativeInteractionCopy } from "./native-interaction-copy";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { NativeSceneInteractionMap } from "./native-scene-interaction-map";
 
@@ -87,25 +93,30 @@ function map({
   expanded = true,
   scene = fixture(),
   editable = true,
+  locale,
+  navigationTargets = [
+    { id: "abcdefab-1111-4111-8111-111111111111", title: "Decision checkpoint" },
+  ],
 }: {
   selectedNodeIds?: string[];
   expanded?: boolean;
   scene?: PresentationScene;
   editable?: boolean;
+  locale?: SupportedLocale;
+  navigationTargets?: { id: string; title: string }[];
 } = {}) {
   const onSelect = vi.fn(),
     onExpandedChange = vi.fn(),
     onEdit = vi.fn();
   const tree = NativeSceneInteractionMap({
     scene,
+    locale,
     selectedNodeIds,
     expanded,
     onExpandedChange,
     onSelect,
     onEdit: editable ? onEdit : undefined,
-    navigationTargets: [
-      { id: "abcdefab-1111-4111-8111-111111111111", title: "Decision checkpoint" },
-    ],
+    navigationTargets,
   });
   const all = elements(tree);
   return {
@@ -235,5 +246,102 @@ describe("native scene interaction map", () => {
     expect(empty.markup).toBe("");
     expect(empty.rows).toHaveLength(0);
     expect(empty.markup).not.toContain('data-native-interaction-connection="true"');
+  });
+  it.each(supportedLocales)(
+    "localizes map controls, current connections and blocked guidance in %s",
+    (locale) => {
+      const copy = nativeInteractionCopy(locale);
+      const ready = map({ locale, selectedNodeIds: ["navigation"] });
+      expect(ready.markup).toContain(`aria-label="${copy("Interaction map")}" lang="${locale}"`);
+      expect(ready.markup).toContain(copy("Hide interaction map"));
+      expect(ready.markup).toContain(copy("{count} interactions", { count: 5 }));
+      expect(ready.markup).toContain(copy("Slide link"));
+      expect(ready.markup).toContain('<span lang="">Decision checkpoint</span>');
+      expect(ready.markup).toContain(
+        copy("Live: move everyone. Preview and shared links: move this reader only."),
+      );
+      expect(ready.markup).not.toContain(copy("Choose an available target slide or activity."));
+      const before = JSON.stringify(ready.scene);
+      const blocked = map({
+        locale,
+        scene: ready.scene,
+        selectedNodeIds: ["navigation"],
+        navigationTargets: [],
+      });
+      expect(blocked.markup).toContain(copy("Choose an available target slide or activity."));
+      expect(blocked.markup).toContain(copy("Check in Content tools"));
+      expect(blocked.markup).toContain(copy("Choose a slide or activity"));
+      expect(blocked.markup).not.toContain("Decision checkpoint");
+      expect(JSON.stringify(ready.scene)).toBe(before);
+      expect(blocked.markup).not.toContain("NEVER RENDER");
+      expect(blocked.markup).not.toContain("href=");
+      blocked.rows[0]!.props.onClick();
+      expect(blocked.onSelect.mock.calls).toEqual([["navigation"]]);
+      expect(blocked.onEdit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("separates translated kinds and generated targets from authored English collisions and annotations", () => {
+    const source = fixture();
+    source.nodes = source.nodes.map((node) =>
+      node.type === "navigation"
+        ? { ...node, label: "Slide link" }
+        : node.type === "dialog"
+          ? { ...node, label: "Detail dialog", detailTitle: "Detail dialog" }
+          : node,
+    );
+    const navigation = map({
+      scene: source,
+      locale: "ko-KR",
+      selectedNodeIds: ["navigation"],
+      navigationTargets: [
+        { id: "abcdefab-1111-4111-8111-111111111111", title: "Choose a slide or activity" },
+      ],
+    });
+    expect(navigation.markup).toContain('<span lang="">Slide link</span>');
+    expect(navigation.markup).toContain('<span lang="">Choose a slide or activity</span>');
+    expect(text(navigation.rows[0])).toContain("슬라이드 링크 Slide link");
+    const dialog = map({ scene: source, locale: "ko-KR", selectedNodeIds: ["dialog"] });
+    expect(dialog.markup).toContain('<span lang="">Detail dialog</span>');
+    expect(dialog.markup).toContain("상세 대화상자");
+    source.nodes = source.nodes.map((node) =>
+      node.type === "dialog" ? { ...node, label: " ", detailTitle: " " } : node,
+    );
+    const fallback = map({ scene: source, locale: "ko-KR", selectedNodeIds: ["dialog"] });
+    expect(text(fallback.rows[3])).toContain("상세 대화상자 상세 대화상자");
+    expect(fallback.markup).not.toContain('<span lang="">상세 대화상자</span>');
+    expect(fallback.markup).toContain("상세 제목을 추가하세요.");
+    const readOnly = map({ scene: source, locale: "ko-KR", editable: false });
+    expect(readOnly.markup).not.toContain("상호작용 편집");
+    expect(readOnly.rows).toHaveLength(5);
+  });
+
+  it("uses current image source geometry for localized associations and failures", () => {
+    const source = fixture();
+    source.nodes = source.nodes.map((node) =>
+      node.type === "image" ? { ...node, altText: "Image description needed" } : node,
+    );
+    const valid = map({ scene: source, locale: "ko-KR", selectedNodeIds: ["hotspot"] });
+    expect(valid.markup).toContain('이미지: <span lang="">Image description needed</span>');
+    expect(valid.markup).not.toContain("이미지 설명 필요");
+    source.nodes = source.nodes.map((node) =>
+      node.type === "image" ? { ...node, altText: " " } : node,
+    );
+    const unnamed = map({ scene: source, locale: "ko-KR", selectedNodeIds: ["hotspot"] });
+    expect(unnamed.markup).toContain("이미지: 이미지 설명 필요");
+    expect(unnamed.markup).not.toContain('<span lang="">이미지 설명 필요</span>');
+    source.nodes = source.nodes.map((node) =>
+      node.type === "image" ? { ...node, rotation: 15, altText: "STALE ASSOCIATION" } : node,
+    );
+    const rotated = map({ scene: source, locale: "ko-KR", selectedNodeIds: ["hotspot"] });
+    expect(rotated.markup).toContain("핫스폿을 회전하지 않은 이미지 안에 유지하세요.");
+    expect(rotated.markup).not.toContain("이미지: ");
+    source.nodes = source.nodes.filter((node) => node.type !== "image");
+    const removed = map({ scene: source, locale: "ko-KR", selectedNodeIds: ["hotspot"] });
+    expect(removed.markup).toContain("이 핫스폿의 이미지를 선택하세요.");
+    expect(removed.markup).not.toContain("STALE ASSOCIATION");
+    expect(removed.markup).not.toContain("이미지: ");
+    for (const view of [valid, unnamed, rotated, removed])
+      expect(view.markup).not.toContain("NEVER RENDER");
   });
 });

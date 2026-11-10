@@ -6,6 +6,7 @@ import {
   presentationRichTextToPlainText,
   type PresentationRichText,
   type PresentationSceneNode,
+  type SupportedLocale,
 } from "@openround/contracts";
 import {
   editNativeRichText,
@@ -14,6 +15,11 @@ import {
   setNativeRichTextParagraphKind,
   toggleNativeRichTextMark,
 } from "../../lib/presentation-rich-text";
+import {
+  nativeTextVideoCopy,
+  nativeTextVideoValidationFeedback,
+  type NativeTextVideoFeedback,
+} from "./native-text-video-copy";
 import styles from "./native-scene.module.css";
 
 type TextNode = Extract<PresentationSceneNode, { type: "text" }>;
@@ -23,12 +29,15 @@ export function NativeRichTextEditor({
   onChange,
   onUndo,
   onRedo,
+  locale = "en-CA",
 }: {
   node: TextNode;
   onChange: (node: TextNode, field?: string) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  locale?: SupportedLocale;
 }) {
+  const copy = nativeTextVideoCopy(locale);
   const input = useRef<HTMLTextAreaElement>(null);
   const range = useRef({ start: 0, end: 0 });
   const beforeInput = useRef<{ text: string; start: number; end: number } | null>(null);
@@ -37,9 +46,9 @@ export function NativeRichTextEditor({
   const restoreEpoch = useRef(0);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [link, setLink] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<NativeTextVideoFeedback | null>(null);
   const richText = node.richText!;
-  const label = node.role === "title" ? "Native slide title" : "Node text";
+  const label = copy(node.role === "title" ? "Native slide title" : "Node text");
   const hasSelection = selection.end > selection.start;
 
   const cancelRestore = useCallback(() => {
@@ -72,10 +81,10 @@ export function NativeRichTextEditor({
         consumedHistoryInput.current = inputType;
         const action = inputType === "historyUndo" ? onUndo : onRedo;
         if (action) {
-          setError("");
+          setError(null);
           action();
         } else {
-          setError("Undo and Redo are unavailable in this view.");
+          setError({ key: "Undo and Redo are unavailable in this view." });
         }
         return;
       }
@@ -111,10 +120,10 @@ export function NativeRichTextEditor({
     beforeInput.current = null;
     const action = redo ? onRedo : onUndo;
     if (action) {
-      setError("");
+      setError(null);
       action();
     } else {
-      setError("Undo and Redo are unavailable in this view.");
+      setError({ key: "Undo and Redo are unavailable in this view." });
     }
   }
 
@@ -132,7 +141,7 @@ export function NativeRichTextEditor({
         text: presentationRichTextToPlainText(richText),
         richText,
       }) as TextNode;
-      setError("");
+      setError(null);
       if (JSON.stringify(next) !== JSON.stringify(node)) onChange(next, field);
       if (restore) {
         const { start, end } = range.current;
@@ -155,9 +164,10 @@ export function NativeRichTextEditor({
       }
     } catch (caught) {
       setError(
-        caught instanceof Error && !("issues" in caught)
-          ? caught.message
-          : "This text change exceeds the formatting limits or contains unsupported characters. Shorten it or remove some formatting and try again.",
+        nativeTextVideoValidationFeedback(
+          caught,
+          "This text change exceeds the formatting limits or contains unsupported characters. Shorten it or remove some formatting and try again.",
+        ),
       );
     }
   }
@@ -166,6 +176,7 @@ export function NativeRichTextEditor({
   }
   return (
     <div
+      lang={locale}
       className={styles.richEditor}
       onFocusCapture={cancelRestore}
       onBlurCapture={cancelRestore}
@@ -175,7 +186,7 @@ export function NativeRichTextEditor({
       <label>
         {label}
         <textarea
-          lang={node.lang}
+          lang={node.lang ?? ""}
           ref={input}
           data-native-text-input="true"
           aria-label={label}
@@ -243,7 +254,7 @@ export function NativeRichTextEditor({
           }}
         />
       </label>
-      <div className={styles.formatToolbar} aria-label="Text formatting">
+      <div className={styles.formatToolbar} aria-label={copy("Text formatting")}>
         <button
           type="button"
           disabled={!hasSelection}
@@ -255,7 +266,7 @@ export function NativeRichTextEditor({
           )}
           onClick={() => mark("bold")}
         >
-          Bold
+          {copy("Bold")}
         </button>
         <button
           type="button"
@@ -268,12 +279,12 @@ export function NativeRichTextEditor({
           )}
           onClick={() => mark("italic")}
         >
-          Italic
+          {copy("Italic")}
         </button>
         <label>
-          Paragraph style
+          {copy("Paragraph style")}
           <select
-            aria-label="Paragraph style"
+            aria-label={copy("Paragraph style")}
             value=""
             onChange={(event) => {
               const kind = event.target.value as "paragraph" | "bullet" | "numbered";
@@ -288,17 +299,20 @@ export function NativeRichTextEditor({
               );
             }}
           >
-            <option value="">Choose for selected paragraphs</option>
-            <option value="paragraph">Paragraph</option>
-            {node.role !== "title" ? <option value="bullet">Bulleted list</option> : null}
-            {node.role !== "title" ? <option value="numbered">Numbered list</option> : null}
+            <option value="">{copy("Choose for selected paragraphs")}</option>
+            <option value="paragraph">{copy("Paragraph")}</option>
+            {node.role !== "title" ? <option value="bullet">{copy("Bulleted list")}</option> : null}
+            {node.role !== "title" ? (
+              <option value="numbered">{copy("Numbered list")}</option>
+            ) : null}
           </select>
         </label>
       </div>
       <label>
-        Link address
+        {copy("Link address")}
         <input
-          aria-label="Link address"
+          lang=""
+          aria-label={copy("Link address")}
           type="url"
           placeholder="https://example.com"
           maxLength={2048}
@@ -314,7 +328,7 @@ export function NativeRichTextEditor({
             apply(() => linkNativeRichText(richText, range.current.start, range.current.end, link))
           }
         >
-          Apply link
+          {copy("Apply link")}
         </button>
         <button
           type="button"
@@ -323,28 +337,28 @@ export function NativeRichTextEditor({
             apply(() => linkNativeRichText(richText, range.current.start, range.current.end, null))
           }
         >
-          Remove link
+          {copy("Remove link")}
         </button>
         <button
           type="button"
           onClick={() => {
             const { richText: _richText, ...plain } = node;
             void _richText;
-            setError("");
+            setError(null);
             onChange(plain);
           }}
         >
-          Remove formatting
+          {copy("Remove formatting")}
         </button>
       </div>
       <p className={styles.help}>
-        Select text before applying emphasis or a link. Paragraph style applies to the current or
-        selected paragraphs. Pasting adds plain text; existing text keeps its formatting. Links open
-        in a new tab when presenting or previewing.
+        {copy(
+          "Select text before applying emphasis or a link. Paragraph style applies to the current or selected paragraphs. Pasting adds plain text; existing text keeps its formatting. Links open in a new tab when presenting or previewing.",
+        )}
       </p>
       {error ? (
-        <p role="alert" className={styles.formatError}>
-          {error}
+        <p role="alert" className={styles.formatError} lang={error.key ? locale : "en-CA"}>
+          {error.key ? copy(error.key) : error.diagnostic}
         </p>
       ) : null}
     </div>

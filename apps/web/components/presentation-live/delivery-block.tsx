@@ -4,7 +4,10 @@ import type {
   PresentationRevealedAnswer,
 } from "@openround/contracts";
 import { ContentSlideView } from "../presentation/content-slide-view";
-import { PresentationActivitySlide } from "../presentation/presentation-activity-slide";
+import {
+  PresentationActivitySlide,
+  type PresentationActivitySlideProps,
+} from "../presentation/presentation-activity-slide";
 import styles from "./presentation-delivery.module.css";
 import type { NativeSceneInteractionRuntime } from "../presentation/native-scene-interaction-view";
 import { useLocale } from "../locale-provider";
@@ -16,12 +19,14 @@ export function PresentationDeliveryBlock({
   revealedAnswer = null,
   interactionSourceKey,
   interactionRuntime,
+  accessibilityContext,
 }: {
   block: PresentationParticipantCurrentBlock;
   renderMedia: (mediaId: string | null, altText: string | null) => ReactNode;
   revealedAnswer?: PresentationRevealedAnswer | null;
   interactionSourceKey?: string;
   interactionRuntime?: NativeSceneInteractionRuntime;
+  accessibilityContext?: PresentationActivitySlideProps["accessibilityContext"];
 }) {
   const { locale } = useLocale();
   const copy = presentationActivityCopy(locale);
@@ -41,6 +46,7 @@ export function PresentationDeliveryBlock({
   return (
     <div className={styles.block}>
       <PresentationActivitySlide
+        accessibilityContext={accessibilityContext}
         question={block.question}
         design={block.design}
         media={

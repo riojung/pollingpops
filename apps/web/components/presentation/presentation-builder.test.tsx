@@ -64,6 +64,40 @@ vi.mock("../workspace/workspace-provider", () => ({ useWorkspace: () => workspac
 import { PresentationBuilder } from "./presentation-builder";
 
 describe("Presentation Builder UI", () => {
+  it.each([false, true])(
+    "keeps legacy preview layout styling unless the deck explicitly supplies design (%s)",
+    (authoredDesign) => {
+      const slide = createContentBlock("section");
+      slide.textElements[0]!.text = "Preserved section title";
+      const neighbor = createNativeContentBlock();
+      if (authoredDesign)
+        neighbor.scene = {
+          ...neighbor.scene!,
+          schemaVersion: 3,
+          design: { theme: "sunset", font: "serif", spacing: "compact" },
+        };
+      editor.draft = {
+        schemaVersion: authoredDesign ? 7 : 5,
+        title: "Design parity",
+        description: "",
+        experiencePreset: { id: "focus", version: 1 },
+        blocks: [slide, neighbor],
+      };
+      const before = structuredClone(editor.draft);
+      editor.preview = true;
+      const markup = renderToStaticMarkup(
+        withEnglishLocale(<PresentationBuilder presentationId="presentation-1" />),
+      );
+      const preview = markup.slice(markup.indexOf('aria-label="Presentation preview"'));
+      const article = preview.match(/<article[^>]*data-layout="section"[^>]*>/)?.[0];
+      expect(article).toBeDefined();
+      if (authoredDesign) expect(article).toContain('data-design-theme="sunset"');
+      else expect(article).not.toContain("data-design-theme");
+      expect(preview).toContain("Preserved section title");
+      expect(editor.draft).toEqual(before);
+    },
+  );
+
   it("renders Korean primary publication and slide commands without changing authored words", async () => {
     const slide = createContentBlock();
     slide.textElements[0]!.text = "AUTHOR original English";

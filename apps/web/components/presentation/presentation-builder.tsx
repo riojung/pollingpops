@@ -124,6 +124,7 @@ import { PresentationActivitySlide } from "./presentation-activity-slide";
 import { SpeakerNotesEditor, PresenterNotesPanel } from "./presentation-speaker-notes";
 import {
   inheritPresentationSceneDesign,
+  resolvePresentationContentDesign,
   resolvePresentationActivityDesign,
 } from "../../lib/presentation-activity-design";
 import { applyNativeSceneDesign } from "../../lib/presentation-native-design";
@@ -392,7 +393,7 @@ function PresentationPreview({
                   <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
                 )}
                 variant="preview"
-                designOverride={inheritPresentationSceneDesign(publication.blocks, block.id)}
+                designOverride={resolvePresentationContentDesign(publication.blocks, block.id)}
                 interactionRuntime={{
                   mode: "review",
                   navigationTargets: presentationInteractionTargets(publication, block.id).map(
@@ -415,6 +416,7 @@ function PresentationPreview({
               />
             ) : (
               <PresentationActivitySlide
+                accessibilityContext="preview"
                 question={block.question}
                 design={resolvePresentationActivityDesign(publication.blocks, block.id)}
                 media={
@@ -657,6 +659,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [loaded, setLoaded] = useState(false);
   const [roundSources, setRoundSources] = useState<RoundSource[]>([]);
   const [roundImportOpen, setRoundImportOpen] = useState(false);
+  const roundImportMenuSource = useRef<HTMLButtonElement | undefined>(undefined);
+  useEffect(() => {
+    if (roundImportOpen) return;
+    const source = roundImportMenuSource.current;
+    roundImportMenuSource.current = undefined;
+    handoffEditorDisclosure(source);
+  }, [roundImportOpen]);
   const [sourceImportOpen, setSourceImportOpen] = useState(false);
   const [textAssistanceOpen, setTextAssistanceOpen] = useState(false);
   const [textAssistancePending, setTextAssistancePending] = useState(false);
@@ -1854,7 +1863,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setMediaPreviewUrl("");
   }
 
-  function openRoundImport() {
+  function openRoundImport(source?: HTMLButtonElement) {
     if (
       importPreparation.current ||
       packOperation.current ||
@@ -1868,6 +1877,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     )
       return;
     const first = roundSources[0]?.id ?? "";
+    roundImportMenuSource.current = source;
     setSelectedRoundId((current) => current || first);
     setRoundImportOpen(true);
     setError("");
@@ -3207,7 +3217,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <li key={block.id} className={styles.filmstripItem}>
                 <PresentationSlideThumbnail
                   block={block}
-                  design={inheritPresentationSceneDesign(draft.blocks, block.id)}
+                  design={resolvePresentationContentDesign(draft.blocks, block.id)}
                   priority={index < 3 || selectedBlockId === block.id}
                   mediaEnabled={mapOpen}
                   mediaScope={{
@@ -3347,7 +3357,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <EditorMenuSection label={commands.bringContent}>
                 <button
                   disabled={!roundSources.length || preparingImport}
-                  onClick={openRoundImport}
+                  onClick={(event) => openRoundImport(event.currentTarget)}
                   type="button"
                 >
                   <EditorIcon name="round" />
@@ -3612,7 +3622,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 <button onClick={() => addBlock(createQuestionBlock())} type="button">
                   {t("delivery.presentationBuilder.addAudienceQuestion")}
                 </button>
-                <button disabled={!roundSources.length} onClick={openRoundImport} type="button">
+                <button
+                  disabled={!roundSources.length}
+                  onClick={(event) => openRoundImport(event.currentTarget)}
+                  type="button"
+                >
                   {t("delivery.presentationBuilder.reuseRound")}
                 </button>
                 <button onClick={() => void openSourceImport()} type="button">
@@ -3838,7 +3852,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             <section className={styles.slideCanvas} lang="en-CA">
               <ContentSlideView
                 block={selectedBlock}
-                designOverride={inheritPresentationSceneDesign(draft.blocks, selectedBlock.id)}
+                designOverride={resolvePresentationContentDesign(draft.blocks, selectedBlock.id)}
                 bodyPlaceholder={
                   selectedBlock.layout === "quote"
                     ? "Add the quote or reflection prompt"
@@ -3880,6 +3894,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               </div>
               <PresentationActivitySlide
                 question={selectedBlock.question}
+                accessibilityContext="editor"
                 design={resolvePresentationActivityDesign(draft.blocks, selectedBlock.id)}
                 editable
                 onPromptChange={(prompt) =>

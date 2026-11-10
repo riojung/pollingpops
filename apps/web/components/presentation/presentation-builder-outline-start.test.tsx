@@ -328,6 +328,82 @@ afterEach(() => {
 });
 
 describe("Question insertion workflows", () => {
+  it.each(["cancel", "insert"] as const)(
+    "returns from a Round import %s to an unobstructed navigator",
+    async (completion) => {
+      const imported = createQuestionBlock();
+      const previous = fixture.request.getMockImplementation()!;
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path === "/v1/quizzes")
+          return {
+            quizzes: [{ id: "source", title: "Published source", currentVersionId: "version" }],
+          };
+        if (path === "/v1/quizzes/source")
+          return { currentVersion: { id: "version", content: { questions: [imported.question] } } };
+        if (path.endsWith("/blocks/import"))
+          return {
+            presentation: {
+              id: presentationId,
+              draft: { ...savedDraft, blocks: [imported] },
+              draftRevision: 5,
+            },
+            insertedBlockIds: [imported.id],
+          };
+        return previous(path, init);
+      });
+      const view = editor(false);
+      await view.settle();
+      const source = view.nodes.find(
+        (node) =>
+          node.type === "button" &&
+          elements(node).some(
+            (child) => child.props.children === "delivery.presentationBuilder.fromPublishedRound",
+          ),
+      );
+      expect(source).toBeDefined();
+      const summary = { focus: vi.fn() };
+      const popup = { hasAttribute: () => true, hidePopover: vi.fn() };
+      const menu = {
+        open: true,
+        querySelector: (selector: string) => (selector === "summary" ? summary : popup),
+      };
+      (source!.props.onClick as (event: { currentTarget: HTMLButtonElement }) => void)({
+        currentTarget: { closest: () => menu } as unknown as HTMLButtonElement,
+      });
+      await view.settle();
+      expect(
+        view.nodes.some((node) => node.props["aria-labelledby"] === "round-import-title"),
+      ).toBe(true);
+      expect(summary.focus).not.toHaveBeenCalled();
+      if (completion === "insert") {
+        const checkbox = view.nodes.find(
+          (node) => node.type === "input" && node.props.type === "checkbox",
+        );
+        expect(checkbox).toBeDefined();
+        (checkbox!.props.onChange as () => void)();
+        await view.settle();
+      }
+      const button = view.nodes.find(
+        (node) =>
+          node.type === "button" &&
+          node.props.children === (completion === "cancel" ? "Cancel" : "Insert 1"),
+      );
+      expect(button).toBeDefined();
+      (button!.props.onClick as () => void)();
+      await view.settle();
+      expect(
+        view.nodes.some((node) => node.props["aria-labelledby"] === "round-import-title"),
+      ).toBe(false);
+      expect(menu.open).toBe(false);
+      expect(popup.hidePopover).toHaveBeenCalledOnce();
+      expect(summary.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+      const imports = fixture.request.mock.calls.filter(([path]) =>
+        path.endsWith("/blocks/import"),
+      );
+      expect(imports).toHaveLength(completion === "cancel" ? 0 : 1);
+    },
+  );
+
   function sourceFixture(full = false) {
     const block = createNativeContentBlock();
     const title = block.scene!.nodes[0]!;

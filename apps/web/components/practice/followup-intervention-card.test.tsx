@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FollowupInterventionCard } from "./followup-intervention-card";
+import { supportedLocales } from "@openround/contracts";
+import { followupCopy } from "../../lib/i18n/followup-copy";
 
 describe("active followup intervention card", () => {
   const intervention = {
@@ -53,4 +55,24 @@ describe("active followup intervention card", () => {
     expect(markup).toContain("Continue to recheck");
     expect(markup).not.toContain("Next guidance card");
   });
+  it.each(supportedLocales)(
+    "localizes guidance controls in %s while preserving the frozen card",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <FollowupInterventionCard
+          intervention={intervention}
+          locale={locale}
+          busy
+          onContinue={() => undefined}
+        />,
+      );
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain(followupCopy(locale)("Next guidance card"));
+      expect(markup).toContain(followupCopy(locale)("Card citations"));
+      expect(markup).toContain('disabled=""');
+      expect(markup).toContain('lang="">Review &lt; evidence');
+      expect(markup).toContain("Frozen notes, p. 3");
+      expect(markup).not.toContain("<script>");
+    },
+  );
 });

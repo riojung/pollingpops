@@ -348,7 +348,17 @@ test("host navigation survives lost acknowledgement, returns and reviews saved e
       totalScore: 100,
     });
     await page.goto(`/presentation-session/${f.sessionId}/report`);
-    await expect(page.getByText("Skipped · not presented", { exact: true })).toBeVisible();
+    const skippedEvidence = page
+      .getByRole("region", { name: "Block evidence", exact: true })
+      .getByRole("article")
+      .filter({ has: page.getByRole("heading", { name: f.skipped.question.prompt, exact: true }) });
+    await expect(skippedEvidence).toHaveCount(1);
+    await expect(
+      skippedEvidence.getByText("Skipped · not presented", { exact: true }),
+    ).toBeVisible();
+    await expect(skippedEvidence).toContainText(
+      "This block was never presented. No response or assessment evidence was collected.",
+    );
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

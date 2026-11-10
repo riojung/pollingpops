@@ -9,6 +9,7 @@ import { createScopedAudienceSubscription } from "../../lib/scoped-audience-real
 import { clientUuid } from "../../lib/uuid";
 import { QnaPanel } from "../qna-panel";
 import { useLocale } from "../locale-provider";
+import { localizeQnaModerationError, qnaModerationCopy } from "../../lib/i18n/qna-moderation-copy";
 import styles from "./presentation-qna.module.css";
 
 export function PresentationQnaPanel({
@@ -22,7 +23,8 @@ export function PresentationQnaPanel({
   role: "host" | "participant" | "companion";
   closed: boolean;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const copy = qnaModerationCopy(locale);
   const [availability, setAvailability] = useState<PresentationAudienceAvailability | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -122,7 +124,9 @@ export function PresentationQnaPanel({
       onAccessDenied: () => {
         discoveryRetry.current.reset();
         setAvailability(null);
-        setError(t("live.presentationQna.accessExpired"));
+        setError(
+          "Q&A access has expired. Rejoin the Presentation or reacquire your host/Companion pass.",
+        );
       },
     });
     const timer = window.setInterval(() => {
@@ -133,7 +137,7 @@ export function PresentationQnaPanel({
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       subscription.stop();
     };
-  }, [availability?.activated, open, sessionId, t, token]);
+  }, [availability?.activated, open, sessionId, token]);
 
   useEffect(() => {
     setRevision((value) => value + 1);
@@ -165,15 +169,17 @@ export function PresentationQnaPanel({
   }
 
   if (!availability?.available && !error) return null;
+  const displayError = localizeQnaModerationError(locale, error);
   return (
     <div
       className={`${styles.container} ${role === "companion" ? styles.compact : ""}`}
       data-presentation-qna
+      lang={locale}
     >
       {error ? (
         <>
-          <p className="error" lang="en-CA" role="alert">
-            {error}
+          <p className="error" lang={displayError.language} role="alert">
+            {displayError.text}
           </p>
           <button type="button" className="button-quiet" onClick={() => void discover()}>
             {t("live.qna.refresh")}
@@ -192,8 +198,8 @@ export function PresentationQnaPanel({
           {hasOpened ? (
             <>
               {role === "companion" ? (
-                <p className="notice" lang="en-CA">
-                  {t("live.presentationQna.readOnly")}
+                <p className="notice">
+                  {copy("Companion Q&A is read-only. Use the host window to moderate questions.")}
                 </p>
               ) : null}
               <QnaPanel
@@ -211,20 +217,23 @@ export function PresentationQnaPanel({
       ) : availability?.canActivate ? (
         <div className="panel">
           <h2>{t("live.qna.title")}</h2>
-          <p lang="en-CA">{t("live.presentationQna.setup")}</p>
+          <p>
+            {copy(
+              "Open a moderated question space alongside this Presentation. Companion access is read-only.",
+            )}
+          </p>
           <button
             className="button"
-            lang="en-CA"
             type="button"
             disabled={busy || closed}
             onClick={() => void activate()}
           >
-            {t(busy ? "live.presentationQna.activating" : "live.presentationQna.activate")}
+            {copy(busy ? "Activating Q&A…" : "Activate audience Q&A")}
           </button>
         </div>
       ) : availability?.available ? (
-        <p className="notice" lang="en-CA">
-          {t("live.presentationQna.waiting")}
+        <p className="notice">
+          {copy("Audience Q&A will appear when the facilitator activates it.")}
         </p>
       ) : null}
     </div>

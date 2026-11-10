@@ -283,12 +283,22 @@ for (const suffix of ["", " @mobile"]) {
     await expect.poll(() => savedDraft(page, record.id)).toEqual(formattedDraft);
     await page.screenshot({ path: testInfo.outputPath("rich-text-editor.png"), fullPage: true });
 
-    // Adding another plain native slide must not downgrade the formatted document.
+    // A new slide inherits design tokens, promoting the document to v7 while
+    // preserving the existing rich-text slide exactly.
     await clickNavigatorAction(page, "Blank slide");
     await openE01Inspector(page, "Content");
     await page.getByLabel("Native slide title", { exact: true }).fill("Next actions");
     await expect.poll(async () => (await savedDraft(page, record.id)).blocks.length).toBe(3);
-    expect((await savedDraft(page, record.id)).schemaVersion).toBe(5);
+    const expandedDraft = await savedDraft(page, record.id);
+    expect(expandedDraft.schemaVersion).toBe(7);
+    expect(expandedDraft.blocks[0]).toEqual(formattedDraft.blocks[0]);
+    const added = expandedDraft.blocks.find(
+      (block) => !formattedDraft.blocks.some((original) => original.id === block.id),
+    );
+    expect(added?.kind).toBe("content");
+    if (added?.kind !== "content") throw new Error("Expected the new native slide");
+    expect(added.scene?.schemaVersion).toBe(3);
+    expect(added.scene?.design).toBeDefined();
     if (narrow) {
       await closeE01Overlays(page);
       await page.getByRole("button", { name: "Open map", exact: true }).click();
@@ -310,7 +320,7 @@ for (const suffix of ["", " @mobile"]) {
           sceneVersion: block?.kind === "content" ? block.scene?.schemaVersion : 0,
         };
       })
-      .toEqual({ version: 5, sceneVersion: 1 });
+      .toEqual({ version: 7, sceneVersion: 1 });
     const publishing = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&

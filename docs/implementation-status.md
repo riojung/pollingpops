@@ -8,6 +8,31 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B specialist workflows November 10, 2026
+
+The `codex/option-b-secondary-flows` source extends selected-language controls and recovery
+guidance to Round staff/embed tools, follow-up access management and participation, and
+Q&A/text moderation across the ten configured locales. Staff writes prevent duplicate
+creation; one-time links retain visible copy recovery. Follow-up actions respect canonical
+owner/editor permissions and session deletion stays owner-only. Read-only users retain
+access metadata; Q&A observers cannot compose replies. Authored content, credential
+transport, privacy projections and exact retry identities retain their existing meanings.
+
+Integration fixes restore preview/delivery styling parity, distinguish activity preview
+landmarks, close imported-Round popovers without covering the next action, and correct
+the participant brand/self label. Direct follow-up visits now load the shared delivery
+catalog, preventing internal keys and narrow-screen overflow. The repository gate passes
+7,331 tests and all builds/startup checks; after the final catalog correction, all 3,459
+web tests, web type checking, scoped lint and fresh web production builds pass. Fifty-five
+distinct selected production-browser cases pass across desktop Chromium and phone
+Chromium/WebKit, with fresh API fixtures. These results are scoped in the implementation
+record; the full hosted matrix and local Firefox qualification remain open.
+
+The [Option B implementation record](option-b-ux-implementation.md) preserves the bounded
+scope and pending qualification. Advanced native inspectors, Sections/spatial navigation,
+AI/Pack tools and Companion chrome still need language review. Launch-facing content,
+customer observation, manual accessibility/device work and the release gates remain open.
+
 ### Option B customer workflow completion November 10, 2026
 
 The merged `codex/option-b-ux` source refines Home and Library, first-session guidance and mobile

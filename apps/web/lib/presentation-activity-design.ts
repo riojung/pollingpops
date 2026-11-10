@@ -35,7 +35,16 @@ function designNearIndex(blocks: readonly PresentationBlock[], before: number) {
     if (block?.kind === "content" && !block.hidden && block.scene?.design)
       return copyPresentationSceneDesign(block.scene.design);
   }
-  return copyPresentationSceneDesign();
+  return undefined;
+}
+
+/** Match delivery: legacy layouts retain their own appearance unless the deck has authored design. */
+export function resolvePresentationContentDesign(
+  blocks: readonly PresentationBlock[],
+  blockId: string,
+): PresentationSceneDesign | undefined {
+  const index = blocks.findIndex((block) => block.id.toLowerCase() === blockId.toLowerCase());
+  return index < 0 ? undefined : designNearIndex(blocks, index);
 }
 
 /** Rendering borrows the nearest visible native design without upgrading stored content. */
@@ -44,7 +53,7 @@ export function resolvePresentationActivityDesign(
   blockId: string,
 ): PresentationSceneDesign {
   const index = blocks.findIndex((block) => block.id.toLowerCase() === blockId.toLowerCase());
-  return designNearIndex(blocks, index - 1);
+  return designNearIndex(blocks, index - 1) ?? copyPresentationSceneDesign();
 }
 
 /** Explicit insertion may copy the current content slide's design, including after a question. */
@@ -55,5 +64,5 @@ export function inheritPresentationSceneDesign(
   const index = afterBlockId
     ? blocks.findIndex((block) => block.id.toLowerCase() === afterBlockId.toLowerCase())
     : blocks.length - 1;
-  return designNearIndex(blocks, index);
+  return designNearIndex(blocks, index) ?? copyPresentationSceneDesign();
 }

@@ -82,22 +82,59 @@ function frame(value: PresentationScene, id: string): PresentationSceneFrame {
   return node.frame;
 }
 async function outsideStage(controls: Locator, stage: Locator) {
-  const bounds = await stage.boundingBox();
+  const toolbarHandle = await controls.elementHandle();
+  expect(toolbarHandle).not.toBeNull();
+  const readGeometry = () =>
+    stage.evaluate((slide, toolbar) => {
+      const rectangle = (element: Element) => {
+        if (!element.getClientRects().length) return null;
+        const rect = element.getBoundingClientRect();
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          right: rect.right,
+          bottom: rect.bottom,
+        };
+      };
+      return {
+        stage: rectangle(slide),
+        toolbar: rectangle(toolbar),
+        content: [...slide.querySelectorAll("[data-frame]")].map((node) => {
+          const rect = node.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom };
+        }),
+        controls: [...toolbar.querySelectorAll("select,button")].map(rectangle),
+      };
+    }, toolbarHandle!);
+  let geometry: Awaited<ReturnType<typeof readGeometry>> | undefined;
+  // A zoom change can reflow the command bar between separate protocol reads in Firefox.
+  // Sample all rectangles in one browser turn, retaining the original one-pixel relation.
+  await expect
+    .poll(
+      async () => {
+        geometry = await readGeometry();
+        return geometry.stage && geometry.toolbar
+          ? geometry.toolbar.bottom - geometry.stage.y
+          : Infinity;
+      },
+      {
+        message: "selected controls stay above the authored stage after responsive reflow",
+        timeout: 10_000,
+      },
+    )
+    .toBeLessThanOrEqual(1);
+  const bounds = geometry!.stage;
   expect(bounds).not.toBeNull();
-  const toolbar = await controls.boundingBox();
+  const toolbar = geometry!.toolbar;
   expect(toolbar).not.toBeNull();
   expect(
     toolbar!.y + toolbar!.height,
     "selected controls stay above the authored stage",
   ).toBeLessThanOrEqual(bounds!.y + 1);
-  const content = await stage.locator("[data-frame]").evaluateAll((nodes) =>
-    nodes.map((node) => {
-      const rect = node.getBoundingClientRect();
-      return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom };
-    }),
-  );
-  for (const control of await controls.locator("select,button").all()) {
-    const box = await control.boundingBox();
+  const content = geometry!.content;
+  for (const box of geometry!.controls) {
     expect(box).not.toBeNull();
     const overlaps = (other: { x: number; y: number; right: number; bottom: number }) =>
       box!.x < other.right - 0.5 &&

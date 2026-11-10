@@ -11,6 +11,12 @@ import {
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
+function presentationCommandBar(page: Page) {
+  return page
+    .getByRole("textbox", { name: "Presentation title", exact: true, includeHidden: true })
+    .locator("xpath=ancestor::header[1]");
+}
+
 test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "wait" });
 });
@@ -327,7 +333,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
   );
   await picker.getByRole("button", { name: "Insert Pack checkpoints" }).click();
   await expect(picker.getByRole("button", { name: "Retry Pack insertion" })).toBeEnabled();
-  await expect(page.locator("header")).toHaveAttribute("inert", "");
+  await expect(presentationCommandBar(page)).toHaveAttribute("inert", "");
   await expect(picker.getByRole("button", { name: "Cancel" })).toBeDisabled();
   await picker.getByRole("button", { name: "Retry Pack insertion" }).click();
   await expect(picker).toHaveCount(0);
@@ -515,12 +521,23 @@ test("Presentation workspace retry and deferred import preparation preserve one 
     await page.getByLabel("Presentation title", { exact: true }).fill(`${title} — pending edit`);
     await clickNavigatorAction(page, "From trusted source");
     await saveStarted;
-    await expect(
-      page.getByRole("button", { name: "From Recovery Pack", exact: true }),
-    ).toBeDisabled();
-    await expect(
-      page.getByRole("button", { name: "From published Round", exact: true }),
-    ).toBeDisabled();
+    for (const name of ["From Recovery Pack", "From published Round"]) {
+      const backgroundAction = page
+        .locator("#presentation-slide-navigator")
+        .getByRole("button", { name, exact: true, includeHidden: true });
+      await expect(backgroundAction).toBeAttached();
+      await expect(backgroundAction.locator("xpath=ancestor::*[@inert][1]")).toHaveAttribute(
+        "inert",
+        "",
+      );
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+      expect(
+        await backgroundAction.evaluate((element) => {
+          (element as HTMLElement).focus();
+          return document.activeElement === element;
+        }),
+      ).toBe(false);
+    }
     await expect(
       page.getByRole("dialog", { name: "Insert a published Recovery Pack" }),
     ).toHaveCount(0);
@@ -707,7 +724,7 @@ async function presentationPackUpdateWorkflow(page: Page) {
     await page.getByLabel("Presentation title", { exact: true }).fill(pendingTitle);
     await panel.getByRole("button", { name: "Review latest Pack version" }).click();
     await expect.poll(() => reviewStarted).toBe(true);
-    await expect(page.locator("header")).toHaveAttribute("inert", "");
+    await expect(presentationCommandBar(page)).toHaveAttribute("inert", "");
     const savedBeforeReview = await page.request.get(`${apiUrl}/v1/presentations/${target.id}`);
     expect((await savedBeforeReview.json()).presentation.draft.title).toBe(pendingTitle);
     releaseReview();
@@ -772,7 +789,7 @@ async function presentationPackUpdateWorkflow(page: Page) {
   await expect(
     panel.getByRole("button", { name: "Retry Pack update acknowledgement" }),
   ).toBeEnabled();
-  await expect(page.locator("header")).toHaveAttribute("inert", "");
+  await expect(presentationCommandBar(page)).toHaveAttribute("inert", "");
   await panel.getByRole("button", { name: "Retry Pack update acknowledgement" }).click();
   await expect(panel.getByRole("button", { name: "Undo this Pack update" })).toBeEnabled();
   expect(updateBodies).toHaveLength(2);

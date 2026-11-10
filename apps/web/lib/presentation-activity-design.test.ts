@@ -6,6 +6,7 @@ import { INITIAL_NATIVE_DESIGN } from "./presentation-native-design";
 import {
   copyPresentationSceneDesign,
   inheritPresentationSceneDesign,
+  resolvePresentationContentDesign,
   resolvePresentationActivityDesign,
 } from "./presentation-activity-design";
 
@@ -22,6 +23,29 @@ function native(design?: PresentationSceneDesign, hidden = false) {
 }
 
 describe("Presentation activity design inheritance", () => {
+  it("keeps legacy layout styling when no visible authored design exists, matching delivery", () => {
+    const legacy = createContentBlock("section");
+    const blocks = [legacy, native(), native(sunset, true)];
+    const before = structuredClone(blocks);
+    expect(resolvePresentationContentDesign(blocks, legacy.id)).toBeUndefined();
+    expect(resolvePresentationContentDesign(blocks, "missing")).toBeUndefined();
+    expect(blocks).toEqual(before);
+  });
+
+  it("inherits only explicit visible deck design for content, preferring its own authored design", () => {
+    const preceding = native(ocean);
+    const legacy = createContentBlock("section");
+    const own = native(sunset);
+    expect(resolvePresentationContentDesign([legacy, preceding], legacy.id)).toEqual(ocean);
+    expect(resolvePresentationContentDesign([preceding, legacy, own], legacy.id)).toEqual(ocean);
+    const blocks = [preceding, own];
+    const before = structuredClone(blocks);
+    const resolved = resolvePresentationContentDesign(blocks, own.id.toUpperCase());
+    expect(resolved).toEqual(sunset);
+    expect(resolved).not.toBe(sunset);
+    expect(blocks).toEqual(before);
+  });
+
   it("uses the nearest preceding visible native design, preserving the stored deck", () => {
     const activity = createQuestionBlock();
     const blocks: PresentationDraft["blocks"] = [

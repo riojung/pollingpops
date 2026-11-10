@@ -714,6 +714,7 @@ function PresentationHostContent() {
                         aria-label="Next slide content"
                       >
                         <PresentationDeliveryBlock
+                          accessibilityContext="preview"
                           block={snapshot.presenter.nextBlock}
                           interactionRuntime={{ mode: "live_audience" }}
                           interactionSourceKey={JSON.stringify([

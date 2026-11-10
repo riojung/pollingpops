@@ -45,6 +45,8 @@ export interface PresentationActivitySlideProps {
   revealedChoiceIds?: readonly string[];
   /** Inert slide artwork inside the creator's filmstrip. */
   staticThumbnail?: boolean;
+  /** Distinguish simultaneous editor, preview, and live artwork landmarks. */
+  accessibilityContext?: "audience" | "editor" | "preview";
 }
 
 function isChoiceActivity(type: QuestionType) {
@@ -126,6 +128,7 @@ export function PresentationActivitySlide({
   onSelectChoice,
   revealedChoiceIds,
   staticThumbnail = false,
+  accessibilityContext,
 }: PresentationActivitySlideProps) {
   const { locale } = useLocale();
   const copy = presentationActivityCopy(locale);
@@ -165,6 +168,13 @@ export function PresentationActivitySlide({
     Boolean(media);
   const needsRoom = dense || overflow.tabIndex === 0 || readingView;
   const canEdit = editable && !staticThumbnail;
+  const context = accessibilityContext ?? (canEdit ? "editor" : "audience");
+  const slideName =
+    context === "editor"
+      ? copy.editorSlideName
+      : context === "preview"
+        ? copy.previewSlideName
+        : copy.slideName;
   const style = {
     "--activity-background": palette.background,
     "--activity-text": palette.text,
@@ -185,7 +195,7 @@ export function PresentationActivitySlide({
       data-static-thumbnail={staticThumbnail ? "true" : undefined}
       aria-hidden={staticThumbnail ? true : undefined}
       inert={staticThumbnail ? true : undefined}
-      aria-label={staticThumbnail ? undefined : copy.slideName}
+      aria-label={staticThumbnail ? undefined : slideName}
       style={style}
       lang={locale}
     >

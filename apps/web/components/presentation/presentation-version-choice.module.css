@@ -1,0 +1,50 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--ui-overlay);
+}
+
+.panel {
+  width: min(100%, 540px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: clamp(18px, 4vw, 28px);
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-lg);
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.35;
+}
+
+.panel p {
+  margin: 12px 0 20px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: grid;
+  justify-items: stretch;
+  gap: 12px;
+}
+
+.actions > * {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.actions small {
+  color: var(--ui-text-subtle);
+  font-size: 0.875rem;
+}

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { signInBeta } from "./sign-in";
+import { closeHostControls, openHostControls } from "./host-controls";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const confidenceName = "Ask for confidence (optional)";
@@ -103,6 +104,8 @@ async function openCrowdedRecoveryBar(page: Page) {
   await host.getByRole("button", { name: "Reveal answer", exact: true }).click();
   await expect(host.getByTestId("host-session")).toHaveAttribute("data-phase", "question_reveal");
   const bar = host.getByTestId("host-command-bar");
+  await expect(bar.getByRole("button", { name: "Finish round", exact: true })).toBeVisible();
+  await openHostControls(host);
   for (const name of [
     "Audience",
     "Explain or reinforce",
@@ -119,79 +122,60 @@ async function openCrowdedRecoveryBar(page: Page) {
 
 async function expectContainedAndReadable(host: Page, bar: Locator, width: number) {
   await host.setViewportSize({ width, height: 900 });
-  await bar.scrollIntoViewIfNeeded();
-  const geometry = await bar.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    const confidenceLabel = element.querySelector<HTMLLabelElement>(
-      ".host-confidence-control label",
-    )!;
-    const label = confidenceLabel.getBoundingClientRect();
-    const text = confidenceLabel.querySelector<HTMLElement>("span:not(.sr-only)")!;
-    const textBounds = text.getBoundingClientRect();
+  await closeHostControls(bar);
+  await host.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const primary = bar.getByRole("button", { name: "Finish round", exact: true });
+  await expect(primary).toBeInViewport();
+  await expect(primary).toBeEnabled();
+  const compact = await bar.evaluate((element) => ({
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+    height: element.getBoundingClientRect().height,
+    bottom: element.getBoundingClientRect().bottom,
+    viewportHeight: window.innerHeight,
+    position: getComputedStyle(element).position,
+  }));
+  expect(compact.overflow, `${width}px document overflow`).toBeLessThanOrEqual(1);
+  expect(compact.height, `${width}px compact primary controls`).toBeLessThanOrEqual(150);
+  expect(compact.bottom).toBeLessThanOrEqual(compact.viewportHeight + 1);
+  expect(compact.position).toBe("sticky");
+  await openHostControls(host);
+  const panel = bar.locator("details > div");
+  await expect(panel).toBeVisible();
+  const geometry = await panel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const label = element
+      .querySelector<HTMLLabelElement>(".host-confidence-control label")!
+      .getBoundingClientRect();
     const controls = [...element.querySelectorAll<HTMLElement>("button, input[type=checkbox]")]
       .filter((control) => control.getClientRects().length > 0)
       .map((control) => {
-        const rect = control.getBoundingClientRect();
-        return {
-          name: control.getAttribute("aria-label") ?? control.textContent?.trim() ?? control.id,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        };
+        const r = control.getBoundingClientRect();
+        return { left: r.left, right: r.right };
       });
     return {
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
-      pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
-      barOverflow: element.scrollWidth - element.clientWidth,
-      bar: {
-        left: bounds.left,
-        right: bounds.right,
-        top: bounds.top,
-        bottom: bounds.bottom,
-        height: bounds.height,
-      },
-      label: { width: label.width, height: label.height },
-      text: { value: text.textContent?.trim(), width: textBounds.width, height: textBounds.height },
+      labelWidth: label.width,
+      labelHeight: label.height,
       controls,
     };
   });
-  expect(geometry.pageOverflow, `${width}px document overflow`).toBeLessThanOrEqual(1);
-  expect(geometry.barOverflow, `${width}px command bar overflow`).toBeLessThanOrEqual(1);
-  expect(geometry.bar.left).toBeGreaterThanOrEqual(-1);
-  expect(geometry.bar.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
-  expect(geometry.bar.top).toBeGreaterThanOrEqual(-1);
-  expect(geometry.bar.bottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
-  expect(geometry.label.width, `${width}px readable confidence label`).toBeGreaterThanOrEqual(100);
-  expect(geometry.label.height, `${width}px confidence label height`).toBeLessThanOrEqual(80);
-  expect(geometry.text.value, `${width}px translated compact confidence label`).toBe("Confidence");
-  expect(geometry.text.width, `${width}px confidence text width`).toBeGreaterThanOrEqual(60);
-  expect(geometry.text.height, `${width}px confidence text height`).toBeLessThanOrEqual(56);
-  if (width >= 1024)
-    expect(geometry.bar.height, `${width}px compact desktop bar`).toBeLessThanOrEqual(140);
-  else if (width >= 821)
-    expect(geometry.bar.height, `${width}px wrapped desktop bar`).toBeLessThanOrEqual(190);
-  expect(geometry.controls.length).toBe(7);
+  expect(geometry.left).toBeGreaterThanOrEqual(-1);
+  expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+  expect(geometry.labelWidth).toBeGreaterThanOrEqual(100);
+  expect(geometry.labelHeight).toBeLessThanOrEqual(80);
+  expect(geometry.controls.length).toBe(6);
   for (const control of geometry.controls) {
-    expect(control.left, `${width}px ${control.name} left`).toBeGreaterThanOrEqual(
-      geometry.bar.left - 1,
-    );
-    expect(control.right, `${width}px ${control.name} right`).toBeLessThanOrEqual(
-      geometry.bar.right + 1,
-    );
-    expect(control.top, `${width}px ${control.name} top`).toBeGreaterThanOrEqual(
-      geometry.bar.top - 1,
-    );
-    expect(control.bottom, `${width}px ${control.name} bottom`).toBeLessThanOrEqual(
-      geometry.bar.bottom + 1,
-    );
+    expect(control.left).toBeGreaterThanOrEqual(geometry.left - 1);
+    expect(control.right).toBeLessThanOrEqual(geometry.right + 1);
   }
-  for (const control of await bar.locator("button, input[type=checkbox]").all()) {
-    if (await control.isVisible()) {
-      await expect(control).toBeEnabled();
-      await control.click({ trial: true });
-    }
+  for (const control of await panel.locator("button, input[type=checkbox]").all()) {
+    await expect(control).toBeEnabled();
+    await control.click({ trial: true });
   }
 }
 

@@ -46,6 +46,7 @@ describe("Round Builder shell", () => {
     expect(markup).toContain('aria-label="Redo last edit"');
     expect(markup).toContain(">Preview</button>");
     expect(markup).toContain(">Publish</button>");
+    expect(markup).toContain('href="/library?type=rounds"');
   });
 
   it("keeps the brand inside the signed-in legacy dashboard when workspace Home is unavailable", () => {
@@ -132,5 +133,7 @@ describe("Round Builder shell", () => {
     expect(markup).toContain("Diagnostic controls");
     expect(markup).toContain('id="inspector-build"');
     expect(markup).toContain('hidden=""');
+    expect(markup.match(/tabindex="0"/gi)).toHaveLength(1);
+    expect(markup.match(/tabindex="-1"/gi)).toHaveLength(2);
   });
 });

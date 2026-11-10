@@ -25,6 +25,32 @@ const model: RecoveryStoryModel = {
 };
 
 describe("RecoveryStorySummary", () => {
+  it("does not portray absent concept evidence as a measured zero and qualifies small initial samples", () => {
+    const markup = renderToStaticMarkup(
+      withEnglishLocale(
+        <RecoveryStorySummary
+          model={{
+            ...model,
+            unresolvedCount: 0,
+            conceptEvidenceCount: 0,
+            unresolvedNarrative: "No concept-level recovery evidence was recorded.",
+            denominator: 0,
+            recovered: 0,
+            recoveryPercent: null,
+            initialResponses: 1,
+            initialCorrect: 0,
+            initialAccuracyPercent: 0,
+            initialSmallSample: true,
+          }}
+        />,
+      ),
+    );
+    expect(markup).toContain("What remains unresolved</span><strong>Not measured</strong>");
+    expect(markup).toContain("Fewer than five assessed responses");
+    expect(markup).toContain("0/1 · 0%");
+    expect(markup).not.toContain("0/0");
+    expect(markup).toContain('class="recovery-story-evidence-note"');
+  });
   it("shows retained Pack version/card references without depending on the mutable source Pack", () => {
     const markup = renderToStaticMarkup(
       withEnglishLocale(

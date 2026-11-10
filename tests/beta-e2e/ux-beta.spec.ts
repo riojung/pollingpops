@@ -3,6 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
 import type { QuizDraft } from "@openround/contracts";
 import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { betaEmail, signInBeta } from "./sign-in";
+import { clickHostCommand } from "./host-controls";
 
 const webUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
@@ -31,6 +32,7 @@ async function joinParticipant(browser: Browser, code: string) {
   const context = await browser.newContext({ baseURL: webUrl, reducedMotion: "reduce" });
   const page = await context.newPage();
   await page.goto(`/join?code=${code}`);
+  await page.locator('summary[aria-label="Change avatar"]').click();
   await expect(page.getByRole("group", { name: "Choose your avatar" })).toBeVisible();
   // Both participant-choice and explicitly generated-name rooms support a blank-name join.
   await expect(
@@ -862,6 +864,7 @@ test("signed-in creator replaces one stale host credential and resumes", async (
     await expect(participantRows).toHaveCount(1);
     await expect(page.getByTestId("host-session")).toHaveAttribute("data-phase", "lobby");
     const audienceTrigger = page.getByRole("button", { name: "Audience", exact: true });
+    await page.getByText("More controls", { exact: true }).click();
     await audienceTrigger.click();
     const audienceDialog = page.getByRole("dialog", { name: "Participants and conversation" });
     await expect(audienceDialog).toBeVisible();
@@ -971,7 +974,7 @@ test("creator and participants complete a beta Recovery loop through report", as
         .getByRole("img", { name: "Owl avatar" }),
     ).toHaveCount(5);
 
-    await page.getByRole("button", { name: "Start round" }).click();
+    await clickHostCommand(page, "Start round");
     await Promise.all(
       participants.map(({ page: participant }) => submitChoice(participant, misconception.label)),
     );
@@ -985,16 +988,16 @@ test("creator and participants complete a beta Recovery loop through report", as
       }),
     ).toHaveAttribute("aria-pressed", "true");
 
-    await page.getByRole("button", { name: "Lock answers" }).click();
+    await clickHostCommand(page, "Lock answers");
     const distribution = page.getByRole("region", { name: "Post-lock response distribution" });
     await expect(distribution).toContainText("5 respondents");
     await expect(distribution).toContainText(misconception.label);
-    await page.getByRole("button", { name: "Reveal answer" }).click();
+    await clickHostCommand(page, "Reveal answer");
     await expect(page.getByText("Address the confident misconception")).toBeVisible();
-    await page.getByRole("button", { name: "Address the misconception" }).click();
+    await clickHostCommand(page, "Address the misconception");
     await expect(page.getByText(/Active intervention: explain/)).toBeVisible();
-    await page.getByRole("button", { name: "Finish intervention" }).click();
-    await page.getByRole("button", { name: "Open linked recheck" }).click();
+    await clickHostCommand(page, "Finish intervention");
+    await clickHostCommand(page, "Open linked recheck");
 
     await Promise.all(
       participants.map(({ page: participant }, index) =>
@@ -1004,9 +1007,9 @@ test("creator and participants complete a beta Recovery loop through report", as
         ),
       ),
     );
-    await page.getByRole("button", { name: "Lock answers" }).click();
-    await page.getByRole("button", { name: "Reveal answer" }).click();
-    await page.getByRole("button", { name: "Continue after recheck" }).click();
+    await clickHostCommand(page, "Lock answers");
+    await clickHostCommand(page, "Reveal answer");
+    await clickHostCommand(page, "Continue after recheck");
     await expect(page.getByText("Results are ready.")).toBeVisible();
     await page.getByTestId("host-stage").getByRole("link", { name: "Open report" }).click();
 
@@ -1156,7 +1159,7 @@ test("every remaining response type requires explicit Submit before it is saved"
   try {
     await page.goto(`/host/${session.sessionId}`);
     await expect(page.getByRole("button", { name: "Start round" })).toBeVisible();
-    await page.getByRole("button", { name: "Start round" }).click();
+    await clickHostCommand(page, "Start round");
 
     const answeredCount = page
       .locator(".room-readiness span")
@@ -1226,8 +1229,8 @@ test("every remaining response type requires explicit Submit before it is saved"
       await expect(participant.page.getByText("Answer received and saved.")).toBeVisible();
       await expect(answeredCount).toHaveText("1");
 
-      await page.getByRole("button", { name: "Lock answers" }).click();
-      await page.getByRole("button", { name: "Reveal answer" }).click();
+      await clickHostCommand(page, "Lock answers");
+      await clickHostCommand(page, "Reveal answer");
       await page
         .getByRole("button", {
           name: index === responseCases.length - 1 ? "Finish round" : "Next question",

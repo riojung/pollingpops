@@ -211,6 +211,37 @@ describe("participant nickname choice", () => {
 });
 
 describe("unified password admission", () => {
+  it("keeps optional avatar choices behind a closed disclosure", async () => {
+    const ui = harness();
+    await ui.submit();
+    const details = find(fixtures.tree, (node) => node.type === "details")!;
+    expect(details).not.toBeNull();
+    expect(details.props.open).not.toBe(true);
+    expect(ui.render()).toContain("Change avatar");
+  });
+
+  it("identifies an invalid code at its field, while keeping network failures global", async () => {
+    const ui = harness();
+    fixtures.apiFetch.mockRejectedValueOnce(
+      new ApiClientError("Check the code", "INVALID_CODE", 404),
+    );
+    await ui.submit();
+    const code = find(fixtures.tree, (node) => node.props.id === "join-code")!;
+    expect(code.props["aria-invalid"]).toBe(true);
+    expect(code.props["aria-describedby"]).toBe("join-code-error");
+    fixtures.apiFetch.mockRejectedValueOnce(new Error("Network unavailable"));
+    expect(await ui.submit()).toContain("Network unavailable");
+    expect(
+      find(fixtures.tree, (node) => node.props.id === "join-code")!.props["aria-invalid"],
+    ).toBeUndefined();
+  });
+
+  it("uses an action label when a Survey code is recognized", async () => {
+    fixtures.artifact = "feedback_room";
+    const ui = harness();
+    expect(await ui.submit()).toContain("Open survey");
+  });
+
   it.each(["round", "presentation", "feedback_room"] as const)(
     "preflights and sends the exact %s password only in the POST body",
     async (artifact) => {

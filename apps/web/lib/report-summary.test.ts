@@ -38,6 +38,29 @@ describe("recovery summary", () => {
     expect(deriveRecoverySummary(report()).nextAction).toMatch(/linked recheck/i);
   });
 
+  it("distinguishes missing concept evidence from measured recovery and flags a small initial sample", () => {
+    expect(
+      deriveRecoverySummary(report({ initialAccuracy: { correct: 0, responses: 1, percent: 0 } })),
+    ).toMatchObject({
+      conceptEvidenceCount: 0,
+      initialSmallSample: true,
+      recoveryPercent: null,
+    });
+    expect(
+      deriveRecoverySummary(
+        report({
+          unresolvedConcepts: [
+            { conceptKey: "fractions", initiallyIncorrect: 2, recovered: 2, unresolved: 0 },
+          ],
+        }),
+      ),
+    ).toMatchObject({ conceptEvidenceCount: 1, unresolved: [], initialSmallSample: false });
+    expect(
+      deriveRecoverySummary(report({ initialAccuracy: { correct: 0, responses: 0, percent: 0 } }))
+        .initialSmallSample,
+    ).toBe(false);
+  });
+
   it("aggregates recovery, contradictions, and ranks unresolved concepts", () => {
     const summary = deriveRecoverySummary(
       report({

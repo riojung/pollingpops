@@ -11,12 +11,14 @@ import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { recordCreationEvent } from "../../../components/workspace/product-events";
 import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
 import { PresentationOutlineStart } from "../../../components/workspace/presentation-outline-start";
+import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
 import styles from "./presentation-launcher.module.css";
 
 function PresentationLauncher() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const workflowCopy = creatorWorkflowCopy(locale);
   const { canEdit } = useWorkspace();
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -123,48 +125,8 @@ function PresentationLauncher() {
           ) : null}
 
           {!selectedStart ? (
-            <nav className={styles.quickStarts} aria-label="Other starting points" lang="en-CA">
-              <Link href="/create/presentation?start=source">Use source material →</Link>
-              <span>
-                <Link
-                  href="/create/presentation?start=outline"
-                  aria-label="Optional outline assistance"
-                >
-                  From outline →
-                </Link>
-                <small>Optional assistance</small>
-              </span>
-            </nav>
-          ) : null}
-
-          {!selectedStart || selectedStart === "template" ? (
-            <section className={styles.templates} aria-labelledby="presentation-templates-title">
-              <div className={styles.sectionHeading}>
-                <div>
-                  <p className={styles.kicker}>{t("create.common.fastestStart")}</p>
-                  <h2 id="presentation-templates-title">
-                    {t("create.presentation.templates.title")}
-                  </h2>
-                  <p>{t("create.presentation.method.template.description")}</p>
-                </div>
-                {!selectedStart ? (
-                  <Link
-                    className="button-quiet small-button"
-                    href="/create/presentation?start=template"
-                  >
-                    <span lang="en-CA">Browse templates →</span>
-                  </Link>
-                ) : null}
-              </div>
-              <PresentationTemplateGallery />
-            </section>
-          ) : null}
-
-          {!selectedStart ? (
-            <section className={styles.alternatives} aria-labelledby="other-starts-title">
-              <h2 id="other-starts-title" lang="en-CA">
-                Already have a starting point?
-              </h2>
+            <details className={styles.alternatives}>
+              <summary>{workflowCopy.otherStartingPoints}</summary>
               <div className={styles.methodGrid}>
                 <Link className={styles.methodCard} href="/create/presentation?start=source">
                   <small lang="en-CA">Source assistance</small>
@@ -191,6 +153,29 @@ function PresentationLauncher() {
                   <span className={styles.cardLink}>Start from an outline →</span>
                 </Link>
               </div>
+            </details>
+          ) : null}
+
+          {!selectedStart || selectedStart === "template" ? (
+            <section className={styles.templates} aria-labelledby="presentation-templates-title">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p className={styles.kicker}>{t("create.common.fastestStart")}</p>
+                  <h2 id="presentation-templates-title">
+                    {t("create.presentation.templates.title")}
+                  </h2>
+                  <p>{t("create.presentation.method.template.description")}</p>
+                </div>
+                {!selectedStart ? (
+                  <Link
+                    className="button-quiet small-button"
+                    href="/create/presentation?start=template"
+                  >
+                    <span lang="en-CA">Browse templates →</span>
+                  </Link>
+                ) : null}
+              </div>
+              <PresentationTemplateGallery />
             </section>
           ) : null}
 

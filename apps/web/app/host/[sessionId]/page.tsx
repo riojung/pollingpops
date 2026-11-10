@@ -860,6 +860,69 @@ export default function HostPage() {
                 </span>
               </section>
             ) : null}
+            {uxBeta && phaseView ? (
+              <HostCommandBar
+                compact
+                busy={commandPending}
+                fallback={
+                  reportId ? (
+                    <Link className="button" href={`/report/${reportId}`} lang="en-CA">
+                      Open report
+                    </Link>
+                  ) : null
+                }
+                leading={
+                  <>
+                    {confidenceControl}
+                    <button
+                      aria-controls="host-audience-drawer"
+                      aria-expanded={audienceOpen}
+                      className="button-quiet"
+                      lang="en-CA"
+                      onClick={() => {
+                        if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
+                        setAudienceOpen((open) => !open);
+                      }}
+                      ref={audienceButtonRef}
+                      type="button"
+                    >
+                      Audience
+                    </button>
+                    {snapshot.phase === "lobby" ? (
+                      <button
+                        className="button-quiet"
+                        disabled={commandPending}
+                        lang="en-CA"
+                        onClick={() =>
+                          command(snapshot.lobbyLocked ? "unlock_lobby" : "lock_lobby")
+                        }
+                        type="button"
+                      >
+                        {snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby"}
+                      </button>
+                    ) : null}
+                  </>
+                }
+                onCommand={runPhaseCommand}
+                phaseView={phaseView}
+                primaryDisabled={
+                  phaseView.primary?.action === "start" && snapshot.participants.length === 0
+                }
+                trailing={
+                  snapshot.phase !== "lobby" && snapshot.phase !== "finished" ? (
+                    <button
+                      className="button-danger"
+                      disabled={commandPending}
+                      lang="en-CA"
+                      onClick={() => window.confirm("End this session now?") && command("end")}
+                      type="button"
+                    >
+                      End
+                    </button>
+                  ) : null
+                }
+              />
+            ) : null}
             <div
               className={uxBeta ? "host-grid host-layout" : "host-grid"}
               data-phase={snapshot.phase}
@@ -1075,6 +1138,7 @@ export default function HostPage() {
                 ) : null}
               </HostStage>
               <RecoveryCompass
+                showCounts={!uxBeta}
                 collapsible={uxBeta && standingsStage}
                 phaseView={phaseView!}
                 showSteps={uxBeta}
@@ -1297,68 +1361,6 @@ export default function HostPage() {
                   token={mediaCredential}
                 />
               </>
-            ) : null}
-            {uxBeta && phaseView ? (
-              <HostCommandBar
-                busy={commandPending}
-                fallback={
-                  reportId ? (
-                    <Link className="button" href={`/report/${reportId}`} lang="en-CA">
-                      Open report
-                    </Link>
-                  ) : null
-                }
-                leading={
-                  <>
-                    {confidenceControl}
-                    <button
-                      aria-controls="host-audience-drawer"
-                      aria-expanded={audienceOpen}
-                      className="button-quiet"
-                      lang="en-CA"
-                      onClick={() => {
-                        if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
-                        setAudienceOpen((open) => !open);
-                      }}
-                      ref={audienceButtonRef}
-                      type="button"
-                    >
-                      Audience
-                    </button>
-                    {snapshot.phase === "lobby" ? (
-                      <button
-                        className="button-quiet"
-                        disabled={commandPending}
-                        lang="en-CA"
-                        onClick={() =>
-                          command(snapshot.lobbyLocked ? "unlock_lobby" : "lock_lobby")
-                        }
-                        type="button"
-                      >
-                        {snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby"}
-                      </button>
-                    ) : null}
-                  </>
-                }
-                onCommand={runPhaseCommand}
-                phaseView={phaseView}
-                primaryDisabled={
-                  phaseView.primary?.action === "start" && snapshot.participants.length === 0
-                }
-                trailing={
-                  snapshot.phase !== "lobby" && snapshot.phase !== "finished" ? (
-                    <button
-                      className="button-danger"
-                      disabled={commandPending}
-                      lang="en-CA"
-                      onClick={() => window.confirm("End this session now?") && command("end")}
-                      type="button"
-                    >
-                      End
-                    </button>
-                  ) : null
-                }
-              />
             ) : null}
           </>
         )}

@@ -32,7 +32,11 @@ export function HomeCreatorActions() {
     <div className="hero-actions">
       <Link
         className="button"
-        href={signedIn === false ? "/signin" : creatorLandingHref(productFeatures)}
+        href={
+          signedIn === false
+            ? "/signin?mode=signup&returnTo=%2Fcreate"
+            : creatorLandingHref(productFeatures)
+        }
       >
         {signedIn === true
           ? t("delivery.landing.manage")

@@ -63,6 +63,17 @@ describe("MediaEditor", () => {
     expect(markup).toContain('aria-describedby="media-help"');
     expect(markup).not.toContain("<img");
     expect(markup).not.toContain("Remove image");
+    expect(markup).toContain("Add image");
+    expect(markup).not.toMatch(/<details[^>]*open=""/);
+  });
+
+  it("keeps image settings open for an attached image even when preview loading fails", () => {
+    const markup = renderToStaticMarkup(
+      editor({ question: { ...question, mediaId: "attached-image" } }),
+    );
+    expect(markup).toMatch(/<details[^>]*open=""/);
+    expect(markup).toContain("Image settings");
+    expect(markup).toContain('id="media-alt"');
   });
 
   it("preserves alternative text, preview removal, and repeated file selection", () => {

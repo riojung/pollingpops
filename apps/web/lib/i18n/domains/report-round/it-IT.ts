@@ -439,6 +439,27 @@ const messages = {
   "reportRound.editor.history.questionMoved": "Domanda spostata.",
   "reportRound.editor.recoveredCopy": "{title} — copia recuperata",
   "reportRound.editor.describeImage": "Descrivi l’immagine didattica prima di caricarla.",
+  "reportRound.clarity.noConceptEvidence":
+    "Non sono stati registrati dati di recupero per concetto.",
+  "reportRound.clarity.trackedConcepts": "Concetti con dati di recupero: {count}.",
+  "reportRound.clarity.unresolvedEvidence": "{concept}: {count} risposta/e non risolta/e.",
+  "reportRound.clarity.initialSmallSample":
+    "Meno di cinque risposte valutate. Interpreta il conteggio con cautela.",
+  "reportRound.clarity.nextPractice": "Crea esercizi mirati sui concetti non risolti.",
+  "reportRound.clarity.nextReview":
+    "Esamina i dati di questa sessione e pianifica una verifica successiva.",
+  "reportRound.clarity.nextRecheck":
+    "Aggiungi una verifica collegata la prossima volta per misurare il recupero.",
+  "reportRound.clarity.targetPractice": "Esercizio mirato",
+  "reportRound.clarity.reviewEvidence": "Esamina i dati",
+  "reportRound.clarity.linkedRecheck": "verifica collegata",
+  "reportRound.clarity.revote": "nuova votazione",
+  "reportRound.clarity.noRecheckEvidence": "Nessun dato di verifica",
+  "reportRound.clarity.sessionReport": "Rapporto della sessione",
+  "reportRound.clarity.backToResults": "Torna ai risultati",
+  "reportRound.clarity.noPairedResponses": "Nessuna coppia di risposte di verifica",
+  "reportRound.clarity.unresolvedConcepts": "concetti non risolti",
+  "reportRound.clarity.participation": "partecipazione",
 } satisfies ReportRoundMessages;
 
 export default messages;

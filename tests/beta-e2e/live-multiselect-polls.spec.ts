@@ -176,6 +176,12 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(guest.getByText("Correct", { exact: true })).toHaveCount(0);
       await expect(guest.getByText("Incorrect", { exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "Finish round", exact: true }).click();
+      await expect(
+        guest.getByText("Thanks for taking part. Your accepted responses were recorded.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(guest.getByText(/Your final score/)).toHaveCount(0);
       await page
         .getByTestId("host-command-bar")
         .getByRole("link", { name: "Open report", exact: true })

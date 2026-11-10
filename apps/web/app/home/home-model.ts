@@ -124,6 +124,21 @@ export function hasHomeWork(summary: HomeSummary): boolean {
   return summary.totals.artifacts > 0 || recentHomeWork(summary).length > 0;
 }
 
+/** Positive evidence from the current summary; dismissal is scoped to the viewer and workspace. */
+export function homeMilestones(summary: HomeSummary) {
+  const delivered =
+    summary.resultHighlights.some((item) => item.status === "ready" && item.participantCount > 0) ||
+    summary.sessions.some((item) => item.status === "finished" && item.participantCount > 0);
+  return {
+    created: hasHomeWork(summary),
+    published:
+      delivered ||
+      summary.sessions.length > 0 ||
+      summary.recentArtifacts.some((item) => item.status === "published"),
+    delivered,
+  };
+}
+
 export function homeWorkAction(artifact: HomeWork, canEdit: boolean) {
   if (!canEdit || ("canEdit" in artifact && !artifact.canEdit))
     return { href: artifact.editHref, label: "view" as const };

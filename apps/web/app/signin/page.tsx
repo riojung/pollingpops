@@ -27,6 +27,13 @@ import {
   LogoutWarningNotice,
   useManagementNavigation,
 } from "../../components/management-navigation";
+import {
+  clearSignupContinuation,
+  readSignupContinuation,
+  saveSignupContinuation,
+} from "./signup-continuation";
+import { signupJourneyCopy } from "./signup-journey-copy";
+import styles from "./signin.module.css";
 
 type EmailFlow =
   { step: "email" } | { step: "verification-sent"; email: string } | ({ step: "pin" } & PinEntry);
@@ -59,7 +66,8 @@ function updateSignInLocation(
 }
 
 export default function SignInPage() {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const journeyCopy = signupJourneyCopy(locale);
   const management = useManagementNavigation();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -81,6 +89,8 @@ export default function SignInPage() {
   const [pin, setPin] = useState("");
   const [now, setNow] = useState(0);
   const [pinInvalid, setPinInvalid] = useState(false);
+  const [signupJourney, setSignupJourney] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const requestVersion = useRef(0);
   const stage = useRef<EmailFlow["step"] | "verified">("email");
   const emailInput = useRef<HTMLInputElement>(null);
@@ -102,6 +112,7 @@ export default function SignInPage() {
     const requestedAccountType =
       query.get("accountType") === "organization" ? "organization" : "personal";
     setAccountType(requestedAccountType);
+    setPreferencesOpen(requestedAccountType === "organization");
     const requestedWorkspace = OidcStartSchema.shape.workspaceId.safeParse(
       query.get("workspaceId"),
     );
@@ -112,6 +123,7 @@ export default function SignInPage() {
       ...(localReturn ? { returnTo: localReturn } : {}),
       ...(requestedWorkspace.success ? { workspaceId: requestedWorkspace.data } : {}),
     };
+    const continuation = readSignupContinuation(context);
     const isVerificationLanding = query.get("verified") === "1";
     if (isVerificationLanding) {
       clearPinEntry();
@@ -121,6 +133,12 @@ export default function SignInPage() {
     const restored = isVerificationLanding ? null : readPinEntry(context);
     const intent = readSignInIntent(context);
     const knownVerification = isVerificationLanding || intent?.step === "verified";
+    setSignupJourney(requestedSignup || knownVerification || continuation !== null);
+    if (continuation && knownVerification) {
+      setEmail(continuation.email);
+      setSegment(continuation.segment);
+      if (!query.has("accountType")) setAccountType(continuation.accountType);
+    }
     // Keep explicit destinations separate from the account choice's signup default.
     setReturnTo(localReturn ?? null);
     if (restored) {
@@ -188,6 +206,8 @@ export default function SignInPage() {
   }
 
   function beginEmailStage(nextMode: "signin" | "signup", anotherIdentity: boolean) {
+    const continuingSignup = signupJourney && flow.step === "verification-sent" && !anotherIdentity;
+    setSignupJourney(nextMode === "signup" || continuingSignup);
     requestVersion.current += 1;
     stage.current = "email";
     clearPinEntry();
@@ -200,7 +220,10 @@ export default function SignInPage() {
     setError("");
     setAcceptPolicies(false);
     setVerified(false);
-    if (anotherIdentity) setEmail("");
+    if (anotherIdentity) {
+      setEmail("");
+      clearSignupContinuation();
+    }
     updateSignInLocation(
       {
         apiUrl: API_URL,
@@ -317,6 +340,7 @@ export default function SignInPage() {
     }
     const signupReturnTo =
       returnTo ?? (accountType === "organization" ? "/account/setup?type=organization" : null);
+    const version = ++requestVersion.current;
     setSending(true);
     try {
       await apiFetch("/v1/auth/email-verification", {
@@ -328,14 +352,23 @@ export default function SignInPage() {
           ...(signupReturnTo ? { returnTo: signupReturnTo } : {}),
         }),
       });
+      if (requestVersion.current !== version) return;
       // Sign-in continuation must keep the destination chosen for this signup.
       setReturnTo(signupReturnTo);
+      saveSignupContinuation(
+        {
+          apiUrl: API_URL,
+          ...(signupReturnTo ? { returnTo: signupReturnTo } : {}),
+          ...(workspaceId ? { workspaceId } : {}),
+        },
+        { email: submittedEmail, accountType, segment },
+      );
       stage.current = "verification-sent";
       setFlow({ step: "verification-sent", email: submittedEmail });
     } catch (caught) {
-      setError(humanError(caught));
+      if (requestVersion.current === version) setError(humanError(caught));
     } finally {
-      setSending(false);
+      if (requestVersion.current === version) setSending(false);
     }
   }
 
@@ -368,6 +401,7 @@ export default function SignInPage() {
       requestVersion.current += 1;
       clearPinEntry();
       clearSignInIntent();
+      clearSignupContinuation();
       window.location.replace(result.redirectTo);
     } catch (caught) {
       const invalid = (caught as { status?: number }).status === 401;
@@ -414,6 +448,7 @@ export default function SignInPage() {
               : !flow.challenge
                 ? "delivery.auth.pinExpired"
                 : "delivery.auth.pinSent";
+  const journeyStep = verified || flow.step === "pin" ? 1 : 0;
 
   return (
     <>
@@ -435,17 +470,41 @@ export default function SignInPage() {
                   ? t("delivery.auth.verificationSent")
                   : mode === "signup"
                     ? t("delivery.auth.createAccount")
-                    : t("delivery.auth.signInTitle")}
+                    : verified
+                      ? journeyCopy.verifiedTitle
+                      : t("delivery.auth.signInTitle")}
           </h1>
           <p className="muted">
             {pinRecovery
               ? t("customer.signin.pinRecoveryDescription")
               : flow.step === "pin"
                 ? t("delivery.auth.pinDescription")
-                : mode === "signup"
-                  ? t("delivery.auth.createAccountDescription")
-                  : t("delivery.auth.signInDescription")}
+                : verified
+                  ? journeyCopy.verifiedDescription
+                  : flow.step === "verification-sent"
+                    ? journeyCopy.verificationDescription
+                    : mode === "signup"
+                      ? t("delivery.auth.createAccountDescription")
+                      : t("delivery.auth.signInDescription")}
           </p>
+          {signupJourney ? (
+            <ol className={styles.progress} aria-label={journeyCopy.progressLabel}>
+              {[
+                journeyCopy.verifyEmail,
+                journeyCopy.signIn,
+                returnTo?.startsWith("/create") ? journeyCopy.create : journeyCopy.continue,
+              ].map((label, index) => (
+                <li
+                  key={index}
+                  aria-current={journeyStep === index ? "step" : undefined}
+                  data-complete={index < journeyStep || undefined}
+                >
+                  <span aria-hidden="true">{index < journeyStep ? "✓" : index + 1}</span>
+                  {label}
+                </li>
+              ))}
+            </ol>
+          ) : null}
           <LogoutWarningNotice navigation={management} />
           {verified ? (
             <div className="success" ref={verificationNotice} role="status" tabIndex={-1}>
@@ -529,47 +588,6 @@ export default function SignInPage() {
               aria-busy={pending}
               onSubmit={submitEmail}
             >
-              {mode === "signup" ? (
-                <fieldset className="field auth-segment">
-                  <legend className="field-label">{t("customer.accountType")}</legend>
-                  <div className="segmented">
-                    {(["personal", "organization"] as const).map((type) => (
-                      <button
-                        key={type}
-                        aria-pressed={accountType === type}
-                        disabled={!hydrated || pending}
-                        onClick={() => setAccountType(type)}
-                        type="button"
-                      >
-                        {t(`customer.${type}`)}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-              ) : null}
-              {mode === "signup" ? (
-                <fieldset className="field auth-segment">
-                  <legend className="field-label">{t("delivery.auth.facilitate")}</legend>
-                  <div className="segmented">
-                    <button
-                      aria-pressed={segment === "workplace"}
-                      disabled={!hydrated || pending}
-                      onClick={() => setSegment("workplace")}
-                      type="button"
-                    >
-                      {t("delivery.auth.workplace")}
-                    </button>
-                    <button
-                      aria-pressed={segment === "education"}
-                      disabled={!hydrated || pending}
-                      onClick={() => setSegment("education")}
-                      type="button"
-                    >
-                      {t("delivery.auth.education")}
-                    </button>
-                  </div>
-                </fieldset>
-              ) : null}
               <div className="field">
                 <label htmlFor="email">{t("delivery.auth.email")}</label>
                 <input
@@ -584,6 +602,63 @@ export default function SignInPage() {
                   value={email}
                 />
               </div>
+              {mode === "signup" ? (
+                <details
+                  className={styles.preferences}
+                  open={preferencesOpen}
+                  onToggle={(event) => setPreferencesOpen(event.currentTarget.open)}
+                >
+                  <summary>
+                    {journeyCopy.preferences}
+                    <small>
+                      {t(`customer.${accountType}`)} ·{" "}
+                      {t(
+                        segment === "workplace"
+                          ? "delivery.auth.workplace"
+                          : "delivery.auth.education",
+                      )}
+                    </small>
+                  </summary>
+                  <p>{journeyCopy.preferencesDescription}</p>
+                  <fieldset className="field auth-segment">
+                    <legend className="field-label">{t("customer.accountType")}</legend>
+                    <div className="segmented">
+                      {(["personal", "organization"] as const).map((type) => (
+                        <button
+                          key={type}
+                          aria-pressed={accountType === type}
+                          disabled={!hydrated || pending}
+                          onClick={() => setAccountType(type)}
+                          type="button"
+                        >
+                          {t(`customer.${type}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset className="field auth-segment">
+                    <legend className="field-label">{t("delivery.auth.facilitate")}</legend>
+                    <div className="segmented">
+                      <button
+                        aria-pressed={segment === "workplace"}
+                        disabled={!hydrated || pending}
+                        onClick={() => setSegment("workplace")}
+                        type="button"
+                      >
+                        {t("delivery.auth.workplace")}
+                      </button>
+                      <button
+                        aria-pressed={segment === "education"}
+                        disabled={!hydrated || pending}
+                        onClick={() => setSegment("education")}
+                        type="button"
+                      >
+                        {t("delivery.auth.education")}
+                      </button>
+                    </div>
+                  </fieldset>
+                </details>
+              ) : null}
               <label className="checkbox-field policy-consent">
                 <input
                   checked={acceptPolicies}
@@ -627,7 +702,7 @@ export default function SignInPage() {
                 onClick={() => beginEmailStage("signin", false)}
                 type="button"
               >
-                {t("delivery.auth.signInMode")}
+                {journeyCopy.continueAfterVerification}
               </button>
               <button
                 className="button-quiet full-width auth-status-action"

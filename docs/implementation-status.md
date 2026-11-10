@@ -8,6 +8,21 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B customer workflow refinement November 9, 2026
+
+The `codex/option-b-ux` source refines Home and Library, first-session guidance and mobile
+navigation, private Quick poll creation, focused Round editing, publication-version choice,
+participant entry/completion, primary live commands, report interpretation/recovery and signup.
+The [Option B implementation record](option-b-ux-implementation.md) maps the ten concerns,
+records verification and preserves the launch-facing content explicitly deferred to release
+preparation. English remains the default and existing locale choices remain available.
+
+The final repository check passes 7,159 tests, all four production builds and compiled-server
+startup; 513 standard opt-in skips remain. Twelve selected local browser cases pass across
+desktop Chromium and phone Chromium/WebKit. Firefox could not launch its profile in this
+environment. Customer observation, manual accessibility, physical devices, hosted deployment
+and existing release gates remain open; this source work does not claim release acceptance.
+
 ### Presentation editing and interaction clarity November 9, 2026
 
 The `codex/presentation-interaction-polish` source moves geometry controls into a selected-object

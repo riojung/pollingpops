@@ -88,7 +88,12 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
   });
   const [fetching, setFetching] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [failure, setFailure] = useState({ key: "", message: "" });
+  const [failure, setFailure] = useState<{
+    key: string;
+    message: string;
+    kind: "initial" | "more";
+  }>({ key: "", message: "", kind: "initial" });
+  const [reload, setReload] = useState(0);
   const fetchPage = useCallback(
     (cursor?: string, signal?: AbortSignal) =>
       apiFetch<CursorPage<T>>(
@@ -105,7 +110,7 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
     loadMoreController.current = null;
     setFetching(true);
     setLoadingMore(false);
-    setFailure({ key: queryKey, message: "" });
+    setFailure({ key: queryKey, message: "", kind: "initial" });
     void fetchPage(undefined, controller.signal)
       .then((response) => {
         if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
@@ -113,8 +118,10 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
       })
       .catch((caught) => {
         if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
-        setPage({ key: queryKey, items: [], nextCursor: null });
-        setFailure({ key: queryKey, message: humanError(caught) });
+        setPage((current) =>
+          current.key === queryKey ? current : { key: queryKey, items: [], nextCursor: null },
+        );
+        setFailure({ key: queryKey, message: humanError(caught), kind: "initial" });
       })
       .finally(() => {
         if (!controller.signal.aborted && activeQueryKey.current === queryKey) setFetching(false);
@@ -123,14 +130,14 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
       controller.abort();
       loadMoreController.current?.abort();
     };
-  }, [fetchPage, queryKey, workspaceId]);
+  }, [fetchPage, queryKey, workspaceId, reload]);
 
   async function more() {
-    if (page.key !== queryKey || !page.nextCursor || loadMoreController.current) return;
+    if (fetching || page.key !== queryKey || !page.nextCursor || loadMoreController.current) return;
     const controller = new AbortController();
     loadMoreController.current = controller;
     setLoadingMore(true);
-    setFailure({ key: queryKey, message: "" });
+    setFailure({ key: queryKey, message: "", kind: "more" });
     try {
       const response = await fetchPage(page.nextCursor, controller.signal);
       if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
@@ -141,7 +148,7 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
       }));
     } catch (caught) {
       if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
-      setFailure({ key: queryKey, message: humanError(caught) });
+      setFailure({ key: queryKey, message: humanError(caught), kind: "more" });
     } finally {
       if (loadMoreController.current === controller) {
         loadMoreController.current = null;
@@ -156,8 +163,34 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
     loading: fetching || page.key !== queryKey,
     loadingMore,
     error: failure.key === queryKey ? failure.message : "",
+    retry: () => (failure.kind === "more" ? void more() : setReload((value) => value + 1)),
     more,
   };
+}
+
+function ResultsLoadError({
+  error,
+  onRetry,
+  retained = false,
+}: {
+  error: string;
+  onRetry: () => void;
+  retained?: boolean;
+}) {
+  const { t } = useLocale();
+  return (
+    <section className={resultStyles.loadError} role="alert">
+      <div>
+        <p className="error" lang="en-CA">
+          {error}
+        </p>
+        {retained ? <p>{t("resultsOverview.retained")}</p> : null}
+      </div>
+      <button className="button-quiet" onClick={onRetry} type="button">
+        {t("pages.common.tryAgain")}
+      </button>
+    </section>
+  );
 }
 
 function HistoryFilters({
@@ -296,6 +329,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
     loading,
     loadingMore,
     error,
+    retry,
     more,
   } = useHistoryPage<ReportSummary>("/v1/reports", {
     status,
@@ -342,9 +376,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         <ResultsOverview kind="rounds" items={reports} hasMore={Boolean(nextCursor)} />
       ) : null}
       {error ? (
-        <p className="error" lang="en-CA" role="alert">
-          {error}
-        </p>
+        <ResultsLoadError error={error} onRetry={retry} retained={reports.length > 0} />
       ) : null}
       {loading ? (
         <p className={styles.muted} role="status">
@@ -415,7 +447,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
               />
               <div className={styles.metric}>
                 <strong>{report.unresolvedConceptCount}</strong>
-                <span>{t("pages.results.unresolvedConcepts")}</span>
+                <span>{t("resultsOverview.unresolved")}</span>
               </div>
               <div className={styles.metric}>
                 <strong>{report.interventionCount}</strong>
@@ -460,6 +492,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
     loading,
     loadingMore,
     error,
+    retry,
     more,
   } = useHistoryPage<FollowupSummary>("/v1/followups", {
     status,
@@ -508,9 +541,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
         <ResultsOverview kind="practice" items={followups} hasMore={Boolean(nextCursor)} />
       ) : null}
       {error ? (
-        <p className="error" lang="en-CA" role="alert">
-          {error}
-        </p>
+        <ResultsLoadError error={error} onRetry={retry} retained={followups.length > 0} />
       ) : null}
       {loading ? (
         <p className={styles.muted} role="status">
@@ -637,30 +668,52 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
 
 function PresentationResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
-  const [sessions, setSessions] = useState<PresentationResultSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { creator } = useWorkspace();
+  const workspaceId = creator?.workspaceId ?? "";
+  const activeWorkspace = useRef(workspaceId);
+  activeWorkspace.current = workspaceId;
+  const [snapshot, setSnapshot] = useState<{
+    workspaceId: string;
+    sessions: PresentationResultSummary[];
+    error: string;
+  }>({ workspaceId: "", sessions: [], error: "" });
+  const [fetching, setFetching] = useState(true);
+  const [reload, setReload] = useState(0);
+  const sessions = snapshot.workspaceId === workspaceId ? snapshot.sessions : [];
+  const loading = fetching || snapshot.workspaceId !== workspaceId;
+  const error = snapshot.workspaceId === workspaceId ? snapshot.error : "";
   const [status, setStatus] = useState("all");
   const [sourceId, setSourceId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
   useEffect(() => {
+    if (!workspaceId) return;
     const controller = new AbortController();
+    const isCurrent = () => !controller.signal.aborted && activeWorkspace.current === workspaceId;
+    setFetching(true);
+    setSnapshot((current) =>
+      current.workspaceId === workspaceId ? { ...current, error: "" } : current,
+    );
     void apiFetch<{ sessions: PresentationResultSummary[] }>("/v1/presentation-sessions", {
       signal: controller.signal,
     })
       .then((response) => {
-        if (!controller.signal.aborted) setSessions(response.sessions);
+        if (isCurrent()) setSnapshot({ workspaceId, sessions: response.sessions, error: "" });
       })
       .catch((caught) => {
-        if (!controller.signal.aborted) setError(humanError(caught));
+        if (isCurrent())
+          setSnapshot((current) => ({
+            workspaceId,
+            sessions: current.workspaceId === workspaceId ? current.sessions : [],
+            error: humanError(caught),
+          }));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (isCurrent()) setFetching(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [workspaceId, reload]);
 
   const search = listControls.search.trim().toLocaleLowerCase();
   const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
@@ -724,9 +777,11 @@ function PresentationResultList(listControls: ListControls) {
       ) : null}
       {loading ? <p className={styles.muted}>{t("pages.results.loadingPresentations")}</p> : null}
       {error ? (
-        <p className="error" lang="en-CA" role="alert">
-          {error}
-        </p>
+        <ResultsLoadError
+          error={error}
+          onRetry={() => setReload((value) => value + 1)}
+          retained={sessions.length > 0}
+        />
       ) : null}
       {!loading && !error && !visible.length ? (
         <div className={styles.emptyState}>
@@ -817,6 +872,8 @@ function SurveyResultList(listControls: ListControls) {
   const [toDate, setToDate] = useState("");
   const [displayPage, setDisplayPage] = useState({ key: "", limit: 25 });
   const [now, setNow] = useState(() => Date.now());
+  const [reload, setReload] = useState(0);
+  const [fetching, setFetching] = useState(true);
   const loadingError = t("pages.results.surveyLoadError");
 
   useEffect(() => {
@@ -828,6 +885,10 @@ function SurveyResultList(listControls: ListControls) {
     if (!workspaceId) return;
     const controller = new AbortController();
     const isCurrent = () => !controller.signal.aborted && activeWorkspace.current === workspaceId;
+    setFetching(true);
+    setSnapshot((current) =>
+      current.workspaceId === workspaceId ? { ...current, error: "" } : current,
+    );
     async function load() {
       const rooms = new Map<string, SurveySessionSummary>();
       const seenCursors = new Set<string>();
@@ -849,15 +910,24 @@ function SurveyResultList(listControls: ListControls) {
       } while (cursor);
       if (isCurrent()) setSnapshot({ workspaceId, rooms: [...rooms.values()], error: "" });
     }
-    void load().catch((caught) => {
-      if (isCurrent()) setSnapshot({ workspaceId, rooms: [], error: humanError(caught) });
-    });
+    void load()
+      .catch((caught) => {
+        if (isCurrent())
+          setSnapshot((current) => ({
+            workspaceId,
+            rooms: current.workspaceId === workspaceId ? current.rooms : [],
+            error: humanError(caught),
+          }));
+      })
+      .finally(() => {
+        if (isCurrent()) setFetching(false);
+      });
     return () => controller.abort();
-  }, [loadingError, workspaceId]);
+  }, [loadingError, workspaceId, reload]);
 
-  const loading = !workspaceId || snapshot.workspaceId !== workspaceId;
-  const error = loading ? "" : snapshot.error;
-  const retained = (loading ? [] : snapshot.rooms)
+  const loading = fetching || !workspaceId || snapshot.workspaceId !== workspaceId;
+  const error = snapshot.workspaceId === workspaceId ? snapshot.error : "";
+  const retained = (snapshot.workspaceId === workspaceId ? snapshot.rooms : [])
     .filter(
       (room) =>
         (room.closed || new Date(room.closesAt).getTime() <= now) &&
@@ -934,9 +1004,11 @@ function SurveyResultList(listControls: ListControls) {
         </p>
       ) : null}
       {error ? (
-        <p className="error" lang="en-CA" role="alert">
-          {error}
-        </p>
+        <ResultsLoadError
+          error={error}
+          onRetry={() => setReload((value) => value + 1)}
+          retained={retained.length > 0}
+        />
       ) : null}
       {!loading && !error && !visible.length ? (
         <div className={styles.emptyState}>

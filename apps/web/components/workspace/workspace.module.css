@@ -748,12 +748,12 @@
   }
 
   .mobileNav {
-    display: flex;
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     border-bottom: 1px solid var(--ui-border);
     background: var(--ui-surface);
     padding: 0 0.65rem;
-    scrollbar-width: thin;
+    position: relative;
   }
 
   .mobileNavLink,
@@ -768,6 +768,41 @@
     min-height: 44px;
     padding: 0.9rem 0.7rem 0.7rem;
     text-decoration: none;
+    justify-content: center;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+
+  .mobileMore {
+    min-width: 0;
+  }
+  .mobileMore > summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    cursor: pointer;
+    list-style: none;
+    height: 100%;
+  }
+  .mobileMore > summary::-webkit-details-marker {
+    display: none;
+  }
+  .mobileCurrent {
+    font-size: 0.72rem;
+    line-height: 1.25;
+  }
+  .mobileMorePanel {
+    position: absolute;
+    z-index: 30;
+    inset: 100% 0.65rem auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.5rem;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--radius-small);
+    background: var(--ui-surface);
+    box-shadow: var(--ui-shadow-md);
   }
 
   .mobileNavActive {

@@ -31,6 +31,7 @@ import { BuilderCommandBar } from "../../../components/editor/builder-command-ba
 import { DeliveryScoring } from "../../../components/editor/delivery-scoring";
 import { DiagnosticDetails } from "../../../components/editor/diagnostic-details";
 import { MediaEditor } from "../../../components/editor/media-editor";
+import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
 import { ParticipantPreview } from "../../../components/editor/participant-preview";
 import {
   QuestionInspector,
@@ -148,6 +149,7 @@ function newQuestion(type: QuestionType): QuestionDraft {
 
 export default function QuizEditorPage() {
   const { locale, t } = useLocale();
+  const workflowCopy = creatorWorkflowCopy(locale);
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1295,11 +1297,14 @@ export default function QuizEditorPage() {
   const mutationFieldsetStyle = { border: 0, padding: 0, margin: 0, minWidth: 0 };
   const canvasSnapshotLinks =
     quiz && productFeatures?.canvasBoards ? (
-      <CanvasArtifactLinks
-        target={{ kind: "round", targetId: id }}
-        editable={canEdit}
-        disabled={draftMutationBusy}
-      />
+      <details className={builderStyles.references}>
+        <summary>{workflowCopy.references}</summary>
+        <CanvasArtifactLinks
+          target={{ kind: "round", targetId: id }}
+          editable={canEdit}
+          disabled={draftMutationBusy}
+        />
+      </details>
     ) : null;
 
   if (!uxBeta) {
@@ -1856,29 +1861,32 @@ export default function QuizEditorPage() {
                   issues={readinessIssues}
                   onSelectIssue={focusReadinessIssue}
                 />
-                <QuestionHealthPanel
-                  key={id}
-                  canEdit={canEdit}
-                  currentDraftRevision={serverRevision.current}
-                  draftSaved={
-                    saveState === "saved" &&
-                    !saveConflict &&
-                    JSON.stringify(draft) === lastSavedJson.current
-                  }
-                  featureEnabled={Boolean(productFeatures?.questionHealth)}
-                  onApplySuggestion={applyHealthSuggestion}
-                  onUndoSuggestion={undoHealthSuggestion}
-                  quizId={id}
-                />
-                <PublishedQuestionHealthPanel
-                  key={`${id}:${quiz?.currentVersionId ?? "unpublished"}`}
-                  canEdit={canEdit}
-                  draftQuestionIds={new Set(draft.questions.map((candidate) => candidate.id))}
-                  featureEnabled={Boolean(productFeatures?.questionHealth)}
-                  onOpenDraftQuestion={openPublishedFindingInDraft}
-                  quizId={id}
-                  versionId={quiz?.currentVersionId ?? null}
-                />
+                <details className={builderStyles.reviewTools}>
+                  <summary>{workflowCopy.health}</summary>
+                  <QuestionHealthPanel
+                    key={id}
+                    canEdit={canEdit}
+                    currentDraftRevision={serverRevision.current}
+                    draftSaved={
+                      saveState === "saved" &&
+                      !saveConflict &&
+                      JSON.stringify(draft) === lastSavedJson.current
+                    }
+                    featureEnabled={Boolean(productFeatures?.questionHealth)}
+                    onApplySuggestion={applyHealthSuggestion}
+                    onUndoSuggestion={undoHealthSuggestion}
+                    quizId={id}
+                  />
+                  <PublishedQuestionHealthPanel
+                    key={`${id}:${quiz?.currentVersionId ?? "unpublished"}`}
+                    canEdit={canEdit}
+                    draftQuestionIds={new Set(draft.questions.map((candidate) => candidate.id))}
+                    featureEnabled={Boolean(productFeatures?.questionHealth)}
+                    onOpenDraftQuestion={openPublishedFindingInDraft}
+                    quizId={id}
+                    versionId={quiz?.currentVersionId ?? null}
+                  />
+                </details>
                 {packUpdatePanels}
                 {recoveryPackInsertion && recoveryPackReferenceContent ? (
                   <details className="notice" lang="en-CA">

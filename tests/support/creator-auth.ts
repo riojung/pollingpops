@@ -81,6 +81,10 @@ export async function verifyCreatorEmail(
     name: segment === "education" ? "Education" : "Workplace learning",
     exact: true,
   });
+  const preferences = form.locator("details");
+  if ((await preferences.count()) && (await preferences.getAttribute("open")) === null) {
+    await preferences.locator("summary").click();
+  }
   await segmentChoice.click();
   await expect(segmentChoice).toHaveAttribute("aria-pressed", "true");
   await form.getByLabel("Email address").fill(email);

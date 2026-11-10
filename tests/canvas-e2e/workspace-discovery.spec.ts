@@ -31,7 +31,7 @@ test("universal creation opens board setup and Home includes every authoring for
     await expect(menu.getByRole("link", { name })).toHaveAttribute("href", href);
   await create.click();
   const homeCreation = page.getByRole("main").getByRole("link", { name: "Create", exact: true });
-  await expect(homeCreation).toHaveCount(2);
+  await expect(homeCreation).toHaveCount(1);
   for (const link of await homeCreation.all())
     await expect(link).toHaveAttribute("href", "/create");
   await homeCreation.first().click();
@@ -42,7 +42,7 @@ test("universal creation opens board setup and Home includes every authoring for
   });
   for (const label of [
     "Live quiz",
-    "Live poll",
+    "Quick poll",
     "Custom Round",
     "Presentation",
     "Survey",

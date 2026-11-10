@@ -196,11 +196,20 @@ function opinionReport(distribution?: ResponseDistribution, responses = 7): Repo
   });
 }
 
-async function renderReport(report: Report, uxBeta = false) {
+async function renderReport(
+  report: Report,
+  uxBeta = false,
+  context?: {
+    quizId: string;
+    quizTitle: string;
+    sessionCreatedAt: string;
+    sessionUpdatedAt: string;
+  },
+) {
   fixtures.apiFetch.mockImplementation(async (path: string) =>
     path === "/v1/auth/me"
       ? { productFeatures: { uxBeta, workspaceShell: false } }
-      : { report, entitlements: null, followup: null },
+      : { report, entitlements: null, followup: null, context },
   );
   const hooks: ReportHooks = { cursor: 0, slots: [], effects: [] };
   const render = () => {
@@ -221,6 +230,36 @@ async function renderReport(report: Report, uxBeta = false) {
 }
 
 describe("Live Round opinion report compatibility", () => {
+  it.each([false, true])(
+    "keeps missing evidence distinct from zero in the %s beta report",
+    async (uxBeta) => {
+      const report = ReportV7Schema.parse({
+        ...opinionReport(),
+        initialAccuracy: { correct: 0, responses: 1, percent: 0 },
+      });
+      const markup = await renderReport(report, uxBeta);
+      expect(markup).not.toContain("0/0");
+      expect(markup).toContain("Not measured");
+      expect(markup).toContain("Fewer than five assessed responses");
+      expect(markup).toContain('href="/results"');
+      expect(markup).not.toContain(">Dashboard</a>");
+      if (uxBeta) {
+        expect(markup).toContain("No concept-level recovery evidence was recorded.");
+        expect(markup).not.toContain("No authored concept remains unresolved");
+      }
+    },
+  );
+
+  it("keeps the session identity visible independently of UX flags", async () => {
+    const markup = await renderReport(opinionReport(), false, {
+      quizId: "source-round",
+      quizTitle: "Original workshop",
+      sessionCreatedAt: "2026-10-13T12:00:00Z",
+      sessionUpdatedAt: "2026-10-13T13:00:00Z",
+    });
+    expect(markup).toContain('<h1 lang="">Original workshop</h1>');
+    expect(markup).toContain('dateTime="2026-10-13T12:00:00Z"');
+  });
   it.each(distributions)(
     "renders $format results in classic reports independently of UX beta",
     async ({ distribution, result }) => {

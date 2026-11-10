@@ -28,6 +28,13 @@ export function deriveRecoverySummary(
   const evidenceTypes = [...new Set(report.recovery.map((item) => item.evidenceType))];
   const smallSample =
     report.recovery.length > 0 && report.recovery.some((item) => item.smallSample);
+  // Concept rows describe observed initially incorrect responses, not all authored
+  // concepts. An absent row set cannot establish a measured zero.
+  const conceptEvidenceCount = report.unresolvedConcepts.length;
+  const initialSmallSample =
+    report.initialAccuracy.responses > 0 && report.initialAccuracy.responses < 5;
+  const initialAccuracyPercent =
+    report.initialAccuracy.responses > 0 ? report.initialAccuracy.percent : null;
 
   return {
     recovered,
@@ -39,6 +46,9 @@ export function deriveRecoverySummary(
     correctButUnsure,
     evidenceTypes,
     smallSample,
+    initialSmallSample,
+    initialAccuracyPercent,
+    conceptEvidenceCount,
     nextAction:
       unresolved.length > 0
         ? "Create focused practice for the unresolved concepts."

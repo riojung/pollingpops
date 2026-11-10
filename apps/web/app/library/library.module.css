@@ -1,6 +1,6 @@
 .toolbar {
   display: grid;
-  grid-template-columns: auto minmax(260px, 1fr) auto;
+  grid-template-columns: auto minmax(200px, 1fr);
   gap: 14px;
   align-items: center;
   margin-bottom: 12px;
@@ -8,6 +8,98 @@
   border: 1px solid var(--ui-border);
   border-radius: 14px;
   background: var(--ui-surface-raised);
+}
+
+.advancedFilters {
+  align-self: end;
+}
+.advancedFilters > summary {
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  background: var(--ui-surface);
+  cursor: pointer;
+  font-weight: 700;
+}
+.advancedFilterPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  margin-top: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-small);
+  background: var(--ui-surface);
+}
+.appliedFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.appliedFilters button {
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+}
+.presentationPreview {
+  overflow: hidden;
+  border-radius: 15px 15px 0 0;
+  min-height: 145px;
+  background: var(--ui-surface-soft);
+  padding-top: 44px;
+}
+.presentationPreview > strong {
+  display: block;
+  padding: 50px 42px 25px;
+  overflow-wrap: anywhere;
+}
+.presentationPreview > div {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  border: 0;
+  border-radius: 15px 15px 0 0;
+}
+.questionPreview {
+  min-height: 145px;
+  padding: 48px 42px 18px;
+  background: var(--ui-accent-soft);
+  border-radius: 15px 15px 0 0;
+  color: var(--ui-text-strong);
+}
+.questionPreview > strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+.questionPreview > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.questionPreview span {
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-surface);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collection[data-view="list"] .presentationPreview,
+.collection[data-view="list"] .questionPreview {
+  display: none;
 }
 
 .tabs {
@@ -290,6 +382,8 @@
 }
 
 .card {
+  display: flex;
+  flex-direction: column;
   position: relative;
   min-width: 0;
   overflow: visible;
@@ -414,7 +508,8 @@
 .cardBody {
   display: flex;
   min-width: 0;
-  height: calc(100% - 145px);
+  height: auto;
+  flex: 1;
   padding: 18px;
   flex-direction: column;
 }
@@ -469,8 +564,8 @@
   overflow: hidden;
   color: var(--ui-text-strong);
   font-size: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .description {
@@ -570,12 +665,13 @@
 
 .collection[data-view="list"] .card {
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 160px;
   overflow: visible;
 }
 
 .collection[data-view="list"] .artwork {
+  display: none;
   min-height: 160px;
   border-radius: 15px 0 0 15px;
 }
@@ -594,6 +690,11 @@
   height: auto;
   min-height: 160px;
   gap: 0 20px;
+  padding-inline-start: 60px;
+}
+
+.collection[data-view="list"] .cardSelector {
+  top: calc(50% - 15px);
 }
 
 .collection[data-view="list"] .cardMeta {
@@ -716,7 +817,7 @@
   }
 
   .collection[data-view="list"] .card {
-    grid-template-columns: 90px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .collection[data-view="list"] .artwork {
@@ -725,6 +826,7 @@
 
   .collection[data-view="list"] .cardBody {
     padding: 14px;
+    padding-inline-start: 54px;
   }
 
   .collection[data-view="list"] .cardMeta {

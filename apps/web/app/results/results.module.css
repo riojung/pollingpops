@@ -36,7 +36,7 @@
 }
 
 .topline p {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -61,6 +61,29 @@
 
 .actions {
   margin-top: auto;
+}
+
+.loadError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--ui-danger-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+
+.loadError p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.loadError p + p {
+  color: var(--ui-text-subtle);
+  margin-top: 6px;
 }
 
 .collection[data-view="list"] {

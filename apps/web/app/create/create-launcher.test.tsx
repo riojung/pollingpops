@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
 import type { WorkspaceProductFeatures } from "@openround/contracts";
+import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
 
 const allFeatures = () =>
   WorkspaceProductFeaturesSchema.parse({
@@ -28,7 +30,30 @@ const fixtures = vi.hoisted(() => ({
   push: vi.fn(),
   features: null as WorkspaceProductFeatures | null,
   canEdit: true,
+  capture: false,
+  request: vi.fn(),
 }));
+
+vi.mock("react", async (original) => {
+  const react = await original<typeof ReactModule>();
+  return {
+    ...react,
+    useState: <T,>(initial: T) => (fixtures.capture ? [initial, vi.fn()] : react.useState(initial)),
+    useRef: <T,>(initial: T) => (fixtures.capture ? { current: initial } : react.useRef(initial)),
+    useEffect: (...args: Parameters<typeof react.useEffect>) => {
+      if (!fixtures.capture) react.useEffect(...args);
+    },
+  };
+});
+
+vi.mock("../../components/locale-provider", () => ({
+  useLocale: () => ({ locale: "en-CA", t: (key: MessageKey) => translate(englishMessages, key) }),
+}));
+vi.mock("../../lib/api", () => ({
+  apiFetch: fixtures.request,
+  humanError: (error: Error) => error.message,
+}));
+vi.mock("../../components/workspace/product-events", () => ({ recordCreationEvent: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: fixtures.push }),
@@ -73,6 +98,8 @@ describe("Round creation launcher", () => {
     fixtures.push.mockClear();
     fixtures.features = allFeatures();
     fixtures.canEdit = true;
+    fixtures.capture = false;
+    fixtures.request.mockReset();
   });
 
   it("asks for an activity type before offering starting methods", () => {
@@ -80,7 +107,8 @@ describe("Round creation launcher", () => {
 
     expect(markup).toContain("What would you like to create?");
     expect(markup).toContain('href="/create?type=quiz"');
-    expect(markup).toContain('href="/create?type=poll"');
+    expect(markup).toContain("Quick poll");
+    expect(markup).toContain('type="button"');
     expect(markup).toContain('href="/surveys/new"');
     expect(markup).toContain('href="/create?type=custom"');
     expect(markup).toContain('href="/create/presentation"');
@@ -88,6 +116,32 @@ describe("Round creation launcher", () => {
     expect(markup).toContain("at their own pace");
     expect(markup).not.toContain("Source authoring workflow");
     expect(markup).not.toContain("Structured import workflow");
+  });
+
+  it("creates one private unscored draft only after the Quick poll action, even on a double click", async () => {
+    fixtures.request.mockResolvedValue({ quiz: { id: "new-poll" } });
+    fixtures.capture = true;
+    const page = CreatePage();
+    const shell = page.props.children as ReactElement<{ children: ReactElement }>;
+    const content = shell.props.children;
+    const tree = (content.type as () => ReactElement)();
+    fixtures.capture = false;
+    function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+      if (Array.isArray(node)) return node.flatMap(elements);
+      if (!isValidElement<Record<string, unknown>>(node)) return [];
+      return [node, ...elements(node.props.children as ReactNode)];
+    }
+    const button = elements(tree).find((element) => element.type === "button");
+    expect(button).toBeDefined();
+    expect(fixtures.request).not.toHaveBeenCalled();
+    (button!.props.onClick as () => void)();
+    (button!.props.onClick as () => void)();
+    for (let index = 0; index < 8; index++) await Promise.resolve();
+    expect(fixtures.request).toHaveBeenCalledExactlyOnceWith("/v1/quizzes", {
+      method: "POST",
+      body: JSON.stringify({ title: "Untitled Round", description: "" }),
+    });
+    expect(fixtures.push).toHaveBeenCalledExactlyOnceWith("/quiz/new-poll?insert=poll");
   });
 
   it("hides ungranted products while retaining independently granted boards and legacy Rounds", () => {

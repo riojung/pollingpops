@@ -439,6 +439,27 @@ const messages = {
   "reportRound.editor.history.questionMoved": "Pergunta movida.",
   "reportRound.editor.recoveredCopy": "{title} — cópia recuperada",
   "reportRound.editor.describeImage": "Descreva a imagem pedagógica antes de a carregar.",
+  "reportRound.clarity.noConceptEvidence":
+    "Não foram registados dados de recuperação por conceito.",
+  "reportRound.clarity.trackedConcepts": "Conceitos com dados de recuperação: {count}.",
+  "reportRound.clarity.unresolvedEvidence": "{concept}: {count} resposta(s) por resolver.",
+  "reportRound.clarity.initialSmallSample":
+    "Menos de cinco respostas avaliadas. Interprete a contagem com cuidado.",
+  "reportRound.clarity.nextPractice": "Crie prática direcionada aos conceitos por resolver.",
+  "reportRound.clarity.nextReview":
+    "Reveja os dados desta sessão e planeie uma verificação posterior.",
+  "reportRound.clarity.nextRecheck":
+    "Adicione uma verificação associada da próxima vez para medir a recuperação.",
+  "reportRound.clarity.targetPractice": "Prática direcionada",
+  "reportRound.clarity.reviewEvidence": "Rever dados",
+  "reportRound.clarity.linkedRecheck": "verificação associada",
+  "reportRound.clarity.revote": "nova votação",
+  "reportRound.clarity.noRecheckEvidence": "Sem dados de verificação",
+  "reportRound.clarity.sessionReport": "Relatório da sessão",
+  "reportRound.clarity.backToResults": "Voltar aos resultados",
+  "reportRound.clarity.noPairedResponses": "Sem pares de respostas de verificação",
+  "reportRound.clarity.unresolvedConcepts": "conceitos por resolver",
+  "reportRound.clarity.participation": "participação",
 } satisfies ReportRoundMessages;
 
 export default messages;

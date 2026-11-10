@@ -1,0 +1,88 @@
+.setup.setup {
+  max-width: 1040px;
+  padding-top: 24px;
+}
+
+.setup :global(.page-heading) {
+  margin-bottom: 20px;
+}
+
+.setup h1 {
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+}
+
+.setup form {
+  display: grid;
+  gap: 16px;
+}
+
+.setup :global(.panel) {
+  margin-bottom: 0;
+  padding: 20px;
+}
+
+.setup :global(.setup-recipes) {
+  margin: 0;
+}
+
+.setup :global(.recipe-card) {
+  min-height: 110px;
+  padding: 16px;
+}
+
+.quickSettings {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.launchBar {
+  align-items: center;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-small);
+  box-shadow: var(--ui-shadow-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+  padding: 14px 18px;
+  position: sticky;
+  top: 8px;
+  z-index: 10;
+}
+
+.launchBar h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.launchBar p {
+  flex: 1 1 100%;
+  font-size: 0.875rem;
+  margin: 0;
+  order: 1;
+}
+
+@media (max-width: 640px) {
+  .quickSettings {
+    grid-template-columns: 1fr;
+  }
+
+  .launchBar {
+    padding: 12px;
+    top: 4px;
+  }
+
+  .launchBar p {
+    display: none;
+  }
+
+  .setup :global(.recipe-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  .setup :global(.recipe-card) {
+    min-height: 0;
+  }
+}

@@ -1,6 +1,7 @@
 import type { QuestionDraft } from "@openround/contracts";
 import type { QuestionUpdater } from "./types";
 import { useLocale } from "../locale-provider";
+import { creatorWorkflowCopy } from "./creator-workflow-copy";
 import styles from "./media-editor.module.css";
 
 export type MediaEditorState = "idle" | "uploading" | "scanning";
@@ -26,9 +27,19 @@ export function MediaEditor({
   onUpdateQuestion: QuestionUpdater;
   onUploadImage: (file: File | null) => void;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = creatorWorkflowCopy(locale);
   return (
-    <div className={styles.container}>
+    <details
+      className={styles.container}
+      open={
+        Boolean(question.mediaId || mediaPreviewUrl || mediaState !== "idle" || uploadBlocked) ||
+        undefined
+      }
+    >
+      <summary className={styles.summary}>
+        {question.mediaId || mediaPreviewUrl ? copy.imageSettings : copy.addImage}
+      </summary>
       <div className={`media-editor ${styles.editor}`} data-has-preview={Boolean(mediaPreviewUrl)}>
         <div className={`field ${styles.fields}`}>
           <label htmlFor="media-alt">{t("delivery.builder.media")}</label>
@@ -90,6 +101,6 @@ export function MediaEditor({
           </div>
         ) : null}
       </div>
-    </div>
+    </details>
   );
 }

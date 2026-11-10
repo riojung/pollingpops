@@ -1,0 +1,92 @@
+.progress {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 24px 0;
+  padding: 0;
+}
+
+.progress li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ui-text-muted);
+  font-size: 13px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.progress li[aria-current="step"],
+.progress li[data-complete="true"] {
+  color: var(--ui-accent-ink);
+}
+
+.progress li[aria-current="step"] {
+  font-weight: 700;
+}
+
+.progress li > span {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+  border-radius: 50%;
+}
+
+.progress li[aria-current="step"] > span,
+.progress li[data-complete="true"] > span {
+  background: var(--ui-accent-soft);
+}
+
+.preferences {
+  margin: 18px 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  padding: 12px 14px;
+}
+
+.preferences summary {
+  min-height: 44px;
+  align-content: center;
+  color: var(--ui-text-strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.preferences > p {
+  margin: 7px 0 16px;
+  color: var(--ui-text-subtle);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.preferences summary small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ui-text-subtle);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.preferences fieldset + fieldset {
+  margin-top: 18px;
+}
+
+.preferences fieldset:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 400px) {
+  .progress {
+    gap: 6px;
+  }
+  .progress li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

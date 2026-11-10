@@ -1,0 +1,75 @@
+.commandBar.commandBar.commandBar {
+  background: var(--ui-surface-raised);
+  border-color: var(--ui-border);
+  bottom: auto;
+  color: var(--ui-text-strong);
+  margin-block: 12px 18px;
+  padding: 12px 14px;
+  position: sticky;
+  top: 8px;
+}
+
+.commandBar > div:first-child {
+  flex: 1 1 10rem;
+}
+
+.commandBar :global(.eyebrow) {
+  color: var(--ui-accent-ink);
+}
+
+.actions.actions {
+  flex: 0 1 auto;
+}
+
+.primary.primary {
+  order: 0;
+}
+
+.more {
+  position: relative;
+}
+
+.more > summary {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 650;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.overflow.overflow {
+  align-items: stretch;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  box-shadow: var(--ui-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  inset-inline-end: 0;
+  margin-top: 8px;
+  max-height: min(60vh, 400px);
+  overflow: auto;
+  padding: 12px;
+  position: absolute;
+  width: min(290px, calc(100vw - 56px));
+  z-index: 1;
+}
+
+@media (max-width: 600px) {
+  .commandBar.commandBar.commandBar {
+    gap: 8px;
+    top: 4px;
+  }
+
+  .commandBar > div:first-child {
+    flex-basis: 100%;
+  }
+
+  .commandBar .actions.actions {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+}

@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { CompetitionDashboard } from "../../../components/competition-dashboard";
 import { ScoredResponseReceipt } from "../../../components/scored-response-receipt";
+import {
+  ParticipantCompletion,
+  ParticipantSessionState,
+} from "../../../components/participant-session-state";
 import { OptionalConfidenceControl } from "../../../components/optional-confidence-control";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -50,7 +54,6 @@ import {
 import { experienceThemeStyle } from "../../../lib/theme";
 import { clientUuid } from "../../../lib/uuid";
 import {
-  participantProgressStage,
   participantRevealState,
   participantResponseControlsDisabled,
   participantResponseView,
@@ -58,6 +61,7 @@ import {
   togglePollSelection,
   legacyResponseRequiresSubmit,
   usesAutomaticChoiceSubmission,
+  usesImmediateChoiceSubmission,
   type LocalResponseReceipt,
 } from "../../../lib/participant-response";
 import {
@@ -573,6 +577,7 @@ export default function PlayerPage() {
   });
   const uxBeta = snapshot?.uxBeta === true;
   const automaticChoiceSubmission = usesAutomaticChoiceSubmission(snapshot);
+  const immediateChoiceSubmission = usesImmediateChoiceSubmission(snapshot);
 
   // Include confidence only if already chosen; it never delays saving an answer.
   // Fence each draft before sending so snapshots/rejections cannot resubmit it.
@@ -597,17 +602,6 @@ export default function PlayerPage() {
   useEffect(() => {
     if (snapshot?.question?.confidence === "off") setConfidence(null);
   }, [snapshot?.question?.confidence]);
-  const progressStage =
-    snapshot && uxBeta ? participantProgressStage(snapshot, responseSaved) : null;
-  const progressSteps = [
-    ["waiting", "Waiting", "en-CA"],
-    ["answering", "Answering", "en-CA"],
-    ["saved", "Saved", "en-CA"],
-    ["discussing", "Discussing", "en-CA"],
-    ["reviewing", "Reviewing", "en-CA"],
-    ["rechecking", "Rechecking", "en-CA"],
-    ["complete", t("live.common.complete"), undefined],
-  ] as const;
   const legacyNeedsSubmit = Boolean(
     snapshot?.question && legacyResponseRequiresSubmit(snapshot.question),
   );
@@ -703,18 +697,8 @@ export default function PlayerPage() {
         className="shell live-stage"
         style={submitDocked ? { paddingBottom: submitBarHeight + 32 } : undefined}
       >
-        {progressStage ? (
-          <ol aria-label={t("live.roundPlay.progressAria")} className="participant-progress">
-            {progressSteps.map(([stage, label, language]) => (
-              <li
-                aria-current={progressStage === stage ? "step" : undefined}
-                key={stage}
-                lang={language}
-              >
-                {label}
-              </li>
-            ))}
-          </ol>
+        {snapshot && uxBeta ? (
+          <ParticipantSessionState snapshot={snapshot} saved={responseSaved} />
         ) : null}
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {snapshot?.phase === "question_open" ? (
@@ -834,11 +818,16 @@ export default function PlayerPage() {
             {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
               <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
             ) : null}
-            {automaticChoiceSubmission && snapshot.phase === "question_open" && !responseSaved ? (
+            {immediateChoiceSubmission && snapshot.phase === "question_open" && !responseSaved ? (
               <p className="notice" lang={locale}>
                 {snapshot.question.confidence === "off"
                   ? submissionCopy.autoChooseAnswer
                   : confidenceCopy.autoOptional}
+              </p>
+            ) : null}
+            {!immediateChoiceSubmission && snapshot.phase === "question_open" && !responseSaved ? (
+              <p className="notice" lang={locale}>
+                {submissionCopy.chooseResponse}
               </p>
             ) : null}
             {automaticChoiceSubmission ? optionalConfidence : null}
@@ -1104,9 +1093,7 @@ export default function PlayerPage() {
                 />
               </p>
             ) : null}
-            <p className="lead" lang="en-CA">
-              Your final score is {formatNumber(locale, myRow?.score ?? 0)}.
-            </p>
+            <ParticipantCompletion snapshot={snapshot} score={myRow?.score} />
             {!snapshot.competitionStandings ? (
               <ScoredResponseReceipt responseSummary={snapshot.myScoredResponseSummary} />
             ) : null}

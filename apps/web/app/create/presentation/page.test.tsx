@@ -75,9 +75,9 @@ describe("Presentation creation launcher", () => {
     expect(markup.indexOf("Start a blank presentation")).toBeLessThan(
       markup.indexOf("Presentation template gallery"),
     );
-    expect(markup.indexOf("Presentation template gallery")).toBeLessThan(
-      markup.indexOf("Optional AI assistance"),
-    );
+    expect(markup.match(/href="\/create\/presentation\?start=source"/g)).toHaveLength(1);
+    expect(markup.match(/href="\/create\/presentation\?start=outline"/g)).toHaveLength(1);
+    expect(markup).toContain("<summary>");
     expect(markup).not.toContain("Outline draft creation workflow");
     expect(mocked.push).not.toHaveBeenCalled();
     expect(mocked.request).not.toHaveBeenCalled();

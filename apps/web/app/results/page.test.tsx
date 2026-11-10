@@ -247,6 +247,103 @@ afterEach(() => {
 });
 
 describe("Results workspace", () => {
+  it.each([
+    { view: "results", path: "/v1/reports", title: "First Round result" },
+    { view: "practice", path: "/v1/followups", title: "First practice" },
+    {
+      view: "presentations",
+      path: "/v1/presentation-sessions",
+      title: "First Presentation result",
+    },
+    { view: "surveys", path: "/v1/survey-rooms", title: "First Survey result" },
+  ])("retries a failed $view load without discarding the search", async ({ view, path, title }) => {
+    fixtures.query = `view=${view}&q=First`;
+    let failed = false;
+    fixtures.apiFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith(path) && !failed) {
+        failed = true;
+        throw new Error("Connection interrupted");
+      }
+      return response(url);
+    });
+    const harness = resultsHarness();
+    const failedMarkup = await harness.settle();
+    expect(failedMarkup).toContain("Connection interrupted");
+    expect(failedMarkup).not.toContain(`<h2 lang="">${title}</h2>`);
+    clickButton("Try again");
+    const markup = await harness.settle();
+    expect(markup).toContain(`<h2 lang="">${title}</h2>`);
+    expect(markup).not.toContain("Connection interrupted");
+    expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
+    harness.dispose();
+  });
+
+  it.each([
+    {
+      view: "results",
+      path: "/v1/reports",
+      title: "First Round result",
+      later: "Later Round result",
+      more: "Load More",
+    },
+    {
+      view: "practice",
+      path: "/v1/followups",
+      title: "First practice",
+      later: "Later practice",
+      more: "Load More Practice",
+    },
+  ])(
+    "retains $view rows and retries the failed cursor",
+    async ({ view, path, title, later, more }) => {
+      fixtures.query = `view=${view}`;
+      let failed = false;
+      fixtures.apiFetch.mockImplementation(async (url: string) => {
+        if (url.startsWith(path) && url.includes("cursor=") && !failed) {
+          failed = true;
+          throw new Error("Next page unavailable");
+        }
+        return response(url);
+      });
+      const harness = resultsHarness();
+      await harness.settle();
+      clickButton(more);
+      let markup = await harness.settle();
+      expect(markup).toContain(`<h2 lang="">${title}</h2>`);
+      expect(markup).toContain("Previously loaded results remain below.");
+      clickButton("Try again");
+      markup = await harness.settle();
+      expect(markup).toContain(`<h2 lang="">${title}</h2>`);
+      expect(markup).toContain(`<h2 lang="">${later}</h2>`);
+      const calls = historyCalls(path);
+      expect(calls.at(-1)![0]).toBe(calls.at(-2)![0]);
+      harness.dispose();
+    },
+  );
+
+  it("discards stale Presentation history when the workspace changes", async () => {
+    fixtures.query = "view=presentations";
+    const pending = deferred<unknown>();
+    let reads = 0;
+    fixtures.apiFetch.mockImplementation((url: string) => {
+      if (url === "/v1/presentation-sessions") {
+        reads++;
+        return reads === 1
+          ? pending.promise
+          : Promise.resolve({ sessions: [{ ...presentation, title: "Current workspace" }] });
+      }
+      return Promise.resolve(response(url));
+    });
+    const harness = resultsHarness();
+    await harness.settle();
+    fixtures.workspaceId = "workspace-b";
+    await harness.settle();
+    pending.resolve({ sessions: [{ ...presentation, title: "Previous workspace" }] });
+    const markup = await harness.settle();
+    expect(markup).toContain("Current workspace");
+    expect(markup).not.toContain("Previous workspace");
+    harness.dispose();
+  });
   it("opens the modern Round library from the empty results state", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path.startsWith("/v1/reports?") ? { items: [], nextCursor: null } : response(path),

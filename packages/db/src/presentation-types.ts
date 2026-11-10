@@ -1,6 +1,7 @@
 import type {
   PresentationContent,
   PresentationDraft,
+  PresentationBlockDraft,
   PresentationTextLanguage,
 } from "@openround/contracts";
 import type { LibraryArtifactDeletionResult } from "./types.js";
@@ -37,6 +38,8 @@ export interface PresentationVersionRecord {
 
 export interface PresentationSummaryRecord extends Omit<PresentationRecord, "draft"> {
   blockCount: number;
+  /** Creator-only first visible slide for Library recognition; no separate draft fetch. */
+  previewBlock?: PresentationBlockDraft | null;
 }
 
 export interface PresentationHistoryRecord {

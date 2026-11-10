@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnglishLocale } from "../../test-utils/english-locale";
 import type { HomeSummary, HomeWork } from "./home-model";
-import { hasHomeWork, homeWorkAction, recentHomeWork } from "./home-model";
+import { hasHomeWork, homeMilestones, homeWorkAction, recentHomeWork } from "./home-model";
 
 const mocked = vi.hoisted(() => ({
   summary: null as HomeSummary | null,
@@ -176,12 +176,63 @@ beforeEach(() => {
 });
 
 describe("workspace Home", () => {
+  it("keeps first-session guidance after a draft and completes it only on delivery evidence", () => {
+    const summary = emptySummary();
+    summary.totals.artifacts = 1;
+    summary.recentArtifacts = [{ ...mixedSummary().recentArtifacts[1]!, id: "first-draft" }];
+    mocked.summary = summary;
+    expect(homeMilestones(summary)).toEqual({ created: true, published: false, delivered: false });
+    expect(renderHome()).toContain("Finish your first session");
+    summary.resultHighlights = [
+      {
+        id: "first-result",
+        artifactType: "round",
+        title: "First result",
+        status: "ready",
+        participantCount: 2,
+        accuracyPercent: null,
+        recoveryPercent: null,
+        createdAt: summary.generatedAt,
+        href: "/report/first-result",
+      },
+    ];
+    expect(homeMilestones(summary).delivered).toBe(true);
+    expect(renderHome()).not.toContain("Finish your first session");
+  });
+
+  it("puts an active room before recent work and keeps its canonical secure resume destination", () => {
+    mocked.summary = mixedSummary();
+    mocked.summary.sessions = [
+      {
+        id: "live-room",
+        artifactType: "round",
+        artifactId: "source",
+        title: "Audience waiting",
+        status: "active",
+        phase: "lobby",
+        code: "1234567",
+        participantCount: 4,
+        progressLabel: "Lobby",
+        createdAt: mocked.summary.generatedAt,
+        href: "/sessions",
+      },
+    ];
+    const markup = renderHome();
+    expect(markup.indexOf("Audience waiting")).toBeLessThan(markup.indexOf("Recent work"));
+    expect(markup).toContain('href="/sessions">Open Sessions');
+    expect(homeMilestones(mocked.summary)).toEqual({
+      created: true,
+      published: true,
+      delivered: false,
+    });
+  });
   it("routes Home creation to the universal hub without requiring advanced builder features", () => {
     const markup = renderHome();
     expect(markup).toContain(">Home</h1>");
     expect(markup).toContain('class="brand" href="/home"');
     expect(markup).toContain('href="/create"');
-    expect(markup).toContain("Everything you are working on, together.");
+    expect(markup).toContain("Welcome back, new user");
+    expect(markup).not.toContain("Everything you are working on, together.");
     expect(markup).not.toContain("Create a Round or Presentation");
     expect(markup).not.toContain("Your checkpoint sets");
     expect(markup).not.toContain("Loading your workspace");
@@ -212,7 +263,7 @@ describe("workspace Home", () => {
     expect(markup).toContain("Open Idea Board");
     expect(markup).toContain("Open Canvas");
     expect(markup).toContain("Host Round");
-    expect(markup).toContain("<strong>5</strong><span>Artifacts</span>");
+    expect(markup).toContain('data-layout="compact"');
     expect(markup).not.toContain("From a trusted source to useful evidence");
     expect(markup.indexOf("A planning canvas")).toBeLessThan(markup.indexOf("A useful Survey"));
   });
@@ -306,7 +357,7 @@ describe("workspace Home", () => {
     mocked.productFeatures.surveys = true;
     const markup = renderHome();
     expect(markup).toContain("No activities or boards in this workspace yet.");
-    expect(markup).toContain("Choose any format available to this workspace.");
+    expect(markup).toContain("Finish your first session");
     expect(markup).toContain("Create your first artifact");
     expect(markup).toContain('href="/create"');
   });

@@ -118,6 +118,76 @@
   margin-top: 1.5rem;
 }
 
+.activeSessions {
+  padding: 1.2rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-small);
+  background: var(--ui-accent-soft);
+  margin-bottom: 1.2rem;
+}
+
+.activeSessions h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.activeSession {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.65rem;
+}
+.activeSession h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.activeSession p {
+  margin: 0.35rem 0 0;
+  color: var(--ui-text-subtle);
+}
+.activeSession > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.artifactGrid[data-layout="compact"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.artifactGrid[data-layout="compact"] .artifactCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem 1rem;
+  padding: 1rem;
+}
+.artifactGrid[data-layout="compact"] .cardTopline,
+.artifactGrid[data-layout="compact"] h3,
+.artifactGrid[data-layout="compact"] .metadata {
+  grid-column: 1;
+  margin: 0;
+}
+.artifactGrid[data-layout="compact"] .description {
+  display: none;
+}
+.artifactGrid[data-layout="compact"] .cardAction {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
+}
+.onboardingSteps li[data-complete="true"] > span {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+@media (max-width: 620px) {
+  .artifactGrid[data-layout="compact"] .artifactCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .artifactGrid[data-layout="compact"] .cardAction {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
 .mainColumn,
 .sideColumn {
   display: grid;

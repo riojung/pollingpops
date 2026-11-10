@@ -469,7 +469,8 @@ for (const suffix of ["", " @mobile"]) {
     });
 
     await page.goto("/create/presentation");
-    await page.getByRole("link", { name: "Optional outline assistance", exact: true }).click();
+    await page.getByText("Other starting points", { exact: true }).click();
+    await page.getByRole("link", { name: "From outline", exact: true }).click();
     const input = page.getByRole("textbox", { name: "Presentation title", exact: true });
     await input.fill(title);
     await page.setViewportSize({ width: 320, height: 760 });

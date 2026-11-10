@@ -4194,6 +4194,11 @@ html[data-openround-motion="reduced"] *::after {
   color: white;
 }
 
+.recovery-story-evidence-note {
+  color: var(--ui-on-hero-muted);
+  line-height: 1.58;
+}
+
 .recovery-story > .notice {
   color: var(--ink);
 }

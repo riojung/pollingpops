@@ -196,7 +196,7 @@ export function ResultsOverview(props: Props) {
     <section className={styles.overview} aria-label={t("resultsOverview.title")}>
       <div className={styles.header}>
         <strong>{t("resultsOverview.title")}</strong>
-        <p>{t("resultsOverview.scope")}</p>
+        <p>{t("resultsOverview.scope", { count: number(props.items.length) })}</p>
       </div>
       <div className={styles.widgets}>
         <div className={styles.widget}>

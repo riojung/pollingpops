@@ -59,11 +59,13 @@ export function RoomPasswordInput({
   onChange,
   disabled,
   creation = false,
+  error,
 }: {
   value: string;
   onChange(value: string): void;
   disabled?: boolean;
   creation?: boolean;
+  error?: string;
 }) {
   const { locale, t } = useLocale();
   const id = useId();
@@ -83,11 +85,17 @@ export function RoomPasswordInput({
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        aria-describedby={`${id}-help`}
+        aria-describedby={`${id}-help${error ? ` ${id}-error` : ""}`}
+        aria-invalid={Boolean(error) || undefined}
       />
       <small className="muted" id={`${id}-help`}>
         {t(creation ? "live.protection.validation" : "live.protection.required")}
       </small>
+      {error ? (
+        <p className="error" id={`${id}-error`} role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

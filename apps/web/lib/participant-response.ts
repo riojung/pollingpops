@@ -83,6 +83,22 @@ export function usesAutomaticChoiceSubmission(
   );
 }
 
+/** Describes the actual tap behavior across current and retained legacy rooms. */
+export function usesImmediateChoiceSubmission(
+  snapshot: Pick<SessionSnapshot, "uxBeta" | "settings" | "roundKind" | "question"> | null,
+) {
+  if (usesAutomaticChoiceSubmission(snapshot)) return true;
+  const question = snapshot?.question;
+  return Boolean(
+    snapshot &&
+    snapshot.uxBeta !== true &&
+    question &&
+    ["single_select", "true_false", "poll"].includes(question.type) &&
+    question.confidence === "off" &&
+    !multipleSelectionPoll(question),
+  );
+}
+
 /**
  * Builds the learner-safe reveal state from the explicit server signal and the learner's own
  * result. It never needs the facilitator-only correct response.

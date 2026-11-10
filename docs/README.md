@@ -5,6 +5,9 @@ education and workplace learning. Use this index to choose the shortest path for
 
 ## Start here
 
+The [Option B UX implementation record](option-b-ux-implementation.md) maps the customer
+workflow refinements and the launch-facing work deferred to release readiness.
+
 The public name is now Polling Pops. The [brand and interface guide](brand.md) includes
 the new logo assets, palette, Candy Pop preset, and the technical names kept for compatibility.
 

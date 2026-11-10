@@ -392,6 +392,23 @@ const messages = {
   "reportRound.editor.history.questionMoved": "已移動問題。",
   "reportRound.editor.recoveredCopy": "{title} — 復原副本",
   "reportRound.editor.describeImage": "請先描述教學圖片，再進行上傳。",
+  "reportRound.clarity.noConceptEvidence": "尚未記錄概念層面的學習恢復資料。",
+  "reportRound.clarity.trackedConcepts": "有恢復資料的概念：{count}。",
+  "reportRound.clarity.unresolvedEvidence": "{concept}：{count} 個未解決的回答。",
+  "reportRound.clarity.initialSmallSample": "評估的回答少於五個。請謹慎解讀數量。",
+  "reportRound.clarity.nextPractice": "為尚未解決的概念建立針對性練習。",
+  "reportRound.clarity.nextReview": "查看本次工作階段資料，並安排後續檢查。",
+  "reportRound.clarity.nextRecheck": "下次新增關聯複查題以收集學習恢復資料。",
+  "reportRound.clarity.targetPractice": "針對性練習",
+  "reportRound.clarity.reviewEvidence": "查看資料",
+  "reportRound.clarity.linkedRecheck": "關聯複查",
+  "reportRound.clarity.revote": "重新投票",
+  "reportRound.clarity.noRecheckEvidence": "無複查資料",
+  "reportRound.clarity.sessionReport": "工作階段報告",
+  "reportRound.clarity.backToResults": "返回結果",
+  "reportRound.clarity.noPairedResponses": "無配對複查回答",
+  "reportRound.clarity.unresolvedConcepts": "未解決的概念",
+  "reportRound.clarity.participation": "參與率",
 } satisfies ReportRoundMessages;
 
 export default messages;

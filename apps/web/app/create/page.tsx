@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { questionTypeDefinition, type QuestionType } from "@openround/contracts";
 import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { CheckpointSetImport } from "../../components/checkpoint-set-import";
@@ -17,6 +17,8 @@ import type { MessageKey } from "../../lib/i18n/catalog";
 import { recordCreationEvent } from "../../components/workspace/product-events";
 import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
+import { creatorWorkflowCopy } from "../../components/editor/creator-workflow-copy";
+import launcherStyles from "./create-launcher.module.css";
 
 type StartMethod = "starters" | "source" | "import" | "blank";
 
@@ -97,6 +99,7 @@ function CreateContent() {
   const searchParams = useSearchParams();
   const { t, locale } = useLocale();
   const copy = workspaceDiscoveryCopy(locale);
+  const workflowCopy = creatorWorkflowCopy(locale);
   const { canEdit, entitlements, productFeatures } = useWorkspace();
   const creationOptions = workspaceCreationOptions({ canEdit, productFeatures });
   const builderEnabled = productFeatures?.builderV2 === true;
@@ -104,6 +107,7 @@ function CreateContent() {
   const [title, setTitle] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>("single_select");
   const [busy, setBusy] = useState(false);
+  const creatingRef = useRef(false);
   const [error, setError] = useState("");
   const requestedMethod = startMethod(searchParams.get("start")) ?? legacyHashMethod;
   const requestedKind = searchParams.get("type");
@@ -142,7 +146,7 @@ function CreateContent() {
   const roundCards = builderEnabled
     ? (["quiz", "poll", "custom"] as const).map((type) => ({
         id: type,
-        href: `/create?type=${type}`,
+        href: `/create?type=${type}${type === "poll" ? "&start=blank" : ""}`,
         label: t(`create.kind.${type}`),
         description: t(`create.kind.${type}.description`),
       }))
@@ -182,7 +186,12 @@ function CreateContent() {
 
   async function createBlank(event: FormEvent) {
     event.preventDefault();
-    if (!canEdit || !builderEnabled || busy) return;
+    await createRound(effectiveType);
+  }
+
+  async function createRound(firstResponse: QuestionType) {
+    if (!canEdit || !builderEnabled || creatingRef.current) return;
+    creatingRef.current = true;
     setBusy(true);
     setError("");
     recordCreationEvent("creation_started", "blank", "round");
@@ -195,9 +204,10 @@ function CreateContent() {
         }),
       });
       recordCreationEvent("creation_completed", "blank", "round");
-      router.push(`/quiz/${response.quiz.id}?insert=${effectiveType}`);
+      router.push(`/quiz/${response.quiz.id}?insert=${firstResponse}`);
     } catch (caught) {
       setError(humanError(caught));
+      creatingRef.current = false;
       setBusy(false);
     }
   }
@@ -216,18 +226,36 @@ function CreateContent() {
 
   return (
     <>
+      {error && !selectedMethod ? (
+        <p className="error" role="alert" lang="en-CA">
+          {error}
+        </p>
+      ) : null}
       {!kind ? (
         <nav className={styles.startGrid} aria-label={t("create.kind.title")}>
-          {launcherCards.map((option, index) => (
-            <Link className={styles.startCard} href={option.href} key={option.id}>
-              <span className={styles.startNumber} aria-hidden="true">
-                {index + 1}
-              </span>
-              <h2>{option.label}</h2>
-              <p>{option.description}</p>
-              <span className={styles.startLink}>{t("create.kind.start")}</span>
-            </Link>
-          ))}
+          {launcherCards.map((option) =>
+            option.id === "poll" ? (
+              <button
+                className={`${styles.startCard} ${launcherStyles.quickPoll}`}
+                disabled={busy}
+                key={option.id}
+                onClick={() => void createRound("poll")}
+                type="button"
+              >
+                <h2>{workflowCopy.quickPoll}</h2>
+                <p>{option.description}</p>
+                <span className={styles.startLink}>
+                  {busy ? t("create.round.blank.creating") : t("create.round.blank.submit")}
+                </span>
+              </button>
+            ) : (
+              <Link className={styles.startCard} href={option.href} key={option.id}>
+                <h2>{option.label}</h2>
+                <p>{option.description}</p>
+                <span className={styles.startLink}>{t("create.kind.start")}</span>
+              </Link>
+            ),
+          )}
         </nav>
       ) : null}
       {kind && !selectedMethod ? (
@@ -241,15 +269,12 @@ function CreateContent() {
           <nav className={styles.startGrid} aria-label={t("create.round.waysLabel")}>
             {starts
               .filter((start) => kind !== "poll" || start.id === "starters" || start.id === "blank")
-              .map((start, index) => (
+              .map((start) => (
                 <Link
                   className={styles.startCard}
                   href={`/create?type=${kind}&start=${start.id}`}
                   key={start.id}
                 >
-                  <span className={styles.startNumber} aria-hidden="true">
-                    {index + 1}
-                  </span>
                   <span className={styles.startBadge}>{t(start.badgeKey)}</span>
                   <h2>{t(start.titleKey)}</h2>
                   <p>{t(start.descriptionKey)}</p>

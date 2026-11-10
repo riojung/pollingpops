@@ -5,13 +5,13 @@ import { useCallback, useMemo } from "react";
 import { useLocale } from "../../components/locale-provider";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
-import { HomeFirstRunActions } from "./home-first-run-actions";
+import { HomeGuidance } from "./home-guidance";
 import { professionalRoundBuilderAvailable } from "../../lib/help-guide-availability";
 import { pluralCategory } from "../../lib/i18n/format";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 import { canvasMessages } from "../../lib/i18n/canvas-messages";
 import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
-import { hasHomeWork, homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
+import { homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
 import { useHomeSummary } from "./home-summary";
 import styles from "./home.module.css";
 
@@ -172,42 +172,36 @@ function HomeWorkspace() {
           </Link>
         ) : null
       }
-      description={copy.homeDescription}
+      description={t("home.welcome", { name: firstName })}
       eyebrow={t("home.eyebrow")}
       title={t("home.title")}
       translationLevel="full"
     >
-      <section className={styles.hero} lang={locale}>
-        <div>
-          <p className={styles.eyebrow}>{t("home.welcome", { name: firstName })}</p>
-          <h2>{copy.homeHeadline}</h2>
-          <p>{copy.homeIntroduction}</p>
-          <div className={styles.heroActions}>
-            {canCreate ? (
-              <Link className={styles.primaryAction} href={createHref}>
-                {copy.create}
+      {activeSessions.length ? (
+        <section className={styles.activeSessions} aria-label={t("pages.common.liveNow")}>
+          <div className={styles.sectionHeading}>
+            <h2>{t("pages.common.liveNow")}</h2>
+          </div>
+          {activeSessions.map((session) => (
+            <div className={styles.activeSession} key={`${session.artifactType}:${session.id}`}>
+              <div>
+                <h3 lang="">{session.title}</h3>
+                <p>
+                  {t("pages.common.participantCount", { count: session.participantCount })} ·{" "}
+                  {localizedProgress(session.progressLabel, t)}
+                </p>
+              </div>
+              <Link className="button" href={session.href}>
+                {t(
+                  session.artifactType === "round"
+                    ? "pages.common.openSessions"
+                    : "pages.sessions.resumePresentation",
+                )}
               </Link>
-            ) : null}
-            <Link className={styles.secondaryAction} href="/library">
-              {t("home.openLibrary")}
-            </Link>
-          </div>
-        </div>
-        <div aria-label={t("home.snapshotLabel")} className={styles.snapshot}>
-          <div>
-            <strong>{summary?.totals.artifacts ?? "—"}</strong>
-            <span>{t("home.snapshot.artifacts")}</span>
-          </div>
-          <div>
-            <strong>{summary?.totals.activeSessions ?? "—"}</strong>
-            <span>{t("home.snapshot.live")}</span>
-          </div>
-          <div>
-            <strong>{summary?.totals.activeAssignments ?? "—"}</strong>
-            <span>{t("home.snapshot.assignments")}</span>
-          </div>
-        </div>
-      </section>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {error ? (
         <section className={styles.errorState} role="alert">
@@ -229,43 +223,12 @@ function HomeWorkspace() {
         </section>
       ) : null}
 
-      {summary && !hasHomeWork(summary) ? (
-        <section className={styles.onboarding}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.eyebrow}>{t("pages.home.onboarding.eyebrow")}</p>
-              <h2>{t("pages.home.onboarding.title")}</h2>
-              <p>{copy.onboardingDescription}</p>
-            </div>
-          </div>
-          <ol className={styles.onboardingSteps}>
-            <li>
-              <span>1</span>
-              <div>
-                <strong>{t("pages.home.onboarding.createTitle")}</strong>
-                <p>{copy.createDescription}</p>
-              </div>
-            </li>
-            <li>
-              <span>2</span>
-              <div>
-                <strong>{t("pages.home.onboarding.publishTitle")}</strong>
-                <p>{copy.publishDescription}</p>
-              </div>
-            </li>
-            <li>
-              <span>3</span>
-              <div>
-                <strong>{t("pages.home.onboarding.reviewTitle")}</strong>
-                <p>{copy.reviewDescription}</p>
-              </div>
-            </li>
-          </ol>
-          <HomeFirstRunActions
-            canCreate={canCreate}
-            guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
-          />
-        </section>
+      {summary && canCreate && creator ? (
+        <HomeGuidance
+          summary={summary}
+          contextKey={`${creator.userId}:${creator.workspaceId}`}
+          guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
+        />
       ) : null}
 
       {summary ? (
@@ -281,7 +244,7 @@ function HomeWorkspace() {
                 <Link href="/library">{t("pages.common.viewLibrary")}</Link>
               </div>
               {recentWork.length ? (
-                <div className={styles.artifactGrid}>
+                <div className={styles.artifactGrid} data-layout="compact">
                   {recentWork.map((artifact) => (
                     <article
                       className={styles.artifactCard}
@@ -407,40 +370,6 @@ function HomeWorkspace() {
           </div>
 
           <aside className={styles.sideColumn} aria-label={t("pages.home.currentActivity")}>
-            {productFeatures?.ideaBoards ||
-            productFeatures?.canvasBoards ||
-            summary.recentBoards?.length ? (
-              <section className={styles.sidePanel} aria-labelledby="home-boards-title">
-                <div className={styles.sideHeading}>
-                  <h2 id="home-boards-title">
-                    {t("workspace.nav.boards")}{" "}
-                    <span className={styles.sectionCount}>
-                      {new Intl.NumberFormat(locale).format(
-                        summary.totals.boards ?? summary.recentBoards?.length ?? 0,
-                      )}
-                    </span>
-                  </h2>
-                  <Link href="/boards">{t("pages.common.all")}</Link>
-                </div>
-                {compactWork(summary.recentBoards ?? [])}
-              </section>
-            ) : null}
-            {productFeatures?.surveys || summary.recentSurveys?.length ? (
-              <section className={styles.sidePanel} aria-labelledby="home-surveys-title">
-                <div className={styles.sideHeading}>
-                  <h2 id="home-surveys-title">
-                    {t("pages.common.surveys")}{" "}
-                    <span className={styles.sectionCount}>
-                      {new Intl.NumberFormat(locale).format(
-                        summary.totals.surveys ?? summary.recentSurveys?.length ?? 0,
-                      )}
-                    </span>
-                  </h2>
-                  <Link href="/library?type=surveys">{t("pages.common.all")}</Link>
-                </div>
-                {compactWork(summary.recentSurveys ?? [])}
-              </section>
-            ) : null}
             <section className={styles.sidePanel}>
               <div className={styles.sideHeading}>
                 <div>
@@ -502,6 +431,40 @@ function HomeWorkspace() {
               ) : null}
             </section>
 
+            {productFeatures?.ideaBoards ||
+            productFeatures?.canvasBoards ||
+            summary.recentBoards?.length ? (
+              <section className={styles.sidePanel} aria-labelledby="home-boards-title">
+                <div className={styles.sideHeading}>
+                  <h2 id="home-boards-title">
+                    {t("workspace.nav.boards")}{" "}
+                    <span className={styles.sectionCount}>
+                      {new Intl.NumberFormat(locale).format(
+                        summary.totals.boards ?? summary.recentBoards?.length ?? 0,
+                      )}
+                    </span>
+                  </h2>
+                  <Link href="/boards">{t("pages.common.all")}</Link>
+                </div>
+                {compactWork(summary.recentBoards ?? [])}
+              </section>
+            ) : null}
+            {productFeatures?.surveys || summary.recentSurveys?.length ? (
+              <section className={styles.sidePanel} aria-labelledby="home-surveys-title">
+                <div className={styles.sideHeading}>
+                  <h2 id="home-surveys-title">
+                    {t("pages.common.surveys")}{" "}
+                    <span className={styles.sectionCount}>
+                      {new Intl.NumberFormat(locale).format(
+                        summary.totals.surveys ?? summary.recentSurveys?.length ?? 0,
+                      )}
+                    </span>
+                  </h2>
+                  <Link href="/library?type=surveys">{t("pages.common.all")}</Link>
+                </div>
+                {compactWork(summary.recentSurveys ?? [])}
+              </section>
+            ) : null}
             <section className={styles.sidePanel}>
               <div className={styles.sideHeading}>
                 <div>

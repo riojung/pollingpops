@@ -54,7 +54,28 @@ export function QuestionInspector({
               id={`inspector-tab-${tab}`}
               key={tab}
               onClick={() => onTabChange(tab)}
+              onKeyDown={(event) => {
+                const tabs = Object.keys(tabLabels) as InspectorTab[];
+                const index = tabs.indexOf(tab);
+                const next =
+                  event.key === "ArrowRight"
+                    ? (index + 1) % tabs.length
+                    : event.key === "ArrowLeft"
+                      ? (index + tabs.length - 1) % tabs.length
+                      : event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? tabs.length - 1
+                          : null;
+                if (next === null) return;
+                event.preventDefault();
+                onTabChange(tabs[next]!);
+                event.currentTarget.parentElement
+                  ?.querySelector<HTMLButtonElement>(`#inspector-tab-${tabs[next]}`)
+                  ?.focus();
+              }}
               role="tab"
+              tabIndex={activeTab === tab ? 0 : -1}
               type="button"
             >
               {tabLabels[tab]}

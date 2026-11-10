@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { CreatePresentationSchema } from "@openround/contracts";
+import { CreatePresentationSchema, type PresentationDraft } from "@openround/contracts";
 import type { PoolClient, QueryResultRow } from "pg";
 import {
   MemoryRepository,
@@ -251,7 +251,22 @@ function mapPresentationSummary(row: QueryResultRow): PresentationSummaryRecord 
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(String(row.created_at)),
     updatedAt: row.updated_at instanceof Date ? row.updated_at : new Date(String(row.updated_at)),
     blockCount: draft.blocks.length,
+    previewBlock: presentationLibraryPreview(draft),
   };
+}
+
+function presentationLibraryPreview(draft: PresentationDraft) {
+  const block = draft.blocks.find((item) => !item.hidden);
+  if (!block) return null;
+  return block.kind === "content"
+    ? {
+        ...block,
+        speakerNotes: "",
+        citations: [],
+        sourceDisclosure: undefined,
+        textAssistance: undefined,
+      }
+    : block;
 }
 
 function mapPresentationHistory(row: QueryResultRow): PresentationHistoryRecord {
@@ -383,7 +398,11 @@ export class MemoryPresentationRepository
           normalized.folderId = null;
         }
         const { draft, ...summary } = clone(normalized);
-        return { ...summary, blockCount: draft.blocks.length };
+        return {
+          ...summary,
+          blockCount: draft.blocks.length,
+          previewBlock: presentationLibraryPreview(draft),
+        };
       });
   }
 

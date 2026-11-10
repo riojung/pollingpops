@@ -25,6 +25,8 @@ import { deriveRecoverySummary } from "../../../lib/report-summary";
 import { RankingDistribution } from "../../../components/ranking-distribution";
 import { TextResultsView } from "../../../components/text-results-view";
 import { SessionSummaryButton } from "../../../components/session-summary/summary-dialog";
+import { useLocale } from "../../../components/locale-provider";
+import { formatDate, formatNumber } from "../../../lib/i18n/format";
 
 interface ReportContext {
   quizId: string;
@@ -41,28 +43,44 @@ function RecoveryStory({
 }: {
   report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
 }) {
+  const { locale, t } = useLocale();
   const summary = deriveRecoverySummary(report);
   const evidenceLabel =
     summary.evidenceTypes.length === 0
-      ? "No recheck evidence"
+      ? t("reportRound.clarity.noRecheckEvidence")
       : summary.evidenceTypes
-          .map((type) => (type === "linked_recheck" ? "linked recheck" : "revote"))
-          .join(" and ");
+          .map((type) =>
+            t(
+              type === "linked_recheck"
+                ? "reportRound.clarity.linkedRecheck"
+                : "reportRound.clarity.revote",
+            ),
+          )
+          .join(" · ");
   return (
     <RecoveryStorySummary
-      contentLanguage="en-CA"
+      contentLanguage={locale}
+      evidenceLanguage="en-CA"
       model={{
         recovered: summary.recovered,
         denominator: summary.denominator,
         recoveryPercent: summary.recoveryPercent,
-        initialAccuracyPercent: report.initialAccuracy.percent,
+        initialAccuracyPercent: summary.initialAccuracyPercent,
         initialCorrect: report.initialAccuracy.correct,
         initialResponses: report.initialAccuracy.responses,
         evidenceLabel,
         unresolvedCount: summary.unresolved.length,
+        conceptEvidenceCount: summary.conceptEvidenceCount,
         unresolvedNarrative: summary.topUnresolved
-          ? `${summary.topUnresolved.conceptKey} has the strongest unresolved evidence (${summary.topUnresolved.unresolved}).`
-          : "No authored concept remains unresolved in the available evidence.",
+          ? t("reportRound.clarity.unresolvedEvidence", {
+              concept: summary.topUnresolved.conceptKey,
+              count: formatNumber(locale, summary.topUnresolved.unresolved),
+            })
+          : summary.conceptEvidenceCount > 0
+            ? t("reportRound.clarity.trackedConcepts", {
+                count: formatNumber(locale, summary.conceptEvidenceCount),
+              })
+            : t("reportRound.clarity.noConceptEvidence"),
         interventions: report.interventions.map((item) => ({
           id: item.id,
           label: item.type.replaceAll("_", " "),
@@ -74,11 +92,22 @@ function RecoveryStory({
               }
             : {}),
         })),
-        nextActionLabel: summary.unresolved.length ? "Target practice" : "Review evidence",
-        nextAction: summary.nextAction,
+        nextActionLabel: t(
+          summary.unresolved.length
+            ? "reportRound.clarity.targetPractice"
+            : "reportRound.clarity.reviewEvidence",
+        ),
+        nextAction: t(
+          summary.unresolved.length
+            ? "reportRound.clarity.nextPractice"
+            : summary.denominator > 0
+              ? "reportRound.clarity.nextReview"
+              : "reportRound.clarity.nextRecheck",
+        ),
         highConfidenceWrong: summary.highConfidenceWrong,
         correctButUnsure: summary.correctButUnsure,
         smallSample: summary.smallSample,
+        initialSmallSample: summary.initialSmallSample,
         evidenceNote: report.evidenceNote,
       }}
     />
@@ -147,11 +176,10 @@ function EvidenceSections({
 }: {
   report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
 }) {
-  const recovered = report.recovery.reduce((total, item) => total + item.recovered, 0);
-  const recoveryDenominator = report.recovery.reduce(
-    (total, item) => total + item.initiallyIncorrectWithBoth,
-    0,
-  );
+  const { locale, t } = useLocale();
+  const summary = deriveRecoverySummary(report);
+  const recovered = summary.recovered;
+  const recoveryDenominator = summary.denominator;
   return (
     <>
       <p className="notice" style={{ marginBottom: 26 }}>
@@ -160,29 +188,42 @@ function EvidenceSections({
       <section className="metric-grid" aria-label="Recovery evidence" style={{ marginBottom: 26 }}>
         <div className="metric">
           <strong>
-            {report.initialAccuracy.percent === null ? "—" : `${report.initialAccuracy.percent}%`}
+            {summary.initialAccuracyPercent === null
+              ? t("reportRound.common.notMeasured")
+              : `${formatNumber(locale, report.initialAccuracy.correct)}/${formatNumber(locale, report.initialAccuracy.responses)}`}
           </strong>
-          <span>
-            {report.initialAccuracy.percent === null ? "No assessed answers" : "initial accuracy"}
-          </span>
+          <span>{t("reportRound.story.initialAccuracy")}</span>
         </div>
         <div className="metric">
           <strong>{report.participation.percent}%</strong>
-          <span>participation</span>
+          <span>{t("reportRound.clarity.participation")}</span>
         </div>
         <div className="metric">
           <strong>
-            {recovered}/{recoveryDenominator}
+            {recoveryDenominator > 0
+              ? `${formatNumber(locale, recovered)}/${formatNumber(locale, recoveryDenominator)}`
+              : t("reportRound.common.notMeasured")}
           </strong>
-          <span>recovered in rechecks</span>
+          <span>
+            {recoveryDenominator > 0
+              ? t("reportRound.story.pairedRecovery")
+              : t("reportRound.clarity.noPairedResponses")}
+          </span>
         </div>
         <div className="metric">
           <strong>
-            {report.unresolvedConcepts.filter((concept) => concept.unresolved > 0).length}
+            {summary.conceptEvidenceCount > 0
+              ? formatNumber(locale, summary.unresolved.length)
+              : t("reportRound.common.notMeasured")}
           </strong>
-          <span>unresolved concepts</span>
+          <span>{t("reportRound.clarity.unresolvedConcepts")}</span>
         </div>
       </section>
+      {summary.initialSmallSample ? (
+        <p className="notice" lang={locale}>
+          {t("reportRound.clarity.initialSmallSample")}
+        </p>
+      ) : null}
 
       <section className="panel" style={{ marginBottom: 26 }}>
         <h2 style={{ fontSize: "1.7rem" }}>Recovery evidence</h2>
@@ -877,6 +918,34 @@ function FollowupBuilder({
   );
 }
 
+function ReportReturnLink() {
+  const { locale, t } = useLocale();
+  return (
+    <Link className="button-quiet small-button" href="/results" lang={locale}>
+      {t("reportRound.clarity.backToResults")}
+    </Link>
+  );
+}
+
+function ReportIdentity({ context }: { context: ReportContext | null }) {
+  const { locale, t } = useLocale();
+  return (
+    <div lang={locale}>
+      <p className="eyebrow">{t("reportRound.clarity.sessionReport")}</p>
+      <h1 lang={context?.quizTitle ? "" : locale}>
+        {context?.quizTitle || t("reportRound.story.title")}
+      </h1>
+      {context ? (
+        <p className="muted">
+          <time dateTime={context.sessionCreatedAt}>
+            {formatDate(locale, context.sessionCreatedAt)}
+          </time>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -987,7 +1056,7 @@ export default function ReportPage() {
     setError("");
     try {
       await apiFetch(`/v1/sessions/${report.sessionId}`, { method: "DELETE" });
-      router.replace("/dashboard");
+      router.replace("/results");
     } catch (caught) {
       setError(humanError(caught));
       setDeleting(false);
@@ -998,25 +1067,11 @@ export default function ReportPage() {
     <>
       <header className="shell topbar" lang="en-CA">
         <CreatorBrand productFeatures={productFeatures} />
-        <Link className="button-quiet small-button" href="/dashboard">
-          Dashboard
-        </Link>
+        <ReportReturnLink />
       </header>
       <main className="shell page-main" id="main" lang="en-CA">
         <div className="page-heading">
-          <div>
-            <p className="eyebrow">Session report</p>
-            {uxBeta && context?.quizTitle ? (
-              <h1 lang="">{context.quizTitle}</h1>
-            ) : (
-              <h1>What the room understood</h1>
-            )}
-            {uxBeta && context ? (
-              <p className="muted">
-                What the room understood · {new Date(context.sessionCreatedAt).toLocaleDateString()}
-              </p>
-            ) : null}
-          </div>
+          <ReportIdentity context={context} />
           <div className="button-row">
             {report?.status === "ready" ? (
               <SessionSummaryButton source={{ kind: "round", id: report.sessionId }} />

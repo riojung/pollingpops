@@ -147,8 +147,9 @@ for (const surface of ["", "@mobile "]) {
     await signInBeta(page);
     await page.goto("/create");
     await expect(page.getByRole("link", { name: /^Survey Share/ })).toBeVisible();
-    await page.getByRole("link", { name: /^Live poll/ }).click();
-    await page.getByRole("link", { name: /Start blank/ }).click();
+    await expect(page.getByRole("button", { name: /^Quick poll/ })).toBeVisible();
+    // The explicit format chooser remains available beside the direct Quick poll path.
+    await page.goto("/create?type=poll&start=blank");
     await expect(page.getByRole("radio", { name: /^Poll/ })).toBeChecked();
     await expect(page.getByRole("radio", { name: /^Number/ })).toHaveCount(0);
     await page.goto("/templates");

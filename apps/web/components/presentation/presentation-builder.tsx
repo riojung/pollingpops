@@ -150,6 +150,8 @@ import {
 import { PresentationSections } from "./presentation-sections";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
+import { PresentationVersionChoice } from "./presentation-version-choice";
+import { publishBeforePresent } from "./publish-before-present";
 import {
   adaptContentSlideToScene,
   attachNativeImage,
@@ -541,6 +543,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const recoveryKey = `presentation:${presentationId}`;
   const pendingSaveKey = `${recoveryKey}:pending-save`;
   const [record, setRecord] = useState<PresentationRecord | null>(null);
+  const [presentChoiceOpen, setPresentChoiceOpen] = useState(false);
   const [draft, setDraft] = useState<PresentationDraft | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
@@ -664,9 +667,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const questionSuggestionsActive = useRef(false);
   questionSuggestionsActive.current = questionSuggestionsOpen || questionSuggestionsPending;
   const questionSuggestionsAuthorization = useRef(true);
+  const publicationAuthorization = useRef(true);
   useEffect(() => {
     const changed = () => {
       questionSuggestionsAuthorization.current = false;
+      publicationAuthorization.current = false;
     };
     window.addEventListener(AUTH_CHANGE_EVENT, changed);
     return () => window.removeEventListener(AUTH_CHANGE_EVENT, changed);
@@ -2559,17 +2564,38 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }
 
   async function publish() {
-    if (!draft || packUpdateOperation.current || packUpdatePending.current) return;
+    if (
+      !draft ||
+      !alive.current ||
+      !publicationAuthorization.current ||
+      !assistancePermission.current
+    )
+      return false;
+    if (
+      builderMutationBlocked ||
+      preparingImport ||
+      packUpdateOperation.current ||
+      packUpdatePending.current
+    ) {
+      setError("Finish or recover the current operation before publishing.");
+      return false;
+    }
+    if (mediaState !== "idle" || pendingNativeImage) {
+      setError("Finish or discard the pending image attachment before publishing.");
+      return false;
+    }
     if (issues.length) {
       recordAuthoringEvent("publish_blocked", "presentation");
       setInspectorOpen(true);
       setInspectorTab("readiness");
       setError("Resolve the readiness issues before publishing.");
-      return;
+      return false;
     }
     setError("");
     try {
       await enqueueSave(draft);
+      if (!alive.current || !publicationAuthorization.current || !assistancePermission.current)
+        return false;
       const serialized = JSON.stringify(draft);
       if (lastSavedJson.current !== serialized || latestDraftJson.current !== serialized) {
         throw new Error("Save the latest Presentation changes before publishing.");
@@ -2581,8 +2607,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           body: JSON.stringify({ expectedDraftRevision: revisionRef.current }),
         },
       );
+      if (!alive.current || !publicationAuthorization.current || !assistancePermission.current)
+        return false;
       setRecord(response.presentation);
       setSaveState("saved");
+      return true;
     } catch (caught) {
       if (
         caught instanceof ApiClientError &&
@@ -2593,6 +2622,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         recordAuthoringEvent("publish_blocked", "presentation");
       }
       setError(humanError(caught));
+      return false;
     }
   }
 
@@ -2795,7 +2825,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               className={styles.presentButton}
               href={`/presentation/${presentationId}/host`}
               prefetch={false}
-              onClick={guardBuilderExit}
+              onClick={(event) => {
+                if (hasUnpublishedChanges) {
+                  event.preventDefault();
+                  // Touch activation in WebKit does not focus links; retain the modal opener.
+                  event.currentTarget.focus();
+                  setError("");
+                  setPresentChoiceOpen(true);
+                } else guardBuilderExit(event);
+              }}
               title="Present the published version"
               lang="en-CA"
             >
@@ -2854,6 +2892,23 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           </EditorDisclosure>
         </div>
       </header>
+
+      {presentChoiceOpen ? (
+        <PresentationVersionChoice
+          href={`/presentation/${presentationId}/host`}
+          error={error}
+          onClose={() => setPresentChoiceOpen(false)}
+          onPublishedExit={guardBuilderExit}
+          onPublish={() =>
+            publishBeforePresent(
+              publish,
+              () => router.push(`/presentation/${presentationId}/host`),
+              () =>
+                alive.current && publicationAuthorization.current && assistancePermission.current,
+            )
+          }
+        />
+      ) : null}
 
       {textAssistanceRecovery && !textAssistanceOpen ? (
         <div className={styles.errorBanner} role="status">

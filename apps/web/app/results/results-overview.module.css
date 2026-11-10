@@ -17,7 +17,7 @@
 .header p,
 .more {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--ui-text-muted);
   line-height: 1.5;
 }
@@ -57,7 +57,7 @@
 }
 .widget dt {
   color: var(--ui-text-subtle);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
   line-height: 1.5;
 }
@@ -75,13 +75,13 @@
 .widget p,
 .evidence small {
   color: var(--ui-text-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
   margin: 0;
 }
 .widget .qualifier {
   margin-bottom: 12px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .widget dd p {
   margin-top: 12px;
@@ -93,13 +93,11 @@
   gap: 9px;
 }
 .evidenceHeading {
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  align-items: baseline;
+  display: grid;
+  gap: 5px;
 }
 .evidenceHeading > span {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--ui-text-subtle);
   font-weight: 650;
 }
@@ -107,6 +105,10 @@
   font-size: 20px;
   font-variant-numeric: tabular-nums;
   color: var(--ui-text-strong);
+  white-space: nowrap;
+  overflow-wrap: normal;
+  width: max-content;
+  max-width: 100%;
 }
 .widget .evidenceHeading {
   flex-direction: column;
@@ -152,7 +154,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ui-text-subtle);
 }
 .distribution li > span {

@@ -100,8 +100,13 @@ export function BuilderCommandBar({
           {saveStateLabel}
         </span>
         <div className={styles.historyActions}>
-          <Link className={styles.iconButton} href="/dashboard">
-            {t("delivery.builder.dashboard")}
+          <Link
+            className={styles.iconButton}
+            href={productFeatures?.workspaceShell ? "/library?type=rounds" : "/dashboard"}
+          >
+            {productFeatures?.workspaceShell
+              ? t("workspace.nav.library")
+              : t("delivery.builder.dashboard")}
           </Link>
           <button
             aria-label={t("delivery.builder.undoLastEdit")}

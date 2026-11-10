@@ -86,6 +86,29 @@ function snapshot(phase: SessionSnapshot["phase"]): SessionSnapshot {
 }
 
 describe("host command center", () => {
+  it("keeps the primary live command available while secondary commands are disclosed", () => {
+    const markup = renderLocalized(
+      <HostCommandBar
+        compact
+        busy={false}
+        leading={<button type="button">Audience</button>}
+        onCommand={() => undefined}
+        phaseView={{
+          phaseLabel: "Question open",
+          primary: { action: "lock", label: "Lock answers" },
+          secondary: [{ action: "pause", label: "Pause" }],
+          suggestionKind: "none",
+        }}
+      />,
+    );
+    expect(markup).toContain("More controls</summary>");
+    expect(markup).toContain("<details");
+    expect(markup).not.toContain("<details open");
+    expect(markup.indexOf("Lock answers")).toBeLessThan(markup.indexOf("<details"));
+    expect(markup).toContain("Audience");
+    expect(markup).toContain("Pause");
+  });
+
   it("discloses secondary host tools without removing recovery guidance", () => {
     const locked = snapshot("question_locked");
     const markup = renderLocalized(

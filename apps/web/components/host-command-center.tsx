@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import type { SessionSnapshot } from "@openround/contracts";
 import type { HostPhaseCommand, HostPhaseView } from "../lib/host-phase";
 import { useLocale } from "./locale-provider";
+import { liveWorkflowCopy } from "../lib/i18n/live-workflow-copy";
+import styles from "./host-command-center.module.css";
 
 const phaseKeys = {
   Lobby: "live.host.phase.lobby",
@@ -66,6 +68,7 @@ export function RecoveryCompass({
   showSteps = true,
   synthetic = false,
   collapsible = false,
+  showCounts = true,
   children,
 }: {
   snapshot: SessionSnapshot;
@@ -74,6 +77,7 @@ export function RecoveryCompass({
   showSteps?: boolean;
   synthetic?: boolean;
   collapsible?: boolean;
+  showCounts?: boolean;
   children?: ReactNode;
 }) {
   const { t } = useLocale();
@@ -153,16 +157,18 @@ export function RecoveryCompass({
           {steps}
         </details>
       )}
-      <div className="metric-grid recovery-compass-metrics">
-        <div className="metric">
-          <strong>{snapshot.participants.length}</strong>
-          <span>{synthetic ? t("live.host.syntheticLearners") : t("live.host.joined")}</span>
+      {showCounts ? (
+        <div className="metric-grid recovery-compass-metrics">
+          <div className="metric">
+            <strong>{snapshot.participants.length}</strong>
+            <span>{synthetic ? t("live.host.syntheticLearners") : t("live.host.joined")}</span>
+          </div>
+          <div className="metric">
+            <strong>{snapshot.answerCount}</strong>
+            <span>{t("live.host.answered")}</span>
+          </div>
         </div>
-        <div className="metric">
-          <strong>{snapshot.answerCount}</strong>
-          <span>{t("live.host.answered")}</span>
-        </div>
-      </div>
+      ) : null}
       {guidance ? (
         <div className="notice recovery-guidance" aria-live="polite">
           <p className="eyebrow">
@@ -202,6 +208,7 @@ export function HostCommandBar({
   fallback,
   synthetic = false,
   inert = false,
+  compact = false,
 }: {
   phaseView: HostPhaseView;
   busy: boolean;
@@ -215,8 +222,10 @@ export function HostCommandBar({
   fallback?: ReactNode;
   synthetic?: boolean;
   inert?: boolean;
+  compact?: boolean;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const copy = liveWorkflowCopy(locale);
   const commandLabel = (command: HostPhaseCommand | null | undefined) => {
     if (!command) return "";
     const commandKey = commandKeys[command.label as keyof typeof commandKeys];
@@ -225,7 +234,7 @@ export function HostCommandBar({
   return (
     <nav
       aria-label={synthetic ? t("live.host.syntheticCommandsAria") : t("live.host.commandsAria")}
-      className="host-command-bar"
+      className={`host-command-bar${compact ? ` ${styles.commandBar}` : ""}`}
       data-synthetic={synthetic || undefined}
       data-testid="host-command-bar"
       inert={inert}
@@ -236,8 +245,8 @@ export function HostCommandBar({
         </span>
         <strong>{primary ? commandLabel(primary) : t("live.host.reviewResults")}</strong>
       </div>
-      <div className="button-row">
-        <div className="host-command-primary">
+      <div className={`button-row${compact ? ` ${styles.actions}` : ""}`}>
+        <div className={`host-command-primary${compact ? ` ${styles.primary}` : ""}`}>
           {primary ? (
             <button
               className="button"
@@ -251,21 +260,42 @@ export function HostCommandBar({
             fallback
           )}
         </div>
-        <div className="host-command-overflow">
-          {leading}
-          {secondary.map((item) => (
-            <button
-              className="button-quiet"
-              disabled={busy}
-              key={`${item.action}:${item.interventionType ?? item.recheckMode ?? ""}`}
-              onClick={() => onCommand(item)}
-              type="button"
-            >
-              {commandLabel(item)}
-            </button>
-          ))}
-          {trailing}
-        </div>
+        {compact ? (
+          <details className={styles.more}>
+            <summary>{copy.moreControls}</summary>
+            <div className={`host-command-overflow ${styles.overflow}`}>
+              {leading}
+              {secondary.map((item) => (
+                <button
+                  className="button-quiet"
+                  disabled={busy}
+                  key={`${item.action}:${item.interventionType ?? item.recheckMode ?? ""}`}
+                  onClick={() => onCommand(item)}
+                  type="button"
+                >
+                  {commandLabel(item)}
+                </button>
+              ))}
+              {trailing}
+            </div>
+          </details>
+        ) : (
+          <div className="host-command-overflow">
+            {leading}
+            {secondary.map((item) => (
+              <button
+                className="button-quiet"
+                disabled={busy}
+                key={`${item.action}:${item.interventionType ?? item.recheckMode ?? ""}`}
+                onClick={() => onCommand(item)}
+                type="button"
+              >
+                {commandLabel(item)}
+              </button>
+            ))}
+            {trailing}
+          </div>
+        )}
       </div>
     </nav>
   );

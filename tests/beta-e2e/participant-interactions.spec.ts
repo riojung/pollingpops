@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { joinBetaRound } from "./round-join";
 import { signInBeta } from "./sign-in";
+import { openHostControls } from "./host-controls";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
@@ -125,6 +126,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       name: "Ask for confidence (optional)",
       exact: true,
     });
+    await openHostControls(host);
     await expect(hostConfidence).toBeVisible();
     await expect(hostConfidence).toBeChecked();
     const expectedJoinUrl = `${new URL(host.url()).origin}/join?code=${session.code}`;
@@ -159,6 +161,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       const nickname = guest.getByRole("textbox", { name: /^Nickname/ });
       await expect(nickname).toBeVisible();
       await nickname.fill("River Learner");
+      await guest.locator('summary[aria-label="Change avatar"]').click();
       await expect(guest.getByRole("radio")).toHaveCount(24);
       await guest
         .getByTestId("avatar-option-hedgehog")
@@ -186,7 +189,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(guest.getByRole("img", { name: "Hedgehog avatar", exact: true })).toBeVisible();
       const unsaved = await context.newPage();
       await unsaved.goto(`/join?code=${session.code}`);
-      await expect(unsaved.getByRole("radio")).toHaveCount(24);
+      await expect(unsaved.getByRole("radio")).toHaveCount(0);
       await unsaved
         .getByRole("textbox", { name: /^Nickname/ })
         .fill("UnsavedDraftWithLongNickname");

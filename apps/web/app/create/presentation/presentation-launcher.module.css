@@ -285,3 +285,10 @@
     justify-content: flex-start;
   }
 }
+.alternatives > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  color: var(--ui-accent-ink);
+  font-weight: 650;
+  cursor: pointer;
+}

@@ -1,0 +1,28 @@
+.heading.heading {
+  font-size: clamp(2rem, 7vw, 3rem);
+  line-height: 1.12;
+}
+
+.avatarChoice {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-small);
+  margin: 14px 0;
+  padding: 8px 12px;
+}
+
+.avatarChoice > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.avatarChoice[open] > summary {
+  margin-bottom: 12px;
+}
+
+.privacy {
+  font-size: 0.875rem;
+  margin: 18px 0 0;
+}

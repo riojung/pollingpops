@@ -21,6 +21,7 @@ import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-l
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { formatNumber } from "../../../../lib/i18n/format";
+import { presentationDeliveryCopy } from "../../../../lib/i18n/presentation-delivery-copy";
 import {
   createPresentationRealtimeController,
   presentationRemainingSeconds,
@@ -50,6 +51,7 @@ import {
 
 export default function PresentationParticipantPage() {
   const { locale, t } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<PresentationParticipantSnapshot | null>(null);
@@ -257,14 +259,14 @@ export default function PresentationParticipantPage() {
     saveState === "reconnecting_not_saved";
   const deliveryStatus =
     saveState === "saving"
-      ? "Saving…"
+      ? t("live.common.saving")
       : saveState === "reconnecting_not_saved"
-        ? "Reconnecting—not yet saved"
+        ? copy("notSaved")
         : saveState === "saved" || snapshot?.responseSubmitted
-          ? "Saved"
+          ? copy("saved")
           : connection === "connected" || connection === "fallback"
-            ? "Connected"
-            : "Reconnecting—not yet saved";
+            ? t("live.common.connected")
+            : copy("notSaved");
 
   return (
     <main className={styles.page}>
@@ -381,8 +383,8 @@ export default function PresentationParticipantPage() {
                 ) : block.question.type === "ranking" ? (
                   snapshot?.responseSubmitted ? (
                     <>
-                      <p lang="en-CA">Your ranking is saved.</p>
-                      <ul aria-label="Ranking choices">
+                      <p lang={locale}>{copy("rankingSaved")}</p>
+                      <ul aria-label={copy("rankingChoices")}>
                         {block.question.choices.map((choice) => (
                           <li key={choice.id} lang="">
                             {choice.label}
@@ -401,9 +403,11 @@ export default function PresentationParticipantPage() {
                 ) : block.question.choices.length ? (
                   <>
                     {block.question.type === "poll" && (block.question.maxSelections ?? 1) > 1 ? (
-                      <p lang="en-CA" role="status">
-                        Choose up to {block.question.maxSelections} options.{" "}
-                        {selectedChoiceIds.length} selected.
+                      <p lang={locale} role="status">
+                        {copy("selectionCount", {
+                          max: formatNumber(locale, block.question.maxSelections ?? 1),
+                          count: formatNumber(locale, selectedChoiceIds.length),
+                        })}
                       </p>
                     ) : null}
                     <div className={styles.choiceGrid}>

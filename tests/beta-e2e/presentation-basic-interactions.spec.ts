@@ -204,7 +204,7 @@ for (const suffix of ["", " @mobile"]) {
       const guest = await guestContext.newPage();
       await guest.goto(`/join?code=${lobby.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("E06 interaction audience");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       for (const surface of [stage, companion, guest]) {

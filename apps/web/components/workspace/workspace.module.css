@@ -872,7 +872,7 @@
   .mobileNavLink,
   .mobileNavActive {
     font-size: 0.8rem;
-    padding-inline: 0.6rem;
+    padding-inline: 0.3rem;
   }
 
   .pageHeader {

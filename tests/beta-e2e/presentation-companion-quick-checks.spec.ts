@@ -142,7 +142,7 @@ async function quickCheckWorkflow(page: Page, browser: Browser, testInfo: TestIn
     const guest = await guestContext.newPage();
     await guest.goto(`/join?code=${fixture.snapshot.code}`);
     await guest.getByLabel("Nickname", { exact: true }).fill("Synthetic guest");
-    await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
     const open = companion.getByRole("button", { name: "Add Quick Check", exact: true });
     await expect(open).toBeEnabled();

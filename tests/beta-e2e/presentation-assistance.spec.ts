@@ -305,6 +305,10 @@ for (const suffix of ["", " @mobile"]) {
     expect((await readE01Record(page, record.id)).draft).toEqual(recovered.draft);
     expect((await readE01Record(page, record.id)).draftRevision).toBe(recovered.draftRevision);
     await failed.dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(
+      page.locator('summary[aria-label="Insert & import"]').locator("xpath=ancestor::details[1]"),
+    ).not.toHaveAttribute("open");
+    await expect(page.locator('summary[aria-label="Insert & import"]')).toBeFocused();
 
     // Pin a known insertion anchor, then have a separate editor delete it while
     // this proposal remains open. One reload must refresh both revision and anchor.

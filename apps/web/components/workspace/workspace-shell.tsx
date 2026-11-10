@@ -21,6 +21,7 @@ import {
 } from "./workspace-provider";
 import { workspaceCreationOptions } from "./workspace-creation-model";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
+import { workspaceFlowMessages } from "../../lib/i18n/workspace-flow-messages";
 import styles from "./workspace.module.css";
 
 type IconName =
@@ -363,7 +364,7 @@ export function WorkspaceNav({
       {mobile ? (
         <details className={styles.mobileMore} key={pathname}>
           <summary className={activeSecondary ? styles.mobileNavActive : styles.mobileNavLink}>
-            {t("pages.library.more")}
+            {workspaceFlowMessages(locale).more}
             {activeSecondary ? (
               <span className={styles.mobileCurrent}>{t(activeSecondary.label)}</span>
             ) : null}

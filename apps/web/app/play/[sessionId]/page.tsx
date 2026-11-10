@@ -31,6 +31,12 @@ import {
 } from "../../../components/audience-panel";
 import { ExperiencePreferences } from "../../../components/experience-preferences";
 import { Countdown } from "../../../components/countdown";
+import {
+  deliveryPrimaryCopy,
+  deliveryInterventionLabel,
+  localizeDeliveryMessage,
+  livePhaseMessageKeys,
+} from "../../../lib/i18n/delivery-primary-copy";
 import { useLocale } from "../../../components/locale-provider";
 import { LivePollChoices } from "../../../components/live-poll-choices";
 import { RankingChoices } from "../../../components/ranking-choices";
@@ -87,6 +93,7 @@ const LOCALIZED_VALUE_MARKER = "\uFFFC";
 export default function PlayerPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { locale, t } = useLocale();
+  const copy = deliveryPrimaryCopy(locale);
   const tRef = useRef(t);
   tRef.current = t;
   const socket = useMemo(createRealtimeClient, []);
@@ -94,6 +101,7 @@ export default function PlayerPage() {
   const snapshotRef = useRef<SessionSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+  const errorView = localizeDeliveryMessage(locale, error);
   const [errorIsEnglish, setErrorIsEnglish] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [automaticSaveFailed, setAutomaticSaveFailed] = useState(false);
@@ -703,12 +711,12 @@ export default function PlayerPage() {
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {snapshot?.phase === "question_open" ? (
             uxBeta ? (
-              <span lang="en-CA">
-                Question open:{" "}
+              <span lang={locale}>
+                {t("live.host.phase.questionOpen")}:{" "}
                 {snapshot.question?.prompt ? (
                   <span lang="">{snapshot.question.prompt}</span>
                 ) : (
-                  "new question"
+                  t("live.roundSetup.item.question")
                 )}
               </span>
             ) : snapshot.question?.prompt ? (
@@ -727,21 +735,28 @@ export default function PlayerPage() {
           ) : snapshot ? (
             <>
               {roundStatusBefore}
-              <span lang="en-CA">{snapshot.phase.replaceAll("_", " ")}</span>
+              <span lang={locale}>{t(livePhaseMessageKeys[snapshot.phase])}</span>
               {roundStatusAfter}
             </>
           ) : (
-            <span lang="en-CA">Connecting to the live round.</span>
+            <span lang={locale}>{t("live.roundPlay.syncing")}</span>
           )}
         </p>
         {error && !showSubmitControls ? (
           <section className="live-card">
-            <p className="error" lang={errorIsEnglish ? "en-CA" : undefined} role="alert">
-              {error}
+            <p className="error" lang={locale} role="alert">
+              {errorIsEnglish ? (
+                <>
+                  {!errorView.known ? `${copy("Service message")}: ` : ""}
+                  <span lang={errorView.language}>{errorView.text}</span>
+                </>
+              ) : (
+                error
+              )}
             </p>
             {!snapshot ? (
-              <Link className="button" href="/join" lang="en-CA">
-                Join again
+              <Link className="button" href="/join" lang={locale}>
+                {copy("Join again")}
               </Link>
             ) : null}
           </section>
@@ -760,7 +775,7 @@ export default function PlayerPage() {
                 {myRow?.nickname ? (
                   <span lang="">{myRow.nickname}</span>
                 ) : (
-                  <span lang="en-CA">Ready</span>
+                  <span lang={locale}>{copy("Ready")}</span>
                 )}
               </h1>
             </div>
@@ -775,13 +790,21 @@ export default function PlayerPage() {
         {snapshot?.question && snapshot.phase !== "finished" ? (
           <section className="live-card" data-testid="participant-task">
             <div className="page-heading" style={{ alignItems: "center", marginBottom: 20 }}>
-              <span className="status-pill" lang="en-CA">
-                {snapshot.roundKind === "main" ? (uxBeta ? "Question" : "Checkpoint") : "Recheck"}{" "}
-                {formatNumber(
-                  locale,
-                  (snapshot.questionPosition ?? snapshot.questionIndex ?? 0) + 1,
-                )}{" "}
-                of {formatNumber(locale, snapshot.questionCount)}
+              <span className="status-pill" lang={locale}>
+                {copy(
+                  snapshot.roundKind === "main"
+                    ? uxBeta
+                      ? "Question {current} of {total}"
+                      : "Checkpoint {current} of {total}"
+                    : "Recheck {current} of {total}",
+                  {
+                    current: formatNumber(
+                      locale,
+                      (snapshot.questionPosition ?? snapshot.questionIndex ?? 0) + 1,
+                    ),
+                    total: formatNumber(locale, snapshot.questionCount),
+                  },
+                )}
               </span>
               {snapshot.phase === "question_open" ? (
                 snapshot.settings.timeMode === "flex" ? (
@@ -805,14 +828,16 @@ export default function PlayerPage() {
               />
             </span>
             {snapshot.phase === "paused" ? (
-              <p className="notice" lang="en-CA">
-                The facilitator paused this {uxBeta ? "question" : "checkpoint"}.
+              <p className="notice" lang={locale}>
+                {copy("The facilitator paused this question.")}
               </p>
             ) : null}
             {snapshot.phase === "intervention" ? (
-              <p className="notice" lang="en-CA">
-                The facilitator started{" "}
-                {snapshot.intervention?.type.replaceAll("_", " ") ?? "an intervention"}.
+              <p className="notice" lang={locale}>
+                {copy("The facilitator started an intervention.")}
+                {snapshot.intervention
+                  ? ` · ${deliveryInterventionLabel(locale, snapshot.intervention.type)}`
+                  : ""}
               </p>
             ) : null}
             {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
@@ -962,9 +987,10 @@ export default function PlayerPage() {
               >
                 <div className="participant-submit-message">
                   {retryableSubmission ? (
-                    <p className="muted" lang="en-CA">
-                      Your original response is unchanged. Retry uses the same save request so it
-                      cannot create a second answer.
+                    <p className="muted" lang={locale}>
+                      {copy(
+                        "Your original response is unchanged. Retry uses the same save request so it cannot create a second answer.",
+                      )}
                     </p>
                   ) : (
                     <>
@@ -989,8 +1015,15 @@ export default function PlayerPage() {
                     </>
                   )}
                   {error ? (
-                    <p className="error" role="alert" lang={errorIsEnglish ? "en-CA" : undefined}>
-                      {error}
+                    <p className="error" role="alert" lang={locale}>
+                      {errorIsEnglish ? (
+                        <>
+                          {!errorView.known ? `${copy("Service message")}: ` : ""}
+                          <span lang={errorView.language}>{errorView.text}</span>
+                        </>
+                      ) : (
+                        error
+                      )}
                     </p>
                   ) : null}
                 </div>
@@ -1040,10 +1073,10 @@ export default function PlayerPage() {
               <p
                 aria-label={t("live.roundPlay.saveStatusAria")}
                 className="success"
-                lang="en-CA"
+                lang={locale}
                 role="status"
               >
-                Answer received and saved.
+                {submissionCopy.saved}
               </p>
             ) : null}
             {isTextQuestion(snapshot.question.type) && snapshot.roundId ? (
@@ -1063,11 +1096,17 @@ export default function PlayerPage() {
                   {snapshot.question.purpose === "opinion" && responseSaved ? (
                     t("live.presentationPlay.responseRecorded")
                   ) : snapshot.myCorrect === true ? (
-                    <span lang="en-CA">Correct</span>
+                    <span lang={locale}>{copy("Correct")}</span>
                   ) : snapshot.myCorrect === false ? (
                     <>
                       {reviewItemBefore}
-                      <span lang="en-CA">{uxBeta ? "question" : "checkpoint"}</span>
+                      <span lang={locale}>
+                        {t(
+                          uxBeta
+                            ? "live.roundSetup.item.question"
+                            : "live.roundSetup.item.checkpoint",
+                        )}
+                      </span>
                       {reviewItemAfter}
                     </>
                   ) : (
@@ -1119,7 +1158,7 @@ export default function PlayerPage() {
             key={snapshot.roundId ?? snapshot.phase}
           >
             <summary>{t("live.roundPlay.openTools")}</summary>
-            <p className="muted" lang="en-CA">
+            <p className="muted" lang={locale}>
               These optional tools never affect whether your response is saved.
             </p>
             {snapshot.phase !== "finished" ? (

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { WorkspaceProductFeatures } from "@openround/contracts";
 import { CreatorBrand } from "../brand";
 import { useLocale } from "../locale-provider";
+import { authoringWorkflowCopy } from "./authoring-workflow-copy";
 import styles from "./round-builder.module.css";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
@@ -47,7 +48,8 @@ export function BuilderCommandBar({
   onToggleQuestionMap: () => void;
   onToggleInspector: () => void;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = authoringWorkflowCopy(locale);
   const saveStateLabel =
     saveState === "saving"
       ? t("delivery.common.saving")
@@ -74,7 +76,17 @@ export function BuilderCommandBar({
           placeholder={t("delivery.builder.titlePlaceholder")}
           value={title}
         />
-        {status ? <span className="status-pill">{status}</span> : null}
+        {status ? (
+          <span className="status-pill">
+            {status === "draft"
+              ? copy.draft
+              : status === "published"
+                ? t("delivery.presentationBuilder.published")
+                : status === "archived"
+                  ? copy.archived
+                  : status}
+          </span>
+        ) : null}
       </div>
       <div className={styles.commandActions}>
         <div className={styles.viewActions}>

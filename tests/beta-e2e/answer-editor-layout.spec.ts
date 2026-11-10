@@ -257,7 +257,7 @@ for (const suffix of ["desktop", "@mobile"]) {
     try {
       const participant = await context.newPage();
       await participant.goto(`/join?code=${room.code}`);
-      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       const choice = participant.getByRole("checkbox", { name: longOption, exact: true });
       await expect(choice).toBeVisible();
       await expectNoOverflow(participant);

@@ -143,7 +143,7 @@ async function companionWorkflow(page: Page, browser: Browser, testInfo: TestInf
       guest.getByRole("heading", { name: "Join a Presentation", exact: true }),
     ).toBeVisible();
     await guest.getByLabel("Nickname", { exact: true }).fill("Synthetic guest");
-    await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(guest).toHaveURL(`/presentation-session/${fixture.sessionId}/play`);
 
     // Lose an authoritative acknowledgement, not its accepted state or broadcast. The retry

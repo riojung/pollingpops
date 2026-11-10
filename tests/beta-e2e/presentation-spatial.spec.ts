@@ -346,7 +346,7 @@ async function join(browser: Browser, host: Page, code: string, info: TestInfo) 
   );
   await page.goto(`/join?code=${code}`);
   await page.getByLabel("Nickname", { exact: true }).fill("E10 synthetic participant");
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
   return { context, page, frames };
 }

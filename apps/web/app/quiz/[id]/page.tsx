@@ -31,6 +31,7 @@ import { BuilderCommandBar } from "../../../components/editor/builder-command-ba
 import { DeliveryScoring } from "../../../components/editor/delivery-scoring";
 import { DiagnosticDetails } from "../../../components/editor/diagnostic-details";
 import { MediaEditor } from "../../../components/editor/media-editor";
+import { authoringWorkflowCopy } from "../../../components/editor/authoring-workflow-copy";
 import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
 import { ParticipantPreview } from "../../../components/editor/participant-preview";
 import {
@@ -150,6 +151,7 @@ function newQuestion(type: QuestionType): QuestionDraft {
 export default function QuizEditorPage() {
   const { locale, t } = useLocale();
   const workflowCopy = creatorWorkflowCopy(locale);
+  const authoringCopy = authoringWorkflowCopy(locale);
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2000,9 +2002,9 @@ export default function QuizEditorPage() {
                         />
                         <div className={builderStyles.canvasSection}>
                           <div className={builderStyles.canvasSectionHeading}>
-                            <h2 lang="en-CA">Response</h2>
-                            <span className="muted" lang="en-CA">
-                              Mark the correct answer where applicable
+                            <h2 lang={locale}>{authoringCopy.response}</h2>
+                            <span className="muted" lang={locale}>
+                              {authoringCopy.responseInstructions}
                             </span>
                           </div>
                           <ResponseEditor
@@ -2031,9 +2033,9 @@ export default function QuizEditorPage() {
                 build={
                   question ? (
                     <>
-                      <h3 lang="en-CA">Question delivery</h3>
-                      <p className={builderStyles.inspectorIntro} lang="en-CA">
-                        Tune timing, scoring, and the explanation shown after reveal.
+                      <h3 lang={locale}>{authoringCopy.questionDelivery}</h3>
+                      <p className={builderStyles.inspectorIntro} lang={locale}>
+                        {authoringCopy.questionDeliveryHelp}
                       </p>
                       <DeliveryScoring onUpdateQuestion={updateQuestion} question={question} />
                       <details className={builderStyles.settingsDisclosure} lang="en-CA">

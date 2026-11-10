@@ -332,7 +332,7 @@ for (const suffix of ["", " @mobile"]) {
       const guest = await guestContext.newPage();
       await guest.goto(`/join?code=${snapshot.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("Discussion attendee");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await page.goto(`/presentation-session/${snapshot.sessionId}/host`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       await page.getByRole("button", { name: "Next block", exact: true }).click();

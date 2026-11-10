@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceAccountContext } from "./workspace-provider";
 import type { ManagementNavigationState } from "../management-navigation";
 import { LocaleProvider } from "../locale-provider";
-import { englishMessages } from "../../lib/i18n/catalog";
+import { englishMessages, localeDomainsForPath } from "../../lib/i18n/catalog";
 import { workspacePageEnglishMessages } from "../../lib/i18n/domains/workspace-pages";
 import germanWorkspacePageMessages from "../../lib/i18n/domains/workspace-pages/de-DE";
 import germanMessages from "../../lib/i18n/messages/de-DE";
@@ -96,6 +96,7 @@ import {
   saveSidebarCollapsed,
   WorkspaceFeatureGate,
   WorkspaceShell,
+  WorkspaceNav,
   WorkspaceManagementRail,
 } from "./workspace-shell";
 
@@ -156,6 +157,21 @@ describe("professional workspace shell", () => {
     fixtures.workspace.productFeatures.canvasBoards = false;
     fixtures.push.mockClear();
     fixtures.replace.mockClear();
+  });
+
+  it("labels mobile More on creation routes without loading the Library domain", () => {
+    fixtures.pathname = "/create";
+    const markup = renderToStaticMarkup(
+      <LocaleProvider
+        initialLocale="en-CA"
+        initialMessages={englishMessages}
+        initialDomains={localeDomainsForPath("/create")}
+      >
+        <WorkspaceNav mobile />
+      </LocaleProvider>,
+    );
+    expect(markup).toContain(">More</summary>");
+    expect(markup).not.toContain("pages.library.more");
   });
 
   it("exposes an expanded desktop sidebar with an explicitly named collapse control", () => {

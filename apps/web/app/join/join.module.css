@@ -12,10 +12,15 @@
 
 .avatarChoice > summary {
   align-items: center;
+  color: var(--ui-text);
   cursor: pointer;
   display: flex;
   gap: 12px;
   min-height: 44px;
+}
+
+.avatarChoice :global(.avatar-picker-hint) {
+  color: var(--ui-text-muted);
 }
 
 .avatarChoice[open] > summary {

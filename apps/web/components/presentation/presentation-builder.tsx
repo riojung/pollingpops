@@ -131,6 +131,7 @@ import {
   EditorIcon,
   EDITOR_MODAL_SELECTOR,
   EditorDisclosure,
+  handoffEditorDisclosure,
   EditorMenuSection,
   type EditorIconName,
   PresentationSlideThumbnail,
@@ -150,6 +151,8 @@ import {
 import { PresentationSections } from "./presentation-sections";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
+import { presentationCommandCopy } from "./presentation-command-copy";
+import { authoringWorkflowCopy } from "../editor/authoring-workflow-copy";
 import { PresentationVersionChoice } from "./presentation-version-choice";
 import { publishBeforePresent } from "./publish-before-present";
 import {
@@ -284,6 +287,8 @@ function PresentationPreview({
   initialMode?: "audience" | "presenter";
   origin?: "interaction" | "notes" | "slide";
 }) {
+  const { locale, t } = useLocale();
+  const authoring = authoringWorkflowCopy(locale);
   const [mode, setMode] = useState(initialMode);
   const publication = preparePresentationPublication(draft);
   const [index, setIndex] = useState(
@@ -303,11 +308,11 @@ function PresentationPreview({
       className={styles.previewBackdrop}
       role="dialog"
       aria-modal="true"
-      aria-label="Presentation preview"
+      aria-label={authoring.preview}
       data-presentation-preview="true"
       data-preview-origin={origin ?? (initialBlockId ? "interaction" : undefined)}
       data-preview-mode={mode}
-      lang="en-CA"
+      lang={locale}
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
         handleModalKeyDown(event, onClose);
@@ -316,32 +321,32 @@ function PresentationPreview({
     >
       <div className={styles.previewStage}>
         <div className={styles.previewBar}>
-          <strong lang={draft.title ? "" : "en-CA"}>
-            {draft.title || "Untitled presentation"}
+          <strong lang={draft.title ? "" : locale}>
+            {draft.title || t("delivery.presentationBuilder.untitled")}
           </strong>
           <span>
             {publication.blocks.length
               ? `${index + 1} / ${publication.blocks.length}`
-              : "No slides"}
+              : authoring.noSlides}
           </span>
-          <div className={styles.previewModes} role="group" aria-label="Preview mode">
+          <div className={styles.previewModes} role="group" aria-label={authoring.previewMode}>
             <button
               type="button"
               aria-pressed={mode === "audience"}
               onClick={() => setMode("audience")}
             >
-              <EditorIcon name="slides" /> Audience view
+              <EditorIcon name="slides" /> {authoring.audienceView}
             </button>
             <button
               type="button"
               aria-pressed={mode === "presenter"}
               onClick={() => setMode("presenter")}
             >
-              <EditorIcon name="notes" /> Presenter view
+              <EditorIcon name="notes" /> {authoring.presenterView}
             </button>
           </div>
           <button className={styles.iconButton} onClick={onClose} type="button">
-            Close preview
+            {authoring.closePreview}
           </button>
         </div>
         <PresentationSpatialDelivery
@@ -374,7 +379,7 @@ function PresentationPreview({
             tabIndex={0}
           >
             {!block ? (
-              <p>Show a slide or add an activity to preview this presentation.</p>
+              <p>{authoring.emptyPreview}</p>
             ) : block.kind === "content" ? (
               <ContentSlideView
                 block={block}
@@ -437,14 +442,14 @@ function PresentationPreview({
             onClick={() => setIndex((value) => value - 1)}
             type="button"
           >
-            Previous
+            {authoring.previous}
           </button>
           <button
             disabled={index >= publication.blocks.length - 1}
             onClick={() => setIndex((value) => value + 1)}
             type="button"
           >
-            Next
+            {authoring.next}
           </button>
         </div>
       </div>
@@ -493,6 +498,8 @@ export function PresentationBuilder({ presentationId, startOutline }: Presentati
 function PresentationEditor({ presentationId, startOutline }: PresentationBuilderProps) {
   const { creator, canEdit, productFeatures } = useWorkspace();
   const { locale, t } = useLocale();
+  const authoring = authoringWorkflowCopy(locale);
+  const commands = presentationCommandCopy(locale);
   const router = useRouter();
   const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -677,6 +684,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     return () => window.removeEventListener(AUTH_CHANGE_EVENT, changed);
   }, []);
   const [assistanceOpen, setAssistanceOpen] = useState(false);
+  const assistanceMenuSource = useRef<HTMLButtonElement | undefined>(undefined);
+  useEffect(() => {
+    if (assistanceOpen) return;
+    const source = assistanceMenuSource.current;
+    assistanceMenuSource.current = undefined;
+    // Run after the dialog's focus cleanup and after the workspace loses inert.
+    handoffEditorDisclosure(source);
+  }, [assistanceOpen]);
   const [assistancePending, setAssistancePending] = useState(false);
   const [assistanceTarget, setAssistanceTarget] = useState({
     revision: 0,
@@ -2232,7 +2247,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, [draft, enqueueSave]);
 
   const openAssistance = useCallback(
-    async (automatic = false) => {
+    async (automatic = false, source?: HTMLButtonElement) => {
       if (
         !draft ||
         !canEdit ||
@@ -2265,6 +2280,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           return;
         setAssistanceTarget({ revision, anchor: selectedBlockId });
         assistanceActive.current = true;
+        assistanceMenuSource.current = source;
         setAssistanceOpen(true);
         consumeOutlineStart();
       } catch (caught) {
@@ -2774,12 +2790,12 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
               {saveLabel}
             </span>
-            <span className={styles.publicationState} lang="en-CA">
+            <span className={styles.publicationState} lang={locale}>
               {!record.currentVersionId
-                ? "Draft"
+                ? authoring.draft
                 : hasUnpublishedChanges
-                  ? "Unpublished changes"
-                  : "Published version ready"}
+                  ? authoring.unpublished
+                  : authoring.publishedReady}
             </span>
           </div>
         </div>
@@ -2834,22 +2850,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   setPresentChoiceOpen(true);
                 } else guardBuilderExit(event);
               }}
-              title="Present the published version"
-              lang="en-CA"
+              title={authoring.presentHelp}
+              lang={locale}
             >
               <EditorIcon name="play" />
-              Present
+              {authoring.present}
             </Link>
           ) : (
             <button
               className={styles.presentButton}
               disabled
               type="button"
-              title="Publish a version before presenting"
-              lang="en-CA"
+              title={authoring.publishFirst}
+              lang={locale}
             >
               <EditorIcon name="play" />
-              Present
+              {authoring.present}
             </button>
           )}
           <PresentationShareButton
@@ -2858,7 +2874,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             versionId={record.currentVersionId}
             disabled={!canEdit}
           />
-          <EditorDisclosure label="More options" compact className={styles.moreActions}>
+          <EditorDisclosure label={authoring.moreOptions} compact className={styles.moreActions}>
             <PresentationAssignmentButton
               actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
               className={styles.shareButton}
@@ -2883,11 +2899,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             <button
               className={styles.spatialButton}
               disabled={!canEdit}
-              lang="en-CA"
+              lang={locale}
               onClick={() => setSpatialOpen(true)}
               type="button"
             >
-              Arrange space
+              {authoring.arrangeSpace}
             </button>
           </EditorDisclosure>
         </div>
@@ -2895,6 +2911,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
       {presentChoiceOpen ? (
         <PresentationVersionChoice
+          publicationContext={{
+            actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
+            presentationId,
+            versionId: record.currentVersionId!,
+          }}
           href={`/presentation/${presentationId}/host`}
           error={error}
           onClose={() => setPresentChoiceOpen(false)}
@@ -3125,7 +3146,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         <button
           type="button"
           className={styles.drawerBackdrop}
-          aria-label="Close editor panel"
+          aria-label={commands.closePanel}
           onClick={() => closeEditorPanels(true)}
           tabIndex={-1}
         />
@@ -3143,7 +3164,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           <div className={styles.mapHeader}>
             <div>
               <span className={styles.eyebrow}>
-                <span lang="en-CA">Slides</span>
+                <span lang={locale}>{commands.slides}</span>
               </span>
               <strong>
                 {t(
@@ -3241,8 +3262,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     ) : null}
                   </span>
                   {block.kind === "content" && block.hidden ? (
-                    <span className={styles.hiddenBadge} lang="en-CA">
-                      Hidden
+                    <span className={styles.hiddenBadge} lang={locale}>
+                      {commands.hidden}
                     </span>
                   ) : issuesByBlock.has(block.id) ? (
                     <span
@@ -3272,30 +3293,28 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               onClick={() => addBlock(createDesignedNativeContentBlock())}
               type="button"
             >
-              <EditorIcon name="plus" /> New slide
+              <EditorIcon name="plus" /> {commands.newSlide}
             </button>
             <EditorDisclosure
-              label="Insert & import"
+              label={commands.insertImport}
               icon="import"
               align="start"
               className={styles.insertMenu}
             >
-              <EditorMenuSection label="Create a slide">
+              <EditorMenuSection label={commands.createSlide}>
                 <button
-                  aria-label="Blank slide"
-                  title="Empty canvas · matches this deck"
+                  title={commands.emptyCanvas}
                   onClick={(event) => addBlock(createNativeContentBlock(), event.currentTarget)}
                   type="button"
                 >
                   <EditorIcon name="slides" />
                   <span className={styles.insertChoice}>
-                    <span>Blank slide</span>
-                    <small>Empty canvas · matches this deck</small>
+                    <span>{commands.blankSlide}</span>
+                    <small>{commands.emptyCanvas}</small>
                   </span>
                 </button>
                 <button
-                  aria-label={t("delivery.presentation.contentSlide")}
-                  title="Title and body · matches this deck"
+                  title={commands.bodyCanvas}
                   onClick={(event) =>
                     addBlock(createDesignedNativeContentBlock(), event.currentTarget)
                   }
@@ -3304,7 +3323,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   <EditorIcon name="content" />
                   <span className={styles.insertChoice}>
                     <span>{t("delivery.presentation.contentSlide")}</span>
-                    <small>Title and body · matches this deck</small>
+                    <small>{commands.bodyCanvas}</small>
                   </span>
                 </button>
                 <button
@@ -3315,17 +3334,17 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   <span>{t("delivery.builder.addQuestion")}</span>
                 </button>
                 <button
-                  aria-label="Outline to slides"
+                  aria-label={commands.outlineToSlides}
                   disabled={!canEdit || preparingImport}
-                  lang="en-CA"
-                  onClick={() => void openAssistance()}
+                  lang={locale}
+                  onClick={(event) => void openAssistance(false, event.currentTarget)}
                   type="button"
                 >
                   <EditorIcon name="outline" />
-                  <span>Outline to slides</span>
+                  <span>{commands.outlineToSlides}</span>
                 </button>
               </EditorMenuSection>
-              <EditorMenuSection label="Bring content in">
+              <EditorMenuSection label={commands.bringContent}>
                 <button
                   disabled={!roundSources.length || preparingImport}
                   onClick={openRoundImport}
@@ -3344,22 +3363,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 </button>
                 <button
                   disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
-                  lang="en-CA"
+                  lang={locale}
                   onClick={openVisualImport}
                   type="button"
                 >
                   <EditorIcon name="image" />
-                  <span>Import visual slides</span>
+                  <span>{commands.importVisual}</span>
                 </button>
                 {canInsertPack ? (
                   <button
                     disabled={mediaState !== "idle" || preparingImport}
-                    lang="en-CA"
+                    lang={locale}
                     onClick={() => void openPackImport()}
                     type="button"
                   >
                     <EditorIcon name="recovery" />
-                    <span>From Recovery Pack</span>
+                    <span>{commands.fromPack}</span>
                   </button>
                 ) : null}
               </EditorMenuSection>
@@ -3380,12 +3399,18 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             <div
               className={styles.canvasToolbar}
               role="group"
-              aria-label="Selected block actions"
-              lang="en-CA"
+              aria-label={commands.selectedActions}
+              lang={locale}
             >
               <span className={styles.slidePosition}>
-                Slide {draft.blocks.findIndex((block) => block.id === selectedBlock.id) + 1} of{" "}
-                {draft.blocks.length}
+                {commands.slidePosition
+                  .replace(
+                    "{current}",
+                    new Intl.NumberFormat(locale).format(
+                      draft.blocks.findIndex((block) => block.id === selectedBlock.id) + 1,
+                    ),
+                  )
+                  .replace("{total}", new Intl.NumberFormat(locale).format(draft.blocks.length))}
               </span>
 
               {selectedBlock.kind === "content" && !selectedBlock.scene ? (
@@ -3395,7 +3420,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     onClick={addTextBox}
                     type="button"
                   >
-                    Add text box
+                    {commands.addTextBox}
                   </button>
                   <button
                     disabled={!selectedTextElement}
@@ -3409,7 +3434,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }}
                     type="button"
                   >
-                    Move text earlier
+                    {commands.moveTextEarlier}
                   </button>
                   <button
                     disabled={!selectedTextElement}
@@ -3423,7 +3448,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }}
                     type="button"
                   >
-                    Move text later
+                    {commands.moveTextLater}
                   </button>
                   <button
                     className={styles.dangerButton}
@@ -3431,7 +3456,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     onClick={deleteSelectedTextBox}
                     type="button"
                   >
-                    Delete text box
+                    {commands.deleteTextBox}
                   </button>
                 </>
               ) : null}
@@ -3451,14 +3476,18 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }
                   }}
                 >
-                  Convert to native slide
+                  {commands.convertNative}
                 </button>
               ) : null}
-              <div className={styles.slideActionGroup} role="group" aria-label="Slide order">
+              <div
+                className={styles.slideActionGroup}
+                role="group"
+                aria-label={commands.slideOrder}
+              >
                 <button
-                  aria-label="Move earlier"
+                  aria-label={commands.moveEarlier}
                   disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
-                  title="Move earlier. Linked rechecks stay after their source question."
+                  title={commands.moveEarlierHelp}
                   onClick={() =>
                     commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
                   }
@@ -3467,9 +3496,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   <EditorIcon name="arrow-up" />
                 </button>
                 <button
-                  aria-label="Move later"
+                  aria-label={commands.moveLater}
                   disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
-                  title="Move later. Linked rechecks stay after their source question."
+                  title={commands.moveLaterHelp}
                   onClick={() =>
                     commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
                   }
@@ -3478,11 +3507,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   <EditorIcon name="arrow-down" />
                 </button>
               </div>
-              <div className={styles.slideActionGroup} role="group" aria-label="Slide actions">
+              <div
+                className={styles.slideActionGroup}
+                role="group"
+                aria-label={commands.slideActions}
+              >
                 {selectedBlock.kind === "content" ? (
                   <button
-                    aria-label={selectedBlock.hidden ? "Show slide" : "Hide slide"}
-                    title={selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                    aria-label={selectedBlock.hidden ? commands.showSlide : commands.hideSlide}
+                    title={selectedBlock.hidden ? commands.showSlide : commands.hideSlide}
                     type="button"
                     onClick={() =>
                       commit((current) =>
@@ -3495,17 +3528,16 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }
                   >
                     <EditorIcon name={selectedBlock.hidden ? "preview" : "eye-off"} />
-                    <span>{selectedBlock.hidden ? "Show slide" : "Hide slide"}</span>
+                    <span>{selectedBlock.hidden ? commands.showSlide : commands.hideSlide}</span>
                   </button>
                 ) : (
-                  <p className={styles.helpText} lang="en-CA">
-                    Activities stay in the presentation. Remove an activity to exclude it; linked
-                    rechecks keep their order.
+                  <p className={styles.helpText} lang={locale}>
+                    {commands.activityOrderHelp}
                   </p>
                 )}
                 <button
-                  aria-label="Duplicate"
-                  title="Duplicate slide"
+                  aria-label={t("delivery.common.duplicate")}
+                  title={commands.duplicateSlide}
                   disabled={draft.blocks.length >= 200}
                   onClick={() => {
                     const copy = duplicatePresentationBlock(selectedBlock);
@@ -3518,11 +3550,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   type="button"
                 >
                   <EditorIcon name="duplicate" />
-                  <span>Duplicate</span>
+                  <span>{t("delivery.common.duplicate")}</span>
                 </button>
                 <button
-                  aria-label="Delete"
-                  title="Delete slide"
+                  aria-label={t("delivery.common.delete")}
+                  title={commands.deleteSlide}
                   className={styles.dangerButton}
                   onClick={() => {
                     const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
@@ -3535,7 +3567,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   type="button"
                 >
                   <EditorIcon name="trash" />
-                  <span>Delete</span>
+                  <span>{t("delivery.common.delete")}</span>
                 </button>
               </div>
             </div>
@@ -4113,7 +4145,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                       onClick={addTextBox}
                       type="button"
                     >
-                      Add text box
+                      {commands.addTextBox}
                     </button>
                   </>
                 ) : inspectorTab === "layout" ? (

@@ -122,7 +122,7 @@ async function joinDeliveryAudience(context: BrowserContext, fixture: DeliveryFi
   const page = await context.newPage();
   await page.goto(`/join?code=${fixture.code}`);
   await page.getByLabel("Nickname", { exact: true }).fill("E03 delivery audience");
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(`/presentation-session/${fixture.sessionId}/play`);
   return page;
 }

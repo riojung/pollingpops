@@ -434,6 +434,21 @@ describe("workspace Home", () => {
     expect(markup).toContain("View →");
   });
 
+  it.each([true, false])(
+    "retains an available quick-start guide for first-run viewers: %s",
+    (guideAvailable) => {
+      mocked.summary = emptySummary();
+      mocked.canEdit = false;
+      mocked.creator.role = "viewer";
+      mocked.productFeatures.uxBeta = true;
+      mocked.productFeatures.builderV2 = guideAvailable;
+      const markup = renderHome();
+      expect(markup.includes('href="/help#quick-start"')).toBe(guideAvailable);
+      expect(markup).not.toContain('href="/create"');
+      expect(markup).not.toContain("Ask a quick poll");
+    },
+  );
+
   it("labels linked workshop canvases correctly and omits unavailable timestamps/counts", () => {
     mocked.summary = emptySummary();
     mocked.summary.totals.artifacts = 2;

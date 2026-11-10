@@ -17,42 +17,11 @@ import type { MessageKey } from "../../lib/i18n/catalog";
 import { recordCreationEvent } from "../../components/workspace/product-events";
 import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
-import { creatorWorkflowCopy } from "../../components/editor/creator-workflow-copy";
+import { creationGoalMessages } from "../../lib/i18n/creation-goal-messages";
 import launcherStyles from "./create-launcher.module.css";
 
-type StartMethod = "starters" | "source" | "import" | "blank";
-
-const starts: Array<{
-  id: StartMethod;
-  titleKey: MessageKey;
-  descriptionKey: MessageKey;
-  badgeKey: MessageKey;
-}> = [
-  {
-    id: "starters",
-    titleKey: "create.round.method.starter.title",
-    descriptionKey: "create.round.method.starter.description",
-    badgeKey: "create.common.fastestStart",
-  },
-  {
-    id: "source",
-    titleKey: "create.round.method.source.title",
-    descriptionKey: "create.round.method.source.description",
-    badgeKey: "create.common.sourceGrounded",
-  },
-  {
-    id: "import",
-    titleKey: "create.round.method.import.title",
-    descriptionKey: "create.round.method.import.description",
-    badgeKey: "create.round.method.import.badge",
-  },
-  {
-    id: "blank",
-    titleKey: "create.round.method.blank.title",
-    descriptionKey: "create.round.method.blank.description",
-    badgeKey: "create.common.fullControl",
-  },
-];
+const starts = ["blank", "starters", "source", "import"] as const;
+type StartMethod = (typeof starts)[number];
 
 const questionTypeKeys: Record<QuestionType, { label: MessageKey; description: MessageKey }> = {
   single_select: {
@@ -91,7 +60,7 @@ const questionTypeKeys: Record<QuestionType, { label: MessageKey; description: M
 };
 
 function startMethod(value: string | null): StartMethod | null {
-  return starts.some((start) => start.id === value) ? (value as StartMethod) : null;
+  return starts.some((start) => start === value) ? (value as StartMethod) : null;
 }
 
 function CreateContent() {
@@ -99,7 +68,7 @@ function CreateContent() {
   const searchParams = useSearchParams();
   const { t, locale } = useLocale();
   const copy = workspaceDiscoveryCopy(locale);
-  const workflowCopy = creatorWorkflowCopy(locale);
+  const goals = creationGoalMessages(locale);
   const { canEdit, entitlements, productFeatures } = useWorkspace();
   const creationOptions = workspaceCreationOptions({ canEdit, productFeatures });
   const builderEnabled = productFeatures?.builderV2 === true;
@@ -121,8 +90,8 @@ function CreateContent() {
   const selectedMethod = !kind
     ? null
     : kind === "poll" && (requestedMethod === "source" || requestedMethod === "import")
-      ? null
-      : requestedMethod;
+      ? "blank"
+      : (requestedMethod ?? "blank");
   const availableTypes = questionTypeOptions
     .filter(
       (option) =>
@@ -178,6 +147,50 @@ function CreateContent() {
     }));
   const launcherCards =
     searchParams.get("product") === "round" ? roundCards : [...roundCards, ...productCards];
+  const primaryCards = ["poll", "quiz", "presentation", "round"].flatMap((id) =>
+    launcherCards.filter((card) => card.id === id),
+  );
+  const moreCards = launcherCards.filter((card) => !primaryCards.includes(card));
+  const methods = starts.filter(
+    (start) => kind !== "poll" || start === "starters" || start === "blank",
+  );
+  const methodLabel = (method: StartMethod) => goals[method === "starters" ? "templates" : method];
+  function goalLabel(card: (typeof launcherCards)[number]) {
+    return card.id === "poll"
+      ? goals.poll
+      : card.id === "quiz"
+        ? goals.quiz
+        : card.id === "presentation"
+          ? goals.presentation
+          : card.label;
+  }
+  function goalCard(option: (typeof launcherCards)[number]) {
+    return option.id === "poll" ? (
+      <button
+        className={`${styles.startCard} ${launcherStyles.goalCard}`}
+        disabled={busy}
+        key={option.id}
+        onClick={() => void createRound("poll")}
+        type="button"
+      >
+        <strong className={launcherStyles.cardTitle}>{goalLabel(option)}</strong>
+        <span className={launcherStyles.cardDescription}>{option.description}</span>
+        <span className={styles.startLink}>
+          {busy ? t("create.round.blank.creating") : t("create.round.blank.submit")}
+        </span>
+      </button>
+    ) : (
+      <Link
+        className={`${styles.startCard} ${launcherStyles.goalCard}`}
+        href={option.href}
+        key={option.id}
+      >
+        <h2>{goalLabel(option)}</h2>
+        <p>{option.description}</p>
+        <span className={styles.startLink}>{t("create.kind.start")}</span>
+      </Link>
+    );
+  }
 
   useEffect(() => {
     if (startMethod(searchParams.get("start"))) return;
@@ -232,172 +245,180 @@ function CreateContent() {
         </p>
       ) : null}
       {!kind ? (
-        <nav className={styles.startGrid} aria-label={t("create.kind.title")}>
-          {launcherCards.map((option) =>
-            option.id === "poll" ? (
-              <button
-                className={`${styles.startCard} ${launcherStyles.quickPoll}`}
-                disabled={busy}
-                key={option.id}
-                onClick={() => void createRound("poll")}
-                type="button"
-              >
-                <h2>{workflowCopy.quickPoll}</h2>
-                <p>{option.description}</p>
-                <span className={styles.startLink}>
-                  {busy ? t("create.round.blank.creating") : t("create.round.blank.submit")}
-                </span>
-              </button>
-            ) : (
-              <Link className={styles.startCard} href={option.href} key={option.id}>
-                <h2>{option.label}</h2>
-                <p>{option.description}</p>
-                <span className={styles.startLink}>{t("create.kind.start")}</span>
-              </Link>
-            ),
-          )}
-        </nav>
-      ) : null}
-      {kind && !selectedMethod ? (
-        <>
-          <div className={styles.methodToolbar}>
-            <Link href="/create" className="button-quiet small-button">
-              {t("create.kind.title")}
-            </Link>
-            <h2>{t(`create.kind.${kind}`)}</h2>
-          </div>
-          <nav className={styles.startGrid} aria-label={t("create.round.waysLabel")}>
-            {starts
-              .filter((start) => kind !== "poll" || start.id === "starters" || start.id === "blank")
-              .map((start) => (
-                <Link
-                  className={styles.startCard}
-                  href={`/create?type=${kind}&start=${start.id}`}
-                  key={start.id}
-                >
-                  <span className={styles.startBadge}>{t(start.badgeKey)}</span>
-                  <h2>{t(start.titleKey)}</h2>
-                  <p>{t(start.descriptionKey)}</p>
-                  <span className={styles.startLink}>{t("create.round.choosePath")}</span>
-                </Link>
-              ))}
+        <div className={launcherStyles.goalLauncher}>
+          <nav className={launcherStyles.goalGrid} aria-label={goals.title}>
+            {(primaryCards.length ? primaryCards : moreCards).map(goalCard)}
           </nav>
-          <aside aria-label={t("create.round.review.label")} className={styles.launcherNote}>
-            <strong>{t("create.round.review.title")}</strong>
-            <span>{t("create.round.review.description")}</span>
-          </aside>
-        </>
-      ) : selectedMethod ? (
+          {primaryCards.length && moreCards.length ? (
+            <details className={launcherStyles.moreFormats}>
+              <summary>{goals.moreFormats}</summary>
+              <nav className={launcherStyles.goalGrid} aria-label={goals.moreFormats}>
+                {moreCards.map(goalCard)}
+              </nav>
+            </details>
+          ) : null}
+          <p className={launcherStyles.draftNote}>{goals.privateDraft}</p>
+        </div>
+      ) : null}
+      {selectedMethod ? (
         <div className={styles.focusedCreate}>
           <div className={styles.methodToolbar}>
             <Link className="button-quiet small-button" href="/create">
-              {t("create.common.allStartingPoints")}
+              {goals.allGoals}
             </Link>
             <span>
-              {t(`create.kind.${kind ?? "custom"}`)} ·{" "}
-              {t(starts.find((start) => start.id === selectedMethod)?.badgeKey ?? "common.create")}
+              {kind === "quiz"
+                ? goals.quiz
+                : kind === "poll"
+                  ? goals.poll
+                  : t("create.kind.custom")}
             </span>
           </div>
-
-          {selectedMethod === "starters" ? (
-            <section className={styles.panel} id="starters">
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className="eyebrow">{t("create.common.fastestStart")}</p>
-                  <h2>{t("create.round.starter.title")}</h2>
-                  <p>{t("create.round.starter.description")}</p>
-                </div>
-                <Link href="/templates">{t("create.round.starter.allTemplates")}</Link>
-              </div>
-              <StarterGallery compact roundType={kind === "custom" ? "all" : (kind ?? "all")} />
-            </section>
-          ) : null}
-
-          {selectedMethod === "source" ? (
-            <section className={styles.panel} id="source">
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className="eyebrow">{t("create.round.source.eyebrow")}</p>
-                  <h2>{t("create.round.source.title")}</h2>
-                  <p>{t("create.round.source.description")}</p>
-                </div>
-              </div>
-              <div lang="en-CA">
-                <AuthoringAssistant canEdit plain terminology="round" trackCreation />
-              </div>
-            </section>
-          ) : null}
-
-          {selectedMethod === "import" ? (
-            <section className={styles.panel} id="import">
-              <div lang="en-CA">
-                <CheckpointSetImport
-                  enabled={Boolean(entitlements?.csvExport)}
-                  onImported={async (quiz) => {
-                    router.push(`/quiz/${quiz.id}`);
-                  }}
-                  onUpgrade={() => router.push("/pricing")}
-                  plain
-                  terminology="round"
-                  trackCreation
-                />
-              </div>
-            </section>
-          ) : null}
-
-          {selectedMethod === "blank" ? (
-            <section className={styles.panel} id="blank">
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className="eyebrow">{t("create.common.fullControl")}</p>
-                  <h2>{t("create.round.blank.title")}</h2>
-                  <p>{t("create.round.blank.description")}</p>
-                </div>
-              </div>
-              <form className={styles.blankForm} onSubmit={createBlank}>
-                <fieldset>
-                  <legend>{t("create.round.blank.firstResponse")}</legend>
-                  <div className={styles.typeGrid}>
-                    {availableTypes.map((option) => (
-                      <label className={styles.typeChoice} key={option.type}>
-                        <input
-                          checked={effectiveType === option.type}
-                          name="question-type"
-                          onChange={() => setQuestionType(option.type)}
-                          type="radio"
-                          value={option.type}
-                        />
-                        <span>
-                          <strong>{t(questionTypeKeys[option.type].label)}</strong>
-                          <small>{t(questionTypeKeys[option.type].description)}</small>
-                        </span>
-                      </label>
-                    ))}
+          <div
+            className={launcherStyles.startTabs}
+            role="tablist"
+            aria-label={goals.startingPoints}
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              const tabs = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+              );
+              const current = tabs.indexOf(event.target as HTMLButtonElement);
+              if (current < 0) return;
+              event.preventDefault();
+              const next =
+                event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? tabs.length - 1
+                    : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+              tabs[next]?.click();
+              tabs[next]?.focus();
+            }}
+          >
+            {methods.map((start) => (
+              <button
+                aria-controls="creation-workflow-panel"
+                aria-selected={selectedMethod === start}
+                disabled={busy}
+                id={`creation-start-${start}`}
+                key={start}
+                onClick={() =>
+                  router.push(`/create?type=${kind}&start=${start}`, { scroll: false })
+                }
+                role="tab"
+                tabIndex={selectedMethod === start ? 0 : -1}
+                type="button"
+              >
+                {methodLabel(start)}
+              </button>
+            ))}
+          </div>
+          <div
+            role="tabpanel"
+            id="creation-workflow-panel"
+            aria-labelledby={`creation-start-${selectedMethod}`}
+          >
+            {selectedMethod === "starters" ? (
+              <section className={styles.panel} id="starters">
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className="eyebrow">{t("create.common.fastestStart")}</p>
+                    <h2>{t("create.round.starter.title")}</h2>
+                    <p>{t("create.round.starter.description")}</p>
                   </div>
-                </fieldset>
-                <label className="field">
-                  <span>{t("create.round.blank.titleLabel")}</span>
-                  <input
-                    className="input"
-                    maxLength={160}
-                    onChange={(event) => setTitle(event.target.value)}
-                    placeholder={t("create.round.blank.titlePlaceholder")}
-                    value={title}
-                  />
-                </label>
-                {error ? (
-                  <p className="error" lang="en-CA" role="alert">
-                    {error}
-                  </p>
-                ) : null}
-                <div>
-                  <button className="button" disabled={busy} type="submit">
-                    {busy ? t("create.round.blank.creating") : t("create.round.blank.submit")}
-                  </button>
+                  <Link href="/templates">{t("create.round.starter.allTemplates")}</Link>
                 </div>
-              </form>
-            </section>
-          ) : null}
+                <StarterGallery compact roundType={kind === "custom" ? "all" : (kind ?? "all")} />
+              </section>
+            ) : null}
+
+            {selectedMethod === "source" ? (
+              <section className={styles.panel} id="source">
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className="eyebrow">{t("create.round.source.eyebrow")}</p>
+                    <h2>{t("create.round.source.title")}</h2>
+                    <p>{t("create.round.source.description")}</p>
+                  </div>
+                </div>
+                <div>
+                  <AuthoringAssistant canEdit plain terminology="round" trackCreation />
+                </div>
+              </section>
+            ) : null}
+
+            {selectedMethod === "import" ? (
+              <section className={styles.panel} id="import">
+                <div>
+                  <CheckpointSetImport
+                    enabled={Boolean(entitlements?.csvExport)}
+                    onImported={async (quiz) => {
+                      router.push(`/quiz/${quiz.id}`);
+                    }}
+                    onUpgrade={() => router.push("/pricing")}
+                    plain
+                    terminology="round"
+                    trackCreation
+                  />
+                </div>
+              </section>
+            ) : null}
+
+            {selectedMethod === "blank" ? (
+              <section className={styles.panel} id="blank">
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className="eyebrow">{t("create.common.fullControl")}</p>
+                    <h2>{t("create.round.blank.title")}</h2>
+                    <p>{t("create.round.blank.description")}</p>
+                  </div>
+                </div>
+                <form className={styles.blankForm} onSubmit={createBlank}>
+                  <fieldset>
+                    <legend>{t("create.round.blank.firstResponse")}</legend>
+                    <div className={styles.typeGrid}>
+                      {availableTypes.map((option) => (
+                        <label className={styles.typeChoice} key={option.type}>
+                          <input
+                            checked={effectiveType === option.type}
+                            name="question-type"
+                            onChange={() => setQuestionType(option.type)}
+                            type="radio"
+                            value={option.type}
+                          />
+                          <span>
+                            <strong>{t(questionTypeKeys[option.type].label)}</strong>
+                            <small>{t(questionTypeKeys[option.type].description)}</small>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <label className="field">
+                    <span>{t("create.round.blank.titleLabel")}</span>
+                    <input
+                      className="input"
+                      maxLength={160}
+                      onChange={(event) => setTitle(event.target.value)}
+                      placeholder={t("create.round.blank.titlePlaceholder")}
+                      value={title}
+                    />
+                  </label>
+                  {error ? (
+                    <p className="error" lang="en-CA" role="alert">
+                      {error}
+                    </p>
+                  ) : null}
+                  <div>
+                    <button className="button" disabled={busy} type="submit">
+                      {busy ? t("create.round.blank.creating") : t("create.round.blank.submit")}
+                    </button>
+                  </div>
+                </form>
+              </section>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </>
@@ -407,6 +428,7 @@ function CreateContent() {
 export default function CreatePage() {
   const { t, locale } = useLocale();
   const copy = workspaceDiscoveryCopy(locale);
+  const goals = creationGoalMessages(locale);
   return (
     <WorkspaceProvider>
       <WorkspaceShell
@@ -415,9 +437,9 @@ export default function CreatePage() {
             {copy.backToHome}
           </Link>
         }
-        description={copy.launcherDescription}
+        description={goals.description}
         eyebrow={t("create.round.eyebrow")}
-        title={t("create.kind.title")}
+        title={goals.title}
         translationLevel="full"
       >
         <CreateContent />

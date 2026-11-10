@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { signInBeta } from "./sign-in";
+import { openLibraryFilters } from "./library-controls";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 type Folder = { id: string; name: string; parentId: string | null; position: number };
@@ -63,6 +64,7 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
       "aria-selected",
       "true",
     );
+    await openLibraryFilters(page);
     const manageLink = page.getByRole("link", { name: "Manage folders", exact: true });
     await expect(manageLink).toHaveAttribute("href", `/library/folders?type=${journey.type}`);
     await manageLink.click();

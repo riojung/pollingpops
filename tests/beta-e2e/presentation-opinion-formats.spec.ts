@@ -83,7 +83,7 @@ async function contextFor(browser: Browser, host: Page, info: TestInfo) {
 async function participant(page: Page, code: string, nickname: string) {
   await page.goto(`/join?code=${code}`);
   await page.getByLabel("Nickname", { exact: true }).fill(nickname);
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
 }
 

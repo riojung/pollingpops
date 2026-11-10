@@ -345,7 +345,7 @@ for (const suffix of ["", " @mobile"]) {
     try {
       await guest.goto(`/join?code=${lobby.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("Information audience");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       await expectInformation(guest.locator("[data-native-scene]"));

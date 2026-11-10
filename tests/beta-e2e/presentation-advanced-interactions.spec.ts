@@ -406,7 +406,7 @@ for (const suffix of ["", " @mobile"])
     try {
       await guest.goto(`/join?code=${f.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("E06 genuine browser response");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${f.sessionId}/play`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       for (const surface of [page, guest, f.companion, f.stage]) {

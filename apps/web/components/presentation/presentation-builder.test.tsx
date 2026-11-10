@@ -64,6 +64,35 @@ vi.mock("../workspace/workspace-provider", () => ({ useWorkspace: () => workspac
 import { PresentationBuilder } from "./presentation-builder";
 
 describe("Presentation Builder UI", () => {
+  it("renders Korean primary publication and slide commands without changing authored words", async () => {
+    const slide = createContentBlock();
+    slide.textElements[0]!.text = "AUTHOR original English";
+    editor.draft = {
+      schemaVersion: 5,
+      title: "AUTHOR deck title",
+      description: "",
+      experiencePreset: { id: "focus", version: 1 },
+      blocks: [slide],
+    };
+    editor.nullCursor = 0;
+    editor.tab = "content";
+    const domains = localeDomainsForPath("/presentation/presentation-1");
+    const messages = await loadMessages("ko-KR", domains);
+    const markup = renderToStaticMarkup(
+      <LocaleProvider initialLocale="ko-KR" initialDomains={domains} initialMessages={messages}>
+        <PresentationBuilder presentationId="presentation-1" />
+      </LocaleProvider>,
+    );
+    expect(markup).toContain("초안");
+    expect(markup).toContain("발표하기 전에 버전을 게시하세요");
+    expect(markup).toContain("추가 옵션");
+    expect(markup).toContain("새 슬라이드");
+    expect(markup).toContain("삽입 및 가져오기");
+    expect(markup).toContain("AUTHOR original English");
+    expect(markup).toContain("AUTHOR deck title");
+    expect(markup).not.toContain('title="Publish a version before presenting"');
+  });
+
   beforeEach(() => {
     editor.draft = null;
     editor.nullCursor = 0;

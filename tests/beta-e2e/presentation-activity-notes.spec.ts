@@ -670,7 +670,7 @@ for (const suffix of ["", " @mobile"]) {
       const guest = await guestContext!.newPage();
       await guest.goto(`/join?code=${lobby.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("Synthetic activity guest");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
 
       const stagePass = await page.request.post(

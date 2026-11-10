@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale } from "../../components/locale-provider";
 import { workspaceFlowMessages } from "../../lib/i18n/workspace-flow-messages";
+import { creationGoalMessages } from "../../lib/i18n/creation-goal-messages";
+import type { WorkspaceCreationGoal } from "../../components/workspace/workspace-creation-model";
 import { homeMilestones, type HomeSummary } from "./home-model";
 import styles from "./home.module.css";
 
@@ -11,13 +13,16 @@ export function HomeGuidance({
   summary,
   contextKey,
   guideAvailable,
+  creationGoals = [],
 }: {
   summary: HomeSummary;
   contextKey: string;
   guideAvailable: boolean;
+  creationGoals?: WorkspaceCreationGoal[];
 }) {
   const { locale, t } = useLocale();
   const copy = workspaceFlowMessages(locale);
+  const goals = creationGoalMessages(locale);
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const key = `pollingpops:home-guidance:v1:${contextKey}`;
   useEffect(() => {
@@ -53,6 +58,16 @@ export function HomeGuidance({
           ×
         </button>
       </div>
+      {!milestones.created && creationGoals.length ? (
+        <nav className={styles.goalActions} aria-label={goals.title}>
+          {creationGoals.map((goal) => (
+            <Link className={styles.goalAction} key={goal.kind} href={goal.href}>
+              {goal.kind === "round" ? t("common.round") : goals[goal.kind]}{" "}
+              <span aria-hidden="true">→</span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
       <ol className={styles.onboardingSteps}>
         {[
           { label: copy.create, done: milestones.created },

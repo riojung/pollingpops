@@ -130,7 +130,7 @@ for (const suffix of ["", " @mobile"]) {
       if (request.method() === "POST" && new URL(request.url()).pathname === "/v1/quizzes")
         writes.push(request.url());
     });
-    await page.getByRole("button", { name: /Quick poll/ }).click();
+    await page.getByRole("button", { name: /^Ask a quick poll/ }).click();
     await expect(page).toHaveURL(/\/quiz\/[^/?]+(?:\?insert=poll)?$/);
     const quizId = new URL(page.url()).pathname.split("/").pop();
     await expect

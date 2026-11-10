@@ -190,9 +190,14 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await expect(
     creator
       .locator(".metric")
-      .filter({ hasText: "initial accuracy" })
-      .getByText("100%", { exact: true }),
+      .filter({ has: creator.getByText("Initial accuracy", { exact: true }) })
+      .getByText("1/1", { exact: true }),
   ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    creator.getByText("Fewer than five assessed responses. Interpret the count with care.", {
+      exact: true,
+    }),
+  ).toBeVisible();
   const exportNotice = creator.getByRole("link", { name: "CSV was not included for this room" });
   await expect(exportNotice).toBeVisible();
   await expect(exportNotice).toHaveAttribute("href", "/pricing");
@@ -205,7 +210,15 @@ test("creator and participant complete a live round", async ({ browser }, testIn
     expect(response.status()).toBe(402);
     expect(await response.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
   }
-  await expect(creator.getByText(/current free plan defaults to 30 days/)).toBeVisible();
+  const retainedReport = await creator.request.get(`http://127.0.0.1:4100/v1/reports/${reportId}`);
+  expect(retainedReport.ok()).toBeTruthy();
+  const { report: retained } = await retainedReport.json();
+  const expiry = new Date(retained.expiresAt).toLocaleDateString("en-CA", { dateStyle: "medium" });
+  await expect(
+    creator.getByText(`Report retained until ${expiry}. Current plan default: 30 days.`, {
+      exact: true,
+    }),
+  ).toBeVisible();
   expect((await new AxeBuilder({ page: creator }).analyze()).violations).toEqual([]);
 
   await participantContext.close();

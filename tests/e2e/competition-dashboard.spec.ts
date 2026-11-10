@@ -689,9 +689,19 @@ test("ending before reveal shows no scored results and keeps the participant sco
       await expect(dashboard(audience).getByTestId("competition-celebration")).toHaveCount(0);
       await expect(dashboard(audience).getByTestId("competition-replay")).toHaveCount(0);
     }
-    await expect(participant.getByText("Your final score is 0.", { exact: true })).toBeVisible();
+    await expect(
+      participant.getByText("Thanks for taking part. Your accepted responses were recorded.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(participant.getByText(/^Your final score is /)).toHaveCount(0);
     await participant.reload();
-    await expect(participant.getByText("Your final score is 0.", { exact: true })).toBeVisible();
+    await expect(
+      participant.getByText("Thanks for taking part. Your accepted responses were recorded.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(participant.getByText(/^Your final score is /)).toHaveCount(0);
   } finally {
     await presenter.close();
     await context.close();

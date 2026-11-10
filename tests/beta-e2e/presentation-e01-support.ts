@@ -157,7 +157,16 @@ export async function openE01Navigator(page: Page) {
 
 export async function clickNavigatorAction(page: Page, name: string | RegExp) {
   const navigator = await openE01Navigator(page);
-  const action = navigator.getByRole("button", { name, exact: typeof name === "string" });
+  const actionName =
+    name === "Blank slide"
+      ? "Blank slide Empty canvas · matches this deck"
+      : name === "Content slide"
+        ? "Content slide Title and body · matches this deck"
+        : name;
+  const action = navigator.getByRole("button", {
+    name: actionName,
+    exact: typeof actionName === "string",
+  });
   if (!(await action.isVisible()))
     await navigator.locator('summary[aria-label="Insert & import"]').click();
   await action.click();

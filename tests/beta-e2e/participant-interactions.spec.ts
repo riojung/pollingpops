@@ -3,7 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { joinBetaRound } from "./round-join";
 import { signInBeta } from "./sign-in";
-import { openHostControls } from "./host-controls";
+import { clickHostCommand, closeHostControls, openHostControls } from "./host-controls";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
@@ -408,7 +408,8 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(
         guest.getByTestId("participant-task").getByText("Correct", { exact: true }),
       ).toBeVisible();
-      await host.getByRole("button", { name: "Show standings", exact: true }).click();
+      await clickHostCommand(host, "Show standings");
+      await closeHostControls(host.getByTestId("host-command-bar"));
       const dashboards = [host, presenter];
       const viewports =
         suffix === "desktop"
@@ -432,7 +433,9 @@ for (const suffix of ["desktop", "@mobile"]) {
             expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
             if (surface === host) {
               const commands = await host.getByTestId("host-command-bar").boundingBox();
-              expect(box!.y + box!.height).toBeLessThanOrEqual(commands!.y);
+              const commandsBeforeDashboard = commands!.y + commands!.height <= box!.y;
+              const commandsAfterDashboard = box!.y + box!.height <= commands!.y;
+              expect(commandsBeforeDashboard || commandsAfterDashboard).toBe(true);
               expect(commands!.y + commands!.height).toBeLessThanOrEqual(viewport.height);
             }
           }
@@ -487,7 +490,9 @@ for (const suffix of ["desktop", "@mobile"]) {
             expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
             if (surface === host) {
               const commands = await host.getByTestId("host-command-bar").boundingBox();
-              expect(box!.y + box!.height).toBeLessThanOrEqual(commands!.y);
+              const commandsBeforeDashboard = commands!.y + commands!.height <= box!.y;
+              const commandsAfterDashboard = box!.y + box!.height <= commands!.y;
+              expect(commandsBeforeDashboard || commandsAfterDashboard).toBe(true);
               expect(commands!.y + commands!.height).toBeLessThanOrEqual(viewport.height);
             }
             expect((await new AxeBuilder({ page: surface }).analyze()).violations).toEqual([]);
@@ -653,7 +658,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(answer).toBeDisabled();
       await host.getByRole("button", { name: "Lock answers", exact: true }).click();
       await host.getByRole("button", { name: "Reveal answer", exact: true }).click();
-      await host.getByRole("button", { name: "Show standings", exact: true }).click();
+      await clickHostCommand(host, "Show standings");
       await host.getByRole("button", { name: "Finish round", exact: true }).click();
       await expect(guest.getByText("Your final score is 1,000.", { exact: true })).toBeVisible();
       const receipt = guest.getByTestId("scored-response-receipt");

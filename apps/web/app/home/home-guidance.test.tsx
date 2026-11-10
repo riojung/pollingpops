@@ -16,6 +16,25 @@ const summary: HomeSummary = {
 };
 
 describe("Home guidance feature availability", () => {
+  it("offers granted goals before the first draft and removes them once work has begun", () => {
+    const creationGoals = [{ kind: "quiz" as const, href: "/create?type=quiz" }];
+    const render = (data: HomeSummary) =>
+      renderToStaticMarkup(
+        withEnglishLocale(
+          <HomeGuidance
+            summary={data}
+            contextKey="owner:workspace"
+            guideAvailable={false}
+            creationGoals={creationGoals}
+          />,
+        ),
+      );
+    expect(render(summary)).toContain("Check understanding");
+    expect(render(summary)).toContain('href="/create?type=quiz"');
+    expect(render({ ...summary, totals: { ...summary.totals, artifacts: 1 } })).not.toContain(
+      "Check understanding",
+    );
+  });
   it.each([true, false])(
     "links the professional quick-start guide only when available: %s",
     (guideAvailable) => {

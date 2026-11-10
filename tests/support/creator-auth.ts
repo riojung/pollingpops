@@ -27,6 +27,16 @@ export async function acceptCreatorPolicies(page: Page) {
   await expect(policyConsent).toBeChecked();
 }
 
+export async function openCreatorPreferences(page: Page) {
+  const form = page.getByRole("form", { name: "Create account", exact: true });
+  const preferences = form.locator("details").filter({ hasText: "Workspace preferences" });
+  await expect(preferences).toHaveCount(1);
+  if ((await preferences.getAttribute("open")) === null) {
+    await preferences.locator("summary").click();
+  }
+  await expect(preferences).toHaveAttribute("open", "");
+}
+
 export async function expectAnonymousCreator(page: Page, apiOrigin: string) {
   expect(
     (await page.context().cookies()).filter((cookie) => cookie.name === "openround_creator"),
@@ -81,10 +91,7 @@ export async function verifyCreatorEmail(
     name: segment === "education" ? "Education" : "Workplace learning",
     exact: true,
   });
-  const preferences = form.locator("details");
-  if ((await preferences.count()) && (await preferences.getAttribute("open")) === null) {
-    await preferences.locator("summary").click();
-  }
+  await openCreatorPreferences(page);
   await segmentChoice.click();
   await expect(segmentChoice).toHaveAttribute("aria-pressed", "true");
   await form.getByLabel("Email address").fill(email);

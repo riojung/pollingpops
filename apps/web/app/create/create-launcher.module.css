@@ -1,6 +1,72 @@
-.quickPoll {
+.goalCard {
   width: 100%;
   font: inherit;
   text-align: start;
   cursor: pointer;
+}
+
+.goalLauncher {
+  display: grid;
+  gap: 24px;
+}
+.goalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 16px;
+}
+.goalCard h2 {
+  margin-top: 0;
+}
+.cardTitle {
+  margin: 0 0 0.45rem;
+  color: var(--ui-text-strong);
+  font-size: 1.2rem;
+}
+.cardDescription {
+  color: var(--ui-text-subtle);
+  line-height: 1.5;
+}
+.moreFormats {
+  border-top: 1px solid var(--ui-border);
+  padding-top: 12px;
+}
+.moreFormats summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  color: var(--ui-text-subtle);
+  font-weight: 650;
+}
+.moreFormats[open] summary {
+  margin-bottom: 12px;
+}
+.draftNote {
+  color: var(--ui-text-subtle);
+  margin: 0;
+}
+.startTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px solid var(--ui-border);
+  padding-bottom: 12px;
+}
+.startTabs button {
+  min-height: 44px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 650;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  color: var(--ui-text-subtle);
+}
+.startTabs button[aria-selected="true"] {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  border-color: var(--ui-accent-ink);
+}
+.startTabs button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
 }

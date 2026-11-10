@@ -8,19 +8,32 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
-### Option B customer workflow refinement November 9, 2026
+### Option B customer workflow completion November 10, 2026
 
-The `codex/option-b-ux` source refines Home and Library, first-session guidance and mobile
+The merged `codex/option-b-ux` source refines Home and Library, first-session guidance and mobile
 navigation, private Quick poll creation, focused Round editing, publication-version choice,
 participant entry/completion, primary live commands, report interpretation/recovery and signup.
-The [Option B implementation record](option-b-ux-implementation.md) maps the ten concerns,
+The [Option B implementation record](option-b-ux-implementation.md) maps the concerns,
 records verification and preserves the launch-facing content explicitly deferred to release
 preparation. English remains the default and existing locale choices remain available.
 
-The final repository check passes 7,159 tests, all four production builds and compiled-server
-startup; 513 standard opt-in skips remain. Twelve selected local browser cases pass across
-desktop Chromium and phone Chromium/WebKit. Firefox could not launch its profile in this
-environment. Customer observation, manual accessibility, physical devices, hosted deployment
+The `codex/option-b-completion` follow-up adds goal-based entry on first-session Home and
+Create, one Round creation surface with keyboard starting-method tabs, exact published
+version/date details and translations for the primary creation/delivery/results journey.
+It also fixes the PIN card's narrow-screen intrinsic width and updates existing browser
+journeys for the new native disclosures. Specialist language review and customer/manual
+release qualification remain explicit in the implementation record.
+Primary activity-slide guidance, public display states and ranking receipts also follow
+the selected locale. Default opinion-poll reports now retain absent correctness instead
+of showing zero accuracy; empty assessments remain distinct from real assessed zero.
+
+The completion repository check passes 7,217 tests, all four production builds and
+compiled-server startup; 513 standard opt-in skips remain. Eighty-six distinct selected
+browser cases are verified, including 59 production beta cases across desktop Chromium
+and phone Chromium/WebKit. The final accessible-name follow-up also passes 92 focused
+tests, web type checking, scoped lint, a fresh production build and dialog/menu browser
+checks. The implementation record preserves the remaining Firefox profile limitation. Customer
+observation, manual accessibility, physical devices, the full hosted matrix/deployment
 and existing release gates remain open; this source work does not claim release acceptance.
 
 ### Presentation editing and interaction clarity November 9, 2026

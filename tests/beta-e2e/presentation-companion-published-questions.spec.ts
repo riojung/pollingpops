@@ -181,7 +181,7 @@ async function workflow(page: Page, browser: Browser, testInfo: TestInfo) {
     const guest = await guestContext.newPage();
     await guest.goto(`/join?code=${data.snapshot.code}`);
     await guest.getByLabel("Nickname", { exact: true }).fill("Synthetic guest");
-    await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
     const open = companion.getByRole("button", { name: "Add published question", exact: true });
     await expect(open).toBeEnabled();

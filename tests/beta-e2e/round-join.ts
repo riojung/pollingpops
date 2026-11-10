@@ -29,14 +29,14 @@ export async function joinBetaParticipant(
   return response;
 }
 
-export async function joinBetaRound(page: Page) {
+export async function joinBetaRound(page: Page, accessibleName = "Join Round") {
   const join = async () => {
     const response = page.waitForResponse(
       (candidate) =>
         candidate.request().method() === "POST" &&
         new URL(candidate.url()).pathname === "/v1/sessions/join",
     );
-    await page.getByRole("button", { name: "Join Round", exact: true }).click();
+    await page.getByRole("button", { name: accessibleName, exact: true }).click();
     return response;
   };
   let response = await join();

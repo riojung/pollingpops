@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, type CSSProperties, type ReactNode } from "react";
-import type { PresentationSceneDesign, QuestionType } from "@openround/contracts";
+import type { PresentationSceneDesign, QuestionType, SupportedLocale } from "@openround/contracts";
 import { copyPresentationSceneDesign } from "../../lib/presentation-activity-design";
 import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
 import { TextResponseControl } from "../text-response-control";
+import { useLocale } from "../locale-provider";
+import {
+  presentationActivityCopy,
+  type PresentationActivityCopy,
+} from "./presentation-activity-copy";
 import { useNativeTextOverflow } from "./use-native-text-overflow";
 import styles from "./presentation-activity-slide.module.css";
 
@@ -42,18 +47,6 @@ export interface PresentationActivitySlideProps {
   staticThumbnail?: boolean;
 }
 
-const activityNames: Record<QuestionType, string> = {
-  single_select: "Multiple choice",
-  true_false: "True or false",
-  multi_select: "Multiple answers",
-  poll: "Poll",
-  numeric: "Number response",
-  rating: "Rating",
-  ranking: "Ranking",
-  open_text: "Open response",
-  word_cloud: "Word cloud",
-};
-
 function isChoiceActivity(type: QuestionType) {
   return (
     type === "single_select" ||
@@ -64,25 +57,30 @@ function isChoiceActivity(type: QuestionType) {
   );
 }
 
-function instructions(question: PresentationActivityQuestion) {
+function instructions(
+  question: PresentationActivityQuestion,
+  copy: PresentationActivityCopy,
+  formatNumber: (value: number) => string,
+) {
   if (question.type === "ranking")
     return question.rankCount
-      ? `Rank your top ${question.rankCount} choices`
-      : "Put the choices in your preferred order";
-  if (question.type === "multi_select") return "Choose all answers that apply";
+      ? copy.rankTop.replace("{count}", formatNumber(question.rankCount))
+      : copy.rankOrder;
+  if (question.type === "multi_select") return copy.chooseAll;
   if (question.type === "poll" && (question.maxSelections ?? 1) > 1)
-    return `Choose up to ${question.maxSelections} answers`;
-  if (isChoiceActivity(question.type)) return "Choose one answer";
-  if (question.type === "numeric") return "Enter a number on your device";
-  if (question.type === "rating") return "Choose a rating on your device";
-  if (question.type === "word_cloud") return "Share a word or short phrase on your device";
-  return "Share your response on your device";
+    return copy.chooseUpTo.replace("{count}", formatNumber(question.maxSelections!));
+  if (isChoiceActivity(question.type)) return copy.chooseOne;
+  if (question.type === "numeric") return copy.numberDevice;
+  if (question.type === "rating") return copy.ratingDevice;
+  if (question.type === "word_cloud") return copy.phraseDevice;
+  return copy.responseDevice;
 }
 
 function EditableText({
   value,
   label,
   placeholder,
+  locale,
   prompt = false,
   onChange,
   onFocus,
@@ -90,6 +88,7 @@ function EditableText({
   value: string;
   label: string;
   placeholder: string;
+  locale: SupportedLocale;
   prompt?: boolean;
   onChange: (value: string) => void;
   onFocus?: () => void;
@@ -103,7 +102,7 @@ function EditableText({
         aria-label={label}
         aria-invalid={!value.trim()}
         className={styles.editableText}
-        lang={value.trim() ? "" : "en-CA"}
+        lang={value.trim() ? "" : locale}
         maxLength={prompt ? 500 : 180}
         onChange={(event) => onChange(event.target.value)}
         onFocus={onFocus}
@@ -128,6 +127,10 @@ export function PresentationActivitySlide({
   revealedChoiceIds,
   staticThumbnail = false,
 }: PresentationActivitySlideProps) {
+  const { locale } = useLocale();
+  const copy = presentationActivityCopy(locale);
+  const numberFormatter = new Intl.NumberFormat(locale);
+  const formatNumber = (value: number) => numberFormatter.format(value);
   const design = copyPresentationSceneDesign(suppliedDesign);
   const palette = NATIVE_DESIGN_THEMES[design.theme];
   const [readingView, setReadingView] = useState(false);
@@ -139,6 +142,7 @@ export function PresentationActivitySlide({
     maxLabel: question.maxLabel ?? "",
   };
   const contentKey = JSON.stringify([
+    locale,
     question.type,
     question.prompt,
     question.timeLimitSeconds,
@@ -181,40 +185,43 @@ export function PresentationActivitySlide({
       data-static-thumbnail={staticThumbnail ? "true" : undefined}
       aria-hidden={staticThumbnail ? true : undefined}
       inert={staticThumbnail ? true : undefined}
-      aria-label={staticThumbnail ? undefined : "Audience activity slide"}
+      aria-label={staticThumbnail ? undefined : copy.slideName}
       style={style}
-      lang="en-CA"
+      lang={locale}
     >
       <div className={styles.stage}>
         <article
           {...(staticThumbnail ? {} : overflow)}
           className={styles.surface}
-          aria-label={staticThumbnail ? undefined : "Activity content"}
+          aria-label={staticThumbnail ? undefined : copy.contentName}
         >
           <header className={styles.meta}>
-            <span>Audience activity · {activityNames[question.type]}</span>
-            <span>{question.timeLimitSeconds} seconds</span>
+            <span>
+              {copy.audienceActivity} · {copy[question.type]}
+            </span>
+            <span>{copy.seconds.replace("{count}", formatNumber(question.timeLimitSeconds))}</span>
           </header>
           <div className={styles.prompt}>
             {canEdit && onPromptChange ? (
               <EditableText
                 value={question.prompt}
-                label="Question prompt"
-                placeholder="What do you want the room to think about?"
+                label={copy.questionPrompt}
+                placeholder={copy.promptPlaceholder}
+                locale={locale}
                 prompt
                 onChange={onPromptChange}
               />
             ) : (
-              <h1 lang={question.prompt.trim() ? "" : "en-CA"}>
-                {question.prompt || "Untitled question"}
+              <h1 lang={question.prompt.trim() ? "" : locale}>
+                {question.prompt || copy.untitledQuestion}
               </h1>
             )}
           </div>
-          <p className={styles.instructions}>{instructions(question)}</p>
+          <p className={styles.instructions}>{instructions(question, copy, formatNumber)}</p>
           <div className={styles.responseLayout} data-activity-media={media ? "true" : undefined}>
             {media ? <div className={styles.media}>{media}</div> : null}
             {isChoiceActivity(question.type) ? (
-              <div className={styles.choices} role="list" aria-label="Answer choices">
+              <div className={styles.choices} role="list" aria-label={copy.answerChoices}>
                 {choices.map((choice, index) => {
                   const letter = String.fromCharCode(65 + index);
                   const revealed =
@@ -234,20 +241,19 @@ export function PresentationActivitySlide({
                         {canEdit && onChoiceChange && question.type !== "true_false" ? (
                           <EditableText
                             value={choice.label}
-                            label={`Slide answer ${letter}`}
-                            placeholder={`Answer ${letter}`}
+                            label={copy.slideAnswer.replace("{letter}", letter)}
+                            placeholder={copy.answer.replace("{letter}", letter)}
+                            locale={locale}
                             onChange={(text) => onChoiceChange(choice.id, text)}
                             onFocus={() => onSelectChoice?.(choice.id)}
                           />
                         ) : (
-                          <span lang={choice.label.trim() ? "" : "en-CA"}>
-                            {choice.label || `Answer ${letter}`}
+                          <span lang={choice.label.trim() ? "" : locale}>
+                            {choice.label || copy.answer.replace("{letter}", letter)}
                           </span>
                         )}
                         {revealed ? (
-                          <span className={styles.correctAnswer} lang="en-CA">
-                            Correct answer
-                          </span>
+                          <span className={styles.correctAnswer}>{copy.correctAnswer}</span>
                         ) : null}
                       </div>
                     </div>
@@ -256,31 +262,38 @@ export function PresentationActivitySlide({
               </div>
             ) : question.type === "numeric" ? (
               <div className={styles.responseExample}>
-                <span className={styles.numberExample}>123</span>
-                <span>Participants enter a number{question.unit ? ` (${question.unit})` : ""}</span>
+                <span className={styles.numberExample}>{formatNumber(123)}</span>
+                <span>
+                  {copy.participantsNumber.replace(
+                    "{unit}",
+                    question.unit ? ` (${question.unit})` : "",
+                  )}
+                </span>
               </div>
             ) : question.type === "rating" ? (
               <div className={styles.rating}>
                 <div
                   className={styles.ratingScale}
-                  aria-label={`Rating scale from ${rating.min} to ${rating.max}`}
+                  aria-label={copy.ratingScale
+                    .replace("{min}", formatNumber(rating.min))
+                    .replace("{max}", formatNumber(rating.max))}
                 >
                   {Array.from(
                     { length: Math.max(0, Math.min(10, rating.max - rating.min + 1)) },
                     (_, index) => (
-                      <span key={index}>{rating.min + index}</span>
+                      <span key={index}>{formatNumber(rating.min + index)}</span>
                     ),
                   )}
                 </div>
                 <div className={styles.ratingLabels}>
-                  <span lang={rating.minLabel ? "" : "en-CA"}>{rating.minLabel || "Low"}</span>
-                  <span lang={rating.maxLabel ? "" : "en-CA"}>{rating.maxLabel || "High"}</span>
+                  <span lang={rating.minLabel ? "" : locale}>{rating.minLabel || copy.low}</span>
+                  <span lang={rating.maxLabel ? "" : locale}>{rating.maxLabel || copy.high}</span>
                 </div>
               </div>
             ) : question.type === "open_text" || question.type === "word_cloud" ? (
               staticThumbnail ? (
                 <div className={styles.responseExample}>
-                  {question.type === "word_cloud" ? "A word or short phrase" : "A written response"}
+                  {question.type === "word_cloud" ? copy.phrase : copy.written}
                 </div>
               ) : (
                 <div className={styles.textResponse}>
@@ -293,16 +306,13 @@ export function PresentationActivitySlide({
       </div>
       {!staticThumbnail && needsRoom ? (
         <div className={styles.fitGuidance}>
-          <span>
-            This activity may need more room. Shorten the text or use Reading view to see it in
-            full.
-          </span>
+          <span>{copy.fitGuidance}</span>
           <button
             type="button"
             aria-pressed={readingView}
             onClick={() => setReadingView((current) => !current)}
           >
-            {readingView ? "Slide view" : "Reading view"}
+            {readingView ? copy.slideView : copy.readingView}
           </button>
         </div>
       ) : null}

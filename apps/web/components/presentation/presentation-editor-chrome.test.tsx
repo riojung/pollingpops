@@ -8,6 +8,7 @@ import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { ContentSlideView } from "./content-slide-view";
 import {
   EditorDisclosure,
+  handoffEditorDisclosure,
   EditorIcon,
   EditorMenuItem,
   EditorMenuSection,
@@ -306,6 +307,23 @@ describe("editor menu primitives", () => {
 });
 
 describe("editor disclosure lifecycle", () => {
+  it("hands an external dialog a visible summary opener without retaining the covering popover", () => {
+    const summary = { focus: vi.fn() };
+    const popup = { hasAttribute: () => true, hidePopover: vi.fn() };
+    const menu = {
+      open: true,
+      querySelector: (selector: string) => (selector === "summary" ? summary : popup),
+    };
+    const source = { closest: () => menu } as unknown as HTMLElement;
+    handoffEditorDisclosure(source);
+    expect(menu.open).toBe(false);
+    expect(popup.hidePopover).toHaveBeenCalledOnce();
+    expect(summary.focus).toHaveBeenCalledWith({ preventScroll: true });
+    handoffEditorDisclosure(source);
+    expect(summary.focus).toHaveBeenCalledOnce();
+    handoffEditorDisclosure();
+  });
+
   it("focuses a pointer-activated action before its dialog records the opener", () => {
     let focused: unknown = null;
     const recordOpener = vi.fn();

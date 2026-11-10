@@ -150,7 +150,7 @@ async function audience(browser: Browser, host: Page, code: string, info: TestIn
   );
   await page.goto(`/join?code=${code}`);
   await page.getByLabel("Nickname", { exact: true }).fill("E07 real browser response");
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
   return { page, context, frames };
 }

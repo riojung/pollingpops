@@ -160,6 +160,15 @@ function hideEditorPopup(popup: HTMLDivElement | null) {
   if (popup?.hasAttribute("popover")) popup.hidePopover?.();
 }
 
+/** External dialogs return focus to a visible summary, without reopening an obstructing menu. */
+export function handoffEditorDisclosure(source?: HTMLElement) {
+  const menu = source?.closest("details");
+  if (!menu?.open) return;
+  menu.open = false;
+  hideEditorPopup(menu.querySelector<HTMLDivElement>(":scope > [popover]"));
+  menu.querySelector("summary")?.focus({ preventScroll: true });
+}
+
 /** Children stay in their native details ancestry and remain mounted between openings. */
 export function EditorDisclosure({
   label,

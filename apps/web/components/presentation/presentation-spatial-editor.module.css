@@ -40,8 +40,78 @@
   margin: 0;
   max-width: 70ch;
 }
-.header button {
+.header > button {
   flex-shrink: 0;
+}
+.header > button,
+.toolbar > button,
+.intro > button,
+.controls > button,
+.list > li > button {
+  appearance: none;
+  min-width: 40px;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 10px;
+  background: var(--ui-surface-raised);
+  color: var(--ui-text-strong);
+  box-shadow: var(--ui-shadow-sm);
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.header > button:hover:not(:disabled),
+.toolbar > button:hover:not(:disabled),
+.intro > button:hover:not(:disabled),
+.controls > button:hover:not(:disabled),
+.list > li > button:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+  border-color: var(--ui-focus);
+}
+.intro > button {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+.intro > button:hover:not(:disabled) {
+  border-color: var(--ui-accent-hover);
+  background: var(--ui-accent-hover);
+}
+.controls > .move {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+.header > button:focus-visible,
+.toolbar > button:focus-visible,
+.intro > button:focus-visible,
+.controls > button:focus-visible,
+.list > li > button:focus-visible,
+.controls > label > input:focus-visible,
+.controls > label > select:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.header > button:disabled,
+.toolbar > button:disabled,
+.intro > button:disabled,
+.controls > button:disabled,
+.list > li > button:disabled,
+.controls > label > input:disabled,
+.controls > label > select:disabled {
+  border-color: var(--ui-border);
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 .intro {
   padding: 24px;
@@ -149,15 +219,31 @@
 .controls > * {
   flex-shrink: 0;
 }
-.controls label {
+.controls > label {
   display: grid;
   gap: 5px;
   font-weight: 600;
 }
-.controls input,
-.controls select {
+.controls > label > input,
+.controls > label > select {
   width: 100%;
+  min-width: 0;
   min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text-strong);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+.controls > label > input:focus-visible,
+.controls > label > select:focus-visible {
+  border-color: var(--ui-focus);
 }
 .controls p {
   margin: 0;
@@ -186,13 +272,15 @@
 .list li {
   max-width: 300px;
 }
-.list button {
+.list > li > button {
   text-align: left;
   overflow-wrap: anywhere;
 }
-.list [aria-current] {
+.list > li > button[aria-current] {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
   font-weight: 700;
-  text-decoration: underline;
 }
 @media (max-width: 700px) {
   .backdrop {
@@ -212,7 +300,7 @@
   .header p {
     font-size: 0.85rem;
   }
-  .header button {
+  .header > button {
     max-width: 110px;
   }
   .workspace {
@@ -241,6 +329,13 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .header > button,
+  .toolbar > button,
+  .intro > button,
+  .controls > button,
+  .list > li > button,
+  .controls > label > input,
+  .controls > label > select,
   .world {
     transition: none;
   }

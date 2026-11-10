@@ -1,6 +1,8 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 import { type PresentationScene } from "@openround/contracts";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
 

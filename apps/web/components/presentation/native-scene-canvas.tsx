@@ -31,6 +31,7 @@ type Gesture = {
 /** Pointer previews are local; only a completed gesture enters draft history and autosave. */
 export function NativeSceneCanvas({
   scene,
+  canEdit = true,
   renderImage,
   selectedNodeIds,
   onSelect,
@@ -39,6 +40,7 @@ export function NativeSceneCanvas({
   onEditInteraction,
 }: {
   scene: PresentationScene;
+  canEdit?: boolean;
   renderImage: SceneImageRenderer;
   selectedNodeIds: readonly string[];
   onSelect: (id: string, additive?: boolean) => void;
@@ -46,6 +48,8 @@ export function NativeSceneCanvas({
   navigationTargets?: readonly { id: string; title: string }[];
   onEditInteraction?: (id: string) => void;
 }) {
+  const permission = useRef(canEdit);
+  permission.current = canEdit;
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const [interactionMapOpen, setInteractionMapOpen] = useState(false);
@@ -54,7 +58,7 @@ export function NativeSceneCanvas({
     scene: PresentationScene;
     guides: NativeSnapGuide[];
   } | null>(null);
-  const displayedScene = preview?.base === scene ? preview.scene : scene;
+  const displayedScene = canEdit && preview?.base === scene ? preview.scene : scene;
 
   function release(active: Gesture) {
     if (root.current?.hasPointerCapture(active.pointerId)) {
@@ -70,14 +74,14 @@ export function NativeSceneCanvas({
   useEffect(() => {
     // Undo, another edit, recovered drafts and remote updates invalidate the snapshot.
     const active = gesture.current;
-    if (active && active.base !== scene) {
+    if (active && (!canEdit || active.base !== scene)) {
       gesture.current = null;
       setPreview(null);
       if (root.current?.hasPointerCapture(active.pointerId)) {
         root.current.releasePointerCapture(active.pointerId);
       }
     }
-  }, [scene]);
+  }, [canEdit, scene]);
   useEffect(
     () => () => {
       const active = gesture.current;
@@ -98,6 +102,7 @@ export function NativeSceneCanvas({
     }
     const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
     if (!selectedNodeIds.includes(id)) onSelect(id);
+    if (!permission.current) return;
     // The narrow layout is a semantic list, not a scaled coordinate plane. Touch can scroll
     // content normally; only explicit handles opt into a touch gesture on the wide stage.
     if (
@@ -130,7 +135,13 @@ export function NativeSceneCanvas({
   }
   function move(event: PointerEvent<HTMLDivElement>) {
     const active = gesture.current;
-    if (!active || event.pointerId !== active.pointerId || active.base !== scene) return;
+    if (
+      !permission.current ||
+      !active ||
+      event.pointerId !== active.pointerId ||
+      active.base !== scene
+    )
+      return;
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
     if (Math.hypot(dx, dy) < 2 && active.preview === active.base) return;
@@ -165,6 +176,10 @@ export function NativeSceneCanvas({
   function finish(event: PointerEvent<HTMLDivElement>) {
     const active = gesture.current;
     if (!active || event.pointerId !== active.pointerId) return;
+    if (!permission.current) {
+      cancel();
+      return;
+    }
     // Include the release position even when the browser coalesces the final move event.
     move(event);
     gesture.current = null;
@@ -174,6 +189,7 @@ export function NativeSceneCanvas({
   }
   function geometryKey(id: string, dx: number, dy: number, resize: boolean) {
     cancel();
+    if (!permission.current) return;
     const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
     if (!selectedNodeIds.includes(id)) onSelect(id);
     const next = resize
@@ -204,6 +220,7 @@ export function NativeSceneCanvas({
       }}
     >
       <NativeSceneSelectionControls
+        disabled={!canEdit}
         scene={scene}
         selectedNodeIds={selectedNodeIds}
         onSelect={(id) => {
@@ -253,7 +270,7 @@ export function NativeSceneCanvas({
             ) : undefined
           }
         />
-        {preview?.base === scene && preview.guides.length ? (
+        {canEdit && preview?.base === scene && preview.guides.length ? (
           <svg
             className={styles.snapGuides}
             viewBox="0 0 1600 900"
@@ -273,7 +290,7 @@ export function NativeSceneCanvas({
           </svg>
         ) : null}
       </div>
-      <NativeSceneFitFeedback root={root} scene={preview?.base === scene ? preview.scene : scene} />
+      <NativeSceneFitFeedback root={root} scene={displayedScene} />
     </div>
   );
 }

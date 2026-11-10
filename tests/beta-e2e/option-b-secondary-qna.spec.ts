@@ -46,11 +46,10 @@ for (const suffix of ["desktop", "@mobile"]) {
       await page.goto(`/presentation-session/${room.id}/host`);
       await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
       const opened = page.waitForEvent("popup");
-      // The Companion toolbar is outside this Q&A localization slice.
-      await page.getByRole("button", { name: "Launch companion", exact: true }).click();
+      await page.getByRole("button", { name: "Companion 실행", exact: true }).click();
       companion = await opened;
       await expect(
-        companion.getByRole("heading", { name: "Presentation Companion", exact: true }),
+        companion.getByRole("heading", { name: "프레젠테이션 Companion", exact: true }),
       ).toBeVisible();
       const { viewport, isMobile, hasTouch, userAgent, deviceScaleFactor } = info.project.use;
       guestContext = await browser.newContext({

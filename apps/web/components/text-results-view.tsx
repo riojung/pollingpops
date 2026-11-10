@@ -6,14 +6,17 @@ export function TextResultsView({
   respondents,
   items = [],
   terms = [],
+  compact = false,
 }: {
   type: TextQuestionType;
   respondents: number;
   items?: Array<{ answerId: string; body: string }>;
   terms?: Array<{ value: string; label: string; count: number }>;
+  compact?: boolean;
 }) {
   const { locale, t } = useLocale();
   const largest = Math.max(1, ...terms.map((term) => term.count));
+  const cloudFont = compact ? { minimum: 16, range: 8 } : { minimum: 18, range: 22 };
   return (
     <div lang={locale}>
       <p>{t("live.text.approvedRespondents", { count: respondents })}</p>
@@ -32,7 +35,9 @@ export function TextResultsView({
               <span
                 key={term.value}
                 lang=""
-                style={{ fontSize: `${18 + 22 * Math.sqrt(term.count / largest)}px` }}
+                style={{
+                  fontSize: `${cloudFont.minimum + cloudFont.range * Math.sqrt(term.count / largest)}px`,
+                }}
               >
                 {term.label}
               </span>

@@ -110,6 +110,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
   const original = fixture();
   let scene = original;
   let tree: ReactElement<Record<string, any>>;
+  let canEdit = true;
   function render(next = scene, flush = true) {
     scene = next;
     hooks.cursor = 0;
@@ -117,6 +118,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     try {
       tree = NativeSceneCanvas({
         scene,
+        canEdit,
         renderImage: () => null,
         selectedNodeIds,
         onSelect,
@@ -148,6 +150,10 @@ function harness(selectedNodeIds = ["body", "shape"]) {
   const view = () => elements(tree).find((child) => child.type === NativeSceneView)!;
   return {
     original,
+    setCanEdit: (value: boolean) => {
+      canEdit = value;
+    },
+    tree: () => tree,
     onChange,
     onSelect,
     onEditInteraction,
@@ -382,5 +388,40 @@ describe("native pointer gesture lifecycle", () => {
     expect(editor.onSelect).not.toHaveBeenCalled();
     expect(frame(editor.onChange.mock.calls[0]![0])).toMatchObject({ x: 11 });
     expect(frame(editor.onChange.mock.calls[0]![0], "shape")).toMatchObject({ x: 61 });
+  });
+});
+
+describe("native canvas permission boundaries", () => {
+  it("discards an in-flight preview on permission loss and fences captured geometry handlers before effects", () => {
+    const current = harness();
+    const ownerStart = current.view().props.onNodePointerDown;
+    const ownerKey = current.controls().props.onGeometryKey;
+    const ownerFinish = current.tree().props.onPointerUp;
+    current.start();
+    current.move();
+    current.render();
+    expect(current.view().props.scene).not.toBe(current.original);
+    current.setCanEdit(false);
+    current.render(current.original, false);
+    expect(current.view().props.scene).toBe(current.original);
+    expect(current.controls().props.disabled).toBe(true);
+    ownerFinish(current.event({ clientX: 240 }));
+    ownerKey("body", 5, 0, false);
+    ownerStart(current.event(), "body", false, true);
+    expect(current.onChange).not.toHaveBeenCalled();
+    expect(current.root.releasePointerCapture).toHaveBeenCalledWith(7);
+    current.controls().props.onSelect("shape");
+    expect(current.onSelect).toHaveBeenCalledWith("shape");
+    current.interactionMap().props.onExpandedChange(true);
+    current.render();
+    expect(current.interactionMap().props.expanded).toBe(true);
+    current.interactionMap().props.onEdit("shape");
+    expect(current.onEditInteraction).toHaveBeenCalledWith("shape");
+    expect(current.onChange).not.toHaveBeenCalled();
+    current.setCanEdit(true);
+    current.render();
+    current.controls().props.onGeometryKey("body", 1, 0, false);
+    expect(current.onChange).toHaveBeenCalledOnce();
+    expect(frame(current.onChange.mock.calls[0]![0]).x).toBe(11);
   });
 });

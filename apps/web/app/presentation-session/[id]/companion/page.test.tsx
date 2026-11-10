@@ -1,14 +1,15 @@
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PresentationCompanionSnapshotSchema,
   type PresentationCompanionSnapshot,
+  type SupportedLocale,
 } from "@openround/contracts";
 import { ApiClientError } from "../../../../lib/api";
 import type * as ApiModule from "../../../../lib/api";
 import { translate, type MessageKey } from "../../../../lib/i18n/catalog";
-import { liveDeliveryEnglishMessages } from "../../../../lib/i18n/domains/live-delivery";
 import type { PresentationRealtimeControllerOptions } from "../../../../lib/presentation-realtime";
 import { CompanionOverlay } from "../../../../components/presentation-live/companion-overlay";
 import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
@@ -39,6 +40,7 @@ const fixtures = vi.hoisted(() => ({
   execute: vi.fn(),
   apiFetch: vi.fn(),
   reconcile: vi.fn(),
+  locale: "en-CA" as SupportedLocale,
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -83,13 +85,25 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "11111111-1111-4111-8111-111111111111" }),
 }));
-vi.mock("../../../../components/locale-provider", () => ({
-  useLocale: () => ({
-    locale: "en-CA",
-    t: (key: MessageKey, values?: Record<string, string | number>) =>
-      translate(liveDeliveryEnglishMessages, key, values),
-  }),
-}));
+vi.mock("../../../../components/locale-provider", async () => {
+  const { loadMessages } = await import("../../../../lib/i18n/catalog");
+  const { supportedLocales } = await import("@openround/contracts");
+  const messages = Object.fromEntries(
+    await Promise.all(
+      supportedLocales.map(async (locale) => [
+        locale,
+        await loadMessages(locale, ["live-delivery"]),
+      ]),
+    ),
+  );
+  return {
+    useLocale: () => ({
+      locale: fixtures.locale,
+      t: (key: MessageKey, values?: Record<string, string | number>) =>
+        translate(messages[fixtures.locale]!, key, values),
+    }),
+  };
+});
 vi.mock("../../../../lib/presentation-companion-pass", () => ({
   capturePresentationCompanionPass: () => "companion-pass",
   rejectPresentationCompanionPass: vi.fn(),
@@ -154,6 +168,7 @@ function initialSnapshot() {
 }
 
 beforeEach(() => {
+  fixtures.locale = "en-CA";
   fixtures.hooks = null;
   fixtures.snapshot = initialSnapshot();
   fixtures.controllerOptions = null;
@@ -263,6 +278,71 @@ const authoredDraft = {
   timeLimitSeconds: "120",
 };
 const quickCheck = { ...authoredDraft, timeLimitSeconds: 120 };
+
+describe("Companion selected-language shell and recovery", () => {
+  it("localizes connection and pass rejection while removing the rejected projection", () => {
+    fixtures.locale = "ko-KR";
+    fixtures.snapshot = null;
+    const harness = pageHarness();
+    const connecting = renderToStaticMarkup(harness.render());
+    expect(connecting).toContain("프레젠테이션에 연결 중…");
+    fixtures.controllerOptions?.onCredentialRejected?.("companion-pass");
+    const rejected = renderToStaticMarkup(harness.render());
+    expect(rejected).toContain("이 Companion 패스가 만료되었거나 취소되었습니다.");
+    expect(rejected).toContain("연결 끊김");
+    expect(rejected).not.toContain("A facilitated discussion");
+    expect(rejected).not.toContain("companion-pass");
+  });
+
+  it("renders Korean shell and join overlay while leaving the room title and URL untouched", () => {
+    fixtures.locale = "ko-KR";
+    const harness = pageHarness();
+    const initial = renderToStaticMarkup(harness.render());
+    expect(initial).toContain("프레젠테이션 Companion");
+    expect(initial).toContain("참여 정보 표시");
+    expect(initial).not.toContain("서버 확인 대기 중");
+    expect(initial).toContain("A facilitated discussion");
+    expect(initial).not.toContain("companion-pass");
+    click(harness.render(), "참여 정보 표시");
+    const overlay = propsFor(harness.render(), CompanionOverlay);
+    expect(overlay.title).toBe("이 프레젠테이션에 참여");
+    const markup = renderToStaticMarkup(harness.render());
+    expect(markup).toContain("프레젠테이션으로 돌아가기");
+    expect(markup).toContain("https://discussion.example.test/join?code=1234567");
+    expect(markup).not.toContain("Return to deck");
+  });
+
+  it("changes a pending Quick Check to Korean without changing its authored draft or retained command", async () => {
+    fixtures.execute
+      .mockRejectedValueOnce(
+        new Error("The server did not confirm that action. Retry its acknowledgement."),
+      )
+      .mockResolvedValueOnce(initialSnapshot());
+    const harness = pageHarness();
+    harness.open();
+    propsFor(harness.render(), CompanionQuickCheckForm).onChange(authoredDraft);
+    propsFor(harness.render(), CompanionQuickCheckForm).onInsert(quickCheck);
+    await settle();
+    const original = fixtures.execute.mock.calls[0]![0];
+    fixtures.locale = "ko-KR";
+    const localized = renderToStaticMarkup(harness.render());
+    expect(localized).toContain("Quick Check 확인 응답 재시도");
+    expect(localized).toContain("서버가 작업을 확인하지 않았습니다. 확인 응답을 재시도하세요.");
+    expect(localized).toContain(authoredDraft.prompt);
+    expect(localized).toContain('lang=""');
+    expect(propsFor(harness.render(), CompanionQuickCheckForm).draft).toEqual(authoredDraft);
+    expect(fixtures.execute).toHaveBeenCalledTimes(1);
+    click(harness.render(), "Quick Check 확인 응답 재시도");
+    await settle();
+    expect(fixtures.execute).toHaveBeenCalledTimes(2);
+    expect(fixtures.execute.mock.calls[1]![0]).toBe(original);
+    expect(original).toMatchObject({
+      action: "insert_quick_check",
+      expectedRevision: 2,
+      quickCheck,
+    });
+  });
+});
 
 describe("Companion navigation commands", () => {
   const targetBlockId = "66666666-6666-4666-8666-666666666666";

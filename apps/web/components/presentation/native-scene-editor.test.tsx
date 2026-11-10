@@ -14,7 +14,7 @@ import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
 import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
-import type { PresentationScene } from "@openround/contracts";
+import type { PresentationScene, PresentationSceneDesign } from "@openround/contracts";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import {
   NativeSceneDesignControls,
@@ -26,6 +26,13 @@ vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
+    useRef: <T,>(initial: T) => {
+      const hooks = mocked.hooks;
+      if (!hooks) return react.useRef(initial);
+      const index = hooks.cursor++;
+      if (!(index in hooks.slots)) hooks.slots[index] = { current: initial };
+      return hooks.slots[index];
+    },
     useState: <T,>(initial: T) => {
       const hooks = mocked.hooks;
       if (!hooks) return react.useState(initial);
@@ -65,8 +72,10 @@ function controlText(node: ReactNode): string {
 
 function editorHarness(
   history: {
+    canEdit?: boolean;
     onUndo?: () => void;
     onRedo?: () => void;
+    onApplyDesignToDeck?: (design: PresentationSceneDesign) => void;
     onTextAssistance?: (nodeId: string, operation: "rewrite" | "shorten" | "translate") => void;
     textAssistanceDisabled?: boolean;
     layoutSuggestionsDisabled?: boolean;
@@ -93,7 +102,11 @@ function editorHarness(
     onChange,
     root: () => tree,
     all: () => elements(tree),
-    render(mediaState: "idle" | "uploading" | "scanning", attachmentPending = false) {
+    render(
+      mediaState: "idle" | "uploading" | "scanning",
+      attachmentPending = false,
+      canEdit = history.canEdit ?? true,
+    ) {
       hooks.cursor = 0;
       mocked.hooks = hooks;
       try {
@@ -106,6 +119,7 @@ function editorHarness(
           attachmentPending,
           onUploadImage: vi.fn(),
           ...history,
+          canEdit,
         });
       } finally {
         mocked.hooks = null;
@@ -941,5 +955,67 @@ describe("selected native text assistance", () => {
     selectLanguage("");
     const cleared = editor.onChange.mock.calls[1]![0];
     expect(cleared).toEqual({ ...original, schemaVersion: 7 });
+  });
+});
+
+describe("native editor permission boundaries", () => {
+  it("disables portal mutations while preserving object inspection and fences captured owner callbacks", () => {
+    const undo = vi.fn(),
+      redo = vi.fn(),
+      deck = vi.fn(),
+      assistance = vi.fn();
+    const editor = editorHarness({
+      onUndo: undo,
+      onRedo: redo,
+      onApplyDesignToDeck: deck,
+      onTextAssistance: assistance,
+    } as Parameters<typeof editorHarness>[0]);
+    editor.render("idle");
+    const canvas = editor.find((element) => element.type === NativeSceneCanvas);
+    const design = editor.find((element) => element.type === NativeSceneDesignControls);
+    const capturedChange = canvas.props.onChange as (next: PresentationScene) => boolean;
+    const capturedDeck = design.props.onApplyDesignToDeck as (design: unknown) => void;
+    editor.render("idle", false, false);
+    expect(editor.find((element) => element.type === NativeSceneCanvas).props.canEdit).toBe(false);
+    const picker = editor.find(
+      (element) => element.type === "select" && element.props["aria-label"] === "Selected object",
+    );
+    expect(picker.props.disabled).not.toBe(true);
+    (picker.props.onChange as (event: unknown) => void)({ target: { value: "body" } });
+    editor.render("idle", false, false);
+    expect(
+      editor.find(
+        (element) => element.type === "select" && element.props["aria-label"] === "Selected object",
+      ).props.value,
+    ).toBe("body");
+    for (const section of ["layout", "media"])
+      expect(
+        editor.find((element) => element.props["data-native-inspector-section"] === section).props
+          .disabled,
+      ).toBe(true);
+    expect(
+      editor
+        .all()
+        .some(
+          (element) =>
+            element.type === "fieldset" &&
+            element.props.disabled === true &&
+            element.props["data-native-text-fields"] === "true",
+        ),
+    ).toBe(true);
+    expect(
+      capturedChange({
+        ...editor.scene,
+        nodes: editor.scene.nodes.map((node) =>
+          node.id === "body" && node.type === "text" ? { ...node, text: "Blocked" } : node,
+        ),
+      }),
+    ).toBe(false);
+    capturedDeck({ theme: "ocean", font: "serif", spacing: "compact" });
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(deck).not.toHaveBeenCalled();
+    editor.render("idle", false, true);
+    expect(capturedChange({ ...editor.scene })).toBe(true);
+    expect(editor.onChange).toHaveBeenCalledOnce();
   });
 });

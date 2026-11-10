@@ -808,3 +808,20 @@
 .staticThumbnail {
   pointer-events: none;
 }
+
+/* Permission boundaries retain the existing normal-flow layout and portaled inspector. */
+.permissionControls {
+  margin: 0;
+  min-inline-size: 0;
+}
+.permissionControls:not(.objectToolbar) {
+  border: 0;
+  padding: 0;
+}
+.permissionControls.objectToolbar {
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.permissionControls[hidden] {
+  display: none;
+}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PresentationCompanionPassResponseSchema } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
+import { localizeCompanionError } from "../../lib/i18n/domains/live-delivery/companion-translations";
 import {
   isolatePresentationCompanionWindow,
   presentationCompanionLaunchUrl,
@@ -18,7 +19,7 @@ export function PresentationCompanionLauncher({
   enabled: boolean;
   canEdit: boolean;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const [credentialId, setCredentialId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -26,6 +27,7 @@ export function PresentationCompanionLauncher({
   const inFlight = useRef(false);
   const launchUrl = useRef<string | null>(null);
   const credentialKey = `openround:presentation-companion-credential:${sessionId}`;
+  const displayError = localizeCompanionError(locale, error);
 
   useEffect(() => {
     setCredentialId(sessionStorage.getItem(credentialKey));
@@ -92,7 +94,7 @@ export function PresentationCompanionLauncher({
   }
 
   return (
-    <section aria-label={t("live.companion.title")}>
+    <section aria-label={t("live.companion.title")} lang={locale}>
       {enabled ? (
         <button
           className="button-quiet full-width"
@@ -136,8 +138,8 @@ export function PresentationCompanionLauncher({
         </button>
       ) : null}
       {error ? (
-        <p className="error" role="alert">
-          {error}
+        <p className="error" role="alert" lang={displayError.language}>
+          {displayError.text}
         </p>
       ) : null}
     </section>

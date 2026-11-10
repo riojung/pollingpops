@@ -2,7 +2,12 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PresentationDraft } from "@openround/contracts";
+import {
+  supportedLocales,
+  type PresentationDraft,
+  type SupportedLocale,
+} from "@openround/contracts";
+import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { createContentBlock } from "../../lib/presentation-builder";
 import {
   enablePresentationSpatial,
@@ -11,7 +16,9 @@ import {
 import { PresentationSpatialEditor } from "./presentation-spatial-editor";
 const mocked = vi.hoisted(() => ({
   hooks: null as null | { cursor: number; slots: unknown[]; effects: (() => void)[] },
+  locale: "en-CA" as SupportedLocale,
 }));
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: mocked.locale }) }));
 vi.mock("../../lib/modal-initial-focus", () => ({ startModalInitialFocus: () => () => undefined }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
@@ -156,6 +163,7 @@ function harness(enabled = true) {
     onClose,
     onPreviewPath,
     render,
+    tree: () => tree,
     find,
     field,
     event,
@@ -172,9 +180,64 @@ function harness(enabled = true) {
 }
 beforeEach(() => {
   mocked.hooks = null;
+  mocked.locale = "en-CA";
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("Presentation spatial editor", () => {
+  it("renders the real Korean dialog close control with its translated accessible name", () => {
+    mocked.locale = "ko-KR";
+    const editor = harness();
+    const html = renderToStaticMarkup(editor.tree());
+    expect(html).toContain('aria-label="공간 배치"');
+    expect(html).toMatch(/<button[^>]*>공간 배치 닫기<\/button>/);
+    expect(html).not.toContain("Close arrange space");
+    editor.find("공간 배치 닫기").props.onClick();
+    expect(editor.onClose).toHaveBeenCalledOnce();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.unmount();
+  });
+  it.each(supportedLocales)(
+    "localizes the spatial editor in %s while preserving authored titles, IDs and draft order",
+    (locale) => {
+      mocked.locale = locale;
+      const editor = harness();
+      const before = structuredClone(editor.initial);
+      const html = renderToStaticMarkup(editor.tree());
+      const copy = sectionsSpatialCopy(locale);
+      expect(html).toContain(`aria-label="${copy("Arrange space")}"`);
+      expect(html).toContain(copy("Frame width"));
+      expect(html).toContain(copy("Spatial frames in playback order"));
+      expect(html).toContain(copy("Hidden · excluded from publication"));
+      expect(html).toContain('lang="">First public title');
+      expect(html).not.toContain("PRIVATE_EDITOR_NOTES");
+      expect(editor.initial).toEqual(before);
+      expect(editor.onChange).not.toHaveBeenCalled();
+      editor.unmount();
+    },
+  );
+  it("keeps an unfinished numeric edit through a language change and commits one exact frame update", () => {
+    const editor = harness();
+    const before = structuredClone(editor.initial);
+    editor.field("Frame width").props.onChange({ target: { value: "960" } });
+    mocked.locale = "ko-KR";
+    editor.render();
+    expect(editor.field("프레임 너비").props.value).toBe("960");
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.field("프레임 너비").props.onKeyDown(editor.event({ key: "Enter" }));
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    const [update, historyKey] = editor.onChange.mock.calls[0]!;
+    const next = update(editor.initial) as PresentationDraft;
+    expect(next.spatial!.frames[0]).toMatchObject({
+      blockId: before.blocks[0]!.id,
+      width: 960,
+      height: 540,
+    });
+    expect(next.blocks).toEqual(before.blocks);
+    expect(next.schemaVersion).toBe(before.schemaVersion);
+    expect(historyKey).toBeUndefined();
+    expect(editor.initial).toEqual(before);
+    editor.unmount();
+  });
   it("offers explicit enablement and accessible numeric/mobile controls without private notes", () => {
     const props = {
       draft: fixture(false),

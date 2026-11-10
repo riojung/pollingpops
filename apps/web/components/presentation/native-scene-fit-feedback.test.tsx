@@ -1,7 +1,13 @@
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
-import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
+import {
+  NativeSceneFitFeedback,
+  nativeFitFeedbackText,
+  type NativeFitFeedback,
+} from "./native-scene-fit-feedback";
 import { createNativeTableNode } from "../../lib/presentation-native-data";
 
 const mocked = vi.hoisted(() => ({
@@ -12,12 +18,12 @@ vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
-    useState: (initial: string) => {
-      mocked.feedback = initial;
+    useState: (initial: NativeFitFeedback) => {
+      mocked.feedback = nativeFitFeedbackText("en-CA", initial);
       return [
         initial,
-        (value: string) => {
-          mocked.feedback = value;
+        (value: NativeFitFeedback) => {
+          mocked.feedback = nativeFitFeedbackText("en-CA", value);
         },
       ];
     },

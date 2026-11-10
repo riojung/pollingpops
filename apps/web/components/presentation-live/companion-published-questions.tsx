@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { PresentationPublishedQuestionSelection } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import { formatNumber } from "../../lib/i18n/format";
+import { localizeCompanionError } from "../../lib/i18n/domains/live-delivery/companion-translations";
 import {
   publishedQuestionSelection,
   selectedPublishedQuestion,
@@ -27,6 +28,7 @@ export function CompanionPublishedQuestionPicker({
   onInsert: (selection: PresentationPublishedQuestionSelection) => void;
 }) {
   const { locale, t } = useLocale();
+  const displayError = localizeCompanionError(locale, error);
   const id = useId();
   const [search, setSearch] = useState("");
   const [sourceVersionId, setSourceVersionId] = useState("");
@@ -51,6 +53,7 @@ export function CompanionPublishedQuestionPicker({
     <section
       className={styles.packPicker}
       aria-label={t("live.companion.publishedQuestions.title")}
+      lang={locale}
     >
       <p className="muted">{t("live.companion.publishedQuestions.description")}</p>
       <form onSubmit={searchQuestions}>
@@ -61,6 +64,7 @@ export function CompanionPublishedQuestionPicker({
             className="input"
             disabled={disabled || loading}
             maxLength={100}
+            lang={search.trim() ? "" : locale}
             onChange={(event) => {
               if (!disabled && !loading) setSearch(event.target.value);
             }}
@@ -74,8 +78,8 @@ export function CompanionPublishedQuestionPicker({
       </form>
       {loading ? <p role="status">{t("live.companion.publishedQuestions.loading")}</p> : null}
       {error ? (
-        <p className="error" role="alert">
-          {error}
+        <p className="error" role="alert" lang={displayError.language}>
+          {displayError.text}
         </p>
       ) : null}
       {!loading && catalog?.questions.length === 0 ? (
@@ -101,7 +105,7 @@ export function CompanionPublishedQuestionPicker({
         >
           <option value="">{t("live.companion.publishedQuestions.chooseRound")}</option>
           {sources.map((question) => (
-            <option key={question.sourceQuizVersionId} value={question.sourceQuizVersionId}>
+            <option key={question.sourceQuizVersionId} value={question.sourceQuizVersionId} lang="">
               {question.title} ·{" "}
               {t("live.companion.publishedQuestions.version", {
                 version: formatNumber(locale, question.sourceQuizVersion),
@@ -131,7 +135,7 @@ export function CompanionPublishedQuestionPicker({
         >
           <option value="">{t("live.companion.publishedQuestions.chooseQuestion")}</option>
           {questions.map((question) => (
-            <option key={question.sourceQuestionId} value={question.sourceQuestionId}>
+            <option key={question.sourceQuestionId} value={question.sourceQuestionId} lang="">
               {question.prompt} · {t(`questionType.${question.type}.label`)}
             </option>
           ))}

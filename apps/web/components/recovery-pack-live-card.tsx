@@ -11,19 +11,29 @@ export function recoveryPackCardKey(card: RecoveryPackLiveCard) {
 export function RecoveryPackLiveCardView({
   card,
   preview = false,
+  labels,
 }: {
   card: RecoveryPackLiveCard;
   preview?: boolean;
+  /** Optional delivery chrome; authored card material remains unchanged. */
+  labels?: { language: string; regionName: string; attribution: string; sources: string };
 }) {
   const Heading = preview ? "h4" : "h2";
   return (
     <section
-      aria-label={preview ? "Recovery Pack card preview (host only)" : "Active Recovery Pack card"}
+      aria-label={
+        labels?.regionName ??
+        (preview ? "Recovery Pack card preview (host only)" : "Active Recovery Pack card")
+      }
       className={styles.card}
     >
-      <p className="eyebrow" lang="en-CA">
-        {preview ? "Host-only preview" : "Recovery Pack card"} · version{" "}
-        {card.reference.packVersion}
+      <p className="eyebrow" lang={labels?.language ?? "en-CA"}>
+        {labels?.attribution ?? (
+          <>
+            {preview ? "Host-only preview" : "Recovery Pack card"} · version{" "}
+            {card.reference.packVersion}
+          </>
+        )}
       </p>
       <Heading lang="">{card.title}</Heading>
       <p className={styles.body} lang="">
@@ -31,7 +41,7 @@ export function RecoveryPackLiveCardView({
       </p>
       {card.citations.length ? (
         <div className={styles.citations}>
-          <strong lang="en-CA">Sources</strong>
+          <strong lang={labels?.language ?? "en-CA"}>{labels?.sources ?? "Sources"}</strong>
           <ul>
             {card.citations.map((citation, index) => (
               <li key={index}>

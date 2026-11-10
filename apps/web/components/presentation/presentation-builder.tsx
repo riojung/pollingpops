@@ -120,6 +120,7 @@ import {
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { nativeEditorCopy } from "./native-editor-copy";
 import { PresentationActivitySlide } from "./presentation-activity-slide";
 import { SpeakerNotesEditor, PresenterNotesPanel } from "./presentation-speaker-notes";
 import {
@@ -504,6 +505,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const authoring = authoringWorkflowCopy(locale);
   const commands = presentationCommandCopy(locale);
   const sectionsSpatial = sectionsSpatialCopy(locale);
+  const nativeEditorUi = nativeEditorCopy(locale);
   const router = useRouter();
   const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -4022,13 +4024,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         >
           <div className={styles.inspectorHeading}>
             <div>
-              <span className={styles.inspectorEyebrow}>Customize your slide</span>
-              <h2>Slide tools</h2>
+              <span className={styles.inspectorEyebrow}>
+                {nativeEditorUi("Customize your slide")}
+              </span>
+              <h2>{nativeEditorUi("Slide tools")}</h2>
             </div>
             <button
               type="button"
               onClick={() => (compactEditor ? closeEditorPanels(true) : setInspectorOpen(false))}
-              aria-label="Close inspector panel"
+              aria-label={nativeEditorUi("Close inspector panel")}
             >
               <EditorIcon name="close" />
             </button>

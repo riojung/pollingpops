@@ -63,8 +63,8 @@ assign accuracy to an empty assessment. Stored historical reports without questi
 metadata remain unchanged; their meaning is not inferred from zero values.
 
 This is a bounded translation pass over the primary customer journey. The specialist and
-editor/Companion follow-ups below extend that coverage; detailed native text/data/video/
-interaction inspectors, assistance and Pack library tools still require separate language review. Raw service
+editor/Companion follow-ups below extend that coverage; specialized rich-text/data/video/
+interaction editors, branching/navigation, assistance and Pack library tools still require separate language review. Raw service
 diagnostics retain their original language. Existing language choices are preserved;
 launch-language acceptance remains a release gate.
 
@@ -225,6 +225,76 @@ physical-device qualification, the hosted matrix or the deferred public launch c
   the local regressions above; they do not establish a passing hosted matrix for this branch.
   Local Firefox still cannot start its profile, and the current full hosted matrix, manual
   accessibility, physical-device/customer qualification and native-language review remain open.
+
+## Native editor shell follow-up — November 10, 2026
+
+The `codex/option-b-native-editor` slice extends selected-language copy to the native
+editor's inspector heading/close action, selection summary/picker, insertion menus,
+ordinary text/shape/connector fields,
+position/size guidance, image-upload states and accessibility/reading-order controls.
+The shell's writing-assistance entry points follow the locale; the separate assistance
+review/recovery dialogs remain outside this slice. English remains the default and all
+ten configured locales retain coverage.
+
+Generated object labels use the existing locale-aware fallback; authored text, labels,
+descriptions and their language annotations remain unchanged. Language names are display
+labels for stored language codes. Changing the application locale never changes object
+content, shape/color/anchor enums, geometry, order, document versions or history. Known
+local feedback is stored as source keys and translated when displayed. Existing permission,
+portal mounting, media scanning and explicit-insertion behavior remain authoritative.
+
+Specialized rich-text/data/video/interaction internals and remaining canvas copy retain
+explicit original-language boundaries inside the localized shell. Branching/shared
+navigation, assistance review/recovery and Pack library/editor tools remain pending.
+Native-language acceptance and customer/manual/device qualification remain release work.
+
+Hosted investigation of [PR #226’s WebKit job](https://github.com/riojung/pollingpops/actions/runs/42869869061/job/130017928811)
+found that phone WebKit reached case 125 of 132 and hit
+its 30-minute job limit; no assertion failure was recorded before cancellation. Five
+later fresh-API phases were skipped, and browser-smoke correctly rejected the cancelled
+beta result. WebKit's beta job budget is now 45 minutes; all other projects retain 30.
+Per-case/step limits, assertions, workers, retries, phases and smoke requirements remain
+unchanged. This budget adjustment does not establish a passing hosted matrix for the new
+source; that remains pending candidate-specific qualification. The merged baseline’s
+[main run](https://github.com/riojung/pollingpops/actions/runs/42879549851) subsequently hit
+the same 30-minute cap at case 131/132, again without a recorded assertion failure before
+cancellation; its later phases were skipped. Both observed runs used the previous budget.
+
+### Native editor verification
+
+- Repository validation completes formatting, lint, type checking, Docker context checks,
+  **7,452 passing tests** and 513 standard opt-in skips, all four production builds and
+  compiled-server startup. The final complete smoke-support suite passes 423 tests after
+  updating its existing budget policy guard; all package suites pass 7,029 tests, including
+  **368 web suites / 3,569 tests**.
+- All **161 typed native-editor UI keys** cover the ten configured locales, including 35
+  reused shared translations. Coverage checks preserve placeholders and English defaults;
+  real-render and behavior tests cover language changes with active feedback, authored
+  language annotations, retained image-description input, editing/history identities,
+  reading order and permission guards.
+- The beta production web build passes. The workflow parses, and its policy test verifies
+  each matrix project's actual budget while preserving isolation and coverage assertions.
+  The new workflow/source still requires hosted qualification; local checks do not close
+  release acceptance.
+
+- **37 distinct selected production-browser cases pass**: 13 desktop Chromium, 12 phone
+  Chromium and 12 phone WebKit. They cover the new Korean/German ordinary-editor journey,
+  prior localized native controls, geometry, grouped inspectors and insertion menus,
+  tables/charts, interaction preview, rich text, native publish/delivery, pending-image
+  history, dense phone layouts, both translation journeys and reviewed text recovery.
+  Each profile/phase uses a fresh API; authoring uses an owned loopback provider.
+- The final three parent-inspector labels are followed by **155 focused web tests**,
+  web type checking, scoped lint and fresh normal/beta production builds. Phone WebKit
+  qualifies the complete selected set against that final build; the new native-editor
+  journey is requalified on desktop and phone Chromium. Reruns are included in the 37
+  distinct cases rather than added to that count. The ordinary-editor case checks
+  320px phone overflow, Axe, raw authored text/language, enum/geometry/history semantics,
+  explicit insert/undo, locale changes without draft writes and canonical viewer inspection.
+- Screenshot review includes the localized inspector heading, ordinary Content/Access/Media
+  controls, authored Spanish/English values and retained focus treatment. Specialist child
+  editors remain explicitly English. Native-language review, manual accessibility and
+  physical-device/customer acceptance remain open; the release ledger stays at 15 pending
+  gates and public launch content remains deferred.
 
 ## Release readiness checklist
 

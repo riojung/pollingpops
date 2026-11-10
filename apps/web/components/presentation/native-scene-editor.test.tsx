@@ -8,20 +8,29 @@ import {
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
+import { nativeEditorCopy } from "./native-editor-copy";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { EditorDisclosure, EditorIcon } from "./presentation-editor-chrome";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
 import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
-import type { PresentationScene, PresentationSceneDesign } from "@openround/contracts";
+import type {
+  PresentationScene,
+  PresentationSceneDesign,
+  SupportedLocale,
+} from "@openround/contracts";
 import { NativeSceneInteractionEditor } from "./native-scene-interaction-editor";
 import {
   NativeSceneDesignControls,
   NativeSceneLayoutControls,
 } from "./native-scene-design-controls";
 
-const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
+const mocked = vi.hoisted(() => ({
+  hooks: null as { cursor: number; slots: unknown[] } | null,
+  locale: "en-CA" as SupportedLocale,
+}));
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: mocked.locale }) }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
@@ -133,7 +142,10 @@ function editorHarness(
   };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  mocked.locale = "en-CA";
+});
 
 describe("interaction insertion picker", () => {
   it.each([
@@ -461,10 +473,7 @@ describe("native multi-object selection", () => {
     const canvas = editor.find((element) => element.type === NativeSceneCanvas);
     expect(canvas.props.selectedNodeIds).toEqual([editor.scene.nodes[0]!.id, "body"]);
     const move = editor.find(
-      (element) =>
-        element.type === "button" &&
-        Array.isArray(element.props.children) &&
-        element.props.children.join("") === "Move selection right",
+      (element) => element.type === "button" && controlText(element) === "Move selection right",
     );
     (move.props.onClick as () => void)();
     const moved = editor.onChange.mock.calls[0]![0];
@@ -758,7 +767,9 @@ describe("native canvas and contextual inspector", () => {
       editor.render("idle");
       const root = editor.find((element) => element.type === "div");
       const children = root.props.children as ReactElement<Record<string, unknown>>[];
-      const canvasIndex = children.findIndex((element) => element?.type === NativeSceneCanvas);
+      const canvasIndex = children.findIndex((element) =>
+        elements(element).some((child) => child.type === NativeSceneCanvas),
+      );
       const inspectorIndex = children.findIndex(
         (element) => element?.props["aria-label"] === "Native slide editor",
       );
@@ -1017,5 +1028,140 @@ describe("native editor permission boundaries", () => {
     editor.render("idle", false, true);
     expect(capturedChange({ ...editor.scene })).toBe(true);
     expect(editor.onChange).toHaveBeenCalledOnce();
+  });
+});
+
+describe("native editor locale changes and ordinary edit contracts", () => {
+  it("relocalizes active rejection feedback while preserving selection, authored language and current-permission guards", () => {
+    const editor = editorHarness();
+    const body = editor.scene.nodes.find((node) => node.id === "body");
+    if (body?.type !== "text") throw new Error("Expected text fixture");
+    body.lang = "fr";
+    editor.scene.schemaVersion = 7;
+    editor.render("idle");
+    (
+      editor.find((element) => element.props["aria-label"] === "Selected object").props
+        .onChange as (event: unknown) => void
+    )({ target: { value: "body" } });
+    editor.render("idle");
+    editor.onChange.mockReturnValue(false);
+    const ownerChange = editor.find((element) => element.props["aria-label"] === "Node text").props
+      .onChange as (event: unknown) => void;
+    ownerChange({ target: { value: "Rejected authored change" } });
+    editor.render("idle");
+    expect(controlText(editor.find((element) => element.props.role === "alert"))).toContain(
+      "The Presentation could not accept this change",
+    );
+    const attempted: PresentationScene = editor.onChange.mock.calls[0]![0];
+    expect(attempted.nodes.find((node) => node.id === "body")).toEqual({
+      ...body,
+      text: "Rejected authored change",
+    });
+    expect(editor.onChange.mock.calls[0]![1]).toBe("native:body:text");
+    const before = structuredClone(editor.scene);
+    mocked.locale = "ko-KR";
+    editor.render("idle", false, false);
+    const message = controlText(editor.find((element) => element.props.role === "alert"));
+    expect(message).toMatch(/[가-힣]/);
+    expect(message).not.toContain("could not accept this change");
+    const field = editor.find(
+      (element) => element.type === "textarea" && element.props.value === "Evidence",
+    );
+    expect(field.props.lang).toBe("fr");
+    expect(
+      editor.find((element) => element.type === NativeSceneCanvas).props.selectedNodeIds,
+    ).toEqual(["body"]);
+    ownerChange({ target: { value: "Blocked captured callback" } });
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    expect(editor.scene).toEqual(before);
+    mocked.locale = "en-CA";
+    editor.render("idle");
+    expect(controlText(editor.find((element) => element.props.role === "alert"))).toContain(
+      "The Presentation could not accept this change",
+    );
+    expect(editor.onChange).toHaveBeenCalledOnce();
+  });
+
+  it("preserves in-progress image description and active format errors across locale switches", () => {
+    const editor = editorHarness();
+    const title = editor.scene.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title fixture");
+    title.text = Array.from({ length: 101 }, () => "Paragraph").join("\n");
+    editor.render("idle");
+    (
+      editor.find((element) => element.type === "button" && controlText(element) === "Format text")
+        .props.onClick as () => void
+    )();
+    (
+      editor.find((element) => element.props["aria-label"] === "New image description").props
+        .onChange as (event: unknown) => void
+    )({ target: { value: "Raw English upload description" } });
+    editor.render("idle");
+    expect(controlText(editor.find((element) => element.props.role === "alert"))).toContain(
+      "This text cannot be formatted",
+    );
+    mocked.locale = "ko-KR";
+    editor.render("scanning");
+    expect(controlText(editor.find((element) => element.props.role === "alert"))).toMatch(
+      /[가-힣]/,
+    );
+    expect(
+      editor.find(
+        (element) =>
+          element.type === "input" && element.props.value === "Raw English upload description",
+      ).props.lang,
+    ).toBe("");
+    expect(controlText(editor.root())).not.toContain("Checking image safety…");
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(title.text.split("\n")).toHaveLength(101);
+  });
+
+  it("keeps geometry, language codes and reading-order history exact through Korean controls", () => {
+    const editor = editorHarness();
+    const before = structuredClone(editor.scene);
+    mocked.locale = "ko-KR";
+    editor.render("idle");
+    const language = editor.find(
+      (element) =>
+        element.type === "select" &&
+        element.props.value === "" &&
+        elements(element).some((option) => option.props.value === "fr"),
+    );
+    (language.props.onChange as (event: unknown) => void)({ target: { value: "fr" } });
+    const marked = editor.onChange.mock.calls[0]![0];
+    expect(marked).toEqual({
+      ...before,
+      schemaVersion: 7,
+      nodes: before.nodes.map((node, index) => (index === 0 ? { ...node, lang: "fr" } : node)),
+    });
+    Object.assign(editor.scene, marked);
+    const canvas = editor.find((element) => element.type === NativeSceneCanvas);
+    (canvas.props.onSelect as (id: string) => void)("body");
+    editor.render("idle");
+    const x = editor.find(
+      (element) =>
+        element.type === "input" && element.props.type === "number" && element.props.value === 8,
+    );
+    (x.props.onChange as (event: unknown) => void)({ target: { valueAsNumber: 13 } });
+    expect(editor.onChange.mock.calls.at(-1)![1]).toBe("native:body:frame:x");
+    const positioned: PresentationScene = editor.onChange.mock.calls.at(-1)![0];
+    expect(positioned.nodes.find((node) => node.id === "body")).toMatchObject({
+      frame: { x: 13, y: 35, width: 55, height: 25 },
+    });
+    // Reading-order controls keep exact document identities independently of localized labels.
+    const copy = nativeEditorCopy("ko-KR");
+    const readEarlier = editor
+      .all()
+      .find(
+        (element) =>
+          element.type === "button" && controlText(element) === copy("Read object earlier"),
+      );
+    expect(readEarlier).toBeDefined();
+    (readEarlier!.props.onClick as () => void)();
+    expect(editor.onChange.mock.calls.at(-1)![0].readingOrder).toEqual([
+      "body",
+      before.nodes[0]!.id,
+    ]);
+    expect(editor.onChange.mock.calls.at(-1)![0].nodes).toEqual(marked.nodes);
   });
 });

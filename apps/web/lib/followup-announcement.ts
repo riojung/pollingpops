@@ -1,16 +1,32 @@
-import type { FollowupSnapshot } from "@openround/contracts";
+import type { FollowupSnapshot, SupportedLocale } from "@openround/contracts";
+import { followupCopy } from "./i18n/followup-copy";
+import { formatNumber } from "./i18n/format";
 
-export function followupStatusAnnouncement(snapshot: FollowupSnapshot | null) {
-  if (!snapshot) return "Opening your private practice.";
+export function followupStatusAnnouncement(
+  snapshot: FollowupSnapshot | null,
+  locale: SupportedLocale = "en-CA",
+) {
+  const copy = followupCopy(locale);
+  if (!snapshot) return copy("Opening your private practice.");
   if (snapshot.status === "completed" || snapshot.phase === "completed") {
-    return snapshot.purpose === "assignment" ? "Practice complete." : "Follow-up complete.";
+    return copy(snapshot.purpose === "assignment" ? "Practice complete." : "Follow-up complete.");
   }
   if (snapshot.phase === "intervention" && snapshot.intervention) {
-    return `Recovery guidance card ${snapshot.intervention.index + 1} of ${snapshot.intervention.count}: ${snapshot.intervention.card.title}. No countdown.`;
+    return copy("Recovery guidance card {current} of {total}: {title}. No countdown.", {
+      current: formatNumber(locale, snapshot.intervention.index + 1),
+      total: formatNumber(locale, snapshot.intervention.count),
+      title: snapshot.intervention.card.title,
+    });
   }
 
   const position = (snapshot.questionIndex ?? 0) + 1;
-  return snapshot.phase === "answer_reveal"
-    ? `Question ${position} of ${snapshot.questionCount}: feedback available.`
-    : `Question ${position} of ${snapshot.questionCount}: ready for your response.`;
+  return copy(
+    snapshot.phase === "answer_reveal"
+      ? "Question {current} of {total}: feedback available."
+      : "Question {current} of {total}: ready for your response.",
+    {
+      current: formatNumber(locale, position),
+      total: formatNumber(locale, snapshot.questionCount),
+    },
+  );
 }

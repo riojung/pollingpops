@@ -154,7 +154,7 @@ describe("localized message catalogs", () => {
       "live-delivery",
     ]);
     expect(localeDomainsForPath("/practice/example")).toEqual(["report-round"]);
-    expect(localeDomainsForPath("/followup/example")).toEqual(["report-round"]);
+    expect(localeDomainsForPath("/followup/example")).toEqual(["report-round", "live-delivery"]);
     expect(localeDomainsForPath("/templates")).toEqual(["workspace-pages"]);
     expect(localeDomainsForPath("/canvas/board-id")).toEqual(["idea-boards"]);
     expect(localeDomainsForPath("/privacy")).toEqual([]);
@@ -190,6 +190,35 @@ describe("localized message catalogs", () => {
         "0 of 1000 characters",
       );
       expect(translate(messages, "live.text.reviewPrivacy")).toContain("Only approved responses");
+    },
+  );
+
+  it.each(supportedLocales)(
+    "loads all shared private-practice controls on a direct follow-up visit in %s",
+    async (locale) => {
+      const messages = await loadMessages(
+        locale,
+        localeDomainsForPath("/followup/private/?from=link"),
+      );
+      const controls = [
+        "live.presentationPlay.submit",
+        "live.presentationPlay.numericResponse",
+        "live.presentationPlay.chooseRating",
+        "live.presentationPlay.required",
+        "live.presentationPlay.responseRecorded",
+        "live.common.saving",
+        "live.host.command.nextQuestion",
+        "live.roundPlay.confidence.notSure",
+        "live.roundPlay.confidence.somewhat",
+        "live.roundPlay.confidence.very",
+      ] as const;
+      for (const key of controls) {
+        expect(messages[key]).toBeTruthy();
+        expect(translate(messages, key)).not.toBe(key);
+      }
+      if (locale === "ko-KR")
+        expect(translate(messages, "live.presentationPlay.submit")).toBe("응답 제출");
+      expect(localeDomainsForPath("/practice/manage")).toEqual(["report-round"]);
     },
   );
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type {
   Entitlements,
   Followup,
@@ -20,7 +20,7 @@ import { CreatorBrand } from "../../../components/brand";
 import { ParticipantIdentity } from "../../../components/participant-avatar";
 import { RecoveryStorySummary } from "../../../components/recovery-story";
 import { recordFollowupShared } from "../../../components/workspace/product-events";
-import { API_URL, apiFetch, humanError } from "../../../lib/api";
+import { API_URL, AUTH_CHANGE_EVENT, apiFetch, humanError } from "../../../lib/api";
 import { deriveRecoverySummary } from "../../../lib/report-summary";
 import { RankingDistribution } from "../../../components/ranking-distribution";
 import { TextResultsView } from "../../../components/text-results-view";
@@ -31,7 +31,8 @@ import {
   deliveryInterventionLabel,
   localizeDeliveryMessage,
 } from "../../../lib/i18n/delivery-primary-copy";
-import { formatDate, formatNumber } from "../../../lib/i18n/format";
+import { formatDate, formatDateTime, formatNumber } from "../../../lib/i18n/format";
+import { followupCopy, localizeFollowupMessage } from "../../../lib/i18n/followup-copy";
 
 interface ReportContext {
   quizId: string;
@@ -605,14 +606,19 @@ function FollowupBuilder({
   entitlement,
   initialFollowup,
   uxBeta,
+  canEdit,
+  mayManage,
 }: {
   report: ReportV2 | ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
   entitlement: boolean;
   initialFollowup: Followup | null;
   uxBeta: boolean;
+  canEdit: boolean;
+  mayManage: () => boolean;
 }) {
   const { locale, t } = useLocale();
   const copy = deliveryPrimaryCopy(locale);
+  const secondary = followupCopy(locale);
   const unresolved = report.unresolvedConcepts.filter((concept) => concept.unresolved > 0);
   const [followup, setFollowup] = useState(initialFollowup);
   const [selected, setSelected] = useState(() => unresolved.map((concept) => concept.conceptKey));
@@ -624,32 +630,48 @@ function FollowupBuilder({
   const [closesAt, setClosesAt] = useState(localDateTimeValue(suggestedClose));
   const [access, setAccess] = useState<FollowupAccessView[]>([]);
   const [created, setCreated] = useState<CreatedFollowup | null>(null);
-  const [passLabel, setPassLabel] = useState("Extended time");
+  // Null means the generated default is still untouched. User input remains authored text.
+  const [passLabel, setPassLabel] = useState<string | null>(null);
+  const displayedPassLabel = passLabel ?? secondary("Extended time");
   const [passMultiplier, setPassMultiplier] = useState<1.5 | 2>(1.5);
   const [latestPass, setLatestPass] = useState<FollowupAccessView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [shareStatus, setShareStatus] = useState("");
+  const [shareStatus, setShareStatus] = useState<"downloaded" | "generic" | "private" | null>(null);
+  const [accessLoading, setAccessLoading] = useState(Boolean(initialFollowup));
+  const [accessError, setAccessError] = useState("");
+  const [accessLoadRevision, setAccessLoadRevision] = useState(0);
+  const ended = Boolean(
+    followup && (followup.closedAt || Date.parse(followup.closesAt) <= Date.now()),
+  );
+  const retentionExpired = maximumClose.getTime() <= Date.now();
 
   useEffect(() => {
     if (!followup) return;
     let cancelled = false;
+    setAccessLoading(true);
+    setAccessError("");
     void apiFetch<{ access: FollowupAccessView[] }>(`/v1/followups/${followup.id}`)
       .then((result) => {
         if (!cancelled) setAccess(result.access);
       })
       .catch((caught) => {
-        if (!cancelled) setError(humanError(caught));
+        if (!cancelled) setAccessError(humanError(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setAccessLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [followup]);
+  }, [followup, accessLoadRevision]);
 
   async function createFollowup(event: FormEvent) {
     event.preventDefault();
+    if (!canEdit || !mayManage() || !entitlement || retentionExpired || busy) return;
     setBusy(true);
     setError("");
+    setShareStatus(null);
     try {
       const result = await apiFetch<CreatedFollowup>(`/v1/reports/${report.id}/followups`, {
         method: "POST",
@@ -671,15 +693,16 @@ function FollowupBuilder({
 
   async function createPass(event: FormEvent) {
     event.preventDefault();
-    if (!followup) return;
+    if (!followup || !canEdit || !mayManage() || ended || busy) return;
     setBusy(true);
     setError("");
+    setShareStatus(null);
     try {
       const result = await apiFetch<{ access: FollowupAccessView }>(
         `/v1/followups/${followup.id}/accommodation-passes`,
         {
           method: "POST",
-          body: JSON.stringify({ label: passLabel, timeMultiplier: passMultiplier }),
+          body: JSON.stringify({ label: displayedPassLabel, timeMultiplier: passMultiplier }),
         },
       );
       setLatestPass(result.access);
@@ -694,7 +717,10 @@ function FollowupBuilder({
   async function revoke(accessId: string) {
     if (
       !followup ||
-      !window.confirm("Revoke this follow-up pass? Its attempt will stop working.")
+      !canEdit ||
+      !mayManage() ||
+      busy ||
+      !window.confirm(secondary("Revoke this follow-up pass? Its attempt will stop working."))
     ) {
       return;
     }
@@ -715,7 +741,14 @@ function FollowupBuilder({
   }
 
   async function closeFollowup() {
-    if (!followup || !window.confirm("Close this follow-up for every participant?")) return;
+    if (
+      !followup ||
+      !canEdit ||
+      !mayManage() ||
+      busy ||
+      !window.confirm(secondary("Close this follow-up for every participant?"))
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -749,22 +782,41 @@ function FollowupBuilder({
     document.body.append(link);
     link.click();
     recordFollowupShared();
-    setShareStatus(copy("Follow-up links downloaded."));
+    setShareStatus("downloaded");
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   async function copyGenericLink() {
     if (!created) return;
+    setShareStatus(null);
+    setError("");
     try {
       await navigator.clipboard.writeText(created.genericUrl);
       recordFollowupShared();
-      setShareStatus(copy("Generic follow-up link copied."));
+      setShareStatus("generic");
     } catch {
-      setError(t("reportRound.assign.copyBlocked"));
+      setError("Copy was blocked. Select and copy the link instead.");
     }
   }
 
+  async function copyPrivateLink() {
+    if (!latestPass?.url) return;
+    setShareStatus(null);
+    setError("");
+    try {
+      await navigator.clipboard.writeText(latestPass.url);
+      setShareStatus("private");
+      setError("");
+    } catch {
+      setError("Copy was blocked. Select and copy the link instead.");
+    }
+  }
+
+  const errorMessage =
+    error === "Copy was blocked. Select and copy the link instead."
+      ? { text: t("reportRound.assign.copyBlocked"), language: locale }
+      : localizeFollowupMessage(locale, error);
   if (!unresolved.length) return null;
   return (
     <section className="panel" style={{ marginBottom: 26 }} aria-labelledby="followup-heading">
@@ -772,33 +824,61 @@ function FollowupBuilder({
       <h2 id="followup-heading" style={{ fontSize: "1.7rem" }}>
         {copy("Self-paced follow-up")}
       </h2>
+      {entitlement && followup && !canEdit ? (
+        <p className="notice">
+          {secondary("An owner or editor must create or manage follow-up access.")}
+        </p>
+      ) : null}
       {!entitlement ? (
         <p className="notice">
-          Signed follow-up links and private feedback are available with Hosted Pro and in the
-          Community edition. <Link href="/pricing">Compare editions</Link>.
+          {secondary(
+            "Signed follow-up links and private feedback are available with Hosted Pro and in the Community edition.",
+          )}{" "}
+          <Link href="/pricing">{secondary("Compare editions")}</Link>.
         </p>
       ) : followup ? (
         <>
           <p>
-            <strong lang="">{followup.title}</strong> contains {followup.checkpointCount}{" "}
-            {uxBeta ? "question" : "checkpoint"}
-            {followup.checkpointCount === 1 ? "" : "s"} and closes on{" "}
-            {new Date(followup.closesAt).toLocaleString()}.
+            <strong lang="">{followup.title}</strong>{" "}
+            {secondary(
+              uxBeta
+                ? "Questions: {count}. Closes on {date}."
+                : "Checkpoints: {count}. Closes on {date}.",
+              {
+                count: formatNumber(locale, followup.checkpointCount),
+                date: formatDateTime(locale, followup.closesAt),
+              },
+            )}
           </p>
           <p className="muted">
             {followup.timeMode === "flex"
-              ? "Time-flex mode has no countdown."
-              : `Standard ${uxBeta ? "question" : "checkpoint"} timers are enforced by the server.`}{" "}
-            {followup.closedAt ? "This follow-up is closed." : "Links remain revocable."}
+              ? secondary("Time-flex mode has no countdown.")
+              : secondary(
+                  uxBeta
+                    ? "Standard question timers are enforced by the server."
+                    : "Standard checkpoint timers are enforced by the server.",
+                )}{" "}
+            {followup.closedAt
+              ? secondary("This follow-up is closed.")
+              : ended
+                ? secondary("This follow-up has expired")
+                : secondary("Links remain revocable.")}
           </p>
           {created ? (
             <div className="notice">
-              <strong>Save these links now.</strong> Polling Pops stores only token hashes and
-              cannot show the same links again.
+              <strong>{secondary("Save these links now.")}</strong>{" "}
+              {secondary(
+                "Polling Pops stores only token hashes and cannot show the same links again.",
+              )}
               <div className="field" style={{ marginTop: 12 }}>
-                <span>{t("reportRound.assign.genericLink")}</span>
+                <label htmlFor="followup-generic-url">{t("reportRound.assign.genericLink")}</label>
                 <div className="toolbar">
-                  <input className="input" readOnly value={created.genericUrl} />
+                  <input
+                    id="followup-generic-url"
+                    className="input"
+                    readOnly
+                    value={created.genericUrl}
+                  />
                   <button
                     className="button-quiet small-button"
                     onClick={() => void copyGenericLink()}
@@ -811,94 +891,144 @@ function FollowupBuilder({
               <button className="button-quiet small-button" onClick={downloadLinks} type="button">
                 {t("reportRound.assign.downloadCsv")}
               </button>
-              {shareStatus ? (
-                <p aria-live="polite" className="success" role="status">
-                  {shareStatus}
-                </p>
-              ) : null}
             </div>
           ) : (
             <p className="notice">
-              Access links were shown once when this follow-up was created. Create an accommodation
-              pass below if a new individual link is needed.
+              {secondary(
+                canEdit && !ended
+                  ? "Access links were shown once when this follow-up was created. Create an accommodation pass below if a new individual link is needed."
+                  : "Access links were shown once when this follow-up was created.",
+              )}
             </p>
           )}
 
-          {!followup.closedAt ? (
+          {canEdit && !ended ? (
             <form onSubmit={createPass} className="toolbar" style={{ marginTop: 20 }}>
               <label className="field" style={{ flex: "1 1 220px" }}>
-                <span>Accommodation pass label</span>
+                <span>{secondary("Accommodation pass label")}</span>
                 <input
                   className="input"
                   lang=""
                   maxLength={80}
                   onChange={(event) => setPassLabel(event.target.value)}
                   required
-                  value={passLabel}
+                  value={displayedPassLabel}
                 />
               </label>
               <label className="field">
-                <span>Time allowance</span>
+                <span>{secondary("Time allowance")}</span>
                 <select
                   className="select"
                   onChange={(event) => setPassMultiplier(Number(event.target.value) as 1.5 | 2)}
                   value={passMultiplier}
                 >
-                  <option value={1.5}>1.5×</option>
-                  <option value={2}>2×</option>
+                  <option value={1.5}>{formatNumber(locale, 1.5)}×</option>
+                  <option value={2}>{formatNumber(locale, 2)}×</option>
                 </select>
               </label>
               <button className="button-quiet" disabled={busy} type="submit">
-                Create private pass
+                {secondary("Create private pass")}
               </button>
             </form>
           ) : null}
           {latestPass?.url ? (
             <div className="notice">
-              <strong>Save this new pass now:</strong>
+              <strong>{secondary("Save this new pass now:")}</strong>
+              <label className="field-label" htmlFor="followup-private-url">
+                {secondary("Private follow-up pass link")}
+              </label>
               <div className="toolbar" style={{ marginTop: 8 }}>
-                <input className="input" readOnly value={latestPass.url} />
+                <input
+                  id="followup-private-url"
+                  className="input"
+                  readOnly
+                  value={latestPass.url}
+                />
                 <button
                   className="button-quiet small-button"
-                  onClick={() => void navigator.clipboard.writeText(latestPass.url!)}
+                  onClick={() => void copyPrivateLink()}
                   type="button"
                 >
-                  Copy
+                  {t("reportRound.assign.copy")}
                 </button>
               </div>
             </div>
+          ) : null}
+          {shareStatus ? (
+            <p aria-live="polite" className="success" role="status">
+              {shareStatus === "private"
+                ? secondary("Private pass link copied.")
+                : copy(
+                    shareStatus === "downloaded"
+                      ? "Follow-up links downloaded."
+                      : "Generic follow-up link copied.",
+                  )}
+            </p>
+          ) : null}
+          {accessLoading ? <p role="status">{secondary("Loading access passes…")}</p> : null}
+          {accessError ? (
+            <div>
+              <p
+                className="error"
+                role="alert"
+                lang={localizeFollowupMessage(locale, accessError).language}
+              >
+                {localizeFollowupMessage(locale, accessError).text}
+              </p>
+              <button
+                className="button-quiet"
+                disabled={accessLoading}
+                onClick={() => setAccessLoadRevision((revision) => revision + 1)}
+                type="button"
+              >
+                {secondary("Retry loading access passes")}
+              </button>
+            </div>
+          ) : null}
+          {!accessLoading && !accessError && !access.length ? (
+            <p className="muted">{secondary("No individual access passes have been created.")}</p>
           ) : null}
           {access.length ? (
             <div
               style={{ overflowX: "auto" }}
               role="region"
-              aria-label="Follow-up access passes"
+              aria-label={secondary("Follow-up access passes")}
               tabIndex={0}
             >
               <table className="report-table">
                 <thead>
                   <tr>
-                    <th>Pass</th>
-                    <th>Time</th>
-                    <th>Status</th>
-                    <th>Action</th>
+                    <th>{secondary("Pass")}</th>
+                    <th>{secondary("Time")}</th>
+                    <th>{secondary("Status")}</th>
+                    <th>{secondary("Action")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {access.map((item) => (
                     <tr key={item.id}>
                       <td lang="">{item.nickname ?? item.label}</td>
-                      <td>{item.timeMultiplier}×</td>
-                      <td>{item.revokedAt ? "Revoked" : "Active"}</td>
+                      <td>{formatNumber(locale, item.timeMultiplier)}×</td>
                       <td>
-                        {!item.revokedAt && !followup.closedAt ? (
+                        {secondary(
+                          item.revokedAt
+                            ? "Revoked"
+                            : followup.closedAt
+                              ? "Closed"
+                              : ended || Date.parse(item.expiresAt) <= Date.now()
+                                ? "Expired"
+                                : "Active",
+                        )}
+                      </td>
+                      <td>
+                        {canEdit && !item.revokedAt && !followup.closedAt ? (
                           <button
                             className="danger-link"
                             disabled={busy}
                             onClick={() => void revoke(item.id)}
                             type="button"
                           >
-                            Revoke
+                            {secondary("Revoke")}
                           </button>
                         ) : (
                           "—"
@@ -910,17 +1040,29 @@ function FollowupBuilder({
               </table>
             </div>
           ) : null}
-          {!followup.closedAt ? (
+          {canEdit && !followup.closedAt ? (
             <button
               className="danger-link"
               disabled={busy}
               onClick={() => void closeFollowup()}
               type="button"
             >
-              Close follow-up for everyone
+              {secondary("Close follow-up for everyone")}
             </button>
           ) : null}
         </>
+      ) : !canEdit ? (
+        <p className="notice">
+          {secondary("An owner or editor must create or manage follow-up access.")}
+        </p>
+      ) : retentionExpired ? (
+        <p className="notice">
+          {secondary(
+            Date.parse(report.expiresAt) <= Date.now()
+              ? "The report retention deadline has passed. A new follow-up cannot be created."
+              : "One minute or less remains before the report retention deadline. A new follow-up cannot be created.",
+          )}
+        </p>
       ) : (
         <form onSubmit={createFollowup}>
           <p>
@@ -975,14 +1117,19 @@ function FollowupBuilder({
               />
             </label>
           </div>
+          <p className="muted">
+            {secondary("Choose a close time before the report retention deadline: {date}.", {
+              date: formatDateTime(locale, report.expiresAt),
+            })}
+          </p>
           <button className="button" disabled={busy || selected.length === 0} type="submit">
             {busy ? t("reportRound.assign.creating") : copy("Create follow-up and links")}
           </button>
         </form>
       )}
       {error ? (
-        <p className="error" role="alert">
-          {error}
+        <p className="error" role="alert" lang={errorMessage.language}>
+          {errorMessage.text}
         </p>
       ) : null}
     </section>
@@ -1033,10 +1180,15 @@ export default function ReportPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>("evidence");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
+  const [authContextRevision, setAuthContextRevision] = useState(0);
+  const authority = useRef({ canEdit: false, canDelete: false, generation: 0 });
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const generation = authority.current.generation;
     const load = async () => {
       try {
         const response = await apiFetch<{
@@ -1045,7 +1197,7 @@ export default function ReportPage() {
           followup: Followup | null;
           context?: ReportContext;
         }>(`/v1/reports/${id}`);
-        if (cancelled) return;
+        if (cancelled || generation !== authority.current.generation) return;
         setReport(response.report);
         setContext(response.context ?? null);
         setEntitlements(response.entitlements);
@@ -1053,7 +1205,7 @@ export default function ReportPage() {
         setError("");
         if (response.report.status === "pending") retryTimer = setTimeout(load, 1_500);
       } catch (caught) {
-        if (cancelled) return;
+        if (cancelled || generation !== authority.current.generation) return;
         if ((caught as { status?: number }).status === 401) router.replace("/signin");
         else setError(humanError(caught));
       }
@@ -1063,15 +1215,58 @@ export default function ReportPage() {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [id, router]);
+  }, [id, router, authContextRevision]);
 
   useEffect(() => {
-    apiFetch<{
+    let cancelled = false;
+    const generation = authority.current.generation;
+    const current = () => !cancelled && generation === authority.current.generation;
+    void apiFetch<{
       productFeatures: Pick<WorkspaceProductFeatures, "uxBeta" | "workspaceShell">;
+      creator: { role: "owner" | "editor" | "viewer" };
     }>("/v1/auth/me")
-      .then((account) => setProductFeatures(account.productFeatures))
-      .catch(() => setProductFeatures(null));
-  }, []);
+      .then((account) => {
+        if (!current()) return;
+        const editable = account.creator?.role === "owner" || account.creator?.role === "editor";
+        const deletable = account.creator?.role === "owner";
+        authority.current.canEdit = editable;
+        authority.current.canDelete = deletable;
+        setProductFeatures(account.productFeatures);
+        setCanEdit(editable);
+        setCanDelete(deletable);
+      })
+      .catch(() => {
+        if (!current()) return;
+        authority.current.canEdit = false;
+        authority.current.canDelete = false;
+        setProductFeatures(null);
+        setCanEdit(false);
+        setCanDelete(false);
+      });
+    const refreshContext = () => {
+      authority.current = {
+        canEdit: false,
+        canDelete: false,
+        generation: authority.current.generation + 1,
+      };
+      setCanEdit(false);
+      setCanDelete(false);
+      setProductFeatures(null);
+      setReport(null);
+      setContext(null);
+      setEntitlements(null);
+      setFollowup(null);
+      setError("");
+      setAuthContextRevision((revision) => revision + 1);
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, refreshContext);
+    window.addEventListener("polling-pops:workspace-updated", refreshContext);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_CHANGE_EVENT, refreshContext);
+      window.removeEventListener("polling-pops:workspace-updated", refreshContext);
+    };
+  }, [id, authContextRevision]);
 
   const uxBeta = productFeatures?.uxBeta === true;
   const showResponseDistributions =
@@ -1124,7 +1319,11 @@ export default function ReportPage() {
   }
 
   async function deleteSession() {
-    if (!report || !window.confirm(copy("Delete this session, its answers, and this report?")))
+    if (
+      !report ||
+      !authority.current.canDelete ||
+      !window.confirm(copy("Delete this session, its answers, and this report?"))
+    )
       return;
     setDeleting(true);
     setError("");
@@ -1249,6 +1448,8 @@ export default function ReportPage() {
               <FollowupBuilder
                 entitlement={entitlements.followups}
                 initialFollowup={followup}
+                canEdit={canEdit}
+                mayManage={() => authority.current.canEdit}
                 report={evidence}
                 uxBeta={uxBeta}
               />
@@ -1325,6 +1526,8 @@ export default function ReportPage() {
               <FollowupBuilder
                 entitlement={entitlements.followups}
                 initialFollowup={followup}
+                canEdit={canEdit}
+                mayManage={() => authority.current.canEdit}
                 report={evidence}
                 uxBeta={uxBeta}
               />
@@ -1468,25 +1671,27 @@ export default function ReportPage() {
                     })}
                   </p>
                 </section>
-                <section className="panel danger-panel">
-                  <h2 style={{ fontSize: "1.5rem" }}>{copy("Delete session data")}</h2>
-                  <p className="muted">
-                    {copy(
-                      "Permanently remove this session, its participant records, answers, and report.",
-                    )}
-                  </p>
-                  <button
-                    className="button-danger"
-                    disabled={deleting}
-                    onClick={() => void deleteSession()}
-                    type="button"
-                  >
-                    {deleting ? copy("Deleting…") : copy("Delete session and report")}
-                  </button>
-                </section>
+                {canDelete ? (
+                  <section className="panel danger-panel">
+                    <h2 style={{ fontSize: "1.5rem" }}>{copy("Delete session data")}</h2>
+                    <p className="muted">
+                      {copy(
+                        "Permanently remove this session, its participant records, answers, and report.",
+                      )}
+                    </p>
+                    <button
+                      className="button-danger"
+                      disabled={deleting}
+                      onClick={() => void deleteSession()}
+                      type="button"
+                    >
+                      {deleting ? copy("Deleting…") : copy("Delete session and report")}
+                    </button>
+                  </section>
+                ) : null}
               </div>
             ) : null}
-            {!uxBeta ? (
+            {!uxBeta && canDelete ? (
               <section className="panel danger-panel">
                 <h2 style={{ fontSize: "1.5rem" }}>{copy("Delete session data")}</h2>
                 <p className="muted">

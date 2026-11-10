@@ -88,6 +88,24 @@ beforeEach(() => {
 });
 
 describe("Presentation activity slide", () => {
+  it("distinguishes editor, preview, and audience landmarks without exposing thumbnails", () => {
+    const value = question("single_select");
+    expect(markup({ question: value, editable: true })).toContain(
+      'aria-label="Activity slide editor"',
+    );
+    expect(markup({ question: value, accessibilityContext: "preview" })).toContain(
+      'aria-label="Activity slide preview"',
+    );
+    expect(markup({ question: value })).toContain('aria-label="Audience activity slide"');
+    const thumbnail = markup({
+      question: value,
+      staticThumbnail: true,
+      accessibilityContext: "preview",
+    });
+    expect(thumbnail).toContain('aria-hidden="true"');
+    expect(thumbnail).not.toContain('aria-label="Activity slide preview"');
+  });
+
   it("renders Korean primary guidance through the real locale provider and preserves authored content", async () => {
     const messages = await loadMessages("ko-KR", localeDomains);
     const koreanMarkup = (props: PresentationActivitySlideProps) =>
@@ -149,6 +167,10 @@ describe("Presentation activity slide", () => {
       onChoiceChange: vi.fn(),
     });
     expect(editable).toContain('aria-label="질문 내용"');
+    expect(editable).toContain('aria-label="활동 슬라이드 편집기"');
+    expect(koreanMarkup({ question: question("poll"), accessibilityContext: "preview" })).toContain(
+      'aria-label="활동 슬라이드 미리보기"',
+    );
     expect(editable).toContain('aria-label="슬라이드 답안 A"');
     expect(editable).toContain("참여자들이 무엇에 대해 생각하기를 바라시나요?");
     expect(editable).toContain("읽기 보기");

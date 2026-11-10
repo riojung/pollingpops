@@ -12,6 +12,7 @@ import {
 } from "../../lib/presentation-text-client";
 import { clientUuid } from "../../lib/uuid";
 import { useLocale } from "../locale-provider";
+import { localizeQnaModerationError, qnaModerationCopy } from "../../lib/i18n/qna-moderation-copy";
 import styles from "./text-results.module.css";
 
 export interface PresentationTextModerationPanelProps {
@@ -38,6 +39,7 @@ export function PresentationTextModerationPanel({
   onChanged,
 }: PresentationTextModerationPanelProps) {
   const { locale, t } = useLocale();
+  const copy = qnaModerationCopy(locale);
   const [scope, setScope] = useState<"current" | "all">("current");
   const [status, setStatus] = useState<"pending" | "approved" | "removed">("pending");
   const [cursor, setCursor] = useState<string | null>(null);
@@ -64,6 +66,8 @@ export function PresentationTextModerationPanel({
     review?.intent.sessionId === sessionId && review.intent.credential === credential
       ? review
       : null;
+  const reviewError = localizeQnaModerationError(locale, activeReview?.error ?? "");
+  const readError = localizeQnaModerationError(locale, current?.error ?? "");
 
   useEffect(() => {
     pending.current = null;
@@ -172,15 +176,15 @@ export function PresentationTextModerationPanel({
       <h2>{t("live.text.moderation")}</h2>
       <p className="muted">{t("live.text.moderationHelp")}</p>
       {activeReview ? (
-        <div lang="en-CA" role="status">
+        <div role="status">
           <p>
             {activeReview.busy
-              ? "Updating response review…"
-              : "Review update unconfirmed. Retry to check whether it was saved."}
+              ? copy("Updating response review…")
+              : copy("Review update unconfirmed. Retry to check whether it was saved.")}
           </p>
           {activeReview.error ? (
-            <p className="error" role="alert">
-              {activeReview.error}
+            <p className="error" role="alert" lang={reviewError.language}>
+              {reviewError.text}
             </p>
           ) : null}
           {!activeReview.busy ? (
@@ -191,7 +195,7 @@ export function PresentationTextModerationPanel({
                 disabled={disabled || !credential}
                 onClick={() => void attempt(activeReview.intent)}
               >
-                Retry review acknowledgement
+                {copy("Retry review acknowledgement")}
               </button>
               <button
                 className="button-quiet small-button"
@@ -202,7 +206,7 @@ export function PresentationTextModerationPanel({
                   setRetry((value) => value + 1);
                 }}
               >
-                Discard review retry
+                {copy("Discard review retry")}
               </button>
             </div>
           ) : null}
@@ -213,7 +217,7 @@ export function PresentationTextModerationPanel({
       ) : (
         <>
           {blockId ? (
-            <div className="button-row" aria-label={t("live.text.scope")}>
+            <div className="button-row" role="group" aria-label={t("live.text.scope")}>
               <button
                 className="button-quiet small-button"
                 type="button"
@@ -232,7 +236,7 @@ export function PresentationTextModerationPanel({
               </button>
             </div>
           ) : null}
-          <div className="button-row" aria-label={t("live.text.filter")}>
+          <div className="button-row" role="group" aria-label={t("live.text.filter")}>
             {(["pending", "approved", "removed"] as const).map((value) => (
               <button
                 key={value}
@@ -248,8 +252,8 @@ export function PresentationTextModerationPanel({
           {!credential ? (
             <p role="status">{t("live.text.connectionRequired")}</p>
           ) : current?.error ? (
-            <p className="error" role="alert" lang="en-CA">
-              {current.error}
+            <p className="error" role="alert" lang={readError.language}>
+              {readError.text}
             </p>
           ) : !current?.data ? (
             <p role="status">{t("live.text.loading")}</p>
@@ -266,8 +270,10 @@ export function PresentationTextModerationPanel({
                     {blockId && item.blockId !== blockId ? (
                       <>{t("live.text.earlierQuestion")} · </>
                     ) : null}
-                    <span lang="">{item.authorAlias ?? t("live.text.participant")}</span> ·{" "}
-                    {new Date(item.submittedAt).toLocaleString(locale)}
+                    <span lang={item.authorAlias === null ? locale : ""}>
+                      {item.authorAlias ?? t("live.text.participant")}
+                    </span>{" "}
+                    · {new Date(item.submittedAt).toLocaleString(locale)}
                   </small>
                   <p lang={item.textValue === null ? undefined : ""}>
                     {item.textValue ?? t("live.text.removedBody")}

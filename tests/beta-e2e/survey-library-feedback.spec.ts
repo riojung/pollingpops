@@ -84,12 +84,31 @@ for (const surface of ["", "@mobile "]) {
       expect(smallBounds!.x + smallBounds!.width).toBeLessThanOrEqual(320);
       await page.setViewportSize({ width: 390, height: 844 });
     }
+    const artwork = card.locator(":scope > div[aria-hidden=true]");
+    // List rows prioritize readable metadata and actions; decorative artwork is hidden.
+    await expect(page.locator("#surveys-panel section[data-view=list]")).toBeVisible();
+    await expect(artwork).not.toBeVisible();
+    const listTitle = await card.getByRole("heading", { name: title, exact: true }).boundingBox();
+    const listCard = await card.boundingBox();
+    expect(listTitle!.x).toBeGreaterThan(listCard!.x);
+    expect(listTitle!.x + listTitle!.width).toBeLessThanOrEqual(listCard!.x + listCard!.width);
+    await openLibraryFilters(page);
+    await page.getByRole("button", { name: "Grid view", exact: true }).click();
+    await expect(page.locator("#surveys-panel section[data-view=grid]")).toBeVisible();
+    await expect(artwork).toBeVisible();
     const bounds = await card.getByRole("heading", { name: title, exact: true }).boundingBox();
     const cardBounds = await card.boundingBox();
-    const artworkBounds = await card.locator(":scope > div[aria-hidden=true]").boundingBox();
+    const artworkBounds = await artwork.boundingBox();
     expect(bounds!.x).toBeGreaterThan(cardBounds!.x);
-    expect(bounds!.x).toBeGreaterThanOrEqual(artworkBounds!.x + artworkBounds!.width);
+    expect(bounds!.y).toBeGreaterThanOrEqual(artworkBounds!.y + artworkBounds!.height);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(cardBounds!.x + cardBounds!.width);
+    expect(artworkBounds!.x).toBeGreaterThanOrEqual(cardBounds!.x);
+    expect(artworkBounds!.x + artworkBounds!.width).toBeLessThanOrEqual(
+      cardBounds!.x + cardBounds!.width,
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: `test-results-beta/survey-library-${test.info().project.name}.png`,

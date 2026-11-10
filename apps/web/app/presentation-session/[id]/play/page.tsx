@@ -271,7 +271,7 @@ export default function PresentationParticipantPage() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Brand />
+        <Brand inverted />
         <span>
           {snapshot
             ? t("live.common.joinedCount", {

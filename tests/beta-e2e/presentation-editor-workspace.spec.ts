@@ -5,6 +5,7 @@ import { signInBeta } from "./sign-in";
 import {
   closeE01Overlays,
   createE01Deck,
+  e01ApiUrl,
   e01Body,
   e01Slide,
   enterE01Editor,
@@ -330,7 +331,15 @@ for (const suffix of ["", " @mobile"]) {
     await outline.click();
     const dialog = page.getByRole("dialog", { name: "Outline to slides", exact: true });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("textbox", { name: "Outline name", exact: true })).toBeDisabled();
+    const availability = await page.request.get(
+      `${e01ApiUrl}/v1/presentation-assistance/status?presentationId=${record.id}`,
+    );
+    expect(availability.status()).toBe(200);
+    const { status } = await availability.json();
+    expect(status.enabled).toBe(process.env.BETA_E2E_AUTHORING === "true");
+    const outlineName = dialog.getByRole("textbox", { name: "Outline name", exact: true });
+    if (status.enabled) await expect(outlineName).toBeEnabled();
+    else await expect(outlineName).toBeDisabled();
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();

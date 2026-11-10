@@ -125,7 +125,7 @@ for (const suffix of ["", " @mobile"]) {
     const hidden = { ...e01Slide("Hidden planning text"), hidden: true as const };
     const record = await createE01Deck(page, [block, hidden], 15);
     const initialStatus = await availability(page, record.id);
-    expect(initialStatus.enabled).toBe(false);
+    expect(initialStatus.enabled).toBe(process.env.BETA_E2E_AUTHORING === "true");
     const publication = await page.request.post(
       `${e01ApiUrl}/v1/presentations/${record.id}/publish`,
       {

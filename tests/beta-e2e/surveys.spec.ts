@@ -151,7 +151,12 @@ for (const surface of ["", "@mobile "]) {
       .locator("summary")
       .filter({ hasText: /^More formats$/ })
       .click();
-    await expect(page.getByRole("link", { name: /^Survey Share/ })).toBeVisible();
+    const survey = page
+      .getByRole("navigation", { name: "More formats", exact: true })
+      .getByRole("link")
+      .filter({ has: page.getByRole("heading", { name: "Survey", exact: true }) });
+    await expect(survey).toBeVisible();
+    await expect(survey).toHaveAttribute("href", "/surveys/new");
     // Survey remains a separate format; the poll route keeps unscored response defaults.
     await page.goto("/create?type=poll&start=blank");
     await expect(page.getByRole("radio", { name: /^Poll/ })).toBeChecked();
@@ -175,7 +180,15 @@ for (const surface of ["", "@mobile "]) {
     test.setTimeout(60000);
     await signInBeta(page);
     await page.goto("/create");
-    await page.getByRole("link", { name: /^Survey Share/ }).click();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^More formats$/ })
+      .click();
+    await page
+      .getByRole("navigation", { name: "More formats", exact: true })
+      .getByRole("link")
+      .filter({ has: page.getByRole("heading", { name: "Survey", exact: true }) })
+      .click();
     await page.getByLabel("Search templates").fill("Training feedback");
     await page.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
@@ -204,8 +217,10 @@ for (const surface of ["", "@mobile "]) {
       const participant = await context.newPage();
       await participant.goto(`/join?code=${room.code}`);
       await expect(
-        participant.getByText("No nickname or learning identity is collected.", { exact: false }),
-      ).toBeVisible();
+        participant.getByRole("region", { name: "Survey", exact: true }).getByRole("status"),
+      ).toHaveText(
+        "No nickname is collected. Organizers see question-level totals, not linked respondent answers.",
+      );
       await expect(participant.getByLabel("Nickname")).toHaveCount(0);
       await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       await expect(participant).toHaveURL(new RegExp(`/survey/${room.id}$`));

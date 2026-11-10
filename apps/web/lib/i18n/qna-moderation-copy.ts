@@ -1,0 +1,490 @@
+import type { SupportedLocale } from "@openround/contracts";
+
+const locales = [
+  "fr-FR",
+  "de-DE",
+  "es-ES",
+  "it-IT",
+  "pt-PT",
+  "ja-JP",
+  "ko-KR",
+  "zh-CN",
+  "zh-TW",
+] as const;
+// Only the remaining workflow copy belongs here; existing live-domain labels stay in their catalog.
+const rows = {
+  You: ["Vous", "Sie", "Tú", "Tu", "Tu", "あなた", "본인", "你", "你"],
+  "Activate audience Q&A": [
+    "Activer les questions du public",
+    "Publikumsfragen aktivieren",
+    "Activar preguntas del público",
+    "Attiva le domande del pubblico",
+    "Ativar perguntas do público",
+    "参加者の質問を有効にする",
+    "참여자 질의응답 활성화",
+    "启用观众问答",
+    "啟用觀眾問答",
+  ],
+  "Activating Q&A…": [
+    "Activation des questions…",
+    "Fragen werden aktiviert…",
+    "Activando preguntas…",
+    "Attivazione delle domande…",
+    "A ativar perguntas…",
+    "質問を有効化中…",
+    "질의응답 활성화 중…",
+    "正在启用问答…",
+    "正在啟用問答…",
+  ],
+  "Open a moderated question space alongside this Presentation. Companion access is read-only.": [
+    "Ouvrez un espace de questions modéré pour cette présentation. L’accès Companion est en lecture seule.",
+    "Öffnen Sie einen moderierten Fragebereich für diese Präsentation. Der Companion-Zugriff ist schreibgeschützt.",
+    "Abre un espacio de preguntas moderadas junto a esta presentación. Companion solo permite lectura.",
+    "Apri uno spazio di domande moderate per questa presentazione. Companion consente solo la lettura.",
+    "Abra um espaço de perguntas moderadas nesta apresentação. O acesso Companion é só de leitura.",
+    "このプレゼンテーションに質問の承認スペースを開きます。Companionは閲覧専用です。",
+    "이 프레젠테이션에서 질문을 검토할 공간을 여세요. Companion은 읽기 전용입니다.",
+    "为此演示文稿开启受审核的提问空间。Companion访问为只读。",
+    "為此簡報開啟受審核的提問空間。Companion存取為唯讀。",
+  ],
+  "Audience Q&A will appear when the facilitator activates it.": [
+    "Les questions apparaîtront lorsque l’animateur les activera.",
+    "Publikumsfragen erscheinen, sobald die Moderation sie aktiviert.",
+    "Las preguntas aparecerán cuando las active el facilitador.",
+    "Le domande appariranno quando il facilitatore le attiverà.",
+    "As perguntas aparecem quando o facilitador as ativar.",
+    "進行役が有効にすると質問が表示されます。",
+    "진행자가 활성화하면 참여자 질의응답이 표시됩니다.",
+    "主持人启用后将显示观众问答。",
+    "主持人啟用後將顯示觀眾問答。",
+  ],
+  "The facilitator can see your session alias. Anonymous public display hides it from the room, not from the facilitator.":
+    [
+      "L’animateur peut voir votre pseudonyme de session. L’affichage anonyme le masque au public, mais pas à l’animateur.",
+      "Die Moderation sieht Ihren Sitzungsalias. Die anonyme Anzeige verbirgt ihn vor dem Publikum, aber nicht vor der Moderation.",
+      "El facilitador puede ver tu alias de sesión. La vista anónima lo oculta al público, pero no al facilitador.",
+      "Il facilitatore può vedere il tuo alias di sessione. La visualizzazione anonima lo nasconde al pubblico, ma non al facilitatore.",
+      "O facilitador pode ver o seu nome na sessão. A apresentação anónima oculta-o do público, mas não do facilitador.",
+      "進行役にはセッションの別名が表示されます。匿名表示では会場からのみ非表示となり、進行役には表示されます。",
+      "진행자는 세션 별칭을 볼 수 있습니다. 공개 익명 표시는 참여자들에게만 별칭을 숨기며 진행자에게는 숨기지 않습니다.",
+      "主持人可以看到您的会话别名。公开匿名显示只对观众隐藏别名，不对主持人隐藏。",
+      "主持人可以看到您的工作階段別名。公開匿名顯示只對觀眾隱藏別名，不對主持人隱藏。",
+    ],
+  "This Presentation has ended. Q&A is now read-only.": [
+    "Cette présentation est terminée. Les questions sont en lecture seule.",
+    "Diese Präsentation ist beendet. Fragen sind jetzt schreibgeschützt.",
+    "Esta presentación ha terminado. Las preguntas ahora son de solo lectura.",
+    "Questa presentazione è terminata. Le domande sono ora in sola lettura.",
+    "Esta apresentação terminou. As perguntas são agora só de leitura.",
+    "このプレゼンテーションは終了しました。質問は閲覧専用です。",
+    "이 프레젠테이션이 종료되었습니다. 질의응답은 이제 읽기 전용입니다.",
+    "此演示已结束。问答现为只读。",
+    "此簡報已結束。問答現為唯讀。",
+  ],
+  "Retry the same Q&A action": [
+    "Réessayer la même action",
+    "Dieselbe Frageaktion erneut versuchen",
+    "Reintentar la misma acción de preguntas",
+    "Riprova la stessa azione sulle domande",
+    "Repetir a mesma ação nas perguntas",
+    "同じ質問操作を再試行",
+    "동일한 질의응답 작업 재시도",
+    "重试同一问答操作",
+    "重試同一問答操作",
+  ],
+  "Mark answered": [
+    "Marquer comme répondue",
+    "Als beantwortet markieren",
+    "Marcar como respondida",
+    "Segna come risposta",
+    "Marcar como respondida",
+    "回答済みにする",
+    "답변 완료로 표시",
+    "标记为已回答",
+    "標記為已回答",
+  ],
+  "Companion Q&A is read-only. Use the host window to moderate questions.": [
+    "Les questions de Companion sont en lecture seule. Modérez-les dans la fenêtre de l’hôte.",
+    "Companion-Fragen sind schreibgeschützt. Moderieren Sie Fragen im Host-Fenster.",
+    "Las preguntas en Companion son de solo lectura. Modéralas desde la ventana del anfitrión.",
+    "Le domande in Companion sono in sola lettura. Moderale dalla finestra dell’host.",
+    "As perguntas no Companion são só de leitura. Modere-as na janela do anfitrião.",
+    "Companionの質問は閲覧専用です。質問の管理にはホスト画面を使用してください。",
+    "Companion 질의응답은 읽기 전용입니다. 호스트 창에서 질문을 검토하세요.",
+    "Companion问答为只读。请在主持人窗口审核问题。",
+    "Companion問答為唯讀。請在主持人視窗審核問題。",
+  ],
+  "Q&A access has expired. Rejoin the Presentation or reacquire your host/Companion pass.": [
+    "L’accès aux questions a expiré. Rejoignez la présentation ou obtenez un nouveau pass hôte/Companion.",
+    "Der Fragenzugriff ist abgelaufen. Treten Sie der Präsentation erneut bei oder erneuern Sie Ihren Host-/Companion-Pass.",
+    "El acceso a preguntas ha caducado. Vuelve a unirte a la presentación u obtén otro pase de anfitrión/Companion.",
+    "L’accesso alle domande è scaduto. Rientra nella presentazione o ottieni un nuovo pass host/Companion.",
+    "O acesso às perguntas expirou. Volte a entrar na apresentação ou obtenha um novo passe de anfitrião/Companion.",
+    "質問へのアクセス期限が切れました。プレゼンテーションに再参加するか、ホスト／Companionパスを再取得してください。",
+    "질의응답 접근 권한이 만료되었습니다. 프레젠테이션에 다시 참가하거나 호스트/Companion 패스를 다시 받으세요.",
+    "问答访问权限已过期。请重新加入演示或重新获取主持人/Companion通行证。",
+    "問答存取權限已過期。請重新加入簡報或重新取得主持人/Companion通行證。",
+  ],
+  "Updating response review…": [
+    "Mise à jour de la révision…",
+    "Antwortprüfung wird aktualisiert…",
+    "Actualizando la revisión…",
+    "Aggiornamento della revisione…",
+    "A atualizar a revisão…",
+    "回答の確認状態を更新中…",
+    "응답 검토 업데이트 중…",
+    "正在更新回答审核…",
+    "正在更新回答審核…",
+  ],
+  "Review update unconfirmed. Retry to check whether it was saved.": [
+    "La mise à jour n’est pas confirmée. Réessayez pour vérifier son enregistrement.",
+    "Prüfungsänderung unbestätigt. Versuchen Sie es erneut, um die Speicherung zu prüfen.",
+    "La revisión no está confirmada. Reintenta para comprobar si se guardó.",
+    "Aggiornamento non confermato. Riprova per verificare se è stato salvato.",
+    "A atualização não está confirmada. Repita para verificar se foi guardada.",
+    "確認状態の更新は未確認です。再試行して保存済みか確認してください。",
+    "검토 업데이트가 확인되지 않았습니다. 저장 여부를 확인하려면 재시도하세요.",
+    "审核更新尚未确认。请重试以检查是否已保存。",
+    "審核更新尚未確認。請重試以檢查是否已儲存。",
+  ],
+  "Retry review acknowledgement": [
+    "Réessayer la confirmation de révision",
+    "Prüfungsbestätigung erneut versuchen",
+    "Reintentar confirmación de revisión",
+    "Riprova la conferma della revisione",
+    "Repetir confirmação da revisão",
+    "確認の受領を再試行",
+    "검토 확인 응답 재시도",
+    "重试审核确认",
+    "重試審核確認",
+  ],
+  "Discard review retry": [
+    "Abandonner la nouvelle tentative",
+    "Prüfungswiederholung verwerfen",
+    "Descartar reintento de revisión",
+    "Annulla il nuovo tentativo",
+    "Descartar repetição da revisão",
+    "確認の再試行を破棄",
+    "검토 재시도 취소",
+    "放弃审核重试",
+    "放棄審核重試",
+  ],
+  "Responses changed. Refresh the list before continuing.": [
+    "Les réponses ont changé. Actualisez la liste avant de continuer.",
+    "Antworten haben sich geändert. Aktualisieren Sie die Liste, bevor Sie fortfahren.",
+    "Las respuestas han cambiado. Actualiza la lista antes de continuar.",
+    "Le risposte sono cambiate. Aggiorna l’elenco prima di continuare.",
+    "As respostas mudaram. Atualize a lista antes de continuar.",
+    "回答が変更されました。続行する前に一覧を更新してください。",
+    "응답이 변경되었습니다. 계속하기 전에 목록을 새로고침하세요.",
+    "回答已更改。请刷新列表后继续。",
+    "回答已變更。請重新整理清單後繼續。",
+  ],
+  "The response list does not match the requested question and filter.": [
+    "La liste ne correspond pas à la question et au filtre demandés.",
+    "Die Antwortliste passt nicht zur angeforderten Frage und zum Filter.",
+    "La lista de respuestas no coincide con la pregunta y el filtro solicitados.",
+    "L’elenco non corrisponde alla domanda e al filtro richiesti.",
+    "A lista não corresponde à pergunta e ao filtro pedidos.",
+    "回答一覧が指定した質問と絞り込み条件に一致しません。",
+    "응답 목록이 요청한 질문 및 필터와 일치하지 않습니다.",
+    "回答列表与请求的问题和筛选条件不一致。",
+    "回答清單與要求的問題和篩選條件不一致。",
+  ],
+  "The server did not confirm this response review. Retry its acknowledgement.": [
+    "Le serveur n’a pas confirmé cette révision. Réessayez sa confirmation.",
+    "Der Server hat diese Antwortprüfung nicht bestätigt. Versuchen Sie die Bestätigung erneut.",
+    "El servidor no confirmó esta revisión. Reintenta su confirmación.",
+    "Il server non ha confermato questa revisione. Riprova la conferma.",
+    "O servidor não confirmou esta revisão. Repita a confirmação.",
+    "サーバーで回答の確認状態を確定できませんでした。受領確認を再試行してください。",
+    "서버가 이 응답 검토를 확인하지 않았습니다. 확인 응답을 재시도하세요.",
+    "服务器未确认此回答审核。请重试确认。",
+    "伺服器未確認此回答審核。請重試確認。",
+  ],
+  "Reconnect before reviewing a response.": [
+    "Reconnectez-vous avant de réviser une réponse.",
+    "Verbinden Sie sich vor der Antwortprüfung erneut.",
+    "Vuelve a conectarte antes de revisar una respuesta.",
+    "Riconnettiti prima di esaminare una risposta.",
+    "Volte a ligar-se antes de rever uma resposta.",
+    "回答を確認する前に再接続してください。",
+    "응답을 검토하기 전에 다시 연결하세요.",
+    "请重新连接后审核回答。",
+    "請重新連線後審核回答。",
+  ],
+  "Reconnect to refresh responses.": [
+    "Reconnectez-vous pour actualiser les réponses.",
+    "Verbinden Sie sich erneut, um Antworten zu aktualisieren.",
+    "Vuelve a conectarte para actualizar las respuestas.",
+    "Riconnettiti per aggiornare le risposte.",
+    "Volte a ligar-se para atualizar as respostas.",
+    "回答を更新するには再接続してください。",
+    "응답을 새로고침하려면 다시 연결하세요.",
+    "请重新连接以刷新回答。",
+    "請重新連線以重新整理回答。",
+  ],
+  "Something went wrong. Try again.": [
+    "Une erreur s’est produite. Réessayez.",
+    "Ein Fehler ist aufgetreten. Versuchen Sie es erneut.",
+    "Se ha producido un error. Inténtalo de nuevo.",
+    "Si è verificato un errore. Riprova.",
+    "Ocorreu um erro. Tente novamente.",
+    "問題が発生しました。再試行してください。",
+    "문제가 발생했습니다. 다시 시도하세요.",
+    "出现问题。请重试。",
+    "發生問題。請重試。",
+  ],
+  "Unable to connect. Check your connection and retry.": [
+    "Connexion impossible. Vérifiez votre connexion et réessayez.",
+    "Verbindung nicht möglich. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "No se puede conectar. Comprueba tu conexión y reintenta.",
+    "Connessione non riuscita. Controlla la connessione e riprova.",
+    "Não foi possível ligar. Verifique a ligação e repita.",
+    "接続できません。接続を確認して再試行してください。",
+    "연결할 수 없습니다. 연결 상태를 확인하고 재시도하세요.",
+    "无法连接。请检查连接后重试。",
+    "無法連線。請檢查連線後重試。",
+  ],
+  "Q&A is disabled for this session.": [
+    "Les questions sont désactivées pour cette session.",
+    "Fragen sind für diese Sitzung deaktiviert.",
+    "Las preguntas están desactivadas en esta sesión.",
+    "Le domande sono disattivate per questa sessione.",
+    "As perguntas estão desativadas nesta sessão.",
+    "このセッションでは質問が無効です。",
+    "이 세션에서 질의응답이 비활성화되어 있습니다.",
+    "此会话已停用问答。",
+    "此工作階段已停用問答。",
+  ],
+  "Q&A access has been revoked.": [
+    "Votre accès aux questions a été révoqué.",
+    "Ihr Fragenzugriff wurde widerrufen.",
+    "Tu acceso a preguntas se ha revocado.",
+    "L’accesso alle domande è stato revocato.",
+    "O acesso às perguntas foi revogado.",
+    "質問へのアクセスが取り消されました。",
+    "질의응답 접근 권한이 취소되었습니다.",
+    "问答访问权限已被撤销。",
+    "問答存取權限已被撤銷。",
+  ],
+  "Q&A changed. Refresh the audience view and try again.": [
+    "Les questions ont changé. Actualisez la vue du public et réessayez.",
+    "Die Fragen haben sich geändert. Aktualisieren Sie die Publikumsansicht und versuchen Sie es erneut.",
+    "Las preguntas han cambiado. Actualiza la vista del público y reintenta.",
+    "Le domande sono cambiate. Aggiorna la vista del pubblico e riprova.",
+    "As perguntas mudaram. Atualize a vista do público e repita.",
+    "質問が変更されました。参加者の表示を更新して再試行してください。",
+    "질의응답이 변경되었습니다. 참여자 화면을 새로고침하고 재시도하세요.",
+    "问答已更改。请刷新观众视图后重试。",
+    "問答已變更。請重新整理觀眾檢視後重試。",
+  ],
+  "This Q&A view is read-only.": [
+    "Cette vue des questions est en lecture seule.",
+    "Diese Fragenansicht ist schreibgeschützt.",
+    "Esta vista de preguntas es de solo lectura.",
+    "Questa vista delle domande è in sola lettura.",
+    "Esta vista das perguntas é só de leitura.",
+    "この質問画面は閲覧専用です。",
+    "이 질의응답 화면은 읽기 전용입니다.",
+    "此问答视图为只读。",
+    "此問答檢視為唯讀。",
+  ],
+  "Use the host window to activate or moderate Q&A.": [
+    "Utilisez la fenêtre de l’hôte pour activer ou modérer les questions.",
+    "Nutzen Sie das Host-Fenster, um Fragen zu aktivieren oder zu moderieren.",
+    "Usa la ventana del anfitrión para activar o moderar preguntas.",
+    "Usa la finestra dell’host per attivare o moderare le domande.",
+    "Utilize a janela do anfitrião para ativar ou moderar perguntas.",
+    "質問の有効化や管理にはホスト画面を使用してください。",
+    "질의응답을 활성화하거나 검토하려면 호스트 창을 사용하세요.",
+    "请使用主持人窗口启用或审核问答。",
+    "請使用主持人視窗啟用或審核問答。",
+  ],
+  "Enter a question containing visible text before submitting": [
+    "Saisissez une question avec du texte visible avant l’envoi.",
+    "Geben Sie vor dem Senden eine Frage mit sichtbarem Text ein.",
+    "Escribe una pregunta con texto visible antes de enviarla.",
+    "Inserisci una domanda con testo visibile prima di inviarla.",
+    "Introduza uma pergunta com texto visível antes de enviar.",
+    "送信前に表示可能な文字で質問を入力してください。",
+    "제출하기 전에 표시 가능한 텍스트로 질문을 입력하세요.",
+    "请先输入包含可见文字的问题再提交。",
+    "請先輸入包含可見文字的問題再提交。",
+  ],
+  "Enter a reply before submitting": [
+    "Saisissez une réponse avant l’envoi.",
+    "Geben Sie vor dem Senden eine Antwort ein.",
+    "Escribe una respuesta antes de enviarla.",
+    "Inserisci una risposta prima di inviarla.",
+    "Introduza uma resposta antes de enviar.",
+    "送信前に返信を入力してください。",
+    "제출하기 전에 답글을 입력하세요.",
+    "请先输入回复再提交。",
+    "請先輸入回覆再提交。",
+  ],
+  "Too many Q&A actions; wait before trying again": [
+    "Trop d’actions sur les questions ; patientez avant de réessayer.",
+    "Zu viele Frageaktionen; warten Sie vor dem nächsten Versuch.",
+    "Demasiadas acciones en preguntas; espera antes de reintentar.",
+    "Troppe azioni sulle domande; attendi prima di riprovare.",
+    "Demasiadas ações nas perguntas; aguarde antes de repetir.",
+    "質問の操作が多すぎます。しばらく待って再試行してください。",
+    "질의응답 작업이 너무 많습니다. 잠시 기다린 후 재시도하세요.",
+    "问答操作过多；请稍候再试。",
+    "問答操作過多；請稍候再試。",
+  ],
+  "This question is awaiting moderation": [
+    "Cette question attend une révision.",
+    "Diese Frage wartet auf Moderation.",
+    "Esta pregunta está pendiente de moderación.",
+    "Questa domanda è in attesa di moderazione.",
+    "Esta pergunta aguarda moderação.",
+    "この質問は承認待ちです。",
+    "이 질문은 검토 대기 중입니다.",
+    "此问题正在等待审核。",
+    "此問題正在等待審核。",
+  ],
+  "Q&A question not found": [
+    "Question introuvable.",
+    "Frage nicht gefunden.",
+    "Pregunta no encontrada.",
+    "Domanda non trovata.",
+    "Pergunta não encontrada.",
+    "質問が見つかりません。",
+    "질문을 찾을 수 없습니다.",
+    "未找到问题。",
+    "找不到問題。",
+  ],
+  "Q&A reply not found": [
+    "Réponse introuvable.",
+    "Antwort nicht gefunden.",
+    "Respuesta no encontrada.",
+    "Risposta non trovata.",
+    "Resposta não encontrada.",
+    "返信が見つかりません。",
+    "답글을 찾을 수 없습니다.",
+    "未找到回复。",
+    "找不到回覆。",
+  ],
+  "Only participants can submit or vote on questions": [
+    "Seuls les participants peuvent soumettre des questions ou voter.",
+    "Nur Teilnehmende können Fragen senden oder dafür stimmen.",
+    "Solo los participantes pueden enviar preguntas o votar.",
+    "Solo i partecipanti possono inviare domande o votare.",
+    "Só os participantes podem enviar perguntas ou votar.",
+    "質問の投稿や投票は参加者のみ行えます。",
+    "참여자만 질문을 제출하거나 투표할 수 있습니다.",
+    "只有参与者可以提交问题或投票。",
+    "只有參與者可以提交問題或投票。",
+  ],
+  "Q&A is closed because this live round has finished": [
+    "Les questions sont fermées car ce Round en direct est terminé.",
+    "Fragen sind geschlossen, da diese Live-Runde beendet ist.",
+    "Las preguntas están cerradas porque este Round en directo ha terminado.",
+    "Le domande sono chiuse perché questo Round dal vivo è terminato.",
+    "As perguntas estão encerradas porque este Round em direto terminou.",
+    "このライブRoundは終了したため、質問は締め切られています。",
+    "라이브 라운드가 종료되어 질의응답이 마감되었습니다.",
+    "此实时Round已结束，问答已关闭。",
+    "此即時Round已結束，問答已關閉。",
+  ],
+  "Request failed ({status})": [
+    "Échec de la demande ({status})",
+    "Anfrage fehlgeschlagen ({status})",
+    "La solicitud ha fallado ({status})",
+    "Richiesta non riuscita ({status})",
+    "O pedido falhou ({status})",
+    "リクエストが失敗しました（{status}）",
+    "요청 실패 ({status})",
+    "请求失败（{status}）",
+    "要求失敗（{status}）",
+  ],
+} as const;
+export type QnaModerationCopyKey = keyof typeof rows;
+export const qnaModerationCopyKeys = Object.keys(rows) as QnaModerationCopyKey[];
+
+export function qnaModerationCopy(locale: SupportedLocale = "en-CA") {
+  const column = locales.indexOf(locale as (typeof locales)[number]);
+  return (key: QnaModerationCopyKey, values: Record<string, string | number> = {}) => {
+    const message = column < 0 ? key : (rows[key][column] ?? key);
+    return message.replace(/\{(\w+)\}/g, (token, name: string) => String(values[name] ?? token));
+  };
+}
+
+const aliases: Record<string, QnaModerationCopyKey> = {
+  "Failed to fetch": "Unable to connect. Check your connection and retry.",
+  "Load failed": "Unable to connect. Check your connection and retry.",
+  "Network request failed": "Unable to connect. Check your connection and retry.",
+  "Responses changed. Refresh the list before continuing":
+    "Responses changed. Refresh the list before continuing.",
+  "The response cursor is no longer available. Refresh the list":
+    "Responses changed. Refresh the list before continuing.",
+  "Q&A is disabled for this round": "Q&A is disabled for this session.",
+  "Q&A is disabled for this Presentation": "Q&A is disabled for this session.",
+  "Your Q&A access has been revoked": "Q&A access has been revoked.",
+  "Presentation access has expired":
+    "Q&A access has expired. Rejoin the Presentation or reacquire your host/Companion pass.",
+  "Room credential is invalid or revoked":
+    "Q&A access has expired. Rejoin the Presentation or reacquire your host/Companion pass.",
+  "The Q&A pagination cursor is invalid": "Q&A changed. Refresh the audience view and try again.",
+  "The Q&A pagination cursor is invalid; refresh the list":
+    "Q&A changed. Refresh the audience view and try again.",
+  "Q&A changed. Refresh the audience view and try again":
+    "Q&A changed. Refresh the audience view and try again.",
+  "This Presentation is finished; Q&A is read-only":
+    "This Presentation has ended. Q&A is now read-only.",
+  "This Presentation is closed; Q&A is read-only":
+    "This Presentation has ended. Q&A is now read-only.",
+  "Presenter credentials are read-only": "This Q&A view is read-only.",
+  "Only a Presentation host pass can activate audience services":
+    "Use the host window to activate or moderate Q&A.",
+  "Only a host or cohost can change Q&A settings":
+    "Use the host window to activate or moderate Q&A.",
+  "Only a host or cohost can moderate Q&A": "Use the host window to activate or moderate Q&A.",
+  "Enter a question before submitting":
+    "Enter a question containing visible text before submitting",
+  "Too many Q&A requests. Wait a minute and retry":
+    "Too many Q&A actions; wait before trying again",
+  "Q&A question not found in this room": "Q&A question not found",
+  "Only participants can submit audience questions":
+    "Only participants can submit or vote on questions",
+  "Only participants can vote on questions": "Only participants can submit or vote on questions",
+};
+
+/** Display-time translation never rewrites requests, authored bodies or unknown diagnostics. */
+export function localizeQnaModerationError(locale: SupportedLocale, message: string) {
+  const key = Object.hasOwn(rows, message)
+    ? (message as QnaModerationCopyKey)
+    : Object.hasOwn(aliases, message)
+      ? aliases[message]
+      : undefined;
+  const request = /^Request failed \((\d{3})\)$/.exec(message);
+  return {
+    text: key
+      ? qnaModerationCopy(locale)(key)
+      : request
+        ? qnaModerationCopy(locale)("Request failed ({status})", { status: request[1]! })
+        : message,
+    language: key || request ? locale : "en-CA",
+    known: Boolean(key || request),
+  };
+}
+
+/** Only an authoritative participant self projection is app-owned; aliases stay literal. */
+export function localizeQnaSelfName(
+  locale: SupportedLocale,
+  role: "participant" | "moderator" | "observer",
+  author: { displayName: string; mine: boolean; kind?: "participant" | "staff" },
+  source: "question" | "reply",
+) {
+  const self =
+    role === "participant" &&
+    author.mine &&
+    author.displayName === "You" &&
+    (source === "question" || author.kind === "participant");
+  return {
+    text: self ? qnaModerationCopy(locale)("You") : author.displayName,
+    language: self ? locale : "",
+  };
+}

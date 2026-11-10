@@ -41,6 +41,8 @@ const english = {
   slideView: "Slide view",
   readingView: "Reading view",
   reviewNotice: "Responses are reviewed before they appear.",
+  editorSlideName: "Activity slide editor",
+  previewSlideName: "Activity slide preview",
 } as const;
 export type PresentationActivityCopy = Record<keyof typeof english, string>;
 const translated: Record<SupportedLocale, readonly string[]> = {
@@ -85,6 +87,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "Vue Diapositive",
     "Vue Lecture",
     "Les réponses sont vérifiées avant leur affichage.",
+    "Éditeur de diapositive d’activité",
+    "Aperçu de la diapositive d’activité",
   ],
   "de-DE": [
     "Einfachauswahl",
@@ -126,6 +130,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "Folienansicht",
     "Leseansicht",
     "Antworten werden vor der Anzeige geprüft.",
+    "Aktivitätsfolieneditor",
+    "Vorschau der Aktivitätsfolie",
   ],
   "es-ES": [
     "Opción múltiple",
@@ -167,6 +173,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "Vista de diapositiva",
     "Vista de lectura",
     "Las respuestas se revisan antes de mostrarse.",
+    "Editor de diapositiva de actividad",
+    "Vista previa de diapositiva de actividad",
   ],
   "it-IT": [
     "Scelta multipla",
@@ -208,6 +216,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "Vista diapositiva",
     "Vista lettura",
     "Le risposte vengono verificate prima di essere mostrate.",
+    "Editor della diapositiva di attività",
+    "Anteprima della diapositiva di attività",
   ],
   "pt-PT": [
     "Escolha múltipla",
@@ -249,6 +259,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "Vista de diapositivo",
     "Vista de leitura",
     "As respostas são revistas antes de serem apresentadas.",
+    "Editor do diapositivo de atividade",
+    "Pré-visualização do diapositivo de atividade",
   ],
   "ja-JP": [
     "選択式",
@@ -290,6 +302,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "スライド表示",
     "閲覧表示",
     "回答は確認後に表示されます。",
+    "アクティビティスライドの編集",
+    "アクティビティスライドのプレビュー",
   ],
   "ko-KR": [
     "객관식",
@@ -331,6 +345,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "슬라이드 보기",
     "읽기 보기",
     "응답은 검토 후 표시됩니다.",
+    "활동 슬라이드 편집기",
+    "활동 슬라이드 미리보기",
   ],
   "zh-CN": [
     "单选题",
@@ -372,6 +388,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "幻灯片视图",
     "阅读视图",
     "回答经审核后才会显示。",
+    "活动幻灯片编辑器",
+    "活动幻灯片预览",
   ],
   "zh-TW": [
     "單選題",
@@ -413,6 +431,8 @@ const translated: Record<SupportedLocale, readonly string[]> = {
     "投影片檢視",
     "閱讀檢視",
     "回答經審核後才會顯示。",
+    "活動投影片編輯器",
+    "活動投影片預覽",
   ],
 };
 

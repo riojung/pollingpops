@@ -62,11 +62,93 @@ The classic summary also excludes unanswered questions from review counts and do
 assign accuracy to an empty assessment. Stored historical reports without question-purpose
 metadata remain unchanged; their meaning is not inferred from zero values.
 
-This is a bounded translation pass over the primary customer journey. Optional staff/embed
-credential tools, specialist follow-up management, advanced slide-design/spatial navigation,
-Q&A, AI and Pack tools still contain English and require separate language review. Raw
-service diagnostics retain their original language. Existing language choices are preserved;
+This is a bounded translation pass over the primary customer journey. The specialist
+follow-up below extends that coverage; advanced slide-design/spatial navigation,
+Companion chrome, AI and Pack tools still require separate language review. Raw service
+diagnostics retain their original language. Existing language choices are preserved;
 launch-language acceptance remains a release gate.
+
+## Specialist workflow follow-up — November 10, 2026
+
+The `codex/option-b-secondary-flows` slice covers Round staff/cohost and presenter embed
+controls, report follow-up/access-pass management, participant follow-up guidance and
+Q&A/text moderation. System labels, action feedback and known recovery messages use all
+ten configured locales. Dates and counts follow the selected locale; authored questions,
+responses and credential labels retain their original text. Unknown service diagnostics
+remain explicitly attributed to their original language. Native-language acceptance is
+still pending.
+
+Staff tools distinguish creation and revocation progress, prevent duplicate credential
+writes, place errors beside their actions and keep a visible URL when clipboard access is
+blocked. One-time-link guidance explains who can use a link and when to save it. Existing
+credential roles, fragment transport, expiry, revocation and HTTPS origin restrictions
+remain authoritative.
+
+Follow-up management reads the canonical workspace role: owners and editors can manage
+access, while viewers retain useful read-only metadata. Session deletion remains
+owner-only. Role changes and late responses cannot re-enable a captured mutation handler.
+Access lists have loading, retry, empty and expiry states; failed reads retain safe rows.
+Private-link inputs have associated labels and blocked-copy feedback without replacing
+the credential. Participant guidance, retry acknowledgements, completion and timer
+announcements follow the selected locale while retaining the existing recovery identity.
+
+Presentation Q&A explains facilitator visibility and read-only Companion access. Observer
+reply controls are absent and their handlers reject writes. Success notices translate
+when the locale changes. Moderation filter groups retain accessible names; private
+pending questions and participant aliases keep their existing projection boundaries.
+The synthesized participant self label follows the selected locale only when the
+canonical projection identifies it as the current participant; authored names, including
+literal “You” and staff aliases, remain unchanged. The dark participant header uses the
+light brand treatment.
+
+Integration review of the prior PR's completed beta run also found duplicate activity-slide
+landmarks, inconsistent legacy slide appearance between preview and delivery, and an
+import popover that could cover the next editor action. Activity previews now have
+contextual accessible names. Legacy layouts keep their authored appearance unless an
+explicit deck design applies, matching delivery. Closing published-Round import hands
+focus back to its disclosure without reopening the menu. Browser fixtures now use the
+current creation choices, report labels, list/grid geometry and authored-design schema;
+assistance expectations follow the fixture's configured provider availability. Existing
+accessibility, privacy, recovery and geometry assertions remain in place.
+
+This slice does not complete advanced object inspectors, Sections/spatial navigation,
+AI/Pack tools or all Companion chrome. Customer observation, manual accessibility,
+physical-device checks and approved launch-facing content remain on the release checklist.
+
+## Specialist verification
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes with **7,331 tests**, 513 standard opt-in
+  skips, formatting, lint, type checks, Docker-context checks, all four production builds
+  and compiled-server startup/configuration smoke.
+- The final direct-follow-up browser check exposed a missing route catalog: shared
+  response controls could display internal keys and overflow at 320 pixels in WebKit.
+  Follow-up routes now load their delivery catalog; practice management keeps its
+  existing domains. Route-aware regressions cover all ten locales. After this correction,
+  **all 361 web suites / 3,459 web tests pass**, as do web type checking, scoped lint,
+  and fresh standard and browser production web builds. Unaffected package checks remain
+  those of the full repository gate above.
+- **55 distinct selected production-browser cases pass**: 21 desktop Chromium,
+  17 phone Chromium and 17 phone WebKit. These include nine new Korean staff,
+  follow-up and Q&A cases, plus affected editor, moderation, Recovery Pack, reporting
+  and Survey journeys. Staff and follow-up controls retain strict 320-pixel overflow
+  and Axe checks while one-time URLs are visible, after reload and after revoked access.
+  Each profile/qualification phase used a fresh API fixture. Desktop menu/layout
+  checks also pass with assistance both enabled and disabled.
+- The final brand/self-label polish is requalified in the new Korean Q&A case and the
+  existing private-projection/retry cases. Authored English questions and private aliases
+  remain unchanged. Final follow-up reruns pass on all three profiles after the route
+  correction; corrected reruns do not add to the distinct-case count.
+- Zoom geometry checks now sample the toolbar, slide and authored frames atomically
+  during responsive reflow, retaining the original one-pixel non-overlap relation.
+  Screenshot review includes desktop and phone specialist surfaces. This does not
+  replace manual accessibility, native-language or physical-device acceptance.
+- The prior PR's [completed CI run](https://github.com/riojung/pollingpops/actions/runs/42774265223)
+  passed the repository, migration and all four core browser jobs; its broader beta jobs
+  failed or were cancelled. Their identified UI/fixture regressions are addressed and
+  selectively requalified here. This is not a fresh full hosted matrix for this branch.
+  The existing local Firefox runtime limitation remains open.
+- The release ledger validates with **0 complete / 15 pending** gates. Public launch
+  content remains deferred as requested.
 
 ## Release readiness checklist
 

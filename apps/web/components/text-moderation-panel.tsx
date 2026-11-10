@@ -12,6 +12,7 @@ import {
   type TextReadState,
 } from "../lib/text-response-client";
 import { useLocale } from "./locale-provider";
+import { localizeQnaModerationError } from "../lib/i18n/qna-moderation-copy";
 
 export function TextModerationPanel({
   sessionId,
@@ -52,6 +53,7 @@ export function TextModerationPanel({
   ]);
   const current = currentTextRead(state, key, credential);
   const finished = phase === "finished";
+  const displayError = localizeQnaModerationError(locale, current?.error ?? "");
 
   useEffect(() => {
     setCursor(null);
@@ -108,7 +110,7 @@ export function TextModerationPanel({
       ) : (
         <>
           {roundId ? (
-            <div className="button-row" aria-label={t("live.text.scope")}>
+            <div className="button-row" role="group" aria-label={t("live.text.scope")}>
               <button
                 className="button-quiet small-button"
                 type="button"
@@ -127,7 +129,7 @@ export function TextModerationPanel({
               </button>
             </div>
           ) : null}
-          <div className="button-row" aria-label={t("live.text.filter")}>
+          <div className="button-row" role="group" aria-label={t("live.text.filter")}>
             {(["pending", "approved", "removed"] as const).map((value) => (
               <button
                 className="button-quiet small-button"
@@ -143,8 +145,8 @@ export function TextModerationPanel({
           {!credential ? (
             <p role="status">{t("live.text.connectionRequired")}</p>
           ) : current?.error ? (
-            <p className="error" role="alert" lang="en-CA">
-              {current.error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : !current?.data ? (
             <p role="status">{t("live.text.loading")}</p>
@@ -161,8 +163,10 @@ export function TextModerationPanel({
                     {roundId && item.roundId !== roundId ? (
                       <>{t("live.text.earlierQuestion")} · </>
                     ) : null}
-                    <span lang="">{item.authorAlias ?? t("live.text.participant")}</span> ·{" "}
-                    {new Date(item.submittedAt).toLocaleString(locale)}
+                    <span lang={item.authorAlias === null ? locale : ""}>
+                      {item.authorAlias ?? t("live.text.participant")}
+                    </span>{" "}
+                    · {new Date(item.submittedAt).toLocaleString(locale)}
                   </small>
                   <p lang={item.body === null ? undefined : ""}>
                     {item.body ?? t("live.text.removedBody")}

@@ -149,6 +149,7 @@ import {
 } from "../../lib/presentation-text-assistance-client";
 import { PresentationSections } from "./presentation-sections";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
+import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
 import {
   adaptContentSlideToScene,
   attachNativeImage,
@@ -236,42 +237,6 @@ function updateBlock(
     ...draft,
     blocks: draft.blocks.map((block) => (block.id === blockId ? updater(block) : block)),
   };
-}
-
-const modalFocusable =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function focusModal(container: HTMLElement | null) {
-  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  const first = container?.querySelector<HTMLElement>(modalFocusable) ?? container;
-  first?.focus();
-  return () => previous?.focus();
-}
-
-function handleModalKeyDown(event: KeyboardEvent<HTMLElement>, onClose: () => void) {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    onClose();
-    return;
-  }
-  if (event.key !== "Tab") return;
-  const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>(modalFocusable)].filter(
-    (element) => element.offsetParent !== null,
-  );
-  if (focusable.length === 0) {
-    event.preventDefault();
-    event.currentTarget.focus();
-    return;
-  }
-  const first = focusable[0]!;
-  const last = focusable.at(-1)!;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 function AuthenticatedMedia({ mediaId, altText }: { mediaId: string; altText: string | null }) {
@@ -430,7 +395,14 @@ function PresentationPreview({
                     const target = publication.blocks.findIndex(
                       (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
                     );
-                    if (target >= 0) setIndex(target);
+                    if (target >= 0) {
+                      // The link is about to unmount. The surviving region remains in
+                      // the dialog's Tab order, including reverse keyboard navigation.
+                      dialogRef.current
+                        ?.querySelector<HTMLElement>('[role="region"][aria-label="Slide preview"]')
+                        ?.focus({ preventScroll: true });
+                      setIndex(target);
+                    }
                   },
                 }}
               />

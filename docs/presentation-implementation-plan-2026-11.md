@@ -130,6 +130,15 @@ all four builds and 76 unique production-browser cases across Chromium desktop/p
 WebKit phone and Firefox desktop. See the
 [activity and notes record](evidence/presentation-activity-notes.md) for qualification and limits.
 
+The `codex/presentation-interaction-map` slice adds an editor-only reading-order action map,
+selected trigger/outcome and audience guidance, plus passive wide-stage action outlines and valid
+hotspot/image connections. Local map controls select/configure without executing an action or
+changing draft/history/publication state; existing contextual preview retains its guards. Phones
+keep the semantic map in reading flow. See the [interaction-map record](evidence/presentation-interaction-map.md)
+for qualification and boundaries. Presenting/sharing mode and version clarity and observed creator
+tasks remain next. Qualification passes 7,112 repository tests, all four builds and 34 selected
+production-browser workflows across Chromium desktop/phone, WebKit phone and Firefox desktop.
+
 The table below is the current gap map; the detailed E00–E14 sections retain implementation
 history and acceptance contracts. “Implemented” means the selected software slice, not complete
 competitor parity or successful creator task observation.

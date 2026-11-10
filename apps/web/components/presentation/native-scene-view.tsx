@@ -127,6 +127,8 @@ interface NativeSceneViewProps {
   staticThumbnail?: boolean;
   /** Canvas supplies normal-flow selection controls outside the authored slide. */
   hideGeometryControls?: boolean;
+  /** Creator-only passive annotations, never rendered by delivery or thumbnail callers. */
+  editorOverlay?: ReactNode;
   interactionRuntime?: NativeSceneInteractionRuntime;
   selectedNodeId?: string;
   selectedNodeIds?: readonly string[];
@@ -181,6 +183,7 @@ function NativeSceneSurface({
   interactionRuntime,
   staticThumbnail = false,
   hideGeometryControls = false,
+  editorOverlay,
 }: NativeSceneViewProps) {
   const markerId = useId();
   const [outline, setOutline] = useState(false);
@@ -479,6 +482,7 @@ function NativeSceneSurface({
               );
             })
           : null}
+        {editing ? editorOverlay : null}
       </article>
     </div>
   );

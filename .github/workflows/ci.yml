@@ -186,7 +186,7 @@ jobs:
 
   browser-beta:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.project == 'webkit-beta-mobile' && 45 || 30 }}
     strategy:
       fail-fast: false
       matrix:

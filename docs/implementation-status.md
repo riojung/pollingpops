@@ -8,6 +8,28 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B native editor shell follow-up November 10, 2026
+
+The `codex/option-b-native-editor` source extends the selected locale to ordinary native
+editing, insertion menus, image-upload guidance and access/reading-order controls, while
+preserving authored content/language, stored enums/geometry/order and existing permission
+and history boundaries. The separate specialized editors, shared branching/navigation,
+assistance review/recovery and Pack library/editor tools remain pending.
+
+The previous phone WebKit beta run exhausted its 30-minute job budget at case 125/132,
+without a recorded assertion failure, and skipped five later phases. Its beta budget is
+now 45 minutes; other projects retain 30 and every test/step/assertion remains in place.
+Fresh hosted acceptance of the resulting source remains pending. Repository validation
+completes 7,452 passing tests with 513 standard opt-in skips, formatting/lint/types,
+all four production builds and compiled-server startup. All 368 web suites / 3,569 tests
+pass; the final three inspector-label follow-ups pass 155 focused tests, web types, scoped
+lint and fresh normal/beta web builds. Thirty-seven distinct selected production-browser
+cases pass across desktop Chromium and phone Chromium/WebKit. The implementation record
+distinguishes final reruns from distinct counts and preserves the pending hosted gate. The
+[Option B implementation record](option-b-ux-implementation.md) retains scope and evidence;
+manual/customer/native-language/device checks and deferred launch-facing content remain
+release work.
+
 ### Option B editor and Companion follow-up November 10, 2026
 
 The `codex/option-b-editor-companion` source extends selected-language guidance to native

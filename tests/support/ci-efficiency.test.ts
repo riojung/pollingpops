@@ -17,7 +17,7 @@ type Job = {
   steps: Step[];
   env?: Record<string, string>;
   "runs-on": string;
-  "timeout-minutes": number;
+  "timeout-minutes": number | string;
   "continue-on-error"?: boolean;
   needs?: string[];
   if?: string;
@@ -33,6 +33,18 @@ async function workflow(name: string) {
   return parse(
     await readFile(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), "utf8"),
   ) as Workflow;
+}
+
+function browserMatrixBudget(job: Job, project: string) {
+  const budget = job["timeout-minutes"];
+  if (typeof budget === "number") return budget;
+  // Accept only the literal project comparison used by this budget policy, never arbitrary code.
+  const conditional =
+    /^\$\{\{\s*matrix\.project\s*==\s*'([^']+)'\s*&&\s*([1-9]\d*)\s*\|\|\s*([1-9]\d*)\s*\}\}$/.exec(
+      budget,
+    );
+  if (!conditional) throw new Error("Unsupported browser matrix timeout expression");
+  return Number(project === conditional[1] ? conditional[2] : conditional[3]);
 }
 
 describe("CI efficiency without coverage bypasses", () => {
@@ -188,7 +200,10 @@ describe("CI efficiency without coverage bypasses", () => {
     const coreConfig = (await import("../../playwright.config")).default;
     expect(coreConfig.projects?.map((project) => project.name)).toEqual(coreProjects);
     expect(core["timeout-minutes"]).toBe(25);
-    expect(beta["timeout-minutes"]).toBe(30);
+    for (const project of projects)
+      expect(browserMatrixBudget(beta, project), project).toBe(
+        project === "webkit-beta-mobile" ? 45 : 30,
+      );
     for (const browser of [core, beta]) {
       expect(browser.env?.PLAYWRIGHT_PRODUCTION).toBe("true");
       expect(browser.env?.PLAYWRIGHT_REUSE_BUILD).toBe("true");

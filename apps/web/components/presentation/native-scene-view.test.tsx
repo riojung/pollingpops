@@ -4,11 +4,12 @@ import {
   createNativeContentBlock,
   createNativeRevealNode,
 } from "../../lib/presentation-native-scene";
-import { type PresentationScene } from "@openround/contracts";
+import { supportedLocales, type PresentationScene } from "@openround/contracts";
 import { ContentSlideView } from "./content-slide-view";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { NativeSceneView } from "./native-scene-view";
 import { createNativeTableNode } from "../../lib/presentation-native-data";
+import { nativeAudienceCopy } from "./native-audience-copy";
 
 function nativeSceneFixture(): PresentationScene {
   return {
@@ -51,6 +52,52 @@ function nativeSceneFixture(): PresentationScene {
 }
 
 describe("production native scene rendering", () => {
+  it.each(supportedLocales)(
+    "renders audience system controls in %s while preserving authored language, ARIA, image arguments and scene identity",
+    (locale) => {
+      const scene = nativeSceneFixture();
+      const title = scene.nodes.find((node) => node.id === "title")!;
+      if (title.type !== "text") throw new Error("Text title required");
+      title.text = "Le choix suivant";
+      title.lang = "fr";
+      const reveal = {
+        ...createNativeRevealNode(),
+        label: "Reveal panel",
+        body: "Original Spanish: más detalles",
+      };
+      scene.nodes.push(reveal, {
+        id: "image",
+        type: "image",
+        mediaId: "image-id",
+        altText: "Image description needed",
+        frame: { x: 70, y: 40, width: 20, height: 30 },
+      });
+      scene.readingOrder.push(reveal.id, "image");
+      const original = structuredClone(scene);
+      const renderImage = vi.fn((_mediaId, altText) => (
+        <img src="/authorized-image" alt={altText ?? ""} />
+      ));
+      const copy = nativeAudienceCopy(locale);
+      const markup = renderToStaticMarkup(
+        <NativeSceneView scene={scene} locale={locale} renderImage={renderImage} />,
+      );
+      expect(markup).toContain(copy("Show accessible outline"));
+      expect(markup).toContain(copy("Show on this screen"));
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toMatch(new RegExp(`<article lang="${locale}"`));
+      expect(markup).toMatch(/<h1[^>]*lang="fr"[^>]*>Le choix suivant/);
+      expect(markup).toMatch(/<p lang=""[^>]*>Start here<\/p>/);
+      expect(markup).toContain('aria-label="Decision"');
+      expect(markup).toContain('<span lang="">Reveal panel</span>');
+      expect(markup).not.toContain(reveal.body);
+      expect(renderImage).toHaveBeenCalledExactlyOnceWith("image-id", "Image description needed");
+      expect(scene).toEqual(original);
+      expect(NativeSceneView({ scene, locale, interactionSourceKey: "source" }).key).toBe(
+        NativeSceneView({ scene, interactionSourceKey: "source" }).key,
+      );
+    },
+  );
+
   it("renders static thumbnail artwork without live controls, selection handles or private notes", () => {
     const scene = nativeSceneFixture();
     scene.schemaVersion = 5;

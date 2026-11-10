@@ -56,8 +56,12 @@ import {
   isPresentationRecoverableCommand,
   persistPresentationNavigationCommand,
   restorePresentationNavigationCommand,
-  presentationNavigationRetryLabel,
 } from "../../../../lib/presentation-navigation";
+import {
+  branchNavigationCopy,
+  branchNavigationRetryLabel,
+} from "../../../../components/presentation/branch-navigation-copy";
+import { companionCopy } from "../../../../lib/i18n/domains/live-delivery/companion-translations";
 import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
 import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
@@ -95,6 +99,8 @@ function advanceMessageKey(
 
 function PresentationHostContent() {
   const { locale, t } = useLocale();
+  const navigationCopy = branchNavigationCopy(locale);
+  const sharedCopy = companionCopy(locale);
   const { productFeatures, canEdit } = useWorkspace();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -779,13 +785,16 @@ function PresentationHostContent() {
                   <button
                     className="button-quiet full-width"
                     type="button"
-                    lang="en-CA"
+                    lang={locale}
                     ref={navigationButtonRef}
                     aria-haspopup="dialog"
                     aria-expanded={navigationOpen}
-                    onClick={() => setNavigationOpen(true)}
+                    onClick={(event) => {
+                      event.currentTarget.focus({ preventScroll: true });
+                      setNavigationOpen(true);
+                    }}
                   >
-                    Open navigation
+                    {sharedCopy("Open navigation")}
                   </button>
                 ) : null}
                 {snapshot.phase !== "finished" ? (
@@ -802,12 +811,16 @@ function PresentationHostContent() {
                 ) : null}
                 {!hasControlPass &&
                 (snapshot.phase !== "finished" || !!commandState.pendingCommand) ? (
-                  <div lang="en-CA">
+                  <div lang={locale}>
                     <p className="muted" role="status">
                       {commandState.pendingCommand
-                        ? "Reacquire a host control pass to confirm the pending action."
-                        : "Live navigation and Recovery Pack card actions require a host control pass. You can still advance using compatibility mode."}
-                      {controlPassError ? ` ${controlPassError}` : ""}
+                        ? navigationCopy(
+                            "Reacquire a host control pass to confirm the pending action.",
+                          )
+                        : navigationCopy(
+                            "Live navigation and Recovery Pack card actions require a host control pass. You can still advance using compatibility mode.",
+                          )}
+                      {controlPassError ? <span lang="en-CA"> {controlPassError}</span> : null}
                     </p>
                     <button
                       className="button-quiet full-width"
@@ -815,16 +828,22 @@ function PresentationHostContent() {
                       onClick={() => void retryControlPass()}
                       type="button"
                     >
-                      {controlPassBusy ? "Acquiring host control pass…" : "Retry host control pass"}
+                      {navigationCopy(
+                        controlPassBusy
+                          ? "Acquiring host control pass…"
+                          : "Retry host control pass",
+                      )}
                     </button>
                   </div>
                 ) : null}
                 {commandState.pendingCommand ? (
-                  <div lang="en-CA">
+                  <div lang={locale}>
                     <p className="muted" role="status" aria-live="polite">
                       {commandState.busy
-                        ? "Waiting for server confirmation…"
-                        : "Action not yet confirmed. Retry to confirm the original action."}
+                        ? sharedCopy("Waiting for server confirmation…")
+                        : sharedCopy(
+                            "Action not yet confirmed. Retry to confirm the original action.",
+                          )}
                     </p>
                     {!commandState.busy ? (
                       <button
@@ -834,10 +853,10 @@ function PresentationHostContent() {
                         type="button"
                       >
                         {isPresentationRecoverableCommand(commandState.pendingCommand)
-                          ? presentationNavigationRetryLabel(commandState.pendingCommand)
+                          ? branchNavigationRetryLabel(locale, commandState.pendingCommand)
                           : commandState.pendingCommand.action === "start_recovery_card"
-                            ? "Retry card action acknowledgement"
-                            : "Retry advance acknowledgement"}
+                            ? sharedCopy("Retry card action acknowledgement")
+                            : sharedCopy("Retry advance acknowledgement")}
                       </button>
                     ) : null}
                   </div>
@@ -857,6 +876,7 @@ function PresentationHostContent() {
                 ) : null}
                 {snapshot.branches ? (
                   <PresentationBranches
+                    locale={locale}
                     branches={snapshot.branches}
                     disabled={
                       busy ||
@@ -891,6 +911,7 @@ function PresentationHostContent() {
       </div>
       {navigationOpen && snapshot?.navigation ? (
         <PresentationNavigationDialog
+          locale={locale}
           navigation={snapshot.navigation}
           disabled={
             busy ||

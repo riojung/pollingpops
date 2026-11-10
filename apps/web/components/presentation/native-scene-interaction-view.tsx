@@ -1,9 +1,16 @@
 "use client";
 
 import { useId, useRef, useState, type KeyboardEvent } from "react";
-import { isSafePresentationLink, type PresentationSceneNode } from "@openround/contracts";
+import {
+  isSafePresentationLink,
+  type PresentationSceneNode,
+  type SupportedLocale,
+} from "@openround/contracts";
 import styles from "./native-scene.module.css";
 import { NativeSceneDetailDialog } from "./native-scene-detail-dialog";
+import { nativeAudienceCopy, nativeAudienceInteractionKindKeys } from "./native-audience-copy";
+import { localizeBranchNavigationFeedback } from "./branch-navigation-copy";
+import { useNativeTextOverflow } from "./use-native-text-overflow";
 
 export type NativeInteractionNode = Extract<
   PresentationSceneNode,
@@ -48,43 +55,69 @@ export function containNativeInteractionKey(event: KeyboardEvent<HTMLElement>) {
     event.stopPropagation();
 }
 
+/** Passive creator artwork remains keyboard-scrollable when its authored content overflows. */
+function NativeSceneInteractionPreview({
+  node,
+  label,
+  labelLang,
+  locale,
+}: {
+  node: NativeInteractionNode;
+  label: string;
+  labelLang: string;
+  locale: SupportedLocale;
+}) {
+  const copy = nativeAudienceCopy(locale);
+  const scroll = useNativeTextOverflow(JSON.stringify([node, locale]));
+  return (
+    <div {...scroll} className={styles.interaction} data-native-interaction={node.type}>
+      <span lang={labelLang} className={styles.interactionLabel}>
+        {label}
+      </span>
+      {node.type === "reveal" || node.type === "hotspot" || node.type === "dialog" ? (
+        <p lang={node.body ? "" : locale} className={styles.interactionPreview}>
+          {node.body || copy("Revealed audience content")}
+        </p>
+      ) : node.type === "link" ? (
+        <span lang={locale} className={styles.interactionNotice}>
+          {copy("External link · opens in a new tab")}
+        </span>
+      ) : (
+        <span lang={locale} className={styles.interactionNotice}>
+          {copy("Slide navigation · facilitator controlled live")}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** Audience content with viewer-local state only; this component has no command or response API. */
 export function NativeSceneInteractionView({
   node,
   editing = false,
   runtime,
+  locale = "en-CA",
 }: {
   node: NativeInteractionNode;
   editing?: boolean;
   runtime?: NativeSceneInteractionRuntime;
+  locale?: SupportedLocale;
 }) {
+  const copy = nativeAudienceCopy(locale);
   const regionId = useId();
   const [open, setOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const detailTriggerRef = useRef<HTMLButtonElement>(null);
-  const label =
-    node.label.trim() ||
-    {
-      reveal: "Reveal panel",
-      link: "External link",
-      hotspot: "Image hotspot",
-      dialog: "Detail dialog",
-      navigation: "Slide link",
-    }[node.type];
+  const label = node.label.trim() || copy(nativeAudienceInteractionKindKeys[node.type]);
+  const labelLang = node.label.trim() ? "" : locale;
   if (editing) {
     return (
-      <div className={styles.interaction} data-native-interaction={node.type}>
-        <span className={styles.interactionLabel}>{label}</span>
-        {node.type === "reveal" || node.type === "hotspot" || node.type === "dialog" ? (
-          <p className={styles.interactionPreview}>{node.body || "Revealed audience content"}</p>
-        ) : node.type === "link" ? (
-          <span className={styles.interactionNotice}>External link · opens in a new tab</span>
-        ) : (
-          <span className={styles.interactionNotice}>
-            Slide navigation · facilitator controlled live
-          </span>
-        )}
-      </div>
+      <NativeSceneInteractionPreview
+        node={node}
+        label={label}
+        labelLang={labelLang}
+        locale={locale}
+      />
     );
   }
   if (node.type === "hotspot" || node.type === "dialog") {
@@ -102,8 +135,10 @@ export function NativeSceneInteractionView({
           aria-expanded={detailOpen}
           onClick={() => setDetailOpen(true)}
         >
-          <span>{label}</span>
-          <span className={styles.interactionNotice}>Open details on this screen</span>
+          <span lang={labelLang}>{label}</span>
+          <span lang={locale} className={styles.interactionNotice}>
+            {copy("Open details on this screen")}
+          </span>
         </button>
         {detailOpen ? (
           <NativeSceneDetailDialog
@@ -111,6 +146,8 @@ export function NativeSceneInteractionView({
             body={node.body}
             onClose={() => setDetailOpen(false)}
             returnFocusRef={detailTriggerRef}
+            locale={locale}
+            titleLang={node.detailTitle ? "" : labelLang}
           />
         ) : null}
       </div>
@@ -129,8 +166,10 @@ export function NativeSceneInteractionView({
     );
     const reason =
       runtime?.mode === "live_audience"
-        ? "The facilitator controls slide navigation."
-        : policy?.blockedReason || "Slide navigation is unavailable here.";
+        ? { text: copy("The facilitator controls slide navigation."), lang: locale }
+        : policy?.blockedReason
+          ? localizeBranchNavigationFeedback(locale, policy.blockedReason)
+          : { text: copy("Slide navigation is unavailable here."), lang: locale };
     return (
       <div
         className={styles.interaction}
@@ -145,16 +184,20 @@ export function NativeSceneInteractionView({
             if (available && node.targetBlockId) runtime?.onNavigate?.(node.id, node.targetBlockId);
           }}
         >
-          <span>{label}</span>
-          <span className={styles.interactionNotice}>
+          <span lang={labelLang}>{label}</span>
+          <span lang={locale} className={styles.interactionNotice}>
             {runtime?.mode === "review"
-              ? "Go to slide"
+              ? copy("Go to slide")
               : runtime?.mode === "live_audience"
-                ? "Facilitator navigation"
-                : "Jump for everyone"}
+                ? copy("Facilitator navigation")
+                : copy("Jump for everyone")}
           </span>
         </button>
-        {!available ? <p className={styles.interactionNotice}>{reason}</p> : null}
+        {!available ? (
+          <p lang={reason.lang} className={styles.interactionNotice}>
+            {reason.text}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -175,11 +218,16 @@ export function NativeSceneInteractionView({
             rel="noopener noreferrer"
             referrerPolicy="no-referrer"
           >
-            <span>{label}</span>
-            <span className={styles.interactionNotice}>Opens in a new tab</span>
+            <span lang={labelLang}>{label}</span>
+            <span lang={locale} className={styles.interactionNotice}>
+              {copy("Opens in a new tab")}
+            </span>
           </a>
         ) : (
-          <span className={styles.interactionLabel}>{label} · link unavailable</span>
+          <span className={styles.interactionLabel}>
+            <span lang={labelLang}>{label}</span> ·{" "}
+            <span lang={locale}>{copy("link unavailable")}</span>
+          </span>
         )}
       </div>
     );
@@ -205,9 +253,17 @@ export function NativeSceneInteractionView({
           } else setOpen((current) => !current);
         }}
       >
-        <span>{label}</span>
-        <span className={styles.interactionNotice}>
-          {revealed ? "Hide" : "Show"} {shared ? "for everyone" : "on this screen"}
+        <span lang={labelLang}>{label}</span>
+        <span lang={locale} className={styles.interactionNotice}>
+          {copy(
+            shared
+              ? revealed
+                ? "Hide for everyone"
+                : "Show for everyone"
+              : revealed
+                ? "Hide on this screen"
+                : "Show on this screen",
+          )}
         </span>
       </button>
       <div
@@ -216,9 +272,10 @@ export function NativeSceneInteractionView({
         hidden={!revealed}
         role="region"
         aria-label={label}
+        lang={labelLang}
         tabIndex={revealed ? 0 : undefined}
       >
-        {revealed ? <p>{node.body}</p> : null}
+        {revealed ? <p lang="">{node.body}</p> : null}
       </div>
     </div>
   );

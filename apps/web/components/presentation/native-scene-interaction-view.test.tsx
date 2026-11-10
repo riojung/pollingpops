@@ -2,7 +2,12 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { PresentationSceneNodeSchema, type PresentationScene } from "@openround/contracts";
+import {
+  PresentationSceneNodeSchema,
+  supportedLocales,
+  type PresentationScene,
+  type SupportedLocale,
+} from "@openround/contracts";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { ContentSlideView } from "./content-slide-view";
 import { NativeSceneView } from "./native-scene-view";
@@ -13,6 +18,8 @@ import {
   type NativeSceneInteractionRuntime,
 } from "./native-scene-interaction-view";
 import { NativeSceneDetailDialog } from "./native-scene-detail-dialog";
+import { nativeAudienceCopy } from "./native-audience-copy";
+import { localizeBranchNavigationFeedback } from "./branch-navigation-copy";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -74,14 +81,18 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
-function panel(node: NativeInteractionNode = reveal, runtime?: NativeSceneInteractionRuntime) {
+function panel(
+  node: NativeInteractionNode = reveal,
+  runtime?: NativeSceneInteractionRuntime,
+  locale: SupportedLocale = "en-CA",
+) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
   let tree: ReactNode;
   function render() {
     hooks.cursor = 0;
     mocked.hooks = hooks;
     try {
-      tree = NativeSceneInteractionView({ node, runtime });
+      tree = NativeSceneInteractionView({ node, runtime, locale });
     } finally {
       mocked.hooks = null;
     }
@@ -106,6 +117,112 @@ function panel(node: NativeInteractionNode = reveal, runtime?: NativeSceneIntera
 }
 
 describe("viewer-local native interactions", () => {
+  it.each(supportedLocales)(
+    "localizes reveal and dialog state controls without changing authored text or commands in %s",
+    (locale) => {
+      const copy = nativeAudienceCopy(locale);
+      const node = { ...reveal, label: "Reveal panel" };
+      const original = structuredClone(node);
+      const onNavigate = vi.fn();
+      const onSetReveal = vi.fn();
+      const view = panel(node, { mode: "review", onNavigate, onSetReveal }, locale);
+      expect(view.markup).toContain('<span lang="">Reveal panel</span>');
+      expect(view.markup).toContain(copy("Show on this screen"));
+      expect(view.markup).toContain(`lang="${locale}"`);
+      expect(view.markup).not.toContain("Plain audience content");
+      view.toggle();
+      expect(view.markup).toContain(copy("Hide on this screen"));
+      expect(view.markup).toContain('<p lang="">&lt;script&gt;Plain audience content');
+      const detail = panel(
+        { ...node, type: "dialog", scope: "local", detailTitle: "Close details" },
+        undefined,
+        locale,
+      );
+      expect(detail.markup).toContain(copy("Open details on this screen"));
+      detail.toggle();
+      expect(detail.markup).toMatch(/<h2 lang=""[^>]*>Close details<\/h2>/);
+      expect(detail.markup).toContain(`>${copy("Close details")}</button>`);
+      detail.closeDetails();
+      expect(detail.markup).not.toContain("<dialog");
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(onSetReveal).not.toHaveBeenCalled();
+      expect(node).toEqual(original);
+    },
+  );
+
+  it("localizes canonical navigation feedback and keeps unknown service diagnostics explicitly English", () => {
+    const targetBlockId = "11111111-1111-4111-8111-111111111111";
+    const node: NativeInteractionNode = {
+      id: "navigation",
+      type: "navigation",
+      label: "Go to slide",
+      targetBlockId,
+      frame: reveal.frame,
+    };
+    const onNavigate = vi.fn();
+    for (const blockedReason of [
+      "Complete the linked recheck before navigating.",
+      "Unrecognized diagnostic {title}",
+    ]) {
+      const reason = localizeBranchNavigationFeedback("ko-KR", blockedReason);
+      const view = panel(
+        node,
+        {
+          mode: "live_staff",
+          onNavigate,
+          navigationTargets: [{ blockId: targetBlockId, available: false, blockedReason }],
+        },
+        "ko-KR",
+      );
+      expect(view.markup).toContain(`lang="${reason.lang}"`);
+      expect(view.markup).toContain(reason.text);
+      expect(view.markup).toContain('<span lang="">Go to slide</span>');
+      view.toggle();
+    }
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("keeps selected-language audience broadcast and navigation controls inert and staff state authoritative", () => {
+    const onSetReveal = vi.fn();
+    const onNavigate = vi.fn();
+    const node = { ...reveal, scope: "broadcast" as const };
+    const revealedNodeIds: string[] = [];
+    const audience = panel(node, { mode: "live_audience", onSetReveal, revealedNodeIds }, "ko-KR");
+    expect(audience.markup).toContain('disabled=""');
+    expect(audience.markup).toContain(nativeAudienceCopy("ko-KR")("Show for everyone"));
+    audience.toggle();
+    expect(audience.markup).not.toContain("Plain audience content");
+    expect(onSetReveal).not.toHaveBeenCalled();
+    const staff = panel(node, { mode: "live_staff", onSetReveal, revealedNodeIds }, "ko-KR");
+    staff.toggle();
+    expect(onSetReveal).toHaveBeenCalledExactlyOnceWith(node.id, true);
+    expect(staff.markup).toContain('aria-expanded="false"');
+    revealedNodeIds.push(node.id);
+    staff.refresh();
+    expect(staff.markup).toContain(nativeAudienceCopy("ko-KR")("Hide for everyone"));
+    const targetBlockId = "11111111-1111-4111-8111-111111111111";
+    const navigation = panel(
+      {
+        id: "navigation",
+        type: "navigation",
+        label: "Read next",
+        targetBlockId,
+        frame: reveal.frame,
+      },
+      {
+        mode: "live_audience",
+        onNavigate,
+        navigationTargets: [{ blockId: targetBlockId, available: true, blockedReason: null }],
+      },
+      "ko-KR",
+    );
+    navigation.toggle();
+    expect(navigation.markup).toContain(
+      nativeAudienceCopy("ko-KR")("The facilitator controls slide navigation."),
+    );
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
   it.each(["hotspot", "dialog"] as const)(
     "opens %s details locally as escaped text and removes closed content",
     (type) => {

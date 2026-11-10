@@ -364,6 +364,94 @@ acceptance or hosted qualification of the new source.
   specialist-editor changes. Their hosted matrix and local Firefox qualification remain
   open. The release ledger remains valid with **0 complete / 15 pending** gates.
 
+## Native audience and navigation follow-up — November 10, 2026
+
+The `codex/option-b-audience-navigation` slice extends selected-language controls to the
+shared native audience renderer, branch authoring and live host/Companion navigation.
+English remains the default. Two typed catalogs cover 96 UI keys across all ten configured
+locales: 77 new translation rows and nineteen reused translations. Canonical navigation
+policy feedback also reuses the existing Sections/spatial adapter, and the host reuses
+Companion navigation/acknowledgement wording.
+
+The shared `ContentSlideView` boundary resolves the application language unless a caller
+explicitly supplies one. Native audience controls therefore follow the selected language
+in editor preview, shared review, follow-up content, live delivery and Companion without
+rewriting slide data. The low-level renderer remains compatible with callers that omit
+locale. The legacy renderer and the still-pending layout-assistance area retain their
+existing explicit language boundaries.
+
+Accessible outline controls, reveal/action notices, detail dialog controls, image feedback
+and chart legends/data guidance distinguish system copy from authored text. Stored text
+language is retained; unknown authored labels, titles, bodies, cells and URLs retain
+explicit unknown-language boundaries. Authored strings that happen to equal an English
+UI key are never translated by lookup. Locale does not enter the native interaction state
+identity, so mounted local disclosures and dialogs retain their state.
+
+Branch labels, choice/target IDs including their original case, percentage/response limits
+and exact history fields keep their existing meanings. Read-only/mutation-busy branches
+are disabled and guarded, while live navigation and branches continue to obey canonical
+server eligibility. Known policy reasons translate only at display time; unknown service
+diagnostics stay verbatim with their original English attribution. Server snapshot title
+fallbacks have no provenance distinct from authored titles, so these titles stay unchanged.
+Navigation dialogs retain keyboard containment, close focus and return focus; retries keep
+the original command and acknowledgement identity. Navigation titles and statuses occupy
+separate rows, and return controls wrap naturally within the available width, keeping long
+authored titles readable on 320px phones.
+
+The host and Companion explicitly focus their navigation launchers before opening a dialog,
+so Safari can return focus to the actual trigger. Passive editor interaction artwork reuses
+the existing conditional overflow observer and focus ring: it gains a keyboard stop only
+when its content needs scrolling. Scroll keys retain native scrolling and cannot trigger
+presentation shortcuts. Live audience controls and inert thumbnails keep their existing
+behavior.
+
+The inherited hotspot issue was observed in the
+[merged specialist-editor Chromium job](https://github.com/riojung/pollingpops/actions/runs/42913212189/job/130168913765):
+Axe reported a scrolling passive preview without keyboard access. The regression fixture
+now forces overflow in the desktop editor and checks the visible phone canvas using its
+actual responsive geometry. It retains the Axe, one-pixel overflow, authored-content,
+permission and no-save assertions; it does not require a hidden phone canvas to scroll.
+
+Native templates and generated table/chart examples are persisted draft content rather
+than renderer labels. Creation-locale template/default content remains a separate pending
+phase, alongside assistance review/recovery and Pack library/editor tools. Native-language
+review, observed customer usability, manual accessibility/device acceptance, hosted
+qualification and deferred public launch content remain release work.
+
+### Audience and navigation verification
+
+- The repository gate passes **7,621 tests** with 513 standard opt-in skips, formatting,
+  lint, type checks, Docker-context validation, all four production builds and compiled
+  server startup. After final integration and accessibility corrections, all **378 web suites /
+  3,800 tests** pass, giving **7,683 passing tests** across the validated repository suites.
+  Final web type checking, integration lint and fresh normal/beta production builds pass.
+- Catalog coverage checks all 960 key/locale entries, English defaults, placeholders and
+  shared wording. Real-render/state tests cover authored collisions/language, active local
+  disclosure/dialog state across mounted locale changes, branch IDs/threshold/history,
+  viewer callback guards, canonical live policies, focus stability and exact retry objects.
+- **58 distinct selected production-browser cases pass**: 20 desktop Chromium, eighteen
+  phone Chromium and twenty phone WebKit. Nine new Korean cases cover audience controls,
+  branch editing and host/Companion navigation. Existing native/template/data, interaction,
+  spatial, translation and linked-recovery journeys also pass. Each profile/phase uses a
+  fresh API; authoring and visual import use the existing owned loopback fixtures.
+- After the keyboard/layout corrections, 34 affected cases pass, including the complete
+  eighteen-case phone WebKit selection and advanced image/map journeys on desktop and
+  phone WebKit. Six further navigation cases requalify final focus-ring spacing across all
+  three profiles. Reruns remain included once in the 58 distinct cases. Screenshot review
+  covers localized controls, authored collisions, 320px chart/branch/navigation layouts,
+  visible focus and readable title/status rows.
+- The new live fixture's accepted-response expectation is corrected to the actual HTTP 202
+  contract. Its successful reruns preserve response acceptance, exact retry identity and
+  score assertions. The passive-preview test measures the visible responsive phone canvas;
+  it requires a keyboard stop only for actual overflow and forces the desktop overflow
+  reproduction. Axe and all existing privacy/history/permission assertions remain in place.
+- One visual-import attempt spans a local runtime interruption: upload/completion/image
+  reads succeed, while autosave and screencast activity pause for about ten minutes. Both
+  advanced image/map profiles pass with a temporary keep-awake process, without upload or
+  timeout changes. This local observation does not qualify the hosted matrix. Native-language,
+  manual accessibility/device and customer acceptance remain open; the release ledger stays
+  valid with **0 complete / 15 pending** gates.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.

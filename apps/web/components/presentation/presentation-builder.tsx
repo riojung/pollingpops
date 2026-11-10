@@ -3974,6 +3974,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   />
                 </div>
                 <PresentationBranchEditor
+                  locale={locale}
+                  disabled={!canEdit || builderMutationBlocked || preparingImport}
                   block={selectedBlock}
                   targets={presentationInteractionTargets(draft, selectedBlock.id, true)}
                   onChange={(branches, historyField) =>

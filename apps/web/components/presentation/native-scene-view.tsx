@@ -17,8 +17,11 @@ import {
   type PresentationScene,
   type PresentationSceneFrame,
   type PresentationSceneNode,
+  type SupportedLocale,
 } from "@openround/contracts";
-import { boundNativeSceneFrame, nativeNodeLabel } from "../../lib/presentation-native-scene";
+import { boundNativeSceneFrame } from "../../lib/presentation-native-scene";
+import { nativeControlNodeLabel, nativeControlsCopy } from "./native-controls-copy";
+import { nativeAudienceCopy } from "./native-audience-copy";
 import styles from "./native-scene.module.css";
 import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
 import { useNativeTextOverflow } from "./use-native-text-overflow";
@@ -56,7 +59,13 @@ function endpoint(scene: PresentationScene, endpoint: Connector["from"]) {
   };
 }
 
-function Shape({ node }: { node: Extract<FramedNode, { type: "shape" }> }) {
+function Shape({
+  node,
+  locale,
+}: {
+  node: Extract<FramedNode, { type: "shape" }>;
+  locale: SupportedLocale;
+}) {
   const path =
     node.shape === "ellipse"
       ? null
@@ -64,7 +73,12 @@ function Shape({ node }: { node: Extract<FramedNode, { type: "shape" }> }) {
         ? canvasDiagramShapePath(node.shape, 160, 90)
         : canvasShapeVariantPath(node.shape, 160, 90);
   return (
-    <div className={styles.shape} role="img" aria-label={node.label || nativeNodeLabel(node)}>
+    <div
+      className={styles.shape}
+      role="img"
+      aria-label={node.label || nativeControlNodeLabel(locale, node).text}
+      lang={node.label ? "" : locale}
+    >
       <svg viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden="true">
         {path ? (
           <path
@@ -117,6 +131,7 @@ function NativePlainText({
 
 interface NativeSceneViewProps {
   scene: PresentationScene;
+  locale?: SupportedLocale;
   /** Scaled previews retain the authored coordinate plane even on phone viewports. */
   fixedLayout?: boolean;
   renderImage?: SceneImageRenderer;
@@ -171,6 +186,7 @@ export function NativeSceneView(props: NativeSceneViewProps) {
 /** Closed geometry and structured text; image authority belongs to the calling surface. */
 function NativeSceneSurface({
   scene,
+  locale = "en-CA",
   renderImage,
   fixedLayout = false,
   selectedNodeId,
@@ -185,6 +201,8 @@ function NativeSceneSurface({
   hideGeometryControls = false,
   editorOverlay,
 }: NativeSceneViewProps) {
+  const copy = nativeAudienceCopy(locale);
+  const controlCopy = nativeControlsCopy(locale);
   const markerId = useId();
   const [outline, setOutline] = useState(false);
   const hasInteractions = scene.nodes.some(isNativeInteractionNode);
@@ -244,11 +262,17 @@ function NativeSceneSurface({
       aria-hidden={staticThumbnail || undefined}
     >
       {hasInteractions && !editing && !interactionEditing && !staticThumbnail ? (
-        <div className={styles.interactionToolbar} onKeyDown={containNativeInteractionKey}>
+        <div
+          lang={locale}
+          className={styles.interactionToolbar}
+          onKeyDown={containNativeInteractionKey}
+        >
           <p>
             {sharedReveals
-              ? "Local details open on this screen. Broadcast reveals follow the facilitator."
-              : "Panels open only on this screen. They do not change other screens, responses or scores."}
+              ? copy("Local details open on this screen. Broadcast reveals follow the facilitator.")
+              : copy(
+                  "Panels open only on this screen. They do not change other screens, responses or scores.",
+                )}
           </p>
           <button
             type="button"
@@ -256,11 +280,12 @@ function NativeSceneSurface({
             aria-controls={sceneId}
             onClick={() => setOutline((current) => !current)}
           >
-            {outline ? "Show slide layout" : "Show accessible outline"}
+            {copy(outline ? "Show slide layout" : "Show accessible outline")}
           </button>
         </div>
       ) : null}
       <article
+        lang={locale}
         id={sceneId}
         className={`${styles.stage}${outline ? ` ${styles.outline}` : ""}${staticThumbnail ? ` ${styles.staticThumbnail}` : ""}`}
         data-native-outline={
@@ -268,7 +293,9 @@ function NativeSceneSurface({
             ? outline
             : undefined
         }
-        aria-label={`${presentationSceneTitle(scene) || "Untitled"} native slide`}
+        aria-label={copy("{title} native slide", {
+          title: presentationSceneTitle(scene) || copy("Untitled"),
+        })}
         data-native-scene={staticThumbnail ? undefined : "true"}
         data-native-fixed-layout={fixedLayout ? "true" : undefined}
         data-thumbnail-scene={staticThumbnail ? "true" : undefined}
@@ -312,8 +339,14 @@ function NativeSceneSurface({
           if (node.type === "connector")
             return (
               <p key={id} className={styles.connectorSummary} data-node-id={id}>
-                {node.label || "Connection"}: {nativeNodeLabel(nodes.get(node.from.nodeId)!)} →{" "}
-                {nativeNodeLabel(nodes.get(node.to.nodeId)!)}
+                <span lang={node.label ? "" : locale}>{node.label || copy("Connection")}</span>:{" "}
+                <span lang={nativeControlNodeLabel(locale, nodes.get(node.from.nodeId)!).language}>
+                  {nativeControlNodeLabel(locale, nodes.get(node.from.nodeId)!).text}
+                </span>{" "}
+                →{" "}
+                <span lang={nativeControlNodeLabel(locale, nodes.get(node.to.nodeId)!).language}>
+                  {nativeControlNodeLabel(locale, nodes.get(node.to.nodeId)!).text}
+                </span>
               </p>
             );
           const style: CSSProperties = {
@@ -350,34 +383,36 @@ function NativeSceneSurface({
                     richText={node.richText}
                     title={node.role === "title"}
                     editing={editing}
-                    lang={node.lang}
+                    lang={node.lang ?? ""}
                     layoutKey={JSON.stringify([node.frame, design])}
                   />
                 ) : (
                   <NativePlainText
                     text={
                       node.text ||
-                      (editing ? (node.role === "title" ? "Slide title" : "Body text") : "")
+                      (editing ? copy(node.role === "title" ? "Slide title" : "Body text") : "")
                     }
                     title={node.role === "title"}
                     layoutKey={JSON.stringify([node.frame, design])}
-                    lang={node.lang}
+                    lang={node.text ? (node.lang ?? "") : editing ? locale : (node.lang ?? "")}
                   />
                 )
               ) : null}
-              {node.type === "shape" ? <Shape node={node} /> : null}
+              {node.type === "shape" ? <Shape node={node} locale={locale} /> : null}
               {isNativeInteractionNode(node) ? (
                 <NativeSceneInteractionView
                   node={node}
                   editing={editing || interactionEditing || staticThumbnail}
                   runtime={interactionRuntime}
+                  locale={locale}
                 />
               ) : null}
               {node.type === "table" || node.type === "chart" ? (
-                <NativeSceneDataView node={node} fixedLayout={fixedLayout} />
+                <NativeSceneDataView node={node} fixedLayout={fixedLayout} locale={locale} />
               ) : null}
               {node.type === "image" ? (
                 <div
+                  lang=""
                   className={styles.image}
                   data-image-fit={node.fit ?? "contain"}
                   style={
@@ -390,8 +425,12 @@ function NativeSceneSurface({
                   {renderImage ? (
                     renderImage(node.mediaId, node.altText)
                   ) : (
-                    <span role="img" aria-label={node.altText || "Image description needed"}>
-                      Image unavailable
+                    <span
+                      lang={node.altText ? "" : locale}
+                      role="img"
+                      aria-label={node.altText || copy("Image description needed")}
+                    >
+                      <span lang={locale}>{copy("Image unavailable")}</span>
                     </span>
                   )}
                 </div>
@@ -400,7 +439,10 @@ function NativeSceneSurface({
                 <div className={styles.handles}>
                   <button
                     type="button"
-                    aria-label={`Move ${nativeNodeLabel(node)}. Use arrow keys to nudge.`}
+                    lang={locale}
+                    aria-label={controlCopy("Move {name}. Use arrow keys to nudge.", {
+                      name: nativeControlNodeLabel(locale, node).text,
+                    })}
                     onFocus={() => {
                       if (!selectedNodeIds?.includes(id)) onSelect?.(id);
                     }}
@@ -420,7 +462,10 @@ function NativeSceneSurface({
                   <button
                     type="button"
                     hidden={scene.groups?.some((group) => group.nodeIds.includes(id))}
-                    aria-label={`Resize ${nativeNodeLabel(node)}. Use arrow keys to change size.`}
+                    lang={locale}
+                    aria-label={controlCopy("Resize {name}. Use arrow keys to change size.", {
+                      name: nativeControlNodeLabel(locale, node).text,
+                    })}
                     onFocus={() => {
                       if (!selectedNodeIds?.includes(id)) onSelect?.(id);
                     }}
@@ -464,7 +509,11 @@ function NativeSceneSurface({
                   {!hideGeometryControls ? (
                     <button
                       type="button"
-                      aria-label={`Resize group ${index + 1}. Use arrow keys to change size.`}
+                      lang={locale}
+                      aria-label={controlCopy(
+                        "Resize group {number}. Use arrow keys to change size.",
+                        { number: index + 1 },
+                      )}
                       onKeyDown={(event) => frameKey(event, member, true)}
                       onPointerDown={
                         onNodePointerDown

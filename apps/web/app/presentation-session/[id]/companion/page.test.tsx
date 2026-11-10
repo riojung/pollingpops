@@ -232,9 +232,9 @@ function propsFor<
 }
 
 function click(tree: ReactNode, name: string) {
-  button(tree, name).onClick?.(
-    {} as Parameters<NonNullable<ComponentProps<"button">["onClick"]>>[0],
-  );
+  button(tree, name).onClick?.({ currentTarget: { focus: vi.fn() } } as unknown as Parameters<
+    NonNullable<ComponentProps<"button">["onClick"]>
+  >[0]);
 }
 
 // The harness runs the page's capture/controller setup once and exercises the real

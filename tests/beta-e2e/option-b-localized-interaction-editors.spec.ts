@@ -76,7 +76,7 @@ for (const suffix of ["desktop", "@mobile"]) {
           scope: "local",
           label: "Original image action",
           detailTitle: "Original image title",
-          body: "Original image detail",
+          body: `Original image detail. ${"Detailed audience context remains authored and scrollable. ".repeat(20)}`,
           imageNodeId: null,
           frame: { x: 67, y: 56, width: 20, height: 20 },
         },
@@ -173,6 +173,27 @@ for (const suffix of ["desktop", "@mobile"]) {
         .poll(() => node("external"))
         .toMatchObject({ href: "https://example.com/reviewed", label: "Original external action" });
       await expect(previewButton).toBeEnabled();
+      const scrollPreview = page.locator('[data-native-scene] [data-native-interaction="hotspot"]');
+      if (suffix === "@mobile") await closeSpecialistInspector(page);
+      await expect(scrollPreview).toBeVisible();
+      const overflowing = () =>
+        scrollPreview.evaluate((element) => element.scrollHeight > element.clientHeight);
+      if (suffix === "desktop") await expect.poll(overflowing).toBe(true);
+      const beforeScroll = await saved(),
+        beforeScrollWrites = writes.length;
+      if (await overflowing()) {
+        await expect(scrollPreview).toHaveAttribute("tabindex", "0");
+        await scrollPreview.focus();
+        await expect(scrollPreview).toBeFocused();
+        await scrollPreview.press("PageDown");
+        await expect
+          .poll(() => scrollPreview.evaluate((element) => element.scrollTop))
+          .toBeGreaterThan(0);
+      } else await expect(scrollPreview).not.toHaveAttribute("tabindex", "0");
+      if (suffix === "@mobile") await specialistInspector(page);
+      await expect(picker).toHaveValue("external");
+      expect(await saved()).toEqual(beforeScroll);
+      expect(writes.length).toBe(beforeScrollWrites);
       await specialistQuality(page);
       await inspector.screenshot({ path: info.outputPath("korean-interaction-editor.png") });
 

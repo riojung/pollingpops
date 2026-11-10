@@ -313,7 +313,7 @@ async function presentationCardWorkflow(
       participant.getByRole("heading", { name: "Join a Presentation", exact: true }),
     ).toBeVisible();
     await participant.getByLabel("Nickname", { exact: true }).fill("Card participant");
-    const join = participant.getByRole("button", { name: "Join a Presentation", exact: true });
+    const join = participant.getByRole("button", { name: "Join presentation", exact: true });
     await expect(join).toBeEnabled();
     await join.click();
     await expect(participant).toHaveURL(`/presentation-session/${fixture.sessionId}/play`);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { PresentationDraft } from "@openround/contracts";
 import { signInBeta } from "./sign-in";
 import { clickNavigatorAction } from "./presentation-e01-support";
@@ -25,6 +25,66 @@ async function signIn(page: Page) {
 
 async function expectNoAxeViolations(page: Page) {
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+}
+
+async function expectReadableFocusedPrompt(prompt: Locator) {
+  await prompt.focus();
+  await expect(prompt).toBeFocused();
+  const appearance = await prompt.evaluate((element) => {
+    const rgba = (value: string) => {
+      const channels = value.match(/[\d.]+/g)?.map(Number);
+      if (!channels || channels.length < 3) throw new Error(`Unsupported color: ${value}`);
+      return [...channels.slice(0, 3), channels[3] ?? 1];
+    };
+    const composite = (foreground: number[], background: number[]) =>
+      foreground
+        .slice(0, 3)
+        .map(
+          (channel, index) => channel * foreground[3]! + background[index]! * (1 - foreground[3]!),
+        );
+    const layers: number[][] = [];
+    for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
+      const color = rgba(getComputedStyle(ancestor).backgroundColor);
+      layers.unshift(color);
+      if (color[3] === 1) break;
+    }
+    const background = layers.reduce(
+      (backdrop, layer) => composite(layer, backdrop),
+      [255, 255, 255],
+    );
+    const luminance = (color: number[]) =>
+      color.reduce((total, channel, index) => {
+        const value = channel / 255;
+        return (
+          total +
+          (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4) *
+            [0.2126, 0.7152, 0.0722][index]!
+        );
+      }, 0);
+    const contrast = (color: number[]) => {
+      const values = [luminance(composite(color, background)), luminance(background)];
+      return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+    };
+    const style = getComputedStyle(element);
+    const placeholder = getComputedStyle(element, "::placeholder");
+    const placeholderColor = rgba(placeholder.color);
+    placeholderColor[3] = placeholderColor[3]! * Number(placeholder.opacity);
+    return {
+      background: background.map(Math.round),
+      textContrast: contrast(rgba(style.color)),
+      placeholderContrast: contrast(placeholderColor),
+      focusContrast: contrast(rgba(style.outlineColor)),
+      focusWidth: Number.parseFloat(style.outlineWidth),
+      focusStyle: style.outlineStyle,
+    };
+  });
+  // Editable activity text borrows the saved slide palette through transparent ancestors.
+  expect(appearance.background).toEqual([255, 253, 247]);
+  expect(appearance.textContrast).toBeGreaterThanOrEqual(4.5);
+  expect(appearance.placeholderContrast).toBeGreaterThanOrEqual(4.5);
+  expect(appearance.focusContrast).toBeGreaterThanOrEqual(3);
+  expect(appearance.focusWidth).toBeGreaterThanOrEqual(2);
+  expect(appearance.focusStyle).toBe("solid");
 }
 
 async function createPublishedPracticeSource(page: Page) {
@@ -143,7 +203,7 @@ test("beta workspace and creation surfaces pass automated accessibility checks",
   await expectNoAxeViolations(page);
 
   await page.goto("/create");
-  await expect(page.getByRole("heading", { name: "What would you like to create?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would you like to do?" })).toBeVisible();
   await expectNoAxeViolations(page);
 
   await page.goto("/templates");
@@ -318,18 +378,19 @@ test("Presentation Builder dialogs and drawers pass automated accessibility chec
 
   await clickNavigatorAction(page, "Add question");
   const questionPrompt = page.getByLabel("Question prompt");
-  await questionPrompt.focus();
-  await expect(questionPrompt).toHaveCSS("background-color", "rgba(255, 255, 255, 0.94)");
-  await expect(questionPrompt).toHaveCSS("color", "rgb(48, 54, 64)");
+  await expectReadableFocusedPrompt(questionPrompt);
   await expect(page.getByRole("status")).toHaveText("Saved");
 
   await page.evaluate(() => window.localStorage.setItem("openround:color-mode", "dark"));
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-color-mode", "dark");
   await expect(page.getByLabel("Presentation title")).toHaveValue("Accessible presentation");
+  // Reload opens the first slide; select the saved activity before checking its editor.
+  await clickNavigatorAction(page, /Interactive question/);
+  await expectReadableFocusedPrompt(page.getByLabel("Question prompt"));
   await expectNoAxeViolations(page);
 
-  await page.getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Presentation preview" })).toBeVisible();
   await expectNoAxeViolations(page);
   await page.getByRole("button", { name: "Close preview" }).click();
@@ -471,7 +532,7 @@ test("mobile beta creation surface passes automated accessibility checks @mobile
 }) => {
   await signIn(page);
   await page.goto("/create");
-  await expect(page.getByRole("heading", { name: "What would you like to create?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would you like to do?" })).toBeVisible();
   await expectNoAxeViolations(page);
   await page.getByLabel("Appearance: System").click();
   await page.getByRole("radio", { name: "Dark" }).click();

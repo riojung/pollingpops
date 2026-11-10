@@ -160,7 +160,7 @@ for (const suffix of ["", " @mobile"]) {
           response.request().method() === "POST" &&
           new URL(response.url()).pathname === "/v1/presentation-sessions/join",
       );
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       expect((await joining).status()).toBe(201);
       await expect(guest).toHaveURL(`/presentation-session/${sessionId}/play`);
       await expect(guest.getByText("You’re in", { exact: true })).toBeVisible();

@@ -6,6 +6,31 @@ export interface WorkspaceCreationOption {
   href: string;
 }
 
+export type WorkspaceCreationGoal = {
+  kind: "poll" | "quiz" | "presentation" | "round";
+  href: string;
+};
+
+/** First-session goals use the same role and feature grants as the full creation launcher. */
+export function workspaceCreationGoals(
+  input: Parameters<typeof workspaceCreationOptions>[0],
+): WorkspaceCreationGoal[] {
+  const available = workspaceCreationOptions(input);
+  const goals: WorkspaceCreationGoal[] = [];
+  const round = available.find((option) => option.kind === "round");
+  if (round) {
+    if (input.productFeatures?.builderV2)
+      goals.push(
+        { kind: "poll", href: "/create?type=poll" },
+        { kind: "quiz", href: "/create?type=quiz" },
+      );
+    else goals.push({ kind: "round", href: round.href });
+  }
+  if (available.some((option) => option.kind === "presentation"))
+    goals.push({ kind: "presentation", href: "/create/presentation" });
+  return goals;
+}
+
 /** Account-resolved feature grants and workspace role are the source of UI availability. */
 export function workspaceCreationOptions({
   canEdit,

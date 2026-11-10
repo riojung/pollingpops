@@ -308,7 +308,7 @@ for (const suffix of ["", " @mobile"]) {
       const audience = await context.newPage();
       await audience.goto(`/join?code=${lobby.code}`);
       await audience.getByLabel("Nickname", { exact: true }).fill("Composition audience");
-      await audience.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await audience.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(audience).toHaveURL(`/presentation-session/${lobby.sessionId}/play`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       const delivered = audience.locator("[data-native-scene]");

@@ -11,6 +11,9 @@ import {
   type PresentationStageSnapshot,
 } from "@openround/contracts";
 import { apiFetch, ApiClientError } from "../../../../lib/api";
+import { useLocale } from "../../../../components/locale-provider";
+import { presentationDeliveryCopy } from "../../../../lib/i18n/presentation-delivery-copy";
+import { formatNumber } from "../../../../lib/i18n/format";
 import {
   capturePresentationStagePass,
   rejectPresentationStagePass,
@@ -47,6 +50,8 @@ function StageMedia({
   mediaId: string | null;
   altText: string | null;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const [source, setSource] = useState("");
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -86,14 +91,22 @@ function StageMedia({
     />
   ) : failed ? (
     <p className={styles.mediaFallback} role="status">
-      Image unavailable.{altText ? ` ${altText}` : ""}
+      {copy("imageUnavailable")}
+      {altText ? (
+        <>
+          {" "}
+          <span lang="">{altText}</span>
+        </>
+      ) : null}
     </p>
   ) : (
-    <p role="status">Loading image…</p>
+    <p role="status">{copy("loadingImage")}</p>
   );
 }
 
 function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
+  const { locale } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const [snapshot, setSnapshot] = useState<PresentationStageSnapshot | null>(null);
   const latest = useRef<PresentationStageSnapshot | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -107,7 +120,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
   const receivedAt = useRef(Date.now());
   const [fullScreenSupported, setFullScreenSupported] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
-  const [fullScreenError, setFullScreenError] = useState("");
+  const [fullScreenError, setFullScreenError] = useState(false);
 
   useEffect(() => {
     setSnapshot(null);
@@ -198,12 +211,12 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
   }, []);
 
   async function toggleFullScreen() {
-    setFullScreenError("");
+    setFullScreenError(false);
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen();
     } catch {
-      setFullScreenError("Full screen could not open. You can continue presenting in this tab.");
+      setFullScreenError(true);
     }
   }
 
@@ -225,38 +238,36 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
     isTextQuestion(snapshot.currentBlock.question.type) &&
     ["question_reveal", "intervention"].includes(snapshot.phase);
   return (
-    <main className={styles.stagePage} lang="en-CA">
+    <main className={styles.stagePage} lang={locale}>
       <div className={styles.stageLayout}>
         {unavailable ? (
           <section className={styles.stageCanvas}>
             <div>
-              <h1>Audience stage unavailable</h1>
-              <p role="alert">
-                Stage access has expired, was revoked, or is missing. Ask the presenter to open a
-                new audience stage.
-              </p>
+              <h1>{copy("unavailable")}</h1>
+              <p role="alert">{copy("accessExpired")}</p>
             </div>
           </section>
         ) : !snapshot || !token ? (
           <section className={styles.stageCanvas}>
-            <h1>Connecting to audience stage…</h1>
+            <h1>{copy("connecting")}</h1>
           </section>
         ) : (
           <>
             <header className={styles.stageHeader}>
               <p lang="">{snapshot.title}</p>
-              <p>Join code: {snapshot.code}</p>
+              <p>{copy("joinCodeHeader", { code: snapshot.code })}</p>
               <p>
                 {snapshot.phase === "lobby"
-                  ? "Ready to begin"
+                  ? copy("ready")
                   : snapshot.phase === "finished"
-                    ? "Presentation complete"
-                    : `Slide or activity ${snapshot.currentBlockIndex + 1} of ${snapshot.blockCount}`}
+                    ? copy("complete")
+                    : copy("progress", {
+                        current: formatNumber(locale, snapshot.currentBlockIndex + 1),
+                        total: formatNumber(locale, snapshot.blockCount),
+                      })}
               </p>
             </header>
-            {reconnecting ? (
-              <p role="status">Reconnecting — showing the last confirmed slide.</p>
-            ) : null}
+            {reconnecting ? <p role="status">{copy("reconnecting")}</p> : null}
             <PresentationSpatialDelivery
               spatial={snapshot.spatial}
               currentBlockIndex={snapshot.currentBlockIndex}
@@ -264,7 +275,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
               sourceKey={`${id}:${snapshot.presentationVersionId}`}
             />
             <section
-              aria-label="Audience slide"
+              aria-label={copy("audienceSlide")}
               style={questionStyle}
               className={`${styles.stageCanvas}${opinionSummary || textResults ? ` ${styles.stageOpinionCanvas}` : ""}`}
               tabIndex={0}
@@ -272,18 +283,22 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
               {snapshot.phase === "lobby" ? (
                 <div className={styles.stageBody}>
                   <h1 lang="">{snapshot.title}</h1>
-                  <p>Join on your device while you wait.</p>
+                  <p>{copy("joinWaiting")}</p>
                 </div>
               ) : snapshot.phase === "finished" ? (
                 <div className={styles.stageBody}>
-                  <h1>Presentation complete</h1>
-                  <p>Thank you for taking part.</p>
+                  <h1>{copy("complete")}</h1>
+                  <p>{copy("thanks")}</p>
                 </div>
               ) : snapshot.currentBlock ? (
                 <div
                   className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}${opinionSummary || textResults ? ` ${styles.stageOpinionBody}` : ""}`}
                 >
-                  {remaining !== null ? <p aria-live="off">{remaining}s remaining</p> : null}
+                  {remaining !== null ? (
+                    <p aria-live="off">
+                      {copy("secondsRemaining", { count: formatNumber(locale, remaining) })}
+                    </p>
+                  ) : null}
                   {textResults &&
                   snapshot.currentBlock.kind === "question" &&
                   isTextQuestion(snapshot.currentBlock.question.type) ? (
@@ -350,7 +365,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   ) : null}
                 </div>
               ) : (
-                <p>Waiting for the next slide.</p>
+                <p>{copy("waiting")}</p>
               )}
             </section>
             <footer className={styles.stageFooter}>
@@ -361,15 +376,10 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   disabled={!fullScreenSupported}
                   onClick={() => void toggleFullScreen()}
                 >
-                  {fullScreen ? "Exit full screen" : "Enter full screen"}
+                  {copy(fullScreen ? "exitFullScreen" : "enterFullScreen")}
                 </button>
-                {!fullScreenSupported ? (
-                  <p>
-                    Full-screen mode is unavailable in this browser. The stage remains usable in
-                    this tab.
-                  </p>
-                ) : null}
-                {fullScreenError ? <p role="alert">{fullScreenError}</p> : null}
+                {!fullScreenSupported ? <p>{copy("fullScreenUnavailable")}</p> : null}
+                {fullScreenError ? <p role="alert">{copy("fullScreenError")}</p> : null}
               </div>
             </footer>
           </>

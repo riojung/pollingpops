@@ -1051,12 +1051,27 @@ describe("Saved-deck outline handoff", () => {
     const manual = view.nodes.find(
       (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
     )!;
-    (manual.props.onClick as () => void)();
+    const summary = { focus: vi.fn() };
+    const popup = { hasAttribute: () => true, hidePopover: vi.fn() };
+    const menu = {
+      open: true,
+      querySelector: (selector: string) => (selector === "summary" ? summary : popup),
+    };
+    const source = { closest: () => menu } as unknown as HTMLButtonElement;
+    (manual.props.onClick as (event: { currentTarget: HTMLButtonElement }) => void)({
+      currentTarget: source,
+    });
     await view.settle();
     expect(view.assistance.open).toBe(true);
+    expect(summary.focus).not.toHaveBeenCalled();
     expect(fixture.router.replace).toHaveBeenCalledExactlyOnceWith(
       `/presentation/${presentationId}`,
     );
+    view.assistance.onClose();
+    await view.settle();
+    expect(menu.open).toBe(false);
+    expect(popup.hidePopover).toHaveBeenCalledOnce();
+    expect(summary.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
   });
 
   it.each(["local-copy", "pending-save", "conflict"])(

@@ -46,7 +46,12 @@ function versionedReport(
     decisionReplayComplete: replay.decisionReplayComplete,
     decisionTimeline: replay.decisionTimeline,
   };
-  if (!requiresExtendedRoundResponses(state.quiz)) {
+  // Nullable correctness describes the frozen question purpose, independently of
+  // whether its live response format requires newer client capabilities.
+  const hasOpinionQuestions = state.quiz.questions.some(
+    (question) => questionPurpose(question) === "opinion",
+  );
+  if (!hasOpinionQuestions && !requiresExtendedRoundResponses(state.quiz)) {
     return replay.enabled
       ? ReportV4Schema.parse({ ...report, schemaVersion: 4, ...replayFields })
       : ReportV3Schema.parse({ ...report, schemaVersion: 3 });

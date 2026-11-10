@@ -53,7 +53,7 @@ for (const surface of ["", "@mobile "]) {
           response.request().method() === "POST" &&
           new URL(response.url()).pathname === "/v1/survey-rooms/join",
       );
-      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       const admitted = (await (await admission).json()).attempt;
       expect(admitted.schemaVersion).toBe(2);
       expect(admitted.content.items[0].question.maxSelections).toBe(2);
@@ -146,9 +146,13 @@ for (const surface of ["", "@mobile "]) {
   }) => {
     await signInBeta(page);
     await page.goto("/create");
+    await expect(page.getByRole("button", { name: /^Ask a quick poll/ })).toBeVisible();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^More formats$/ })
+      .click();
     await expect(page.getByRole("link", { name: /^Survey Share/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Quick poll/ })).toBeVisible();
-    // The explicit format chooser remains available beside the direct Quick poll path.
+    // Survey remains a separate format; the poll route keeps unscored response defaults.
     await page.goto("/create?type=poll&start=blank");
     await expect(page.getByRole("radio", { name: /^Poll/ })).toBeChecked();
     await expect(page.getByRole("radio", { name: /^Number/ })).toHaveCount(0);
@@ -203,7 +207,7 @@ for (const surface of ["", "@mobile "]) {
         participant.getByText("No nickname or learning identity is collected.", { exact: false }),
       ).toBeVisible();
       await expect(participant.getByLabel("Nickname")).toHaveCount(0);
-      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       await expect(participant).toHaveURL(new RegExp(`/survey/${room.id}$`));
       await participant.getByRole("button", { name: "Submit Survey", exact: true }).click();
       await expect(participant.getByRole("main").getByRole("alert")).toContainText("Question 1");

@@ -13,6 +13,7 @@ import { useLocale } from "../../components/locale-provider";
 import { ApiClientError, apiFetch, humanError } from "../../lib/api";
 import { surveyAccessToken, type SurveyAttempt } from "../../lib/survey-client";
 import { liveWorkflowCopy } from "../../lib/i18n/live-workflow-copy";
+import { deliveryPrimaryCopy, type DeliveryPrimaryKey } from "../../lib/i18n/delivery-primary-copy";
 import styles from "./join.module.css";
 import {
   beginJoinPreflight,
@@ -29,6 +30,8 @@ import {
 export function JoinForm() {
   const { locale, t } = useLocale();
   const copy = liveWorkflowCopy(locale);
+  const primaryCopy = deliveryPrimaryCopy(locale);
+  const [localError, setLocalError] = useState<DeliveryPrimaryKey | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
   const [code, setCode] = useState(() =>
@@ -67,13 +70,7 @@ export function JoinForm() {
         })
         .catch((caught) => {
           if (controller.signal.aborted) return;
-          setPreflight((current) =>
-            failJoinPreflight(
-              current,
-              requestId,
-              `${humanError(caught)}. You can still try joining.`,
-            ),
-          );
+          setPreflight((current) => failJoinPreflight(current, requestId, humanError(caught)));
         });
     }, 150);
 
@@ -92,6 +89,7 @@ export function JoinForm() {
     const submittedCode = code;
     setBusy(true);
     setError("");
+    setLocalError(null);
     setErrorField(null);
     setErrorKey(null);
     try {
@@ -114,13 +112,7 @@ export function JoinForm() {
             current.requestId === requestId && current.code === submittedCode ? resolved : current,
           );
         } catch (caught) {
-          setPreflight((current) =>
-            failJoinPreflight(
-              current,
-              requestId,
-              `${humanError(caught)}. We could not confirm the room type; try again.`,
-            ),
-          );
+          setPreflight((current) => failJoinPreflight(current, requestId, humanError(caught)));
           throw caught;
         }
       }
@@ -138,7 +130,11 @@ export function JoinForm() {
       const resolvedArtifactType = joinArtifactFor(resolvedPreflight, submittedCode);
       if (resolvedArtifactType === "feedback_room") {
         const roomId = resolvedPreflight.destination?.match(/^\/survey\/([a-f0-9-]{36})$/)?.[1];
-        if (!roomId) throw new Error("Could not confirm this Survey. Check the code and retry.");
+        if (!roomId) {
+          setLocalError("We could not confirm the room type; try again.");
+          setBusy(false);
+          return;
+        }
         const storageKey = `pollingpops:survey:${roomId}`;
         const token = localStorage.getItem(storageKey) ?? surveyAccessToken();
         // Persist before admission so an interrupted acknowledgement retries the same guest.
@@ -173,7 +169,9 @@ export function JoinForm() {
         return;
       }
       if (resolvedArtifactType !== "round") {
-        throw new Error("The room type could not be confirmed. Please try again.");
+        setLocalError("We could not confirm the room type; try again.");
+        setBusy(false);
+        return;
       }
       const requestedNickname = nicknameForJoin(resolvedPreflight, submittedCode, nickname);
       const joined = await apiFetch<JoinResponse>("/v1/sessions/join", {
@@ -245,6 +243,7 @@ export function JoinForm() {
               setPassword("");
               setPasswordRequested(false);
               setError("");
+              setLocalError(null);
               setErrorKey(null);
               setErrorField(null);
             }}
@@ -335,13 +334,19 @@ export function JoinForm() {
           </p>
         ) : null}
         {preflight.code === code && preflight.status === "failed" ? (
-          <p className="notice" lang="en-CA" role="status">
-            {preflight.message}
+          <p className="notice" lang={locale} role="status">
+            {primaryCopy("You can still try joining.")} {primaryCopy("Service message")}:{" "}
+            <span lang="en-CA">{preflight.message}</span>
           </p>
         ) : null}
         {error && !errorField ? (
-          <p className="error" lang="en-CA" role="alert">
-            {error}
+          <p className="error" lang={locale} role="alert">
+            {primaryCopy("Service message")}: <span lang="en-CA">{error}</span>
+          </p>
+        ) : null}
+        {localError ? (
+          <p className="error" lang={locale} role="alert">
+            {primaryCopy(localError)}
           </p>
         ) : null}
         <button

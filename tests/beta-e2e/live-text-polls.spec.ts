@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { signInBeta } from "./sign-in";
 import { joinBetaParticipant, joinBetaRound } from "./round-join";
+import { clickHostCommand } from "./host-controls";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const clientCapabilities = {
@@ -352,7 +353,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(publicGuest.getByText("Another approved idea", { exact: true })).toBeVisible();
       expect(snapshotLeaked).toBe(false);
       const hostCommands = page.getByTestId("host-command-bar");
-      await hostCommands.getByRole("button", { name: "Explain or reinforce", exact: true }).click();
+      await clickHostCommand(page, "Explain or reinforce");
       await hostCommands.getByRole("button", { name: "Finish intervention", exact: true }).click();
       const nextQuestion = hostCommands
         .locator(".host-command-primary")
@@ -426,7 +427,7 @@ for (const suffix of ["desktop", "@mobile"]) {
         }),
       ).toBeVisible();
       await expect(guest.getByLabel("A word or short phrase", { exact: true })).toHaveCount(0);
-      await hostCommands.getByRole("button", { name: "Work an example", exact: true }).click();
+      await clickHostCommand(page, "Work an example");
       await hostCommands.getByRole("button", { name: "Finish intervention", exact: true }).click();
       const finishRound = hostCommands
         .locator(".host-command-primary")

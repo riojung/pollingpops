@@ -152,7 +152,7 @@ async function surfaces(browser: Browser, page: Page, info: TestInfo, host: Host
       const guest = await context.newPage();
       await guest.goto(`/join?code=${host.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill(`Text attendee ${index + 1}`);
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${host.sessionId}/play`);
       guests.push(guest);
     }

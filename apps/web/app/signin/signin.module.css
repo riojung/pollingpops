@@ -1,3 +1,13 @@
+.card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.card input {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .progress {
   list-style: none;
   display: grid;

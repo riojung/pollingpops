@@ -292,8 +292,8 @@ for (const suffix of ["", " @mobile"]) {
     const menu = popup(page, "Insert & import");
     await withinViewport(page, menu);
     for (const name of [
-      "Blank slide",
-      "Content slide",
+      "Blank slide Empty canvas · matches this deck",
+      "Content slide Title and body · matches this deck",
       "Add question",
       "Outline to slides",
       "From published Round",
@@ -316,7 +316,12 @@ for (const suffix of ["", " @mobile"]) {
       path: info.outputPath("navigator-insert-menu-above.png"),
     });
     await trigger.press(nextControlKey);
-    await expect(menu.getByRole("button", { name: "Blank slide", exact: true })).toBeFocused();
+    await expect(
+      menu.getByRole("button", {
+        name: "Blank slide Empty canvas · matches this deck",
+        exact: true,
+      }),
+    ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(trigger).toBeFocused();
@@ -329,8 +334,9 @@ for (const suffix of ["", " @mobile"]) {
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(menu).toBeVisible();
-    await expect(outline).toBeFocused();
+    await expect(menu).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await trigger.press("Enter");
     const sourceAction = menu.getByRole("button", { name: "From trusted source", exact: true });
     await sourceAction.click();
     const sourceDialog = page.getByRole("dialog", {

@@ -38,6 +38,22 @@
   gap: 12px;
 }
 
+.publication {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text);
+}
+.publication > time {
+  color: var(--ui-text-subtle);
+}
+.publication > button {
+  justify-self: start;
+}
+
 .actions > * {
   min-width: 0;
   white-space: normal;

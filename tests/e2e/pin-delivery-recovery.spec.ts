@@ -3,6 +3,7 @@ import { setTimeout as waitForCooldown } from "node:timers/promises";
 import {
   acceptCreatorPolicies,
   expectAnonymousCreator,
+  openCreatorPreferences,
   submitCreatorPin,
   verifyCreatorEmail,
 } from "../support/creator-auth";
@@ -28,9 +29,18 @@ async function captureAuthStage(page: Page, testInfo: TestInfo, stage: string) {
     ["mobile", 390, 844],
   ] as const) {
     await page.setViewportSize({ width, height });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-      width,
-    );
+    const layout = await page.evaluate(() => ({
+      width: document.documentElement.scrollWidth,
+      overflowing: [...document.querySelectorAll("main, section, form, input")]
+        .map((element) => ({
+          tag: element.tagName,
+          id: element.id,
+          right: element.getBoundingClientRect().right,
+          width: element.getBoundingClientRect().width,
+        }))
+        .filter((element) => element.right > innerWidth),
+    }));
+    expect(layout.width, JSON.stringify({ stage, name, ...layout })).toBeLessThanOrEqual(width);
     await page.screenshot({ path: testInfo.outputPath(`${stage}-${name}.png`), fullPage: true });
   }
   if (originalViewport) await page.setViewportSize(originalViewport);
@@ -174,10 +184,17 @@ test("verification and restored PIN keep the organization destination without re
     },
   });
   await expectSignInContinuation(page);
+  await expect(page.getByRole("textbox", { name: "Email address", exact: true })).toHaveValue(
+    email,
+  );
   await captureAuthStage(page, testInfo, "verified");
   await page.reload();
   await expectSignInContinuation(page);
   await expect(page.getByRole("form", { name: "Sign in by email", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Email address", exact: true })).toHaveValue(
+    email,
+  );
+  await expect(page).toHaveURL((url) => !url.searchParams.has("email"));
   expect(posts.filter((path) => path === "/v1/auth/pin/request")).toHaveLength(0);
   await expectAnonymousCreator(page, apiOrigin);
 
@@ -405,6 +422,10 @@ for (const scenario of [
     });
     await page.goto(`/signin?${query}`);
     const signup = page.getByRole("form", { name: "Create account", exact: true });
+    const preferences = signup.locator("details");
+    if (scenario.initial === "organization") await expect(preferences).toHaveAttribute("open", "");
+    else await expect(preferences).not.toHaveAttribute("open");
+    await openCreatorPreferences(page);
     const choice = (type: "personal" | "organization") =>
       signup.getByRole("button", {
         name: type === "personal" ? "Personal workspace" : "Organization workspace",

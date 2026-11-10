@@ -557,7 +557,7 @@ test("authors can edit, save, publish, and deliver the same slide arrangement", 
     const participant = await participantContext.newPage();
     await participant.goto(`/join?code=${code}`);
     await participant.getByLabel("Nickname", { exact: true }).fill("Layout audience");
-    await participant.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await participant.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(participant).toHaveURL(`/presentation-session/${sessionId}/play`);
     await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
     const hostSlide = page.locator("article[data-layout]");

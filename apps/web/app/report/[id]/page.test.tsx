@@ -1,4 +1,5 @@
 import type * as ReactModule from "react";
+import type * as LocaleModule from "../../../components/locale-provider";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -6,6 +7,7 @@ import {
   ReportV7Schema,
   type Report,
   type ResponseDistribution,
+  type SupportedLocale,
 } from "@openround/contracts";
 import type * as ApiModule from "../../../lib/api";
 import { withEnglishLocale } from "../../../test-utils/english-locale";
@@ -20,6 +22,7 @@ interface ReportHooks {
 const fixtures = vi.hoisted(() => ({
   hooks: null as ReportHooks | null,
   apiFetch: vi.fn(),
+  locale: "en-CA" as SupportedLocale,
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -59,7 +62,27 @@ vi.mock("../../../lib/api", async (importOriginal) => ({
   apiFetch: fixtures.apiFetch,
 }));
 
+vi.mock("../../../components/locale-provider", async (importOriginal) => {
+  const original = await importOriginal<typeof LocaleModule>();
+  const { loadMessages, translate, localeDomains } = await import("../../../lib/i18n/catalog");
+  const { supportedLocales } = await import("@openround/contracts");
+  const messages = Object.fromEntries(
+    await Promise.all(
+      supportedLocales.map(async (locale) => [locale, await loadMessages(locale, localeDomains)]),
+    ),
+  );
+  return {
+    ...original,
+    useLocale: () => ({
+      locale: fixtures.locale,
+      t: (key: Parameters<typeof translate>[1], values?: Record<string, string | number>) =>
+        translate(messages[fixtures.locale]!, key, values),
+    }),
+  };
+});
+
 beforeEach(() => {
+  fixtures.locale = "en-CA";
   fixtures.hooks = null;
   fixtures.apiFetch.mockReset();
 });
@@ -230,6 +253,85 @@ async function renderReport(
 }
 
 describe("Live Round opinion report compatibility", () => {
+  it.each([
+    [false, "en-CA", "Not measured"],
+    [true, "en-CA", "Not measured"],
+    [false, "ko-KR", "측정되지 않음"],
+    [true, "ko-KR", "측정되지 않음"],
+  ] as const)(
+    "separates an unanswered assessment from an observed zero (beta=%s, locale=%s)",
+    async (uxBeta, locale, unavailable) => {
+      fixtures.locale = locale;
+      const report = LegacyReportSchema.parse({
+        ...opinionReport(),
+        schemaVersion: 1,
+        metrics: { participantCount: 1, completedCount: 1, answerCount: 1, accuracyPercent: 0 },
+        questions: [
+          {
+            questionId: "00000000-0000-4000-8000-000000000003",
+            prompt: "Missing assessment evidence",
+            responses: 0,
+            correct: 0,
+            accuracyPercent: 0,
+            difficult: true,
+          },
+          {
+            questionId: "00000000-0000-4000-8000-000000000004",
+            prompt: "Observed incorrect response",
+            responses: 1,
+            correct: 0,
+            accuracyPercent: 0,
+            difficult: true,
+          },
+        ],
+      });
+      const markup = await renderReport(report, uxBeta);
+      const rows = markup.match(/<tr(?: [^>]*)?>[\s\S]*?<\/tr>/g) ?? [];
+      const missing = rows.find((row) => row.includes("Missing assessment evidence"))!;
+      const zero = rows.find((row) => row.includes("Observed incorrect response"))!;
+      expect(missing).toContain(`<td>${unavailable}</td>`);
+      expect(missing.match(/<td>(?:Not measured|측정되지 않음)<\/td>/g)).toHaveLength(2);
+      expect(missing).not.toContain("<td>0%</td>");
+      expect(missing).not.toContain(`<td>${locale === "en-CA" ? "Review" : "검토"}</td>`);
+      expect(zero).toContain("<td>0%</td>");
+      expect(zero).toContain(`<td>${locale === "en-CA" ? "Review" : "검토"}</td>`);
+      if (locale === "en-CA") expect(markup).toContain("<strong>0%</strong><span>Accuracy</span>");
+    },
+  );
+
+  it("does not assign accuracy or review needs when a legacy assessment has no responses", async () => {
+    const report = LegacyReportSchema.parse({
+      ...opinionReport(),
+      schemaVersion: 1,
+      metrics: { participantCount: 1, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
+      questions: [
+        {
+          questionId: "00000000-0000-4000-8000-000000000003",
+          prompt: "Unanswered assessment",
+          responses: 0,
+          correct: 0,
+          accuracyPercent: 0,
+          difficult: true,
+        },
+      ],
+    });
+    const markup = await renderReport(report);
+    expect(markup).toContain("<strong>—</strong><span>No assessed answers</span>");
+    expect(markup).toContain("<strong>0</strong><span>Checkpoints needing review</span>");
+    expect(markup).not.toContain("0%");
+  });
+
+  it("localizes report navigation and analysis while retaining authored question text", async () => {
+    fixtures.locale = "fr-FR";
+    const report = opinionReport(distributions[0]!.distribution);
+    const markup = await renderReport(report, true);
+    expect(markup).toContain("Gérer les données");
+    expect(markup).toContain("Analyse des questions");
+    expect(markup).toContain("Non noté");
+    expect(markup).toContain(report.questions[0]!.prompt);
+    expect(markup).not.toContain(">Manage data<");
+    expect(markup).not.toContain(">Not scored<");
+  });
   it.each([false, true])(
     "keeps missing evidence distinct from zero in the %s beta report",
     async (uxBeta) => {

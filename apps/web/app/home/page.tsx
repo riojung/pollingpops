@@ -6,12 +6,16 @@ import { useLocale } from "../../components/locale-provider";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { HomeGuidance } from "./home-guidance";
+import { HomeFirstRunActions } from "./home-first-run-actions";
 import { professionalRoundBuilderAvailable } from "../../lib/help-guide-availability";
 import { pluralCategory } from "../../lib/i18n/format";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 import { canvasMessages } from "../../lib/i18n/canvas-messages";
-import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
-import { homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
+import {
+  workspaceCreationGoals,
+  workspaceCreationOptions,
+} from "../../components/workspace/workspace-creation-model";
+import { hasHomeWork, homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
 import { useHomeSummary } from "./home-summary";
 import styles from "./home.module.css";
 
@@ -227,6 +231,13 @@ function HomeWorkspace() {
         <HomeGuidance
           summary={summary}
           contextKey={`${creator.userId}:${creator.workspaceId}`}
+          guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
+          creationGoals={workspaceCreationGoals({ canEdit, productFeatures })}
+        />
+      ) : null}
+      {summary && !canCreate && !hasHomeWork(summary) ? (
+        <HomeFirstRunActions
+          canCreate={false}
           guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
         />
       ) : null}

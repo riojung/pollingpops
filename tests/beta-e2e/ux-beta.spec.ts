@@ -154,9 +154,16 @@ test("creator starts a blank Round with the selected first response type", async
   await signIn(page, betaEmail);
 
   await openRoundCreate(page);
-  await expect(page.getByRole("heading", { name: "What would you like to create?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would you like to do?" })).toBeVisible();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^More formats$/ })
+    .click();
   await page.getByRole("link", { name: /^Custom Round/ }).click();
-  await page.getByRole("link", { name: /Start blank/ }).click();
+  await expect(page.getByRole("tab", { name: "Blank", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(page.getByRole("heading", { name: "Start a blank Round" })).toBeVisible();
   await page.getByLabel("Round title (optional for now)", { exact: true }).fill("Beta blank Round");
   await page.getByRole("radio", { name: /^Number/ }).check();
@@ -464,8 +471,8 @@ test("starter rehearsal completes privately with bounded telemetry", async ({ pa
   const reportsBeforeRehearsal = (await beforeReports.json()).items;
 
   await page.goto("/create");
-  await page.getByRole("link", { name: /^Live quiz/ }).click();
-  await page.getByRole("link", { name: /Use a starter/ }).click();
+  await page.getByRole("link", { name: /^Check understanding/ }).click();
+  await page.getByRole("tab", { name: "Templates", exact: true }).click();
   const starterCard = page.getByRole("article").filter({
     has: page.getByRole("heading", { name: "Misconception check", exact: true }),
   });
@@ -1385,9 +1392,16 @@ test("@mobile beta creation remains usable at 390 by 844", async ({ page }) => {
   await signIn(page, betaEmail);
   expect(page.viewportSize()).toEqual({ width: 390, height: 844 });
   await page.goto("/create");
-  await expect(page.getByRole("heading", { name: "What would you like to create?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would you like to do?" })).toBeVisible();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^More formats$/ })
+    .click();
   await page.getByRole("link", { name: /^Custom Round/ }).click();
-  await page.getByRole("link", { name: /Start blank/ }).click();
+  await expect(page.getByRole("tab", { name: "Blank", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(page.getByRole("heading", { name: "Start a blank Round" })).toBeInViewport();
   const title = page.getByLabel("Round title (optional for now)", { exact: true });
   await title.scrollIntoViewIfNeeded();

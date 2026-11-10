@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AuthoringAssistant } from "../../../components/authoring-assistant";
 import { useLocale } from "../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../lib/api";
@@ -11,6 +11,7 @@ import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { recordCreationEvent } from "../../../components/workspace/product-events";
 import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
 import { PresentationOutlineStart } from "../../../components/workspace/presentation-outline-start";
+import { presentationStartCopy } from "../../../components/workspace/presentation-start-copy";
 import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
 import styles from "./presentation-launcher.module.css";
 
@@ -19,11 +20,15 @@ function PresentationLauncher() {
   const searchParams = useSearchParams();
   const { t, locale } = useLocale();
   const workflowCopy = creatorWorkflowCopy(locale);
+  const startCopy = presentationStartCopy(locale);
   const { canEdit } = useWorkspace();
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
   const [error, setError] = useState("");
 
   async function createBlankPresentation() {
+    if (!canEdit || creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     setError("");
     recordCreationEvent("creation_started", "blank", "presentation");
@@ -31,7 +36,7 @@ function PresentationLauncher() {
       const response = await apiFetch<{ presentation: { id: string } }>("/v1/presentations", {
         method: "POST",
         body: JSON.stringify({
-          title: "Untitled presentation",
+          title: t("delivery.presentationBuilder.untitled"),
           description: "",
           initialSlide: "native",
         }),
@@ -40,6 +45,7 @@ function PresentationLauncher() {
       router.push(`/presentation/${response.presentation.id}`);
     } catch (caught) {
       setError(humanError(caught));
+      creatingRef.current = false;
       setCreating(false);
     }
   }
@@ -83,11 +89,11 @@ function PresentationLauncher() {
               <Link className="button-quiet small-button" href="/create/presentation">
                 {t("create.common.allStartingPoints")}
               </Link>
-              <span lang={selectedStart === "outline" ? "en-CA" : undefined}>
+              <span lang={locale}>
                 {selectedStart === "source"
                   ? t("create.common.sourceGrounded")
                   : selectedStart === "outline"
-                    ? "From outline"
+                    ? startCopy.fromOutline
                     : t("create.common.presentationTemplate")}
               </span>
             </div>
@@ -129,12 +135,9 @@ function PresentationLauncher() {
               <summary>{workflowCopy.otherStartingPoints}</summary>
               <div className={styles.methodGrid}>
                 <Link className={styles.methodCard} href="/create/presentation?start=source">
-                  <small lang="en-CA">Source assistance</small>
+                  <small>{startCopy.sourceAssistance}</small>
                   <h3>{t("create.presentation.method.source.title")}</h3>
-                  <p lang="en-CA">
-                    Review content proposals from PowerPoint, PDF, Word or pasted text. Original
-                    slide layouts are not preserved.
-                  </p>
+                  <p>{startCopy.sourceWarning}</p>
                   <span className={styles.cardLink}>
                     {t("create.presentation.method.source.action")}
                   </span>
@@ -142,15 +145,13 @@ function PresentationLauncher() {
                 <Link
                   className={styles.methodCard}
                   href="/create/presentation?start=outline"
-                  lang="en-CA"
-                  aria-label="From outline"
+                  lang={locale}
+                  aria-label={startCopy.fromOutline}
                 >
-                  <small>Optional AI assistance</small>
-                  <h3>From outline</h3>
-                  <p>
-                    Create a saved draft, then turn your outline into editable slides for review.
-                  </p>
-                  <span className={styles.cardLink}>Start from an outline →</span>
+                  <small>{startCopy.optionalAI}</small>
+                  <h3>{startCopy.fromOutline}</h3>
+                  <p>{startCopy.outlineCard}</p>
+                  <span className={styles.cardLink}>{startCopy.outlineAction}</span>
                 </Link>
               </div>
             </details>
@@ -171,7 +172,7 @@ function PresentationLauncher() {
                     className="button-quiet small-button"
                     href="/create/presentation?start=template"
                   >
-                    <span lang="en-CA">Browse templates →</span>
+                    <span>{startCopy.browseTemplates}</span>
                   </Link>
                 ) : null}
               </div>
@@ -184,7 +185,7 @@ function PresentationLauncher() {
               <p className="eyebrow">{t("create.presentation.source.eyebrow")}</p>
               <h2>{t("create.presentation.source.title")}</h2>
               <p>{t("create.presentation.source.description")}</p>
-              <div lang="en-CA">
+              <div lang={locale}>
                 <AuthoringAssistant
                   artifactType="presentation"
                   canEdit
@@ -198,8 +199,8 @@ function PresentationLauncher() {
 
           {selectedStart === "outline" ? <PresentationOutlineStart /> : null}
 
-          <p className={styles.notice} lang="en-CA">
-            Your work starts as a private draft. Review and publish when you are ready.
+          <p className={styles.notice} lang={locale}>
+            {startCopy.privateDraft}
           </p>
         </>
       )}

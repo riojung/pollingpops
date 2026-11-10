@@ -3,6 +3,8 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { englishMessages, translate, type MessageKey } from "../../../lib/i18n/catalog";
+import type { SupportedLocale } from "@openround/contracts";
+import authoringEnglish from "../../../lib/i18n/domains/delivery-authoring/en-CA";
 
 const mocked = vi.hoisted(() => ({
   query: "",
@@ -11,12 +13,14 @@ const mocked = vi.hoisted(() => ({
   request: vi.fn(),
   event: vi.fn(),
   capture: false,
+  locale: "en-CA" as SupportedLocale,
 }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
     useState: <T,>(initial: T) => (mocked.capture ? [initial, vi.fn()] : react.useState(initial)),
+    useRef: <T,>(initial: T) => (mocked.capture ? { current: initial } : react.useRef(initial)),
   };
 });
 vi.mock("next/navigation", () => ({
@@ -45,7 +49,10 @@ vi.mock("../../../components/workspace/presentation-outline-start", () => ({
   PresentationOutlineStart: () => <div>Outline draft creation workflow</div>,
 }));
 vi.mock("../../../components/locale-provider", () => ({
-  useLocale: () => ({ t: (key: MessageKey) => translate(englishMessages, key) }),
+  useLocale: () => ({
+    locale: mocked.locale,
+    t: (key: MessageKey) => translate({ ...englishMessages, ...authoringEnglish }, key),
+  }),
 }));
 vi.mock("../../../lib/api", () => ({
   apiFetch: mocked.request,
@@ -61,6 +68,7 @@ beforeEach(() => {
   mocked.query = "";
   mocked.canEdit = true;
   mocked.capture = false;
+  mocked.locale = "en-CA";
   vi.clearAllMocks();
 });
 describe("Presentation creation launcher", () => {
@@ -135,6 +143,7 @@ describe("Presentation creation launcher", () => {
     expect(blank).toBeDefined();
     expect(mocked.request).not.toHaveBeenCalled();
     (blank!.props.onClick as () => void)();
+    (blank!.props.onClick as () => void)();
     for (let index = 0; index < 8; index++) await Promise.resolve();
     expect(mocked.request).toHaveBeenCalledExactlyOnceWith("/v1/presentations", {
       method: "POST",
@@ -149,5 +158,15 @@ describe("Presentation creation launcher", () => {
       ["creation_completed", "blank", "presentation"],
     ]);
     expect(mocked.push).toHaveBeenCalledExactlyOnceWith(`/presentation/${id}`);
+  });
+
+  it("shows a localized source-layout boundary and optional outline labels", () => {
+    mocked.locale = "ko-KR";
+    const markup = renderToStaticMarkup(<CreatePresentationPage />);
+    expect(markup).toContain("원본 슬라이드 레이아웃은 유지되지 않습니다");
+    expect(markup).toContain('aria-label="개요에서 시작"');
+    expect(markup).toContain("작업은 비공개 초안으로 시작됩니다");
+    expect(markup).not.toContain("Original slide layouts");
+    expect(markup).not.toContain('lang="en-CA"');
   });
 });

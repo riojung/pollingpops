@@ -3,7 +3,7 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
-import type { WorkspaceProductFeatures } from "@openround/contracts";
+import type { SupportedLocale, WorkspaceProductFeatures } from "@openround/contracts";
 import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
 
 const allFeatures = () =>
@@ -32,6 +32,7 @@ const fixtures = vi.hoisted(() => ({
   canEdit: true,
   capture: false,
   request: vi.fn(),
+  locale: "en-CA" as SupportedLocale,
 }));
 
 vi.mock("react", async (original) => {
@@ -47,7 +48,10 @@ vi.mock("react", async (original) => {
 });
 
 vi.mock("../../components/locale-provider", () => ({
-  useLocale: () => ({ locale: "en-CA", t: (key: MessageKey) => translate(englishMessages, key) }),
+  useLocale: () => ({
+    locale: fixtures.locale,
+    t: (key: MessageKey) => translate(englishMessages, key),
+  }),
 }));
 vi.mock("../../lib/api", () => ({
   apiFetch: fixtures.request,
@@ -100,14 +104,18 @@ describe("Round creation launcher", () => {
     fixtures.canEdit = true;
     fixtures.capture = false;
     fixtures.request.mockReset();
+    fixtures.locale = "en-CA";
   });
 
-  it("asks for an activity type before offering starting methods", () => {
+  it("leads with common goals and keeps additional formats in a disclosure", () => {
     const markup = renderToStaticMarkup(<CreatePage />);
 
-    expect(markup).toContain("What would you like to create?");
+    expect(markup).toContain("What would you like to do?");
     expect(markup).toContain('href="/create?type=quiz"');
-    expect(markup).toContain("Quick poll");
+    expect(markup).toContain("Ask a quick poll");
+    expect(markup).toContain("Check understanding");
+    expect(markup).toContain("Build a presentation");
+    expect(markup).toContain("<summary>More formats</summary>");
     expect(markup).toContain('type="button"');
     expect(markup).toContain('href="/surveys/new"');
     expect(markup).toContain('href="/create?type=custom"');
@@ -116,6 +124,43 @@ describe("Round creation launcher", () => {
     expect(markup).toContain("at their own pace");
     expect(markup).not.toContain("Source authoring workflow");
     expect(markup).not.toContain("Structured import workflow");
+  });
+
+  it("opens a quiz blank draft form immediately and keeps alternatives in the same surface", () => {
+    fixtures.query = "type=quiz";
+    const markup = renderToStaticMarkup(<CreatePage />);
+    expect(markup).toContain("Start a blank Round");
+    expect(markup).toContain('role="tablist" aria-label="Starting points"');
+    expect(markup).toContain('aria-selected="true" id="creation-start-blank"');
+    expect(markup).toContain('aria-labelledby="creation-start-blank"');
+    expect(markup).toContain(">Templates</button>");
+    expect(markup).toContain(">Source assistance</button>");
+    expect(markup).toContain(">Import</button>");
+    expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it("retains source deep links but prevents scored import methods for a poll", () => {
+    fixtures.query = "type=quiz&start=source";
+    expect(renderToStaticMarkup(<CreatePage />)).toContain("Source authoring workflow");
+    fixtures.query = "type=poll&start=import";
+    const markup = renderToStaticMarkup(<CreatePage />);
+    expect(markup).toContain("Start a blank Round");
+    expect(markup).not.toContain("Structured import workflow");
+    expect(markup).not.toContain('id="creation-start-import"');
+    expect(markup).not.toContain('id="creation-start-source"');
+  });
+
+  it("localizes goal names and starting method controls in the selected language", () => {
+    fixtures.locale = "ko-KR";
+    const goals = renderToStaticMarkup(<CreatePage />);
+    expect(goals).toContain("무엇을 하고 싶으세요?");
+    expect(goals).toContain("빠른 투표 진행");
+    expect(goals).not.toContain("Ask a quick poll");
+    fixtures.query = "type=quiz";
+    const workflow = renderToStaticMarkup(<CreatePage />);
+    expect(workflow).toContain('aria-label="시작 방법"');
+    expect(workflow).toContain(">템플릿</button>");
+    expect(workflow).toContain(">가져오기</button>");
   });
 
   it("creates one private unscored draft only after the Quick poll action, even on a double click", async () => {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page, type TestInfo } from "@playwright/test";
 import { signInBeta } from "./sign-in";
+import { openLibraryFilters } from "./library-controls";
 import {
   clickNavigatorAction,
   closeE01Overlays,
@@ -93,6 +94,7 @@ async function recoveryPackWorkflow(page: Page) {
   const target = (await targetResponse.json()).quiz as { id: string };
 
   await page.goto("/library");
+  await openLibraryFilters(page);
   await page.getByRole("link", { name: "Recovery Packs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recovery Packs", exact: true })).toBeVisible();
   await page.getByLabel("Source Round").selectOption(source.id, { timeout: 10_000 });
@@ -434,7 +436,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
     );
     await participant.goto(`/join?code=${snapshot.code}`);
     await participant.getByLabel("Nickname", { exact: true }).fill("Pack participant");
-    await participant.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await participant.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(participant).toHaveURL(`/presentation-session/${sessionId}/play`);
     await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
     await page.getByRole("button", { name: "Next block", exact: true }).click();

@@ -4,6 +4,10 @@ import type * as ApiModule from "../../lib/api";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_CHANGE_EVENT } from "../../lib/api";
+import type { SupportedLocale } from "@openround/contracts";
+import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
+import englishAuthoring from "../../lib/i18n/domains/delivery-authoring/en-CA";
+import koreanAuthoring from "../../lib/i18n/domains/delivery-authoring/ko-KR";
 
 interface Hooks {
   cursor: number;
@@ -19,6 +23,17 @@ const mocked = vi.hoisted(() => ({
   feature: true,
   userId: "00000000-0000-4000-8000-000000000001",
   workspaceId: "00000000-0000-4000-8000-000000000002",
+  locale: "en-CA" as SupportedLocale,
+}));
+vi.mock("../locale-provider", () => ({
+  useLocale: () => ({
+    locale: mocked.locale,
+    t: (key: MessageKey) =>
+      translate(
+        { ...englishMessages, ...(mocked.locale === "ko-KR" ? koreanAuthoring : englishAuthoring) },
+        key,
+      ),
+  }),
 }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
@@ -134,6 +149,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   entries.clear();
   mocked.canEdit = true;
+  mocked.locale = "en-CA";
   mocked.feature = true;
   mocked.workspaceId = "00000000-0000-4000-8000-000000000002";
   mocked.request.mockResolvedValue({
@@ -153,6 +169,22 @@ afterEach(() => {
 });
 
 describe("outline-first creation panel", () => {
+  it("localizes storage recovery and privacy guidance without changing the saved request", () => {
+    mocked.locale = "ko-KR";
+    storage.getItem.mockImplementation(() => {
+      throw new Error("Restricted");
+    });
+    const view = harness();
+    view.render();
+    const markup = view.render();
+    expect(markup).toContain("선택적 AI 지원");
+    expect(markup).toContain("자동으로 게시되지 않습니다");
+    expect(markup).toContain("탭 저장소를 허용한 후 다시 시도하세요");
+    expect(view.button("탭 복구 다시 시도")).toBeDefined();
+    expect(markup).not.toContain("Allow tab storage");
+    expect(mocked.request).not.toHaveBeenCalled();
+    view.unmount();
+  });
   it("explains the saved-draft boundary and offers an accessible explicit title form without creating on mount", () => {
     const view = harness();
     expect(view.render()).toContain("Checking draft recovery");

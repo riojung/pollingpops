@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 import { signInBeta } from "./sign-in";
+import { openLibraryFilters } from "./library-controls";
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
 for (const surface of ["", "@mobile "]) {
@@ -52,6 +53,7 @@ for (const surface of ["", "@mobile "]) {
     await expect(page.getByRole("searchbox", { name: "Search surveys", exact: true })).toHaveValue(
       title,
     );
+    await openLibraryFilters(page);
     await page.getByLabel("Filter by folder", { exact: true }).selectOption(folder.id);
     await expect(card).toBeVisible();
     await card.getByRole("button", { name: `Add ${title} to favorites`, exact: true }).click();

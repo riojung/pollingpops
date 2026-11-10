@@ -101,7 +101,7 @@ async function workflow(page: Page, browser: Browser, testInfo: TestInfo) {
     ] as const) {
       await surface.goto(`/join?code=${room.code}`);
       await surface.getByLabel("Nickname", { exact: true }).fill(alias);
-      await surface.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await surface.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(surface).toHaveURL(`/presentation-session/${room.id}/play`);
     }
     await expect(
@@ -275,7 +275,7 @@ test("Slow Presentation Q&A reads make progress under overlapping refreshes", as
     });
     await guest.goto(`/join?code=${room.code}`);
     await guest.getByLabel("Nickname", { exact: true }).fill("Slow network fixture");
-    await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(
       guest.locator("summary").filter({ hasText: "Questions and answers" }),
     ).toBeVisible();

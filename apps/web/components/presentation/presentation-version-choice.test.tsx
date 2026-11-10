@@ -3,8 +3,26 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
+import type { SupportedLocale } from "@openround/contracts";
+import authoringEnglish from "../../lib/i18n/domains/delivery-authoring/en-CA";
+import authoringFrench from "../../lib/i18n/domains/delivery-authoring/fr-FR";
 
-const fixture = vi.hoisted(() => ({ capture: false }));
+const fixture = vi.hoisted(() => ({
+  capture: false,
+  locale: "en-CA" as SupportedLocale,
+  metadataReady: false,
+}));
+vi.mock("./presentation-publication-info", () => ({
+  usePresentationPublicationInfo: () => ({
+    state: fixture.metadataReady
+      ? {
+          status: "ready",
+          publication: { id: "version-1", version: 3, publishedAt: "2026-10-17T18:30:00.000Z" },
+        }
+      : { status: "loading" },
+    retry: vi.fn(),
+  }),
+}));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
@@ -17,7 +35,17 @@ vi.mock("react", async (original) => {
   };
 });
 vi.mock("../locale-provider", () => ({
-  useLocale: () => ({ locale: "en-CA", t: (key: MessageKey) => translate(englishMessages, key) }),
+  useLocale: () => ({
+    locale: fixture.locale,
+    t: (key: MessageKey) =>
+      translate(
+        {
+          ...englishMessages,
+          ...(fixture.locale === "fr-FR" ? authoringFrench : authoringEnglish),
+        },
+        key,
+      ),
+  }),
 }));
 vi.mock("./presentation-modal-focus", () => ({
   focusModal: vi.fn(),
@@ -36,6 +64,8 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
 
 beforeEach(() => {
   fixture.capture = false;
+  fixture.locale = "en-CA";
+  fixture.metadataReady = false;
 });
 describe("Presentation version choice", () => {
   it("explains both versions without publishing or navigating on open", () => {
@@ -43,6 +73,11 @@ describe("Presentation version choice", () => {
     const markup = renderToStaticMarkup(
       <PresentationVersionChoice
         href="/presentation/deck/host"
+        publicationContext={{
+          actorKey: "owner:workspace",
+          presentationId: "deck",
+          versionId: "version-1",
+        }}
         error="Save failed"
         onClose={vi.fn()}
         onPublish={publish}
@@ -70,6 +105,11 @@ describe("Presentation version choice", () => {
     fixture.capture = true;
     const tree = PresentationVersionChoice({
       href: "/presentation/deck/host",
+      publicationContext: {
+        actorKey: "owner:workspace",
+        presentationId: "deck",
+        versionId: "version-1",
+      },
       error: "",
       onClose: close,
       onPublish: publish,
@@ -91,5 +131,30 @@ describe("Presentation version choice", () => {
     for (let index = 0; index < 8; index++) await Promise.resolve();
     key({ key: "Escape" });
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("shows the exact publication date and number in a non-English dialog", () => {
+    fixture.locale = "fr-FR";
+    fixture.metadataReady = true;
+    const markup = renderToStaticMarkup(
+      <PresentationVersionChoice
+        href="/presentation/deck/host"
+        publicationContext={{
+          actorKey: "owner:workspace",
+          presentationId: "deck",
+          versionId: "version-1",
+        }}
+        error=""
+        onClose={vi.fn()}
+        onPublish={vi.fn()}
+        onPublishedExit={vi.fn()}
+      />,
+    );
+    expect(markup).toContain("Quelle version voulez-vous présenter");
+    expect(markup).toContain("Version 3");
+    expect(markup).toMatch(/datetime="2026-10-17T18:30:00.000Z"/i);
+    expect(markup).toContain("Publié le");
+    expect(markup).toContain("oct.");
+    expect(markup).not.toContain("Published");
   });
 });

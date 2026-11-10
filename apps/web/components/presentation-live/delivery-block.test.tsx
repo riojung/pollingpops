@@ -6,6 +6,12 @@ import {
   type PresentationParticipantCurrentBlock,
 } from "@openround/contracts";
 import { PresentationDeliveryBlock } from "./delivery-block";
+import { LocaleProvider } from "../locale-provider";
+import { loadMessages } from "../../lib/i18n/catalog";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/presentation-session/session/stage",
+}));
 
 const design = { theme: "sunset", font: "serif", spacing: "compact" } as const;
 
@@ -40,6 +46,22 @@ function render(block: PresentationParticipantCurrentBlock) {
 }
 
 describe("Presentation live delivery artwork", () => {
+  it("localizes Korean moderation guidance using only delivery messages and preserves authored material", async () => {
+    const markup = renderToStaticMarkup(
+      <LocaleProvider
+        initialLocale="ko-KR"
+        initialDomains={["live-delivery"]}
+        initialMessages={await loadMessages("ko-KR", ["live-delivery"])}
+      >
+        <PresentationDeliveryBlock block={questionBlock("open_text")} renderMedia={() => null} />
+      </LocaleProvider>,
+    );
+    expect(markup).toContain('<p lang="ko-KR">응답은 검토 후 표시됩니다.</p>');
+    expect(markup).toContain("A live audience question");
+    expect(markup).not.toContain("Responses are reviewed before they appear.");
+    expect(markup).not.toContain("Correct answer");
+  });
+
   it("uses shared deck styling and marks answers only after an explicit reveal", () => {
     const block = questionBlock();
     if (block.kind !== "question") throw new Error("Expected question");

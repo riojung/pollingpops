@@ -6,11 +6,15 @@ import type { PublicFeatures } from "@openround/contracts";
 import { apiFetch } from "../../lib/api";
 import { buildJoinUrl, isLoopbackJoinBase, selectJoinBase } from "../../lib/join-url";
 import { copyTextToClipboard } from "../../lib/clipboard";
+import { useLocale } from "../locale-provider";
+import { presentationDeliveryCopy } from "../../lib/i18n/presentation-delivery-copy";
 import styles from "./presentation-delivery.module.css";
 
 export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
+  const { locale } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const [base, setBase] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<"copied" | "copyUnavailable" | null>(null);
   useEffect(() => {
     let active = true;
     const current = window.location.origin;
@@ -32,16 +36,16 @@ export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
   }, []);
   const url = buildJoinUrl(base, code);
   return (
-    <section className={styles.joinAccess} aria-label="Join this Presentation" lang="en-CA">
-      {url ? <QRCodeSVG value={url} size={84} title="Scan to join this Presentation" /> : null}
+    <section className={styles.joinAccess} aria-label={copy("joinPresentation")} lang={locale}>
+      {url ? <QRCodeSVG value={url} size={84} title={copy("scanJoin")} /> : null}
       <div>
         <p>
-          Join code <strong className={styles.joinCode}>{code}</strong>
+          {copy("joinCode")} <strong className={styles.joinCode}>{code}</strong>
         </p>
         {url ? (
           <p>
             <a href={url} target="_blank" rel="noopener noreferrer">
-              {url}
+              <span lang="">{url}</span>
             </a>
           </p>
         ) : null}
@@ -51,23 +55,15 @@ export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
             type="button"
             onClick={() =>
               void copyTextToClipboard(url).then((copied) =>
-                setStatus(
-                  copied
-                    ? "Join link copied."
-                    : "Copy is unavailable. Use the visible join address.",
-                ),
+                setStatus(copied ? "copied" : "copyUnavailable"),
               )
             }
           >
-            Copy join link
+            {copy("copyJoin")}
           </button>
         ) : null}
-        {base && isLoopbackJoinBase(base) ? (
-          <p>
-            This address works on this device. Use a public or network address for other devices.
-          </p>
-        ) : null}
-        {status ? <p role="status">{status}</p> : null}
+        {base && isLoopbackJoinBase(base) ? <p>{copy("loopbackAddress")}</p> : null}
+        {status ? <p role="status">{copy(status)}</p> : null}
       </div>
     </section>
   );

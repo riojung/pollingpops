@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { QuizDraft } from "@openround/contracts";
 import { signInBeta } from "./sign-in";
+import { openLibraryFilters } from "./library-controls";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
@@ -109,6 +110,7 @@ for (const mobile of [false, true]) {
       await page.screenshot({ path: testInfo.outputPath(`library-23-rounds-${mode}.png`) });
 
       // Navigate directly from the complete grid before filtering or changing its layout.
+      await openLibraryFilters(page);
       await page.getByRole("link", { name: "Recovery Packs", exact: true }).click();
       await expect(page).toHaveURL(/\/recovery-packs$/);
       await expect(

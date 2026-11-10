@@ -43,7 +43,13 @@ for (const suffix of ["desktop", "@mobile"]) {
       data: { expectedDraftRevision: record.draftRevision },
     });
     expect(firstPublish.status(), await firstPublish.text()).toBe(200);
-    const initialVersionId = (await firstPublish.json()).version.id as string;
+    const initialVersion = (await firstPublish.json()).version as {
+      id: string;
+      version: number;
+      publishedAt: string;
+    };
+    const initialVersionId = initialVersion.id;
+    const metadataUrl = `${e01ApiUrl}/v1/presentations/${record.id}/publication`;
     const editorPath = `/presentation/${record.id}`;
     const hostPath = `${editorPath}/host`;
 
@@ -65,6 +71,10 @@ for (const suffix of ["desktop", "@mobile"]) {
     await present.focus();
     await present.press("Enter");
     await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText(`Version ${initialVersion.version}`, { exact: true }),
+    ).toBeVisible();
+    await expect(dialog.locator("time")).toHaveAttribute("datetime", initialVersion.publishedAt);
     await expect(publishLatest).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(cancel).toBeFocused();
@@ -77,7 +87,21 @@ for (const suffix of ["desktop", "@mobile"]) {
       publicationRequests++;
       await route.continue();
     });
+    await page.route(metadataUrl, (route) => route.fulfill({ status: 503, json: {} }));
     await present.click();
+    await expect(
+      dialog.getByText("Publication details are unavailable. Your draft is preserved.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(dialog.locator("time")).toHaveCount(0);
+    expect((await readRecord(page, record.id)).title).toBe(latestTitle);
+    await page.unroute(metadataUrl);
+    await dialog.getByRole("button", { name: "Retry publication details", exact: true }).click();
+    await expect(
+      dialog.getByText(`Version ${initialVersion.version}`, { exact: true }),
+    ).toBeVisible();
+    await expect(dialog.locator("time")).toHaveAttribute("datetime", initialVersion.publishedAt);
     await dialog.getByRole("link", { name: "Present published version", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${hostPath}$`));
     const existingChoice = await readRecord(page, record.id);

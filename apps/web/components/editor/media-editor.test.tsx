@@ -9,6 +9,7 @@ import type { QuestionUpdater } from "./types";
 
 vi.mock("../locale-provider", () => ({
   useLocale: () => ({
+    locale: "en-CA",
     t: (key: MessageKey) => translate(deliveryAuthoringEnglishMessages, key),
   }),
 }));

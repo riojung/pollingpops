@@ -389,7 +389,7 @@ export default function HostSetupPage() {
               </div>
             </section>
             {publishedContent && hasTextOpinionQuestions(publishedContent) ? (
-              <p className="muted" lang="en-CA">
+              <p className="muted" lang={locale}>
                 {t("live.text.roomCapacity", { limit: TEXT_RESPONSE_MAX_PER_ROUND })}
               </p>
             ) : null}

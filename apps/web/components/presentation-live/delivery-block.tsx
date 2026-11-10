@@ -7,6 +7,8 @@ import { ContentSlideView } from "../presentation/content-slide-view";
 import { PresentationActivitySlide } from "../presentation/presentation-activity-slide";
 import styles from "./presentation-delivery.module.css";
 import type { NativeSceneInteractionRuntime } from "../presentation/native-scene-interaction-view";
+import { useLocale } from "../locale-provider";
+import { presentationActivityCopy } from "../presentation/presentation-activity-copy";
 
 export function PresentationDeliveryBlock({
   block,
@@ -21,6 +23,8 @@ export function PresentationDeliveryBlock({
   interactionSourceKey?: string;
   interactionRuntime?: NativeSceneInteractionRuntime;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationActivityCopy(locale);
   if (block.kind === "content") {
     return (
       <ContentSlideView
@@ -49,7 +53,7 @@ export function PresentationDeliveryBlock({
         }
       />
       {block.question.type === "open_text" || block.question.type === "word_cloud" ? (
-        <p lang="en-CA">Responses are reviewed before they appear.</p>
+        <p lang={locale}>{copy.reviewNotice}</p>
       ) : null}
       {revealedAnswer?.kind === "numeric" ? (
         <p lang="">

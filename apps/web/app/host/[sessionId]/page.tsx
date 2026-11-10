@@ -27,6 +27,11 @@ import {
   RecoveryCompass,
 } from "../../../components/host-command-center";
 import { JoinAccess } from "../../../components/join-access";
+import {
+  deliveryPrimaryCopy,
+  deliveryInterventionLabel,
+  localizeDeliveryMessage,
+} from "../../../lib/i18n/delivery-primary-copy";
 import { useLocale } from "../../../components/locale-provider";
 import { confidenceControlCopy } from "../../../lib/i18n/confidence-control-copy";
 import { ParticipantIdentity } from "../../../components/participant-avatar";
@@ -117,6 +122,7 @@ function hostCredential(sessionId: string) {
 export default function HostPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { locale, t } = useLocale();
+  const copy = deliveryPrimaryCopy(locale);
   const confidenceCopy = confidenceControlCopy[locale];
   const socket = useMemo(createRealtimeClient, []);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
@@ -137,6 +143,7 @@ export default function HostPage() {
   const [staffPending, setStaffPending] = useState(false);
   const [presenterPending, setPresenterPending] = useState(false);
   const [error, setError] = useState("");
+  const errorView = localizeDeliveryMessage(locale, error);
   const [reportId, setReportId] = useState("");
   const [mediaCredential, setMediaCredential] = useState("");
   const [textReadAuthorized, setTextReadAuthorized] = useState(false);
@@ -752,23 +759,18 @@ export default function HostPage() {
         </span>
         <div className="button-row">
           <ExperiencePreferences />
-          <span
-            className="connection"
-            data-connected={connected}
-            lang={connected ? locale : "en-CA"}
-            role="status"
-          >
+          <span className="connection" data-connected={connected} lang={locale} role="status">
             <span className="connection-dot" aria-hidden="true" />
-            {connected ? t("live.common.connected") : "Reconnecting…"}
+            {connected ? t("live.common.connected") : copy("Reconnecting…")}
           </span>
           <button
             className="button-quiet small-button"
             disabled={presenterPending}
-            lang="en-CA"
+            lang={locale}
             onClick={() => void presenter()}
             type="button"
           >
-            Presenter view
+            {copy("Presenter view")}
           </button>
         </div>
       </header>
@@ -781,36 +783,37 @@ export default function HostPage() {
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {phaseView ? (
             <>
-              <span lang="en-CA">Host phase: </span>
+              <span>{copy("Host phase")}: </span>
               <span lang={phaseMessageKey ? locale : "en-CA"}>{localizedPhaseLabel}</span>.
             </>
           ) : (
-            <span lang="en-CA">Connecting host controls.</span>
+            <span>{copy("Connecting host controls.")}</span>
           )}
         </p>
         {error ? (
-          <p className="error" lang="en-CA" role="alert">
-            {error}
+          <p className="error" lang={locale} role="alert">
+            {!errorView.known ? `${copy("Service message")}: ` : ""}
+            <span lang={errorView.language}>{errorView.text}</span>
           </p>
         ) : null}
         {!snapshot ? (
-          <section className="live-card" lang="en-CA">
-            <p>Synchronizing host controls…</p>
-            <Link href="/dashboard">Return to dashboard</Link>
+          <section className="live-card" lang={locale}>
+            <p>{copy("Synchronizing host controls…")}</p>
+            <Link href="/library">{t("workspace.nav.library")}</Link>
           </section>
         ) : (
           <>
             {uxBeta && !standingsStage ? (
-              <section aria-label="Room readiness" className="room-readiness" lang="en-CA">
+              <section aria-label={copy("Room readiness")} className="room-readiness" lang={locale}>
                 <span>
-                  <strong lang={connected ? locale : "en-CA"}>
-                    {connected ? t("live.common.connected") : "Reconnecting"}
+                  <strong lang={locale}>
+                    {connected ? t("live.common.connected") : copy("Reconnecting…")}
                   </strong>
-                  <small>connection</small>
+                  <small>{copy("connection")}</small>
                 </span>
                 <span>
                   <strong>{snapshot.code}</strong>
-                  <small>round code</small>
+                  <small>{copy("Round code")}</small>
                 </span>
                 <span>
                   <strong>{numberFormatter.format(snapshot.participants.length)}</strong>
@@ -838,9 +841,9 @@ export default function HostPage() {
                       >
                         {snapshot.deadline
                           ? timeFormatter.format(new Date(snapshot.deadline))
-                          : "None"}
+                          : copy("None")}
                       </strong>
-                      <small>deadline</small>
+                      <small>{copy("deadline")}</small>
                     </>
                   )}
                 </span>
@@ -850,13 +853,13 @@ export default function HostPage() {
                       ? t("live.host.phase.lobby")
                       : `${numberFormatter.format(snapshot.questionPosition + 1)}/${numberFormatter.format(snapshot.questionCount)}`}
                   </strong>
-                  <small>progress</small>
+                  <small>{copy("progress")}</small>
                 </span>
                 <span>
                   <strong lang={phaseMessageKey ? locale : "en-CA"}>
                     {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
                   </strong>
-                  <small>phase</small>
+                  <small>{copy("phase")}</small>
                 </span>
               </section>
             ) : null}
@@ -866,8 +869,8 @@ export default function HostPage() {
                 busy={commandPending}
                 fallback={
                   reportId ? (
-                    <Link className="button" href={`/report/${reportId}`} lang="en-CA">
-                      Open report
+                    <Link className="button" href={`/report/${reportId}`} lang={locale}>
+                      {copy("Open report")}
                     </Link>
                   ) : null
                 }
@@ -878,7 +881,7 @@ export default function HostPage() {
                       aria-controls="host-audience-drawer"
                       aria-expanded={audienceOpen}
                       className="button-quiet"
-                      lang="en-CA"
+                      lang={locale}
                       onClick={() => {
                         if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
                         setAudienceOpen((open) => !open);
@@ -886,19 +889,19 @@ export default function HostPage() {
                       ref={audienceButtonRef}
                       type="button"
                     >
-                      Audience
+                      {copy("Audience")}
                     </button>
                     {snapshot.phase === "lobby" ? (
                       <button
                         className="button-quiet"
                         disabled={commandPending}
-                        lang="en-CA"
+                        lang={locale}
                         onClick={() =>
                           command(snapshot.lobbyLocked ? "unlock_lobby" : "lock_lobby")
                         }
                         type="button"
                       >
-                        {snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby"}
+                        {copy(snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby")}
                       </button>
                     ) : null}
                   </>
@@ -913,11 +916,13 @@ export default function HostPage() {
                     <button
                       className="button-danger"
                       disabled={commandPending}
-                      lang="en-CA"
-                      onClick={() => window.confirm("End this session now?") && command("end")}
+                      lang={locale}
+                      onClick={() =>
+                        window.confirm(copy("End this session now?")) && command("end")
+                      }
                       type="button"
                     >
-                      End
+                      {copy("End")}
                     </button>
                   ) : null
                 }
@@ -932,23 +937,23 @@ export default function HostPage() {
               <HostStage enhanced={uxBeta} className={standingsStage ? "host-results-stage" : ""}>
                 {snapshot.phase === "lobby" ? (
                   <>
-                    <p className="eyebrow" lang="en-CA">
-                      Round code
+                    <p className="eyebrow" lang={locale}>
+                      {copy("Round code")}
                     </p>
-                    <h1 className="live-lobby-heading" lang="en-CA">
-                      Join this round
+                    <h1 className="live-lobby-heading" lang={locale}>
+                      {copy("Join this round")}
                     </h1>
                     <div
                       className="session-code"
-                      aria-label={`Round code ${snapshot.code.split("").join(" ")}`}
-                      lang="en-CA"
+                      aria-label={`${copy("Round code")} ${snapshot.code.split("").join(" ")}`}
+                      lang={locale}
                     >
                       {snapshot.code}
                     </div>
-                    <p className="lead" lang="en-CA">
-                      Share the code or QR. Start when the room is ready.
+                    <p className="lead" lang={locale}>
+                      {copy("Share the code or QR. Start when the room is ready.")}
                     </p>
-                    <ul className="roster" aria-label="Participant roster" lang="en-CA">
+                    <ul className="roster" aria-label={copy("Participant roster")} lang={locale}>
                       {snapshot.participants.map((participant) => (
                         <li key={participant.id}>
                           <span>
@@ -1037,26 +1042,27 @@ export default function HostPage() {
                         ))}
                       </div>
                     ) : snapshot.question.type === "numeric" ? (
-                      <p className="notice" lang="en-CA">
-                        Participants enter a numeric response
+                      <p className="notice" lang={locale}>
+                        {copy("Numeric response")}
                         {snapshot.question.unit ? (
                           <>
                             {" "}
-                            in <span lang="">{snapshot.question.unit}</span>
+                            · <span lang="">{snapshot.question.unit}</span>
                           </>
-                        ) : (
-                          ""
-                        )}
-                        .
-                        {snapshot.correctResponse?.kind === "numeric"
-                          ? ` Accepted value: ${snapshot.correctResponse.value}.`
-                          : ""}
+                        ) : null}
+                        {snapshot.correctResponse?.kind === "numeric" ? (
+                          <>
+                            {" "}
+                            · {copy("Accepted value")}:{" "}
+                            <span lang="">{snapshot.correctResponse.value}</span>
+                          </>
+                        ) : null}
                       </p>
                     ) : snapshot.question.rating ? (
-                      <p className="notice" lang="en-CA">
-                        Rating {numberFormatter.format(snapshot.question.rating.min)}–
+                      <p className="notice" lang={locale}>
+                        {copy("Rating")} {numberFormatter.format(snapshot.question.rating.min)}–
                         {numberFormatter.format(snapshot.question.rating.max)}:{" "}
-                        <span lang="">{snapshot.question.rating.minLabel}</span> to{" "}
+                        <span lang="">{snapshot.question.rating.minLabel}</span> →{" "}
                         <span lang="">{snapshot.question.rating.maxLabel}</span>.
                       </p>
                     ) : null}
@@ -1074,20 +1080,21 @@ export default function HostPage() {
                   <div className="host-completion-summary">
                     <div>
                       <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
-                      <h1 className="host-complete-heading" lang="en-CA">
-                        Results are ready.
+                      <h1 className="host-complete-heading" lang={locale}>
+                        {copy("Results are ready.")}
                       </h1>
-                      <p className="lead" lang="en-CA">
-                        {numberFormatter.format(snapshot.participants.length)} participants
-                        completed this live round.
+                      <p className="lead" lang={locale}>
+                        {copy("{count} participants completed this live round.", {
+                          count: numberFormatter.format(snapshot.participants.length),
+                        })}
                       </p>
                     </div>
                     {reportId ? (
                       <Link className="button" href={`/report/${reportId}`}>
-                        Open report
+                        {copy("Open report")}
                       </Link>
                     ) : (
-                      <p className="notice">Finalizing the report…</p>
+                      <p className="notice">{copy("Finalizing the report…")}</p>
                     )}
                   </div>
                 ) : null}
@@ -1177,11 +1184,11 @@ export default function HostPage() {
                   <ResponseDistributionView distribution={snapshot.responseDistribution} />
                 ) : null}
                 {!uxBeta && legacyRecoveryActions.length > 0 ? (
-                  <div className="host-controls" lang="en-CA" style={{ marginBottom: 18 }}>
+                  <div className="host-controls" lang={locale} style={{ marginBottom: 18 }}>
                     <strong>
                       {snapshot.phase === "question_locked"
-                        ? "Recover understanding"
-                        : "Intervene and verify"}
+                        ? copy("Recover understanding")
+                        : copy("Intervene and verify")}
                     </strong>
                     {legacyRecoveryActions.map((item) => (
                       <button
@@ -1197,13 +1204,15 @@ export default function HostPage() {
                   </div>
                 ) : null}
                 {snapshot.phase === "intervention" && snapshot.intervention ? (
-                  <p className="notice" lang="en-CA">
-                    Active intervention: {snapshot.intervention.type.replaceAll("_", " ")}. Finish
-                    it before revealing or rechecking.
+                  <p className="notice" lang={locale}>
+                    {copy(
+                      "Active intervention: {type}. Finish it before revealing or rechecking.",
+                      { type: deliveryInterventionLabel(locale, snapshot.intervention.type) },
+                    )}
                   </p>
                 ) : null}
                 {!uxBeta ? (
-                  <div className="host-controls" lang="en-CA">
+                  <div className="host-controls" lang={locale}>
                     {confidenceControl}
                     {legacyPhaseActions.map((item) => (
                       <button
@@ -1228,17 +1237,19 @@ export default function HostPage() {
                         }
                         type="button"
                       >
-                        {snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby"}
+                        {copy(snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby")}
                       </button>
                     ) : null}
                     {snapshot.phase !== "lobby" && snapshot.phase !== "finished" ? (
                       <button
                         className="button-danger"
                         disabled={commandPending}
-                        onClick={() => window.confirm("End this session now?") && command("end")}
+                        onClick={() =>
+                          window.confirm(copy("End this session now?")) && command("end")
+                        }
                         type="button"
                       >
-                        End session
+                        {copy("End session")}
                       </button>
                     ) : null}
                   </div>
@@ -1380,15 +1391,15 @@ export default function HostPage() {
         >
           <div className="audience-drawer-heading">
             <div>
-              <p className="eyebrow" lang="en-CA">
-                Audience
+              <p className="eyebrow" lang={locale}>
+                {copy("Audience")}
               </p>
-              <h2 id="audience-drawer-title" lang="en-CA">
-                Participants and conversation
+              <h2 id="audience-drawer-title" lang={locale}>
+                {copy("Participants and conversation")}
               </h2>
             </div>
             <button
-              aria-label="Close audience tools"
+              aria-label={copy("Close audience tools")}
               className="button-quiet small-button"
               onClick={() => {
                 setAudienceOpen(false);
@@ -1401,9 +1412,9 @@ export default function HostPage() {
             </button>
           </div>
           <div
-            aria-label="Audience views"
+            aria-label={copy("Audience views")}
             className="audience-tabs"
-            lang="en-CA"
+            lang={locale}
             onKeyDown={(event) => {
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
               event.preventDefault();
@@ -1482,8 +1493,8 @@ export default function HostPage() {
                 view={audienceTab === "qna" ? "participants" : audienceTab}
               />
             ) : (
-              <p className="muted" lang="en-CA">
-                Audience controls close when the round finishes.
+              <p className="muted" lang={locale}>
+                {copy("Audience controls close when the round finishes.")}
               </p>
             )}
           </div>

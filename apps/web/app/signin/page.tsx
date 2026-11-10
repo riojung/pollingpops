@@ -459,7 +459,7 @@ export default function SignInPage() {
         </Link>
       </header>
       <main className="shell auth-wrap">
-        <section className="join-card auth-card" aria-labelledby="signin-title">
+        <section className={`join-card auth-card ${styles.card}`} aria-labelledby="signin-title">
           <p className="eyebrow">{t("delivery.auth.creatorAccess")}</p>
           <h1 id="signin-title" style={{ fontSize: "clamp(2.4rem, 8vw, 4rem)" }}>
             {pinRecovery

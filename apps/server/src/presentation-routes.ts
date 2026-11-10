@@ -538,6 +538,31 @@ export async function registerPresentationRoutes(
     return { presentation: presentationView(presentation) };
   });
 
+  // Creator-only metadata for the immutable publication; draft timestamps never substitute.
+  app.get("/v1/presentations/:id/publication", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    const { id } = IdParamsSchema.parse(request.params);
+    const presentation = await presentations.getPresentation(creator.workspaceId, id);
+    if (!presentation)
+      return apiError(reply, 404, "NOT_FOUND", "Presentation not found", request.id);
+    if (!presentation.currentVersionId) return { publication: null };
+    const version = await presentations.getPresentationVersion(
+      creator.workspaceId,
+      presentation.currentVersionId,
+    );
+    if (!version || version.presentationId !== presentation.id)
+      return apiError(reply, 404, "NOT_FOUND", "Publication not found", request.id);
+    return {
+      publication: {
+        id: version.id,
+        version: version.version,
+        publishedAt: version.publishedAt.toISOString(),
+      },
+    };
+  });
+
   app.put("/v1/presentations/:id/draft", { bodyLimit: 4_000_000 }, async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;

@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QuestionDraft } from "@openround/contracts";
 import { createPresentationQuestion } from "../../lib/presentation-builder";
+import { LocaleProvider } from "../locale-provider";
+import type * as LocaleProviderModule from "../locale-provider";
+import { loadMessages, localeDomains } from "../../lib/i18n/catalog";
 import {
   PresentationActivitySlide,
   type PresentationActivityQuestion,
@@ -14,12 +17,25 @@ const mocked = vi.hoisted(() => ({
   reading: false,
   overflow: false,
   setReading: vi.fn(),
+  direct: false,
 }));
 
-vi.mock("react", async (original) => ({
-  ...(await original<typeof ReactModule>()),
-  useState: () => [mocked.reading, mocked.setReading],
-}));
+vi.mock("react", async (original) => {
+  const react = await original<typeof ReactModule>();
+  return {
+    ...react,
+    useState: <T,>(initial: T | (() => T)) =>
+      typeof initial === "boolean" ? [mocked.reading, mocked.setReading] : react.useState(initial),
+  };
+});
+vi.mock("../locale-provider", async (original) => {
+  const provider = await original<typeof LocaleProviderModule>();
+  return {
+    ...provider,
+    useLocale: () => (mocked.direct ? { locale: "en-CA" } : provider.useLocale()),
+  };
+});
+vi.mock("next/navigation", () => ({ usePathname: () => "/presentation/presentation-1" }));
 vi.mock("./use-native-text-overflow", () => ({
   useNativeTextOverflow: () => ({ tabIndex: mocked.overflow ? 0 : undefined }),
 }));
@@ -55,13 +71,98 @@ function markup(props: PresentationActivitySlideProps) {
   return renderToStaticMarkup(<PresentationActivitySlide {...props} />);
 }
 
+function directSlide(props: PresentationActivitySlideProps) {
+  mocked.direct = true;
+  try {
+    return PresentationActivitySlide(props);
+  } finally {
+    mocked.direct = false;
+  }
+}
+
 beforeEach(() => {
   mocked.reading = false;
   mocked.overflow = false;
   mocked.setReading.mockReset();
+  mocked.direct = false;
 });
 
 describe("Presentation activity slide", () => {
+  it("renders Korean primary guidance through the real locale provider and preserves authored content", async () => {
+    const messages = await loadMessages("ko-KR", localeDomains);
+    const koreanMarkup = (props: PresentationActivitySlideProps) =>
+      renderToStaticMarkup(
+        <LocaleProvider
+          initialLocale="ko-KR"
+          initialDomains={localeDomains}
+          initialMessages={messages}
+        >
+          <PresentationActivitySlide {...props} />
+        </LocaleProvider>,
+      );
+    const hints = {
+      single_select: "답을 하나 선택하세요",
+      true_false: "답을 하나 선택하세요",
+      multi_select: "해당하는 답을 모두 선택하세요",
+      poll: "최대 3개의 답을 선택하세요",
+      numeric: "기기에서 숫자를 입력하세요",
+      rating: "기기에서 평점을 선택하세요",
+      ranking: "선호하는 상위 2개 항목의 순위를 정하세요",
+      open_text: "기기에서 응답을 공유하세요",
+      word_cloud: "기기에서 단어나 짧은 문구를 공유하세요",
+    } as const;
+    for (const type of Object.keys(hints) as Array<keyof typeof hints>) {
+      const value = {
+        ...question(type),
+        ...(type === "poll" ? { maxSelections: 3 } : {}),
+        ...(type === "ranking" ? { rankCount: 2 } : {}),
+      };
+      const baseline = structuredClone(value);
+      const result = koreanMarkup({ question: value });
+      expect(result).toContain(hints[type]);
+      expect(result).toContain("참여자 활동");
+      expect(result).toContain("20초");
+      expect(result).toContain('lang="ko-KR"');
+      expect(result).toContain(value.prompt);
+      expect(result).not.toContain("Audience activity");
+      expect(result).not.toContain("on your device");
+      if ("choices" in value)
+        for (const choice of value.choices) expect(result).toContain(choice.label);
+      if (type === "numeric") expect(result).toContain("참여자가 숫자를 입력합니다 (km)");
+      if (type === "rating") {
+        expect(result).toContain("1부터 5까지의 평점 척도");
+        expect(result).toContain("Low");
+        expect(result).toContain("High");
+      }
+      expect(value).toEqual(baseline);
+    }
+    const ratingDefaults = koreanMarkup({
+      question: { type: "rating", prompt: "AUTHOR rating", timeLimitSeconds: 20, min: 1, max: 5 },
+    });
+    expect(ratingDefaults).toContain("낮음");
+    expect(ratingDefaults).toContain("높음");
+    mocked.overflow = true;
+    const editable = koreanMarkup({
+      question: { ...question("single_select"), prompt: "" },
+      editable: true,
+      onPromptChange: vi.fn(),
+      onChoiceChange: vi.fn(),
+    });
+    expect(editable).toContain('aria-label="질문 내용"');
+    expect(editable).toContain('aria-label="슬라이드 답안 A"');
+    expect(editable).toContain("참여자들이 무엇에 대해 생각하기를 바라시나요?");
+    expect(editable).toContain("읽기 보기");
+    expect(editable).toContain("이 활동에는 더 넓은 공간이 필요할 수 있습니다.");
+    mocked.reading = true;
+    expect(koreanMarkup({ question: question("numeric") })).toContain("슬라이드 보기");
+    const thumbnail = koreanMarkup({ question: question("open_text"), staticThumbnail: true });
+    expect(thumbnail).toContain("서술형 응답");
+    expect(thumbnail).toContain('aria-hidden="true"');
+    expect(thumbnail).toContain('inert=""');
+    expect(thumbnail).not.toContain("<textarea");
+    expect(thumbnail).not.toContain("<button");
+  });
+
   it.each([
     ["single_select", "Choose one answer"],
     ["true_false", "Choose one answer"],
@@ -139,7 +240,7 @@ describe("Presentation activity slide", () => {
       Object.defineProperty(value, field, { enumerable: true, get: privateRead });
     expect(markup({ question: value })).not.toContain("Correct answer");
     const result = elements(
-      PresentationActivitySlide({
+      directSlide({
         question: value,
         revealedChoiceIds: [value.choices[1]!.id, "unknown-answer"],
       }),
@@ -256,7 +357,7 @@ describe("Presentation activity slide", () => {
       onChoiceChange = vi.fn(),
       onSelectChoice = vi.fn();
     const all = elements(
-      PresentationActivitySlide({
+      directSlide({
         question: value,
         editable: true,
         onPromptChange,
@@ -312,14 +413,14 @@ describe("Presentation activity slide", () => {
 
   it("offers a reversible reading view for extreme content and measured overflow", () => {
     const value = { ...question("poll"), prompt: "Long prompt. ".repeat(35) };
-    let result = elements(PresentationActivitySlide({ question: value }));
+    let result = elements(directSlide({ question: value }));
     const button = result.find((node) => node.type === "button")!;
     expect(button.props.children).toBe("Reading view");
     (button.props.onClick as () => void)();
     const update = mocked.setReading.mock.calls[0]![0] as (value: boolean) => boolean;
     expect(update(false)).toBe(true);
     mocked.reading = true;
-    result = elements(PresentationActivitySlide({ question: question("numeric") }));
+    result = elements(directSlide({ question: question("numeric") }));
     expect(
       result.find((node) => node.props["data-activity-reading-view"] === "true"),
     ).toBeDefined();

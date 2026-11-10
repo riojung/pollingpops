@@ -1140,6 +1140,11 @@ export function NativeSceneEditor({
         scene={scene}
         renderImage={renderImage}
         selectedNodeIds={selectedIds}
+        navigationTargets={navigationTargets}
+        onEditInteraction={(id) => {
+          select(id);
+          onInspectSelection?.(true);
+        }}
         onSelect={(id, additive) => {
           select(id, additive);
           onInspectSelection?.();

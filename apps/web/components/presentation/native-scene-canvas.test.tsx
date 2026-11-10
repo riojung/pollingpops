@@ -5,6 +5,7 @@ import { type PresentationScene } from "@openround/contracts";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeSceneView } from "./native-scene-view";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
+import { NativeSceneInteractionMap } from "./native-scene-interaction-map";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as null | {
@@ -105,6 +106,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
   vi.stubGlobal("HTMLButtonElement", class {});
   const onChange = vi.fn();
   const onSelect = vi.fn();
+  const onEditInteraction = vi.fn();
   const original = fixture();
   let scene = original;
   let tree: ReactElement<Record<string, any>>;
@@ -119,6 +121,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
         selectedNodeIds,
         onSelect,
         onChange,
+        onEditInteraction,
       });
     } finally {
       mocked.hooks = null;
@@ -147,11 +150,13 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     original,
     onChange,
     onSelect,
+    onEditInteraction,
     root,
     event,
     render,
     view,
     controls: () => elements(tree).find((child) => child.type === NativeSceneSelectionControls)!,
+    interactionMap: () => elements(tree).find((child) => child.type === NativeSceneInteractionMap)!,
     start: (ev = event(), id = "body", resize = false, handle = true) =>
       view().props.onNodePointerDown(ev, id, resize, handle),
     move: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerMove(ev),
@@ -181,6 +186,44 @@ beforeEach(() => {
 });
 
 describe("native pointer gesture lifecycle", () => {
+  it("keeps map visibility and selection outside history, and follows gesture previews and cancellation", () => {
+    const current = harness();
+    expect(current.interactionMap().props.expanded).toBe(false);
+    expect(current.view().props.editorOverlay).toBeUndefined();
+    current.interactionMap().props.onExpandedChange(true);
+    current.render();
+    expect(current.interactionMap().props.expanded).toBe(true);
+    expect(current.view().props.editorOverlay.props.scene).toBe(current.original);
+    current.start();
+    current.move();
+    current.render();
+    const preview = current.view().props.scene;
+    expect(preview).not.toBe(current.original);
+    expect(current.view().props.editorOverlay.props.scene).toBe(preview);
+    expect(current.interactionMap().props.scene).toBe(preview);
+    expect(current.onChange).not.toHaveBeenCalled();
+    current.escape();
+    current.render();
+    expect(current.view().props.editorOverlay.props.scene).toBe(current.original);
+    current.start();
+    current.move();
+    current.render();
+    current.interactionMap().props.onSelect("shape");
+    current.render();
+    expect(current.root.releasePointerCapture).toHaveBeenCalled();
+    expect(current.onSelect).toHaveBeenLastCalledWith("shape");
+    expect(current.view().props.scene).toBe(current.original);
+    expect(current.onChange).not.toHaveBeenCalled();
+    current.interactionMap().props.onEdit("body");
+    expect(current.onEditInteraction).toHaveBeenLastCalledWith("body");
+    expect(current.onChange).not.toHaveBeenCalled();
+    const recovered = { ...current.original, nodes: [...current.original.nodes] };
+    current.render(recovered);
+    expect(current.view().props.editorOverlay.props.scene).toBe(recovered);
+    current.interactionMap().props.onExpandedChange(false);
+    current.render();
+    expect(current.view().props.editorOverlay).toBeUndefined();
+  });
   it("places selection controls outside the authored surface and disables in-stage handles", () => {
     const editor = harness();
     expect(editor.view().props.hideGeometryControls).toBe(true);

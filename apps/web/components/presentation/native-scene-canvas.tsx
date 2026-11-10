@@ -12,6 +12,8 @@ import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import styles from "./native-scene.module.css";
 import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
+import { NativeSceneInteractionMap } from "./native-scene-interaction-map";
+import { NativeSceneInteractionCues } from "./native-scene-interaction-cues";
 
 type Gesture = {
   base: PresentationScene;
@@ -33,20 +35,26 @@ export function NativeSceneCanvas({
   selectedNodeIds,
   onSelect,
   onChange,
+  navigationTargets,
+  onEditInteraction,
 }: {
   scene: PresentationScene;
   renderImage: SceneImageRenderer;
   selectedNodeIds: readonly string[];
   onSelect: (id: string, additive?: boolean) => void;
   onChange: (scene: PresentationScene) => void;
+  navigationTargets?: readonly { id: string; title: string }[];
+  onEditInteraction?: (id: string) => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  const [interactionMapOpen, setInteractionMapOpen] = useState(false);
   const [preview, setPreview] = useState<{
     base: PresentationScene;
     scene: PresentationScene;
     guides: NativeSnapGuide[];
   } | null>(null);
+  const displayedScene = preview?.base === scene ? preview.scene : scene;
 
   function release(active: Gesture) {
     if (root.current?.hasPointerCapture(active.pointerId)) {
@@ -205,15 +213,45 @@ export function NativeSceneCanvas({
         onPointerDown={start}
         onGeometryKey={geometryKey}
       />
+      <NativeSceneInteractionMap
+        scene={displayedScene}
+        navigationTargets={navigationTargets}
+        selectedNodeIds={selectedNodeIds}
+        expanded={interactionMapOpen}
+        onExpandedChange={(expanded) => {
+          cancel();
+          setInteractionMapOpen(expanded);
+        }}
+        onSelect={(id) => {
+          cancel();
+          onSelect(id);
+        }}
+        onEdit={
+          onEditInteraction
+            ? (id) => {
+                cancel();
+                onEditInteraction(id);
+              }
+            : undefined
+        }
+      />
       <div className={styles.canvasSurface}>
         <NativeSceneView
-          scene={preview?.base === scene ? preview.scene : scene}
+          scene={displayedScene}
           renderImage={renderImage}
           selectedNodeIds={selectedNodeIds}
           hideGeometryControls
           onSelect={onSelect}
           onNodePointerDown={start}
           onGeometryKey={geometryKey}
+          editorOverlay={
+            interactionMapOpen ? (
+              <NativeSceneInteractionCues
+                scene={displayedScene}
+                selectedNodeIds={selectedNodeIds}
+              />
+            ) : undefined
+          }
         />
         {preview?.base === scene && preview.guides.length ? (
           <svg

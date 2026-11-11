@@ -8,14 +8,19 @@ import {
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SupportedLocale } from "@openround/contracts";
 import type * as ApiModule from "../../lib/api";
 
 interface LibraryHooks {
   cursor: number;
   slots: unknown[];
+  effectCursor: number;
+  effectSlots?: Array<{ dependencies?: readonly unknown[]; cleanup?: () => void }>;
+  effects: Array<() => void>;
 }
 
 const fixtures = vi.hoisted(() => ({
+  locale: "en-CA" as SupportedLocale,
   enabled: true,
   canEdit: true,
   hooks: null as LibraryHooks | null,
@@ -49,8 +54,27 @@ vi.mock("react", async (importOriginal) => {
       if (!(index in hooks.slots)) hooks.slots[index] = { current: initial };
       return hooks.slots[index];
     },
-    useEffect: (...args: Parameters<typeof react.useEffect>) => {
-      if (!fixtures.hooks) react.useEffect(...args);
+    useEffect: (
+      effect: Parameters<typeof react.useEffect>[0],
+      dependencies?: readonly unknown[],
+    ) => {
+      const hooks = fixtures.hooks;
+      if (!hooks) return react.useEffect(effect, dependencies);
+      if (!hooks.effectSlots) return;
+      const index = hooks.effectCursor++;
+      const previous = hooks.effectSlots[index];
+      if (
+        previous?.dependencies &&
+        dependencies?.length === previous.dependencies.length &&
+        dependencies.every((value, position) => Object.is(value, previous.dependencies![position]))
+      )
+        return;
+      const slot = { dependencies, cleanup: undefined as (() => void) | undefined };
+      hooks.effectSlots[index] = slot;
+      hooks.effects.push(() => {
+        previous?.cleanup?.();
+        slot.cleanup = effect() || undefined;
+      });
     },
   };
 });
@@ -59,6 +83,17 @@ vi.mock("../../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
   apiFetch: fixtures.apiFetch,
 }));
+
+vi.mock("../../components/locale-provider", async () => {
+  const { englishMessages, translate } = await import("../../lib/i18n/catalog");
+  return {
+    useLocale: () => ({
+      locale: fixtures.locale,
+      t: (key: Parameters<typeof translate>[1], values?: Record<string, string | number>) =>
+        translate(englishMessages, key, values),
+    }),
+  };
+});
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -79,19 +114,28 @@ import RecoveryPacksPage from "./page";
 import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { RecoveryPackSourceReviewPanel } from "../../components/recovery-pack-source";
 import type { RecoveryPackRecord } from "../../lib/recovery-pack-source";
+import { packWorkspaceCopy } from "../../lib/i18n/pack-workspace-copy";
 import { sourcePackFixtures } from "../../test-utils/recovery-pack-source";
 
 beforeEach(() => {
+  fixtures.locale = "en-CA";
   fixtures.enabled = true;
   fixtures.canEdit = true;
   fixtures.hooks = null;
   fixtures.apiFetch.mockReset();
+  vi.unstubAllGlobals();
 });
 
 // Render only the library's state and callbacks here; browser regressions exercise
 // the real child controls, event propagation, and effect-driven source fencing.
-function libraryHarness(pack: RecoveryPackRecord) {
-  const hooks: LibraryHooks = { cursor: 0, slots: [[pack]] };
+function libraryHarness(pack: RecoveryPackRecord, trackEffects = false) {
+  const hooks: LibraryHooks = {
+    cursor: 0,
+    slots: [[pack]],
+    effectCursor: 0,
+    effects: [],
+    effectSlots: trackEffects ? [] : undefined,
+  };
   const workspace = RecoveryPacksPage().props.children as ReactElement<
     Record<string, never>,
     () => ReactElement<Record<string, never>, () => ReactElement>
@@ -99,6 +143,7 @@ function libraryHarness(pack: RecoveryPackRecord) {
   const library = workspace.type();
   const render = () => {
     hooks.cursor = 0;
+    hooks.effectCursor = 0;
     fixtures.hooks = hooks;
     try {
       return library.type();
@@ -109,7 +154,12 @@ function libraryHarness(pack: RecoveryPackRecord) {
   button(render(), pack.title).onClick?.(
     {} as Parameters<NonNullable<ComponentProps<"button">["onClick"]>>[0],
   );
-  return { render };
+  return {
+    render,
+    hooks,
+    flushEffects: () => hooks.effects.splice(0).forEach((effect) => effect()),
+    unmount: () => hooks.effectSlots?.forEach((slot) => slot.cleanup?.()),
+  };
 }
 
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
@@ -292,5 +342,161 @@ describe("Recovery Pack review ownership", () => {
     expect(currentReview.contentChecked).toBe(false);
     expect(currentReview.citationsChecked).toBe(false);
     expect(button(render(), "Publish saved draft").disabled).toBe(true);
+  });
+});
+
+describe("Pack workspace locale renders", () => {
+  it("keeps the mounted editor, approval checks and request effects stable when locale changes", async () => {
+    const { approvedPack } = sourcePackFixtures();
+    const pack = {
+      ...approvedPack,
+      title: "Save draft",
+      draft: { ...approvedPack.draft, title: "Save draft" },
+    };
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/recovery-packs") return { packs: [pack] };
+      if (path === "/v1/quizzes") return { quizzes: [] };
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    const harness = libraryHarness(pack, true);
+    harness.flushEffects();
+    await vi.waitFor(() => expect(fixtures.apiFetch).toHaveBeenCalledTimes(2));
+    const review = propsFor(harness.render(), RecoveryPackSourceReviewPanel);
+    review.onContentChecked(true);
+    review.onCitationsChecked(true);
+    changeField(harness.render(), "Title", "Save draft — texte original 한국어");
+    const before = propsFor(harness.render(), RecoveryPackSourceReviewPanel);
+    fixtures.locale = "ko-KR";
+    const korean = harness.render();
+    harness.flushEffects();
+    expect(button(korean, "초안 저장").disabled).toBe(false);
+    const after = propsFor(korean, RecoveryPackSourceReviewPanel);
+    expect(after.draft).toEqual(before.draft);
+    expect(after.pack).toEqual(before.pack);
+    expect(after.contentChecked).toBe(true);
+    expect(after.citationsChecked).toBe(true);
+    expect(after.locale).toBe("ko-KR");
+    expect(propsFor(korean, "input").lang).toBe("");
+    expect(propsFor(korean, "input").value).toBe("Save draft — texte original 한국어");
+    fixtures.locale = "de-DE";
+    const german = harness.render();
+    harness.flushEffects();
+    expect(button(german, "Entwurf speichern").disabled).toBe(false);
+    expect(propsFor(german, RecoveryPackSourceReviewPanel).draft).toEqual(before.draft);
+    expect(fixtures.apiFetch).toHaveBeenCalledTimes(2);
+    harness.unmount();
+  });
+
+  it("reuses the exact pending save body across locale changes and a lost acknowledgement", async () => {
+    const { approvedPack } = sourcePackFixtures();
+    const harness = libraryHarness(approvedPack);
+    const rawTitle = "Save draft — Ne pas traduire {number}";
+    changeField(harness.render(), "Title", rawTitle);
+    fixtures.apiFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    button(harness.render(), "Save draft").onClick?.({} as never);
+    await vi.waitFor(() => expect(button(harness.render(), "Save draft").disabled).toBe(false));
+    expect(fixtures.apiFetch).toHaveBeenCalledTimes(1);
+    const firstBody = fixtures.apiFetch.mock.calls[0]![1].body;
+    fixtures.locale = "ko-KR";
+    let current = harness.render();
+    const error = elements(current).find((element) => element.props.role === "alert")!;
+    expect(text(error)).toBe("연결하지 못했습니다");
+    expect(error.props.lang).toBe("ko-KR");
+    expect(fixtures.apiFetch).toHaveBeenCalledTimes(1);
+    let resolve!: (value: { pack: RecoveryPackRecord }) => void;
+    fixtures.apiFetch.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    button(current, "초안 저장").onClick?.({} as never);
+    fixtures.locale = "de-DE";
+    current = harness.render();
+    expect(button(current, "Entwurf speichern").disabled).toBe(true);
+    expect(text(current)).toContain("Entwurf wird gespeichert…");
+    expect(fixtures.apiFetch).toHaveBeenCalledTimes(2);
+    expect(fixtures.apiFetch.mock.calls[1]![1].body).toBe(firstBody);
+    expect(JSON.parse(firstBody)).toMatchObject({
+      draft: { title: rawTitle },
+      expectedRevision: 1,
+    });
+    expect(JSON.parse(firstBody).mutationId).toBeTruthy();
+    resolve({
+      pack: {
+        ...approvedPack,
+        title: rawTitle,
+        draft: { ...approvedPack.draft, title: rawTitle },
+        draftRevision: 2,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(text(harness.render())).toContain(
+        "Entwurf gespeichert. Veröffentlichte Versionen bleiben unverändert.",
+      ),
+    );
+    expect(propsFor(harness.render(), "input").value).toBe(rawTitle);
+  });
+
+  it("retains unknown diagnostics verbatim with an English language boundary", async () => {
+    const { approvedPack } = sourcePackFixtures();
+    const harness = libraryHarness(approvedPack);
+    changeField(harness.render(), "Title", "Raw authored title");
+    const diagnostic = "Draft saved. Published versions are unchanged. Incident abc-123";
+    fixtures.apiFetch.mockRejectedValueOnce(new Error(diagnostic));
+    button(harness.render(), "Save draft").onClick?.({} as never);
+    await vi.waitFor(() => expect(text(harness.render())).toContain(diagnostic));
+    fixtures.locale = "ko-KR";
+    const alert = elements(harness.render()).find((element) => element.props.role === "alert")!;
+    expect(text(alert)).toBe(diagnostic);
+    expect(alert.props.lang).toBe("en-CA");
+  });
+
+  it("preserves current permission fences and readable authored values in a localized editor", async () => {
+    const { approvedPack } = sourcePackFixtures();
+    const harness = libraryHarness(approvedPack, true);
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === "/v1/recovery-packs" ? { packs: [approvedPack] } : { quizzes: [] },
+    );
+    harness.flushEffects();
+    await Promise.resolve();
+    propsFor(harness.render(), RecoveryPackSourceReviewPanel).onContentChecked(true);
+    propsFor(harness.render(), RecoveryPackSourceReviewPanel).onCitationsChecked(true);
+    fixtures.canEdit = false;
+    fixtures.locale = "de-DE";
+    harness.render();
+    harness.flushEffects();
+    const viewer = harness.render();
+    expect(text(viewer)).toContain(
+      packWorkspaceCopy("de-DE")("Your workspace role can view Packs but cannot modify them."),
+    );
+    expect(propsFor(viewer, "fieldset").disabled).toBe(true);
+    expect(propsFor(viewer, "input").value).toBe(approvedPack.draft.title);
+    expect(propsFor(viewer, "input").lang).toBe("");
+    expect(button(viewer, "Entwurf speichern").disabled).toBe(true);
+    expect(button(viewer, "Gespeicherten Entwurf veröffentlichen").disabled).toBe(true);
+    expect(button(viewer, "Gespeicherten Entwurf neu laden").disabled).toBe(false);
+    expect(elements(viewer).some((element) => element.type === AuthoringAssistant)).toBe(false);
+    const review = propsFor(viewer, RecoveryPackSourceReviewPanel);
+    expect(review.canEdit).toBe(false);
+    expect(review.contentChecked).toBe(false);
+    expect(review.citationsChecked).toBe(false);
+    expect(fixtures.apiFetch).toHaveBeenCalledTimes(2);
+    harness.unmount();
+  });
+
+  it("localizes explicit discard confirmation without losing the unsaved draft on cancellation", () => {
+    const { approvedPack } = sourcePackFixtures();
+    const harness = libraryHarness(approvedPack);
+    const other = { ...approvedPack, id: "other-pack", title: "Different raw Pack" };
+    harness.hooks.slots[0] = [approvedPack, other];
+    changeField(harness.render(), "Title", "Unsaved authored title");
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("window", { confirm });
+    fixtures.locale = "ko-KR";
+    button(harness.render(), other.title).onClick?.({} as never);
+    expect(confirm).toHaveBeenCalledWith("저장하지 않은 팩 변경 사항을 버릴까요?");
+    expect(propsFor(harness.render(), "input").value).toBe("Unsaved authored title");
+    expect(fixtures.apiFetch).not.toHaveBeenCalled();
   });
 });

@@ -88,3 +88,20 @@
 .plaintext {
   white-space: pre-wrap;
 }
+
+.dialog,
+.preview,
+.field {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.actions > * {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

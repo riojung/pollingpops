@@ -34,6 +34,9 @@ import {
   recoveryPackSourceApproved,
   type RecoveryPackRecord as PackRecord,
 } from "../../lib/recovery-pack-source";
+import { useLocale } from "../../components/locale-provider";
+import { packWorkspaceCopy, packWorkspaceFeedback } from "../../lib/i18n/pack-workspace-copy";
+import { packSourceQuestionType } from "../../lib/i18n/pack-source-copy";
 import styles from "./recovery-packs.module.css";
 
 interface RoundRecord {
@@ -72,17 +75,23 @@ export default function RecoveryPacksPage() {
 }
 
 function RecoveryPacksWorkspace() {
+  const { locale } = useLocale();
+  const copy = packWorkspaceCopy(locale);
   const { creator } = useWorkspace();
   return creator ? (
     <PackLibrary key={creator.workspaceId} />
   ) : (
-    <WorkspaceShell title="Recovery Packs" requireBeta={false}>
-      <p role="status">Loading workspace…</p>
+    <WorkspaceShell title={copy("Recovery Packs")} requireBeta={false} translationLevel="full">
+      <p lang={locale} role="status">
+        {copy("Loading workspace…")}
+      </p>
     </WorkspaceShell>
   );
 }
 
 function PackLibrary() {
+  const { locale } = useLocale();
+  const copy = packWorkspaceCopy(locale);
   const { canEdit, productFeatures, entitlements } = useWorkspace();
   const enabled = Boolean(productFeatures?.recoveryPacks);
   const writable = canEdit && enabled;
@@ -293,7 +302,7 @@ function PackLibrary() {
   }
 
   function choose(pack: PackRecord) {
-    if (dirty && !window.confirm("Discard unsaved Pack changes?")) return;
+    if (dirty && !window.confirm(copy("Discard unsaved Pack changes?"))) return;
     retrySave.current = null;
     retryRestore.current = null;
     adopt(pack);
@@ -383,57 +392,66 @@ function PackLibrary() {
     URL.revokeObjectURL(url);
   }
 
+  const errorFeedback = packWorkspaceFeedback(locale, error);
+  const statusFeedback = packWorkspaceFeedback(locale, busy || announcement);
+  const practiceFeedback = packWorkspaceFeedback(locale, practiceSourceError);
+
   return (
     <WorkspaceShell
-      title="Recovery Packs"
+      title={copy("Recovery Packs")}
       requireBeta={false}
-      eyebrow="Reusable recovery"
-      description="A diagnostic, facilitator intervention cards, and a different linked recheck."
+      translationLevel="full"
+      eyebrow={copy("Reusable recovery")}
+      description={copy(
+        "A diagnostic, facilitator intervention cards, and a different linked recheck.",
+      )}
       actions={
         <Link className="button-quiet" href="/library">
-          Back to Library
+          {copy("Back to Library")}
         </Link>
       }
     >
-      <div lang="en-CA" className={styles.page}>
+      <div lang={locale} className={styles.page}>
         <p className="notice">
-          With Pack authoring enabled, insert published Packs into Round or Presentation drafts and
-          review updates against the accepted baseline, local checkpoints, and latest published
-          Pack. References stay frozen until you accept an update; existing published content and
-          sessions are unchanged. Live explanation or worked-example playback is available in
-          eligible new Round or Presentation sessions when enabled for the workspace. The
-          facilitator explicitly selects a card after revealing the Pack diagnostic. Standalone
-          delayed-probe practice is available from a published Pack with a delayed probe when Pack
-          authoring and practice assignments are enabled and the workspace has Pro follow-ups.
-          Full-sequence practice uses the frozen diagnostic, intervention cards, and linked recheck
-          under the same gates, without requiring a delayed probe. Delayed recovery trails and
-          Companion insertion are not available.
+          {copy(
+            "With Pack authoring enabled, insert published Packs into Round or Presentation drafts and review updates against the accepted baseline, local checkpoints, and latest published Pack. References stay frozen until you accept an update; existing published content and sessions are unchanged. Live explanation or worked-example playback is available in eligible new Round or Presentation sessions when enabled for the workspace. The facilitator explicitly selects a card after revealing the Pack diagnostic. Standalone delayed-probe practice is available from a published Pack with a delayed probe when Pack authoring and practice assignments are enabled and the workspace has Pro follow-ups. Full-sequence practice uses the frozen diagnostic, intervention cards, and linked recheck under the same gates, without requiring a delayed probe. Delayed recovery trails and Companion insertion are not available.",
+          )}
         </p>
         {!enabled ? (
           <p className="notice">
-            Pack authoring is not enabled for this workspace. Existing Packs remain readable and
-            exportable.
+            {copy(
+              "Pack authoring is not enabled for this workspace. Existing Packs remain readable and exportable.",
+            )}
           </p>
         ) : null}
         {!canEdit ? (
-          <p className="notice">Your workspace role can view Packs but cannot modify them.</p>
-        ) : null}
-        {error ? (
-          <p className="error" role="alert" tabIndex={-1} ref={errorParagraph}>
-            {error}
+          <p className="notice">
+            {copy("Your workspace role can view Packs but cannot modify them.")}
           </p>
         ) : null}
-        <p className={styles.status} role="status" aria-live="polite">
-          {busy ? `${busy}…` : announcement}
+        {error ? (
+          <p
+            className="error"
+            lang={errorFeedback.lang}
+            role="alert"
+            tabIndex={-1}
+            ref={errorParagraph}
+          >
+            {errorFeedback.text}
+          </p>
+        ) : null}
+        <p className={styles.status} lang={statusFeedback.lang} role="status" aria-live="polite">
+          {busy ? `${statusFeedback.text}…` : statusFeedback.text}
         </p>
-        {loading ? <p role="status">Loading Packs…</p> : null}
+        {loading ? <p role="status">{copy("Loading Packs…")}</p> : null}
         <div className={styles.layout}>
           <section className={styles.panel} aria-labelledby="pack-list-title">
-            <h2 id="pack-list-title">Your Packs</h2>
+            <h2 id="pack-list-title">{copy("Your Packs")}</h2>
             {!loading && !packs.length ? (
               <p className="muted">
-                No Packs yet. Start from a published diagnostic and linked recheck, or import an
-                Polling Pops Pack.
+                {copy(
+                  "No Packs yet. Start from a published diagnostic and linked recheck, or import an Polling Pops Pack.",
+                )}
               </p>
             ) : null}
             <ul className={styles.list}>
@@ -446,10 +464,12 @@ function PackLibrary() {
                     disabled={Boolean(busy)}
                     onClick={() => choose(pack)}
                   >
-                    <strong>{pack.title || "Untitled Pack"}</strong>
+                    <strong lang={pack.title ? "" : locale}>
+                      {pack.title || copy("Untitled Pack")}
+                    </strong>
                     <span>
-                      {pack.currentVersionId ? "Published" : "Draft"} · revision{" "}
-                      {pack.draftRevision}
+                      {copy(pack.currentVersionId ? "Published" : "Draft")} ·{" "}
+                      {copy("revision {revision}", { revision: pack.draftRevision })}
                     </span>
                   </button>
                 </li>
@@ -464,7 +484,8 @@ function PackLibrary() {
                     disabled: Boolean(busy),
                     beforeCreate: () => {
                       if (running.current || !writableRef.current) return false;
-                      if (dirty && !window.confirm("Discard unsaved Pack changes?")) return false;
+                      if (dirty && !window.confirm(copy("Discard unsaved Pack changes?")))
+                        return false;
                       running.current = true;
                       sourceCreationRunning.current = true;
                       setBusy("Creating source Pack draft");
@@ -495,9 +516,9 @@ function PackLibrary() {
                     },
                   }}
                 />
-                <h3>Create from published material</h3>
+                <h3>{copy("Create from published material")}</h3>
                 <label className="field">
-                  <span>Source Round</span>
+                  <span>{copy("Source Round")}</span>
                   <select
                     className="select"
                     value={sourceId}
@@ -506,18 +527,18 @@ function PackLibrary() {
                       setSourceId(event.target.value);
                     }}
                   >
-                    <option value="">Choose a published Round</option>
+                    <option value="">{copy("Choose a published Round")}</option>
                     {rounds
                       .filter((round) => round.currentVersionId)
                       .map((round) => (
-                        <option key={round.id} value={round.id}>
+                        <option key={round.id} value={round.id} lang="">
                           {round.title}
                         </option>
                       ))}
                   </select>
                 </label>
                 <label className="field">
-                  <span>Diagnostic and linked recheck</span>
+                  <span>{copy("Diagnostic and linked recheck")}</span>
                   <select
                     className="select"
                     value={sourceQuestionId}
@@ -526,9 +547,9 @@ function PackLibrary() {
                       setSourceQuestionId(event.target.value);
                     }}
                   >
-                    <option value="">Choose a checkpoint pair</option>
+                    <option value="">{copy("Choose a checkpoint pair")}</option>
                     {pairs.map((pair) => (
-                      <option key={pair.diagnostic.id} value={pair.diagnostic.id}>
+                      <option key={pair.diagnostic.id} value={pair.diagnostic.id} lang="">
                         {pair.diagnostic.prompt}
                       </option>
                     ))}
@@ -536,8 +557,9 @@ function PackLibrary() {
                 </label>
                 {currentSource && !pairs.length ? (
                   <p className="muted">
-                    This published version has no scored, linked diagnostic/recheck pair. Add and
-                    publish one in the Round builder first.
+                    {copy(
+                      "This published version has no scored, linked diagnostic/recheck pair. Add and publish one in the Round builder first.",
+                    )}
                   </p>
                 ) : null}
                 <button
@@ -552,7 +574,7 @@ function PackLibrary() {
                         (candidate) => candidate.diagnostic.id === sourceQuestionId,
                       );
                       if (!pair || !currentSource) return;
-                      if (dirty && !window.confirm("Discard unsaved Pack changes?")) return;
+                      if (dirty && !window.confirm(copy("Discard unsaved Pack changes?"))) return;
                       const result = await apiFetch<{ pack: PackRecord }>("/v1/recovery-packs", {
                         method: "POST",
                         body: JSON.stringify({
@@ -569,14 +591,15 @@ function PackLibrary() {
                     })
                   }
                 >
-                  Create Pack draft
+                  {copy("Create Pack draft")}
                 </button>
                 <details className={styles.import}>
-                  <summary>Import Polling Pops Pack JSON</summary>
+                  <summary>{copy("Import Polling Pops Pack JSON")}</summary>
                   <label className="field">
-                    <span>Pack JSON</span>
+                    <span>{copy("Pack JSON")}</span>
                     <textarea
                       className="textarea"
+                      lang=""
                       value={importJson}
                       maxLength={1_000_000}
                       disabled={Boolean(busy)}
@@ -584,8 +607,9 @@ function PackLibrary() {
                     />
                   </label>
                   <p className="muted">
-                    Media IDs are workspace-scoped references, not embedded files. Referenced media
-                    must be accessible in this workspace.
+                    {copy(
+                      "Media IDs are workspace-scoped references, not embedded files. Referenced media must be accessible in this workspace.",
+                    )}
                   </p>
                   <button
                     className="button-quiet"
@@ -593,7 +617,7 @@ function PackLibrary() {
                     disabled={Boolean(busy) || !importJson.trim()}
                     onClick={() =>
                       void run("Importing Pack", async () => {
-                        if (dirty && !window.confirm("Discard unsaved Pack changes?")) return;
+                        if (dirty && !window.confirm(copy("Discard unsaved Pack changes?"))) return;
                         const parsed = RecoveryPackJsonSchema.parse(JSON.parse(importJson));
                         const result = await apiFetch<{ pack: PackRecord }>(
                           "/v1/recovery-packs/import",
@@ -607,82 +631,95 @@ function PackLibrary() {
                       })
                     }
                   >
-                    Import as draft
+                    {copy("Import as draft")}
                   </button>
                 </details>
               </>
             ) : null}
           </section>
           <section className={styles.panel} aria-labelledby="pack-detail-title">
-            <h2 id="pack-detail-title" tabIndex={-1} ref={detailHeading}>
-              {selected ? selected.title || "Untitled Pack" : "Select a Pack"}
+            <h2
+              id="pack-detail-title"
+              lang={selected?.title ? "" : locale}
+              tabIndex={-1}
+              ref={detailHeading}
+            >
+              {selected ? selected.title || copy("Untitled Pack") : copy("Select a Pack")}
             </h2>
             {selected && draft ? (
               <>
                 <p className="muted">
-                  Draft revision {selected.draftRevision}
-                  {dirty ? " · unsaved changes" : " · saved"}
-                  {selected.currentVersionId
-                    ? " · a frozen published version is available"
-                    : " · unpublished"}
+                  {copy("Draft revision {revision}", { revision: selected.draftRevision })}
+                  {copy(dirty ? " · unsaved changes" : " · saved")}
+                  {copy(
+                    selected.currentVersionId
+                      ? " · a frozen published version is available"
+                      : " · unpublished",
+                  )}
                 </p>
                 <fieldset
                   className={styles.editor}
                   disabled={!writable || Boolean(busy)}
                   onChangeCapture={invalidateSourceReview}
                 >
-                  <legend className="sr-only">Pack draft</legend>
+                  <legend className="sr-only">{copy("Pack draft")}</legend>
                   <label className="field">
-                    <span>Title</span>
+                    <span>{copy("Title")}</span>
                     <input
                       className="input"
+                      lang=""
                       maxLength={160}
                       value={draft.title}
                       onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                     />
                   </label>
                   <label className="field">
-                    <span>Description</span>
+                    <span>{copy("Description")}</span>
                     <textarea
                       className="textarea"
+                      lang=""
                       maxLength={1_000}
                       value={draft.description}
                       onChange={(event) => setDraft({ ...draft, description: event.target.value })}
                     />
                   </label>
                   <label className="field">
-                    <span>Shared concept keys (comma-separated)</span>
+                    <span>{copy("Shared concept keys (comma-separated)")}</span>
                     <input
                       className="input"
+                      lang=""
                       value={concepts}
                       onChange={(event) => setConcepts(event.target.value)}
                       aria-describedby="pack-concepts-help"
                     />
                   </label>
                   <p id="pack-concepts-help" className="muted">
-                    These keys apply to every Pack checkpoint. Use meaningful letters, numbers,
-                    dots, dashes, or underscores; at most 12 keys.
+                    {copy(
+                      "These keys apply to every Pack checkpoint. Use meaningful letters, numbers, dots, dashes, or underscores; at most 12 keys.",
+                    )}
                   </p>
                   <label className="field">
-                    <span>Misconception keys (comma-separated)</span>
+                    <span>{copy("Misconception keys (comma-separated)")}</span>
                     <input
                       className="input"
+                      lang=""
                       value={misconceptions}
                       onChange={(event) => setMisconceptions(event.target.value)}
                     />
                   </label>
                   <CheckpointEditor
-                    label="Diagnostic"
+                    label={copy("Diagnostic")}
                     question={draft.diagnostic}
                     onChange={(diagnostic) => setDraft({ ...draft, diagnostic })}
                   />
-                  <h3>Facilitator intervention cards</h3>
+                  <h3>{copy("Facilitator intervention cards")}</h3>
                   {draft.interventions.map((card, index) => (
                     <div className={styles.card} key={card.id}>
                       <label className="field">
-                        <span>Card {index + 1} title</span>
+                        <span>{copy("Card {number} title", { number: index + 1 })}</span>
                         <input
                           className="input"
+                          lang=""
                           value={card.title}
                           maxLength={160}
                           onChange={(event) =>
@@ -698,9 +735,12 @@ function PackLibrary() {
                         />
                       </label>
                       <label className="field">
-                        <span>Card {index + 1} facilitator guidance</span>
+                        <span>
+                          {copy("Card {number} facilitator guidance", { number: index + 1 })}
+                        </span>
                         <textarea
                           className="textarea"
+                          lang=""
                           value={card.body}
                           maxLength={2_000}
                           onChange={(event) =>
@@ -716,7 +756,7 @@ function PackLibrary() {
                         />
                       </label>
                       {card.citations.length ? (
-                        <PackSourceCitations citations={card.citations} />
+                        <PackSourceCitations citations={card.citations} locale={locale} />
                       ) : null}
                       <button
                         className="button-quiet small-button"
@@ -731,7 +771,7 @@ function PackLibrary() {
                           });
                         }}
                       >
-                        Remove card {index + 1}
+                        {copy("Remove card {number}", { number: index + 1 })}
                       </button>
                     </div>
                   ))}
@@ -750,32 +790,35 @@ function PackLibrary() {
                       });
                     }}
                   >
-                    Add intervention card
+                    {copy("Add intervention card")}
                   </button>
                   {selected.sourceReview ? (
                     <p className="muted">
-                      New source cards inherit original Pack citations. Check that these spans
-                      support your edited guidance before saving and approving.
+                      {copy(
+                        "New source cards inherit original Pack citations. Check that these spans support your edited guidance before saving and approving.",
+                      )}
                     </p>
                   ) : null}
                   <CheckpointEditor
-                    label="Different linked recheck"
+                    label={copy("Different linked recheck")}
                     question={draft.recheck}
                     onChange={(recheck) => setDraft({ ...draft, recheck })}
                   />
                   {draft.delayedProbe ? (
                     <CheckpointEditor
-                      label="Optional delayed probe"
+                      label={copy("Optional delayed probe")}
                       question={draft.delayedProbe}
                       onChange={(delayedProbe) => setDraft({ ...draft, delayedProbe })}
                     />
                   ) : null}
                 </fieldset>
                 <details>
-                  <summary>Source citations ({draft.citations.length})</summary>
+                  <summary>
+                    {copy("Source citations ({count})", { count: draft.citations.length })}
+                  </summary>
                   <ul>
                     {draft.citations.map((citation, index) => (
-                      <li key={index}>
+                      <li key={index} lang="">
                         <strong>{citation.sourceName}</strong> · {citation.locator}
                         <p>{citation.excerpt}</p>
                       </li>
@@ -784,6 +827,7 @@ function PackLibrary() {
                 </details>
                 {selected.sourceReview && editedDraft ? (
                   <RecoveryPackSourceReviewPanel
+                    locale={locale}
                     pack={selected}
                     draft={editedDraft}
                     dirty={dirty}
@@ -799,7 +843,11 @@ function PackLibrary() {
                     }
                   />
                 ) : null}
-                {publishError ? <p className="notice">Before publishing: {publishError}</p> : null}
+                {publishError ? (
+                  <p className="notice">
+                    {copy("Before publishing:")} <span lang="en-CA">{publishError}</span>
+                  </p>
+                ) : null}
                 <div className="button-row">
                   <button
                     className="button"
@@ -807,7 +855,7 @@ function PackLibrary() {
                     disabled={!writable || Boolean(busy) || !dirty}
                     onClick={() => void run("Saving draft", save)}
                   >
-                    Save draft
+                    {copy("Save draft")}
                   </button>
                   <button
                     className="button-quiet"
@@ -843,7 +891,7 @@ function PackLibrary() {
                       })
                     }
                   >
-                    Publish saved draft
+                    {copy("Publish saved draft")}
                   </button>
                   <button
                     className="button-quiet"
@@ -853,7 +901,9 @@ function PackLibrary() {
                       void run("Reloading Pack", async () => {
                         if (
                           dirty &&
-                          !window.confirm("Discard unsaved changes and reload the saved draft?")
+                          !window.confirm(
+                            copy("Discard unsaved changes and reload the saved draft?"),
+                          )
                         )
                           return;
                         const result = await apiFetch<{ pack: PackRecord }>(
@@ -865,15 +915,19 @@ function PackLibrary() {
                       })
                     }
                   >
-                    Reload saved draft
+                    {copy("Reload saved draft")}
                   </button>
                 </div>
                 {selected.currentVersionId ? (
-                  <section className={styles.subsection} aria-label="Published Pack actions">
-                    <h3>Use the published version</h3>
+                  <section
+                    className={styles.subsection}
+                    aria-label={copy("Published Pack actions")}
+                  >
+                    <h3>{copy("Use the published version")}</h3>
                     <p className="muted">
-                      Insertion and export use the frozen published version, not the draft above.
-                      They do not update existing inserted copies.
+                      {copy(
+                        "Insertion and export use the frozen published version, not the draft above. They do not update existing inserted copies.",
+                      )}
                     </p>
                     <button
                       className="button-quiet"
@@ -889,14 +943,14 @@ function PackLibrary() {
                         })
                       }
                     >
-                      Export Polling Pops JSON
+                      {copy("Export Polling Pops JSON")}
                     </button>
                     {practiceSourceLoading ? (
-                      <p role="status">Loading the frozen published export source…</p>
+                      <p role="status">{copy("Loading the frozen published export source…")}</p>
                     ) : practiceSourceError ? (
                       <>
-                        <p className="error" role="alert">
-                          {practiceSourceError}
+                        <p className="error" lang={practiceFeedback.lang} role="alert">
+                          {practiceFeedback.text}
                         </p>
                         <button
                           className="button-quiet"
@@ -904,12 +958,13 @@ function PackLibrary() {
                           disabled={Boolean(busy)}
                           onClick={() => setPublishedSourceRefresh((value) => value + 1)}
                         >
-                          Retry published export source
+                          {copy("Retry published export source")}
                         </button>
                       </>
                     ) : null}
                     {publishedPracticePack?.id === selected.currentVersionId ? (
                       <RecoveryPackExportPanel
+                        locale={locale}
                         key={`${selected.id}:${publishedPracticePack.id}:${publishedPracticePack.contentHash}`}
                         source={{
                           artifactType: "recovery_pack",
@@ -925,7 +980,7 @@ function PackLibrary() {
                     {writable ? (
                       <>
                         <label className="field">
-                          <span>Destination Round draft</span>
+                          <span>{copy("Destination Round draft")}</span>
                           <select
                             className="select"
                             value={targetId}
@@ -942,11 +997,11 @@ function PackLibrary() {
                               retryInsert.current = null;
                             }}
                           >
-                            <option value="">Choose a Round</option>
+                            <option value="">{copy("Choose a Round")}</option>
                             {rounds
                               .filter((round) => round.status !== "archived")
                               .map((round) => (
-                                <option key={round.id} value={round.id}>
+                                <option key={round.id} value={round.id} lang="">
                                   {round.title}
                                 </option>
                               ))}
@@ -958,11 +1013,11 @@ function PackLibrary() {
                           disabled={Boolean(busy) || !targetId}
                           onClick={() => void run("Inserting Pack", insert)}
                         >
-                          Insert into Round draft
+                          {copy("Insert into Round draft")}
                         </button>
                         {targetHref ? (
                           <Link className={styles.builderLink} href={targetHref}>
-                            Open destination Round builder
+                            {copy("Open destination Round builder")}
                           </Link>
                         ) : null}
                       </>
@@ -970,6 +1025,7 @@ function PackLibrary() {
                   </section>
                 ) : null}
                 <PackPracticeAction
+                  locale={locale}
                   packId={selected.id}
                   version={
                     publishedPracticePack?.id === selected.currentVersionId
@@ -984,6 +1040,7 @@ function PackLibrary() {
                   canEdit={canEdit}
                 />
                 <PackPracticeAction
+                  locale={locale}
                   packId={selected.id}
                   version={
                     publishedPracticePack?.id === selected.currentVersionId
@@ -998,8 +1055,8 @@ function PackLibrary() {
                   canEdit={canEdit}
                   mode="full_sequence"
                 />
-                <section className={styles.subsection} aria-label="Draft history">
-                  <h3>Draft history</h3>
+                <section className={styles.subsection} aria-label={copy("Draft history")}>
+                  <h3>{copy("Draft history")}</h3>
                   <button
                     className="button-quiet"
                     type="button"
@@ -1014,22 +1071,23 @@ function PackLibrary() {
                       })
                     }
                   >
-                    Load draft history
+                    {copy("Load draft history")}
                   </button>
                   {history.length ? (
                     <>
                       <label className="field">
-                        <span>Previous saved revision</span>
+                        <span>{copy("Previous saved revision")}</span>
                         <select
                           className="select"
                           disabled={Boolean(busy)}
                           value={historyRevision}
                           onChange={(event) => setHistoryRevision(event.target.value)}
                         >
-                          <option value="">Choose a revision</option>
+                          <option value="">{copy("Choose a revision")}</option>
                           {history.map((entry) => (
-                            <option key={entry.revision} value={entry.revision}>
-                              Revision {entry.revision} · {entry.draft.title || "Untitled"} ·{" "}
+                            <option key={entry.revision} value={entry.revision} lang="">
+                              {copy("Revision {revision}", { revision: entry.revision })} ·{" "}
+                              {entry.draft.title || copy("Untitled")} ·{" "}
                               {new Date(entry.createdAt).toLocaleString()}
                             </option>
                           ))}
@@ -1044,7 +1102,7 @@ function PackLibrary() {
                             if (
                               dirty &&
                               !window.confirm(
-                                "Discard unsaved changes and restore this history revision?",
+                                copy("Discard unsaved changes and restore this history revision?"),
                               )
                             )
                               return;
@@ -1068,7 +1126,7 @@ function PackLibrary() {
                           })
                         }
                       >
-                        Restore as new draft revision
+                        {copy("Restore as new draft revision")}
                       </button>
                     </>
                   ) : null}
@@ -1082,7 +1140,9 @@ function PackLibrary() {
                       void run("Deleting Pack", async () => {
                         if (
                           !window.confirm(
-                            "Permanently delete this Pack and its history? Existing inserted Round copies remain usable.",
+                            copy(
+                              "Permanently delete this Pack and its history? Existing inserted Round copies remain usable.",
+                            ),
                           )
                         )
                           return;
@@ -1096,13 +1156,15 @@ function PackLibrary() {
                       })
                     }
                   >
-                    Delete Pack permanently
+                    {copy("Delete Pack permanently")}
                   </button>
                 ) : null}
               </>
             ) : (
               <p className="muted">
-                Choose a Pack to review its draft, publish a version, or reuse a published version.
+                {copy(
+                  "Choose a Pack to review its draft, publish a version, or reuse a published version.",
+                )}
               </p>
             )}
           </section>
@@ -1121,44 +1183,54 @@ function CheckpointEditor({
   question: RecoveryPackDraft["diagnostic"];
   onChange: (question: RecoveryPackDraft["diagnostic"]) => void;
 }) {
+  const { locale } = useLocale();
+  const copy = packWorkspaceCopy(locale);
   return (
     <section className={styles.subsection}>
       <h3>{label}</h3>
       <label className="field">
-        <span>{label} prompt</span>
+        <span>{copy("{label} prompt", { label })}</span>
         <textarea
           className="textarea"
+          lang=""
           maxLength={500}
           value={question.prompt}
           onChange={(event) => onChange({ ...question, prompt: event.target.value })}
         />
       </label>
       <label className="field">
-        <span>{label} explanation</span>
+        <span>{copy("{label} explanation", { label })}</span>
         <textarea
           className="textarea"
+          lang=""
           maxLength={1_000}
           value={question.explanation}
           onChange={(event) => onChange({ ...question, explanation: event.target.value })}
         />
       </label>
       <p className="muted">
-        {question.type} · {question.timeLimitSeconds}s · {question.basePoints} points. Response
-        options and grading are copied from published material.
+        {packSourceQuestionType(locale, question.type)} ·{" "}
+        {copy(
+          "{seconds}s · {points} points. Response options and grading are copied from published material.",
+          { seconds: question.timeLimitSeconds, points: question.basePoints },
+        )}
       </p>
       {"choices" in question ? (
         <ul>
           {question.choices.map((choice) => (
             <li key={choice.id}>
-              {choice.label}
-              {choice.isCorrect ? " (correct)" : ""}
+              <span lang="">{choice.label}</span>
+              {choice.isCorrect ? copy(" (correct)") : ""}
             </li>
           ))}
         </ul>
       ) : question.type === "numeric" ? (
         <p>
-          Accepted value: {question.correctValue} · tolerance {question.tolerance}
-          {question.unit ? ` ${question.unit}` : ""}
+          {copy("Accepted value: {value} · tolerance {tolerance}", {
+            value: question.correctValue,
+            tolerance: question.tolerance,
+          })}
+          {question.unit ? <span lang="">{` ${question.unit}`}</span> : ""}
         </p>
       ) : null}
     </section>

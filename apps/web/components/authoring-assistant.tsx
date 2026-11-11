@@ -20,6 +20,7 @@ import {
   type RecoveryPackSourceTarget,
 } from "./recovery-pack-source";
 import { recoveryPackSourceGeneration } from "../lib/recovery-pack-source";
+import { packSourceCopy } from "../lib/i18n/pack-source-copy";
 
 interface AuthoringStatus {
   enabled: boolean;
@@ -89,7 +90,8 @@ export function AuthoringAssistant({
   recoveryPackTarget,
 }: AuthoringAssistantProps) {
   const router = useRouter();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const packSourceUi = packSourceCopy(locale);
   const [status, setStatus] = useState<AuthoringStatus | null>(null);
   const [jobs, setJobs] = useState<AuthoringJob[]>([]);
   const [sourceMode, setSourceMode] = useState<"pasted_text" | "file">("pasted_text");
@@ -336,7 +338,7 @@ export function AuthoringAssistant({
         {insertionTarget
           ? t("delivery.assistant.insertTrustedSource")
           : artifactType === "recovery_pack"
-            ? "Draft a Recovery Pack from a trusted source"
+            ? packSourceUi("Draft a Recovery Pack from a trusted source")
             : artifactType === "presentation"
               ? t("delivery.assistant.draftPresentation")
               : t(
@@ -347,7 +349,9 @@ export function AuthoringAssistant({
       </summary>
       <p className="muted">
         {artifactType === "recovery_pack"
-          ? "Upload a private source or paste trusted text to propose a diagnostic, a different linked recheck, and a cited facilitator card for your review."
+          ? packSourceUi(
+              "Upload a private source or paste trusted text to propose a diagnostic, a different linked recheck, and a cited facilitator card for your review.",
+            )
           : artifactType === "presentation"
             ? t("delivery.assistant.presentationDescription")
             : t(
@@ -491,6 +495,7 @@ export function AuthoringAssistant({
                 job.output &&
                 recoveryPackTarget ? (
                   <RecoveryPackSourceProposalPanel
+                    locale={locale}
                     key={`${recoveryPackSourceGeneration(job)}:${sourceGeneration}`}
                     job={job}
                     canEdit={canEdit}

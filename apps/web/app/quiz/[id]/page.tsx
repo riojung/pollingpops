@@ -32,6 +32,8 @@ import { DeliveryScoring } from "../../../components/editor/delivery-scoring";
 import { DiagnosticDetails } from "../../../components/editor/diagnostic-details";
 import { MediaEditor } from "../../../components/editor/media-editor";
 import { authoringWorkflowCopy } from "../../../components/editor/authoring-workflow-copy";
+import { packUpdateFeedback } from "../../../lib/i18n/pack-update-copy";
+import { packInsertionCopy } from "../../../lib/i18n/pack-insertion-copy";
 import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
 import { ParticipantPreview } from "../../../components/editor/participant-preview";
 import {
@@ -151,6 +153,7 @@ function newQuestion(type: QuestionType): QuestionDraft {
 export default function QuizEditorPage() {
   const { locale, t } = useLocale();
   const workflowCopy = creatorWorkflowCopy(locale);
+  const packInsertionUi = packInsertionCopy(locale);
   const authoringCopy = authoringWorkflowCopy(locale);
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -1272,6 +1275,7 @@ export default function QuizEditorPage() {
   );
   const packUpdatePanels = draft?.recoveryPackInsertions?.map((insertion) => (
     <RecoveryPackUpdatePanel
+      locale={locale}
       key={`${id}:${insertion.id}`}
       quizId={id}
       insertionId={insertion.id}
@@ -1296,6 +1300,9 @@ export default function QuizEditorPage() {
       onUndo={undoRecoveryPackUpdate}
     />
   ));
+  const packFeedback = errorIsRaw
+    ? packUpdateFeedback(locale, error)
+    : { text: error, lang: locale };
   const mutationFieldsetStyle = { border: 0, padding: 0, margin: 0, minWidth: 0 };
   const canvasSnapshotLinks =
     quiz && productFeatures?.canvasBoards ? (
@@ -1435,8 +1442,8 @@ export default function QuizEditorPage() {
             </section>
           ) : null}
           {error ? (
-            <p className="error" lang={errorIsRaw ? "en-CA" : undefined} role="alert">
-              {error}
+            <p className="error" lang={packFeedback.lang} role="alert">
+              {packFeedback.text}
             </p>
           ) : null}
           {draftGuidance ? (
@@ -1845,8 +1852,8 @@ export default function QuizEditorPage() {
               <section className={builderStyles.canvasColumn}>
                 <div className={builderStyles.alertStack}>
                   {error ? (
-                    <p className="error" lang={errorIsRaw ? "en-CA" : undefined} role="alert">
-                      {error}
+                    <p className="error" lang={packFeedback.lang} role="alert">
+                      {packFeedback.text}
                     </p>
                   ) : null}
                   {publishLimitReached ? (
@@ -1891,36 +1898,47 @@ export default function QuizEditorPage() {
                 </details>
                 {packUpdatePanels}
                 {recoveryPackInsertion && recoveryPackReferenceContent ? (
-                  <details className="notice" lang="en-CA">
+                  <details className="notice" lang={locale}>
                     <summary>
-                      Recovery Pack facilitator references: {recoveryPackReferenceContent.title}
-                      {" · version "}
-                      {recoveryPackInsertion.updateBaseline?.packVersion ??
-                        recoveryPackInsertion.packVersion}
+                      {packInsertionUi("Recovery Pack facilitator references:")}{" "}
+                      <span lang="">{recoveryPackReferenceContent.title}</span>
+                      {" · "}
+                      {packInsertionUi("version {version}", {
+                        version:
+                          recoveryPackInsertion.updateBaseline?.packVersion ??
+                          recoveryPackInsertion.packVersion,
+                      })}
                     </summary>
                     <p>
-                      These cards are frozen references from the accepted source baseline, initially
-                      copied with this Pack. Local checkpoint edits and source Pack changes do not
-                      update them until you accept a Pack update. Live explanation or worked-example
-                      playback is available in eligible new Round sessions when enabled for the
-                      workspace. The facilitator explicitly selects a card after revealing the Pack
-                      diagnostic.
+                      {packInsertionUi(
+                        "These cards are frozen references from the accepted source baseline, initially copied with this Pack. Local checkpoint edits and source Pack changes do not update them until you accept a Pack update.",
+                      )}{" "}
+                      {packInsertionUi(
+                        "Live explanation or worked-example playback is available in eligible new {artifact} sessions when enabled for the workspace. The facilitator explicitly selects a card after revealing the Pack diagnostic.",
+                        { artifact: packInsertionUi("Round") },
+                      )}
                     </p>
                     {recoveryPackReferenceContent.interventions.map((card) => (
                       <section key={card.id}>
-                        <h3>{card.title}</h3>
-                        <p style={{ whiteSpace: "pre-wrap" }}>{card.body}</p>
+                        <h3 lang="">{card.title}</h3>
+                        <p lang="" style={{ whiteSpace: "pre-wrap" }}>
+                          {card.body}
+                        </p>
                         {card.citations.length ? (
                           <p className="muted">
-                            Sources:{" "}
-                            {card.citations
-                              .map((citation) => `${citation.sourceName}, ${citation.locator}`)
-                              .join("; ")}
+                            {packInsertionUi("Sources:")}{" "}
+                            <span lang="">
+                              {card.citations
+                                .map((citation) => `${citation.sourceName}, ${citation.locator}`)
+                                .join("; ")}
+                            </span>
                           </p>
                         ) : null}
                       </section>
                     ))}
-                    <Link href="/recovery-packs">Open Recovery Pack library</Link>
+                    <Link href="/recovery-packs">
+                      {packInsertionUi("Open Recovery Pack library")}
+                    </Link>
                   </details>
                 ) : null}
                 <section

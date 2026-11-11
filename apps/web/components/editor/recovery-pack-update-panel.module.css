@@ -70,3 +70,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Review controls must fit their column even when translated labels grow. */
+.panel button,
+.panel select {
+  max-width: 100%;
+  min-width: 0;
+}
+.panel button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.panel select {
+  width: 100%;
+}

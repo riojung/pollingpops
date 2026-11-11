@@ -8,6 +8,22 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B Pack tools November 11, 2026
+
+The `codex/option-b-pack-tools` source extends selected-language guidance to Pack library/
+editing, source review/approval, export review, Round/Presentation insertion and updates,
+facilitator references and practice entry points. All ten configured locales retain English
+as default. Authored/generated/default content and canonical source/recovery/version/request
+identities retain their meanings. The repository gate passes 8,066 tests with 513 standard
+opt-in skips, all four production builds and server startup. All 392 web suites / 4,183 tests
+pass. Final web types, scoped lint and fresh normal/beta builds pass after a small German
+placeholder refinement. Fifty distinct selected production-browser cases pass across desktop
+Chromium and phone Chromium/WebKit, including fifteen new localized cases. The
+[Option B implementation record](option-b-ux-implementation.md) preserves verification scope,
+screenshot review and corrected fixture reruns. Pack practice setup, preview, private-link receipts and attribution remain a
+separate follow-up, alongside creation-locale templates/default content, hosted/manual/
+native-language/customer acceptance and deferred public launch content.
+
 ### Option B source workflows November 10, 2026
 
 The `codex/option-b-source-workflows` source extends all ten configured UI locales to local

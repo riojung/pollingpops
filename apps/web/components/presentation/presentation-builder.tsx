@@ -145,6 +145,8 @@ import { questionStartersFeedback } from "../../lib/i18n/question-starters-copy"
 import { questionSuggestionsCopy, questionSuggestionsFeedback } from "./question-suggestions-copy";
 import { visualImportCopy, visualImportFeedback } from "./visual-import-copy";
 import { sourceWorkflowsCopy, sourceWorkflowsFeedback } from "./source-workflows-copy";
+import { packUpdateCopy, packUpdateFeedback } from "../../lib/i18n/pack-update-copy";
+import { packInsertionFeedback } from "../../lib/i18n/pack-insertion-copy";
 import { insertPresentationQuestionStarter } from "../../lib/presentation-question-starters";
 import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
 import type { QuestionSuggestionsTarget } from "../../lib/presentation-question-suggestions-client";
@@ -521,6 +523,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const questionSuggestionsUi = questionSuggestionsCopy(locale);
   const visualImportUi = visualImportCopy(locale);
   const sourceWorkflowsUi = sourceWorkflowsCopy(locale);
+  const packUpdateUi = packUpdateCopy(locale);
   const router = useRouter();
   const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -2702,6 +2705,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     questionStartersFeedback(locale, error),
     questionSuggestionsFeedback(locale, error),
     visualImportFeedback(locale, error),
+    packUpdateFeedback(locale, error, "Presentation"),
+    packInsertionFeedback(locale, error),
   ].find((feedback) => feedback.lang === locale) ?? { text: error, lang: "en-CA" };
 
   const questionBlocks = draft.blocks.flatMap((block) =>
@@ -3174,17 +3179,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       {draft.recoveryPackInsertions?.length ? (
         <section
           className={styles.packReviews}
-          aria-label="Presentation Recovery Pack updates"
+          aria-label={packUpdateUi("Presentation Recovery Pack updates")}
+          lang={locale}
           inert={unrelatedEditorMutationBlocked || preparingImport}
         >
           {packUpdateReceiptPending ? (
-            <p className="notice" role="status" lang="en-CA">
-              Editing is paused until the outstanding Pack acknowledgement is recovered. Retry the
-              same update or undo below; it cannot create a duplicate revision.
+            <p className="notice" role="status">
+              {packUpdateUi(
+                "Editing is paused until the outstanding Pack acknowledgement is recovered. Retry the same update or undo below; it cannot create a duplicate revision.",
+              )}
             </p>
           ) : null}
           {draft.recoveryPackInsertions.map((insertion) => (
             <PresentationRecoveryPackUpdateReview
+              locale={locale}
               key={insertion.id}
               presentationId={presentationId}
               insertionId={insertion.id}
@@ -4105,7 +4113,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   disabled={builderMutationBlocked}
                 />
               ) : null}
-              <RecoveryPackPresentationReferences insertions={draft.recoveryPackInsertions ?? []} />
+              <RecoveryPackPresentationReferences
+                locale={locale}
+                insertions={draft.recoveryPackInsertions ?? []}
+              />
             </EditorDisclosure>
           ) : null}
         </main>
@@ -5269,6 +5280,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       />
       {packImportOpen ? (
         <RecoveryPackPresentationPicker
+          locale={locale}
           afterSelectedBlock={Boolean(selectedBlockId)}
           busy={packBusy}
           error={packError}

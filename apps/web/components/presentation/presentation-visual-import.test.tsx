@@ -3,7 +3,11 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PresentationVisualImportJob } from "@openround/contracts";
+import {
+  supportedLocales,
+  type SupportedLocale,
+  type PresentationVisualImportJob,
+} from "@openround/contracts";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as null | { cursor: number; slots: unknown[]; effects: Array<() => void> },
@@ -79,7 +83,12 @@ vi.mock("react", async (original) => {
     },
   };
 });
-import { PresentationVisualImport, VisualPageReviewFields } from "./presentation-visual-import";
+import {
+  PagePreview,
+  PresentationVisualImport,
+  VisualPageReviewFields,
+} from "./presentation-visual-import";
+import { visualImportCopy } from "./visual-import-copy";
 
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
@@ -124,6 +133,7 @@ const review = {
 function harness() {
   const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as Array<() => void> };
   const props = {
+    locale: "en-CA" as SupportedLocale,
     presentationId,
     open: true,
     afterBlockId: randomUUID(),
@@ -149,6 +159,8 @@ function harness() {
   return {
     props,
     render,
+    markup: () => renderToStaticMarkup(tree),
+    all: () => elements(tree),
     async settle() {
       for (let index = 0; index < 12; index++) {
         await Promise.resolve();
@@ -419,5 +431,306 @@ describe("visual slide import UI", () => {
       { path: `/v1/presentations/${presentationId}/visual-imports/${jobId}/insert`, body },
     ]);
     expect(view.props.onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("localized visual import preserves the import lifecycle", () => {
+  it.each(supportedLocales)(
+    "renders localized upload and authored reading controls in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <VisualPageReviewFields
+          locale={locale}
+          pageNumber={2}
+          review={{
+            ...review,
+            title: "Título original",
+            alternativeText: "原文の説明",
+            accessibleText: "Texte source <original>",
+          }}
+          disabled={false}
+          onChange={() => undefined}
+        />,
+      );
+      const copy = visualImportCopy(locale);
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain(copy("Image description"));
+      expect(markup).toContain(copy("Accessible text"));
+      expect(markup).toContain('lang="" maxLength="160" value="Título original"');
+      expect(markup).toContain('lang="" maxLength="300">原文の説明');
+      expect(markup).toContain('lang="" rows="7" maxLength="3000">Texte source &lt;original&gt;');
+    },
+  );
+
+  it("changes Korean review chrome to German without losing source names, order, authored review, or fidelity", async () => {
+    const nextJob = {
+      ...job,
+      sourceName: "자료-original.pdf",
+      pages: [page, { ...page, pageNumber: 2, extractedText: "Texte original non traduit" }],
+      pageCount: 2,
+      warnings: [
+        "No text was extracted. Write a readable description before importing this page.",
+        "Unknown source warning <raw>",
+      ],
+    };
+    mocked.fetch.mockResolvedValue({ available: true, jobs: [nextJob], limits: {} });
+    const view = harness();
+    view.props.locale = "ko-KR";
+    view.render();
+    await view.settle();
+    const choose = view.find(
+      (node) => node.type === "button" && node.props["aria-pressed"] === false,
+    );
+    (choose.props.onClick as () => void)();
+    await view.settle();
+    (
+      view.find((node) => node.props["aria-label"] === "2페이지 위로 이동").props
+        .onClick as () => void
+    )();
+    await view.settle();
+    const fields = view.find(
+      (node) => node.type === VisualPageReviewFields && node.props.pageNumber === 2,
+    );
+    (fields.props.onChange as (value: typeof review) => void)({
+      ...review,
+      title: "Titel original",
+      accessibleText: "Texte original non traduit",
+    });
+    await view.settle();
+    const fidelity = view
+      .all()
+      .filter((node) => node.type === "input" && node.props.type === "checkbox")
+      .at(-1)!;
+    (fidelity.props.onChange as (event: { target: { checked: boolean } }) => void)({
+      target: { checked: true },
+    });
+    await view.settle();
+    const before = {
+      requests: mocked.fetch.mock.calls.length,
+      loads: mocked.load.mock.calls.length,
+      saves: mocked.save.mock.calls.length,
+    };
+    view.props.locale = "de-DE";
+    view.render();
+    await view.settle();
+    expect(mocked.fetch).toHaveBeenCalledTimes(before.requests);
+    expect(mocked.load).toHaveBeenCalledTimes(before.loads);
+    expect(mocked.save).toHaveBeenCalledTimes(before.saves);
+    expect(
+      view.find((node) => node.type === "div" && node.props.role === "dialog").props.lang,
+    ).toBe("de-DE");
+    expect(view.markup()).toContain('lang="">자료-original.pdf');
+    expect(view.markup()).toContain("Reihenfolge ausgewählter Seiten: 2, 1.");
+    expect(view.markup()).toContain('lang="en-CA">Unknown source warning &lt;raw&gt;');
+    expect(view.markup()).toContain('lang="de-DE">Es wurde kein Text extrahiert.');
+    expect(
+      view.find((node) => node.type === VisualPageReviewFields && node.props.pageNumber === 2).props
+        .review,
+    ).toEqual({ ...review, title: "Titel original", accessibleText: "Texte original non traduit" });
+    expect(
+      view
+        .all()
+        .filter((node) => node.type === "input" && node.props.type === "checkbox")
+        .at(-1)!.props.checked,
+    ).toBe(true);
+  });
+
+  it.each([401, 403])(
+    "retains an exact insertion and actor recovery identity after permission response %s and a locale switch",
+    async (status) => {
+      const body = JSON.stringify({
+        expectedRevision: 4,
+        mutationId: randomUUID(),
+        afterBlockId: randomUUID(),
+        fidelityAccepted: true,
+        pages: [{ pageNumber: 1, ...review }],
+      });
+      mocked.load.mockResolvedValue({
+        draft: {
+          createBody: null,
+          insertBody: body,
+          insertJobId: jobId,
+          jobId,
+          order: [1],
+          reviews: { 1: review },
+          fidelity: true,
+        },
+      });
+      let attempt = 0;
+      mocked.fetch.mockImplementation(async (_path: string, init?: RequestInit) => {
+        if (init?.method !== "POST") return { available: true, jobs: [job], limits: {} };
+        if (++attempt === 1)
+          throw Object.assign(new Error("Your workspace role does not allow this action"), {
+            status,
+          });
+        return { insertedBlockIds: ["visual", "reading"] };
+      });
+      const view = harness();
+      view.props.locale = "ko-KR";
+      view.render();
+      await view.settle();
+      (
+        view.find(
+          (node) => node.type === "button" && node.props.children === "동일한 삽입 다시 시도",
+        ).props.onClick as () => void
+      )();
+      await view.settle();
+      expect(view.markup()).toContain("워크스페이스 역할이 이 작업을 허용하지 않습니다");
+      const before = mocked.fetch.mock.calls.length;
+      view.props.locale = "de-DE";
+      view.props.afterBlockId = randomUUID();
+      view.props.prepareInsert.mockResolvedValue(99);
+      view.render();
+      await view.settle();
+      expect(mocked.fetch).toHaveBeenCalledTimes(before);
+      expect(mocked.load).toHaveBeenCalledOnce();
+      expect(new Set(mocked.save.mock.calls.map(([key]) => key))).toEqual(
+        new Set([`visual-import::workspace:${presentationId}`]),
+      );
+      expect(
+        view.find((node) => node.type === "input" && node.props.type === "file").props.disabled,
+      ).toBe(true);
+      expect(view.markup()).toContain("Ihre Workspace-Rolle erlaubt diese Aktion nicht");
+      (
+        view.find(
+          (node) =>
+            node.type === "button" && node.props.children === "Dieselbe Einfügung erneut versuchen",
+        ).props.onClick as () => void
+      )();
+      await view.settle();
+      expect(
+        mocked.fetch.mock.calls
+          .filter(([, init]) => init?.method === "POST")
+          .map(([path, init]) => ({ path, body: init.body })),
+      ).toEqual(
+        Array(2).fill({
+          path: `/v1/presentations/${presentationId}/visual-imports/${jobId}/insert`,
+          body,
+        }),
+      );
+      expect(view.props.prepareInsert).not.toHaveBeenCalled();
+      expect(view.props.onClose).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("relocalizes a failed local recovery without loading another identity or sending a request", async () => {
+    mocked.load.mockRejectedValue(new Error("Storage unavailable"));
+    const view = harness();
+    view.props.locale = "ko-KR";
+    view.render();
+    await view.settle();
+    expect(view.markup()).toContain("로컬 가져오기 수신 확인을 복구할 수 없습니다.");
+    view.props.locale = "de-DE";
+    view.render();
+    await view.settle();
+    expect(view.markup()).toContain(
+      "Die lokale Importbestätigung konnte nicht wiederhergestellt werden.",
+    );
+    expect(mocked.load).toHaveBeenCalledOnce();
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    expect(mocked.save).not.toHaveBeenCalled();
+  });
+
+  it("retains the selected raw upload through locale changes and retries byte-identical source bytes", async () => {
+    const sourceFile = { name: "원문-original.png", type: "image/png", size: 1 };
+    vi.stubGlobal(
+      "FileReader",
+      class {
+        result = "data:image/png;base64,YQ==";
+        onload = () => undefined;
+        readAsDataURL(file: unknown) {
+          expect(file).toBe(sourceFile);
+          this.onload();
+        }
+      },
+    );
+    mocked.fetch.mockImplementation(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "POST") throw new Error("Unknown upload diagnostic <raw>");
+      return {
+        available: true,
+        jobs: [],
+        limits: {
+          maxPdfBytes: 6000000,
+          maxImageBytes: 10485760,
+          maxImageSetBytes: 20000000,
+          maxPages: 40,
+        },
+      };
+    });
+    const view = harness();
+    view.props.locale = "ko-KR";
+    view.render();
+    await view.settle();
+    (
+      view.find((node) => node.type === "input" && node.props.type === "file").props
+        .onChange as (event: { target: { files: unknown[]; value: string } }) => void
+    )({ target: { files: [sourceFile], value: "original" } });
+    view.props.locale = "de-DE";
+    view.render();
+    await view.settle();
+    expect(view.markup()).toContain('lang="">원문-original.png');
+    (
+      view.find(
+        (node) => node.type === "button" && node.props.children === "Zur Prüfung konvertieren",
+      ).props.onClick as () => void
+    )();
+    await view.settle();
+    expect(view.markup()).toContain('lang="en-CA">Unknown upload diagnostic &lt;raw&gt;');
+    view.props.locale = "ko-KR";
+    view.render();
+    (
+      view.find(
+        (node) => node.type === "button" && node.props.children === "동일한 업로드 다시 시도",
+      ).props.onClick as () => void
+    )();
+    await view.settle();
+    const posts = mocked.fetch.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(posts).toHaveLength(2);
+    expect(posts[1]![1].body).toBe(posts[0]![1].body);
+    expect(JSON.parse(posts[0]![1].body)).toMatchObject({
+      retainOriginal: false,
+      files: [{ name: "원문-original.png", mimeType: "image/png", base64: "YQ==" }],
+    });
+    expect(mocked.load).toHaveBeenCalledOnce();
+  });
+
+  it("localizes private preview failures and retry without fetching again for locale alone", async () => {
+    const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as Array<() => void> };
+    let locale: SupportedLocale = "ko-KR";
+    let tree: ReactNode;
+    function render() {
+      hooks.cursor = 0;
+      mocked.hooks = hooks;
+      try {
+        tree = PagePreview({ path: `/private/${jobId}`, page, locale });
+      } finally {
+        mocked.hooks = null;
+      }
+      for (const effect of hooks.effects.splice(0)) effect();
+    }
+    mocked.fetch.mockRejectedValueOnce(new Error("Permission denied"));
+    render();
+    await Promise.resolve();
+    await Promise.resolve();
+    render();
+    expect(renderToStaticMarkup(tree)).toContain("미리보기를 사용할 수 없습니다.");
+    const originalSignal = mocked.fetch.mock.calls[0]![1].signal;
+    locale = "de-DE";
+    render();
+    expect(mocked.fetch).toHaveBeenCalledOnce();
+    expect(originalSignal.aborted).toBe(false);
+    expect(renderToStaticMarkup(tree)).toContain("Vorschau nicht verfügbar.");
+    mocked.fetch.mockResolvedValueOnce({ downloadUrl: "https://private.example/signed-original" });
+    const retry = elements(tree).find((node) => node.type === "button")!;
+    (retry.props.onClick as () => void)();
+    render();
+    await Promise.resolve();
+    await Promise.resolve();
+    render();
+    expect(mocked.fetch).toHaveBeenCalledTimes(2);
+    expect(mocked.fetch.mock.calls[1]![0]).toBe(`/private/${jobId}/pages/1`);
+    expect(originalSignal.aborted).toBe(true);
+    expect(renderToStaticMarkup(tree)).toContain('src="https://private.example/signed-original"');
+    expect(renderToStaticMarkup(tree)).toContain("Visuelle Konvertierungsvorschau von Seite 1.");
   });
 });

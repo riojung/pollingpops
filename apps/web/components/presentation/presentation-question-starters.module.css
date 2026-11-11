@@ -103,10 +103,9 @@
   font-size: clamp(20px, 3vw, 26px);
 }
 .dialog .heading > button {
-  flex: 0 0 auto;
-  min-width: 70px;
-  white-space: nowrap;
-  overflow-wrap: normal;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
 }
 .dialog .choices {
   display: grid;

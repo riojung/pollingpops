@@ -8,7 +8,9 @@ import {
   presentationQuestionSuggestionInsertedBlockHash,
   presentationQuestionSuggestionsProposalHash,
   presentationQuestionSuggestionsSourceDigest,
+  supportedLocales,
   type PresentationQuestionSuggestionsProposal,
+  type SupportedLocale,
 } from "@openround/contracts";
 import type * as ApiModule from "../../lib/api";
 import { AUTH_CHANGE_EVENT, ApiClientError } from "../../lib/api";
@@ -90,6 +92,7 @@ import {
   QuestionSuggestionsProposalReview,
   QuestionSuggestionsSourceReview,
 } from "./presentation-question-suggestions";
+import { questionSuggestionsCopy, questionSuggestionsFeedback } from "./question-suggestions-copy";
 const id = (n: number) => `aabbccdd-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const source = {
   blockId: id(2),
@@ -327,10 +330,11 @@ function validRecovery(insert = false): QuestionSuggestionsRecovery {
       : null,
   };
 }
-function harness(open = true) {
+function harness(open = true, locale?: SupportedLocale) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [], dirty: true };
   const props: ComponentProps<typeof PresentationQuestionSuggestions> = {
     presentationId: id(1),
+    locale,
     actorKey: "actor:workspace",
     canEdit: true,
     open,
@@ -444,6 +448,237 @@ afterEach(() => {
 });
 
 describe("optional discussion suggestion review", () => {
+  it.each(supportedLocales)(
+    "renders selected %s UI without changing the English generation or review intent",
+    async (locale) => {
+      const t = questionSuggestionsCopy(locale);
+      const h = harness(true, locale);
+      await h.settle();
+      expect(h.dialog?.props.lang).toBe(locale);
+      expect(h.button(t("Generate discussion suggestions")).props.disabled).toBe(false);
+      expect(
+        h.nodes.find((node) => node.type === QuestionSuggestionsSourceReview)?.props.locale,
+      ).toBe(locale);
+      await h.click(t("Generate discussion suggestions"));
+      const create = fixture.request.mock.calls.find(
+        (call) => String(call[0]).endsWith("/jobs") && call[1]?.method === "POST",
+      )!;
+      expect(JSON.parse(String(create[1].body))).toMatchObject({
+        outputLanguage: "en",
+        sourceDigest: proposal.sourceDigest,
+        expectedRevision: 4,
+      });
+      expect(String(create[1].body)).not.toContain("locale");
+      expect(h.review?.props.locale).toBe(locale);
+      expect(h.button(t("Insert reviewed question")).props.disabled).toBe(true);
+      await h.reviewAndChoose(id(32));
+      const retained = storage.get(storageKey);
+      const calls = fixture.request.mock.calls.length;
+      h.props.locale = locale === "en-CA" ? "ko-KR" : "en-CA";
+      h.render();
+      await h.settle();
+      expect(storage.get(storageKey)).toBe(retained);
+      expect(fixture.request).toHaveBeenCalledTimes(calls);
+      expect(h.review?.props.reviewed).toBe(true);
+      expect(h.review?.props.suggestionId).toBe(id(32));
+      expect(
+        h.button(questionSuggestionsCopy(h.props.locale)("Insert reviewed question")).props
+          .disabled,
+      ).toBe(false);
+      expect(h.native.showModal).toHaveBeenCalledOnce();
+      h.unmount();
+    },
+  );
+
+  it("keeps a pending generation and exact saved request through a locale change", async () => {
+    const h = harness(true, "ko-KR");
+    await h.settle();
+    const ordinary = fixture.request.getMockImplementation()!;
+    let finish: () => void = () => undefined;
+    fixture.request.mockImplementation(async (path: string, init: RequestInit = {}) => {
+      if (path.endsWith("/jobs") && init.method === "POST") {
+        currentJob = JSON.parse(String(init.body)).requestId;
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return { job: readyJob() };
+      }
+      return ordinary(path, init);
+    });
+    (
+      h.button(questionSuggestionsCopy("ko-KR")("Generate discussion suggestions")).props
+        .onClick as () => void
+    )();
+    await h.settle();
+    const retained = storage.get(storageKey)!;
+    expect(JSON.parse(retained).createUncertain).toBe(true);
+    expect(h.props.onPendingChange).toHaveBeenLastCalledWith(true);
+    h.props.locale = "de-DE";
+    h.render();
+    await h.settle();
+    expect(storage.get(storageKey)).toBe(retained);
+    expect(h.button(questionSuggestionsCopy("de-DE")("Recover saved request")).props.disabled).toBe(
+      true,
+    );
+    finish();
+    await h.settle();
+    expect(h.review?.props.locale).toBe("de-DE");
+    expect(h.review?.props.reviewed).toBe(false);
+    expect(h.props.onPendingChange).toHaveBeenLastCalledWith(false);
+    expect(
+      fixture.request.mock.calls.filter(
+        (call) => String(call[0]).endsWith("/jobs") && call[1]?.method === "POST",
+      ),
+    ).toHaveLength(1);
+    expect(JSON.parse(storage.get(storageKey)!).createBody).toBe(JSON.parse(retained).createBody);
+    h.unmount();
+  });
+
+  it("localizes retained insertion feedback and retries identical bytes after switching locale", async () => {
+    const h = harness(true, "ko-KR");
+    const failure = "The exact saved source could not be loaded. Your review is retained.";
+    (h.props.onInserted as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error(failure));
+    await h.settle();
+    await h.click(questionSuggestionsCopy("ko-KR")("Generate discussion suggestions"));
+    await h.reviewAndChoose(id(32));
+    await h.click(questionSuggestionsCopy("ko-KR")("Insert reviewed question"));
+    expect(h.nodes.find((node) => node.props.role === "alert")?.props).toMatchObject({
+      lang: "ko-KR",
+      children: questionSuggestionsFeedback("ko-KR", failure).text,
+    });
+    const retained = storage.get(storageKey)!;
+    expect(h.props.onPendingChange).toHaveBeenLastCalledWith(true);
+    h.props.locale = "de-DE";
+    h.render();
+    await h.settle();
+    expect(storage.get(storageKey)).toBe(retained);
+    expect(h.nodes.find((node) => node.props.role === "alert")?.props).toMatchObject({
+      lang: "de-DE",
+      children: questionSuggestionsFeedback("de-DE", failure).text,
+    });
+    await h.click(questionSuggestionsCopy("de-DE")("Retry exact insertion"));
+    const inserts = fixture.request.mock.calls.filter((call) =>
+      String(call[0]).endsWith("/question-suggestions/insert"),
+    );
+    expect(inserts.map((call) => call[1].body)).toEqual([
+      JSON.parse(retained).insertBody,
+      JSON.parse(retained).insertBody,
+    ]);
+    expect(h.props.onInserted).toHaveBeenCalledTimes(2);
+    expect(storage.has(storageKey)).toBe(false);
+    h.unmount();
+  });
+
+  it("keeps invalid recovery acknowledgement, locks and English unknown diagnostics through locale changes", async () => {
+    storage.set(storageKey, "{malformed");
+    const h = harness(true, "ko-KR");
+    await h.settle();
+    h.acknowledgeInvalid();
+    expect(h.nodes.find((node) => node.props.role === "alert")?.props.lang).toBe("en-CA");
+    h.props.locale = "de-DE";
+    h.render();
+    await h.settle();
+    expect(
+      h.nodes.find((node) => node.type === "input" && node.props.type === "checkbox")?.props
+        .checked,
+    ).toBe(true);
+    expect(
+      h.button(questionSuggestionsCopy("de-DE")("Reload saved deck and clear invalid recovery"))
+        .props.disabled,
+    ).toBe(false);
+    expect(storage.get(storageKey)).toBe("{malformed");
+    expect(h.props.onPendingChange).toHaveBeenLastCalledWith(true);
+    await h.click(questionSuggestionsCopy("de-DE")("Reload saved deck and clear invalid recovery"));
+    expect(h.props.onReloadForInvalidRecovery).toHaveBeenCalledOnce();
+    expect(storage.has(storageKey)).toBe(false);
+    h.unmount();
+  });
+
+  it("preserves the permission fence when locale changes during a private review", async () => {
+    const h = harness(true, "ko-KR");
+    await h.settle();
+    await h.click(questionSuggestionsCopy("ko-KR")("Generate discussion suggestions"));
+    const retained = storage.get(storageKey);
+    h.props.canEdit = false;
+    h.props.locale = "de-DE";
+    h.render();
+    await h.settle();
+    const calls = fixture.request.mock.calls.length;
+    expect(h.review).toBeUndefined();
+    expect(h.nodes.some((node) => node.type === QuestionSuggestionsSourceReview)).toBe(false);
+    expect(JSON.stringify(h.nodes)).toContain(
+      questionSuggestionsCopy("de-DE")("Editor permission is required."),
+    );
+    h.props.canEdit = true;
+    h.props.locale = "ko-KR";
+    h.render();
+    await h.settle();
+    expect(h.review).toBeUndefined();
+    expect(storage.get(storageKey)).toBe(retained);
+    expect(fixture.request).toHaveBeenCalledTimes(calls);
+    expect(h.props.onInserted).not.toHaveBeenCalled();
+    h.unmount();
+  });
+
+  it.each(supportedLocales)(
+    "preserves complete English prompts, French source, raw citations and provenance under %s review",
+    (locale) => {
+      const before = JSON.stringify(proposal);
+      const markup = renderToStaticMarkup(
+        <QuestionSuggestionsProposalReview
+          proposal={proposal}
+          suggestionId={id(31)}
+          reviewed={false}
+          disabled={false}
+          onSelect={vi.fn()}
+          onReview={vi.fn()}
+          locale={locale}
+        />,
+      );
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain(questionSuggestionsCopy(locale)("Review both questions"));
+      expect(markup).toContain(
+        questionSuggestionsCopy(locale)(PRESENTATION_QUESTION_SUGGESTIONS_REVIEW_WARNING),
+      );
+      for (const suggestion of proposal.suggestions) {
+        expect(markup).toContain(suggestion.prompt);
+        for (const citation of suggestion.citations) {
+          expect(markup).toContain(`<strong lang="en-CA">${citation.locator}</strong>`);
+          expect(markup).toContain(`<blockquote lang="fr">${citation.excerpt}</blockquote>`);
+        }
+      }
+      expect(markup).toContain('lang="en"');
+      expect(markup).toContain('lang="">fixture-provider / fixture-model</span>');
+      expect(markup).toContain(`dateTime="${proposal.generatedAt}"`);
+      expect(markup).toContain(proposal.source.title.text);
+      expect(markup).toContain(proposal.source.body[0]!.text);
+      expect(JSON.stringify(proposal)).toBe(before);
+    },
+  );
+
+  it("does not translate authored source or generated prompt strings that equal known UI copy", () => {
+    const authored = structuredClone(proposal);
+    authored.source.title.text = "Close";
+    authored.source.title.lang = null;
+    authored.source.body[0]!.text = "Private source context";
+    authored.source.body[0]!.lang = null;
+    authored.suggestions[0]!.prompt = "Discussion question";
+    authored.suggestions[0]!.citations[0]!.excerpt = "Private source context";
+    const markup = renderToStaticMarkup(
+      <QuestionSuggestionsProposalReview
+        proposal={authored}
+        suggestionId={null}
+        reviewed={false}
+        disabled={false}
+        onSelect={vi.fn()}
+        onReview={vi.fn()}
+        locale="ko-KR"
+      />,
+    );
+    expect(markup).toContain('lang="en">Discussion question</p>');
+    expect(markup).toContain('lang="">Close</p>');
+    expect(markup).toContain('<blockquote lang="">Private source context</blockquote>');
+  });
   it("opens native modal and checks availability without auto-generating", async () => {
     const h = harness();
     await h.settle();
@@ -689,6 +924,30 @@ describe("optional discussion suggestion review", () => {
     expect(trigger.focus).toHaveBeenCalledOnce();
     h.unmount();
   });
+  it.each(["body", "documentElement"] as const)(
+    "returns to the visible resume control when reopening leaves %s as the focus sentinel",
+    async (sentinel) => {
+      const body = new FocusTarget();
+      const documentElement = new FocusTarget();
+      const roots = { body, documentElement };
+      const querySelector = vi.fn(() => trigger);
+      vi.stubGlobal("document", { ...roots, activeElement: roots[sentinel], querySelector });
+      const h = harness();
+      await h.settle();
+      await h.click("Generate discussion suggestions");
+      const retained = storage.get(storageKey);
+      await h.click("Close");
+      expect(h.props.onInserted).not.toHaveBeenCalled();
+      expect(storage.get(storageKey)).toBe(retained);
+      expect(querySelector).toHaveBeenCalledWith(
+        "[data-question-suggestions-resume], [data-question-suggestions-trigger]",
+      );
+      expect(trigger.focus).toHaveBeenCalledOnce();
+      expect(body.focus).not.toHaveBeenCalled();
+      expect(documentElement.focus).not.toHaveBeenCalled();
+      h.unmount();
+    },
+  );
   it("reloads authoritative state before clearing an invalid record and retains it on failed reads", async () => {
     storage.set(storageKey, "{malformed");
     storage.set("another-receipt", "preserved");

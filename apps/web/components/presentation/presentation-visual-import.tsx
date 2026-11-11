@@ -6,6 +6,7 @@ import {
   InsertPresentationVisualImportSchema,
   type PresentationVisualImportJob,
   type PresentationVisualImportPage,
+  type SupportedLocale,
 } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
 import { loadBuilderRecovery, saveBuilderRecovery } from "../../lib/builder-recovery";
@@ -22,8 +23,14 @@ import {
 } from "../../lib/presentation-visual-import";
 import { useWorkspace } from "../workspace/workspace-provider";
 import styles from "./presentation-visual-import.module.css";
+import {
+  visualImportCopy,
+  visualImportFeedback,
+  type VisualImportCopyKey,
+} from "./visual-import-copy";
 
 interface Props {
+  locale?: SupportedLocale;
   presentationId: string;
   open: boolean;
   preparationBlocked?: boolean;
@@ -56,6 +63,11 @@ const emptyRecovery: Recovery = {
 const focusableSelector =
   'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]';
 
+function SystemFeedback({ locale, raw }: { locale: SupportedLocale; raw: string }) {
+  const feedback = visualImportFeedback(locale, raw);
+  return <span lang={feedback.lang}>{feedback.text}</span>;
+}
+
 function readFile(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -70,7 +82,16 @@ function readFile(file: File) {
   });
 }
 
-function PagePreview({ path, page }: { path: string; page: PresentationVisualImportPage }) {
+export function PagePreview({
+  path,
+  page,
+  locale = "en-CA",
+}: {
+  path: string;
+  page: PresentationVisualImportPage;
+  locale?: SupportedLocale;
+}) {
+  const copy = visualImportCopy(locale);
   const [source, setSource] = useState("");
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -98,19 +119,21 @@ function PagePreview({ path, page }: { path: string; page: PresentationVisualImp
     };
   }, [path, page.pageNumber, retry]);
   return (
-    <div className={styles.preview}>
+    <div className={styles.preview} lang={locale}>
       {source ? (
         // Private signed media is authorized by the page-preview endpoint.
         <img
           src={source}
-          alt={`Visual conversion preview of page ${page.pageNumber}. Review its meaning below.`}
+          alt={copy("Visual conversion preview of page {page}. Review its meaning below.", {
+            page: page.pageNumber,
+          })}
         />
       ) : (
-        <p role="status">{error ? "Preview unavailable." : "Loading private preview…"}</p>
+        <p role="status">{copy(error ? "Preview unavailable." : "Loading private preview…")}</p>
       )}
       {error ? (
         <button type="button" onClick={() => setRetry((value) => value + 1)}>
-          Retry page preview
+          {copy("Retry page preview")}
         </button>
       ) : null}
     </div>
@@ -118,45 +141,52 @@ function PagePreview({ path, page }: { path: string; page: PresentationVisualImp
 }
 
 export function VisualPageReviewFields({
+  locale = "en-CA",
   pageNumber,
   review,
   disabled,
   onChange,
 }: {
+  locale?: SupportedLocale;
   pageNumber: number;
   review: VisualPageReview;
   disabled: boolean;
   onChange: (review: VisualPageReview) => void;
 }) {
+  const copy = visualImportCopy(locale);
   function change(field: "title" | "alternativeText" | "accessibleText", value: string) {
     onChange({ ...review, [field]: value, readingOrderReviewed: false });
   }
   return (
-    <fieldset disabled={disabled} className={styles.review}>
-      <legend>Accessible reading version for page {pageNumber}</legend>
+    <fieldset disabled={disabled} className={styles.review} lang={locale}>
+      <legend>{copy("Accessible reading version for page {page}", { page: pageNumber })}</legend>
       <label>
-        Slide title
+        {copy("Slide title")}
         <input
+          lang=""
           maxLength={160}
           value={review.title}
           onChange={(event) => change("title", event.target.value)}
         />
       </label>
       <label>
-        Image description
+        {copy("Image description")}
         <textarea
+          lang=""
           maxLength={300}
           value={review.alternativeText}
           onChange={(event) => change("alternativeText", event.target.value)}
         />
       </label>
       <p>
-        A short description identifies the visual. The separate reading slide must explain its
-        meaningful content.
+        {copy(
+          "A short description identifies the visual. The separate reading slide must explain its meaningful content.",
+        )}
       </p>
       <label>
-        Accessible text
+        {copy("Accessible text")}
         <textarea
+          lang=""
           rows={7}
           maxLength={3000}
           value={review.accessibleText}
@@ -164,9 +194,10 @@ export function VisualPageReviewFields({
         />
       </label>
       <p>
-        {review.accessibleText.length} / 3000 characters. Check reading order, charts, labels and
-        meaning. Text extraction is a suggestion, not an accessible equivalent. Scanned pages may
-        have no extracted text; write the reading version yourself.
+        {copy(
+          "{count} / 3000 characters. Check reading order, charts, labels and meaning. Text extraction is a suggestion, not an accessible equivalent. Scanned pages may have no extracted text; write the reading version yourself.",
+          { count: review.accessibleText.length },
+        )}
       </p>
       <label className={styles.check}>
         <input
@@ -174,13 +205,14 @@ export function VisualPageReviewFields({
           checked={review.readingOrderReviewed}
           onChange={(event) => onChange({ ...review, readingOrderReviewed: event.target.checked })}
         />
-        I reviewed the reading order and meaning of this page.
+        {copy("I reviewed the reading order and meaning of this page.")}
       </label>
     </fieldset>
   );
 }
 
 export function PresentationVisualImport({
+  locale = "en-CA",
   presentationId,
   open,
   afterBlockId,
@@ -192,6 +224,7 @@ export function PresentationVisualImport({
   onPendingChange,
   preparationBlocked = false,
 }: Props) {
+  const copy = visualImportCopy(locale);
   const { creator } = useWorkspace();
   const base = `/v1/presentations/${presentationId}/visual-imports`;
   const recoveryKey = `visual-import:${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}:${presentationId}`;
@@ -566,6 +599,20 @@ export function PresentationVisualImport({
   }
 
   if (!open) return null;
+  const retainedSuffix =
+    " Your review is retained. Reload the latest draft before confirming the insertion position again.";
+  const reviewRetained = error.endsWith(retainedSuffix);
+  const feedback = visualImportFeedback(
+    locale,
+    reviewRetained ? error.slice(0, -retainedSuffix.length) : error,
+  );
+  const statuses = {
+    pending: "Pending",
+    processing: "Processing",
+    ready: "Ready",
+    failed: "Failed",
+    canceled: "Canceled",
+  } as const satisfies Record<PresentationVisualImportJob["status"], VisualImportCopyKey>;
   return (
     <div className={styles.backdrop}>
       <div
@@ -576,36 +623,47 @@ export function PresentationVisualImport({
         tabIndex={-1}
         onKeyDown={keyboard}
         className={styles.dialog}
-        lang="en-CA"
+        lang={locale}
       >
         <header className={styles.heading}>
           <div>
-            <p>Review before insertion</p>
-            <h2 id="visual-import-title">Import visual slides</h2>
+            <p>{copy("Review before insertion")}</p>
+            <h2 id="visual-import-title">{copy("Import visual slides")}</h2>
           </div>
           <button type="button" disabled={locked} onClick={close}>
-            Close visual import
+            {copy("Close visual import")}
           </button>
         </header>
         <p>
-          Import one PDF or an image set. Each selected page becomes{" "}
-          <strong>2 slides: a visual and an editable reading version</strong>. The page image
-          contains no editable source objects. Add or reorder native slides and activities between
-          them after insertion.
+          {copy("Import one PDF or an image set. Each selected page becomes")}{" "}
+          <strong>{copy("2 slides: a visual and an editable reading version")}</strong>
+          {copy(
+            ". The page image contains no editable source objects. Add or reorder native slides and activities between them after insertion.",
+          )}
         </p>
         <p>
-          This visual conversion is separate from trusted-source proposals. Animations, transitions,
-          audio, video and interactive content are not preserved. Links and reading order may be
-          lost. There is no OCR guarantee.
+          {copy(
+            "This visual conversion is separate from trusted-source proposals. Animations, transitions, audio, video and interactive content are not preserved. Links and reading order may be lost. There is no OCR guarantee.",
+          )}
         </p>
         <p>
-          Original files are not retained: they are deleted after conversion, failure or
-          cancellation, or within 24 hours. Uninserted converted pages expire with the job. A local
-          recovery copy of an upload request is kept only until its acknowledgement is recovered.
+          {copy(
+            "Original files are not retained: they are deleted after conversion, failure or cancellation, or within 24 hours. Uninserted converted pages expire with the job. A local recovery copy of an upload request is kept only until its acknowledgement is recovered.",
+          )}
         </p>
         {error ? (
           <p role="alert" className={styles.error}>
-            {error}
+            <span lang={feedback.lang}>{feedback.text}</span>
+            {reviewRetained ? (
+              <>
+                {" "}
+                <span lang={locale}>
+                  {copy(
+                    "Your review is retained. Reload the latest draft before confirming the insertion position again.",
+                  )}
+                </span>
+              </>
+            ) : null}
           </p>
         ) : null}
         {revisionConflict && !receiptPending ? (
@@ -632,34 +690,36 @@ export function PresentationVisualImport({
                 });
             }}
           >
-            Reload latest draft and keep review
+            {copy("Reload latest draft and keep review")}
           </button>
         ) : null}
-        {!loaded ? <p role="status">Recovering import receipts…</p> : null}
+        {!loaded ? <p role="status">{copy("Recovering import receipts…")}</p> : null}
         {receiptPending ? (
-          <section className={styles.notice} aria-label="Pending import acknowledgement">
+          <section className={styles.notice} aria-label={copy("Pending import acknowledgement")}>
             <p>
-              Editing is paused until this exact request is acknowledged. Retrying uses the same
-              request and cannot insert duplicate slides. Keep this tab open.
+              {copy(
+                "Editing is paused until this exact request is acknowledged. Retrying uses the same request and cannot insert duplicate slides. Keep this tab open.",
+              )}
             </p>
             <button
               type="button"
               disabled={busy}
               onClick={() => void (state.insertBody ? insert() : create())}
             >
-              Retry same {state.insertBody ? "insertion" : "upload"}
+              {copy(state.insertBody ? "Retry same insertion" : "Retry same upload")}
             </button>
           </section>
         ) : null}
         {!available && loaded ? (
           <p role="status">
-            Visual import is currently unavailable. Ask a workspace operator to check availability,
-            or continue editing native slides.
+            {copy(
+              "Visual import is currently unavailable. Ask a workspace operator to check availability, or continue editing native slides.",
+            )}
           </p>
         ) : null}
-        <section aria-label="Upload visual slides" className={styles.upload}>
+        <section aria-label={copy("Upload visual slides")} className={styles.upload}>
           <label>
-            PDF or images
+            {copy("PDF or images")}
             <input
               disabled={!loaded || !available || locked}
               type="file"
@@ -673,29 +733,35 @@ export function PresentationVisualImport({
             />
           </label>
           <p>
-            PDF: up to {limits.maxPdfBytes / 1_000_000} MB and {limits.maxPages} pages. Images: up
-            to {limits.maxPages}, 10 MiB each and {limits.maxImageSetBytes / 1_000_000} MB total.
+            {copy(
+              "PDF: up to {pdfMb} MB and {pages} pages. Images: up to {pages}, 10 MiB each and {totalMb} MB total.",
+              {
+                pdfMb: limits.maxPdfBytes / 1_000_000,
+                pages: limits.maxPages,
+                totalMb: limits.maxImageSetBytes / 1_000_000,
+              },
+            )}
           </p>
-          {files.length ? <p>{files.map((file) => file.name).join(", ")}</p> : null}
+          {files.length ? <p lang="">{files.map((file) => file.name).join(", ")}</p> : null}
           <button
             type="button"
             disabled={!loaded || !available || locked || !files.length}
             onClick={() => void create()}
           >
-            Convert for review
+            {copy("Convert for review")}
           </button>
         </section>
-        <section aria-label="Visual import jobs" className={styles.jobs}>
-          <h3>Resume a conversion</h3>
+        <section aria-label={copy("Visual import jobs")} className={styles.jobs}>
+          <h3>{copy("Resume a conversion")}</h3>
           <button
             type="button"
             disabled={locked}
             onClick={() => setRefreshKey((value) => value + 1)}
           >
-            Refresh conversions
+            {copy("Refresh conversions")}
           </button>
           {!jobs.length ? (
-            <p>No conversions available.</p>
+            <p>{copy("No conversions available.")}</p>
           ) : (
             <ul>
               {jobs.map((item) => (
@@ -706,7 +772,7 @@ export function PresentationVisualImport({
                     aria-pressed={state.jobId === item.id}
                     onClick={() => chooseJob(item)}
                   >
-                    {item.sourceName} · {item.status}
+                    <span lang="">{item.sourceName}</span> · {copy(statuses[item.status])}
                   </button>
                 </li>
               ))}
@@ -714,25 +780,32 @@ export function PresentationVisualImport({
           )}
         </section>
         {job ? (
-          <section aria-label="Conversion review">
-            <h3>{job.sourceName}</h3>
+          <section aria-label={copy("Conversion review")}>
+            <h3 lang="">{job.sourceName}</h3>
             <p role="status">
               {job.status === "pending" || job.status === "processing"
-                ? "Converting privately. Nothing has been inserted."
-                : `Conversion ${job.status}.`}
+                ? copy("Converting privately. Nothing has been inserted.")
+                : copy("Conversion {status}.", { status: copy(statuses[job.status]) })}
             </p>
-            <p>Review available until {new Date(job.expiresAt).toLocaleString()}.</p>
+            <p>
+              {copy("Review available until {date}.", {
+                date: new Date(job.expiresAt).toLocaleString(locale),
+              })}
+            </p>
             {job.error ? (
               <p role="alert">
-                {job.error.message} Try an unencrypted PDF export or a smaller batch.
+                <SystemFeedback locale={locale} raw={job.error.message} />{" "}
+                {copy("Try an unencrypted PDF export or a smaller batch.")}
               </p>
             ) : null}
             {job.warnings.length ? (
-              <section aria-label="Conversion loss report">
-                <h4>Conversion loss report</h4>
+              <section aria-label={copy("Conversion loss report")}>
+                <h4>{copy("Conversion loss report")}</h4>
                 <ul>
                   {job.warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
+                    <li key={index}>
+                      <SystemFeedback locale={locale} raw={warning} />
+                    </li>
                   ))}
                 </ul>
               </section>
@@ -740,8 +813,9 @@ export function PresentationVisualImport({
             {job.status === "ready" ? (
               <>
                 <p>
-                  Select pages, then use Move up or Move down to set insertion order. Review the
-                  accessible text for every selected page. Nothing is inserted until you confirm.
+                  {copy(
+                    "Select pages, then use Move up or Move down to set insertion order. Review the accessible text for every selected page. Nothing is inserted until you confirm.",
+                  )}
                 </p>
                 <div className={styles.pageSelection}>
                   {job.pages.map((page) => (
@@ -759,12 +833,14 @@ export function PresentationVisualImport({
                           })
                         }
                       />
-                      Page {page.pageNumber}
+                      {copy("Page {page}", { page: page.pageNumber })}
                     </label>
                   ))}
                 </div>
                 <p role="status">
-                  Selected page order: {state.order.length ? state.order.join(", ") : "none"}.
+                  {copy("Selected page order: {order}.", {
+                    order: state.order.length ? state.order.join(", ") : copy("none"),
+                  })}
                 </p>
                 <ol className={styles.pages}>
                   {state.order.map((pageNumber, index) => {
@@ -772,9 +848,12 @@ export function PresentationVisualImport({
                     const review = state.reviews[pageNumber];
                     return review ? (
                       <li key={`${job.id}:${pageNumber}`}>
-                        <article aria-label={`Review page ${pageNumber}`}>
+                        <article aria-label={copy("Review page {page}", { page: pageNumber })}>
                           <h4>
-                            Page {pageNumber} · position {index + 1}
+                            {copy("Page {page} · position {position}", {
+                              page: pageNumber,
+                              position: index + 1,
+                            })}
                           </h4>
                           <div className={styles.actions}>
                             <button
@@ -786,9 +865,9 @@ export function PresentationVisualImport({
                                   order: moveVisualPage(state.order, pageNumber, -1),
                                 })
                               }
-                              aria-label={`Move up page ${pageNumber}`}
+                              aria-label={copy("Move up page {page}", { page: pageNumber })}
                             >
-                              Move up
+                              {copy("Move up")}
                             </button>
                             <button
                               type="button"
@@ -799,16 +878,19 @@ export function PresentationVisualImport({
                                   order: moveVisualPage(state.order, pageNumber, 1),
                                 })
                               }
-                              aria-label={`Move down page ${pageNumber}`}
+                              aria-label={copy("Move down page {page}", { page: pageNumber })}
                             >
-                              Move down
+                              {copy("Move down")}
                             </button>
                           </div>
-                          <PagePreview path={`${base}/${job.id}`} page={page} />
+                          <PagePreview path={`${base}/${job.id}`} page={page} locale={locale} />
                           {page.warnings.map((warning, i) => (
-                            <p key={i}>{warning}</p>
+                            <p key={i}>
+                              <SystemFeedback locale={locale} raw={warning} />
+                            </p>
                           ))}
                           <VisualPageReviewFields
+                            locale={locale}
                             pageNumber={pageNumber}
                             review={review}
                             disabled={locked}
@@ -831,33 +913,38 @@ export function PresentationVisualImport({
                     checked={state.fidelity}
                     onChange={(event) => update({ ...state, fidelity: event.target.checked })}
                   />
-                  I accept the conversion losses and understand that visual images are not editable
-                  source objects.
+                  {copy(
+                    "I accept the conversion losses and understand that visual images are not editable source objects.",
+                  )}
                 </label>
                 <p role="status">
-                  {state.order.length} selected pages · {state.order.length * 2} slides. Insert{" "}
-                  {afterBlockId
-                    ? "after the selected slide or activity"
-                    : "at the end of this Presentation"}
-                  .
+                  {copy("{pages} selected pages · {slides} slides. Insert {position}.", {
+                    pages: state.order.length,
+                    slides: state.order.length * 2,
+                    position: copy(
+                      afterBlockId
+                        ? "after the selected slide or activity"
+                        : "at the end of this Presentation",
+                    ),
+                  })}
                 </p>
                 <button
                   type="button"
                   disabled={locked || revisionConflict || !selectedReady || !state.fidelity}
                   onClick={() => void insert()}
                 >
-                  Insert {state.order.length * 2} reviewed slides
+                  {copy("Insert {count} reviewed slides", { count: state.order.length * 2 })}
                 </button>
               </>
             ) : null}
             {job.status !== "canceled" ? (
               <button type="button" disabled={locked} onClick={() => void cancelJob()}>
-                Cancel conversion and remove uninserted pages
+                {copy("Cancel conversion and remove uninserted pages")}
               </button>
             ) : null}
           </section>
         ) : null}
-        {busy ? <p role="status">Working…</p> : null}
+        {busy ? <p role="status">{copy("Working…")}</p> : null}
       </div>
     </div>
   );

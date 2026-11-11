@@ -7,12 +7,16 @@
   padding: 1.5rem;
   color: var(--ui-text);
   background: var(--ui-surface);
+  overflow-wrap: anywhere;
 }
 .dialog::backdrop {
   background: var(--ui-overlay);
 }
 .dialog h2 {
   margin-top: 0;
+}
+.dialog > button + p {
+  margin-block-start: 0.75rem;
 }
 .entries {
   display: grid;
@@ -24,9 +28,10 @@
   min-width: 0;
 }
 .entry button {
+  display: block;
   width: 100%;
   min-height: 2.75rem;
-  text-align: left;
+  text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -54,7 +59,10 @@
   margin-block: 1rem;
 }
 .return button {
+  display: block;
+  width: 100%;
   min-height: 2.75rem;
+  text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
 }

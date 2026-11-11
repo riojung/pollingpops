@@ -507,6 +507,7 @@
 }
 .interactionToolbar button:focus-visible,
 .interactionAction:focus-visible,
+.interaction:focus-visible,
 .revealBody:focus-visible {
   outline: 3px solid var(--native-link, var(--ui-focus, #1769aa));
   outline-offset: -4px;

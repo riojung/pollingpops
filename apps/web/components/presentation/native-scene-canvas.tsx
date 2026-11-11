@@ -257,6 +257,7 @@ export function NativeSceneCanvas({
       />
       <div className={styles.canvasSurface}>
         <NativeSceneView
+          locale={locale}
           scene={displayedScene}
           renderImage={renderImage}
           selectedNodeIds={selectedNodeIds}

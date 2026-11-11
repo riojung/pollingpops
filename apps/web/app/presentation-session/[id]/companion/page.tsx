@@ -693,7 +693,10 @@ export default function PresentationCompanionPage() {
                 <button
                   className="button-quiet"
                   type="button"
-                  onClick={() => setOverlay("navigation")}
+                  onClick={(event) => {
+                    event.currentTarget.focus({ preventScroll: true });
+                    setOverlay("navigation");
+                  }}
                   aria-haspopup="dialog"
                   aria-expanded={overlay === "navigation"}
                 >
@@ -790,6 +793,7 @@ export default function PresentationCompanionPage() {
             ) : null}
             {snapshot.branches ? (
               <PresentationBranches
+                locale={locale}
                 branches={snapshot.branches}
                 disabled={
                   commandState.busy ||
@@ -805,6 +809,7 @@ export default function PresentationCompanionPage() {
       </section>
       {overlay === "navigation" && snapshot?.navigation ? (
         <PresentationNavigationDialog
+          locale={locale}
           navigation={snapshot.navigation}
           disabled={
             commandState.busy ||

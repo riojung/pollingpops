@@ -4,6 +4,8 @@ import { createNativeChartNode, createNativeTableNode } from "../../lib/presenta
 import { NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
 import { NativeSceneDataView, NATIVE_CHART_COLORS } from "./native-scene-data-view";
 import styles from "./native-scene-data.module.css";
+import { supportedLocales } from "@openround/contracts";
+import { nativeAudienceCopy } from "./native-audience-copy";
 
 function luminance(hex: string) {
   const channels = [1, 3, 5]
@@ -13,6 +15,40 @@ function luminance(hex: string) {
 }
 
 describe("native information rendering", () => {
+  it.each(supportedLocales)(
+    "localizes chart guidance while preserving authored titles, labels and raw numeric data in %s",
+    (locale) => {
+      const node = createNativeChartNode("line");
+      node.title = "Chart legend";
+      node.summary = "Original Spanish: Ganancias por trimestre";
+      node.categories = ["Category", "blue", "Catégorie"];
+      node.series = [{ name: "chart data", values: [-1.25, 0, 1e21] }];
+      const original = structuredClone(node);
+      const copy = nativeAudienceCopy(locale);
+      const markup = renderToStaticMarkup(<NativeSceneDataView node={node} locale={locale} />);
+      expect(markup).toContain('aria-label="Chart legend"');
+      expect(markup).toContain('<figcaption lang=""><strong>Chart legend</strong>');
+      expect(markup).toContain(node.summary);
+      expect(markup).toContain('<span lang="">chart data</span>');
+      expect(markup).toContain(`aria-label="${copy("Chart legend")}"`);
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain(copy("Category numbers match the data table."));
+      expect(markup).toContain(copy("blue"));
+      for (const value of node.series[0]!.values)
+        expect(markup).toContain(`>${String(value)}</td>`);
+      for (const category of node.categories) expect(markup).toContain(category);
+      expect(node).toEqual(original);
+      node.title = " ";
+      expect(NativeSceneDataView({ node, locale }).props["aria-label"]).toBe(copy("Chart"));
+      const table = createNativeTableNode();
+      table.caption = "Data table";
+      expect(NativeSceneDataView({ node: table, locale }).props["aria-label"]).toBe("Data table");
+      table.caption = " ";
+      expect(NativeSceneDataView({ node: table, locale }).props["aria-label"]).toBe(
+        copy("Data table"),
+      );
+    },
+  );
   it.each([createNativeTableNode(), createNativeChartNode()])(
     "retains the authored $type plane in a fixed preview without changing its data",
     (node) => {
@@ -83,7 +119,7 @@ describe("native information rendering", () => {
     node.headers = ["A long heading ".repeat(7), "Literal"];
     node.rows = [["A long cell ".repeat(25), "<script>run()</script> =SUM(A1:A2)"]];
     const markup = renderToStaticMarkup(<NativeSceneDataView node={node} />);
-    expect(markup).toContain("<caption>Complete result table</caption>");
+    expect(markup).toContain('<caption lang="">Complete result table</caption>');
     expect(markup).toContain('scope="col"');
     expect(markup).toContain(node.headers[0]);
     expect(markup).toContain(node.rows[0]![0]);
@@ -102,7 +138,7 @@ describe("native information rendering", () => {
       expect(markup).toContain(node.title);
       expect(markup).toContain(node.summary);
       expect(markup).toContain('aria-hidden="true" focusable="false"');
-      expect(markup).toContain("Revenue by category · chart data");
+      expect(markup).toContain("Revenue by category</span> · chart data");
       expect(markup).toContain('scope="row">1. Alpha');
       expect(markup).toContain(">10</td>");
       expect(markup).toContain(">20</td>");

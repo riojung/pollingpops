@@ -8,6 +8,33 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B audience and navigation follow-up November 10, 2026
+
+The `codex/option-b-audience-navigation` source extends all ten configured locales to
+native audience controls, accessible outline, detail dialogs, chart guidance, branch
+authoring and shared host/Companion navigation. Host navigation entry and acknowledgement
+recovery guidance use the same selected-language copy as the shared controls. Branch
+authoring now explicitly respects canonical read-only and mutation-busy state.
+
+The new catalogs expose 96 typed keys, reusing nineteen existing translations. Authored
+text/language, labels, URLs, data, stored IDs, branch thresholds, history fields, broadcast
+authority and exact command retries retain their existing meanings. Templates and sample
+data remain saved content; this slice does not translate existing drafts or generate
+different sample values when the interface language changes.
+
+The repository gate passes 7,621 tests with 513 standard opt-in skips, all four production
+builds and compiled-server startup. Final integrated web validation passes 378 suites /
+3,800 tests, bringing the validated repository suites to 7,683 passing tests. Final web
+types, integration lint and fresh normal/beta production builds pass. Fifty-eight distinct
+selected production-browser cases pass across desktop Chromium and phone Chromium/WebKit,
+including final navigation focus/spacing, passive-preview keyboard access and advanced
+image/map requalification. The [Option B implementation record](option-b-ux-implementation.md)
+distinguishes corrected reruns, local runtime interruption and remaining hosted acceptance.
+
+Creation-locale template/default content, assistance review/recovery and Pack library/editor
+tools remain pending. Hosted qualification of this source, native-language/customer review,
+manual accessibility/device checks and deferred launch-facing content remain release work.
+
 ### Option B specialized native editors November 10, 2026
 
 The `codex/option-b-specialist-editors` source extends all ten configured locales to

@@ -1,6 +1,8 @@
 "use client";
 
 import { useId, useLayoutEffect, useRef, type RefObject } from "react";
+import type { SupportedLocale } from "@openround/contracts";
+import { nativeAudienceCopy } from "./native-audience-copy";
 import styles from "./native-scene.module.css";
 
 export function NativeSceneDetailDialog({
@@ -8,11 +10,15 @@ export function NativeSceneDetailDialog({
   body,
   onClose,
   returnFocusRef,
+  locale = "en-CA",
+  titleLang = "",
 }: {
   title: string;
   body: string;
   onClose: () => void;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
+  locale?: SupportedLocale;
+  titleLang?: string;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -39,12 +45,20 @@ export function NativeSceneDetailDialog({
         onClose();
       }}
     >
-      <h2 id={titleId}>{title}</h2>
-      <button type="button" className="button-quiet" ref={closeRef} onClick={onClose}>
-        Close details
+      <h2 lang={titleLang} id={titleId}>
+        {title}
+      </h2>
+      <button lang={locale} type="button" className="button-quiet" ref={closeRef} onClick={onClose}>
+        {nativeAudienceCopy(locale)("Close details")}
       </button>
-      <div className={styles.detailBody} tabIndex={0} role="region" aria-label={title}>
-        <p>{body}</p>
+      <div
+        lang={titleLang}
+        className={styles.detailBody}
+        tabIndex={0}
+        role="region"
+        aria-label={title}
+      >
+        <p lang="">{body}</p>
       </div>
     </dialog>
   );

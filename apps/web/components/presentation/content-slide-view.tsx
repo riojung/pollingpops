@@ -24,7 +24,9 @@ import {
   type ContentSlideTextElement,
   type PresentationScene,
   type PresentationSceneDesign,
+  type SupportedLocale,
 } from "@openround/contracts";
+import { useLocale } from "../locale-provider";
 import styles from "./content-slide-view.module.css";
 import { NATIVE_DESIGN_THEMES, NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
@@ -65,6 +67,7 @@ type ContentSlideViewBlock = {
 
 interface ContentSlideViewProps {
   block: ContentSlideViewBlock;
+  locale?: SupportedLocale;
   /** Contextual rendering only; imported source records are never rewritten. */
   designOverride?: PresentationSceneDesign;
   media?: ReactNode;
@@ -272,9 +275,11 @@ function frameBlockSignature(block: ContentSlideViewBlock, hasMedia: boolean) {
 }
 
 export function ContentSlideView(props: ContentSlideViewProps) {
+  const { locale } = useLocale();
   const design = props.designOverride ?? props.block.design;
   return props.block.scene ? (
     <NativeSceneView
+      locale={props.locale ?? locale}
       scene={
         props.block.scene.design || !design
           ? props.block.scene
